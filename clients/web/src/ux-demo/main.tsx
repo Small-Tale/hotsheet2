@@ -53,6 +53,7 @@ import {
 } from 'lucide';
 
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
+import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
@@ -144,16 +145,22 @@ import {
   stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
 import {
+  addCommandEditorSetting,
   AiToolSettingsDemo,
   clampProjectSidebarHeight,
+  closeCommandEditorDemo,
   collapsedCommandGroups,
+  commandEditorEditingId,
   commandGroupExpanded,
   CommandNavigationDemo,
   CommandSettingsEditorDemo,
+  deleteCommandEditorSetting,
   DriveControlDemo,
   DriveOptionsMenuDemo,
   driveRunning,
+  moveCommandEditorSetting,
   NotificationNavigationDemo,
+  openCommandEditorDemo,
   ProjectSidebarDemo,
   projectSidebarHeight,
   ProjectSummaryDemo,
@@ -165,6 +172,7 @@ import {
   sidebarEvent,
   sidebarViews,
   TerminalOperationsSidebarDemo,
+  updateCommandEditorField,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
 import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoFileMenu, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
@@ -806,6 +814,36 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
 });
+function commandEditorRowId(target: Element): string | undefined {
+  return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
+}
+delegate(root, 'click', '[data-action="edit-command-setting"]', (_event, target) => {
+  const id = commandEditorRowId(target);
+  if (id) openCommandEditorDemo(id);
+});
+delegate(root, 'click', '[data-action="add-command-setting"]', () => {
+  addCommandEditorSetting();
+});
+delegate(root, 'click', '[data-action="close-command-editor"]', () => {
+  closeCommandEditorDemo();
+});
+delegate(root, 'click', '[data-action="delete-command-setting"]', (_event, target) => {
+  const id = commandEditorRowId(target);
+  if (id) deleteCommandEditorSetting(id);
+});
+delegate(root, 'click', '[data-action="move-command-setting"]', (_event, target) => {
+  const id = commandEditorRowId(target);
+  const direction = target.closest<HTMLElement>('[data-direction]')?.dataset.direction;
+  if (id && (direction === 'up' || direction === 'down')) moveCommandEditorSetting(id, direction);
+});
+delegate(root, 'input', '[data-command-field]', (_event, target) => {
+  const input = target as HTMLInputElement;
+  const id = commandEditorRowId(target);
+  if (id && input.name) updateCommandEditorField(id, input.name, input.value);
+});
+delegateCapture(root, 'toggle', `#${COMMAND_EDITOR_DIALOG_ID}`, (event) => {
+  if ((event as ToggleEvent).newState === 'closed') commandEditorEditingId.value = undefined;
+}, { match: 'direct' });
 delegate(root, 'click', '[data-action="open-hs1-migration-demo"]', openHs1MigrationDialogDemo);
 delegate(root, 'click', '[data-action="dismiss-hs1-migration"]', closeHs1MigrationDialogDemo);
 delegate(root, 'wa-hide', '[data-component="hs1-migration-dialog"]', closeHs1MigrationDialogDemo);

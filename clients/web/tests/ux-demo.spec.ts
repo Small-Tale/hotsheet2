@@ -2339,11 +2339,24 @@ test('edits custom command color and icon in the command settings editor',async(
   await page.setViewportSize({width:1000,height:900});await page.goto('/ux-demo?component=command-settings-editor');
   const editor=page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
-  await expect(editor.locator('.command-settings-editor__swatch')).toHaveCount(9);
-  await expect(editor.locator('.command-settings-editor__icon')).toHaveCount(12);
-  await expect(editor.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#22c55e');
-  await expect(editor.locator('.command-settings-editor__icon input:checked')).toHaveValue('circle-check-big');
+  // The WYSIWYG list groups commands and offers inline edit/reorder/delete per row.
+  await expect(editor.locator('.command-settings-editor__row')).toHaveCount(3);
+  await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality','Release']);
+  await page.screenshot({path:'/private/tmp/hs2-656xj2-command-list.png'});
+  // Details, including the color and icon pickers, live in the Edit command dialog.
+  await editor.getByRole('button',{name:'Edit Verify project'}).click();
+  const dialog=page.locator('#command-editor-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
+  await expect(dialog.locator('.command-settings-editor__icon')).toHaveCount(12);
+  await dialog.getByTitle('Blue',{exact:true}).click();
+  await dialog.getByTitle('wand',{exact:true}).click();
+  await expect(dialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#3b82f6');
+  await expect(dialog.locator('.command-settings-editor__icon input:checked')).toHaveValue('wand');
   await page.screenshot({path:'/private/tmp/hs2-656xj2-command-editor-color-icon.png'});
+  await dialog.getByRole('button',{name:'Done'}).click();
+  await expect.poll(()=>dialog.evaluate(node=>node.matches(':popover-open'))).toBe(false);
+  await expect(dialog).toBeEmpty();
 });
 
 test('keeps the Markdown preview focus ring inset so an overflow-hidden editor cannot clip it (HS2-0WD3YK)',async({page})=>{

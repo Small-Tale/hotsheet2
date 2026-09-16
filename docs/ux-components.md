@@ -957,10 +957,16 @@ capability-aware sections when their underlying features and data contracts land
   replace the history gesture (HS2-NT3F3Q).
 - `CommandRunDialog` owns output and cancellation presentation. Completion and stop
   changes arrive through the existing long poll; the client never interval-polls.
-- Project Settings contains a local-only JSON editor for the typed `{program,args}`
-  contract. Named AI prompts use the same safe contract by invoking an appropriate
-  configured CLI command. The retired worker target picker is deliberately absent;
-  drive targeting remains a separate control.
+- `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
+  a grouped list of command rows (colored icon, name, type, and inline edit/reorder/delete
+  actions) whose group headers come from each command's `group`. Editing a command — or
+  adding one — opens a native "Edit command" popover dialog holding the typed detail form
+  (Button label, Identifier, Type, group, the Program `{program,args}` / Shell / AI-prompt
+  fields, working directory, confirmation, and the color-swatch + Lucide-icon pickers);
+  Done closes the dialog. Field edits update a project-scoped unsaved draft; an explicit
+  "Save commands" persists all definitions. Named AI prompts use the same safe contract by
+  invoking an appropriate configured CLI command. The retired worker target picker is
+  deliberately absent; drive targeting remains a separate control (HS2-656XJ2).
 
 ### 5.4 Notifications — presentation begins at feature floor
 

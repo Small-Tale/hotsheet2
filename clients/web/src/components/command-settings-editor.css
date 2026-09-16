@@ -6,30 +6,47 @@
 .command-settings-editor button:hover { background:var(--wa-color-neutral-fill-quiet); }
 .command-settings-editor button:disabled { opacity:.45; cursor:default; }
 .command-settings-editor button svg { width:remify(16px); height:remify(16px); }
-.command-settings-editor__layout { display:grid; min-height:remify(400px); overflow:hidden; border:1px solid var(--wa-color-surface-border); border-radius:var(--wa-border-radius-l); background:var(--wa-color-surface-default); grid-template-columns:minmax(remify(208px),remify(272px)) minmax(0,1fr); }
-.command-settings-editor__layout > aside { padding:var(--wa-space-s); border-right:1px solid var(--wa-color-surface-border); background:var(--wa-color-surface-lowered); }
-.command-settings-editor__layout > aside nav { display:grid; gap:var(--wa-space-3xs); }
-.command-settings-editor__layout > aside button { width:100%; min-width:0; border-color:transparent; background:transparent; justify-content:flex-start; text-align:left; }
-.command-settings-editor__layout > aside button[aria-current="page"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-quiet); }
-.command-settings-editor__layout > aside button span { display:grid; min-width:0; }
-.command-settings-editor__layout > aside strong,.command-settings-editor__layout > aside small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.command-settings-editor__layout > aside small { color:var(--wa-color-text-quiet); text-transform:capitalize; }
-.command-settings-editor__layout > aside > p { margin:var(--wa-space-m); color:var(--wa-color-text-quiet); text-align:center; }
-.command-settings-editor__form { padding:var(--wa-space-l); }
-.command-settings-editor__form-heading { display:flex; margin-bottom:var(--wa-space-l); align-items:center; justify-content:space-between; gap:var(--wa-space-s); }
-.command-settings-editor__form-heading > div { display:flex; gap:var(--wa-space-3xs); }
-.command-settings-editor__form-heading button { width:remify(36px); padding:0; }
-.command-settings-editor__form-heading button:last-child { margin-left:var(--wa-space-2xs); color:var(--wa-color-danger-on-quiet); }
+
+/* WYSIWYG command list (HS2-656XJ2) — grouped rows with inline edit/reorder/delete actions. */
+.command-settings-editor__list { display:grid; margin:0; padding:var(--wa-space-2xs); border:1px solid var(--wa-color-surface-border); border-radius:var(--wa-border-radius-l); background:var(--wa-color-surface-default); gap:var(--wa-space-s); list-style:none; }
+.command-settings-editor__group { display:grid; gap:var(--wa-space-3xs); }
+.command-settings-editor__group-label { margin:var(--wa-space-2xs) var(--wa-space-2xs) 0; color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
+.command-settings-editor__group-items { display:grid; margin:0; padding:0; gap:var(--wa-space-3xs); list-style:none; }
+.command-settings-editor__row { display:flex; padding:var(--wa-space-2xs); border:1px solid transparent; border-radius:var(--wa-border-radius-m); align-items:center; gap:var(--wa-space-s); }
+.command-settings-editor__row:hover { border-color:var(--wa-color-surface-border); background:var(--wa-color-neutral-fill-quiet); }
+.command-settings-editor__row[data-editing="true"] { border-color:var(--wa-color-brand-border-loud); background:var(--wa-color-brand-fill-quiet); }
+.command-settings-editor__row-icon { display:grid; width:remify(32px); height:remify(32px); flex:0 0 auto; border-radius:var(--wa-border-radius-m); color:var(--command-text-color); background:var(--command-color); place-items:center; }
+.command-settings-editor__row-icon svg { width:remify(18px); height:remify(18px); }
+.command-settings-editor__row-text { display:grid; min-width:0; flex:1 1 auto; }
+.command-settings-editor__row-text strong { overflow:hidden; color:var(--wa-color-text-normal); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.command-settings-editor__row-text small { color:var(--wa-color-text-quiet); }
+.command-settings-editor__row-actions { display:flex; flex:0 0 auto; gap:var(--wa-space-3xs); }
+.command-settings-editor__row-actions button { width:remify(32px); min-height:remify(32px); padding:0; border-color:transparent; background:transparent; }
+.command-settings-editor__row-actions button:hover:not(:disabled) { border-color:var(--wa-color-neutral-border-normal); background:var(--wa-color-surface-default); }
+.command-settings-editor__row-delete:hover:not(:disabled) { color:var(--wa-color-danger-on-quiet); }
+
+.command-settings-editor__blank { display:grid; padding:var(--wa-space-2xl); border:1px dashed var(--wa-color-surface-border); border-radius:var(--wa-border-radius-l); color:var(--wa-color-text-quiet); gap:var(--wa-space-2xs); place-items:center; text-align:center; }
+.command-settings-editor__blank p { margin:0; }
+.command-settings-editor > footer { display:flex; align-items:center; justify-content:flex-end; gap:var(--wa-space-s); }
+.command-settings-editor > footer span { margin-right:auto; color:var(--wa-color-text-quiet); font-size:var(--wa-font-size-xs); }
+
+/* Edit command dialog (native popover) reusing the detail grid + pickers. */
+.command-settings-editor__dialog { display:flex; width:min(remify(560px),calc(100vw - remify(32px))); max-height:calc(100vh - remify(64px)); flex-direction:column; }
+.command-settings-editor__dialog-icon { display:grid; width:remify(28px); height:remify(28px); border-radius:var(--wa-border-radius-m); color:var(--command-text-color); background:var(--command-color); place-items:center; }
+.command-settings-editor__dialog-icon svg { width:remify(16px); height:remify(16px); }
+.command-settings-editor__dialog-body { min-height:0; padding:var(--wa-space-l); overflow:auto; flex:1 1 auto; }
+.command-settings-editor__dialog-footer { display:flex; padding:var(--wa-space-m) var(--wa-space-l); border-top:1px solid var(--wa-color-surface-border); justify-content:flex-end; }
+.command-settings-editor__dialog-footer button { color:var(--wa-color-brand-on-loud); border-color:transparent; background:var(--wa-color-brand-fill-loud); }
+.command-settings-editor__dialog-footer button:hover { background:var(--wa-color-brand-fill-loud); filter:brightness(1.05); }
+
 .command-settings-editor__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--wa-space-m); }
 .command-settings-editor__grid label { display:grid; min-width:0; color:var(--wa-color-text-normal); font-size:var(--wa-font-size-s); font-weight:600; gap:var(--wa-space-2xs); }
 .command-settings-editor__grid input,.command-settings-editor__grid select,.command-settings-editor__grid textarea { box-sizing:border-box; width:100%; min-width:0; padding:remify(8.8px) remify(10.4px); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-m); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); font:inherit; font-weight:400; }
 .command-settings-editor__grid textarea { min-height:remify(80px); resize:vertical; }
 .command-settings-editor__grid small { color:var(--wa-color-text-quiet); font-weight:400; }
 .command-settings-editor__wide { grid-column:1 / -1; }
-.command-settings-editor__blank { display:grid; color:var(--wa-color-text-quiet); place-items:center; text-align:center; }
-.command-settings-editor > footer { display:flex; align-items:center; justify-content:flex-end; gap:var(--wa-space-s); }
-.command-settings-editor > footer span { margin-right:auto; color:var(--wa-color-text-quiet); font-size:var(--wa-font-size-xs); }
-@container (max-width:remify(672px)) { .command-settings-editor__heading { align-items:stretch; flex-direction:column; } .command-settings-editor__heading button { align-self:start; } .command-settings-editor__layout { grid-template-columns:1fr; } .command-settings-editor__layout > aside { max-height:remify(176px); overflow:auto; border-right:0; border-bottom:1px solid var(--wa-color-surface-border); } .command-settings-editor__form { padding:var(--wa-space-m); } .command-settings-editor__grid { grid-template-columns:1fr; } .command-settings-editor__wide { grid-column:auto; } }
+@container (max-width:remify(672px)) { .command-settings-editor__heading { align-items:stretch; flex-direction:column; } .command-settings-editor__heading button { align-self:start; } }
+@media (max-width:remify(560px)) { .command-settings-editor__grid { grid-template-columns:1fr; } .command-settings-editor__wide { grid-column:auto; } }
 
 /* Color and icon pickers for custom command buttons (HS2-656XJ2). */
 .command-settings-editor__swatches, .command-settings-editor__icons { display: flex; min-width: 0; margin: 0; padding: 0; border: 0; flex-wrap: wrap; gap: remify(8px); }

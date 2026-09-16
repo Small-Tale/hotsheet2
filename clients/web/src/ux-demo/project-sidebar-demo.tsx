@@ -2,9 +2,10 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { signal } from 'kerfjs';
 import { GripHorizontal } from 'lucide';
 
+import type { CommandDefinition } from '../api';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
-import { CommandSettingsEditor } from '../components/command-settings-editor';
+import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/command-settings-editor';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor,DriveOptionsMenu } from '../components/drive-options-menu';
 import { NotificationNavigation } from '../components/notification-navigation';
@@ -51,7 +52,50 @@ export function ProjectSummaryDemo() { return <DemoFrame><div class="project-sum
 export function RepositorySummaryDemo() { return <DemoFrame><RepositorySummary branch="feature/client-sidebar" unpushed={6} uncommitted={2} /></DemoFrame>; }
 export function ViewNavigationDemo() { return <DemoFrame><ViewNavigation items={sidebarViews} selectedId={selectedViewId.value} /></DemoFrame>; }
 export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation label="Project commands" expanded={commandGroupExpanded.value} collapsedGroups={collapsedCommandGroups.value} commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} /></DemoFrame>; }
-export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={[{ id: 'verify', title: 'Verify project', kind: 'shell', command: 'npm test', group: 'Quality', color: '#22c55e', icon: 'circle-check-big' }, { id: 'build', title: 'Build clients', kind: 'program', program: 'npm', args: ['run', 'build'], group: 'Quality', color: '#f97316', icon: 'hammer' }, { id: 'publish', title: 'Publish preview', kind: 'ai', prompt: 'Publish a preview', color: '#8b5cf6', icon: 'send' }]} selectedId="verify" /></section>; }
+export const commandEditorCommands = signal<CommandDefinition[]>([
+  { id: 'verify', title: 'Verify project', kind: 'shell', command: 'npm test', group: 'Quality', color: '#22c55e', icon: 'circle-check-big' },
+  { id: 'build', title: 'Build clients', kind: 'program', program: 'npm', args: ['run', 'build'], group: 'Quality', color: '#f97316', icon: 'build' },
+  { id: 'publish', title: 'Publish preview', kind: 'ai', prompt: 'Publish a preview', color: '#8b5cf6', icon: 'send', group: 'Release' },
+]);
+export const commandEditorEditingId = signal<string | undefined>(undefined);
+export const commandEditorMessage = signal('');
+export function openCommandEditorDemo(id: string) {
+  commandEditorEditingId.value = id;
+  document.querySelector<HTMLElement>(`#${COMMAND_EDITOR_DIALOG_ID}`)?.showPopover();
+}
+export function closeCommandEditorDemo() {
+  document.querySelector<HTMLElement>(`#${COMMAND_EDITOR_DIALOG_ID}`)?.hidePopover();
+  commandEditorEditingId.value = undefined;
+}
+export function updateCommandEditorField(id: string, field: string, value: string) {
+  commandEditorCommands.value = commandEditorCommands.value.map(command => {
+    if (command.id !== id) return command;
+    const updated: CommandDefinition = { ...command };
+    if (field === 'args') updated.args = value.split('\n').filter(argument => argument.length > 0);
+    else if (field === 'id' || field === 'title') updated[field] = value;
+    else if (['program', 'group', 'cwd', 'confirmation', 'command', 'prompt', 'tool', 'color', 'icon', 'kind'].includes(field)) (updated as unknown as Record<string, unknown>)[field] = value || undefined;
+    return updated;
+  });
+  if (field === 'id' && commandEditorEditingId.value === id) commandEditorEditingId.value = value;
+}
+export function moveCommandEditorSetting(id: string, direction: 'up' | 'down') {
+  const commands = [...commandEditorCommands.value], index = commands.findIndex(command => command.id === id), target = index + (direction === 'up' ? -1 : 1);
+  if (index < 0 || target < 0 || target >= commands.length) return;
+  [commands[index], commands[target]] = [commands[target], commands[index]];
+  commandEditorCommands.value = commands;
+}
+export function deleteCommandEditorSetting(id: string) {
+  commandEditorCommands.value = commandEditorCommands.value.filter(command => command.id !== id);
+  if (commandEditorEditingId.value === id) closeCommandEditorDemo();
+}
+export function addCommandEditorSetting() {
+  const existing = new Set(commandEditorCommands.value.map(command => command.id));
+  let index = 1, id = 'command-1';
+  while (existing.has(id)) id = `command-${++index}`;
+  commandEditorCommands.value = [...commandEditorCommands.value, { id, title: 'New command', kind: 'shell', command: '' }];
+  openCommandEditorDemo(id);
+}
+export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={commandEditorCommands.value} editingId={commandEditorEditingId.value} message={commandEditorMessage.value} /></section>; }
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
 export function DriveOptionsMenuDemo(){return <DemoFrame><div style="position:relative;margin-top:14rem"><DriveOptionsMenu tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} defaultSelection={{tool:'codex',model:'gpt-5.6',effort:'high'}}/></div></DemoFrame>}
 export function AiToolSettingsDemo(){return <AiToolSettings tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} message="Saved locally."/>}
