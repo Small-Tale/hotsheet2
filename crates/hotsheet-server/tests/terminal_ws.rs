@@ -362,3 +362,58 @@ async fn broker_mode_attach_streams_through_the_broker() {
          (echo={saw_echo}, size={saw_size})"
     );
 }
+
+/// A custom shell-command button must run the command AND keep the terminal open so its output stays
+/// visible instead of exiting the instant the command finishes (HS2-2BKPGK).
+#[tokio::test]
+async fn shell_command_terminal_runs_the_command_and_stays_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let base = format!("http://{addr}");
+    tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+    let (scrollback, alive) = tokio::task::spawn_blocking(move || {
+        let opened = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"shell_command":"echo hs2-shell-marker","id":"sc1"}"#)
+            .unwrap();
+        assert_eq!(opened.status(), 200);
+        let read = || -> (String, bool) {
+            let value: serde_json::Value = serde_json::from_str(
+                &ureq::get(&format!("{base}/terminals/sc1"))
+                    .set("x-hotsheet-secret", SECRET)
+                    .call()
+                    .unwrap()
+                    .into_string()
+                    .unwrap(),
+            )
+            .unwrap();
+            (
+                value["scrollback"].as_str().unwrap_or_default().to_string(),
+                value["alive"].as_bool().unwrap_or(false),
+            )
+        };
+        for _ in 0..300 {
+            if read().0.contains("hs2-shell-marker") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        // Give the re-exec'd interactive shell a moment, then confirm the terminal is still open.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        read()
+    })
+    .await
+    .unwrap();
+    assert!(
+        scrollback.contains("hs2-shell-marker"),
+        "command output missing: {scrollback:?}"
+    );
+    assert!(
+        alive,
+        "the shell-command terminal exited instead of staying open: {scrollback:?}"
+    );
+}

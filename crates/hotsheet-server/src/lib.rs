@@ -6735,8 +6735,9 @@ fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
 }
 
 /// `POST /terminals` `{command?, shell_command?, args?, cwd?, id?, connect?}` — open (or
-/// reattach to) a PTY. `shell_command` runs text through the user's default shell; with no
-/// launch field, that shell is opened interactively.
+/// reattach to) a PTY. `shell_command` runs text through the user's default shell and then keeps the
+/// terminal open interactively so its output stays visible (HS2-2BKPGK); with no launch field, that
+/// shell is opened interactively.
 async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
@@ -6827,7 +6828,7 @@ fn terminal_launch(
         }
         let command = user_default_shell();
         return Ok(PreparedTerminalLaunch {
-            args: shell_command_args(shell_command),
+            args: shell_command_args(shell_command, &command),
             env: terminal_shell_history_env(state, req, terminal_id, &command)?,
             command,
         });
@@ -6907,16 +6908,32 @@ fn user_default_shell() -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-fn shell_command_args(command: &str) -> Vec<String> {
+/// Build the shell args that run a custom command button. The terminal must stay open with the
+/// output visible instead of exiting the moment the command finishes (HS2-2BKPGK): on Windows `/K`
+/// runs the command and keeps the prompt (vs `/C`, which exits); on POSIX the command runs and then
+/// execs an interactive login shell.
+fn shell_command_args(command: &str, shell: &str) -> Vec<String> {
     #[cfg(windows)]
-    return vec![
-        "/D".to_string(),
-        "/S".to_string(),
-        "/C".to_string(),
-        command.to_string(),
-    ];
+    {
+        let _ = shell;
+        return vec![
+            "/D".to_string(),
+            "/S".to_string(),
+            "/K".to_string(),
+            command.to_string(),
+        ];
+    }
     #[cfg(not(windows))]
-    return vec!["-lc".to_string(), command.to_string()];
+    return vec![
+        "-lc".to_string(),
+        format!("{command}\nexec {} -il", shell_single_quote(shell)),
+    ];
+}
+
+/// Single-quote a shell word so a shell path with spaces or quotes stays one argument.
+#[cfg(not(windows))]
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 const INHERIT_GLOBAL_SHELL_HISTORY_SETTING: &str = "terminal.inherit_global_shell_history";
@@ -7044,11 +7061,13 @@ mod terminal_history_tests {
 
     #[test]
     fn shell_command_uses_the_platform_shell_command_boundary() {
-        let args = shell_command_args("npm run lint");
+        let args = shell_command_args("npm run lint", "/bin/zsh");
+        // The terminal keeps running after the command so its output stays visible (HS2-2BKPGK):
+        // Windows uses /K (not /C), POSIX runs the command then execs an interactive login shell.
         #[cfg(windows)]
-        assert_eq!(args, ["/D", "/S", "/C", "npm run lint"]);
+        assert_eq!(args, ["/D", "/S", "/K", "npm run lint"]);
         #[cfg(not(windows))]
-        assert_eq!(args, ["-lc", "npm run lint"]);
+        assert_eq!(args, ["-lc", "npm run lint\nexec '/bin/zsh' -il"]);
     }
 
     #[test]
