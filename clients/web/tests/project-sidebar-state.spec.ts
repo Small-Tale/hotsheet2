@@ -94,3 +94,34 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     counts:counts(7,3,[0,1,0,1,0,2,3]),
   }});
 });
+
+test('keeps the authoritative completion trend after a local delete drops the counts snapshot (HS2-BRDMBB)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  // The completed-today count and 7-day trend include archived-completed history that is NOT in the loaded
+  // queue rows, so re-deriving them from the partial rows after a local mutation would be wrong.
+  let rows=[ticket('HS2-S1','started'),ticket('HS2-S2','started'),ticket('HS2-S3','started'),ticket('HS2-S4','started'),ticket('HS2-DEL','not_started')];
+  const counts={total:8,queued:5,backlog:0,archive:3,trash:0,open:5,up_next:0,active:0,started:4,completed_today:2,completion_trend:[0,1,0,2,0,1,2]};
+  await page.route('**/*',async route=>{
+    const request=route.request(),url=new URL(request.url()),path=url.pathname;
+    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project('demo-checkout',request.postDataJSON().root as string)});
+    if(path==='/__hotsheet/folders/choose')return route.fulfill({json:{path:'/work/demo'}});
+    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]});
+    if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<{id:string}&Record<string,unknown>>;rows=rows.map(item=>{const u=updates.find(v=>v.id===item.id);return u?{...item,...u}:item});const changed=updates.map(u=>{const t=rows.find(item=>item.id===u.id)!;return{store:'git-local',...t,details:'',blocked_reason:null,notes:[],attachments:[],concurrency_token:`next-${u.id}`}});return route.fulfill({json:changed})}
+    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:{items:rows.filter(item=>item.status!=='deleted'),counts}});
+    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
+    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(url.searchParams.get('since')??0),events:[],overflow:false}});
+    if(path.endsWith('/terminals')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
+    return route.continue();
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const summary=page.locator('[data-component="project-sidebar"] [data-component="project-summary"]'),chart=summary.getByRole('img');
+  await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
+  await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
+  const del=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEL"]');await del.click();await del.click({button:'right'});
+  await page.getByRole('menu',{name:'Ticket actions'}).locator('[data-context-action="Delete ticket"]').click();
+  await page.locator('[data-component="bulk-delete-dialog"]').getByRole('button',{name:'Delete 1 ticket'}).click();
+  await expect(del).toHaveCount(0);
+  // The authoritative completion trend and completed-today must persist through the local delete (HS2-BRDMBB).
+  await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
+  await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
+});
