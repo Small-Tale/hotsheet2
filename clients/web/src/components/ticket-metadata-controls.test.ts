@@ -81,6 +81,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('ticket-attachments__annotation-marker');
     expect(attachments).toContain('data-lucide="pencil"');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
+    // Media grid items cap at 220px wide so they wrap instead of stretching full width (HS2-KEZ0EY).
+    expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
     expect(css).toMatch(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(css).toMatch(/ticket-attachments__count \{[^}]*background: var\(--wa-color-neutral-fill-quiet\)/);
     expect(attachments).toContain('aria-label="More actions for one.png" title="More actions for one.png"');
