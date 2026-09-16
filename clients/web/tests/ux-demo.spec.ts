@@ -2292,3 +2292,15 @@ test('previews AIConversation public states at wide and narrow sizes',async({pag
   await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await page.locator('[data-action="toggle-settings"]').click();const scenario=page.locator('[data-settings="ai-conversation"] [name="scenario"]');for(const value of ['empty','permission','completed','usage-unpriced','failed','interrupted'] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toBeVisible();if(value==='empty')await expect(conversationHost).toContainText('Start a conversation');if(value==='permission')await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();if(value==='completed'){await expect(conversationHost).toContainText('≈$0.04');await expect(conversationHost).toContainText('AI-generated · may contain errors')}if(value==='usage-unpriced')await expect(conversationHost).toContainText('Cost unavailable');if(value==='failed'){await expect(conversationHost).toContainText('Conversation unavailable');await expect(conversationHost).toContainText('The tool turn failed.');await transcript.evaluate(node=>{node.scrollTop=node.scrollHeight});await expect(conversationHost.getByRole('alert')).toBeInViewport();await dialog.screenshot({path:'/private/tmp/hs2-1kqjbk-ai-conversation-failed-wide.png'})}if(value==='interrupted')await expect(conversationHost).toContainText('Stopped before the suite completed.');await page.keyboard.press('Escape');await expect(dialog).toBeHidden()}
   await page.setViewportSize({width:760,height:640});await scenario.evaluate((node:HTMLElement&{value:string})=>{node.value='failed';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(dialog).toBeVisible();await transcript.evaluate(node=>{node.scrollTop=node.scrollHeight});await expect(conversationHost.getByRole('alert')).toBeInViewport();await dialog.screenshot({path:'/private/tmp/hs2-1kqjbk-ai-conversation-failed-narrow.png'});
 });
+
+test('shows a shape-preserving inspector skeleton while a ticket loads',async({page})=>{
+  await page.setViewportSize({width:900,height:800});await page.goto('/ux-demo?component=ticket-inspector-skeleton');
+  const skeleton=page.locator('[data-component="ticket-inspector-skeleton"]');
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton).toHaveAttribute('aria-busy','true');
+  await expect(skeleton.getByRole('button',{name:'Hide ticket inspector'})).toBeVisible();
+  await expect(skeleton.locator('.ticket-inspector-skeleton__tab')).toHaveCount(4);
+  await expect(skeleton.locator('wa-skeleton')).not.toHaveCount(0);
+  await expect(skeleton).not.toContainText('HS2-');
+  await skeleton.screenshot({path:'/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png'});
+});

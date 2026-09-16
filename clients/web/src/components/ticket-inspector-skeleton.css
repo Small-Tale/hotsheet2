@@ -1,0 +1,16 @@
+/* Mirrors .ticket-inspector geometry so the skeleton occupies the same shape while the next
+   ticket loads (HS2-REG3A2). */
+.ticket-inspector-skeleton { display: flex; width: min(remify(432px), 100%); min-width: 0; max-width: 100%; height: 100%; min-height: remify(544px); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(12.8px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); flex-direction: column; }
+.ticket-inspector-skeleton wa-skeleton { --sheen-color: var(--wa-color-neutral-fill-loud); --color: var(--wa-color-neutral-fill-normal); }
+.ticket-inspector-skeleton__header { display: block; padding: 0 0 remify(16px); }
+.ticket-inspector-skeleton__slug { width: remify(88px); height: remify(16px); }
+.ticket-inspector-skeleton__title { width: calc(100% - remify(32px)); height: remify(24px); margin: remify(6px) remify(16px) 0; border-radius: remify(6.4px); }
+.ticket-inspector-skeleton__tabs { display: grid; margin: 0 remify(13.6px) remify(16px); padding: remify(3.2px); border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); grid-template-columns: repeat(4, minmax(0, 1fr)); gap: remify(4px); }
+.ticket-inspector-skeleton__tab { height: remify(36px); border-radius: remify(6.4px); }
+.ticket-inspector-skeleton__content { display: grid; padding: 0 remify(16px); align-content: start; gap: remify(16px); }
+.ticket-inspector-skeleton__field { display: grid; gap: remify(6px); }
+.ticket-inspector-skeleton__label { width: remify(72px); height: remify(12px); border-radius: remify(4px); }
+.ticket-inspector-skeleton__pill { width: remify(120px); height: remify(28px); border-radius: var(--wa-border-radius-pill); }
+.ticket-inspector-skeleton__lines { display: grid; margin-top: remify(8px); gap: remify(10px); }
+.ticket-inspector-skeleton__line { width: 100%; height: remify(12px); border-radius: remify(4px); }
+.ticket-inspector-skeleton__line:last-child { width: 55%; }

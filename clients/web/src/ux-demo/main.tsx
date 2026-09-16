@@ -250,6 +250,7 @@ import {
   QuickTicketComposerDemo,
   TerminalTicketRailDemo,
   TicketInspectorDemo,
+  TicketInspectorSkeletonDemo,
   WorkspaceHeaderDemo,
   workspaceMode,
   workspaceSearchHelpOpen,
@@ -413,6 +414,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'ticket-board': { icon: Kanban, name: 'kanban' },
     'ticket-board-column': { icon: Columns3, name: 'columns-3' },
     'ticket-inspector': { icon: PanelRight, name: 'panel-right' },
+    'ticket-inspector-skeleton': { icon: PanelRight, name: 'panel-right' },
     'ticket-info-panel': { icon: Info, name: 'info' },
     'ticket-timeline': { icon: Activity, name: 'activity' },
     'ticket-code-review': { icon: GitCommitHorizontal, name: 'git-commit-horizontal' },
@@ -467,6 +469,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'page-header') return <PageHeaderDemo />;
   if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
+  if (item.id === 'ticket-inspector-skeleton') return <TicketInspectorSkeletonDemo />;
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;

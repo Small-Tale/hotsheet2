@@ -7,6 +7,7 @@ import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
 import { type InspectorTab,TicketInspector } from '../components/ticket-inspector';
+import { TicketInspectorSkeleton } from '../components/ticket-inspector-skeleton';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import { applyWorkspaceSortDirection, defaultWorkspaceSortDirection, WorkspaceControls, WorkspaceHeader, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from '../components/workspace-header';
@@ -121,4 +122,8 @@ export function TicketInspectorDemo() {
       : <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>}
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;
+}
+
+export function TicketInspectorSkeletonDemo() {
+  return <section class="inspector-demo" aria-label="TicketInspectorSkeleton demo"><TicketInspectorSkeleton /></section>;
 }
