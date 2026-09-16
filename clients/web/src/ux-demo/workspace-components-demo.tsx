@@ -125,5 +125,5 @@ export function TicketInspectorDemo() {
 }
 
 export function TicketInspectorSkeletonDemo() {
-  return <section class="inspector-demo" aria-label="TicketInspectorSkeleton demo"><TicketInspectorSkeleton /></section>;
+  return <section class="inspector-demo" aria-label="TicketInspectorSkeleton demo"><TicketInspectorSkeleton slug="HS2-4J50K3" /></section>;
 }

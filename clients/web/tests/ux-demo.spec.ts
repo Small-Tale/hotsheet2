@@ -2293,15 +2293,21 @@ test('previews AIConversation public states at wide and narrow sizes',async({pag
   await page.setViewportSize({width:760,height:640});await scenario.evaluate((node:HTMLElement&{value:string})=>{node.value='failed';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(dialog).toBeVisible();await transcript.evaluate(node=>{node.scrollTop=node.scrollHeight});await expect(conversationHost.getByRole('alert')).toBeInViewport();await dialog.screenshot({path:'/private/tmp/hs2-1kqjbk-ai-conversation-failed-narrow.png'});
 });
 
-test('shows a shape-preserving inspector skeleton while a ticket loads',async({page})=>{
+test('renders the real inspector chrome as a value-free loading placeholder',async({page})=>{
   await page.setViewportSize({width:900,height:800});await page.goto('/ux-demo?component=ticket-inspector-skeleton');
   const skeleton=page.locator('[data-component="ticket-inspector-skeleton"]');
   await expect(skeleton).toBeVisible();
   await expect(skeleton).toHaveAttribute('aria-busy','true');
-  await expect(skeleton.getByRole('button',{name:'Hide ticket inspector'})).toBeVisible();
-  await expect(skeleton.locator('.ticket-inspector-skeleton__tab')).toHaveCount(4);
-  await expect(skeleton.locator('wa-skeleton')).not.toHaveCount(0);
-  await expect(skeleton).not.toContainText('HS2-');
+  // It IS the inspector: same aside chrome, working collapse control, real segmented tab bar.
+  await expect(skeleton).toHaveClass(/\bticket-inspector--placeholder\b/);
+  await expect(skeleton.getByRole('button',{name:'Hide inspector'})).toBeVisible();
+  await expect(skeleton.locator('.ticket-inspector__tabs .ticket-inspector__tab-label')).toHaveCount(4);
+  // Real controls/section headers are drawn; only the per-ticket values are placeholders.
+  for(const label of ['Category','Priority','Status','Block ticket','Details','Tags','Notes','Activity']){await expect(skeleton.getByText(label,{exact:true}).first()).toBeVisible();}
+  await expect(skeleton.locator('.ticket-inspector__ph')).not.toHaveCount(0);
+  // No stale prior-ticket values; the known slug of the loading ticket is shown as chrome.
+  await expect(skeleton.locator('.ticket-inspector__details-surface')).not.toContainText(/\w/);
+  await expect(skeleton).toContainText('HS2-4J50K3');
   await skeleton.screenshot({path:'/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png'});
 });
 
