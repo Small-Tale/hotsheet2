@@ -24,6 +24,8 @@ export const demoCatalog: DemoCategory[] = [
     demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
     demo('connection-state-banner', 'ConnectionStateBanner', 'Connection progress, interruption, compatibility, and authentication states.', 'feature-floor', true),
     demo('connection-details-dialog', 'ConnectionDetailsDialog', 'Dismissible client/server compatibility metadata and recovery guidance.', 'feature-floor', true, ['dialog-header','value-table']),
+    demo('settings-navigation', 'SettingsNavigation', 'Grouped settings categories in an unpadded sidebar pane.', 'feature-floor', true, ['menu-item', 'toolbar']),
+    demo('notification-navigation', 'NotificationNavigation', 'Notification views with attention counts in an unpadded sidebar pane.', 'feature-floor', true, ['menu-item', 'toolbar']),
   ]},
   { id: 'tickets', name: 'Ticket workspace', children: [
     { id: 'ticket-list', name: 'List', demos: [

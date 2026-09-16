@@ -1,5 +1,6 @@
-.settings-navigation { display: flex; width: min(remify(272px), 100%); min-width: 250px; height: 100%; min-height: 0; padding: remify(10.4px); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(14.4px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); flex-direction: column; gap: remify(10.4px); }
-.settings-navigation > .kui-toolbar { width: calc(100% + remify(20.8px)); margin: remify(-10.4px) remify(-10.4px) 0; flex: none; }
-.settings-navigation__content { min-height: 0; overflow: auto; padding: remify(4px) remify(3.2px) remify(8px); }
-.settings-navigation__heading { margin: remify(2.4px) remify(8.8px) remify(10.4px); color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.settings-navigation nav { display: grid; gap: remify(3.2px); }
+/* Unpadded pane (kui-pane): the shell owns only card chrome; children own their inset
+   (kerf ui rule 15). Shared by SettingsNavigation and NotificationNavigation. */
+.settings-navigation { width: min(remify(272px), 100%); min-width: 250px; height: 100%; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(14px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.settings-navigation__content { grid-row: 2; overflow: auto; padding-block: remify(8px); }
+.settings-navigation__heading { margin: remify(8px) remify(8px) remify(4px); color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.settings-navigation nav { display: grid; gap: remify(2px); }

@@ -6,9 +6,11 @@ import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor,DriveOptionsMenu } from '../components/drive-options-menu';
+import { NotificationNavigation } from '../components/notification-navigation';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectSummary } from '../components/project-summary';
 import { RepositorySummary } from '../components/repository-summary';
+import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 
@@ -53,6 +55,12 @@ export function DriveOptionsMenuDemo(){return <DemoFrame><div style="position:re
 export function AiToolSettingsDemo(){return <AiToolSettings tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} message="Saved locally."/>}
 export function ProjectSidebarDemo() {
   return <section class="project-sidebar-demo"><div class="project-sidebar-demo__resizer" style={`--project-sidebar-demo-height:${projectSidebarHeight.value}px`}><ProjectSidebar completedToday={6} inProgress={3} completionTrend={completionTrend} branch="feature/client-sidebar" unpushed={6} uncommitted={2} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} collapsedCommandGroups={collapsedCommandGroups.value} driveRunning={driveRunning.value} driveTool="codex" driveTools={demoAiTools} driveSelection={{tool:'codex'}} driveDefaultSelection={{tool:'codex',model:'gpt-5.6',effort:'high'}} openCount={17} upNextCount={4} activeCount={2} /><div class="project-sidebar-demo__resize-handle" data-action="resize-project-sidebar" role="separator" aria-label="Resize project sidebar" aria-orientation="horizontal" aria-valuemin={PROJECT_SIDEBAR_MIN_HEIGHT} aria-valuemax={PROJECT_SIDEBAR_MAX_HEIGHT} aria-valuenow={projectSidebarHeight.value} tabindex="0"><LucideIcon icon={GripHorizontal} name="grip-horizontal" /></div></div><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
+}
+export function SettingsNavigationDemo() {
+  return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail"><SettingsNavigation selected="ai" collapseControl /></div></section>;
+}
+export function NotificationNavigationDemo() {
+  return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail"><NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl /></div></section>;
 }
 export function TerminalOperationsSidebarDemo() {
   return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail"><TerminalOperationsSidebar projects={[

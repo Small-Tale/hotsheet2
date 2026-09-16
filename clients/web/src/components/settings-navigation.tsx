@@ -1,3 +1,4 @@
+import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -42,9 +43,9 @@ export function SettingsNavigation({ selected, collapseControl = false }: { sele
       <nav aria-label={heading}>
         {items.map(item => <MenuItem action="select-settings-category" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} />)}
       </nav></>;
-  return <aside class="settings-navigation" data-component="settings-navigation" aria-label="Settings categories">
+  return <aside class="settings-navigation kui-pane" data-component="settings-navigation" aria-label="Settings categories">
     {collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide settings sidebar" title="Hide settings sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
-    <div class="settings-navigation__content">
+    <div class="settings-navigation__content kui-pane__content">
       {renderGroup('Project Settings', projectCategories)}
       {renderGroup('App Settings', appCategories)}
     </div>

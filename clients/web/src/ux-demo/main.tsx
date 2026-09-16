@@ -152,12 +152,14 @@ import {
   DriveControlDemo,
   DriveOptionsMenuDemo,
   driveRunning,
+  NotificationNavigationDemo,
   ProjectSidebarDemo,
   projectSidebarHeight,
   ProjectSummaryDemo,
   RepositorySummaryDemo,
   runningCommandId,
   selectedViewId,
+  SettingsNavigationDemo,
   sidebarCommands,
   sidebarEvent,
   sidebarViews,
@@ -394,6 +396,8 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'repository-status-popover': { icon: FolderGit2, name: 'folder-git-2' },
     'change-evidence-dialog': { icon: GitCompare, name: 'git-compare' },
     'connection-details-dialog': { icon: Wrench, name: 'wrench' },
+    'settings-navigation': { icon: Settings, name: 'settings' },
+    'notification-navigation': { icon: Bell, name: 'bell' },
     'view-navigation': { icon: ListTree, name: 'list-tree' },
     'command-navigation': { icon: Command, name: 'command' },
     'drive-control': { icon: Play, name: 'play' },
@@ -494,6 +498,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'repository-status-popover') return <RepositoryStatusPopoverDemo />;
   if (item.id === 'change-evidence-dialog') return <ChangeEvidenceDialogDemo />;
   if (item.id === 'connection-details-dialog') return <ConnectionDetailsDialogDemo />;
+  if (item.id === 'settings-navigation') return <SettingsNavigationDemo />;
+  if (item.id === 'notification-navigation') return <NotificationNavigationDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
