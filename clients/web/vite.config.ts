@@ -1,6 +1,7 @@
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
 import { defineConfig,type UserConfig } from 'vite';
 
+import remifyCss from './scripts/remify-css.mjs';
 import { devServerRouteExclude } from './src/dev-server-routes';
 import { installTerminalWebSocketBridge } from './src/terminal-ws-bridge';
 
@@ -20,6 +21,7 @@ export default defineConfig(({ command }) => ({
         exclude: [devServerRouteExclude, ...defaultOptions.exclude],
       })]
     : [],
+  css: { postcss: { plugins: [remifyCss()] } },
   server: { host: '127.0.0.1', port: 4175, strictPort: true },
   build: { sourcemap: true },
 }));
