@@ -767,4 +767,33 @@ args = ["--path", "{store}"]
         );
         assert_eq!(version(bundled), version(adapter));
     }
+
+    #[test]
+    fn every_plugin_shares_one_instruction_body() {
+        // The Hot Sheet instruction block is a single shared source: plugins/claude/instructions.md
+        // is canonical and every other tool's instructions.md must match it byte-for-byte, so the
+        // four cannot drift again (HS2-829W59; re-converged in HS2-3JMMAZ). Mirrors the SKILL.md
+        // sync test above. If a tool ever needs a genuine per-tool variation, strip that line here
+        // as the SKILL.md test does for `allowed-tools:` — never fork the whole body.
+        let canonical = include_str!("../../../plugins/claude/instructions.md");
+        for (id, body) in [
+            (
+                "codex",
+                include_str!("../../../plugins/codex/instructions.md"),
+            ),
+            (
+                "antigravity",
+                include_str!("../../../plugins/antigravity/instructions.md"),
+            ),
+            (
+                "opencode",
+                include_str!("../../../plugins/opencode/instructions.md"),
+            ),
+        ] {
+            assert_eq!(
+                canonical, body,
+                "[{id}] instructions.md has drifted from the canonical plugins/claude/instructions.md; edit the canonical and re-copy so the shared instruction body stays identical"
+            );
+        }
+    }
 }
