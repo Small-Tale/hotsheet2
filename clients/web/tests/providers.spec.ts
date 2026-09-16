@@ -2693,3 +2693,18 @@ test('recovers the open new-ticket composer and its draft after a reload/restart
   await expect(restored.getByRole('textbox',{name:'Ticket title'})).toHaveValue('Draft that must survive a restart');
   await expect(restored.getByRole('textbox',{name:'Details'})).toHaveValue('Notes that must survive a restart.');
 });
+
+test('opens a distinct terminal for each shell command even when a create is still pending (HS2-2BKPGK)',async({page})=>{
+  const posted:string[]=[];let releaseFirst!:()=>void;const firstGate=new Promise<void>(resolve=>{releaseFirst=resolve});let firstHeld=false;
+  await installFakeTerminalSockets(page,true);await mockProject(page);
+  await page.route('**/__hotsheet/project-api/demo-checkout/commands',route=>route.request().method()==='GET'?route.fulfill({json:[{id:'lint',title:'Lint project',kind:'shell',command:'npm run lint',group:'Quality'},{id:'test',title:'Test project',kind:'shell',command:'npm test',group:'Quality'}]}):route.fallback());
+  await page.route('**/__hotsheet/project-api/demo-checkout/terminals',async route=>{if(route.request().method()==='POST'){const body=route.request().postDataJSON() as {shell_command:string};posted.push(body.shell_command);if(!firstHeld){firstHeld=true;await firstGate}return route.fulfill({json:{id:`term-${posted.length}`,alive:true,busy:true,cwd:'/work/demo'}})}return route.fallback()});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Lint project'}).click();
+  await expect.poll(()=>posted).toEqual(['npm run lint']); // the first create's POST is held in flight
+  await page.getByRole('button',{name:'Test project'}).click(); // a second click arrives during the pending create
+  await page.waitForTimeout(200);
+  releaseFirst();
+  // The second shell command must still open its own terminal (not be dropped by the in-flight create).
+  await expect.poll(()=>posted).toEqual(['npm run lint','npm test']);
+});
