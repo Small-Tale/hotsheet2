@@ -10,8 +10,17 @@
 .ai-conversation__embedded-header svg { width:remify(16px); height:remify(16px); }
 .ai-conversation__saved-notice { display:grid; padding:var(--wa-space-xs) var(--wa-space-s); margin:var(--wa-space-xs) var(--wa-space-m) 0; border-radius:var(--wa-border-radius-m); color:var(--wa-color-neutral-on-quiet); background:var(--wa-color-neutral-fill-quiet); gap:var(--wa-space-3xs); font-size:var(--wa-font-size-xs); line-height:1.4; }
 .ai-conversation__saved-notice strong { color:var(--wa-color-neutral-on-normal); }
-.ai-conversation__session-controls { display:flex; padding:var(--wa-space-xs) var(--wa-space-s); border-bottom:1px solid var(--wa-color-neutral-border-quiet); align-items:end; gap:var(--wa-space-xs); }
-.ai-conversation__session-controls :is(.kui-select,.model-input) { width:min(remify(224px),40%); }
+/* Compact current-model label + popup trigger for changing model/effort, mirroring the drive
+   button (HS2-R5F7A5). */
+.ai-conversation__model { display:flex; min-width:0; padding:var(--wa-space-2xs) var(--wa-space-s); border-bottom:1px solid var(--wa-color-neutral-border-quiet); align-items:center; gap:var(--wa-space-2xs); }
+.ai-conversation__model-current { display:inline-flex; min-width:0; align-items:center; gap:var(--wa-space-2xs); color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); }
+.ai-conversation__model-icon { flex:none; color:var(--wa-color-neutral-on-quiet); }
+.ai-conversation__model-name { min-width:0; overflow:hidden; color:var(--wa-color-neutral-on-normal); font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.ai-conversation__model-effort { flex:none; padding:0 remify(6.4px); border-radius:var(--wa-border-radius-pill); background:var(--wa-color-neutral-fill-quiet); font-variant:all-small-caps; }
+.ai-conversation__model-trigger { display:grid; width:remify(28px); height:remify(28px); padding:0; border:0; border-radius:var(--wa-border-radius-m); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; place-items:center; }
+.ai-conversation__model-trigger:hover { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-quiet); }
+.ai-conversation__model-trigger:focus-visible { outline:var(--wa-focus-ring); outline-offset:-2px; }
+.ai-conversation__model-trigger svg { width:remify(16px); height:remify(16px); }
 .ai-conversation__header-action::part(base) { width: remify(32px); height: remify(32px); min-height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-pill); }
 .ai-conversation__header-action svg { width: remify(16px); height: remify(16px); }
 .ai-conversation__foreground { position: fixed; z-index: 100; display: flex; padding: remify(72px) remify(16px) remify(16px); pointer-events: none; inset: 0; justify-content: center; }

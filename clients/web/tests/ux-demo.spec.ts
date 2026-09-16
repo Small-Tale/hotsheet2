@@ -2304,3 +2304,15 @@ test('shows a shape-preserving inspector skeleton while a ticket loads',async({p
   await expect(skeleton).not.toContainText('HS2-');
   await skeleton.screenshot({path:'/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png'});
 });
+
+test('shows the chat model/effort as a label with a popup to change them',async({page})=>{
+  await page.setViewportSize({width:1000,height:800});await page.goto('/ux-demo?component=ai-conversation');
+  const control=page.locator('[data-component="conversation-model-control"]').first();
+  await expect(control).toBeVisible();
+  await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
+  await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
+  await control.locator('.ai-conversation__model-trigger').click();
+  await expect(page.getByRole('menuitem',{name:/Model/})).toBeVisible();
+  await expect(page.getByRole('menuitem',{name:/Effort/})).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-r5f7a5-chat-model-popup.png'});
+});

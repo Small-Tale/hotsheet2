@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './manual-model-dialog.css';
 
-export interface ManualModelDialogState { target:'settings'|'drive'; providerName:string; value:string }
+export interface ManualModelDialogState { target:'settings'|'drive'|'conversation'; providerName:string; value:string }
 
 export function ManualModelDialog({state}:{state?:ManualModelDialogState}){
   if(!state)return <></>;
