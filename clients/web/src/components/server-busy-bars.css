@@ -38,7 +38,8 @@
    star-yellow background and rounded bottom corners; scales in/out vertically like the bars. */
 .server-busy-message {
   position: fixed;
-  inset: 4px auto auto 50%;
+  /* Overlaps the 4px wave bars at the very top, per the design (HS2-2G1Y8X). */
+  inset: 0 auto auto 50%;
   z-index: 2147483000;
   padding: remify(1.6px) remify(9.6px);
   border-radius: 0 0 remify(6.4px) remify(6.4px);
