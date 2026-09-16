@@ -1,0 +1,18 @@
+.lucide-icon-picker { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: remify(8px); }
+
+.lucide-icon-picker__search { position: relative; display: flex; align-items: center; }
+.lucide-icon-picker__search-icon { position: absolute; left: remify(10px); display: inline-flex; color: var(--wa-color-neutral-on-quiet); pointer-events: none; }
+.lucide-icon-picker__search-icon svg { width: remify(16px); height: remify(16px); }
+.lucide-icon-picker__search input { width: 100%; padding: remify(6px) remify(10px) remify(6px) remify(32px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-normal); font: inherit; }
+.lucide-icon-picker__search input:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+
+.lucide-icon-picker__grid { display: flex; max-height: remify(184px); margin: 0; padding: remify(2px); overflow-y: auto; flex-wrap: wrap; gap: remify(6px); list-style: none; }
+.lucide-icon-picker__grid > li { margin: 0; }
+
+.lucide-icon-picker__icon { display: grid; width: remify(36px); height: remify(36px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-normal); cursor: pointer; place-items: center; }
+.lucide-icon-picker__icon:hover { border-color: var(--wa-color-neutral-border-loud); }
+.lucide-icon-picker__icon:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.lucide-icon-picker__icon[aria-pressed="true"] { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.lucide-icon-picker__icon svg { width: remify(18px); height: remify(18px); }
+
+.lucide-icon-picker__hint, .lucide-icon-picker__empty { margin: 0; padding: remify(6px) 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); list-style: none; }

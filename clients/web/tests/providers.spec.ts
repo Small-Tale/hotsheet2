@@ -2700,7 +2700,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await commandDialog.getByTitle('Green',{exact:true}).click();
   await commandDialog.getByTitle('circle-check-big',{exact:true}).click();
   await expect(commandDialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#22c55e');
-  await expect(commandDialog.locator('.command-settings-editor__icon input:checked')).toHaveValue('circle-check-big');
+  await expect(commandDialog.locator('[data-action="select-command-icon"][data-icon-name="circle-check-big"]')).toHaveAttribute('aria-pressed','true');
   await commandDialog.getByRole('button',{name:'Done'}).click();
   await expect(editor.getByRole('status')).toContainText('Saved.');
   await page.getByLabel('List view').click();
@@ -2708,6 +2708,32 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(command).toHaveAttribute('data-command-color','#22c55e');
   await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
   await page.locator('[data-component="project-sidebar"]').screenshot({path:'/private/tmp/hs2-656xj2-sidebar-command-color-icon.png'});
+});
+
+test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-5VSNV3)',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const command=page.locator('[data-action="run-command"][data-item-id="check"]');
+  await expect(command).toBeVisible();
+  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();
+  const editor=page.locator('[data-component="command-settings-editor"]');await expect(editor).toBeVisible();
+  const runChecksRow=editor.locator('.command-settings-editor__row',{hasText:'Run checks'});await runChecksRow.locator('.command-settings-editor__row-menu-trigger').click();await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+  const commandDialog=page.locator('#command-editor-dialog'),picker=commandDialog.locator('[data-component="lucide-icon-picker"]');
+  await expect(picker).toBeVisible();
+  // The curated popular defaults show before searching; 'compass' is not among them.
+  await expect(picker.locator('[data-icon-name="send"]')).toBeVisible();
+  await expect(picker.locator('[data-icon-name="compass"]')).toHaveCount(0);
+  await picker.scrollIntoViewIfNeeded();await picker.screenshot({path:'/private/tmp/hs2-5vsnv3-icon-picker-popular.png'});
+  // Typing a query loads the full catalog and surfaces the matching icon.
+  await picker.getByRole('searchbox',{name:'Search icons'}).fill('compass');
+  const compass=picker.locator('[data-action="select-command-icon"][data-icon-name="compass"]').first();
+  await expect(compass).toBeVisible();
+  await picker.screenshot({path:'/private/tmp/hs2-5vsnv3-icon-picker-search.png'});
+  await compass.click();
+  await expect(compass).toHaveAttribute('aria-pressed','true');
+  await commandDialog.getByRole('button',{name:'Done'}).click();
+  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await page.getByLabel('List view').click();
+  await expect(command.locator('[data-lucide="compass"]')).toHaveCount(1);
 });
 
 test('keeps the open new-ticket composer and its draft through a background ticket refresh (HS2-D4PB9Y)',async({page})=>{

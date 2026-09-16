@@ -71,6 +71,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-bridge.ts    #   Vite-only singleton bootstrap-server discovery/detached start + multi-store project attach and credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery; authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     src/terminal-names.ts   #   Human-readable generated-id fallback plus validated device-local terminal-name storage
+    src/lucide-catalog.ts    #   Lazy full Lucide catalog loader (separate chunk): PascalCase→kebab, dedup, sorted entries, bounded search, lucideCatalogVersion signal for reactive resolution (HS2-5VSNV3)
+    src/components/lucide-popular.ts # Bundled curated "popular" command icons (synchronous defaults + legacy) for the picker and command rendering
+    src/components/command-icon.ts # resolveCommandIcon: legacy-alias + popular + lazy-catalog resolution with a default fallback (HS2-5VSNV3)
+    src/components/lucide-icon-picker.tsx # Reusable searchable icon picker (popular defaults + lazy full-catalog search); host-controlled query/selection via delegation (HS2-5VSNV3)
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup and explicit unhealthy-server recovery, plus dev-only /ux-demo, corrupt-file reveal, and review routes

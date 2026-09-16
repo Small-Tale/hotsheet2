@@ -153,6 +153,7 @@ import {
   closeCommandEditorDemo,
   collapsedCommandGroups,
   commandEditorEditingId,
+  commandEditorIconSearch,
   commandGroupExpanded,
   CommandNavigationDemo,
   CommandSettingsEditorDemo,
@@ -914,8 +915,18 @@ delegate(root, 'input', '[data-command-field]', (_event, target) => {
   const id = commandEditorRowId(target);
   if (id && input.name) updateCommandEditorField(id, input.name, input.value);
 });
+delegate(root, 'input', '[name="command-icon-search"]', (_event, target) => {
+  commandEditorIconSearch.value = (target as HTMLInputElement).value;
+});
+delegate(root, 'click', '[data-action="select-command-icon"]', (_event, target) => {
+  const id = commandEditorRowId(target);
+  const name = (target as HTMLElement).dataset.iconName;
+  if (id && name) updateCommandEditorField(id, 'icon', name);
+});
 delegateCapture(root, 'toggle', `#${COMMAND_EDITOR_DIALOG_ID}`, (event) => {
-  if ((event as ToggleEvent).newState === 'closed') commandEditorEditingId.value = undefined;
+  if ((event as ToggleEvent).newState !== 'closed') return;
+  commandEditorEditingId.value = undefined;
+  commandEditorIconSearch.value = '';
 }, { match: 'direct' });
 delegate(root, 'click', '[data-action="open-hs1-migration-demo"]', openHs1MigrationDialogDemo);
 delegate(root, 'click', '[data-action="dismiss-hs1-migration"]', closeHs1MigrationDialogDemo);

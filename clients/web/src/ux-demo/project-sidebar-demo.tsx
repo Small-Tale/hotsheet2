@@ -16,6 +16,7 @@ import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
+import { loadLucideCatalog } from '../lucide-catalog';
 
 export const selectedViewId = signal('all');
 export const commandGroupExpanded = signal(true);
@@ -61,13 +62,17 @@ export const commandEditorCommands = signal<CommandDefinition[]>([
 export const commandEditorEditingId = signal<string | undefined>(undefined);
 export const commandEditorExtraGroups = signal<string[]>([]);
 export const commandEditorMessage = signal('');
+export const commandEditorIconSearch = signal('');
 export function openCommandEditorDemo(id: string) {
   commandEditorEditingId.value = id;
+  commandEditorIconSearch.value = '';
+  void loadLucideCatalog();
   document.querySelector<HTMLElement>(`#${COMMAND_EDITOR_DIALOG_ID}`)?.showPopover();
 }
 export function closeCommandEditorDemo() {
   document.querySelector<HTMLElement>(`#${COMMAND_EDITOR_DIALOG_ID}`)?.hidePopover();
   commandEditorEditingId.value = undefined;
+  commandEditorIconSearch.value = '';
 }
 export function updateCommandEditorField(id: string, field: string, value: string) {
   commandEditorCommands.value = commandEditorCommands.value.map(command => {
@@ -103,7 +108,7 @@ export function addCommandEditorSetting() {
   commandEditorCommands.value = [...commandEditorCommands.value, { id, title: 'New command', kind: 'shell', command: '' }];
   openCommandEditorDemo(id);
 }
-export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={commandEditorCommands.value} extraGroups={commandEditorExtraGroups.value} editingId={commandEditorEditingId.value} message={commandEditorMessage.value} /></section>; }
+export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={commandEditorCommands.value} extraGroups={commandEditorExtraGroups.value} editingId={commandEditorEditingId.value} iconSearch={commandEditorIconSearch.value} message={commandEditorMessage.value} /></section>; }
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
 export function DriveOptionsMenuDemo(){return <DemoFrame><div style="position:relative;margin-top:14rem"><DriveOptionsMenu tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} defaultSelection={{tool:'codex',model:'gpt-5.6',effort:'high'}}/></div></DemoFrame>}
 export function AiToolSettingsDemo(){return <AiToolSettings tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} message="Saved locally."/>}

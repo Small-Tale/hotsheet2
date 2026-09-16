@@ -972,8 +972,8 @@ capability-aware sections when their underlying features and data contracts land
   edits it. An "Add group" button appends an empty group (droppable, with a delete button
   while empty). Editing — or adding — a command opens a native "Edit command" popover
   dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
-  Shell / AI-prompt fields, an optional confirmation message, and the color-swatch and
-  Lucide-icon pickers — with Done in the dialog toolbar. The identifier (auto-generated),
+  Shell / AI-prompt fields, an optional confirmation message, the color-swatch picker, and
+  a searchable Lucide-icon picker — with Done in the dialog toolbar. The identifier (auto-generated),
   group (set by drag-and-drop), and working directory (always the project root; users `cd`
   within shell commands) are intentionally not shown. The color palette's neutral slot is
   "Transparent": a command with that color (or none) renders with no background fill and the
@@ -984,6 +984,19 @@ capability-aware sections when their underlying features and data contracts land
   than painting a stray strip. Named AI prompts use the same safe contract by invoking an
   appropriate configured CLI command. The retired worker target picker is deliberately
   absent; drive targeting remains a separate control (HS2-656XJ2, HS2-D9JBXT).
+- `LucideIconPicker` (`components/lucide-icon-picker.tsx`) is the reusable searchable icon
+  picker used for the command's Button icon. A search field sits above a grid: with no query
+  it shows a curated set of bundled "popular" icons (`components/lucide-popular.ts`, always in
+  the main bundle so defaults and legacy command icons render synchronously); typing a query
+  searches the full Lucide catalog, which is lazy-loaded as a separate chunk on first use
+  (`lucide-catalog.ts`, `loadLucideCatalog()`), so any of the ~2000 icons can be assigned. The
+  host owns state: it passes the current icon name and query and wires the search input
+  (`name="command-icon-search"`) and per-icon `data-action="select-command-icon"`
+  (`data-icon-name`) buttons through Kerf delegation. `components/command-icon.ts`
+  (`resolveCommandIcon`) maps a stored icon to a renderable node — resolving legacy keys
+  (`test`→`test-tube-2`, `build`→`hammer`) and falling back to a default until the catalog
+  loads — and the sidebar/editor read `lucideCatalogVersion` so custom icons appear once the
+  catalog is ready (HS2-5VSNV3).
 
 ### 5.4 Notifications — presentation begins at feature floor
 

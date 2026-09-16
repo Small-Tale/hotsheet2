@@ -51,14 +51,18 @@ describe('CommandSettingsEditor',()=>{
     expect(open).toMatch(/data-command-id="c"[^]*name="command"/);
   });
 
-  it('offers color swatches and an icon picker reflecting the edited command values',()=>{
+  it('offers color swatches and a searchable Lucide icon picker reflecting the edited command values (HS2-5VSNV3)',()=>{
     const markup=String(CommandSettingsEditor({commands:[{id:'c',title:'Verify',kind:'shell',command:'npm test',color:'#22c55e',icon:'test'}],editingId:'c'}));
     expect(markup).toContain('name="color"');
     expect(markup).toContain('--swatch:#22c55e');
     expect(markup).toMatch(/name="color"[^>]*value="#22c55e"[^>]*checked/);
-    expect(markup).toContain('name="icon"');
-    expect(markup).toMatch(/name="icon"[^>]*value="test"[^>]*checked/);
-    expect(markup).toContain('value="build"');
+    // The icon field is the reusable searchable picker, not a fixed radio grid.
+    expect(markup).toContain('data-component="lucide-icon-picker"');
+    expect(markup).toContain('name="command-icon-search"');
+    expect(markup).toContain('data-action="select-command-icon"');
+    // Legacy alias `test` resolves to the Lucide id `test-tube-2` and shows as selected.
+    expect(markup).toMatch(/data-icon-name="test-tube-2" aria-pressed="true"/);
+    expect(markup).not.toContain('name="icon"');
   });
 
   it('drops the identifier/group/working-directory fields and offers a Transparent color (HS2-ZQWQCM)',()=>{
