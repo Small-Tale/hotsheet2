@@ -964,15 +964,21 @@ capability-aware sections when their underlying features and data contracts land
 - `CommandRunDialog` owns output and cancellation presentation. Completion and stop
   changes arrive through the existing long poll; the client never interval-polls.
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
-  a grouped list of command rows (colored icon, name, type, and inline edit/reorder/delete
-  actions) whose group headers come from each command's `group`. Editing a command — or
-  adding one — opens a native "Edit command" popover dialog holding the typed detail form
-  (Button label, Identifier, Type, group, the Program `{program,args}` / Shell / AI-prompt
-  fields, working directory, confirmation, and the color-swatch + Lucide-icon pickers);
-  Done closes the dialog. Field edits update a project-scoped unsaved draft; an explicit
-  "Save commands" persists all definitions. Named AI prompts use the same safe contract by
-  invoking an appropriate configured CLI command. The retired worker target picker is
-  deliberately absent; drive targeting remains a separate control (HS2-656XJ2).
+  a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
+  whose group headers come from each command's `group`, with ungrouped commands at the top.
+  Rows reorder by pointer drag-and-drop within and across groups (dropping into another
+  group changes membership); there are no up/down arrows. Each row exposes an overflow
+  "…" menu — also opened by right-click — with Edit and Delete, and double-clicking a row
+  edits it. An "Add group" button appends an empty group (droppable, with a delete button
+  while empty). Editing — or adding — a command opens a native "Edit command" popover
+  dialog holding the typed detail form (Program `{program,args}` / Shell / AI-prompt fields,
+  color-swatch and Lucide-icon pickers) with Done in the dialog toolbar. Field edits,
+  reorders, and deletes autosave to a project-scoped draft on a debounce (no explicit Save
+  button), surfacing a status line and validation errors. The popover dialog only takes its
+  flex layout while open (`:popover-open`) so a closed, empty dialog stays UA-hidden rather
+  than painting a stray strip. Named AI prompts use the same safe contract by invoking an
+  appropriate configured CLI command. The retired worker target picker is deliberately
+  absent; drive targeting remains a separate control (HS2-656XJ2, HS2-D9JBXT).
 
 ### 5.4 Notifications — presentation begins at feature floor
 

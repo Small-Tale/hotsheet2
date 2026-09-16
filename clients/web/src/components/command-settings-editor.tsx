@@ -1,11 +1,14 @@
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
+import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
 import {LucideIcon} from '@kerfjs/ui/lucide-icon';
 import {PanelHeader} from '@kerfjs/ui/panel-header';
-import {ChevronDown,ChevronUp,Pencil,Plus,Trash2} from 'lucide';
+import {FolderPlus,GripVertical,MoreHorizontal,Pencil,Plus,Trash2} from 'lucide';
 
 import type {CommandDefinition} from '../api';
+import {commandGroupSections} from '../command-order';
 import {COMMAND_ICONS,isCommandNavigationIcon} from './command-navigation';
 import {CUSTOMIZATION_COLORS,customizationContrastColor,resolveCustomizationColor} from './customization-palette';
 
@@ -14,6 +17,8 @@ export const COMMAND_EDITOR_DIALOG_ID='command-editor-dialog';
 
 export interface CommandSettingsEditorProps{
   commands:CommandDefinition[];
+  /** Group names added via "Add group" that may still be empty; pins their display order at the end. */
+  extraGroups?:readonly string[];
   /** The command whose details dialog is open, if any. */
   editingId?:string;
   message?:string;
@@ -27,18 +32,18 @@ function commandIcon(command:CommandDefinition){
   return COMMAND_ICONS.find(option=>option.key===key)??COMMAND_ICONS[0];
 }
 
-/** One WYSIWYG list row: colored icon, name, type, and inline edit/reorder/delete actions. */
-function CommandRow({command,globalIndex,total,editing}:{command:CommandDefinition;globalIndex:number;total:number;editing:boolean}){
-  const icon=commandIcon(command),color=resolveCustomizationColor(command.color),textColor=customizationContrastColor(color);
-  return <li class="command-settings-editor__row" data-command-id={command.id} data-editing={editing?'true':undefined}>
+/** One WYSIWYG list row: drag handle, colored icon, name, type, and an actions overflow menu. */
+function CommandRow({command,editing}:{command:CommandDefinition;editing:boolean}){
+  const icon=commandIcon(command),color=resolveCustomizationColor(command.color),textColor=customizationContrastColor(color),label=command.title||'Untitled command';
+  return <li class="command-settings-editor__row" data-command-id={command.id} data-editing={editing?'true':undefined} draggable="true">
+    <span class="command-settings-editor__row-grip" aria-hidden="true"><LucideIcon icon={GripVertical} name="grip-vertical"/></span>
     <span class="command-settings-editor__row-icon" style={`--command-color:${color};--command-text-color:${textColor}`} aria-hidden="true"><LucideIcon icon={icon.icon} name={icon.name}/></span>
-    <span class="command-settings-editor__row-text"><strong>{command.title||'Untitled command'}</strong><small>{TYPE_LABELS[kind(command)]}</small></span>
-    <span class="command-settings-editor__row-actions">
-      <button type="button" data-action="edit-command-setting" aria-label={`Edit ${command.title||'command'}`}><LucideIcon icon={Pencil} name="pencil"/></button>
-      <button type="button" data-action="move-command-setting" data-direction="up" aria-label={`Move ${command.title||'command'} up`} disabled={globalIndex===0}><LucideIcon icon={ChevronUp} name="chevron-up"/></button>
-      <button type="button" data-action="move-command-setting" data-direction="down" aria-label={`Move ${command.title||'command'} down`} disabled={globalIndex===total-1}><LucideIcon icon={ChevronDown} name="chevron-down"/></button>
-      <button type="button" class="command-settings-editor__row-delete" data-action="delete-command-setting" aria-label={`Delete ${command.title||'command'}`}><LucideIcon icon={Trash2} name="trash-2"/></button>
-    </span>
+    <span class="command-settings-editor__row-text"><strong>{label}</strong><small>{TYPE_LABELS[kind(command)]}</small></span>
+    <wa-dropdown class="command-settings-editor__row-menu" distance={4}>
+      <button slot="trigger" type="button" class="command-settings-editor__row-menu-trigger" aria-label={`Actions for ${label}`} aria-haspopup="menu"><LucideIcon icon={MoreHorizontal} name="more-horizontal"/></button>
+      <wa-dropdown-item data-action="edit-command-setting"><span slot="icon"><LucideIcon icon={Pencil} name="pencil"/></span>Edit</wa-dropdown-item>
+      <wa-dropdown-item variant="danger" data-action="delete-command-setting"><span slot="icon"><LucideIcon icon={Trash2} name="trash-2"/></span>Delete</wa-dropdown-item>
+    </wa-dropdown>
   </li>;
 }
 
@@ -60,25 +65,32 @@ function CommandDetailFields({command}:{command:CommandDefinition}){
   </div>;
 }
 
-export function CommandSettingsEditor({commands,editingId,message=''}:CommandSettingsEditorProps){
+/** One display section: the ungrouped rows (blank group) or a named, droppable, deletable-when-empty group. */
+function CommandGroup({group,commands,editingId}:{group:string;commands:CommandDefinition[];editingId?:string}){
+  const empty=commands.length===0;
+  return <li class="command-settings-editor__section" data-command-group={group||undefined} data-ungrouped={group?undefined:'true'}>
+    {group&&<div class="command-settings-editor__group-header"><span class="command-settings-editor__group-label">{group}</span>{empty&&<button type="button" class="command-settings-editor__group-delete" data-action="delete-command-group" data-group={group} aria-label={`Delete empty group ${group}`}><LucideIcon icon={Trash2} name="trash-2"/></button>}</div>}
+    <ul class="command-settings-editor__group-items" data-command-group-drop={group}>
+      {commands.map(command=><CommandRow command={command} editing={command.id===editingId}/>)}
+      {empty&&<li class="command-settings-editor__group-empty" aria-hidden="true">Drag commands here</li>}
+    </ul>
+  </li>;
+}
+
+export function CommandSettingsEditor({commands,extraGroups=[],editingId,message=''}:CommandSettingsEditorProps){
   const editing=editingId?commands.find(command=>command.id===editingId):undefined;
-  const groups=commands.reduce<Map<string,CommandDefinition[]>>((result,command)=>{
-    const group=command.group?.trim()||'';
-    result.set(group,[...(result.get(group)??[]),command]);
-    return result;
-  },new Map());
+  const sections=commandGroupSections(commands,extraGroups);
   const editingIcon=editing?commandIcon(editing):undefined;
   return <div class="command-settings-editor" data-component="command-settings-editor">
-    <header class="command-settings-editor__heading"><div><h2>Custom commands</h2><p>Create the buttons shown in this project's sidebar.</p></div><button type="button" data-action="add-command-setting"><LucideIcon icon={Plus} name="plus"/> Add command</button></header>
-    {commands.length>0
-      ?<ul class="command-settings-editor__list" aria-label="Custom commands">{[...groups].map(([group,items])=><li class="command-settings-editor__group" data-command-group={group||undefined}>{group&&<p class="command-settings-editor__group-label">{group}</p>}<ul class="command-settings-editor__group-items">{items.map(command=><CommandRow command={command} globalIndex={commands.indexOf(command)} total={commands.length} editing={command.id===editingId}/>)}</ul></li>)}</ul>
+    <header class="command-settings-editor__heading"><div><h2>Custom commands</h2><p>Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save automatically.</p></div><div class="command-settings-editor__heading-actions"><button type="button" data-action="add-command-group"><LucideIcon icon={FolderPlus} name="folder-plus"/> Add group</button><button type="button" class="command-settings-editor__add-command" data-action="add-command-setting"><LucideIcon icon={Plus} name="plus"/> Add command</button></div></header>
+    {sections.length>0
+      ?<ul class="command-settings-editor__list" aria-label="Custom commands">{sections.map(section=><CommandGroup group={section.group} commands={section.commands} editingId={editingId}/>)}</ul>
       :<div class="command-settings-editor__blank"><p>No custom commands yet.</p><p>Add a command to configure its label and action.</p></div>}
-    <footer><button type="button" data-action="save-command-settings">Save commands</button><span role="status">{message}</span></footer>
+    <footer><span role="status">{message}</span></footer>
     <section popover="auto" id={COMMAND_EDITOR_DIALOG_ID} class="dialog-surface command-settings-editor__dialog" data-component="command-editor-dialog" role="dialog" aria-label="Edit command">
       {editing&&editingIcon?<>
-        <PanelHeader title="Edit command" titleId="command-editor-title" summary="Changes apply after you save commands." icon={<span class="command-settings-editor__dialog-icon" style={`--command-color:${resolveCustomizationColor(editing.color)};--command-text-color:${customizationContrastColor(resolveCustomizationColor(editing.color))}`}><LucideIcon icon={editingIcon.icon} name={editingIcon.name}/></span>}/>
+        <PanelHeader title="Edit command" titleId="command-editor-title" summary="Changes save automatically." icon={<span class="command-settings-editor__dialog-icon" style={`--command-color:${resolveCustomizationColor(editing.color)};--command-text-color:${customizationContrastColor(resolveCustomizationColor(editing.color))}`}><LucideIcon icon={editingIcon.icon} name={editingIcon.name}/></span>} actions={<button type="button" class="command-settings-editor__dialog-done" data-action="close-command-editor">Done</button>}/>
         <div class="command-settings-editor__dialog-body"><CommandDetailFields command={editing}/></div>
-        <footer class="command-settings-editor__dialog-footer"><button type="button" data-action="close-command-editor">Done</button></footer>
       </>:null}
     </section>
   </div>;

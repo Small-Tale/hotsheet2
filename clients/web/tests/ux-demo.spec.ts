@@ -2345,12 +2345,13 @@ test('edits custom command color and icon in the command settings editor',async(
   await page.setViewportSize({width:1000,height:900});await page.goto('/ux-demo?component=command-settings-editor');
   const editor=page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
-  // The WYSIWYG list groups commands and offers inline edit/reorder/delete per row.
+  // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
   await expect(editor.locator('.command-settings-editor__row')).toHaveCount(3);
+  await expect(editor.locator('.command-settings-editor__row[draggable="true"]')).toHaveCount(3);
   await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality','Release']);
   await page.screenshot({path:'/private/tmp/hs2-656xj2-command-list.png'});
-  // Details, including the color and icon pickers, live in the Edit command dialog.
-  await editor.getByRole('button',{name:'Edit Verify project'}).click();
+  // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
+  const verifyRow=editor.locator('.command-settings-editor__row',{hasText:'Verify project'});await verifyRow.locator('.command-settings-editor__row-menu-trigger').click();await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog=page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);

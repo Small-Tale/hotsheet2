@@ -52,6 +52,7 @@ import {
   Wrench,
 } from 'lucide';
 
+import type { CommandDropTarget } from '../command-order';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
@@ -145,6 +146,7 @@ import {
   stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
 import {
+  addCommandEditorGroup,
   addCommandEditorSetting,
   AiToolSettingsDemo,
   clampProjectSidebarHeight,
@@ -154,16 +156,17 @@ import {
   commandGroupExpanded,
   CommandNavigationDemo,
   CommandSettingsEditorDemo,
+  deleteCommandEditorGroup,
   deleteCommandEditorSetting,
   DriveControlDemo,
   DriveOptionsMenuDemo,
   driveRunning,
-  moveCommandEditorSetting,
   NotificationNavigationDemo,
   openCommandEditorDemo,
   ProjectSidebarDemo,
   projectSidebarHeight,
   ProjectSummaryDemo,
+  reorderCommandEditorSetting,
   RepositorySummaryDemo,
   runningCommandId,
   selectedViewId,
@@ -817,6 +820,16 @@ delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
 function commandEditorRowId(target: Element): string | undefined {
   return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
 }
+let draggedCommandEditorId: string | undefined;
+function clearCommandEditorDropIndicators() {
+  root.querySelectorAll<HTMLElement>('[data-command-drop-position]').forEach(element => delete element.dataset.commandDropPosition);
+  root.querySelectorAll<HTMLElement>('[data-command-drop-active]').forEach(element => delete element.dataset.commandDropActive);
+}
+function clearCommandEditorDrag() {
+  draggedCommandEditorId = undefined;
+  root.querySelectorAll<HTMLElement>('[data-command-dragging]').forEach(element => delete element.dataset.commandDragging);
+  clearCommandEditorDropIndicators();
+}
 delegate(root, 'click', '[data-action="edit-command-setting"]', (_event, target) => {
   const id = commandEditorRowId(target);
   if (id) openCommandEditorDemo(id);
@@ -831,11 +844,71 @@ delegate(root, 'click', '[data-action="delete-command-setting"]', (_event, targe
   const id = commandEditorRowId(target);
   if (id) deleteCommandEditorSetting(id);
 });
-delegate(root, 'click', '[data-action="move-command-setting"]', (_event, target) => {
-  const id = commandEditorRowId(target);
-  const direction = target.closest<HTMLElement>('[data-direction]')?.dataset.direction;
-  if (id && (direction === 'up' || direction === 'down')) moveCommandEditorSetting(id, direction);
+delegate(root, 'click', '[data-action="add-command-group"]', () => {
+  addCommandEditorGroup();
 });
+delegate(root, 'click', '[data-action="delete-command-group"]', (_event, target) => {
+  const group = target.closest<HTMLElement>('[data-group]')?.dataset.group;
+  if (group) deleteCommandEditorGroup(group);
+});
+delegate(root, 'dblclick', '.command-settings-editor__row', (event, target) => {
+  if ((event.target as Element).closest('.command-settings-editor__row-menu')) return;
+  const id = (target as HTMLElement).dataset.commandId;
+  if (id) openCommandEditorDemo(id);
+});
+delegate(root, 'contextmenu', '.command-settings-editor__row', (event, target) => {
+  const menu = target.querySelector<HTMLElement & { show?(): void }>('.command-settings-editor__row-menu');
+  if (!menu) return;
+  event.preventDefault();
+  menu.show?.();
+});
+delegate(root, 'dragstart', '.command-settings-editor__row', (event, target) => {
+  const element = target as HTMLElement, id = element.dataset.commandId;
+  if (!id) return;
+  draggedCommandEditorId = id;
+  element.dataset.commandDragging = 'true';
+  const transfer = (event as DragEvent).dataTransfer;
+  if (transfer) {
+    transfer.effectAllowed = 'move';
+    transfer.setData('text/plain', id);
+  }
+});
+delegate(root, 'dragover', '.command-settings-editor__list', (event) => {
+  if (!draggedCommandEditorId) return;
+  const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
+  clearCommandEditorDropIndicators();
+  if (row && row.dataset.commandId && row.dataset.commandId !== draggedCommandEditorId) {
+    drag.preventDefault();
+    const bounds = row.getBoundingClientRect();
+    row.dataset.commandDropPosition = drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+    return;
+  }
+  const container = over.closest<HTMLElement>('[data-command-group-drop]');
+  if (container) {
+    drag.preventDefault();
+    container.dataset.commandDropActive = 'true';
+  }
+});
+delegate(root, 'drop', '.command-settings-editor__list', (event) => {
+  const source = draggedCommandEditorId;
+  if (!source) {
+    clearCommandEditorDrag();
+    return;
+  }
+  const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
+  drag.preventDefault();
+  let dropTarget: CommandDropTarget | undefined;
+  if (row && row.dataset.commandId && row.dataset.commandId !== source) {
+    const bounds = row.getBoundingClientRect();
+    dropTarget = { kind: 'row', id: row.dataset.commandId, position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' };
+  } else {
+    const container = over.closest<HTMLElement>('[data-command-group-drop]');
+    if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
+  }
+  clearCommandEditorDrag();
+  if (dropTarget) reorderCommandEditorSetting(source, dropTarget);
+});
+delegate(root, 'dragend', '.command-settings-editor__row', clearCommandEditorDrag);
 delegate(root, 'input', '[data-command-field]', (_event, target) => {
   const input = target as HTMLInputElement;
   const id = commandEditorRowId(target);
