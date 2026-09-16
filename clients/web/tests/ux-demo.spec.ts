@@ -2341,3 +2341,15 @@ test('edits custom command color and icon in the command settings editor',async(
   await expect(editor.locator('.command-settings-editor__icon input:checked')).toHaveValue('circle-check-big');
   await page.screenshot({path:'/private/tmp/hs2-656xj2-command-editor-color-icon.png'});
 });
+
+test('keeps the Markdown preview focus ring inset so an overflow-hidden editor cannot clip it (HS2-0WD3YK)',async({page})=>{
+  await page.setViewportSize({width:1000,height:800});await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
+  const preview=page.locator('.markdown-editor__preview');await expect(preview).toBeVisible();
+  // Keyboard focus so :focus-visible applies, then verify the ring is inset and within the editor's clip box.
+  await preview.evaluate(node=>{node.focus()});
+  const geometry=await preview.evaluate(node=>{const cs=getComputedStyle(node),editor=node.closest('.markdown-editor')!,er=editor.getBoundingClientRect(),r=node.getBoundingClientRect(),width=parseFloat(cs.outlineWidth)||0,offset=parseFloat(cs.outlineOffset);return{focusVisible:node.matches(':focus-visible'),offset,width,within:r.left-(offset+width)>=er.left-0.5&&r.top-(offset+width)>=er.top-0.5&&r.right+(offset+width)<=er.right+0.5&&r.bottom+(offset+width)<=er.bottom+0.5};});
+  expect(geometry.focusVisible).toBe(true);
+  expect(geometry.offset).toBeLessThan(0);
+  expect(geometry.within).toBe(true);
+  await page.locator('.markdown-editor').screenshot({path:'/private/tmp/claude-501/-Users-westphal-Documents-hotsheet2/88cd2d15-f2a9-4f29-8bb4-c672b5069c22/scratchpad/0WD3YK-markdown-preview-focus-inset.png'});
+});

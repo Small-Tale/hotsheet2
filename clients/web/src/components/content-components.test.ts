@@ -56,6 +56,8 @@ describe('content components', () => {
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface \{[^}]*display: grid;[^}]*padding: 0;[^}]*overflow: visible;/);
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: remify\(12px\);/);
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: remify\(12px\);[^}]*resize: vertical/);
+    // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
+    expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: 0;/);
     expect(embedded).not.toContain('Saving changes');
