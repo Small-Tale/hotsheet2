@@ -57,6 +57,14 @@ For every change affecting rendered web-client visuals, inspect the real affecte
 Chromium is the local screenshot-review fallback when an interactive browser is not
 attached; Playwright remains appropriate for automated interaction assertions.
 
+### Settings view persists across projects
+
+`settingsCategory`/`setSettingsCategory` are module-internal to `clients/web/src/main.tsx`
+with no isolated unit surface, and the behavior needs two open projects, so verify
+manually: open two projects, enter Settings and select a non-default view (e.g. AI tools)
+in one, switch to the other project, and confirm it shows the same Settings view rather
+than resetting to Ticket sources (HS2-4J50K3).
+
 ### OpenCode ACP live compatibility
 
 Run `HOTSHEET_OPENCODE_LIVE=1 cargo test -p hotsheet-aitools
