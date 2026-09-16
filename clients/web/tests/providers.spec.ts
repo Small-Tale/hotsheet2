@@ -1020,7 +1020,7 @@ test('keeps a persistently failed project remembered without obscuring a success
   await failure.getByRole('button',{name:'Retry project'}).click();
   await expect(failure).toHaveCount(0);
   await expect(page.getByRole('tab',{name:'older-server'}).locator('xpath=..')).toHaveAttribute('data-attention','false');
-  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(page.locator('.kui-panel-header__title',{hasText:'Queue'})).toBeVisible();
 });
 
 test('suppresses interaction-bound render bursts but reports a storm that persists afterward',async({page})=>{
@@ -1285,7 +1285,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   corruptTickets=[];
   await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:diagnostic.id,slug:diagnostic.slug}],overflow:false}});
   await expect(page.getByRole('button',{name:/Ticket errors/})).toHaveCount(0);
-  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(page.locator('.kui-panel-header__title',{hasText:'Queue'})).toBeVisible();
   await expect(corrupt).toHaveCount(0);
 
   await page.getByText('Use real project tickets').click();
@@ -1896,7 +1896,7 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
 
 test('keeps backlog and archived tickets out of the active Queue',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(page.locator('.kui-panel-header__title',{hasText:'Queue'})).toBeVisible();
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.getByText('Archived ticket')).toHaveCount(0);
@@ -2068,7 +2068,7 @@ test('requires confirmation before permanently emptying Trash',async({page})=>{
   await page.getByRole('button',{name:'Empty Trash'}).click();
   await page.locator('[data-component="empty-trash-dialog"]').getByRole('button',{name:'Empty Trash'}).click();
   await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
-  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(page.locator('.kui-panel-header__title',{hasText:'Queue'})).toBeVisible();
   await expect(page.getByRole('button',{name:/Trash/})).toHaveCount(0);
   await expect(page.locator('[data-component="not-working-dialog"]')).toHaveCount(0);
   await expect(page.getByText('Loading Queue')).toBeVisible();

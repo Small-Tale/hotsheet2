@@ -1,8 +1,8 @@
 import './connection-details-dialog.css';
 import './native-popover-dialog.css';
 
-import { DialogHeader } from '@kerfjs/ui/dialog-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ServerCog } from 'lucide';
 
@@ -34,7 +34,7 @@ export function ConnectionDetailsDialog({ assessment,embedded=false }: { assessm
   const startedLabel = started && !Number.isNaN(started.valueOf()) ? started.toLocaleString() : valueOrUnavailable(server?.started_at);
   const summary=assessment.detail || (assessment.revisionMismatch ? 'The running server build differs from this development checkout.' : 'Hot Sheet could not confirm compatible build metadata.');
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'connection-details-dialog'} class="dialog-surface connection-details-dialog" data-component="connection-details-dialog" data-kind={assessment.kind} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="connection-details-title" aria-describedby="connection-details-summary">
-    <DialogHeader title="Server build details" titleId="connection-details-title" summary={summary} summaryId="connection-details-summary" icon={<LucideIcon icon={ServerCog} name="server-cog"/>}/>
+    <PanelHeader title="Server build details" titleId="connection-details-title" summary={summary} summaryId="connection-details-summary" icon={<LucideIcon icon={ServerCog} name="server-cog"/>}/>
     <div class="connection-details-dialog__body">
       <ValueTable className="connection-details-dialog__metadata" label="Client and server build metadata">
         <div><dt>Running server version</dt><dd>{valueOrUnavailable(server?.application_version)}</dd></div>

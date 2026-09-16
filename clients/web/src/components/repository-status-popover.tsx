@@ -1,10 +1,10 @@
 import './repository-status-popover.css';
 import './native-popover-dialog.css';
 
-import { DialogHeader } from '@kerfjs/ui/dialog-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MenuHeader } from '@kerfjs/ui/menu-header';
 import { MenuItem } from '@kerfjs/ui/menu-item';
+import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArrowDown, ArrowUp, CircleCheck, CircleHelp, Clipboard, Copy, Ellipsis, ExternalLink, FileCode2, FileText, FlaskConical, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
@@ -48,7 +48,7 @@ export function RepositoryStatusPopover({status,error='',initialized=true,setupS
   const review:CodeReview|undefined=status?{commits:detailCommits??status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
   const actions=<>{comparison&&!recoveryStep&&<ToolbarControlGroup buttonAppearance="push" single><button type="button" data-action="toggle-repository-comparison" aria-label="Compare two commits" title="Compare two commits" aria-pressed={String(comparison.active)}><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup>}<ToolbarControlGroup single><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></ToolbarControlGroup></>;
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'repository-status-popover'} class="dialog-surface repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} data-setup-step={recoveryStep} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="repository-status-title">
-    <DialogHeader title={recoveryStep==='initialize'?'This folder is not a Git repository':'Repository Status'} titleId="repository-status-title" summary={recoveryStep==='initialize'?'Initialize Git here to enable repository status':recoveryStep==='remote'?'Git is ready; add an origin remote or skip for now':stateCopy[state]} iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/>} actions={actions} actionsLabel="Repository actions"/>
+    <PanelHeader title={recoveryStep==='initialize'?'This folder is not a Git repository':'Repository Status'} titleId="repository-status-title" summary={recoveryStep==='initialize'?'Initialize Git here to enable repository status':recoveryStep==='remote'?'Git is ready; add an origin remote or skip for now':stateCopy[state]} iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/>} actions={<ToolbarControlGroup label="Repository actions">{actions}</ToolbarControlGroup>}/>
     {recoveryStep&&<RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError}/>}
     {status&&!recoveryStep&&<div class="repository-status-popover__layout"><aside>
       <ValueTable className="repository-status-popover__values" label="Repository identity"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></ValueTable>
@@ -84,7 +84,7 @@ const evidenceViews=[
 export function ChangeEvidenceDialog({review,view='docs',embedded=false,fileMenu,selectedFiles=[],platform}:{review?:CodeReview;view?:ChangeEvidenceView;embedded?:boolean;fileMenu?:RepositoryFileMenu;selectedFiles?:readonly string[];platform?:RepositoryStatus['platform']}){
   const files=review?.files??[],visible=files.filter(file=>file.category===view);
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'change-evidence-dialog'} class="dialog-surface repository-status-popover change-evidence-dialog" data-component="change-evidence-dialog" data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="change-evidence-title">
-    <DialogHeader title="Change evidence" titleId="change-evidence-title" summary="Files changed across the ticket's complete commit range" iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={GitCompare} name="git-compare"/>}/>
+    <PanelHeader title="Change evidence" titleId="change-evidence-title" summary="Files changed across the ticket's complete commit range" iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={GitCompare} name="git-compare"/>}/>
     <div class="repository-status-popover__layout change-evidence-dialog__layout"><aside><nav aria-label="Change evidence views"><MenuHeader label="Views"/>{evidenceViews.map(item=><MenuItem action="select-change-evidence-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id}/>} label={item.label} trailing={<small class="kui-menu-item__count">{files.filter(file=>file.category===item.id).length}</small>}/>)}</nav></aside>
       <main class="repository-status-popover__detail" aria-live="polite">{review&&!review.difftool&&<p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}<CodeReviewFileList files={visible} view={view} selectedFiles={selectedFiles}/></main>
     </div>

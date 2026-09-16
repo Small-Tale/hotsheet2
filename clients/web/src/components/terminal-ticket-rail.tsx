@@ -1,10 +1,10 @@
 import './terminal-ticket-rail.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PageHeader } from '@kerfjs/ui/page-header';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelRightClose } from 'lucide';
 
@@ -25,11 +25,11 @@ export interface TerminalTicketRailProps {
 }
 
 export function TerminalTicketRail({projects,selectedProjectId,views=[],selectedViewId='all',controls,content,inspector,active,direction='forward',title='Queue',action}:TerminalTicketRailProps){
-  const heading=views.length?<Select className="terminal-ticket-rail__view" name="terminal-rail-view" value={selectedViewId} ariaLabel="Ticket rail view" choices={views.map(view=>({value:view.id,label:view.label}))} renderSelected={choice=><span>{choice.label}</span>}/>:title;
+  const heading=views.length?<Select className="terminal-ticket-rail__view" name="terminal-rail-view" value={selectedViewId} ariaLabel="Ticket rail view" choices={views.map(view=>({value:view.id,label:view.label}))} renderSelected={choice=><span>{choice.label}</span>}/>:<ToolbarText text={title} size="large"/>;
   const root=<section class="terminal-ticket-rail__root" aria-label="Project tickets">
     <Toolbar className="terminal-ticket-rail__project" divider={false} leading={<Select name="terminal-rail-project" value={selectedProjectId} ariaLabel="Ticket rail project" choices={projects.map(project=>({value:project.id,label:project.name}))} renderSelected={choice=><span>{choice.label}</span>}/>} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="close-ticket-inspector" aria-label="Hide ticket rail" title="Hide ticket rail"><LucideIcon icon={PanelRightClose} name="panel-right-close"/></button></ToolbarControlGroup>}/>
     <div class="terminal-ticket-rail__controls">{controls}</div>
-    <PageHeader title={heading} action={action}/>
+    <Toolbar className="terminal-ticket-rail__heading" divider={false} leading={heading} trailing={action?<ToolbarControlGroup appearance="borderless" single>{action}</ToolbarControlGroup>:undefined}/>
     <div class="terminal-ticket-rail__content">{content}</div>
   </section>;
   return <aside class="terminal-ticket-rail" data-component="terminal-ticket-rail" data-screen={active} aria-label="Ticket rail">

@@ -21,8 +21,8 @@
 .terminal-ticket-rail__controls .workspace-header__search-group { grid-column:3; grid-row:2; width:remify(40.4px); justify-self:end; transition:width .25s ease; }
 .terminal-ticket-rail__controls .workspace-header__search-group[data-expanded="true"] { width:100%; grid-column:1 / -1; grid-row:3; animation:terminal-ticket-rail-search-enter .25s ease; }
 .terminal-ticket-rail__controls .workspace-header__search { width:100%; }
-.terminal-ticket-rail .kui-page-header { min-height:remify(60px); padding:var(--wa-space-s); }
-.terminal-ticket-rail .kui-page-header h1 { font-size:var(--wa-font-size-l); }
+.terminal-ticket-rail__heading { min-height:remify(60px); padding:var(--wa-space-s); }
+.terminal-ticket-rail__heading .kui-toolbar-text { font-size:var(--wa-font-size-l); }
 .terminal-ticket-rail__view { width:max-content; max-width:remify(192px); }
 .terminal-ticket-rail__view::part(combobox) { min-height:remify(36px); padding:0 remify(21.6px) 0 0; border:0; background:transparent; box-shadow:none; }
 .terminal-ticket-rail__view::part(expand-icon) { position:absolute; inset-inline-end:remify(2.4px); }

@@ -36,8 +36,8 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
 .hs-dev-review__dialog { width: min(remify(680px), calc(100vw - remify(32px))); max-height: calc(100vh - remify(48px)); font: var(--wa-font-size-s)/1.4 system-ui, sans-serif; pointer-events: auto; }
 .hs-dev-review__dialog::backdrop { background: var(--wa-color-overlay-modal); backdrop-filter: blur(2px); }
 .hs-dev-review__form { display: grid; width: 100%; max-height: calc(100vh - 48px); box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr) auto; }
-.hs-dev-review__dialog .kui-dialog-header { min-height: remify(78.4px); }
-.hs-dev-review__dialog .kui-dialog-header__summary { font-size: var(--wa-font-size-xs); }
+.hs-dev-review__dialog .kui-panel-header { min-height: remify(78.4px); }
+.hs-dev-review__dialog .kui-panel-header__summary { font-size: var(--wa-font-size-xs); }
 .hs-dev-review__close { position: relative; width: remify(32px); min-width: remify(32px); height: remify(32px); min-height: remify(32px) !important; padding: 0 !important; border-radius: var(--wa-border-radius-circle) !important; }
 .hs-dev-review__close::before, .hs-dev-review__close::after { position: absolute; top: calc(50% - 1px); left: calc(50% - remify(7.2px)); width: remify(14.4px); height: 2px; border-radius: 1px; background: currentColor; content: ''; transform: rotate(45deg); }
 .hs-dev-review__close::after { transform: rotate(-45deg); }

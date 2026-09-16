@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { PageHeader } from '@kerfjs/ui/page-header';
+import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { describe, expect, it } from 'vitest';
 
@@ -196,7 +196,7 @@ describe('application shell components', () => {
   });
 
   it('composes all top-level regions', () => {
-    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PageHeader({ title: 'All Tickets' }), composer: 'compose' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never, overlay: 'overlay' as never }));
+    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PanelHeader({ title: 'All Tickets', titleId: 'all-tickets-title' }), composer: 'compose' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never, overlay: 'overlay' as never }));
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('aria-valuemin="250"');
@@ -210,14 +210,14 @@ describe('application shell components', () => {
     expect(markup).toContain('data-ticket-scroll-owner="workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
-    expect(markup).toContain('data-component="page-header"');
+    expect(markup).toContain('data-component="panel-header"');
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
     expect(markup).toContain('data-component="toolbar" data-divider="false"');
     expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
     expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="project-tab-bar"'));
-    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('data-component="page-header"'));
+    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('data-component="panel-header"'));
     const globalMarkup = String(AppShell({ mode: 'stats', tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never }));
     expect(globalMarkup).toContain('data-mode="stats"');
     expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');

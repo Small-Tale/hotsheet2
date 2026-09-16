@@ -37,7 +37,7 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).toContain('source-sha256:client');
     expect(markup).toContain('Client 1–1 · Server 1–1');
     expect(markup).toContain('class="dialog-surface connection-details-dialog"');
-    expect(markup).toContain('data-component="dialog-header"');
+    expect(markup).toContain('data-component="panel-header"');
     expect(markup).toContain('data-component="value-table"');
     expect(markup).not.toContain('>Close</button>');
     expect(markup).not.toContain('connection-details-dialog__footer');

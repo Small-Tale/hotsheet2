@@ -117,15 +117,17 @@ Supporting components:
   incompatible-server, and authentication variants with state-specific Lucide icons,
   live-region semantics, details, and relevant recovery actions.
 - `ConnectionDetailsDialog` — **demo built**: every compatible-skew, stale-source,
-  old-server, old-client, and unavailable-metadata state using the shared `DialogHeader`
+  old-server, old-client, and unavailable-metadata state using the shared `PanelHeader`
   and `ValueTable` presentation. Safely recoverable details dismiss through the native
   popover light-dismiss behavior rather than a redundant Close action.
-- `DialogHeader` / `ValueTable` — **demo built**: shared divider-free dialog
+- `PanelHeader` / `ValueTable` — **demo built**: shared divider-free panel/dialog/page
   icon/title/subtitle/action geometry and borderless static metadata cells with inset
-  separators. `DialogHeader` renders a real top `Toolbar` whose leading control group is the
-  icon+title identity and whose trailing group auto-wraps the caller's direct action children
-  under a localized `actionsLabel`, with the optional summary as a sibling below the toolbar.
-  Consumers pass direct action children plus `actionsLabel`; the framework-neutral Dev Review
+  separators. `PanelHeader` (the `@kerfjs/ui` beta.6 consolidation of the former `DialogHeader`
+  and `PageHeader`) renders a real top `Toolbar` whose leading zone holds an optional icon
+  control group plus the extra-large `ToolbarText` title, and whose trailing zone takes the
+  caller's `actions` directly, with the optional summary as a sibling below the toolbar.
+  Because PanelHeader no longer wraps/labels the actions itself, consumers that need a named
+  action group pass their own labeled `ToolbarControlGroup` as `actions`; the framework-neutral Dev Review
   overlay copies this exact anatomy since it cannot import the component (HS2-M4X0WS).
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
@@ -321,8 +323,11 @@ does not introduce polling or another network request.
   bottom divider is an explicit option rather than consumer CSS.
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.
-- `PageHeader` — **demo built**: current view identity below ProjectTabBar, separate
-  from the project-level toolbar above it.
+- `PanelHeader` (page usage) — **demo built**: current view identity below ProjectTabBar,
+  separate from the project-level toolbar above it. Page headings now use the same
+  `PanelHeader` as dialogs (the former `PageHeader` was merged into it in `@kerfjs/ui` beta.6);
+  the view title renders as an extra-large `ToolbarText` and the view action goes in the
+  trailing zone. Note: the title is not a heading element (tracked upstream as KF-CDY0D9).
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
@@ -337,7 +342,7 @@ does not introduce polling or another network request.
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
 
 These generic primitives, plus `LucideIcon`, `MenuItem`, `MenuHeader`, `AppTab`,
-`ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `DialogHeader`,
+`ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `PanelHeader`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.

@@ -31,8 +31,8 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(RepositoryStatusPopover({status:status({branch:undefined,upstream:undefined,staged:0,unstaged:0,untracked:0,conflicted:0,files:[]}),initialized:false}));
     expect(markup).toContain('data-state="uninitialized"');
     expect(markup).toContain('data-setup-step="initialize"');
-    expect(markup).toContain('<h2 id="repository-status-title">This folder is not a Git repository</h2>');
-    expect(markup).not.toContain('<h2 id="repository-status-title">Repository Status</h2>');
+    expect(markup).toMatch(/kui-panel-header__title[^>]*id="repository-status-title"[^>]*>This folder is not a Git repository</);
+    expect(markup).not.toContain('>Repository Status<');
     expect(markup).toContain('data-action="initialize-repository"');
     expect(markup).not.toContain('<dt>Branch</dt>');
     expect(markup).not.toContain('fatal: not a git repository');
@@ -67,7 +67,7 @@ describe('RepositoryStatusPopover',()=>{
     const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8'),shared=readFileSync(resolve(import.meta.dirname,'native-popover-dialog.css'),'utf8');
     expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
     expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
-    expect(shared).toMatch(/\.dialog-surface \.kui-dialog-header \{ border-bottom: 0; \}/);
+    expect(shared).toMatch(/\.dialog-surface \.kui-panel-header \{ border-bottom: 0; \}/);
   });
 
   it('uses the canonical Git status letter for every file change kind',()=>{
@@ -100,9 +100,9 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-label="Compare two commits"');
     expect(markup).toContain('data-action="toggle-repository-comparison"');
     expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*toggle-repository-comparison/);
-    expect(markup).toMatch(/kui-dialog-header__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
+    expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
     // The DialogHeader actions group carries the localized actionsLabel for assistive tech (HS2-M4X0WS).
-    expect(markup).toMatch(/kui-dialog-header__actions[^>]*aria-label="Repository actions"/);
+    expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Repository actions"/);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
     const popoverCss=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');
     expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);

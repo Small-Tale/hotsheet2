@@ -34,7 +34,7 @@ test('offers reload when the client is too old', async ({ page }) => {
 test('surfaces unavailable compatibility metadata without blocking project data', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'unknown', detail: 'The server did not provide compatibility metadata.', revisionMismatch: false, sourceStale: false, canRestartServer: false });
   await expect(page.locator('[data-component="state-banner"]')).toContainText('Server compatibility unknown');
-  await expect(page.getByRole('heading', { name: 'Queue' })).toBeVisible();
+  await expect(page.locator('.kui-panel-header__title', { hasText: 'Queue' })).toBeVisible();
 });
 
 test('surfaces a compatible detached server from another development revision', async ({ page }) => {
@@ -59,7 +59,7 @@ test('tells development users to restart a server built from older local source'
   await expect(dialog).toContainText('source-sha256:client');
   await expect(dialog).toContainText('Client 1–1 · Server 1–1');
   await expect(dialog).toContainText('cargo build -p hotsheet-server');
-  await expect(dialog.locator('[data-component="dialog-header"]')).toBeVisible();
+  await expect(dialog.locator('[data-component="panel-header"]')).toBeVisible();
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
   await expect(dialog.getByRole('button',{name:'Close'})).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-xrs9s4-server-details-wide.png', fullPage: true });

@@ -1,4 +1,4 @@
-import { PageHeader } from '@kerfjs/ui/page-header';
+import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
@@ -97,13 +97,13 @@ function WorkspaceContent() {
 export function WorkspaceHeaderDemo() {
   return <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
     <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} searchHelpOpen={workspaceSearchHelpOpen.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} notificationCount={7} />
-    <PageHeader title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'} />
+    <PanelHeader titleId="workspace-demo-page-title" title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'} />
     <div class="workspace-component-demo__content"><WorkspaceContent /></div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;
 }
 
-export function PageHeaderDemo() { return <section class="workspace-component-demo" aria-label="PageHeader demo"><PageHeader title="Queue" /><p class="component-stage__event">View identity remains separate from project-level controls.</p></section>; }
+export function PageHeaderDemo() { return <section class="workspace-component-demo" aria-label="PageHeader demo"><PanelHeader titleId="page-header-demo-title" title="Queue" /><p class="component-stage__event">View identity remains separate from project-level controls.</p></section>; }
 
 export function QuickTicketComposerDemo() {
   return <section class="workspace-component-demo" aria-label="QuickTicketComposer demo">
