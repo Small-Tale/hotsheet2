@@ -18,11 +18,13 @@ describe('SettingsNavigation', () => {
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
     expect(markup).toContain('>Project Settings</p>');
     expect(markup).toContain('>App Settings</p>');
+    expect(markup).toContain('data-item-id="general"');
     expect(markup).toContain('data-item-id="keyboard"');
     expect(markup).toContain('data-lucide="keyboard"');
     // The keyboard heading precedes the project one? No — project first, then app.
     expect(markup.indexOf('Project Settings')).toBeLessThan(markup.indexOf('App Settings'));
-    expect(markup.indexOf('data-item-id="columns"')).toBeLessThan(markup.indexOf('data-item-id="keyboard"'));
+    expect(markup.indexOf('data-item-id="columns"')).toBeLessThan(markup.indexOf('data-item-id="general"'));
+    expect(markup.indexOf('data-item-id="general"')).toBeLessThan(markup.indexOf('data-item-id="keyboard"'));
   });
 
   it('uses the same category labels for navigation and workspace headings', () => {
@@ -33,6 +35,7 @@ describe('SettingsNavigation', () => {
     expect(settingsCategoryTitle('terminals')).toBe('Terminals');
     expect(settingsCategoryTitle('permissions')).toBe('Permissions');
     expect(settingsCategoryTitle('columns')).toBe('Column view');
+    expect(settingsCategoryTitle('general')).toBe('General');
     expect(settingsCategoryTitle('keyboard')).toBe('Keyboard shortcuts');
   });
 });

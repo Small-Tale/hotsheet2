@@ -2316,3 +2316,11 @@ test('shows the chat model/effort as a label with a popup to change them',async(
   await expect(page.getByRole('menuitem',{name:/Effort/})).toBeVisible();
   await page.screenshot({path:'/private/tmp/hs2-r5f7a5-chat-model-popup.png'});
 });
+
+test('exposes a General app-settings entry in the settings navigator',async({page})=>{
+  await page.setViewportSize({width:900,height:800});await page.goto('/ux-demo?component=settings-navigation');
+  const general=page.locator('[data-item-id="general"]');
+  await expect(general).toBeVisible();
+  await expect(general).toContainText('General');
+  await expect(page.getByText('App Settings',{exact:true})).toBeVisible();
+});

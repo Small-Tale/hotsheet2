@@ -10,9 +10,12 @@
   gap: 2px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity .2s ease;
+  /* Scale the whole strip in/out vertically so it grows down rather than popping (HS2-2G1Y8X). */
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: opacity .2s ease, transform .2s ease;
 }
-.server-busy-bars[data-visible="true"] { opacity: 1; }
+.server-busy-bars[data-visible="true"] { opacity: 1; transform: scaleY(1); }
 .server-busy-bars__bar {
   flex: 0 0 3px;
   width: 3px;
@@ -31,7 +34,28 @@
   0%, 100% { transform: scaleY(.25); }
   50% { transform: scaleY(1); }
 }
+/* Loading-activity label (HS2-2G1Y8X): an 11px pill hanging from the top edge, centered, with a
+   star-yellow background and rounded bottom corners; scales in/out vertically like the bars. */
+.server-busy-message {
+  position: fixed;
+  inset: 4px auto auto 50%;
+  z-index: 2147483000;
+  padding: remify(1.6px) remify(9.6px);
+  border-radius: 0 0 remify(6.4px) remify(6.4px);
+  color: var(--wa-color-warning-on-normal);
+  background: var(--hs-ticket-state-up-next);
+  font-size: var(--wa-font-size-2xs); /* 11px */
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: top center;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.server-busy-message[data-visible="true"] { opacity: 1; transform: translateX(-50%) scaleY(1); }
 @media (prefers-reduced-motion: reduce) {
   .server-busy-bars__bar { animation: none; transform: scaleY(1); }
-  .server-busy-bars { transition: none; }
+  .server-busy-bars { transition: opacity .2s ease; transform: none; }
+  .server-busy-message { transition: opacity .2s ease; transform: translateX(-50%); }
 }

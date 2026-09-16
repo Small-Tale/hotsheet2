@@ -25,7 +25,7 @@ import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabSelectionAfte
 import {terminalProjectOwner} from './terminal-project-scope';
 import {customViewNameAvailable,uniqueCustomViewId} from './saved-views';
 import {chordFromEvent,isAppleShortcutPlatform,loadShortcutOverrides,matchesShortcut,saveShortcutOverrides,shortcutDef,type ShortcutChord} from './keyboard-shortcuts';
-import {computeServerBusyBarCount,serverBusy} from './server-busy';
+import {computeServerBusyBarCount,serverBusy,serverBusyMessage} from './server-busy';
 import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
 import { compareWorkspaceTickets } from './workspace-ticket-sort';
 import {updateRepositoryFileSelection} from './repository-file-selection';
@@ -72,7 +72,7 @@ import type { RepositorySetupStep } from './components/repository-setup';
 import { resizeRegionFromPointer, type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import {SavedViewDeleteDialog,SavedViewDialog} from './components/saved-view-dialog';
 import { KeyboardSettings } from './components/keyboard-settings';
-import { ServerBusyBars } from './components/server-busy-bars';
+import { ServerBusyBars, ServerBusyMessage } from './components/server-busy-bars';
 import { SettingsNavigation, type SettingsCategory, settingsCategoryTitle } from './components/settings-navigation';
 import { focusQuickTicketComposerTitle,QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from './components/quick-ticket-composer';
 import type { TicketStatus } from './components/status-badge';
@@ -198,6 +198,7 @@ let pendingTicketScrollState:ReturnType<typeof captureTicketScrollState>|undefin
 const shellMode=signal<ProjectTabBarMode>('project'),statsProjectId=signal<string|undefined>(undefined);
 const terminalRailScreen=signal<'root'|'ticket'>('root'),terminalRailDirection=signal<'forward'|'backward'>('forward');
 const terminalGroups=signal<TerminalDashboardGroup[]>([]),terminalDashboardLoading=signal(false),terminalDashboardMessage=signal('');
+const showLoadingActivity=signal(localStorage.getItem('hotsheet.show-loading-activity')==='true');
 const inheritGlobalShellHistory=signal(false),terminalSettingsMessage=signal(''),trashCleanupDaysByProject=signal<Record<string,number>>({}),trashSettingsMessagesByProject=signal<Record<string,string>>({});
 const terminalDashboardSize=signal({width:1200,height:601}),terminalFitAcross=signal(Number(localStorage.getItem('hotsheet.terminals.fit-across'))||TERMINAL_GRID_DEFAULT_ACROSS),terminalFitHigh=signal(Number(localStorage.getItem('hotsheet.terminals.fit-high'))||TERMINAL_GRID_DEFAULT_HIGH);
 const rememberedRoots=[...new Set(JSON.parse(localStorage.getItem('hotsheet.open-projects')||'[]') as string[])],initialProjectRestorePending=signal(rememberedRoots.length>0);
@@ -985,6 +986,7 @@ function SettingsWorkspace({current}:{current:Project}){
     {category==='terminals'&&<><label class="project-settings__option"><input type="checkbox" data-action="toggle-global-shell-history" checked={inheritGlobalShellHistory.value}/> Use my global shell history <span>By default, each terminal keeps private, machine-local command recall for this project and terminal. This opt-out applies only on this machine and affects newly created terminals.</span></label><p role="status">{terminalSettingsMessage.value}</p></>}
     {category==='permissions'&&<div class="project-settings__permission-grid"><wa-select name="permission-automation-action" label="Automatic decision" value={permissionAutomation(current.id).action}><wa-option value="off">Off</wa-option><wa-option value="allow">Auto-allow</wa-option><wa-option value="deny">Auto-deny</wa-option></wa-select><wa-select name="permission-automation-delay" label="After visible for" value={String(permissionAutomation(current.id).delayMs)} disabled={permissionAutomation(current.id).action==='off'}>{PERMISSION_DELAYS.map(value=><wa-option value={String(value)}>{value<60_000?'15 seconds':`${value/60_000} minute${value===60_000?'':'s'}`}</wa-option>)}</wa-select><p>Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop auto-allow or Stop auto-deny disables that automatic decision for this request.</p></div>}
     {category==='columns'&&<label class="project-settings__option"><input type="checkbox" data-action="toggle-verified-column" checked={hideVerifiedColumn()}/> Hide Verified column <span>Verified tickets appear in Completed.</span></label>}
+    {category==='general'&&<label class="project-settings__option"><input type="checkbox" data-action="toggle-loading-activity" checked={showLoadingActivity.value}/> Show loading activity <span>Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine.</span></label>}
     {category==='keyboard'&&<KeyboardSettings overrides={keyboardShortcutOverrides.value} capturingId={capturingShortcutId.value} apple={appleShortcutPlatform}/>}
   </section>
 }
@@ -1085,7 +1087,7 @@ let serverBusyResizeTimer:number|undefined;
 window.addEventListener('resize',()=>{if(serverBusyResizeTimer!==undefined)window.clearTimeout(serverBusyResizeTimer);serverBusyResizeTimer=window.setTimeout(()=>{serverBusyResizeTimer=undefined;serverBusyBarCount.value=computeServerBusyBarCount(window.innerWidth)},150)});
 const serverBusyRoot=document.createElement('div');
 document.body.append(serverBusyRoot);
-mount(serverBusyRoot,()=><ServerBusyBars count={serverBusyBarCount.value} busy={serverBusy.value}/>);
+mount(serverBusyRoot,()=><><ServerBusyBars count={serverBusyBarCount.value} busy={serverBusy.value}/><ServerBusyMessage message={serverBusyMessage.value} visible={showLoadingActivity.value&&serverBusy.value}/></>);
 document.addEventListener('pointerdown',event=>{if(savedViewMenu.value&&!(event.target as Element).closest('[data-component="saved-view-context-menu"], [data-action="open-saved-view-menu"]'))savedViewMenu.value=undefined},{capture:true});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')savedViewMenu.value=undefined});
 
@@ -1309,6 +1311,7 @@ delegate(document.body,'click','[data-action="delete-command-setting"]',(_event,
 delegate(document.body,'click','[data-action="move-command-setting"]',(_event,target)=>{const current=project(),id=target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,direction=data(target).direction;if(current&&id&&(direction==='up'||direction==='down'))moveCommandSetting(current.id,id,direction)});
 delegate(document.body,'input','[data-command-field]',(_event,target)=>{const current=project(),field=(target as HTMLInputElement).name,id=target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;if(current&&id&&field)updateCommandSetting(current.id,id,field,(target as HTMLInputElement).value)});
 delegate(document.body,'click','[data-action="save-command-settings"]',()=>{const current=project();if(!current)return;const definitions=commandSettingsDefinitions(current.id),validation=commandSettingsValidation(definitions);if(validation){setCommandSettingsMessage(current.id,validation);return}void new Api(current.apiPath).saveCommands(definitions).then(saved=>{if(project()?.id!==current.id)return;commandDefinitions.value=saved;setCommandSettingsDefinitions(current.id,saved);setCommandSettingsMessage(current.id,'');showToast('Saved locally.')}).catch(reason=>{setCommandSettingsMessage(current.id,reason instanceof Error?reason.message:String(reason))})});
+delegate(document.body,'change','[data-action="toggle-loading-activity"]',(_event,target)=>{const checked=(target as HTMLInputElement).checked;showLoadingActivity.value=checked;localStorage.setItem('hotsheet.show-loading-activity',String(checked))});
 delegate(document.body,'change','[data-action="toggle-global-shell-history"]',(_event,target)=>{const current=project(),checked=(target as HTMLInputElement).checked;if(!current)return;inheritGlobalShellHistory.value=checked;terminalSettingsMessage.value='Saving…';void new Api(current.apiPath).saveTerminalSettings({inherit_global_shell_history:checked}).then(value=>{if(project()?.id!==current.id)return;inheritGlobalShellHistory.value=value.inherit_global_shell_history;terminalSettingsMessage.value='Saved locally. New terminals will use this setting.'}).catch(reason=>{if(project()?.id!==current.id)return;inheritGlobalShellHistory.value=!checked;terminalSettingsMessage.value=reason instanceof Error?reason.message:String(reason)})});
 delegate(document.body,'submit','[data-action="save-trash-settings"]',(event,target)=>{event.preventDefault();const current=project(),raw=target.querySelector<Control>('[name="trash-cleanup-days"]')?.value??'',days=Number(raw);if(!current)return;if(!Number.isSafeInteger(days)||days<1){trashSettingsMessagesByProject.value={...trashSettingsMessagesByProject.value,[current.id]:'Enter a positive whole number of days.'};return}trashSettingsMessagesByProject.value={...trashSettingsMessagesByProject.value,[current.id]:'Saving…'};void new Api(current.apiPath).saveTrashSettings(current.id,{trash_cleanup_days:days}).then(value=>{if(project()?.id!==current.id)return;trashCleanupDaysByProject.value={...trashCleanupDaysByProject.value,[current.id]:value.trash_cleanup_days};trashSettingsMessagesByProject.value={...trashSettingsMessagesByProject.value,[current.id]:'Saved for this project.'};showToast('Trash retention saved.')}).catch(reason=>{if(project()?.id===current.id)trashSettingsMessagesByProject.value={...trashSettingsMessagesByProject.value,[current.id]:reason instanceof Error?reason.message:String(reason)}})});
 delegate(document.body,'click','[data-action="set-view-mode"]',(_event,target)=>{const mode=data(target).viewMode as WorkspaceViewMode,finishTiming=beginInteractionTiming('workspace-mode-change',{mode});resetProgressiveTicketRendering();viewMode.value=mode;persistWorkspacePreferences();finishTiming()});

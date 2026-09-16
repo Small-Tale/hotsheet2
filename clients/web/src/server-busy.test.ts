@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ServerBusyBars } from './components/server-busy-bars';
-import { beginServerRequest, computeServerBusyBarCount, endServerRequest, serverBusy, serverInFlightCount } from './server-busy';
+import { ServerBusyBars, ServerBusyMessage } from './components/server-busy-bars';
+import { beginServerRequest, computeServerBusyBarCount, describeServerRequest, endServerRequest, serverBusy, serverBusyMessage, serverInFlightCount } from './server-busy';
 
 describe('computeServerBusyBarCount', () => {
   it('returns zero for a non-positive or non-finite width', () => {
@@ -96,5 +96,41 @@ describe('ServerBusyBars', () => {
     expect(css).toMatch(/\.server-busy-bars \{[^}]*gap: 2px/);
     expect(css).toContain('animation-play-state: paused');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+});
+
+describe('describeServerRequest', () => {
+  it('names the kind of work from method and path', () => {
+    expect(describeServerRequest('GET', '/__hotsheet/project-api/p/tickets')).toBe('Loading tickets');
+    expect(describeServerRequest('PATCH', '/__hotsheet/project-api/p/tickets/HS2-1')).toBe('Saving ticket');
+    expect(describeServerRequest('POST', '/__hotsheet/project-api/p/tickets/HS2-1/notes')).toBe('Saving note');
+    expect(describeServerRequest('GET', '/__hotsheet/project-api/p/repository-status')).toBe('Checking repository');
+    expect(describeServerRequest('POST', '/__hotsheet/project-api/p/search')).toBe('Searching tickets');
+    expect(describeServerRequest('POST', '/__hotsheet/tool/turn')).toBe('Talking to the AI tool');
+    expect(describeServerRequest('GET', '/__hotsheet/unknown')).toBe('Loading…');
+    expect(describeServerRequest('POST', '/__hotsheet/unknown')).toBe('Saving changes');
+  });
+});
+
+describe('serverBusyMessage', () => {
+  beforeEach(() => { vi.useFakeTimers(); while (serverInFlightCount() > 0) endServerRequest(); serverBusyMessage.value = ''; });
+  afterEach(() => { while (serverInFlightCount() > 0) endServerRequest(); vi.runAllTimers(); vi.useRealTimers(); });
+  it('reflects the latest labeled request and clears after the idle linger', () => {
+    beginServerRequest('Loading tickets');
+    expect(serverBusyMessage.value).toBe('Loading tickets');
+    beginServerRequest('Checking repository');
+    expect(serverBusyMessage.value).toBe('Checking repository');
+    endServerRequest();
+    endServerRequest();
+    expect(serverBusyMessage.value).toBe('Checking repository'); // still set during the linger
+    vi.advanceTimersByTime(400);
+    expect(serverBusy.value).toBe(false);
+    expect(serverBusyMessage.value).toBe('');
+  });
+  it('renders the label pill only when visible with a message', () => {
+    expect(String(ServerBusyMessage({ message: 'Loading tickets', visible: true }))).toContain('data-visible="true"');
+    expect(String(ServerBusyMessage({ message: 'Loading tickets', visible: true }))).toContain('Loading tickets');
+    expect(String(ServerBusyMessage({ message: 'Loading tickets', visible: false }))).toContain('data-visible="false"');
+    expect(String(ServerBusyMessage({ message: '', visible: true }))).toContain('data-visible="false"');
   });
 });

@@ -1,6 +1,6 @@
 import type { ServerCompatibility } from './compatibility';
 import { prioritiesToWire } from './priority-wire';
-import { beginServerRequest, endServerRequest } from './server-busy';
+import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
 import { completionDayStarts } from './ticket-completion-trend';
 
 export type Capabilities = Record<'create'|'update'|'close'|'notes'|'note_edit'|'note_delete'|'attachments'|'assignment'|'review_requests'|'dependencies'|'up_next'|'close_reasons'|'claims'|'atomic_batch'|'not_working_report'|'offline_mutation'|'history'|'watch'|'provider_idempotency', boolean> & {query_fields:string[]};
@@ -91,7 +91,7 @@ export class Api {
   // `trackBusy` defaults to true so ordinary loads and mutations drive the server-busy indicator.
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
-  private async request<T>(path:string,init:RequestInit={},trackBusy=true):Promise<T>{const headers=new Headers(init.headers);headers.set('X-Hotsheet-Secret',this.secret);if(!(init.body instanceof FormData)&&!headers.has('Content-Type'))headers.set('Content-Type','application/json');if(trackBusy)beginServerRequest();try{const response=await fetch(`${this.origin}${path}`,{...init,headers});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error??`${response.status}`);return response.status===204?undefined as T:await response.json()}finally{if(trackBusy)endServerRequest()}}
+  private async request<T>(path:string,init:RequestInit={},trackBusy=true):Promise<T>{const headers=new Headers(init.headers);headers.set('X-Hotsheet-Secret',this.secret);if(!(init.body instanceof FormData)&&!headers.has('Content-Type'))headers.set('Content-Type','application/json');if(trackBusy)beginServerRequest(describeServerRequest(init.method??'GET',path));try{const response=await fetch(`${this.origin}${path}`,{...init,headers});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error??`${response.status}`);return response.status===204?undefined as T:await response.json()}finally{if(trackBusy)endServerRequest()}}
   compatibility=()=>this.request<ServerCompatibility>('/compatibility');
   providers=()=>this.request<ProviderDescriptor[]>('/providers');
   connections=()=>this.request<ProviderConnection[]>('/provider-connections');

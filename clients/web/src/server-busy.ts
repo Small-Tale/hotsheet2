@@ -7,6 +7,11 @@ import { signal } from 'kerfjs';
  */
 const inFlight = signal(0);
 export const serverBusy = signal(false);
+/**
+ * Human-readable description of what the server is most recently doing (e.g. "Loading tickets"),
+ * for the optional loading-activity label. Empty when idle. Shows the latest-started operation.
+ */
+export const serverBusyMessage = signal('');
 
 const IDLE_LINGER_MS = 300;
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -21,14 +26,21 @@ function sync(): void {
   } else if (idleTimer === undefined && serverBusy.value) {
     idleTimer = setTimeout(() => {
       idleTimer = undefined;
-      if (inFlight.value === 0) serverBusy.value = false;
+      if (inFlight.value === 0) {
+        serverBusy.value = false;
+        serverBusyMessage.value = '';
+      }
     }, IDLE_LINGER_MS);
   }
 }
 
-/** Mark one server request as started. Pair every call with exactly one {@link endServerRequest}. */
-export function beginServerRequest(): void {
+/**
+ * Mark one server request as started. Pair every call with exactly one {@link endServerRequest}.
+ * An optional human-readable `label` becomes the current {@link serverBusyMessage}.
+ */
+export function beginServerRequest(label?: string): void {
   inFlight.value += 1;
+  if (label) serverBusyMessage.value = label;
   sync();
 }
 
@@ -41,6 +53,30 @@ export function endServerRequest(): void {
 /** Test-only helper: current in-flight request count. */
 export function serverInFlightCount(): number {
   return inFlight.value;
+}
+
+/**
+ * A short human-readable description of a server request, derived from its method and path, for
+ * the optional loading-activity label. Deliberately coarse — it names the kind of work, not the
+ * exact endpoint — and falls back to a generic phrase for unrecognized paths.
+ */
+export function describeServerRequest(method: string, path: string): string {
+  const verb = method.toUpperCase();
+  const writing = verb === 'POST' || verb === 'PUT' || verb === 'PATCH' || verb === 'DELETE';
+  const has = (segment: string) => path.includes(segment);
+  if (has('/search')) return 'Searching tickets';
+  if (has('/attachments') || has('/thumbnail') || has('/media')) return writing ? 'Uploading attachment' : 'Loading attachment';
+  if (has('/notes')) return 'Saving note';
+  if (has('/code-review')) return 'Loading code review';
+  if (has('/repository') || has('/git')) return writing ? 'Updating repository' : 'Checking repository';
+  if (has('/turn') || has('/drive') || has('/conversation') || has('/tool')) return 'Talking to the AI tool';
+  if (has('/terminals') || has('/terminal')) return 'Preparing terminals';
+  if (has('/commands') || has('/command')) return writing ? 'Running command' : 'Loading commands';
+  if (has('/providers') || has('/models') || has('/ai')) return 'Loading AI tools';
+  if (has('/permission')) return 'Updating permissions';
+  if (has('/setup') || has('/projects/open') || has('/bootstrap')) return 'Preparing project';
+  if (has('/tickets') || has('/checkout')) return writing ? 'Saving ticket' : 'Loading tickets';
+  return writing ? 'Saving changes' : 'Loading…';
 }
 
 /**

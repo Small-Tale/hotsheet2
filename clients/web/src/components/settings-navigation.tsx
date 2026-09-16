@@ -5,9 +5,9 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArchiveRestore, Bot, Columns3, Database, Keyboard, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
+import { ArchiveRestore, Bot, Columns3, Database, Keyboard, PanelLeftClose, ShieldCheck, SlidersHorizontal, TerminalSquare } from 'lucide';
 
-export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'keyboard';
+export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'general' | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
 const projectCategories = [
@@ -21,6 +21,7 @@ const projectCategories = [
 ] as const;
 
 const appCategories = [
+  { id: 'general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 

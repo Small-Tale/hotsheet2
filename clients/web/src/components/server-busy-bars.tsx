@@ -19,3 +19,19 @@ export function ServerBusyBars({ count, busy }: ServerBusyBarsProps) {
     {Array.from({ length: bars }, (_bar, index) => <span class="server-busy-bars__bar" style={`--bar-index:${index}`}></span>)}
   </div>;
 }
+
+export interface ServerBusyMessageProps {
+  /** The human-readable description of the current server work. */
+  message: string;
+  /** Whether the label should be shown (busy AND the loading-activity setting is on). */
+  visible: boolean;
+}
+
+/**
+ * Optional loading-activity label: a small pill that hangs from the top edge (below the busy
+ * bars) and names what the server is doing in human-readable terms (HS2-2G1Y8X). Off by default;
+ * the host gates `visible` on the General settings toggle. Decorative/status-only.
+ */
+export function ServerBusyMessage({ message, visible }: ServerBusyMessageProps) {
+  return <div class="server-busy-message" data-component="server-busy-message" data-visible={String(visible && Boolean(message))} role="status" aria-live="polite">{message}</div>;
+}
