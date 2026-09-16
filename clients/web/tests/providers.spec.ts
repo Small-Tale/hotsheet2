@@ -2414,6 +2414,26 @@ test('switches already-open projects from cache within one frame and rejects sta
   await page.screenshot({path:'/private/tmp/hs2-q8n2q4-instant-project-switch-wide.png',fullPage:true});await page.setViewportSize({width:1024,height:600});await page.screenshot({path:'/private/tmp/hs2-q8n2q4-instant-project-switch-narrow.png',fullPage:true});
 });
 
+test('keeps the new-ticket composer open when it is opened right after a project tab switch (HS2-T1F2VT)',async({page})=>{
+  const otherRow={...row,id:'other-01',native_id:'other-01',qualified_id:'git-local:other-01',slug:'HS2-OTHER1',title:'Other project ticket'};
+  let holdRefreshes=false;const pending=new Map<string,import('@playwright/test').Route>();
+  await mockProject(page);
+  await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;if(root==='/work/other')return route.fulfill({status:201,json:{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}});return route.fulfill({status:201,json:project})});
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
+  await page.route(/\/tickets(?:\?.*)?$/,route=>{if(route.request().method()!=='GET')return route.fallback();const other=new URL(route.request().url()).pathname.includes('/other-checkout/');if(holdRefreshes){pending.set(other?'other':'demo',route);return}return route.fulfill({json:other?[otherRow]:[row,notStartedRow]})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();
+  await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
+  // Switch back to demo with its activation refresh (and thus the session restore) held, then quickly open the composer.
+  holdRefreshes=true;await page.getByRole('tab',{name:'demo'}).click();
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  await expect(page.getByRole('textbox',{name:'Ticket title'})).toBeVisible();
+  // Release the held refresh so the delayed session restore runs; it must not close the composer the user just opened.
+  await expect.poll(()=>pending.has('demo')).toBe(true);
+  await pending.get('demo')!.fulfill({json:[row,notStartedRow]});
+  await page.waitForTimeout(400);
+  await expect(page.getByRole('textbox',{name:'Ticket title'})).toBeVisible();
+});
+
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus',async({page})=>{
   await page.setViewportSize({width:1100,height:840});await mockProject(page);await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}:project})});await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();
   const projectTabs=page.locator('[data-tab-kind="project"]'),projectNames=()=>projectTabs.locator('.kui-app-tab__name').allTextContents();await expect.poll(projectNames).toEqual(['demo','other']);await projectTabs.nth(0).dragTo(projectTabs.nth(1),{targetPosition:{x:70,y:16}});await expect.poll(projectNames).toEqual(['other','demo']);await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual(['/work/other','/work/demo']);
