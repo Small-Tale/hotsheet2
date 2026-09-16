@@ -581,7 +581,7 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
       name="related-component"
       value=""
       label="Related components"
-      placeholder="Choose a related component"
+      placeholderText="Choose a related component"
       choices={choices}
     />
   );
