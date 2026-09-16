@@ -1564,5 +1564,10 @@ document.addEventListener('keydown',event=>{if(!event.defaultPrevented&&attachme
 delegate(document.body,'click','*',completePointerDetailsFinish);
 delegateCapture(document.body,'pointerup','*',schedulePointerDetailsFinish);
 delegateCapture(document.body,'pointercancel','*',schedulePointerDetailsFinish);
+// Flush the debounced session (including the in-progress new-ticket composer draft) before the page
+// is hidden, reloaded, or restarted, so a background refresh/restart never loses typed text (HS2-D4PB9Y).
+const flushProjectSessionPersistence=()=>{if(projectSessionTimer!==undefined){window.clearTimeout(projectSessionTimer);projectSessionTimer=undefined}persistProjectSessionNow()};
+window.addEventListener('pagehide',flushProjectSessionPersistence);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushProjectSessionPersistence()});
 const rememberedActiveRoot=activeProjectRoot(localStorage);
 void(async()=>{try{for(const root of rememberedRoots)await openProject(root,undefined,false,false,true);const restoration=reconcileRememberedProjectRoots(rememberedRoots,projects.value.map(item=>item.root));if(restoration.failed.length){await new Promise(resolve=>setTimeout(resolve,500));for(const root of restoration.failed)await openProject(root,undefined,false,false,true)}const rememberedActive=projects.value.find(item=>item.root===rememberedActiveRoot);if(rememberedActive&&rememberedActive.id!==selectedProjectId.value){const activated=activateOpenProject(rememberedActive.id);if(activated)await restoreProjectSession(activated.project,activated.generation)}else if(projectRestoreFailures.value.some(item=>item.root===rememberedActiveRoot))selectedProjectRestoreRoot.value=rememberedActiveRoot;else if(!projects.value.length&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}finally{initialProjectRestoreComplete=true;initialProjectRestorePending.value=false}})();

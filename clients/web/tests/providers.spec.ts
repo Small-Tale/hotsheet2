@@ -2655,3 +2655,41 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
   await page.locator('[data-component="project-sidebar"]').screenshot({path:'/private/tmp/hs2-656xj2-sidebar-command-color-icon.png'});
 });
+
+test('keeps the open new-ticket composer and its draft through a background ticket refresh (HS2-D4PB9Y)',async({page})=>{
+  await mockProject(page);
+  let liveRows=[row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3],cursor=0;
+  const polls:Array<import('@playwright/test').Route>=[];
+  await page.route(/\/tickets(?:\?.*)?$/,route=>route.request().method()==='GET'?route.fulfill({json:liveRows}):route.fallback());
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  const emit=async(kind:string,id:string,slug:string)=>{await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind,id,slug}],overflow:false}})};
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/New ticket/}).click();
+  const dialog=page.locator('[data-component="quick-ticket-composer"]');
+  await expect(dialog).toHaveJSProperty('open',true);
+  await dialog.getByLabel('Ticket title').fill('Draft title I do not want to lose');
+  await dialog.locator('[name="new-ticket-details"]').fill('Detailed notes typed before a background refresh.');
+  const external={...row,id:'10',native_id:'10',qualified_id:'git-local:10',slug:'HS2-EXTERNAL',title:'Externally added ticket',status:'not_started',up_next:false};liveRows=[external,...liveRows];await emit('changed','10','HS2-EXTERNAL');
+  await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
+  // The composer must stay open with its typed draft intact (HS2-D4PB9Y).
+  await expect(dialog).toHaveJSProperty('open',true);
+  await expect(dialog.getByLabel('Ticket title')).toHaveValue('Draft title I do not want to lose');
+  await expect(dialog.locator('[name="new-ticket-details"]')).toHaveValue('Detailed notes typed before a background refresh.');
+});
+
+test('recovers the open new-ticket composer and its draft after a reload/restart (HS2-D4PB9Y)',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/New ticket/}).click();
+  const dialog=page.locator('[data-component="quick-ticket-composer"]');
+  await expect(dialog).toHaveJSProperty('open',true);
+  await dialog.getByLabel('Ticket title').fill('Draft that must survive a restart');
+  await dialog.locator('[name="new-ticket-details"]').fill('Notes that must survive a restart.');
+  // Reload immediately, before the 700ms persistence debounce — only the pagehide flush can save the draft.
+  await page.reload();
+  const restored=page.locator('[data-component="quick-ticket-composer"]');
+  // Per design the composer is not auto-painted on startup, but the flushed draft is recovered on reopen.
+  await expect(restored).toBeHidden();
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  await expect(restored.getByRole('textbox',{name:'Ticket title'})).toHaveValue('Draft that must survive a restart');
+  await expect(restored.getByRole('textbox',{name:'Details'})).toHaveValue('Notes that must survive a restart.');
+});
