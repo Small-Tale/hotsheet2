@@ -210,8 +210,9 @@ describe('ProjectSidebar component slice', () => {
     // Non-menu content children self-inset instead of leaning on the shell.
     expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: remify\(8px\)/);
     expect(css).toMatch(/\.project-sidebar__footer \{[^}]*padding: remify\(8px\)/);
-    // No negative-margin toolbar hack survives.
-    expect(css).not.toContain('.project-sidebar > .kui-toolbar');
+    // The collapse toolbar aligns its lone control to the gutter with flex, not the old negative-margin hack.
+    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \{[^}]*justify-content: flex-end/);
+    expect(css).not.toMatch(/\.project-sidebar > \.kui-toolbar \{[^}]*margin:/);
   });
 
   it('omits the command section when the project has no commands', () => {
