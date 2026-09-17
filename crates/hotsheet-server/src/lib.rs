@@ -4257,100 +4257,112 @@ async fn get_checkout_ticket_duplicate_backlinks(
         .checkout_registry
         .list()
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-    let mut backlinks = Vec::new();
-    let mut inaccessible_projects = Vec::new();
-    for checkout in checkouts {
-        // A remembered checkout may outlive a temporary or deleted working directory.
-        // It cannot contain a usable backlink while absent, and presenting it as a
-        // transient source failure makes every ticket show a permanent warning.
-        if !FsPath::new(&checkout.root).is_dir() {
-            continue;
-        }
-        let mut inaccessible = false;
-        for source in &checkout.sources {
-            let tickets = if source.provider == "git" {
-                // A directory can be recreated after a remembered temporary checkout is
-                // deleted (for example by an old setup tool) without recreating its HS2
-                // ticket store. A locator without HS2 metadata is no longer a searchable
-                // source, not a transient lookup failure that should warn on every ticket.
-                if !FsPath::new(&source.locator)
-                    .join(STORE_METADATA_FILE)
-                    .is_file()
-                {
-                    continue;
-                }
-                match FsStore::open(&source.locator).and_then(|store| {
-                    store.metadata()?;
-                    store.list_tickets_resilient()
-                }) {
-                    Ok(listing) => listing
-                        .tickets
-                        .iter()
-                        .map(|ticket| ApiTicket::from_provider(ticket, &source.connection_id, None))
-                        .collect(),
-                    Err(_) => {
-                        inaccessible = true;
+    // The scan below opens and fully lists every ticket store of every registered checkout
+    // (O(all tickets in all projects)). Run it on the blocking pool so this per-ticket-open
+    // request cannot starve tokio workers or stall unrelated concurrent clients. HS2-S66BZZ.
+    let scan_state = state.clone();
+    let (backlinks, inaccessible_projects) = tokio::task::spawn_blocking(move || {
+        let state = scan_state;
+        let mut backlinks = Vec::new();
+        let mut inaccessible_projects = Vec::new();
+        for checkout in checkouts {
+            // A remembered checkout may outlive a temporary or deleted working directory.
+            // It cannot contain a usable backlink while absent, and presenting it as a
+            // transient source failure makes every ticket show a permanent warning.
+            if !FsPath::new(&checkout.root).is_dir() {
+                continue;
+            }
+            let mut inaccessible = false;
+            for source in &checkout.sources {
+                let tickets = if source.provider == "git" {
+                    // A directory can be recreated after a remembered temporary checkout is
+                    // deleted (for example by an old setup tool) without recreating its HS2
+                    // ticket store. A locator without HS2 metadata is no longer a searchable
+                    // source, not a transient lookup failure that should warn on every ticket.
+                    if !FsPath::new(&source.locator)
+                        .join(STORE_METADATA_FILE)
+                        .is_file()
+                    {
                         continue;
                     }
-                }
-            } else {
-                match provider_for(&state, &source.connection_id).and_then(|provider| {
-                    provider
-                        .query(&TicketQuery::default())
-                        .map_err(provider_transfer_error)
-                }) {
-                    Ok(tickets) => tickets,
-                    Err(_) => {
-                        inaccessible = true;
+                    match FsStore::open(&source.locator).and_then(|store| {
+                        store.metadata()?;
+                        store.list_tickets_resilient()
+                    }) {
+                        Ok(listing) => listing
+                            .tickets
+                            .iter()
+                            .map(|ticket| {
+                                ApiTicket::from_provider(ticket, &source.connection_id, None)
+                            })
+                            .collect(),
+                        Err(_) => {
+                            inaccessible = true;
+                            continue;
+                        }
+                    }
+                } else {
+                    match provider_for(&state, &source.connection_id).and_then(|provider| {
+                        provider
+                            .query(&TicketQuery::default())
+                            .map_err(provider_transfer_error)
+                    }) {
+                        Ok(tickets) => tickets,
+                        Err(_) => {
+                            inaccessible = true;
+                            continue;
+                        }
+                    }
+                };
+                for ticket in tickets {
+                    let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
+                        continue;
+                    };
+                    if ticket.close_reason != Some(CloseReason::Duplicate)
+                        || !duplicate_reference_matches(duplicate_of, &target)
+                    {
                         continue;
                     }
+                    let source_reference = ProjectTicketRef {
+                        project_id: checkout.id.clone(),
+                        connection_id: ticket.connection_id.clone(),
+                        native_id: ticket.native_id.clone(),
+                    };
+                    backlinks.push(DuplicateBacklink {
+                        reference: source_reference.qualified(),
+                        project_id: checkout.id.clone(),
+                        project_name: checkout.alias.clone(),
+                        connection_id: ticket.connection_id,
+                        native_id: ticket.native_id,
+                        qualified_id: ticket.qualified_id,
+                        slug: ticket.slug,
+                        title: ticket.title,
+                    });
                 }
-            };
-            for ticket in tickets {
-                let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
-                    continue;
-                };
-                if ticket.close_reason != Some(CloseReason::Duplicate)
-                    || !duplicate_reference_matches(duplicate_of, &target)
-                {
-                    continue;
-                }
-                let source_reference = ProjectTicketRef {
-                    project_id: checkout.id.clone(),
-                    connection_id: ticket.connection_id.clone(),
-                    native_id: ticket.native_id.clone(),
-                };
-                backlinks.push(DuplicateBacklink {
-                    reference: source_reference.qualified(),
-                    project_id: checkout.id.clone(),
-                    project_name: checkout.alias.clone(),
-                    connection_id: ticket.connection_id,
-                    native_id: ticket.native_id,
-                    qualified_id: ticket.qualified_id,
-                    slug: ticket.slug,
-                    title: ticket.title,
+            }
+            if inaccessible {
+                inaccessible_projects.push(DuplicateBacklinkProject {
+                    project_id: checkout.id,
+                    project_name: checkout.alias,
                 });
             }
         }
-        if inaccessible {
-            inaccessible_projects.push(DuplicateBacklinkProject {
-                project_id: checkout.id,
-                project_name: checkout.alias,
-            });
-        }
-    }
-    backlinks.sort_by(|left, right| {
-        left.project_name
-            .cmp(&right.project_name)
-            .then(left.slug.cmp(&right.slug))
-            .then(left.reference.cmp(&right.reference))
-    });
-    backlinks.dedup_by(|left, right| left.reference == right.reference);
-    inaccessible_projects.sort_by(|left, right| {
-        left.project_name
-            .cmp(&right.project_name)
-            .then(left.project_id.cmp(&right.project_id))
-    });
+        backlinks.sort_by(|left, right| {
+            left.project_name
+                .cmp(&right.project_name)
+                .then(left.slug.cmp(&right.slug))
+                .then(left.reference.cmp(&right.reference))
+        });
+        backlinks.dedup_by(|left, right| left.reference == right.reference);
+        inaccessible_projects.sort_by(|left, right| {
+            left.project_name
+                .cmp(&right.project_name)
+                .then(left.project_id.cmp(&right.project_id))
+        });
+        (backlinks, inaccessible_projects)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(DuplicateBacklinkResponse {
         backlinks,
         inaccessible_projects,
@@ -6172,6 +6184,30 @@ fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins:
     )
 }
 
+/// Discover AI tools **off the async runtime**.
+///
+/// AI-tool discovery launches blocking `--version`/`models` subprocesses for every
+/// installed drivable tool (even a warm cache re-checks each tool's runtime version),
+/// and it takes the single shared `model_catalogs` mutex for the whole scan. Running it
+/// inline in an async handler both starves a tokio worker for the duration and serializes
+/// unrelated concurrent requests behind it — the mechanism behind a second web client
+/// loading far slower than the first (HS2-10R4VV). Move the whole scan (and its lock) to
+/// the blocking pool so the async workers stay free. See HS2-S66BZZ.
+async fn discovered_ai_tools_off_runtime(
+    state: &AppState,
+    refresh: bool,
+) -> Vec<hotsheet_plugins::AiToolDescriptor> {
+    let catalogs = state.model_catalogs.clone();
+    let plugin_dirs = state.plugin_dirs.clone();
+    let root = state.store.root().to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let mut cache = catalogs.lock().unwrap();
+        hotsheet_aitools::discover_ai_tool_descriptors(&plugin_dirs, &root, &mut cache, refresh)
+    })
+    .await
+    .unwrap_or_default()
+}
+
 #[derive(Default, Deserialize)]
 struct AiToolsQuery {
     #[serde(default)]
@@ -6182,11 +6218,13 @@ async fn list_ai_tools(
     State(state): State<AppState>,
     Query(query): Query<AiToolsQuery>,
 ) -> Json<Vec<hotsheet_plugins::AiToolDescriptor>> {
-    Json(discovered_ai_tools(&state, query.refresh))
+    Json(discovered_ai_tools_off_runtime(&state, query.refresh).await)
 }
 
-fn effective_ai_settings(state: &AppState) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
-    let tools = discovered_ai_tools(state, false);
+async fn effective_ai_settings(
+    state: &AppState,
+) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
+    let tools = discovered_ai_tools_off_runtime(state, false).await;
     let saved = Settings::new(state.store.root())
         .get("ai.defaults", hotsheet_ticketing::Scope::Global)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
@@ -6200,15 +6238,18 @@ fn effective_ai_settings(state: &AppState) -> Result<hotsheet_plugins::AiToolDef
 async fn get_ai_settings(
     State(state): State<AppState>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    Ok(Json(effective_ai_settings(&state)?))
+    Ok(Json(effective_ai_settings(&state).await?))
 }
 
 async fn put_ai_settings(
     State(state): State<AppState>,
     Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(&state, false), &defaults)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    hotsheet_plugins::validate_ai_defaults(
+        &discovered_ai_tools_off_runtime(&state, false).await,
+        &defaults,
+    )
+    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
     Settings::new(state.store.root())
         .set(
             "ai.defaults",
@@ -6228,7 +6269,7 @@ async fn create_drive_connection(
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "tool is required"));
     }
     if request.model.is_some() || request.effort.is_some() {
-        let tools = discovered_ai_tools(&state, false);
+        let tools = discovered_ai_tools_off_runtime(&state, false).await;
         if tools.iter().any(|tool| tool.id == request.tool) {
             hotsheet_plugins::validate_ai_defaults(
                 &tools,
@@ -6394,7 +6435,7 @@ async fn send_drive_turn(
         .get(&id)
         .map_err(client_drive_api_error)?;
     if request.model.is_some() || request.effort.is_some() {
-        let tools = discovered_ai_tools(&state, false);
+        let tools = discovered_ai_tools_off_runtime(&state, false).await;
         if let Some(descriptor) = tools.iter().find(|tool| tool.id == connection.tool) {
             if request.model.is_some()
                 && !descriptor

@@ -352,6 +352,38 @@ async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated(
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_ai_tool_discovery_stays_coherent_off_the_async_runtime() {
+    // AI-tool discovery launches blocking `--version`/`models` subprocesses under a single
+    // shared catalog mutex. HS2-S66BZZ moved it to the blocking pool so concurrent clients
+    // neither starve the async workers nor deadlock on the mutex (the mechanism behind a
+    // second web client loading far slower than the first, HS2-10R4VV). Fire many discovery
+    // requests at once and assert they all succeed and return an identical catalog.
+    let (_dir, state) = state();
+    let router = app(state);
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let router = router.clone();
+        handles.push(tokio::spawn(async move {
+            let response = router
+                .oneshot(authed("GET", "/ai-tools", None))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            body_json(response).await
+        }));
+    }
+    let mut bodies = Vec::new();
+    for handle in handles {
+        bodies.push(handle.await.unwrap());
+    }
+    let first = &bodies[0];
+    assert!(first.is_array());
+    for body in &bodies[1..] {
+        assert_eq!(body, first, "concurrent discovery returned divergent catalogs");
+    }
+}
+
 #[tokio::test]
 async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
     let (dir, state) = state();
