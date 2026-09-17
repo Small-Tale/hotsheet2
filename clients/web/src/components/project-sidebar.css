@@ -5,11 +5,11 @@
 /* Flex layout so a lone collapse control aligns to the 8px gutter; kerf's Toolbar grid
    renders three cells and pushes a single trailing control ~16px in (HS2-V0ZH69). */
 .project-sidebar > .kui-toolbar { display: flex; align-items: center; justify-content: flex-end; }
-.project-sidebar__content { grid-row: 2; display: grid; align-content: start; row-gap: remify(16px); padding-block: remify(8px); scrollbar-gutter: stable; }
-.project-sidebar__content > .project-summary { width: auto; margin-inline: remify(8px); }
-.project-sidebar__footer { grid-row: 3; display: grid; padding: remify(8px); row-gap: remify(8px); }
+.project-sidebar__content { grid-row: 2; display: grid; align-content: start; row-gap: var(--kui-space-m); padding-block: var(--kui-space-xs); scrollbar-gutter: stable; }
+.project-sidebar__content > .project-summary { width: auto; margin-inline: var(--kui-space-xs); }
+.project-sidebar__footer { grid-row: 3; display: grid; padding: var(--kui-space-xs); row-gap: var(--kui-space-xs); }
 .project-sidebar__work-summary { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.25; text-align: center; }
-.project-sidebar__drive-row { display: flex; min-width: 0; gap: remify(8px); }
+.project-sidebar__drive-row { display: flex; min-width: 0; gap: var(--kui-space-xs); }
 .project-sidebar__drive-row > .kui-select { width: remify(88px); flex: none; }
 .project-sidebar__drive-row .drive-control { min-width: 0; flex: 1; }
 .project-sidebar__conversation { display: grid; width: remify(44px); min-width: remify(44px); min-height: remify(44px); padding: 0; border: 0; border-radius: remify(10px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
