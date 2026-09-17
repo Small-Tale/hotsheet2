@@ -129,6 +129,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('Show Notifications (7 pending)');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(headerCss).toContain('.workspace-header__sort { width: remify(44px); }');
+    // The single sort group owns the pill; the Select combobox stays transparent so it does not
+    // draw a second, shorter pill that pokes out of the group's rounding (HS2-W3VD53).
+    expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*background: transparent/);
     expect(headerCss).toContain('.workspace-header__sort .kui-select__custom-selected { width: remify(16px); height: remify(16px); color: var(--kui-toolbar-control-color);');
     expect(headerCss).toMatch(/@container kui-toolbar \(max-width: remify\(480px\)\) \{[\s\S]*workspace-header__utility-group \{ display: none; \}[\s\S]*workspace-header__overflow \{ display: inline-flex; \}/);
     expect(headerCss).toMatch(/@container kui-toolbar \(max-width: remify\(416px\)\) \{[\s\S]*workspace-header__sort-group \{ display: none; \}/);
