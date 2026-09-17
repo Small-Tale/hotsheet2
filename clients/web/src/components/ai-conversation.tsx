@@ -8,15 +8,14 @@ import {LucideIcon} from '@kerfjs/ui/lucide-icon';
 import {PanelHeader} from '@kerfjs/ui/panel-header';
 import {ToolbarControlGroup} from '@kerfjs/ui/toolbar-control-group';
 import type {SafeHtml} from 'kerfjs/jsx-runtime';
-import {Activity,Bot,Brain,ChevronDown,CircleAlert,Copy,Download,Gauge,type IconNode,Image,MessageSquare,Paperclip,Pencil,Send,Square,X} from 'lucide';
+import {Activity,Bot,Brain,ChevronDown,CircleAlert,Copy,Download,Image,MessageSquare,Paperclip,Send,Square,X} from 'lucide';
 
 import {type ConversationActivity,type ConversationMessage,conversationTimeline,type ConversationUsage,formatConversationCost,formatConversationTokens} from '../ai-conversation';
 import type { PermissionItem } from '../permission-notifications';
 import {AIContentLabel} from './ai-content-label';
 import {MarkdownPreview} from './markdown-preview';
 import {PermissionRequestCard} from './permission-request-card';
-
-function modelChoice(action:string,value:string,label:string,selected:boolean,icon:IconNode,iconName:string){return <wa-dropdown-item slot="submenu" aria-current={selected?'true':undefined} data-action={action} data-value={value} value={value}><span slot="icon"><LucideIcon icon={icon} name={iconName}/></span>{label}</wa-dropdown-item>}
+import {ProviderModelEffortSubmenus} from './provider-model-effort-menu';
 
 export interface AIConversationProps {open:boolean;tool:string;sessionId?:string;selectionId?:string;selectedMessageIds?:readonly string[];messages:ConversationMessage[];draft:string;busy:boolean;progress?:string;interruptible:boolean;permissions?:PermissionItem[];activity?:ConversationActivity[];totalUsage?:ConversationUsage;error?:string;feedbackAvailable?:boolean;presentation?:'dialog'|'embedded';foreground?:SafeHtml;providerId?:string;providers?:readonly {id:string;label:string}[];canChangeProvider?:boolean;model?:string;effort?:string;models?:readonly {id:string;label:string}[];efforts?:readonly string[];canChangeModel?:boolean;canChangeEffort?:boolean;readOnly?:boolean;readOnlyContext?:'saved'|'preview';savedSource?:string}
 
@@ -41,9 +40,12 @@ export function AIConversation({open,tool,selectionId,selectedMessageIds=[],mess
     <span class="ai-conversation__model-current"><LucideIcon icon={Brain} name="brain" className="ai-conversation__model-icon" />{canChangeModel&&currentModelLabel&&<span class="ai-conversation__model-name" title={model}>{currentModelLabel}</span>}{canChangeEffort&&currentEffort&&<span class="ai-conversation__model-effort" title="Effort">{currentEffort}</span>}</span>
     <wa-dropdown class="ai-conversation__model-menu" placement="top-end" distance={6}>
       <button slot="trigger" type="button" class="ai-conversation__model-trigger" aria-label="Change provider, model, and effort" title="Change provider, model, and effort" aria-haspopup="menu"><LucideIcon icon={ChevronDown} name="chevron-down" /></button>
-      {providerChangeable&&<wa-dropdown-item><span slot="icon"><LucideIcon icon={Bot} name="bot"/></span>Provider<span slot="details">{currentProviderLabel}</span>{providers.map(item=>modelChoice('select-conversation-provider',item.id,item.label,item.id===providerId,Bot,'bot'))}</wa-dropdown-item>}
-      {canChangeModel&&models.length>0&&<wa-dropdown-item><span slot="icon"><LucideIcon icon={Brain} name="brain"/></span>Model<span slot="details">{currentModelLabel}</span>{customModel&&modelChoice('select-conversation-model',customModel,customModel,true,Brain,'brain')}{models.map(item=>modelChoice('select-conversation-model',item.id,item.label,item.id===activeModel?.id,Brain,'brain'))}<wa-divider slot="submenu"></wa-divider>{modelChoice('open-conversation-manual-model','other','Other…',false,Pencil,'pencil')}</wa-dropdown-item>}
-      {canChangeEffort&&efforts.length>0&&<wa-dropdown-item><span slot="icon"><LucideIcon icon={Gauge} name="gauge"/></span>Effort<span slot="details">{currentEffort}</span>{efforts.map(value=>modelChoice('select-conversation-effort',value,value,value===currentEffort,Gauge,'gauge'))}</wa-dropdown-item>}
+      <ProviderModelEffortSubmenus
+        actions={{provider:'select-conversation-provider',model:'select-conversation-model',effort:'select-conversation-effort',manualModel:'open-conversation-manual-model'}}
+        providers={providerChangeable?{choices:providers,currentId:providerId,currentLabel:currentProviderLabel}:undefined}
+        model={canChangeModel&&models.length>0?{choices:models,currentId:activeModel?.id,currentLabel:currentModelLabel,customModel}:undefined}
+        effort={canChangeEffort&&efforts.length>0?{efforts,current:currentEffort}:undefined}
+      />
     </wa-dropdown>
   </div>:null;
   const savedNotice=readOnly?<p class="ai-conversation__saved-notice"><strong>{previewOnly?'Read-only preview':'Saved transcript'}</strong><span>{previewOnly?<>Return to the AI chat to continue this conversation.{previewConfiguration&&` ${previewConfiguration}`}</>:<>{savedSource?`Opened from ${savedSource}. `:''}This selected range is read-only; save it again or open a tail export with a resumable session to continue.</>}</span></p>:null;
