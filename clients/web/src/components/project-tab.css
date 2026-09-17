@@ -6,7 +6,7 @@
 .project-tab__busy .kui-loading-spinner { width: remify(12.8px); height: remify(12.8px); }
 .project-tab__state { color: var(--wa-color-neutral-on-quiet); }
 .project-tab__state--attention { color: var(--wa-color-danger-on-quiet); }
-.project-tab__indicators { display: flex; align-items: center; gap: var(--wa-space-2xs); }
+.project-tab__indicators { display: flex; align-items: center; gap: var(--kui-space-2xs); }
 .project-tab__notification { display: flex; color: var(--wa-color-warning-on-quiet); align-items: center; gap: remify(1.28px); font-size: var(--wa-font-size-3xs); font-weight: 750; }
 .project-tab__notification svg { width: remify(11.52px); height: remify(11.52px); }
 .project-tab__work { position: relative; display: grid; width: remify(20.4px); height: remify(20.4px); overflow: visible; border-radius: var(--wa-border-radius-pill); color: var(--hs-ticket-state-up-next-on); background: var(--hs-ticket-state-up-next); font-size: var(--wa-font-size-3xs); font-weight: 750; line-height: 1; place-items: center; }

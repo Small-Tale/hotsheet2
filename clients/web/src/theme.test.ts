@@ -82,6 +82,25 @@ describe('shared client theme', () => {
     expect(source).not.toMatch(/--wa-[\w-]+\s*:/);
   });
 
+  it('mirrors the kerf --kui-space-* spacing scale so components can author against it (HS2-4Y6SM9)', () => {
+    const source = css(tokenPath);
+    // Identical to kerf's foundation.css so the canonical scale resolves app-wide without importing
+    // foundation wholesale (which also carries color-scheme/color/font foundations).
+    for (const declaration of [
+      '--kui-space-none: 0',
+      '--kui-space-2xs: var(--wa-space-2xs, 0.25rem)',
+      '--kui-space-xs: var(--wa-space-xs, 0.5rem)',
+      '--kui-space-s: var(--wa-space-s, 0.75rem)',
+      '--kui-space-m: var(--wa-space-m, 1rem)',
+      '--kui-space-l: var(--wa-space-l, 1.5rem)',
+      '--kui-space-xl: var(--wa-space-xl, 2rem)',
+    ]) expect(source).toContain(declaration);
+    // Components consume the scale for real semantic separation.
+    const consumers = clientCss.map(css).join('\n');
+    expect(consumers).toContain('var(--kui-space-xs)');
+    expect(consumers).toContain('var(--kui-space-m)');
+  });
+
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
     const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
     const semanticTypeToken = 'var\\(--hs-reader-font-size-(?:xs|s|m|l)\\)';

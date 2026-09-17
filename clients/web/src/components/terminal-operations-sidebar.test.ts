@@ -36,14 +36,14 @@ describe('TerminalOperationsSidebar',()=>{
 
   it('separates the multi-project aggregate from individual projects',()=>{
     const css=readFileSync(new URL('./terminal-operations-sidebar.css',import.meta.url),'utf8');
-    expect(css).toMatch(/terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--wa-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
+    expect(css).toMatch(/terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--kui-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
   });
 
   it('aligns the group ListHeader label with the ProjectSummary content on one gutter (HS2-RSJ796)',()=>{
     const css=readFileSync(new URL('./terminal-operations-sidebar.css',import.meta.url),'utf8');
     // Zero kerf's own inline margin + title padding so the header label is not indented past the
-    // chart bars; both then share the single --wa-space-s wrapper inset.
-    expect(css).toMatch(/terminal-operations-sidebar__group > \.kui-list-header \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: 0;[^}]*padding-inline: var\(--wa-space-s\)/);
-    expect(css).toMatch(/terminal-operations-sidebar__group > \.project-summary \{[^}]*padding: var\(--wa-space-s\)/);
+    // chart bars; both then share the single --kui-space-s wrapper inset.
+    expect(css).toMatch(/terminal-operations-sidebar__group > \.kui-list-header \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: 0;[^}]*padding-inline: var\(--kui-space-s\)/);
+    expect(css).toMatch(/terminal-operations-sidebar__group > \.project-summary \{[^}]*padding: var\(--kui-space-s\)/);
   });
 });

@@ -1,5 +1,18 @@
 /* Product-only semantic tokens. Generic palette and Web Awesome theming come from @kerfjs/ui. */
 :root {
+  /* Kerf's canonical spacing scale (HS2-4Y6SM9). We author component spacing against these
+     semantic steps instead of raw remify()/--wa-space-*. Kerf defines them in its foundation.css,
+     which the app does not import wholesale (it also carries color-scheme/color/font foundations);
+     mirror just the spacing aliases here, identical to kerf, so the tokens resolve app-wide.
+     Canonical steps: none/2xs/xs/m/l (0/4/8/16/24). --kui-space-s (12) and --kui-space-xl (32) are
+     off-rhythm exceptions — use only deliberately. */
+  --kui-space-none: 0;
+  --kui-space-2xs: var(--wa-space-2xs, 0.25rem);
+  --kui-space-xs: var(--wa-space-xs, 0.5rem);
+  --kui-space-s: var(--wa-space-s, 0.75rem);
+  --kui-space-m: var(--wa-space-m, 1rem);
+  --kui-space-l: var(--wa-space-l, 1.5rem);
+  --kui-space-xl: var(--wa-space-xl, 2rem);
   --hs-shell-divider: var(--wa-color-neutral-border-normal);
   --hs-ticket-state-needs-review: #cb30e0;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
