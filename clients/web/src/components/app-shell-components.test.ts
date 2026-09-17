@@ -136,11 +136,16 @@ describe('application shell components', () => {
     const projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
     expect(String(ProjectTab({id:'focus',name:'Focus',location:'local'}))).toContain('class="kui-app-tab project-tab"');
     expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
-    expect(barCss).toMatch(/\.project-tab-bar__tabs \{[^}]*margin: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
+    expect(barCss).toMatch(/\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*margin-block: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
   });
 
   it('composes tabs with add and overflow actions', () => {
     const markup = String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }] }));
+    // Built on kerf's TabBar (HS2-Q6P9P0): the strip is the kerf tab-bar with a project className and a
+    // stable bar id, the modes are its leading slot and add-project its trailing slot.
+    expect(markup).toContain('data-component="tab-bar"');
+    expect(markup).toContain('data-tab-bar-id="projects"');
+    expect(markup).toContain('class="kui-tab-bar project-tab-bar"');
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
     expect(markup).toContain('data-action="choose-project"');
@@ -226,10 +231,10 @@ describe('application shell components', () => {
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
     expect(markup).toContain('data-component="toolbar" data-divider="false"');
-    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
+    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
-    expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="project-tab-bar"'));
-    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('data-component="panel-header"'));
+    expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="tab-bar"'));
+    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('data-component="panel-header"'));
     const globalMarkup = String(AppShell({ mode: 'stats', tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never }));
     expect(globalMarkup).toContain('data-mode="stats"');
     expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');
@@ -243,7 +248,7 @@ describe('application shell components', () => {
     expect(collapsedMarkup).toContain('data-region-id="app-sidebar"');
     expect(collapsedMarkup).toContain('data-collapsed="true"');
     expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
-    expect(collapsedMarkup.indexOf('aria-label="Show project sidebar"')).toBeLessThan(collapsedMarkup.indexOf('data-component="project-tab-bar"'));
+    expect(collapsedMarkup.indexOf('aria-label="Show project sidebar"')).toBeLessThan(collapsedMarkup.indexOf('data-component="tab-bar"'));
     const hiddenInspectorMarkup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never, inspectorVisible: false }));
     expect(hiddenInspectorMarkup).toContain('aria-label="Show ticket inspector"');
     expect(hiddenInspectorMarkup).toContain('data-region-id="app-inspector"');

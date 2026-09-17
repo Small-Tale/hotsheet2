@@ -1,7 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@kerfjs/ui/tab-bar.css';
 import './project-tab-bar.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
 import { ProjectTab, type ProjectTabProps } from './project-tab';
@@ -13,15 +15,29 @@ export interface ProjectTabBarProps {
 }
 export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
 
+/** Stable id for the projects tab strip; `wireTabBars`'s reorder reports carry it as `barId` so the
+ * host can route project reorders (main.tsx) separately from other tab bars. */
+export const PROJECT_TAB_BAR_ID = 'projects';
+
 export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project' }: ProjectTabBarProps) {
-  return <nav class="project-tab-bar" data-component="project-tab-bar" aria-label={label}>
-    <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
-      <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Workspace grid" title="Workspace grid" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={Grid3X3} name="grid-3x3" /></button>
-      <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="stats" aria-label="Cross-project stats" title="Cross-project stats" aria-pressed={String(mode === 'stats')}><LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" /></button>
-    </div>
-    <div class="project-tab-bar__tabs" role="tablist" aria-label={label}>{tabs.map(tab => <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />)}</div>
-    <div class="project-tab-bar__actions">
-      <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project"><LucideIcon icon={Plus} name="plus" /></wa-button>
-    </div>
-  </nav>;
+  return (
+    <TabBar
+      id={PROJECT_TAB_BAR_ID}
+      label={label}
+      className="project-tab-bar"
+      leading={
+        <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
+          <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Workspace grid" title="Workspace grid" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={Grid3X3} name="grid-3x3" /></button>
+          <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="stats" aria-label="Cross-project stats" title="Cross-project stats" aria-pressed={String(mode === 'stats')}><LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" /></button>
+        </div>
+      }
+      trailing={
+        <div class="project-tab-bar__actions">
+          <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project"><LucideIcon icon={Plus} name="plus" /></wa-button>
+        </div>
+      }
+    >
+      {tabs.map(tab => <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />)}
+    </TabBar>
+  );
 }

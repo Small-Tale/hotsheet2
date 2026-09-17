@@ -1432,7 +1432,12 @@ it. Every selected and unselected tab is reachable in sequential Tab order, whil
 Left/Right/Home/End traverse the current tablist and Delete/Backspace closes the focused
 closeable tab. The segmented dashboard and view controls likewise expose each choice in Tab
 order. The horizontally scrolling tab strips reserve an inset on every edge so pill shadows
-and focus rings remain complete at either end. A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
+and focus rings remain complete at either end. The project strip is composed from kerf UI's
+`TabBar` primitive, with the dashboard-mode buttons in its leading slot and the add-project
+action in its trailing slot; its pointer drag-reorder and **manual-activation** keyboard
+traversal stay host-owned, because kerf's shared tab-bar wire helper activates a tab on every
+arrow key and activating a project loads it (HS2-Q6P9P0; adopting the wire helper is deferred
+to HS2-08ZG4J pending a manual-activation option upstream, KF-9136QY). A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while

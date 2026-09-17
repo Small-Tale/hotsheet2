@@ -1697,7 +1697,7 @@ test('exercises the application-shell component slice and responsive composition
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
-  const tabBar = page.locator('[data-component="project-tab-bar"]');
+  const tabBar = page.locator('.project-tab-bar');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await expect(tabBar.getByRole('tab',{name:/Hot Sheet 2/}).locator('.project-tab__work')).toHaveCount(0);
   await expect(tabBar.getByRole('tab',{name:/Small Tale Website/}).locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 1 active ticket');
@@ -1732,7 +1732,7 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
   const order = await tabBar.locator(':scope > *').evaluateAll(nodes => nodes.map(node => node.className));
-  expect(order).toEqual(['project-tab-bar__modes', 'project-tab-bar__tabs', 'project-tab-bar__actions']);
+  expect(order).toEqual(['kui-tab-bar__leading', 'kui-tab-bar__tabs', 'kui-tab-bar__trailing']);
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__work');
   const spinnerAlignment = await busySpinner.evaluate(node => {
@@ -1754,7 +1754,7 @@ test('exercises the application-shell component slice and responsive composition
   }
   await page.setViewportSize({ width: 760, height: 900 });
   const overflowState = await tabBar.evaluate(node => {
-    const strip = node.querySelector<HTMLElement>('.project-tab-bar__tabs')!;
+    const strip = node.querySelector<HTMLElement>('.kui-tab-bar__tabs')!;
     const selected = node.querySelector<HTMLElement>('.project-tab[data-selected="true"]')!.getBoundingClientRect();
     const viewport = strip.getBoundingClientRect();
     strip.scrollLeft = 100;
@@ -1764,7 +1764,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(overflowState.scrollLeft).toBeGreaterThan(0);
   expect(overflowState.overflowX).toBe('auto');
   expect(overflowState.shadowClearance).toBeGreaterThanOrEqual(3);
-  await tabBar.locator('.project-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});await firstSelect.blur();await page.mouse.move(750,899);await expect(firstClose).toHaveCSS('opacity','0');await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-narrow.png'});
+  await tabBar.locator('.kui-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});await firstSelect.blur();await page.mouse.move(750,899);await expect(firstClose).toHaveCSS('opacity','0');await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-narrow.png'});
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
@@ -1834,7 +1834,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'project-tab-bar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'tab-bar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
@@ -1937,7 +1937,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(collapsedInspector.locator('.kui-resizable-region__content')).toHaveCSS('width', `${inspectorExpandedWidth}px`);
   await expect(collapsedInspector.locator('.kui-resizable-region__content')).not.toHaveCSS('transform', 'none');
   await expect(showInspector.locator('[data-lucide="panel-right-open"]')).toHaveCount(1);
-  await expect(showInspector.locator('xpath=ancestor::*[@data-component="project-tab-bar"]')).toHaveCount(0);
+  await expect(showInspector.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showInspector.click();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
@@ -1971,7 +1971,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(collapsedSidebarContent).toHaveCSS('width', '288px');
   await expect(collapsedSidebarContent).not.toHaveCSS('transform', 'none');
   const showSidebar = shell.getByRole('button', { name: 'Show project sidebar' });
-  await expect(showSidebar.locator('xpath=ancestor::*[@data-component="project-tab-bar"]')).toHaveCount(0);
+  await expect(showSidebar.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showSidebar.click();
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();

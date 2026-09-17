@@ -1,6 +1,9 @@
-.project-tab-bar { display: flex; min-width: 0; height: remify(60px); padding: remify(5.6px) remify(7.2px); box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); align-items: center; gap: remify(5.6px); }
-.project-tab-bar__tabs { display: flex; min-width: 0; height: 100%; margin: calc(var(--wa-space-2xs) * -1); padding: var(--wa-space-2xs); overflow-x: auto; scrollbar-width: none; align-items: center; gap: remify(3.2px); }
-.project-tab-bar__tabs::-webkit-scrollbar { display: none; }
+/* Kerf's TabBar owns the strip layout (.kui-tab-bar / __leading / __tabs / __trailing); these rules
+   restyle the projects strip's chrome on top of it (HS2-Q6P9P0). The tabs container keeps a 2xs inset
+   (padding, cancelled by a negative block margin so the bar height is unchanged) so a focused/selected
+   tab's pill focus ring and shadow are not clipped at the scrolling-strip edges. */
+.project-tab-bar { height: remify(60px); min-height: remify(60px); padding: remify(5.6px) remify(7.2px); border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); gap: remify(5.6px); }
+.project-tab-bar .kui-tab-bar__tabs { height: 100%; margin-block: calc(var(--wa-space-2xs) * -1); padding: var(--wa-space-2xs); border: 0; border-radius: 0; background: transparent; gap: remify(3.2px); }
 .project-tab-bar__modes, .project-tab-bar__actions { display: flex; flex: none; height: 100%; align-items: center; }
 .project-tab-bar__modes { gap: remify(1.6px); }
 .project-tab-bar__modes button { display: grid; width: remify(32px); height: remify(32px); padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; flex: none; place-items: center; }
