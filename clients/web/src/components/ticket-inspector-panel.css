@@ -1,4 +1,15 @@
-.ticket-inspector__content { --kui-layout-inline-margin: 0; display: grid; width: 100%; min-width: 0; min-height: 0; padding: 0 remify(13.6px) remify(13.6px); overflow-x: hidden; overflow-y: auto; flex: 1; align-content: start; gap: remify(19.2px); }
+/* Kerf 8px-grid inset model (HS2-EQEGGG): the content owns no inline padding; each section sits 8px
+   from the inspector edge and carries a 1px border (transparent unless a surface colors it) plus 8px
+   padding, so a bordered surface's border is 8px from the edge and its text is 17px from the edge. */
+.ticket-inspector__content { --kui-layout-inline-margin: 0; display: grid; width: 100%; min-width: 0; min-height: 0; padding: 0 0 remify(8px); overflow-x: hidden; overflow-y: auto; flex: 1; align-content: start; gap: remify(19.2px); }
+/* Each direct child (section, notes, provenance) sits 8px from the edge and carries a 1px transparent
+   border + 8px inline padding, so its text aligns to the 17px column. Full-width bordered surfaces and
+   cards break back out by (1px border + 8px padding) to sit their own border on the 8px column. */
+.ticket-inspector__content > * { margin-inline: remify(8px); border: 1px solid transparent; padding-inline: remify(8px); }
+.ticket-inspector__details-surface, .ticket-inspector__blocked-surface, .ticket-inspector__blocked-editor, .ticket-inspector__attachment, .note-card { margin-inline: calc((remify(8px) + 1px) * -1); }
+/* The reader modal supplies its own generous inline padding on the content, so its sections don't add
+   the sidebar's 8px margin on top (they keep the same transparent-border + 8px-padding text column). */
+.ticket-inspector--reader .ticket-inspector__content > * { margin-inline: 0; }
 .ticket-inspector__content section { display: grid; min-width: 0; gap: remify(8.8px); }
 .ticket-inspector__section { display: grid; min-width: 0; gap: remify(8.8px); }
 .ticket-inspector__section-header { display: flex; min-height: remify(32px); align-items: center; justify-content: space-between; }
@@ -8,14 +19,17 @@
 .ticket-inspector__content :where(h2) { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .ticket-inspector__content :where(p) { margin: 0; color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); line-height: 1.5; }
 .ticket-inspector__details { min-height: remify(48px); cursor: text; }
-.ticket-inspector__details-surface { min-width: 0; max-width: 100%; padding: 0; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: remify(10.4px); background: var(--wa-color-surface-default); }
+.ticket-inspector__details-surface { min-width: 0; max-width: 100%; padding: remify(8px); border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: remify(10.4px); background: var(--wa-color-surface-default); }
+/* The surface owns the 8px inset; the embedded editor sits flush (overriding markdown-editor's own
+   8.8px inline padding) so preview and edit text both land on the 17px column (HS2-EQEGGG). */
+.ticket-inspector .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__surface textarea { padding: 0; }
 .ticket-inspector__details-surface[data-feedback-needed="true"] { display: grid; padding: remify(13.6px) remify(16px); border-color: var(--wa-color-warning-border-normal); background: var(--wa-color-warning-fill-quiet); gap: remify(8.8px); }
 .ticket-inspector__details-feedback { display: grid; min-width: 0; gap: var(--wa-space-s); }
 .ticket-inspector__details-feedback-header { display: inline-flex; align-items: center; gap: remify(6.4px); color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; }
 .ticket-inspector__details-feedback-header svg { width: remify(15.2px); height: remify(15.2px); flex: none; }
 .ticket-inspector__details:focus-visible { border-radius: remify(5.6px); outline: var(--wa-focus-ring); outline-offset: 3px; }
-.ticket-inspector__blocked-surface { min-width: 0; padding: remify(8.8px); border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); overflow-wrap: anywhere; }
-.ticket-inspector__blocked-editor { display: grid; padding: remify(10.4px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(8.8px); background: var(--wa-color-surface-default); gap: var(--wa-space-xs); }
+.ticket-inspector__blocked-surface { min-width: 0; padding: remify(8px); border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); overflow-wrap: anywhere; }
+.ticket-inspector__blocked-editor { display: grid; padding: remify(8px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(8.8px); background: var(--wa-color-surface-default); gap: var(--wa-space-xs); }
 .ticket-inspector__blocked-editor textarea { width: 100%; min-height: remify(64px); padding: 0; resize: vertical; border: 0; background: transparent; outline: 0; font: inherit; line-height: 1.45; }
 .ticket-inspector__blocked-editor > div { display: flex; justify-content: flex-end; gap: remify(5.6px); }
 .ticket-inspector__provenance { display: flex; padding-top: remify(3.2px); color: var(--wa-color-neutral-on-quiet); justify-content: space-between; gap: var(--wa-space-s); font-size: var(--wa-font-size-2xs); }
@@ -33,7 +47,7 @@
 .ticket-inspector__timeline time { padding-top: remify(0.32px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); white-space: nowrap; }
 .ticket-inspector__timeline strong { display: block; color: var(--wa-color-text-normal); font-size: var(--wa-font-size-s); line-height: 1.3; }
 .ticket-inspector__timeline li > div > p { margin-top: remify(3.2px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.4; }
-.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0; padding: remify(10.4px); border-radius: remify(7.2px); background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: var(--wa-space-xs); font-size: var(--wa-font-size-xs); transition: background-color 120ms ease; }
+.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0; padding: remify(8px); border-radius: remify(7.2px); background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: var(--wa-space-xs); font-size: var(--wa-font-size-xs); transition: background-color 120ms ease; }
 .ticket-inspector__attachment[data-action="open-attachment-row"] { cursor: pointer; }
 .ticket-inspector__attachment[data-action="open-attachment-row"]:hover { background: var(--wa-color-neutral-fill-quiet); }
 .ticket-inspector__attachment > svg { width: remify(14.4px); height: remify(14.4px); flex: none; }

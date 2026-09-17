@@ -682,7 +682,13 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
-  The sidebar uses an 8px content gutter and the same `ListHeader`/`ListItem`
+  The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG): `.ticket-inspector__content`
+  owns no inline padding, and each direct child (section, notes, provenance) sits 8px from
+  the edge with a 1px border (transparent unless a surface colors it) plus 8px padding, so a
+  bordered surface's border is 8px from the edge and its text is 17px. Full-width surfaces and
+  cards break back out to the 8px border column, and the compact tabs use the same 8px margin.
+  The wider reader modal keeps its own generous inline padding, so it does not add the 8px
+  section margin on top. It reuses the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.

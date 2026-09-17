@@ -20,7 +20,7 @@
 .ticket-inspector__close-outcome { display: flex; align-items: center; gap: var(--wa-space-2xs); margin: 0 remify(8px) remify(12px); padding: var(--wa-space-xs); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); font-size: var(--wa-font-size-s); }
 .ticket-inspector__close-outcome svg { width: remify(16px); height: remify(16px); }
 .ticket-inspector__close-outcome button { border: 0; padding: 0; color: var(--wa-color-brand-on-quiet); background: transparent; cursor: pointer; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: .12em; }
-.ticket-inspector__tabs { display: grid; min-width: 0; margin: 0 remify(13.6px) remify(16px); padding: remify(3.2px); border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ticket-inspector__tabs { display: grid; min-width: 0; margin: 0 remify(8px) remify(8px); padding: remify(3.2px); border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ticket-inspector__tabs button { display: flex; min-height: remify(36px); border-radius: remify(6.4px); font-size: var(--wa-font-size-xs); align-items: center; justify-content: center; gap: remify(5.6px); }
 .ticket-inspector__tabs button[aria-current="page"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }
 .ticket-inspector__tabs svg { width: remify(14.4px); height: remify(14.4px); }

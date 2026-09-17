@@ -163,8 +163,12 @@ describe('TicketInspector', () => {
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(13\.6px\) remify\(16px\);/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 remify\(13\.6px\) remify\(13\.6px\);/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(8px\) remify\(8px\);/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 remify\(8px\);/);
+    // Each direct child sits 8px from the edge with a transparent 1px border + 8px padding (17px text),
+    // and full-width bordered surfaces break back out to the 8px border column (HS2-EQEGGG).
+    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{[^}]*margin-inline: remify\(8px\);[^}]*border: 1px solid transparent;[^}]*padding-inline: remify\(8px\);/);
+    expect(panelCss).toContain('.ticket-inspector__details-surface, .ticket-inspector__blocked-surface, .ticket-inspector__blocked-editor, .ticket-inspector__attachment, .note-card { margin-inline: calc((remify(8px) + 1px) * -1); }');
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {

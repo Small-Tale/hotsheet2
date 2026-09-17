@@ -59,7 +59,7 @@ describe('content components', () => {
     // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
     expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: 0;/);
+    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: remify\(8px\);/);
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');
