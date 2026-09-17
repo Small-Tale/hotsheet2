@@ -2355,11 +2355,12 @@ test('edits custom command color and icon in the command settings editor',async(
   const dialog=page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
-  await expect(dialog.locator('.command-settings-editor__icon')).toHaveCount(12);
+  // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
+  await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
   await dialog.getByTitle('Blue',{exact:true}).click();
-  await dialog.getByTitle('wand',{exact:true}).click();
+  await dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]').click();
   await expect(dialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#3b82f6');
-  await expect(dialog.locator('.command-settings-editor__icon input:checked')).toHaveValue('wand');
+  await expect(dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]')).toHaveAttribute('aria-pressed','true');
   await page.screenshot({path:'/private/tmp/hs2-656xj2-command-editor-color-icon.png'});
   await dialog.getByRole('button',{name:'Done'}).click();
   await expect.poll(()=>dialog.evaluate(node=>node.matches(':popover-open'))).toBe(false);
