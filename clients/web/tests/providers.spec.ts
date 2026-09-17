@@ -1688,8 +1688,8 @@ test('restores an optimistically dismissed permission only when communication fa
 });
 
 test('presents a legible, aligned AI chat without exposing its session id',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open Codex conversation'}).click();const host=page.locator('[data-component="ai-conversation"]'),dialog=host.getByRole('dialog'),composer=host.getByLabel('Message Codex');await expect(dialog).toBeVisible();await expect(host).toContainText('Ready for your first message');await expect(host).not.toContainText('Session thread-1');await expect(host.getByLabel('Model')).toBeVisible();await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveAttribute('label','Effort');
-  const model=host.locator('input[name="conversation-model"]');await model.fill('gpt-5.6-sol');await model.press('Tab');await expect(model).toHaveValue('gpt-5.6-sol');await expect(dialog).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-jvwhq8-model-selection-open-wide.png'});await page.setViewportSize({width:760,height:640});await expect(dialog).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-jvwhq8-model-selection-open-narrow.png'});await page.setViewportSize({width:1280,height:800});
+  await page.setViewportSize({width:1280,height:800});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open Codex conversation'}).click();const host=page.locator('[data-component="ai-conversation"]'),dialog=host.getByRole('dialog'),composer=host.getByLabel('Message Codex');await expect(dialog).toBeVisible();await expect(host).toContainText('Ready for your first message');await expect(host).not.toContainText('Session thread-1');const modelControl=host.locator('[data-component="conversation-model-control"]');await expect(modelControl).toBeVisible();await expect(modelControl.locator('.ai-conversation__model-effort')).toBeVisible();
+  await host.locator('.ai-conversation__model-trigger').click();const modelSubmenu=host.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({hasText:'Model'});await modelSubmenu.hover();await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();await expect(modelControl.locator('.ai-conversation__model-name')).toHaveAttribute('title','gpt-5.6-sol');await expect(dialog).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-jvwhq8-model-selection-open-wide.png'});await page.setViewportSize({width:760,height:640});await expect(dialog).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-jvwhq8-model-selection-open-narrow.png'});await page.setViewportSize({width:1280,height:800});
   await composer.fill('What time is it in California?');await composer.press('Enter');await expect(host.getByText('I found the relevant client boundary. The event stream remains authoritative.',{exact:true})).toBeVisible();await expect(host).toContainText('2 messages');const userCopy=host.locator('.ai-conversation__message--user .markdown-preview p');await expect(userCopy).toHaveCSS('color','rgb(255, 255, 255)');const contained=()=>dialog.evaluate(element=>{const box=element.getBoundingClientRect();return[...element.querySelectorAll<HTMLElement>('.ai-conversation__message')].every(item=>{const message=item.getBoundingClientRect();return message.left>=box.left&&message.right<=box.right})});await expect.poll(contained).toBe(true);await dialog.screenshot({path:'/private/tmp/hs2-wj3yr2-ai-chat-polish-wide.png'});
   await page.setViewportSize({width:760,height:640});await expect.poll(contained).toBe(true);await expect(userCopy).toHaveCSS('color','rgb(255, 255, 255)');await dialog.screenshot({path:'/private/tmp/hs2-wj3yr2-ai-chat-polish-narrow.png'});
 });
@@ -1715,13 +1715,15 @@ test('omits effort after selecting a model that does not support it',async({page
   await expect(drawer).toHaveAttribute('data-maximized','true');
   await drawer.getByRole('button',{name:'New drawer item'}).click();
   await drawer.getByRole('menu',{name:'New drawer item'}).getByText('AI chat').click();
-  const host=drawer.locator('[data-component="ai-conversation"]'),model=host.locator('input[name="conversation-model"]');
+  const host=drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
-  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveJSProperty('value','medium');
-  await model.fill('haiku');
-  await model.press('Tab');
-  await expect(model).toHaveValue('haiku');
-  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveCount(0);
+  await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await host.locator('.ai-conversation__model-trigger').click();
+  const modelSubmenu=host.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({hasText:'Model'});
+  await modelSubmenu.hover();
+  await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="haiku"]').click();
+  await expect(host.locator('.ai-conversation__model-name')).toHaveAttribute('title','haiku');
+  await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
   await host.getByLabel('Message Claude').fill('What time is it in California?');
   await host.getByLabel('Message Claude').press('Enter');
   await expect.poll(()=>turns).toEqual([{content:'What time is it in California?',model:'haiku'}]);
@@ -1730,7 +1732,7 @@ test('omits effort after selecting a model that does not support it',async({page
   await page.screenshot({path:'/private/tmp/hs2-8xrcyx-haiku-without-effort-wide.png',fullPage:true});
   await page.setViewportSize({width:760,height:800});
   await expect(host).toBeVisible();
-  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveCount(0);
+  await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
   await host.locator('.ai-conversation__transcript').evaluate(element=>{element.scrollTop=0});
   await expect(host.locator('.ai-conversation__message--user')).toBeVisible();
   await page.screenshot({path:'/private/tmp/hs2-8xrcyx-haiku-without-effort-narrow.png',fullPage:true});
@@ -1745,7 +1747,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
 });
 
 test('sends a manually entered live-conversation model literally',async({page})=>{
-  const turns:Array<Record<string,unknown>>=[];await mockProject(page);page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/turns'))turns.push(request.postDataJSON())});await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Open Codex conversation'}).click();const chat=page.locator('[data-component="ai-conversation"]'),model=chat.locator('input[name="conversation-model"]'),custom='legacy model "chat"';await model.fill(custom);await model.press('Tab');await chat.getByLabel('Message Codex').fill('Use the requested model.');await chat.getByLabel('Message Codex').press('Enter');await expect.poll(()=>turns.at(-1)).toMatchObject({content:'Use the requested model.',model:custom});expect(turns.at(-1)).not.toHaveProperty('effort');
+  const turns:Array<Record<string,unknown>>=[];await mockProject(page);page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/turns'))turns.push(request.postDataJSON())});await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Open Codex conversation'}).click();const chat=page.locator('[data-component="ai-conversation"]'),custom='legacy model "chat"';await chat.locator('.ai-conversation__model-trigger').click();const modelSubmenu=chat.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({hasText:'Model'});await modelSubmenu.hover();await modelSubmenu.locator('[data-action="open-conversation-manual-model"]').click();const manualDialog=page.locator('[data-component="manual-model-dialog"]');await expect(manualDialog.locator('dialog')).toBeVisible();await page.getByRole('textbox',{name:/Model identifier/}).fill(custom);await manualDialog.getByRole('button',{name:'Use model'}).click();await expect(chat.locator('.ai-conversation__model-name')).toHaveAttribute('title',custom);const composer=chat.getByLabel('Message Codex');await composer.click();await composer.fill('Use the requested model.');await composer.press('Enter');await expect.poll(()=>turns.at(-1)).toMatchObject({content:'Use the requested model.',model:custom});expect(turns.at(-1)).not.toHaveProperty('effort');
 });
 
 test('shows runtime-discovered Antigravity and OpenCode model catalogs',async({page})=>{
