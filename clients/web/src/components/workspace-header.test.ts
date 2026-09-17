@@ -48,7 +48,7 @@ describe('WorkspaceHeader', () => {
     expect(beforeOverflow).toContain('data-component="token-search-field" data-token-search-id="workspace-search" data-disabled="true"');
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
     expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(remify(768px), 100%); max-width:100%; height:auto; overflow:visible; align-self:flex-start; }');
-    expect(headerCss).toContain('.workspace-header__search-group.kui-toolbar-control-group { padding:0; border:0; background:transparent; box-shadow:none; }');
+    expect(headerCss).toContain('.workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { padding:0; border:0; background:transparent; box-shadow:none; }');
     expect(headerCss).toContain('.workspace-header__search-group .kui-token-search { --kui-token-search-background: var(--wa-color-surface-default); --kui-token-search-border: var(--wa-color-neutral-border-normal); --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet); }');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(remify(416px),100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
