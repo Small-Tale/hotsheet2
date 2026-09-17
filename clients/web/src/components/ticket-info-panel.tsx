@@ -25,8 +25,8 @@ export function TicketInfoPanel({ status, priority, category, tags, tagSuggestio
   const resolvedTagPopoverId=tagPopoverId??'ticket-tag-popover';
   return <div class="ticket-inspector__content" data-component="ticket-info-panel">
     <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
-      <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
-      <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
+      <div class="ticket-inspector__meta-field"><ListHeader label="Category"/><TicketCategorySelect name="inspector-category" value={category} ariaLabel="Category" disabled={!canUpdate} /></div>
+      <div class="ticket-inspector__meta-field ticket-inspector__meta-field--end"><ListHeader label="Priority"/><TicketPrioritySelect name="inspector-priority" value={priority} ariaLabel="Priority" disabled={!canUpdate} /></div>
       <div class="ticket-inspector__status-field"><span>Status</span><span class="ticket-inspector__status-line">{status==='deleted'?<StatusBadge status="deleted"/>:<TicketStatusMenu value={status} disabled={!canUpdate} />}{blockedReason && <BlockedBadge />}</span></div>
     </section>
     <section class="ticket-inspector__section ticket-inspector__blocked-section">{blockedReasonEditing ? <><ListHeader label="Blocked reason"/><div class="ticket-inspector__blocked-editor"><textarea name="blocked-reason" aria-label="Blocked reason">{blockedReasonDraft}</textarea></div></> : blockedReason ? <><ListHeader label="Blocked reason"/><div class="ticket-inspector__blocked-surface" data-edit-blocked-reason={canEditText?'true':undefined} role={canEditText?'button':undefined} tabIndex={canEditText?0:undefined} aria-label={canEditText?'Edit blocked reason':undefined} title={canEditText?'Double-click to edit':undefined}><p>{blockedReason}</p></div></> : canEditText ? <ListItem className="ticket-inspector__block-action" action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus"/>} label="Block ticket"/> : undefined}</section>

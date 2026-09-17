@@ -682,13 +682,19 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
-  The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG): `.ticket-inspector__content`
-  owns no inline padding, and each direct child (section, notes, provenance) sits 8px from
-  the edge with a 1px border (transparent unless a surface colors it) plus 8px padding, so a
-  bordered surface's border is 8px from the edge and its text is 17px. Full-width surfaces and
-  cards break back out to the 8px border column, and the compact tabs use the same 8px margin.
-  The wider reader modal keeps its own generous inline padding, so it does not add the 8px
-  section margin on top. It reuses the same `ListHeader`/`ListItem`
+  The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG, refined in HS2-R64ETQ):
+  `.ticket-inspector__content` owns no inline padding, and each direct child (section, notes,
+  provenance) sits 8px from the edge and owns no border/padding of its own. Bordered
+  surfaces/cards/fields therefore sit their own 1px border on the 8px column and own their 8px
+  padding, so their text lands at 17px; headers and other non-bordered content get a 1px
+  transparent inline border + 8px padding to align their text to the same 17px column. There
+  are **no negative margins** — nothing breaks out of a padded parent. The compact tabs use the
+  same 8px margin. Category and Priority are `ListHeader`s over label-suppressed selects in a
+  two-column grid: column 1 hugs the left (header 17px, select 8px from the left) and column 2
+  the right (header 17px, select 8px from the right). The Code Review and Attachments panels
+  follow the same rule (heading at 17px, evidence/commit/attachment surfaces at the 8px column).
+  The wider reader modal keeps its own generous inline padding, so its sections do not add the
+  8px margin on top. It reuses the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.

@@ -140,7 +140,7 @@ describe('TicketInspector', () => {
 
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(css).toContain('.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0;');
+    expect(css).toContain('.ticket-inspector__attachment { display: flex; box-sizing: border-box; width: 100%; min-width: 0;');
     expect(css).toContain('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
     expect(css).toContain('.ticket-inspector__attachment-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;');
   });
@@ -153,7 +153,7 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-    expect(panelCss).toContain('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
+    expect(panelCss).toContain('.ticket-inspector__meta-field .kui-select { width: 100%; min-width: 0; }');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);
@@ -165,10 +165,12 @@ describe('TicketInspector', () => {
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(8px\) remify\(8px\);/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 remify\(8px\);/);
-    // Each direct child sits 8px from the edge with a transparent 1px border + 8px padding (17px text),
-    // and full-width bordered surfaces break back out to the 8px border column (HS2-EQEGGG).
-    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{[^}]*margin-inline: remify\(8px\);[^}]*border: 1px solid transparent;[^}]*padding-inline: remify\(8px\);/);
-    expect(panelCss).toContain('.ticket-inspector__details-surface, .ticket-inspector__blocked-surface, .ticket-inspector__blocked-editor, .ticket-inspector__attachment, .note-card { margin-inline: calc((remify(8px) + 1px) * -1); }');
+    // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
+    // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
+    // 8px column — no negative margins anywhere (HS2-R64ETQ).
+    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{ margin-inline: remify\(8px\); \}/);
+    expect(panelCss).toContain('border-inline: 1px solid transparent; padding-inline: remify(8px);');
+    expect(panelCss).not.toContain('margin-inline: calc((remify(8px) + 1px) * -1)');
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {

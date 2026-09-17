@@ -9,7 +9,8 @@ const PRIORITIES: readonly { value: TicketPriority; label: string; color: string
   { value: 'default', label: 'Default', color: 'var(--hs-priority-default)', icon: Minus, iconName: 'minus' },
   { value: 'low', label: 'Low', color: 'var(--wa-color-brand-fill-loud)', icon: ChevronDown, iconName: 'chevron-down' },
 ];
-export interface TicketPrioritySelectProps { name: string; value: TicketPriority; label?: string; disabled?: boolean; placeholder?: boolean }
-export function TicketPrioritySelect({ name, value, label = 'Priority', disabled = false, placeholder = false }: TicketPrioritySelectProps) {
-  return <Select className="ticket-priority-select" name={name} value={value} label={label} choices={PRIORITIES} disabled={disabled} placeholder={placeholder} />;
+export interface TicketPrioritySelectProps { name: string; value: TicketPriority; label?: string; ariaLabel?: string; disabled?: boolean; placeholder?: boolean }
+export function TicketPrioritySelect({ name, value, label = 'Priority', ariaLabel, disabled = false, placeholder = false }: TicketPrioritySelectProps) {
+  // See TicketCategorySelect: an ariaLabel means the visible label is rendered separately (HS2-R64ETQ).
+  return <Select className="ticket-priority-select" name={name} value={value} label={ariaLabel ? undefined : label} ariaLabel={ariaLabel} choices={PRIORITIES} disabled={disabled} placeholder={placeholder} />;
 }
