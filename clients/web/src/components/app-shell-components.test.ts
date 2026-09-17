@@ -33,6 +33,13 @@ describe('application shell components', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toMatch(/\.app-shell\[data-mode="terminals"\][^{]*\.project-tab-bar \{[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
   });
+  it('draws a border between the white header chrome and the lowered work area (HS2-WH6CCR)', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    // The gray content region carries a top border so it reads as separate from the white
+    // toolbar/tab-bar/page-header above it; terminals mode uses the tab-bar border instead.
+    expect(css).toMatch(/\.app-shell__work-area \{[^}]*border-top: 1px solid var\(--wa-color-surface-border\)/);
+    expect(css).toContain('.app-shell[data-mode="terminals"] .app-shell__work-area { border-top: 0; }');
+  });
   it('draws one continuous focus outline around the ticket work area', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toContain('.app-shell__work-area:focus, .app-shell__work-area:focus-within');

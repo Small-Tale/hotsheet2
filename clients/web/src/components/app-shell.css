@@ -34,7 +34,11 @@
 .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }
 .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header { align-items:start; }
 body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content { transition: none; }
-.app-shell__work-area { position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden; flex: 1; flex-direction: column; background: var(--wa-color-surface-lowered); outline: 0 solid transparent; outline-offset: -2px; transition: outline-color .12s ease; }
+.app-shell__work-area { position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden; flex: 1; flex-direction: column; border-top: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); outline: 0 solid transparent; outline-offset: -2px; transition: outline-color .12s ease; }
+/* Terminals mode draws its separator on the project tab bar's bottom edge instead (the tab
+   bar sits directly above the work area with no page header between them), so the work-area
+   border would double it there. HS2-WH6CCR. */
+.app-shell[data-mode="terminals"] .app-shell__work-area { border-top: 0; }
 .app-shell__work-area::after { position: absolute; z-index: 20; border: 2px solid transparent; content: ''; pointer-events: none; inset: 0; transition: border-color .12s ease; }
 .app-shell__work-area:focus, .app-shell__work-area:focus-within { z-index: 1; outline: 2px solid var(--wa-color-focus); }
 .app-shell__work-area:focus::after, .app-shell__work-area:focus-within::after { border-color: var(--wa-color-focus); }
