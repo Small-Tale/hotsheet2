@@ -9,6 +9,7 @@
 //! instance registry (HS2-59) with N hosted projects are the next increments.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use hotsheet_index::Index;
@@ -136,26 +137,45 @@ impl StoreHost {
             .unwrap_or(false)
     }
 
-    /// A listing of the hosted stores (id, root, prefix, ticket count), sorted by id for
-    /// a deterministic response.
-    pub fn list(&self) -> Vec<StoreInfo> {
+    /// Lightweight `(id, root)` pairs for every hosted store, read without opening or
+    /// parsing any ticket files. Hot request paths that only need to map a source locator
+    /// to a store id use this so they neither scan the stores nor hold the `stores` lock
+    /// during disk I/O — which otherwise serialized a single-ticket detail read behind an
+    /// unrelated all-stores scan (HS2-P6N7FR).
+    pub fn locations(&self) -> Vec<(String, PathBuf)> {
         let Ok(map) = self.stores.lock() else {
             return Vec::new();
         };
-        let mut out: Vec<StoreInfo> = map
-            .iter()
-            .map(|(id, e)| StoreInfo {
-                id: id.clone(),
-                root: e.store.root().display().to_string(),
-                prefix: e
-                    .store
+        map.iter()
+            .map(|(id, e)| (id.clone(), e.store.root().to_path_buf()))
+            .collect()
+    }
+
+    /// A listing of the hosted stores (id, root, prefix, ticket count), sorted by id for
+    /// a deterministic response. The per-store ticket parse runs **after** the `stores`
+    /// lock is released (stores are cheap to clone) so counting tickets for `GET /stores`
+    /// never blocks concurrent detail reads (HS2-P6N7FR).
+    pub fn list(&self) -> Vec<StoreInfo> {
+        let entries: Vec<(String, FsStore)> = {
+            let Ok(map) = self.stores.lock() else {
+                return Vec::new();
+            };
+            map.iter()
+                .map(|(id, e)| (id.clone(), e.store.clone()))
+                .collect()
+        };
+        let mut out: Vec<StoreInfo> = entries
+            .into_iter()
+            .map(|(id, store)| StoreInfo {
+                id,
+                root: store.root().display().to_string(),
+                prefix: store
                     .metadata()
                     .map(|m| m.ticket_prefix)
                     .unwrap_or_default(),
                 // Resilient count (HS2-PRVPCQ): a corrupt file used to zero the whole
                 // store's ticket count; count the healthy tickets instead.
-                tickets: e
-                    .store
+                tickets: store
                     .list_tickets_resilient()
                     .map(|l| l.tickets.len())
                     .unwrap_or(0),
@@ -214,5 +234,51 @@ mod tests {
             Some("json")
         );
         assert!(home.path().join("permissions").is_dir());
+    }
+
+    fn entry_for(store: FsStore) -> StoreEntry {
+        let index = Index::open_in_memory(store.root().display().to_string()).unwrap();
+        StoreEntry {
+            store,
+            index: Arc::new(Mutex::new(index)),
+        }
+    }
+
+    // The cheap `locations()` mapping the hot request path uses must agree exactly with the
+    // full `list()` — same store ids and roots — without parsing tickets (HS2-P6N7FR).
+    #[test]
+    fn locations_matches_list_ids_and_roots_without_parsing_tickets() {
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first = FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+        let second = FsStore::init(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
+        let first_id = store_url_id(&first);
+        let second_id = store_url_id(&second);
+        let first_root = first.root().to_path_buf();
+        let second_root = second.root().to_path_buf();
+
+        let host = StoreHost::new();
+        host.register(entry_for(first));
+        host.register(entry_for(second));
+
+        // `locations()` returns every hosted store as an (id, root) pair.
+        let mut locations = host.locations();
+        locations.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut expected = vec![
+            (first_id.clone(), first_root),
+            (second_id.clone(), second_root),
+        ];
+        expected.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(locations, expected);
+
+        // The id set (which `checkout_entries` resolves against) equals `list()`'s id set,
+        // and each store maps to a real hosted entry.
+        let list_ids: std::collections::BTreeSet<String> =
+            host.list().into_iter().map(|info| info.id).collect();
+        let location_ids: std::collections::BTreeSet<String> =
+            host.locations().into_iter().map(|(id, _)| id).collect();
+        assert_eq!(list_ids, location_ids);
+        assert!(host.get(&first_id).is_some());
+        assert!(host.get(&second_id).is_some());
     }
 }

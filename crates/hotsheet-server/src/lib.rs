@@ -721,8 +721,8 @@ impl AppState {
                 started_at,
             });
         }
-        for info in self.host.list() {
-            self.register_store_instance(FsPath::new(&info.root));
+        for (_, root) in self.host.locations() {
+            self.register_store_instance(&root);
         }
     }
 
@@ -2400,15 +2400,15 @@ fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiErr
             .descriptors()
             .iter()
             .any(|descriptor| descriptor.default);
-    for info in state.host.list() {
+    for (id, _) in state.host.locations() {
         let entry = state
             .host
-            .get(&info.id)
-            .ok_or_else(|| ApiError::not_found(&info.id))?;
+            .get(&id)
+            .ok_or_else(|| ApiError::not_found(&id))?;
         registry
             .register(Arc::new(
-                GitProvider::new(info.id.clone(), entry.store)
-                    .with_default(info.id == default_id && !external_default),
+                GitProvider::new(id.clone(), entry.store)
+                    .with_default(id == default_id && !external_default),
             ))
             .map_err(provider_transfer_error)?;
     }
@@ -3495,19 +3495,18 @@ fn checkout_entries(
         let canonical = FsPath::new(&store_path)
             .canonicalize()
             .unwrap_or_else(|_| store_path.clone().into());
-        let Some(info) = state.host.list().into_iter().find(|info| {
-            FsPath::new(&info.root)
-                .canonicalize()
-                .unwrap_or_else(|_| info.root.clone().into())
-                == canonical
-        }) else {
+        let Some((store_id, _)) =
+            state.host.locations().into_iter().find(|(_, root)| {
+                root.canonicalize().unwrap_or_else(|_| root.clone()) == canonical
+            })
+        else {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 format!("checkout {reference} links an unhosted store: {store_path}"),
             ));
         };
-        if let Some(entry) = state.host.get(&info.id) {
-            entries.push((info.id, entry));
+        if let Some(entry) = state.host.get(&store_id) {
+            entries.push((store_id, entry));
         }
     }
     Ok(entries)
