@@ -48,6 +48,16 @@ export function ticketsForView(tickets: readonly TicketRow[], view: TicketView):
   return tickets.filter(isQueuedTicket);
 }
 
+/**
+ * Whether a freshly created ticket would appear in `view`. Custom (saved-search) views are treated
+ * as possibly-hidden because their arbitrary query is evaluated server-side, so a caller can switch
+ * to the Queue after creating rather than leaving the new ticket invisible (HS2-F6937Q).
+ */
+export function createdTicketVisibleInView(ticket: TicketRow, view: TicketView): boolean {
+  if (customTicketViewKey(view)) return false;
+  return ticketsForView([ticket], view).length > 0;
+}
+
 export function selectionVisibleInView(tickets: readonly TicketRow[], selectedSlugs: readonly string[], view: TicketView): string[] {
   const visible = new Set(ticketsForView(tickets, view).map(ticket => ticket.slug));
   return selectedSlugs.filter(slug => visible.has(slug));

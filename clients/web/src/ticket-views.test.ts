@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isTrashedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketSearchCountViews, ticketsForView, ticketViewQuery } from './ticket-views';
+import { canCreateTicketInView, createdTicketVisibleInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isTrashedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketSearchCountViews, ticketsForView, ticketViewQuery } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -50,6 +50,16 @@ describe('ticket views', () => {
     expect(canCreateTicketInView('backlog')).toBe(true);
     expect(canCreateTicketInView('archive')).toBe(false);
     expect(canCreateTicketInView('errors')).toBe(false);
+  });
+
+  it('reports whether a freshly created ticket is visible in the active view (HS2-F6937Q)', () => {
+    // A not_started (Up Next) ticket shows in Queue but not in Backlog, so a Backlog+Up Next create must switch views.
+    expect(createdTicketVisibleInView(ticket('not_started'), 'all')).toBe(true);
+    expect(createdTicketVisibleInView(ticket('not_started'), 'backlog')).toBe(false);
+    expect(createdTicketVisibleInView(ticket('backlog'), 'backlog')).toBe(true);
+    // Archive/Trash never show a fresh not_started ticket; custom views are treated as possibly-hidden.
+    expect(createdTicketVisibleInView(ticket('not_started'), 'archive')).toBe(false);
+    expect(createdTicketVisibleInView(ticket('not_started'), customTicketViewId('needs-docs'))).toBe(false);
   });
 
   it('derives open and Up Next summary counts from workflow semantics', () => {

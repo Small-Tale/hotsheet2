@@ -1082,6 +1082,24 @@ test('defers ticket refresh without hiding an open select popup',async({page})=>
   await composer.getByRole('textbox',{name:'Ticket title'}).click();await expect.poll(()=>category.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(false);await expect(page.locator('[data-column-id="started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();await expect(composer).toBeVisible();
 });
 
+test('switches to Queue so a ticket created in Backlog with Up Next stays visible (HS2-F6937Q)',async({page})=>{
+  await mockProject(page);await page.goto('/?dev-review=false');
+  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const sidebar=page.locator('[data-component="project-sidebar"]');
+  await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="backlog"]')).toHaveAttribute('aria-current','page');
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  const composer=page.getByRole('dialog',{name:'Create ticket'});
+  await composer.getByLabel('Ticket title').fill('Websockets question');
+  await composer.locator('[data-action="toggle-new-ticket-up-next"]').click();
+  await composer.getByRole('button',{name:'Create ticket'}).click();
+  // The Up Next ticket becomes not_started (a Queue ticket), so the view switches to Queue and the ticket is visible + selected.
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="all"]')).toHaveAttribute('aria-current','page');
+  const created=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  await expect(created).toBeVisible();
+  await expect(created).toHaveAttribute('data-selected','true');
+});
+
 test('remembers the last ticket category after cancelling and refreshing',async({page})=>{
   await mockProject(page);
   await page.goto('/?dev-review=false');
