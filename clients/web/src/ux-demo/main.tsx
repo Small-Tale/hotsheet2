@@ -152,8 +152,10 @@ import {
   clampProjectSidebarHeight,
   closeCommandEditorDemo,
   collapsedCommandGroups,
+  commandEditorCommands,
   commandEditorEditingId,
   commandEditorIconSearch,
+  commandEditorSelection,
   commandGroupExpanded,
   CommandNavigationDemo,
   CommandSettingsEditorDemo,
@@ -167,9 +169,10 @@ import {
   ProjectSidebarDemo,
   projectSidebarHeight,
   ProjectSummaryDemo,
-  reorderCommandEditorSetting,
+  reorderCommandEditorSettings,
   RepositorySummaryDemo,
   runningCommandId,
+  selectCommandEditorRow,
   selectedViewId,
   SettingsNavigationDemo,
   sidebarCommands,
@@ -821,13 +824,13 @@ delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
 function commandEditorRowId(target: Element): string | undefined {
   return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
 }
-let draggedCommandEditorId: string | undefined;
+let draggedCommandEditorIds: string[] = [];
 function clearCommandEditorDropIndicators() {
   root.querySelectorAll<HTMLElement>('[data-command-drop-position]').forEach(element => delete element.dataset.commandDropPosition);
   root.querySelectorAll<HTMLElement>('[data-command-drop-active]').forEach(element => delete element.dataset.commandDropActive);
 }
 function clearCommandEditorDrag() {
-  draggedCommandEditorId = undefined;
+  draggedCommandEditorIds = [];
   root.querySelectorAll<HTMLElement>('[data-command-dragging]').forEach(element => delete element.dataset.commandDragging);
   clearCommandEditorDropIndicators();
 }
@@ -863,22 +866,35 @@ delegate(root, 'contextmenu', '.command-settings-editor__row', (event, target) =
   event.preventDefault();
   menu.show?.();
 });
+delegate(root, 'click', '.command-settings-editor__row', (event, target) => {
+  if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip')) return;
+  const id = (target as HTMLElement).dataset.commandId;
+  if (!id) return;
+  const mouse = event as MouseEvent;
+  selectCommandEditorRow(id, { toggle: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
+});
 delegate(root, 'dragstart', '.command-settings-editor__row', (event, target) => {
   const element = target as HTMLElement, id = element.dataset.commandId;
   if (!id) return;
-  draggedCommandEditorId = id;
-  element.dataset.commandDragging = 'true';
+  const selection = commandEditorSelection.value;
+  draggedCommandEditorIds = selection.length > 1 && selection.includes(id)
+    ? commandEditorCommands.value.map(command => command.id).filter(commandId => selection.includes(commandId))
+    : [id];
+  if (draggedCommandEditorIds.length <= 1) selectCommandEditorRow(id, {});
+  root.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach(row => {
+    if (draggedCommandEditorIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
+  });
   const transfer = (event as DragEvent).dataTransfer;
   if (transfer) {
     transfer.effectAllowed = 'move';
-    transfer.setData('text/plain', id);
+    transfer.setData('text/plain', draggedCommandEditorIds.join(','));
   }
 });
 delegate(root, 'dragover', '.command-settings-editor__list', (event) => {
-  if (!draggedCommandEditorId) return;
+  if (!draggedCommandEditorIds.length) return;
   const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
   clearCommandEditorDropIndicators();
-  if (row && row.dataset.commandId && row.dataset.commandId !== draggedCommandEditorId) {
+  if (row && row.dataset.commandId && !draggedCommandEditorIds.includes(row.dataset.commandId)) {
     drag.preventDefault();
     const bounds = row.getBoundingClientRect();
     row.dataset.commandDropPosition = drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
@@ -891,15 +907,15 @@ delegate(root, 'dragover', '.command-settings-editor__list', (event) => {
   }
 });
 delegate(root, 'drop', '.command-settings-editor__list', (event) => {
-  const source = draggedCommandEditorId;
-  if (!source) {
+  const sources = draggedCommandEditorIds;
+  if (!sources.length) {
     clearCommandEditorDrag();
     return;
   }
   const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
   drag.preventDefault();
   let dropTarget: CommandDropTarget | undefined;
-  if (row && row.dataset.commandId && row.dataset.commandId !== source) {
+  if (row && row.dataset.commandId && !sources.includes(row.dataset.commandId)) {
     const bounds = row.getBoundingClientRect();
     dropTarget = { kind: 'row', id: row.dataset.commandId, position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' };
   } else {
@@ -907,7 +923,7 @@ delegate(root, 'drop', '.command-settings-editor__list', (event) => {
     if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
   }
   clearCommandEditorDrag();
-  if (dropTarget) reorderCommandEditorSetting(source, dropTarget);
+  if (dropTarget) reorderCommandEditorSettings(sources, dropTarget);
 });
 delegate(root, 'dragend', '.command-settings-editor__row', clearCommandEditorDrag);
 delegate(root, 'input', '[data-command-field]', (_event, target) => {

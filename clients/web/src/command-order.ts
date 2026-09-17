@@ -48,6 +48,39 @@ export function reorderCommands(
   return remaining;
 }
 
+/**
+ * Move several commands (`sourceIds`) to a drop target as one block, preserving their existing
+ * relative order and adopting the target's group. Dropping onto a row that is itself part of the
+ * moved selection is a no-op. Single-id moves defer to {@link reorderCommands}.
+ */
+export function reorderCommandsMultiple(
+  commands: readonly CommandDefinition[],
+  sourceIds: readonly string[],
+  target: CommandDropTarget,
+): CommandDefinition[] {
+  const ids = new Set(sourceIds);
+  const moved = commands.filter(command => ids.has(command.id));
+  if (moved.length === 0) return [...commands];
+  if (moved.length === 1) return reorderCommands(commands, moved[0].id, target);
+  const targetGroup = target.kind === 'row'
+    ? commandGroupKey(commands.find(command => command.id === target.id) ?? moved[0])
+    : target.group;
+  const regrouped = moved.map(command => withGroup(command, targetGroup));
+  const remaining = commands.filter(command => !ids.has(command.id));
+  if (target.kind === 'row') {
+    if (ids.has(target.id)) return [...commands];
+    const index = remaining.findIndex(command => command.id === target.id);
+    if (index < 0) return [...commands];
+    remaining.splice(index + (target.position === 'after' ? 1 : 0), 0, ...regrouped);
+    return remaining;
+  }
+  let lastIndex = -1;
+  remaining.forEach((command, index) => { if (commandGroupKey(command) === targetGroup) lastIndex = index; });
+  if (lastIndex >= 0) remaining.splice(lastIndex + 1, 0, ...regrouped);
+  else remaining.push(...regrouped);
+  return remaining;
+}
+
 /** One rendered section of the editor list: the ungrouped section (blank group) or a named group. */
 export interface CommandGroupSection {
   group: string;

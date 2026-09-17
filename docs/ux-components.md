@@ -971,9 +971,12 @@ capability-aware sections when their underlying features and data contracts land
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
   whose group headers come from each command's `group`, with ungrouped commands at the top.
   Rows reorder by pointer drag-and-drop within and across groups (dropping into another
-  group changes membership); there are no up/down arrows. Each row exposes an overflow
-  "…" menu — also opened by right-click — with Edit and Delete, and double-clicking a row
-  edits it. An "Add group" button appends an empty group (droppable, with a delete button
+  group changes membership); there are no up/down arrows. Rows are multi-selectable —
+  click to select, Cmd/Ctrl-click to toggle a row, Shift-click to select a range — and
+  dragging any row of the selection moves the whole selection together as one block,
+  preserving relative order and adopting the drop target's group (HS2-VJYQHG). Each row
+  exposes an overflow "…" menu — also opened by right-click — with Edit and Delete, and
+  double-clicking a row edits it. An "Add group" button appends an empty group (droppable, with a delete button
   while empty). Editing — or adding — a command opens a native "Edit command" popover
   dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
   Shell / AI-prompt fields, an optional confirmation message, the color-swatch picker, and

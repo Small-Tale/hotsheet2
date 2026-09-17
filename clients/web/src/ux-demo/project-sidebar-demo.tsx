@@ -3,7 +3,7 @@ import { signal } from 'kerfjs';
 import { GripHorizontal } from 'lucide';
 
 import type { CommandDefinition } from '../api';
-import { type CommandDropTarget, emptyExtraGroups, reorderCommands } from '../command-order';
+import { type CommandDropTarget, emptyExtraGroups, reorderCommandsMultiple } from '../command-order';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/command-settings-editor';
@@ -60,6 +60,8 @@ export const commandEditorCommands = signal<CommandDefinition[]>([
   { id: 'publish', title: 'Publish preview', kind: 'ai', prompt: 'Publish a preview', color: '#8b5cf6', icon: 'send', group: 'Release' },
 ]);
 export const commandEditorEditingId = signal<string | undefined>(undefined);
+export const commandEditorSelection = signal<string[]>([]);
+let commandEditorSelectionAnchor: string | undefined;
 export const commandEditorExtraGroups = signal<string[]>([]);
 export const commandEditorMessage = signal('');
 export const commandEditorIconSearch = signal('');
@@ -86,9 +88,26 @@ export function updateCommandEditorField(id: string, field: string, value: strin
   if (field === 'id' && commandEditorEditingId.value === id) commandEditorEditingId.value = value;
 }
 export function reorderCommandEditorSetting(sourceId: string, target: CommandDropTarget) {
-  const next = reorderCommands(commandEditorCommands.value, sourceId, target);
+  reorderCommandEditorSettings([sourceId], target);
+}
+export function reorderCommandEditorSettings(sourceIds: readonly string[], target: CommandDropTarget) {
+  const next = reorderCommandsMultiple(commandEditorCommands.value, sourceIds, target);
   commandEditorCommands.value = next;
   commandEditorExtraGroups.value = emptyExtraGroups(next, commandEditorExtraGroups.value);
+}
+export function selectCommandEditorRow(id: string, intent: { toggle?: boolean; range?: boolean }) {
+  const ordered = commandEditorCommands.value.map(command => command.id), current = commandEditorSelection.value;
+  if (intent.range && commandEditorSelectionAnchor) {
+    const from = ordered.indexOf(commandEditorSelectionAnchor), to = ordered.indexOf(id);
+    if (from >= 0 && to >= 0) { const [lo, hi] = from < to ? [from, to] : [to, from]; commandEditorSelection.value = ordered.slice(lo, hi + 1); return; }
+  }
+  if (intent.toggle) {
+    commandEditorSelection.value = current.includes(id) ? current.filter(item => item !== id) : [...current, id];
+    commandEditorSelectionAnchor = id;
+    return;
+  }
+  commandEditorSelection.value = [id];
+  commandEditorSelectionAnchor = id;
 }
 export function addCommandEditorGroup() {
   const name = window.prompt('New group name')?.trim();
@@ -108,7 +127,7 @@ export function addCommandEditorSetting() {
   commandEditorCommands.value = [...commandEditorCommands.value, { id, title: 'New command', kind: 'shell', command: '' }];
   openCommandEditorDemo(id);
 }
-export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={commandEditorCommands.value} extraGroups={commandEditorExtraGroups.value} editingId={commandEditorEditingId.value} iconSearch={commandEditorIconSearch.value} message={commandEditorMessage.value} /></section>; }
+export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={commandEditorCommands.value} extraGroups={commandEditorExtraGroups.value} editingId={commandEditorEditingId.value} selectedIds={commandEditorSelection.value} iconSearch={commandEditorIconSearch.value} message={commandEditorMessage.value} /></section>; }
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
 export function DriveOptionsMenuDemo(){return <DemoFrame><div style="position:relative;margin-top:14rem"><DriveOptionsMenu tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} defaultSelection={{tool:'codex',model:'gpt-5.6',effort:'high'}}/></div></DemoFrame>}
 export function AiToolSettingsDemo(){return <AiToolSettings tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} message="Saved locally."/>}

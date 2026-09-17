@@ -22,8 +22,9 @@
 .command-settings-editor__group-items[data-command-drop-active="true"] { outline:2px dashed var(--wa-color-brand-border-loud); outline-offset:2px; }
 .command-settings-editor__group-empty { padding:remify(10px) remify(8px); color:var(--wa-color-text-quiet); font-size:var(--wa-font-size-s); text-align:center; border:1px dashed var(--wa-color-surface-border); border-radius:var(--wa-border-radius-m); }
 
-.command-settings-editor__row { display:flex; align-items:center; gap:var(--wa-space-s); padding:remify(4px) remify(4px); border-radius:var(--wa-border-radius-m); }
+.command-settings-editor__row { display:flex; align-items:center; gap:var(--wa-space-s); padding:remify(4px) remify(4px); border-radius:var(--wa-border-radius-m); cursor:pointer; }
 .command-settings-editor__row:hover { background:var(--wa-color-neutral-fill-quiet); }
+.command-settings-editor__row[data-selected="true"] { background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px var(--wa-color-brand-border-normal); }
 .command-settings-editor__row[data-editing="true"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-quiet); }
 .command-settings-editor__row[data-command-dragging="true"] { opacity:.4; }
 .command-settings-editor__row[data-command-drop-position="before"] { box-shadow:inset 0 2px 0 var(--wa-color-brand-border-loud); }

@@ -23,6 +23,8 @@ export interface CommandSettingsEditorProps{
   extraGroups?:readonly string[];
   /** The command whose details dialog is open, if any. */
   editingId?:string;
+  /** Ids of the rows in the current multi-selection (highlighted; dragged together). */
+  selectedIds?:readonly string[];
   /** The current icon-picker search query for the open dialog. */
   iconSearch?:string;
   message?:string;
@@ -34,9 +36,9 @@ const TYPE_LABELS:Record<'program'|'shell'|'ai',string>={program:'Program',shell
 /** The inline style setting a command row/dialog icon tile to its color; undefined when transparent. */
 function commandIconStyle(command:CommandDefinition){const color=resolveCommandColor(command.color);if(color===TRANSPARENT_CUSTOMIZATION_COLOR)return undefined;return `--command-color:${color};--command-text-color:${customizationContrastColor(color)}`}
 
-function CommandRow({command,editing}:{command:CommandDefinition;editing:boolean}){
+function CommandRow({command,editing,selected}:{command:CommandDefinition;editing:boolean;selected:boolean}){
   const icon=resolveCommandIcon(command.icon),transparent=resolveCommandColor(command.color)===TRANSPARENT_CUSTOMIZATION_COLOR,label=command.title||'Untitled command';
-  return <li class="command-settings-editor__row" data-command-id={command.id} data-editing={editing?'true':undefined} draggable="true">
+  return <li class="command-settings-editor__row" data-command-id={command.id} data-editing={editing?'true':undefined} data-selected={selected?'true':undefined} aria-selected={selected?'true':undefined} draggable="true">
     <span class="command-settings-editor__row-grip" aria-hidden="true"><LucideIcon icon={GripVertical} name="grip-vertical"/></span>
     <span class="command-settings-editor__row-icon" data-transparent={transparent?'true':undefined} style={commandIconStyle(command)} aria-hidden="true"><LucideIcon icon={icon.icon} name={icon.name}/></span>
     <span class="command-settings-editor__row-text"><strong>{label}</strong><small>{TYPE_LABELS[kind(command)]}</small></span>
@@ -64,25 +66,26 @@ function CommandDetailFields({command,iconSearch}:{command:CommandDefinition;ico
 }
 
 /** One display section: the ungrouped rows (blank group) or a named, droppable, deletable-when-empty group. */
-function CommandGroup({group,commands,editingId}:{group:string;commands:CommandDefinition[];editingId?:string}){
+function CommandGroup({group,commands,editingId,selectedIds}:{group:string;commands:CommandDefinition[];editingId?:string;selectedIds:ReadonlySet<string>}){
   const empty=commands.length===0;
   return <li class="command-settings-editor__section" data-command-group={group||undefined} data-ungrouped={group?undefined:'true'}>
     {group&&<div class="command-settings-editor__group-header"><span class="command-settings-editor__group-label">{group}</span>{empty&&<button type="button" class="command-settings-editor__group-delete" data-action="delete-command-group" data-group={group} aria-label={`Delete empty group ${group}`}><LucideIcon icon={Trash2} name="trash-2"/></button>}</div>}
     <ul class="command-settings-editor__group-items" data-command-group-drop={group}>
-      {commands.map(command=><CommandRow command={command} editing={command.id===editingId}/>)}
+      {commands.map(command=><CommandRow command={command} editing={command.id===editingId} selected={selectedIds.has(command.id)}/>)}
       {empty&&<li class="command-settings-editor__group-empty" aria-hidden="true">Drag commands here</li>}
     </ul>
   </li>;
 }
 
-export function CommandSettingsEditor({commands,extraGroups=[],editingId,iconSearch='',message=''}:CommandSettingsEditorProps){
+export function CommandSettingsEditor({commands,extraGroups=[],editingId,selectedIds=[],iconSearch='',message=''}:CommandSettingsEditorProps){
   const editing=editingId?commands.find(command=>command.id===editingId):undefined;
+  const selection=new Set(selectedIds);
   const sections=commandGroupSections(commands,extraGroups);
   const editingIcon=editing?resolveCommandIcon(editing.icon):undefined;
   return <div class="command-settings-editor" data-component="command-settings-editor" data-icon-catalog={lucideCatalogVersion.value}>
     <header class="command-settings-editor__heading"><div><h2>Custom commands</h2><p>Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save automatically.</p></div><div class="command-settings-editor__heading-actions"><button type="button" data-action="add-command-group"><LucideIcon icon={FolderPlus} name="folder-plus"/> Add group</button><button type="button" class="command-settings-editor__add-command" data-action="add-command-setting"><LucideIcon icon={Plus} name="plus"/> Add command</button></div></header>
     {sections.length>0
-      ?<ul class="command-settings-editor__list" aria-label="Custom commands">{sections.map(section=><CommandGroup group={section.group} commands={section.commands} editingId={editingId}/>)}</ul>
+      ?<ul class="command-settings-editor__list" aria-label="Custom commands" aria-multiselectable="true">{sections.map(section=><CommandGroup group={section.group} commands={section.commands} editingId={editingId} selectedIds={selection}/>)}</ul>
       :<div class="command-settings-editor__blank"><p>No custom commands yet.</p><p>Add a command to configure its label and action.</p></div>}
     <footer><span role="status">{message}</span></footer>
     <section popover="auto" id={COMMAND_EDITOR_DIALOG_ID} class="dialog-surface command-settings-editor__dialog" data-component="command-editor-dialog" role="dialog" aria-label="Edit command">

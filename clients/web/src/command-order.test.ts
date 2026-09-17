@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CommandDefinition } from './api';
-import { commandGroupSections, emptyExtraGroups, reorderCommands } from './command-order';
+import { commandGroupSections, emptyExtraGroups, reorderCommands, reorderCommandsMultiple } from './command-order';
 
 const cmd = (id: string, group?: string): CommandDefinition => ({ id, title: id, kind: 'shell', command: 'x', ...(group ? { group } : {}) });
 
@@ -35,6 +35,38 @@ describe('reorderCommands', () => {
     const commands = [cmd('a', 'Q')];
     expect(reorderCommands(commands, 'zz', { kind: 'row', id: 'a', position: 'before' })).toEqual(commands);
     expect(reorderCommands(commands, 'a', { kind: 'row', id: 'a', position: 'after' })).toEqual(commands);
+  });
+});
+
+describe('reorderCommandsMultiple', () => {
+  it('moves a multi-selection as one block, preserving order and adopting the target group (HS2-VJYQHG)', () => {
+    const next = reorderCommandsMultiple(
+      [cmd('a', 'Q'), cmd('b', 'R'), cmd('c', 'R'), cmd('d', 'Q')],
+      ['a', 'd'],
+      { kind: 'row', id: 'c', position: 'after' },
+    );
+    // a and d move together after c and adopt group R, keeping their original a-before-d order.
+    expect(next.map(c => `${c.id}:${c.group ?? ''}`)).toEqual(['b:R', 'c:R', 'a:R', 'd:R']);
+  });
+
+  it('moves a multi-selection into a group area appended after that group', () => {
+    const next = reorderCommandsMultiple(
+      [cmd('a'), cmd('b', 'Q'), cmd('c'), cmd('d', 'Q')],
+      ['a', 'c'],
+      { kind: 'group', group: 'Q' },
+    );
+    expect(next.map(c => `${c.id}:${c.group ?? ''}`)).toEqual(['b:Q', 'd:Q', 'a:Q', 'c:Q']);
+  });
+
+  it('is a no-op when the selection is dropped onto one of its own rows', () => {
+    const commands = [cmd('a', 'Q'), cmd('b', 'Q'), cmd('c', 'R')];
+    expect(reorderCommandsMultiple(commands, ['a', 'b'], { kind: 'row', id: 'a', position: 'before' })).toEqual(commands);
+  });
+
+  it('delegates a single-id selection to reorderCommands', () => {
+    const commands = [cmd('a', 'Q'), cmd('b', 'Q'), cmd('c', 'R')];
+    expect(reorderCommandsMultiple(commands, ['c'], { kind: 'row', id: 'a', position: 'before' }))
+      .toEqual(reorderCommands(commands, 'c', { kind: 'row', id: 'a', position: 'before' }));
   });
 });
 

@@ -28,6 +28,18 @@ describe('CommandSettingsEditor',()=>{
     expect(markup).toContain('save automatically');
   });
 
+  it('marks the multi-selected rows as selected for drag-together reordering (HS2-VJYQHG)',()=>{
+    const markup=String(CommandSettingsEditor({commands:[
+      {id:'a',title:'A',kind:'shell',command:'x'},
+      {id:'b',title:'B',kind:'shell',command:'y'},
+      {id:'c',title:'C',kind:'shell',command:'z'},
+    ],selectedIds:['a','c']}));
+    expect(markup).toMatch(/data-command-id="a"[^>]*data-selected="true"[^>]*aria-selected="true"/);
+    expect(markup).toMatch(/data-command-id="c"[^>]*data-selected="true"/);
+    expect(markup).not.toMatch(/data-command-id="b"[^>]*data-selected="true"/);
+    expect(markup).toContain('aria-multiselectable="true"');
+  });
+
   it('renders an empty added group with a droppable area and a delete button (HS2-D9JBXT)',()=>{
     const markup=String(CommandSettingsEditor({commands:[{id:'a',title:'A',kind:'shell',command:'x'}],extraGroups:['Ideas']}));
     expect(markup).toContain('command-settings-editor__group-label">Ideas<');
