@@ -5,8 +5,11 @@ type FullFeedbackTicket = { feedback_needed?: boolean; details: string; notes: r
 
 export const DETAILS_FEEDBACK_ID='ticket-details';
 
-/** Match the intentionally case-sensitive HS1 feedback marker used by the core. */
-export function textRequestsFeedback(text:string){return text.includes('FEEDBACK NEEDED')}
+/** Match the intentionally case-sensitive HS1 feedback marker used by the core.
+ * Markdown blockquote lines are ignored so a reply that quotes the original request
+ * back is not mistaken for a new feedback request (HS2-HG7FZ0); mirrors the core
+ * `Note::text_requests_feedback`. */
+export function textRequestsFeedback(text:string){return text.split('\n').some(line=>!line.trimStart().startsWith('>')&&line.includes('FEEDBACK NEEDED'))}
 
 const after = (candidate: RelevantNote, note: RelevantNote) => candidate.created_at > note.created_at || (candidate.created_at === note.created_at && candidate.id > note.id);
 

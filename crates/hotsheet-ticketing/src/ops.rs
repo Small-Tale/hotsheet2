@@ -2770,6 +2770,45 @@ mod tests {
     }
 
     #[test]
+    fn add_note_keeps_a_reply_that_only_quotes_the_marker_regular() {
+        // HS2-HG7FZ0: answering a feedback request by quoting it back (the inline-reply
+        // composer prefixes quoted lines with `> `) must not re-promote the answer to a
+        // feedback request, or the ticket would stay stuck in the feedback-needed state.
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        add_note(
+            &store,
+            &id,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap(),
+            ts("2026-08-19T01:00:00Z"),
+            NoteKind::FeedbackNeeded,
+            "FEEDBACK NEEDED: choose a layout".into(),
+        )
+        .unwrap();
+        assert!(store.read_ticket(&id).unwrap().feedback_needed());
+
+        let ticket = add_note(
+            &store,
+            &id,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+            ts("2026-08-19T02:00:00Z"),
+            NoteKind::Regular,
+            "> FEEDBACK NEEDED: choose a layout\n\nUse the compact layout.".into(),
+        )
+        .unwrap();
+        assert_eq!(ticket.notes[1].kind, NoteKind::Regular);
+        assert!(!store.read_ticket(&id).unwrap().feedback_needed());
+    }
+
+    #[test]
     fn close_duplicate_requires_a_target() {
         let (_d, store) = store();
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();

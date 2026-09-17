@@ -25,6 +25,7 @@ describe('isFeedbackNeeded', () => {
 
   it('presents answered asks as regular notes without changing later unanswered asks',()=>{const ask=note('1','feedback_needed','2026-09-02T00:00:00Z'),response=note('2','regular','2026-09-02T00:01:00Z'),next=note('3','feedback_needed','2026-09-02T00:02:00Z'),notes=[ask,response,next];expect(presentedNoteKind(ask,notes)).toBe('regular');expect(presentedNoteKind(response,notes)).toBe('regular');expect(presentedNoteKind(next,notes)).toBe('feedback_needed')});
   it('matches the core marker rule for feedback requests in descriptions',()=>{expect(textRequestsFeedback('Context. FEEDBACK NEEDED: choose one')).toBe(true);expect(textRequestsFeedback('feedback needed from someone')).toBe(false)});
+  it('ignores the marker inside quoted reply lines but honors an unquoted new request (HS2-HG7FZ0)',()=>{expect(textRequestsFeedback('> Context. FEEDBACK NEEDED: choose one\n\nGo with A.')).toBe(false);expect(textRequestsFeedback('>> deeply quoted FEEDBACK NEEDED\n\nThanks.')).toBe(false);expect(textRequestsFeedback('> quoted FEEDBACK NEEDED\n\nActually FEEDBACK NEEDED: which one?')).toBe(true)});
   it('infers full-ticket state for older servers while trusting an explicit new-server value',()=>{
     expect(fullTicketFeedbackNeeded({details:'FEEDBACK NEEDED: choose one',notes:[]})).toBe(true);
     expect(fullTicketFeedbackNeeded({details:'FEEDBACK NEEDED: choose one',notes:[note('1','regular','2026-09-02T00:00:00Z')]})).toBe(false);

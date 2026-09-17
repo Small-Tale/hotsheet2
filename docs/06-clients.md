@@ -1771,6 +1771,10 @@ For compatibility with HS1 and early HS2 automation, a regular note containing t
 case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
 kind at the wire boundary and participates in the same exchange. The phrase may appear
 after introductory context and its colon is optional; lowercase prose does not match.
+The marker is ignored inside Markdown blockquote lines (those beginning with `>`), so a
+reply that quotes the original request back — which the inline-reply composer produces —
+is not mistaken for a new request and does not reopen the exchange (HS2-HG7FZ0); an
+unquoted marker the author adds in the same reply still opens one.
 New core writes promote the same marker to the first-class kind. Rebuilding an older
 disposable index must therefore recompute the compact flag for unchanged ticket files.
 

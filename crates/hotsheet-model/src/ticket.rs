@@ -34,8 +34,15 @@ impl Note {
     /// HS1 deliberately accepted the all-caps phrase anywhere in the note and did
     /// not require a colon. Keep the match case-sensitive so ordinary prose such as
     /// "feedback needed from the user" does not accidentally open an exchange.
+    ///
+    /// Markdown blockquote lines are ignored (HS2-HG7FZ0): a reply that quotes the
+    /// original request back — which the client's inline-reply composer does, prefixing
+    /// each quoted line with `> ` — must not be mistaken for a *new* feedback request. A
+    /// genuine new request the author writes on an unquoted line still opens an exchange.
     pub fn text_requests_feedback(text: &str) -> bool {
-        text.contains("FEEDBACK NEEDED")
+        text.lines()
+            .filter(|line| !line.trim_start().starts_with('>'))
+            .any(|line| line.contains("FEEDBACK NEEDED"))
     }
 
     /// Whether this note opens a feedback exchange.
@@ -383,6 +390,59 @@ mod tests {
         assert!(!Note::text_requests_feedback(
             "I think feedback needed from the user before continuing."
         ));
+    }
+
+    #[test]
+    fn quoted_feedback_marker_does_not_open_a_new_request() {
+        // A reply that quotes the original request back (the client's inline-reply
+        // composer prefixes each quoted line with `> `) must not read as a new request
+        // (HS2-HG7FZ0), while an unquoted marker the author adds still opens one.
+        assert!(!Note::text_requests_feedback(
+            "> Context. FEEDBACK NEEDED: choose one\n\nLet's go with option A."
+        ));
+        assert!(!Note::text_requests_feedback(
+            ">> deeply quoted FEEDBACK NEEDED: choose one\n\nThanks, A works."
+        ));
+        assert!(Note::text_requests_feedback(
+            "> quoting an old FEEDBACK NEEDED\n\nActually FEEDBACK NEEDED: which server?"
+        ));
+        let quoting_reply = Note {
+            kind: NoteKind::Regular,
+            text: "> FEEDBACK NEEDED: dev or packaged?\n\nThe dev server.".into(),
+            ..note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+                NoteKind::Regular,
+                "2026-08-20T00:00:00Z",
+            )
+        };
+        assert!(!quoting_reply.is_feedback_needed_request());
+    }
+
+    #[test]
+    fn quoting_reply_to_a_feedback_request_clears_feedback_needed() {
+        // Regression for HS2-HG7FZ0: request -> user answers by quoting the request text
+        // back -> the ticket must leave the feedback-needed state, not re-enter it.
+        let mut ticket = Ticket::default();
+        ticket.notes.push(Note {
+            kind: NoteKind::FeedbackNeeded,
+            text: "FEEDBACK NEEDED: dev server or packaged app?".into(),
+            ..note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+                NoteKind::FeedbackNeeded,
+                "2026-08-20T00:00:00Z",
+            )
+        });
+        assert!(ticket.feedback_needed());
+        ticket.notes.push(Note {
+            kind: NoteKind::Regular,
+            text: "> FEEDBACK NEEDED: dev server or packaged app?\n\nThe dev server.".into(),
+            ..note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+                NoteKind::Regular,
+                "2026-08-20T00:01:00Z",
+            )
+        });
+        assert!(!ticket.feedback_needed());
     }
 
     #[test]
