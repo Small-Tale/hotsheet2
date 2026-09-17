@@ -9,8 +9,9 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('data-component="saved-view-dialog"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
-    expect(markup).toContain('data-saved-view-query="true"');
-    expect(markup).toContain('data-component="filter-chip"');
+    expect(markup).toContain('data-token-search-editor="saved-view-query"');
+    expect(markup).toContain('data-component="token-search-token"');
+    expect(markup).toContain('data-token-value="tag:docs"');
     expect(markup).toContain('tag:docs');
     expect(markup).toContain('Everyone using this ticket store will see it.');
     expect(markup).toContain('data-action="save-saved-view"');

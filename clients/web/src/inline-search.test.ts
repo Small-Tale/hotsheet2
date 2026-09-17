@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {activeTagPrefix,consumeSearchToken,consumeSearchTokens,dateTokenFromInput,effectiveSearch,inlineSearchParts,orderedSearchText,parseSearchDate,sameInlineSearchState,tokenFromRaw,tokenQuery} from './inline-search';
+import {activeTagPrefix,consumeSearchToken,consumeSearchTokens,dateTokenFromInput,effectiveSearch,fromTokenSearchTokens,inlineSearchParts,orderedSearchText,parseSearchDate,sameInlineSearchState,tokenFromRaw,tokenQuery,toTokenSearchToken} from './inline-search';
 
 describe('inline advanced-search tokens',()=>{
   it('supports quoted tags and attachment wildcards',()=>{
@@ -73,5 +73,28 @@ describe('inline advanced-search tokens',()=>{
     expect(tokenQuery(tokens)).toMatchObject({has_attachment:true,has_media_annotation:true,has_commit:true,attachment:'*.png',tags:'needs design',completed_after:parseSearchDate('2026-09-01')});
     expect(tokenQuery([tokenFromRaw('started-before:2026-09-01')!])).toMatchObject({status:'started',updated_before:expect.any(String)});
     expect(tokenQuery([tokenFromRaw('is:duplicate')!])).toEqual({close_reason:'duplicate'});
+  });
+
+  it('adapts inline tokens to kerf TokenSearchToken keyed on raw',()=>{
+    const tag={...tokenFromRaw('tag:client')!,offset:3};
+    expect(toTokenSearchToken(tag)).toEqual({value:'tag:client',label:'tag:client',offset:3,accessibleLabel:'tag client'});
+    const has=tokenFromRaw('has:media-annotation')!;
+    expect(toTokenSearchToken(has)).toMatchObject({value:'has:media-annotation',label:'has media annotation',accessibleLabel:'has media annotation'});
+  });
+
+  it('round-trips kerf TokenSearchTokens back to inline tokens, preferring current parsed values',()=>{
+    const current=[tokenFromRaw('tag:client')!,dateTokenFromInput('updated-after','2026-09-01')!];
+    const read=[{value:'tag:client',label:'tag:client',offset:5},{value:current[1].raw,label:current[1].label,offset:9}];
+    const back=fromTokenSearchTokens(read,current);
+    expect(back).toHaveLength(2);
+    expect(back[0]).toMatchObject({kind:'tag',value:'client',raw:'tag:client',offset:5});
+    // The date token keeps the current parsed ISO value rather than being re-parsed from raw.
+    expect(back[1]).toMatchObject({kind:'date',value:current[1].value,offset:9});
+  });
+
+  it('reconstructs an unknown chip from its raw and drops an unparseable one',()=>{
+    const back=fromTokenSearchTokens([{value:'is:started',label:'is:started',offset:0},{value:'not-a-token',label:'x',offset:4}],[]);
+    expect(back).toHaveLength(1);
+    expect(back[0]).toMatchObject({kind:'is',value:'started',raw:'is:started',offset:0});
   });
 });

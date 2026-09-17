@@ -848,11 +848,11 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const findButton = header.getByRole('button', { name: 'Search tickets' });
   await findButton.click();
   await expect(findButton).toHaveCount(0);
-  const searchControl = header.locator('.workspace-header__search-editor');
-  const search = header.getByRole('textbox', { name: 'Search tickets' });
+  const searchControl = header.locator('.kui-token-search');
+  const search = header.getByRole('searchbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
-  await expect(searchGroup).not.toHaveCSS('box-shadow', 'none');
+  await expect(searchControl).not.toHaveCSS('box-shadow', 'none');
   await expect.poll(() => searchGroup.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(collapsedWidth * 3);
   const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
@@ -870,7 +870,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(search).toBeVisible();
   await search.fill('');
   await header.getByRole('button', { name: 'Columns view' }).focus();
-  await expect(header.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
+  await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(header.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await header.getByRole('button', { name: 'List view' }).click();
@@ -927,7 +927,7 @@ test('organizes search syntax help in the WorkspaceHeader demo',async({page})=>{
   await page.goto('/ux-demo?component=workspace-header');
   const header=page.locator('[data-component="workspace-header"]');
   await header.getByRole('button',{name:'Search tickets'}).click();
-  await header.getByRole('textbox',{name:'Search tickets'}).fill('client');
+  await header.getByRole('searchbox',{name:'Search tickets'}).fill('client');
   await header.getByRole('button',{name:'Search syntax help'}).click();
   const help=header.getByRole('dialog',{name:'Search syntax'});
   await expect(help.locator('dt')).toHaveText(['Tags','Content','Workflow','Dates']);
@@ -945,12 +945,12 @@ test('centers search controls on the first line while the query wraps',async({pa
   await page.goto('/ux-demo?component=workspace-header');
   const header=page.locator('[data-component="workspace-header"]');
   await header.getByRole('button',{name:'Search tickets'}).click();
-  const search=header.getByRole('textbox',{name:'Search tickets'}),group=header.locator('.workspace-header__search-group');
+  const search=header.getByRole('searchbox',{name:'Search tickets'}),group=header.locator('.workspace-header__search-group');
   await expect.poll(()=>group.evaluate(node=>node.getBoundingClientRect().width)).toBeGreaterThan(300);
   const geometry=async()=>group.evaluate(node=>{
     const box=(selector:string)=>{const element=node.querySelector<HTMLElement>(selector)!,rect=element.getBoundingClientRect(),style=getComputedStyle(element);return{top:rect.top,bottom:rect.bottom,height:rect.height,center:(rect.top+rect.bottom)/2,paddingTop:Number.parseFloat(style.paddingTop),lineHeight:Number.parseFloat(style.lineHeight)}};
     const group=node.getBoundingClientRect();
-    return{group:{top:group.top,bottom:group.bottom,height:group.height,center:(group.top+group.bottom)/2},search:box('.workspace-header__search'),icon:box('.workspace-header__search-icon'),clear:node.querySelector('.workspace-header__search-clear')?box('.workspace-header__search-clear'):undefined,help:box('.workspace-header__search-help-button')};
+    return{group:{top:group.top,bottom:group.bottom,height:group.height,center:(group.top+group.bottom)/2},search:box('.kui-token-search__editor'),icon:box('.kui-token-search__leading'),clear:node.querySelector('.kui-token-search__clear')?box('.kui-token-search__clear'):undefined,help:box('.workspace-header__search-help-button')};
   });
   const centered=async(expectedGroupCenter:boolean)=>{const measured=await geometry(),firstLineCenter=measured.search.top+measured.search.paddingTop+measured.search.lineHeight/2;expect(measured.icon.center).toBeCloseTo(firstLineCenter,1);expect(measured.help.center).toBeCloseTo(firstLineCenter,1);if(measured.clear)expect(measured.clear.center).toBeCloseTo(firstLineCenter,1);if(expectedGroupCenter)expect(firstLineCenter).toBeCloseTo(measured.group.center,1);return measured};
   await search.fill('client');
@@ -2009,13 +2009,13 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="quick-ticket-composer-launcher"]')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await shell.getByRole('button', { name: 'Search tickets' }).click();
-  const shellSearch = shell.getByRole('textbox', { name: 'Search tickets' });
+  const shellSearch = shell.getByRole('searchbox', { name: 'Search tickets' });
   await expect(shellSearch).toBeFocused();
   await shellSearch.fill('long-tag-example');
   await expect(shell.locator('[data-component="ticket-list-row"]')).toHaveCount(1);
   await shellSearch.fill('');
   await shellSearch.blur();
-  await expect(shell.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
+  await expect(shell.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await shell.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');

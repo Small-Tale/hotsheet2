@@ -1551,7 +1551,7 @@ delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
 delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
   workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
 });
-delegate(root, 'input', '[data-workspace-search="true"]', (_event, target) => {
+delegate(root, 'input', '[data-token-search-editor="workspace-search"]', (_event, target) => {
   workspaceSearchQuery.value = target.textContent ?? '';
 });
 delegate(
@@ -1565,13 +1565,13 @@ delegate(
 delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
   workspaceSearchQuery.value = '';
   workspaceSearchHelpOpen.value = false;
-  const input = root.querySelector<HTMLElement>('[data-workspace-search="true"]');
+  const input = root.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
   if (input) input.textContent = '';
   queueMicrotask(() => {
     focusWorkspaceSearch(root);
   });
 });
-delegate(root, 'focusout', '[data-workspace-search="true"]', () => {
+delegate(root, 'focusout', '[data-token-search-editor="workspace-search"]', () => {
   queueMicrotask(() => {
     if (root.querySelector('.workspace-header__search-group:focus-within')) return;
     if (workspaceSearchQuery.value === '' && !workspaceSearchHelpOpen.value)

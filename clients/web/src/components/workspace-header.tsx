@@ -3,15 +3,17 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './workspace-header.css';
+import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star } from 'lucide';
 
-import {inlineSearchParts,type InlineSearchToken} from '../inline-search';
+import {type InlineSearchToken,toTokenSearchToken} from '../inline-search';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
@@ -125,7 +127,6 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
   const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
   const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>{const choiceIcon=workspaceSortTrigger(option.value,option.value===sort?sortDirection:defaultWorkspaceSortDirection(option.value));return {...option,icon:choiceIcon.icon,iconName:choiceIcon.iconName}});
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
-  const searchParts=inlineSearchParts(searchQuery,searchTokens);
   return <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
@@ -143,14 +144,10 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
           ? <>
-            <div class="workspace-header__search-editor">
-              <span class="workspace-header__search-icon" aria-hidden="true"><LucideIcon icon={Search} name="search" /></span>
-              <div class="workspace-header__search" data-key={`workspace-search:${searchTokens.map(token=>token.raw).join('|')}`} data-morph-skip data-workspace-search="true" data-token-count={searchTokens.length} role="textbox" aria-label="Search tickets" aria-multiline="true" contenteditable={projectActionsDisabled?'false':'true'} data-placeholder={searchTokens.length?'Add search…':'Search tickets'} spellcheck="false" autofocus>{searchParts.map(part=>part.kind==='text'?<span data-search-text="true" data-empty={String(part.value.length===0)}>{part.value||(searchTokens.length?'\u200b':'')}</span>:<span class="workspace-header__search-token" contenteditable="false" data-component="filter-chip" data-token-raw={part.token.raw} title="Double-click to edit"><button type="button" class="workspace-header__search-token-edit" data-action="edit-workspace-search-token" data-token-raw={part.token.raw} aria-label={`Edit ${part.token.label.replace(/^tag:/,'tag ')}`}>{part.token.label}</button><button type="button" data-action="remove-workspace-search-token" data-token-raw={part.token.raw} aria-label={`Remove ${part.token.label.replace(/^tag:/,'tag ')}`}><LucideIcon icon={X} name="x"/></button></span>)}</div>
-              <span class="workspace-header__search-end">{(searchQuery||searchTokens.length>0) && <button type="button" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}<button type="button" class="workspace-header__search-help-button" data-action="toggle-workspace-search-help" aria-label="Search syntax help" aria-expanded={String(searchHelpOpen)} title="Search syntax help"><LucideIcon icon={CircleHelp} name="circle-help" /></button></span>
-            </div>
-            {searchTagSuggestions.length>0&&<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags">{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag.includes(' ')?`"${tag}"`:tag}</button>)}</div>}
-            {searchDatePrefix&&<div class="workspace-header__search-date" role="group" aria-label="Date and time helper"><label>Date<input name="workspace-search-date" type="date"/></label><label>Time (optional)<input name="workspace-search-time" type="time"/></label><button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>Apply</button></div>}
-            {searchHelpOpen&&<aside class="workspace-header__search-help" role="dialog" aria-label="Search syntax"><header><strong>Search syntax</strong><p>Type words, then add any filters you need.</p></header><dl>
+            <TokenSearchField id="workspace-search" label="Search tickets" query={searchQuery} tokens={searchTokens.map(toTokenSearchToken)} placeholder="Search tickets" disabled={projectActionsDisabled} autofocus editAction="edit-workspace-search-token" removeAction="remove-workspace-search-token" clearAction="clear-workspace-search" clearLabel="Clear search" trailing={<button type="button" class="workspace-header__search-help-button" data-action="toggle-workspace-search-help" aria-label="Search syntax help" aria-expanded={String(searchHelpOpen)} title="Search syntax help"><LucideIcon icon={CircleHelp} name="circle-help" /></button>} />
+            {searchTagSuggestions.length>0&&<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags" data-token-search-keep-open>{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag.includes(' ')?`"${tag}"`:tag}</button>)}</div>}
+            {searchDatePrefix&&<div class="workspace-header__search-date" role="group" aria-label="Date and time helper" data-token-search-keep-open><label>Date<input name="workspace-search-date" type="date"/></label><label>Time (optional)<input name="workspace-search-time" type="time"/></label><button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>Apply</button></div>}
+            {searchHelpOpen&&<aside class="workspace-header__search-help" role="dialog" aria-label="Search syntax" data-token-search-keep-open><header><strong>Search syntax</strong><p>Type words, then add any filters you need.</p></header><dl>
               <div><dt>Tags</dt><dd><code>tag:client</code><code>tag:&quot;needs design&quot;</code></dd></div>
               <div><dt>Content</dt><dd><code>has:attachment</code><code>has:media-annotation</code><code>has:commit</code><code>attachment:*.png</code></dd></div>
               <div><dt>Workflow</dt><dd><code>is:up-next</code><code>is:active</code><code>is:open</code><code>is:closed</code><code>is:duplicate</code><code>is:not-started</code><code>is:started</code><code>is:completed</code><code>is:verified</code><code>is:backlog</code><code>is:archived</code></dd></div>

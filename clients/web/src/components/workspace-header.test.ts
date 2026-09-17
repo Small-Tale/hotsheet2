@@ -12,12 +12,13 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-component="toolbar-text" data-size="large">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
-    expect(markup).toContain('data-workspace-search="true"');
-    expect(markup).toContain('role="textbox" aria-label="Search tickets" aria-multiline="true" contenteditable="false"');
-    expect(markup).toMatch(/data-search-text="true" data-empty="false">NOT <\/span><span class="workspace-header__search-token"[^>]*>.*tag:server.*data-search-text="true" data-empty="false"> AND tag:cl<\/span>/s);
-    expect(markup).toContain('aria-label="Edit tag server">tag:server</button>');
+    expect(markup).toContain('data-token-search-editor="workspace-search"');
+    expect(markup).toContain('role="searchbox" aria-label="Search tickets"');
+    expect(markup).toContain('contenteditable="false"');
+    expect(markup).toMatch(/data-token-search-text data-empty="false">NOT <\/span><span class="kui-token-search__token"[^>]*data-token-value="tag:server">.*tag:server.*data-token-search-text data-empty="false"> AND tag:cl<\/span>/s);
+    expect(markup).toContain('aria-label="Edit tag server"');
+    expect(markup).toContain('>tag:server</button>');
     expect(markup).toContain('aria-label="Remove tag server"');
-    expect(markup).toContain('title="Double-click to edit"');
     expect(markup).toContain('data-action="select-workspace-search-tag" data-tag="client"');
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
@@ -41,16 +42,14 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
-    expect(markup.slice(0,markup.indexOf('<wa-dropdown class="workspace-header__overflow"')).match(/disabled/g)).toHaveLength(3);
+    const beforeOverflow=markup.slice(0,markup.indexOf('<wa-dropdown class="workspace-header__overflow"'));
+    expect(beforeOverflow).toMatch(/name="workspace-sort"[^>]*disabled/);
+    expect((beforeOverflow.match(/disabled[^>]*data-action="(?:toggle-selected-up-next|open-selected-ticket-actions)"/g)??[]).length).toBe(2);
+    expect(beforeOverflow).toContain('data-component="token-search-field" data-token-search-id="workspace-search" data-disabled="true"');
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
-    expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(remify(768px), 100%); max-width:100%; height:auto; overflow:visible;border-radius:remify(24.685px);');
-    expect(headerCss).toContain('.workspace-header__search { min-width: remify(112px); min-height: remify(24px);');
-    expect(headerCss).toContain('padding-block: remify(4px) 0;');
-    expect(headerCss).toContain('.workspace-header__search-icon { display: inline-flex; width: remify(16px); height: remify(16px); margin-block-start: remify(6px);');
-    expect(headerCss).toContain('.workspace-header__search-end { margin-block-start: remify(5.2px); }');
-    expect(headerCss).toContain('white-space: pre-wrap; overflow-wrap: anywhere;');
-    expect(headerCss).toContain('.workspace-header__search-token{display:inline-flex;');
-    expect(headerCss).toContain('height:remify(20px);min-height:remify(20px);');
+    expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(remify(768px), 100%); max-width:100%; height:auto; overflow:visible; align-self:flex-start; }');
+    expect(headerCss).toContain('.workspace-header__search-group.kui-toolbar-control-group { padding:0; border:0; background:transparent; box-shadow:none; }');
+    expect(headerCss).toContain('.workspace-header__search-group .kui-token-search { --kui-token-search-background: var(--wa-color-surface-default); --kui-token-search-border: var(--wa-color-neutral-border-normal); --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet); }');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(remify(416px),100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
     expect(headerCss).toContain('wa-button.workspace-header__text-action::part(base) { width: auto;');
@@ -80,7 +79,7 @@ describe('WorkspaceHeader', () => {
 
   it('keeps an editable caret boundary after a trailing filter chip', () => {
     const markup=String(WorkspaceHeader({projectName:'Hot Sheet 2',mode:'list',searchOpen:true,searchTokens:[{kind:'tag',value:'client',raw:'tag:client',label:'tag:client',offset:0}]}));
-    expect(markup).toMatch(/data-token-raw="tag:client"[\s\S]*<\/span><span data-search-text="true" data-empty="true">\u200b<\/span><\/div>/);
+    expect(markup).toMatch(/data-token-value="tag:client"[\s\S]*<\/span><span data-token-search-text data-empty="true">\u200b<\/span><\/div>/);
   });
 
   it('omits status sorting from column view while retaining it for list view', () => {

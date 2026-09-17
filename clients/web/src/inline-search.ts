@@ -12,6 +12,29 @@ type InlineSearchTokenValue=
 export type InlineSearchToken=InlineSearchTokenValue&{offset?:number};
 export type InlineSearchPart={kind:'text';value:string}|{kind:'token';token:InlineSearchToken};
 
+/** Kerf `TokenSearchToken` shape (kept structural to avoid a runtime import in the model). */
+export interface TokenSearchTokenLike{value:string;label:string;offset?:number;accessibleLabel?:string}
+
+/**
+ * Adapt an app `InlineSearchToken` to kerf's flat `TokenSearchToken`. Kerf keys chips on
+ * `value`, so we key on the token's canonical `raw` — that lets `readTokenSearchField`
+ * round-trip the raw back to us, which `tokenFromRaw` reconstructs into an `InlineSearchToken`.
+ */
+export function toTokenSearchToken(token:InlineSearchToken):TokenSearchTokenLike{
+  return{value:token.raw,label:token.label,offset:token.offset,accessibleLabel:token.label.replace(/^tag:/,'tag ')};
+}
+
+/**
+ * Rebuild `InlineSearchToken`s from the `TokenSearchToken`s kerf's `readTokenSearchField`
+ * returns. Prefer the matching current token (keeps parsed values such as a date's ISO
+ * timestamp stable) and fall back to `tokenFromRaw` for chips the caller has not seen yet.
+ */
+export function fromTokenSearchTokens(tokens:readonly TokenSearchTokenLike[],current:readonly InlineSearchToken[]):InlineSearchToken[]{
+  const result:InlineSearchToken[]=[];
+  for(const token of tokens){const known=current.find(value=>value.raw===token.value)??tokenFromRaw(token.value);if(known)result.push({...known,offset:token.offset})}
+  return result;
+}
+
 /** Compare the editor-owned search state without object-identity sensitivity. */
 export function sameInlineSearchState(leftText:string,leftTokens:readonly InlineSearchToken[],rightText:string,rightTokens:readonly InlineSearchToken[]):boolean{
   if(leftText!==rightText||leftTokens.length!==rightTokens.length)return false;

@@ -592,6 +592,18 @@ the ordinary toolbar search rather than a separate launcher and dialog. The earl
 and saved-view handoff components were removed: they duplicated this simpler primary flow
 without a clear place in the product.
 
+The editor chrome itself is now kerf UI's `TokenSearchField` + `wireTokenSearchFields`
+(HS2-88P90P), not a hand-rolled contenteditable. Kerf renders the editor, atomic chips
+(`data-component="token-search-token"`, `data-token-value`), leading icon, clear, and
+`role="searchbox"`, and its wire helper owns Enter-submit, caret preservation across
+controlled token deletion, and the opt-in adjacent-chip keyboard (Backspace/Delete removes
+the neighbouring chip; ArrowRight steps past a trailing chip). The app keeps ownership of the
+token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken` /
+`fromTokenSearchTokens` keyed on each token's canonical `raw`), the whitespace-commit input
+gating, the suggestions/date/help popovers (marked `data-token-search-keep-open`), and the
+`searchOpen`-driven collapse — so kerf's own collapsible mode stays off. The same component
+backs both the workspace toolbar search and the saved-view dialog's query field.
+
 - `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
   atomic chips in their expression order, with character-level text wrapping and token-level
   chip wrapping; supports inline tag,
