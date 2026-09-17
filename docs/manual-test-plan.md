@@ -65,6 +65,17 @@ manually: open two projects, enter Settings and select a non-default view (e.g. 
 in one, switch to the other project, and confirm it shows the same Settings view rather
 than resetting to Ticket sources (HS2-4J50K3).
 
+### New ticket survives an eventually-consistent index (HS2-Y5PDHW)
+
+The retention logic (`clients/web/src/pending-created-tickets.ts`) is unit-tested with
+transition-matrix coverage, but the end-to-end race needs a real server whose ticket-list
+index lags a moment behind the just-created file plus a concurrent background refresh, which
+is not reliably reproducible in a mocked browser test. Verify manually against a running
+server: create several tickets in quick succession (and while an AI worker is renewing
+claims, so background poll refreshes fire), and confirm every created ticket stays visible
+and selected in the list — it must never briefly vanish and reappear. The optimistic row is
+retained until a fetched page actually contains it or ~30s elapse.
+
 ### OpenCode ACP live compatibility
 
 Run `HOTSHEET_OPENCODE_LIVE=1 cargo test -p hotsheet-aitools

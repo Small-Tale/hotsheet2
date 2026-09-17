@@ -53,6 +53,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     src/project-change-poll.ts # Replay-safe per-open-project long poll; ticket invalidation, overflow/reconnect recovery, and abortable lifecycle
     src/local-ticket-changes.ts # Counted exact acknowledgements that consume only the stream echo already projected by a local ticket mutation
+    src/pending-created-tickets.ts # Retains just-created rows so a background refresh whose eventually-consistent index has not indexed them yet cannot drop them, releasing each once a fetched page contains it or a TTL elapses (HS2-Y5PDHW)
     src/server-busy.ts       #   Global "server busy" state from the in-flight authenticated-request count (idle long-polls excluded), with a short idle linger; plus the viewport-fill bar-count math
     src/components/server-busy-bars.tsx # Decorative fixed top-of-app 4px yellow bar strip that ripples while the server is busy (HS2-MW1V3M)
     src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR)
