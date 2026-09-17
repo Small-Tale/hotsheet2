@@ -651,9 +651,9 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
 The zero-selection placeholder omits the otherwise-shared Toolbar divider so the empty
 navbar does not leave a stray rule above its centered guidance. Loading and
 multi-selection placeholders keep the divider to preserve their intentional state boundary.
-The copyable ticket number sits in the header toolbar's **leading** slot for the sidebar
-inspector (HS2-9MCJ2B); it centers only for the wider reader dialog and the terminal ticket
-rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`
+The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar
+inspector (HS2-9MCJ2B) and the reader dialog (HS2-FZ5HB2); it centers only for the terminal
+ticket rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`
 overrides this per composition (the rail passes `center`).
 
 Structured close outcomes are available from the single-ticket context menu when the

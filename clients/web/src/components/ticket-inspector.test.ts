@@ -43,14 +43,14 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="external-link"');
   });
 
-  it('places the ticket number in the leading toolbar slot for the sidebar and centers it in the reader (HS2-9MCJ2B)', () => {
+  it('places the ticket number in the leading toolbar slot for the sidebar and reader (HS2-9MCJ2B, HS2-FZ5HB2)', () => {
     const slugChild = 'class="ticket-inspector__slug"';
     const sidebar = String(TicketInspector({ ...base }));
     expect(sidebar).toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
     expect(sidebar).not.toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
     const reader = String(TicketInspector({ ...base, presentation: 'reader' }));
-    expect(reader).toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
-    expect(reader).not.toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
+    expect(reader).toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
+    expect(reader).not.toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
     // The terminal rail forces center (its overlaid back button sits at the leading edge).
     const railScoped = String(TicketInspector({ ...base, slugPlacement: 'center' }));
     expect(railScoped).toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);

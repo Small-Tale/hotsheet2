@@ -95,10 +95,11 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
   const actions = presentation === 'reader'
     ? <>{upNextEligible && <ToolbarControlGroup appearance="borderless" single>{star}</ToolbarControlGroup>}<ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single><button type="button" data-action="toggle-reader-text-size" aria-label={largeText?'Use standard reader text size':'Use large reader text size'} aria-pressed={String(largeText)} title={largeText?'Standard text size':'Large text size'}><LucideIcon icon={ALargeSmall} name="a-large-small" /></button></ToolbarControlGroup><ToolbarControlGroup appearance="borderless" single>{close}</ToolbarControlGroup></>
     : <ToolbarControlGroup appearance="borderless" label="Ticket actions">{star}<button type="button" data-action="open-ticket-reader" aria-label="Open ticket reader" title="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></button>{close}</ToolbarControlGroup>;
-  // The ticket number sits in the leading slot for the sidebar inspector (HS2-9MCJ2B); the
-  // wider reader modal keeps it centered.
+  // The ticket number sits in the leading slot for both the sidebar inspector (HS2-9MCJ2B) and the
+  // reader modal (HS2-FZ5HB2); only the terminal rail forces center, because its overlaid back
+  // button occupies the leading edge (it passes slugPlacement="center" explicitly).
   const slugButton = <button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>;
-  const slugCentered = (slugPlacement ?? (presentation === 'reader' ? 'center' : 'leading')) === 'center';
+  const slugCentered = (slugPlacement ?? 'leading') === 'center';
   return <aside class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'} data-component="ticket-inspector" data-presentation={presentation} data-large-text={presentation==='reader'?String(largeText):undefined} data-ticket-slug={slug} data-needs-review={String(feedbackNeeded)} data-attachment-drop-target="true" aria-label={`${slug} inspector`}>
     <header class="ticket-inspector__header">
       <Toolbar divider={false} {...(slugCentered ? { center: slugButton } : { leading: slugButton })} trailing={actions} />
