@@ -21,6 +21,11 @@
    out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
    control groups. */
 .workspace-header__sort::part(combobox) { position: relative; min-height: remify(32px); border: 0; border-radius: var(--wa-border-radius-pill); background: transparent; box-shadow: none; }
+/* Show one focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
+   combobox, whose shape does not match the pill (HS2-M1DF1D). :focus-within reflects the wa-select's
+   shadow-internal focus onto the group; the group's own pill radius makes the ring a matching pill. */
+.workspace-header__sort::part(combobox):focus-visible, .workspace-header__sort::part(combobox):focus { outline: none; }
+.workspace-header__sort-group:focus-within { outline: var(--wa-focus-ring); outline-offset: var(--wa-focus-ring-offset); }
 .workspace-header__sort::part(display-input) { position: absolute; width: 1px; overflow: hidden; clip-path: inset(50%); }
 .workspace-header__sort::part(expand-icon) { position: absolute; inset-inline-end: remify(3.2px); }
 .workspace-header__sort .kui-select__custom-selected { width: remify(16px); height: remify(16px); color: var(--kui-toolbar-control-color); flex: none; }
