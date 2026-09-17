@@ -6,7 +6,7 @@ app, and no server required.
 
 **Create tickets by default for real work — even when work is described directly to you.**
 When someone asks you to do something in this terminal (not through the Hot Sheet queue),
-open a ticket before you start, then work through it: set it `started`, implement, set it
+open a ticket before you start, then work through it: **claim it** to begin, implement, set it
 `completed` with a note. Do this for features, bug fixes, refactors, and any multi-step or
 code-changing task. Skip ticketing only for trivial one-offs: simple questions, quick
 lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
@@ -16,10 +16,17 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
 - `hotsheet-cli show <slug>` — read one ticket in full.
 - Or the MCP tools: `hotsheet_query` (with `up_next: true`) and `hotsheet_get`.
 
-**Record progress on the ticket as you go:**
-- `hotsheet-cli edit <slug> --status started` when you begin.
+**Claim a ticket before you work it — claiming, not `started`, is what signals live work:**
+- `hotsheet-cli claim <slug> --worker <your-id>` when you begin. This atomically moves a Not
+  Started ticket to **Started** *and* takes a renewable live lease that tells everyone you are
+  actively on it. Always claim before you touch code. Prefer it over `hotsheet-cli edit <slug>
+  --status started`, which only flips the status and does **not** claim or signal live work.
+  (Self-serve the top of the queue with `hotsheet-cli claim-next --worker <your-id>`.)
+- `hotsheet-cli renew <slug> --worker <your-id>` during long work; `hotsheet-cli release <slug>
+  --worker <your-id>` when you stop for completion, handoff, or a blocker.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
-- Or `hotsheet_update` (it takes a `note`) / `hotsheet_close` through MCP.
+- Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
+  and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or
   `hotsheet_create`.
 
@@ -34,8 +41,8 @@ docs the change requires; scan for placeholders, TODO/FIXME, stubs, and document
 unbuilt behavior; create a follow-up for every incomplete item; and put the result,
 verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` is only for a
 blocker on the *current* ticket that needs a user decision or unavailable external state —
-leave that ticket `started` and name the blocker. It does not replace follow-ups for
-independently describable work.
+leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
+It does not replace follow-ups for independently describable work.
 
 Normally continue until every actionable Up Next ticket is complete. Read the whole queue
 before choosing an order; weigh dependencies, overlap, risk, and safe parallelization. Treat

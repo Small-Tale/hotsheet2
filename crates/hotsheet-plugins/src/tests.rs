@@ -57,6 +57,9 @@ fn every_builtin_carries_the_full_default_guidance() {
         let body = plugin.instructions_body();
         for phrase in [
             "Create tickets by default for real work",
+            // Claiming (not a bare `--status started`) is the live-work signal (HS2-0X3SZ2).
+            "Claim a ticket before you work it",
+            "hotsheet-cli claim <slug> --worker",
             "Create every follow-up immediately, without asking",
             "Double coverage",
             "update them **in the same change as the code**",
