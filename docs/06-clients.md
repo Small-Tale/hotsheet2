@@ -171,7 +171,13 @@ and identity-less legacy entries remain conservatively blocking.
   self-invalidating module, or a server restart) and a reload wipes the console, a dev-only
   diagnostic records every Vite reload trigger — the event kind and the module path Vite
   blamed — to `sessionStorage` and re-surfaces the most recent one after the page returns, so
-  an otherwise unreproducible "the client just refreshed" report captures its own cause. The launcher
+  an otherwise unreproducible "the client just refreshed" report captures its own cause. It also
+  captures `vite:ws:disconnect`, because a dev-server restart or crash reloads the client on
+  websocket reconnect via a direct `location.reload()` that dispatches **no** HMR event (and can
+  start a fresh document that clears `sessionStorage`); the last trigger is therefore also mirrored
+  to `localStorage`, and a navigation-type `reload` with no session-log trace is surfaced as that
+  connection-loss cause — which points at a dev-server restart/crash (for example under memory
+  pressure) rather than an HMR update (HS2-8JV12R). The launcher
   passes the original repository root into the snapshot so the
   project bridge still resolves the real `target/debug/hotsheet-server` rather than a
   nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate

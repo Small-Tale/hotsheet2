@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEV_RELOAD_LAST_KEY,
   DEV_RELOAD_LOG_KEY,
   DEV_RELOAD_LOG_LIMIT,
   type DevReloadRecord,
@@ -101,5 +102,44 @@ describe('installDevReloadDiagnostics', () => {
     expect(warn).not.toHaveBeenCalled();
     hot.emit('vite:beforeFullReload', { path: '/src/a.ts' });
     expect(logOf(storage)).toEqual([expect.objectContaining({ type: 'full reload', path: '/src/a.ts' })]);
+  });
+
+  it('captures a dev-server websocket disconnect (the connection-loss reload signal, HS2-8JV12R)', () => {
+    const hot = createHot();
+    const storage = createStorage();
+    const persistentStorage = createStorage();
+    installDevReloadDiagnostics({ hot, storage, persistentStorage, logger: { warn }, now: () => 'd1' });
+    hot.emit('vite:ws:disconnect', {});
+    expect(logOf(storage)).toEqual([{ type: 'connection lost', at: 'd1' }]);
+    // The most recent trigger is mirrored to cross-context storage so it survives a context replacement.
+    expect(JSON.parse(persistentStorage.map.get(DEV_RELOAD_LAST_KEY)!)).toEqual({ type: 'connection lost', at: 'd1' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('websocket'));
+  });
+
+  it('surfaces a reload with no session-log trace from cross-context storage (the null-sessionStorage case)', () => {
+    const hot = createHot();
+    const storage = createStorage(); // empty session log, as the user reported
+    const persistentStorage = createStorage();
+    persistentStorage.map.set(DEV_RELOAD_LAST_KEY, JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord));
+    const prior = installDevReloadDiagnostics({ hot, storage, persistentStorage, navigationType: () => 'reload', logger: { warn } });
+    expect(prior).toEqual({ type: 'connection lost', at: 'earlier' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('connection lost'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('server-restart reload'));
+  });
+
+  it('explains a reload with no trace at all when even cross-context storage is empty', () => {
+    const hot = createHot();
+    installDevReloadDiagnostics({ hot, storage: createStorage(), persistentStorage: createStorage(), navigationType: () => 'reload', logger: { warn } });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no HMR or websocket trace'));
+  });
+
+  it('stays quiet on a fresh navigation rather than a reload', () => {
+    const hot = createHot();
+    const persistentStorage = createStorage();
+    persistentStorage.map.set(DEV_RELOAD_LAST_KEY, JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord));
+    const prior = installDevReloadDiagnostics({ hot, storage: createStorage(), persistentStorage, navigationType: () => 'navigate', logger: { warn } });
+    expect(prior).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

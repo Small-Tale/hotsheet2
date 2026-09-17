@@ -161,7 +161,7 @@ if(import.meta.env.DEV){
   const hot=import.meta.hot;
   if(hot){
     const {installDevReloadDiagnostics}=await import('./dev-reload-diagnostics');
-    installDevReloadDiagnostics({hot:{on:(event,callback)=>{hot.on(event as 'vite:beforeFullReload',callback)}},storage:sessionStorage});
+    installDevReloadDiagnostics({hot:{on:(event,callback)=>{hot.on(event as 'vite:beforeFullReload',callback)}},storage:sessionStorage,persistentStorage:localStorage});
   }
   if(devReviewRequested(location.href,true)){
     const [{installUiStabilityDiagnostics},devReview]=await Promise.all([import('./ui-stability-diagnostics'),import('./dev-review')]);
