@@ -1,8 +1,8 @@
 .command-navigation { display: grid; gap: remify(4px); }
 .command-navigation__group { display: grid; gap: var(--wa-space-2xs); }
-.command-navigation__group > .kui-menu-header { min-height: remify(23.2px); }
+.command-navigation__group > .kui-list-header { min-height: remify(23.2px); }
 .command-navigation__items { display: grid; gap: remify(4.8px); }
-/* The command color is applied through kerf's own --kui-menu-item-* tokens (set inline) so it
+/* The command color is applied through kerf's own --kui-list-item-* tokens (set inline) so it
    wins regardless of CSS bundle order; kerf's transparent default previously overrode a plain
    background here at equal specificity (HS2-YVYA8H). */
 .command-navigation__command { min-height: remify(40px); font-weight: 650; }

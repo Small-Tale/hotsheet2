@@ -8,7 +8,7 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
   const trigger = inspector.getByRole('button', { name: 'Add tag' });
   const popover = page.getByRole('dialog', { name: 'Add tag' });
   const input = popover.getByRole('combobox', { name: 'Tag name' });
-  const header = inspector.locator('[data-component="menu-header"]').filter({ hasText: 'Tags' });
+  const header = inspector.locator('[data-component="list-header"]').filter({ hasText: 'Tags' });
 
   await expect(header).toHaveCount(1);
   await expect(trigger.locator('[data-lucide="plus"]')).toBeVisible();
@@ -20,7 +20,7 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
   expect(await popover.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(['accessibility', 'regression', 'server']);
 
   const wideLayout = await page.evaluate(() => {
-    const triggerBox = document.querySelector<HTMLElement>('[data-component="menu-header"] button[aria-label="Add tag"]')!.getBoundingClientRect();
+    const triggerBox = document.querySelector<HTMLElement>('[data-component="list-header"] button[aria-label="Add tag"]')!.getBoundingClientRect();
     const popoverBox = document.querySelector<HTMLElement>('[data-component="ticket-tag-popover"]')!.getBoundingClientRect();
     return {
       belowTrigger: popoverBox.top >= triggerBox.bottom,

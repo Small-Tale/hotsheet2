@@ -3,8 +3,8 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Select } from '@kerfjs/ui/select';
 import { CheckCircle2, CopyX, Search } from 'lucide';
 
@@ -34,7 +34,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
         <wa-input name="ticket-close-target-search" label="Existing ticket" placeholder="Search by ticket number or title" value={state.query}><span slot="start"><LucideIcon icon={Search} name="search" /></span></wa-input>
         {state.selected && <div class="ticket-close-dialog__selected" role="status"><LucideIcon icon={CheckCircle2} name="check-circle-2" /><span><strong>{state.selected.slug}<small>{state.selected.projectName}</small></strong><span>{state.selected.title}</span></span><wa-button type="button" appearance="plain" size="small" data-action="clear-ticket-close-target">Change</wa-button></div>}
         {!state.selected && state.query.trim() && <div class="ticket-close-dialog__results" aria-label="Matching tickets" aria-busy={String(Boolean(state.searching))}>
-          {candidates.map(candidate => <MenuItem action="select-ticket-close-target" itemId={duplicateTargetKey(candidate)} icon={<LucideIcon icon={CopyX} name="copy-x" />} label={<><strong>{candidate.slug}<small>{candidate.projectName}</small></strong><span>{candidate.title}</span></>} multiline />)}
+          {candidates.map(candidate => <ListItem action="select-ticket-close-target" itemId={duplicateTargetKey(candidate)} icon={<LucideIcon icon={CopyX} name="copy-x" />} label={<><strong>{candidate.slug}<small>{candidate.projectName}</small></strong><span>{candidate.title}</span></>} multiline />)}
           {!state.searching && candidates.length === 0 && <p>No matching tickets.</p>}
         </div>}
         <p class="ticket-close-dialog__hint">The selected ticket becomes the canonical target. This relationship is stored as structured duplicate metadata.</p>

@@ -1,8 +1,8 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ArchiveRestore, Bot, Columns3, Database, Keyboard, PanelLeftClose, ShieldCheck, SlidersHorizontal, TerminalSquare } from 'lucide';
@@ -42,7 +42,7 @@ export function SettingsNavigation({ selected, collapseControl = false }: { sele
   const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][]) =>
     <><p class="settings-navigation__heading">{heading}</p>
       <nav aria-label={heading}>
-        {items.map(item => <MenuItem action="select-settings-category" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} />)}
+        {items.map(item => <ListItem action="select-settings-category" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} />)}
       </nav></>;
   return <aside class="settings-navigation kui-pane" data-component="settings-navigation" aria-label="Settings categories">
     {collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide settings sidebar" title="Hide settings sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}

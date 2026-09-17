@@ -12,7 +12,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'change-evidence-dialog', 'view-navigation', 'command-navigation', 'command-settings-editor', 'drive-control', 'drive-options-menu', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'settings-navigation', 'notification-navigation', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-inspector-skeleton', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'ticket-close-dialog', 'not-working-dialog', 'note-composer', 'note-card', 'ai-conversation', 'ai-tool-settings', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'terminal-operations-sidebar', 'terminal-ticket-rail', 'fixed-aspect-terminal-card', 'terminal-visibility-dialog', 'content-transition', 'app-tab', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker', 'hs1-migration-dialog', 'hs1-migration-banner']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'change-evidence-dialog', 'view-navigation', 'command-navigation', 'command-settings-editor', 'drive-control', 'drive-options-menu', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'settings-navigation', 'notification-navigation', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-inspector-skeleton', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'ticket-close-dialog', 'not-working-dialog', 'note-composer', 'note-card', 'ai-conversation', 'ai-tool-settings', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'terminal-operations-sidebar', 'terminal-ticket-rail', 'fixed-aspect-terminal-card', 'terminal-visibility-dialog', 'content-transition', 'app-tab', 'select', 'toolbar', 'list-item', 'list-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker', 'hs1-migration-dialog', 'hs1-migration-banner']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
@@ -20,21 +20,21 @@ describe('UX demo catalog', () => {
     expect(findDemo('ticket-board')?.uses).toEqual(['ticket-board-column']);
     expect(findDemo('workspace-header')?.uses).toEqual(['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']);
     expect(demosUsing('toolbar-control-group').map(entry => entry.id)).toEqual(['app-shell', 'workspace-header', 'ticket-inspector', 'toolbar']);
-    expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);expect(findDemo('terminal-drawer')?.uses).toEqual(['app-tab','menu-item','menu-header','ai-conversation']);expect(findDemo('terminal-dashboard')?.uses).toEqual(['fixed-aspect-terminal-card','menu-item']);expect(findDemo('terminal-visibility-dialog')?.uses).toEqual(['menu-item']);
+    expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);expect(findDemo('terminal-drawer')?.uses).toEqual(['app-tab','list-item','list-header','ai-conversation']);expect(findDemo('terminal-dashboard')?.uses).toEqual(['fixed-aspect-terminal-card','list-item']);expect(findDemo('terminal-visibility-dialog')?.uses).toEqual(['list-item']);
     expect(demosUsing('fixed-aspect-terminal-card').map(entry=>entry.id)).toEqual(['terminal-dashboard']);
     expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
     expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']);
-    expect(findDemo('ticket-info-panel')?.uses).toContain('menu-header');
+    expect(findDemo('ticket-info-panel')?.uses).toContain('list-header');
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
-    expect(findDemo('repository-status-popover')?.uses).toEqual(['dialog-header','value-table','menu-item','menu-header','ticket-code-review']);
-    expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header','menu-item','menu-header']);
+    expect(findDemo('repository-status-popover')?.uses).toEqual(['dialog-header','value-table','list-item','list-header','ticket-code-review']);
+    expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header','list-item','list-header']);
     expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header','value-table']);
     expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });
 
   it('records the planned ProjectSidebar composition', () => {
-    expect(findDemo('project-sidebar')?.uses).toEqual(['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'drive-options-menu', 'menu-item', 'menu-header']);
+    expect(findDemo('project-sidebar')?.uses).toEqual(['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'drive-options-menu', 'list-item', 'list-header']);
     expect(demosUsing('drive-control').map(entry => entry.id)).toEqual(['project-sidebar','ai-conversation']);
   });
 

@@ -1,7 +1,7 @@
 ---
 name: kerf-app
 description: Build UIs in the kerf reactive framework and its @kerfjs/ui component package (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs` or `@kerfjs/ui`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
-kerf-skill-version: 1.21.0
+kerf-skill-version: 1.22.0
 ---
 
 # Building apps with kerf
@@ -33,13 +33,13 @@ when the complete layer is intentional. Prefer a component before inventing a
 parallel local primitive, but keep domain state, routing, commands, and tab/menu
 policy in the app.
 
-Use MenuItem/MenuActionRow/MenuHeader/AppTab `rootAttributes` only for application
-`data-*` metadata. MenuActionRow `trailingActionAttributes` and MenuHeader
+Use ListItem/ListActionRow/ListHeader/AppTab `rootAttributes` only for application
+`data-*` metadata. ListActionRow `trailingActionAttributes` and ListHeader
 `triggerAttributes` additionally support native popover target/action and
 `aria-controls`/`aria-haspopup`. Do not use these slots to override action,
 item identity, selection, disclosure, naming, disabled, icon, or role
 semantics; one `role="menuitem"` does not make a complete menu widget.
-`MenuItem.trailing` is dormant. Use `MenuActionRow` for sibling primary and
+`ListItem.trailing` is dormant. Use `ListActionRow` for sibling primary and
 trailing native buttons, and keep its `label`, `icon`, and
 `trailingActionIcon` SafeHtml slots free of controls.
 AppTab protects its component/action/identity/selection and transient drag/drop

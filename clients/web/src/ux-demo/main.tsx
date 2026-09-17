@@ -7,9 +7,9 @@ import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuHeader } from '@kerfjs/ui/menu-header';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import {
   clampRegionSize,
   type ResizableRegionEdge,
@@ -125,8 +125,8 @@ import {
 } from './content-components-demo';
 import { ContentTransitionDemo, ContentTransitionSettings, transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
 import { closeHs1MigrationDialogDemo, DialogHeaderDemo, Hs1MigrationBannerDemo, Hs1MigrationDialogDemo, openHs1MigrationDialogDemo, ValueTableDemo } from './dialog-layout-demo';
-import { MenuHeaderDemo } from './menu-header-demo';
-import { MenuItemDemo } from './menu-item-demo';
+import { ListHeaderDemo } from './list-header-demo';
+import { ListItemDemo } from './list-item-demo';
 import {
   notWorkingDemoEvent,
   notWorkingDemoFiles,
@@ -364,7 +364,7 @@ function demoLink(item: DemoDefinition) {
   const modified = demoModified.value[item.id];
   return (
     <li>
-      <MenuItem
+      <ListItem
         className={
           item.implemented
             ? 'catalog-link'
@@ -463,11 +463,11 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
 function demoNavigation(category: DemoCategory) {
   return (
     <section class="catalog-group">
-      <MenuHeader label={category.name} />
+      <ListHeader label={category.name} />
       {category.demos && <ul>{category.demos.map(demoLink)}</ul>}
       {category.children?.map((child) => (
         <section class="catalog-subgroup">
-          <MenuHeader label={child.name} />
+          <ListHeader label={child.name} />
           <ul>{child.demos?.map(demoLink)}</ul>
         </section>
       ))}
@@ -496,8 +496,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
-  if (item.id === 'menu-item') return <MenuItemDemo />;
-  if (item.id === 'menu-header') return <MenuHeaderDemo />;
+  if (item.id === 'menu-item') return <ListItemDemo />;
+  if (item.id === 'menu-header') return <ListHeaderDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
   if (item.id === 'ticket-priority-select') return <TicketPrioritySelectDemo />;
   if (item.id === 'ticket-status-menu') return <TicketStatusMenuDemo />;

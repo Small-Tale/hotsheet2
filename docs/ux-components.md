@@ -173,7 +173,7 @@ does not introduce polling or another network request.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail
-  reuses `MenuHeader` and `ProjectSummary` for each open project. When two or more
+  reuses `ListHeader` and `ProjectSummary` for each open project. When two or more
   projects are open, an `All projects` group precedes them and sums aligned trend days,
   completed-today counts, and in-progress counts. The maximum summed daily value becomes the
   shared scale for the aggregate and every constituent chart, making cross-project bar heights
@@ -192,23 +192,23 @@ does not introduce polling or another network request.
     badges and middle-truncated paths;
     double-click, keyboard, copy-path, and host-native reveal actions; and a Commits view
     that reuses Code Review difftool/range presentation. The master views and detail
-    files compose the shared `MenuHeader` and `MenuItem` primitives, and the complete
+    files compose the shared `ListHeader` and `ListItem` primitives, and the complete
     dialog is represented as an embedded production component in `/ux-demo`
     (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
 - `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
   summary opens a repository-style master/detail dialog whose Docs, Tests, Source, and
-  Other views reuse `MenuHeader`, `MenuItem`, middle-truncated paths, and Git-letter
+  Other views reuse `ListHeader`, `ListItem`, middle-truncated paths, and Git-letter
   badges. Selecting a file opens its diff across the server-validated complete ticket
   commit span. The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
-- `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
+- `ListItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.
-- `MenuHeader` — **demo built**: shared section-label alignment with MenuItem icons,
+- `ListHeader` — **demo built**: shared section-label alignment with ListItem icons,
   including an optional subtle count badge, trailing actions, popover-targeted actions,
   and whole-header disclosure variants. Notes uses the shared count slot instead of
   concatenating a bare number into its label (HS2-FYCAZC).
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
-  action, and controlled selection through `MenuItem`.
+  action, and controlled selection through `ListItem`.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, Queue (active tickets), Backlog, Archive
@@ -347,7 +347,7 @@ does not introduce polling or another network request.
   giving a pressed single-button group the shared dark background, matching border, and
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
 
-These generic primitives, plus `LucideIcon`, `MenuItem`, `MenuHeader`, `AppTab`,
+These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `AppTab`,
 `ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `PanelHeader`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
@@ -660,7 +660,7 @@ Structured close outcomes are available from the single-ticket context menu when
 owning provider advertises both close and close-reason support. `TicketCloseDialog`
 offers Completed, Not planned, Duplicate, and Obsolete; Duplicate requires searching for
 and selecting a distinct canonical ticket before submission. Search results reuse
-`MenuItem`, the reason control reuses `Select`, and validation prevents self-reference.
+`ListItem`, the reason control reuses `Select`, and validation prevents self-reference.
 Closed tickets retain a visible outcome in the inspector, and duplicate outcomes link to
 the canonical ticket instead of relying on a freeform explanatory note. Canonical tickets
 render reverse duplicate backlinks as shared menu rows labeled with both project and slug;
@@ -682,11 +682,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
-  The sidebar uses an 8px content gutter and the same `MenuHeader`/`MenuItem`
+  The sidebar uses an 8px content gutter and the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.
-  Editable tags use the shared `MenuHeader` with a trailing icon-only Add tag action,
+  Editable tags use the shared `ListHeader` with a trailing icon-only Add tag action,
   matching the Views header, and a uniquely targeted anchored popover in sidebar and
   reader instances. The popover contains a labeled autocomplete field,
   supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
@@ -715,7 +715,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and
     popup-option icon/color projection with the same measured `0.5rem` icon/label
-    gap used by custom-command `MenuItem`s;
+    gap used by custom-command `ListItem`s;
     the light-DOM icon margin explicitly overrides Web Awesome's slotted default.
     Consumers may supply a custom selected-value renderer while retaining the shared
     option list, keyboard behavior, spacing, and typography
@@ -746,7 +746,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   and reader
 - `TicketAttachmentsSection` — **built**: aligned inspector gutters, a subtle heading count,
   a single accessible Lucide ellipsis per file,
-  with click/right-click parity through the shared MenuItem-based Open, Download, Copy
+  with click/right-click parity through the shared ListItem-based Open, Download, Copy
   reference, and Remove context menu, plus a
   responsive, full-width square contained image-preview grid feeding the shared full-screen
   arrow/keyboard/swipe gallery
@@ -1102,12 +1102,12 @@ xterm surface until bounded font-metric fitting is stable, so transitions do not
 intermediate fitting pass. A plain activation
 magnifies and focuses an interactive copy in place over the same grid; clicking the surrounding
 overlay or pressing Escape restores the grid. A double
-activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
+activation, or Open from the tile's shared ListItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. A permanent Lucide ellipsis footer button opens the same shared Open/Hide menu as
 right-click. These actions must never spawn a
 second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dialog, Select,
-MenuHeader, and MenuItem vocabulary. Adding prompts for the name before creation; pill tabs
+ListHeader, and ListItem vocabulary. Adding prompts for the name before creation; pill tabs
 select groups and named-tab context menus rename or delete them, while Default has no context
 menu. Each row toggles one terminal and Hide all / Show all act on the selected group. An
 adjacent compact label Select switches immediately, while an eye badge reports the active
@@ -1247,7 +1247,7 @@ also keep stateful Web Awesome control properties synchronized when a demo reset
 restores its canonical mock state. The remaining catalog review-tooling package is
 tracked by HS2-89692E. It should grow to provide:
 
-Catalog groups reset native list margins so their shared `MenuHeader` and `MenuItem`
+Catalog groups reset native list margins so their shared `ListHeader` and `ListItem`
 rows begin on the same outer edge; hierarchy is already clear from the headers and
 does not receive an additional list indent.
 Implemented entries use component-specific Lucide icons instead of one generic glyph.

@@ -51,8 +51,8 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(RepositoryStatusPopover({status:status(),view:'staged'}));
     for(const text of ['<dt>Branch</dt><dd>main','<dt>Upstream</dt><dd>origin/main','<dt>Ahead</dt>','<dt>Behind</dt>','Staged','Unstaged','Untracked','Conflicted','Commits'])expect(markup).toContain(text);
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('data-component="menu-header"');
-    expect(markup.match(/data-component="menu-item"/g)).toHaveLength(7);
+    expect(markup).toContain('data-component="list-header"');
+    expect(markup.match(/data-component="list-item"/g)).toHaveLength(7);
     expect(markup).toContain('data-action="select-repository-file" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-action="open-repository-file-menu-trigger" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-lucide="ellipsis"');

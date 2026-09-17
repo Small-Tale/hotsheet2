@@ -3,9 +3,9 @@ import './ticket-inspector.css';
 import './ticket-inspector-panel.css';
 import './ticket-inspector-skeleton.css';
 
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuHeader } from '@kerfjs/ui/menu-header';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -60,10 +60,10 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
         <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
         <div class="ticket-inspector__status-field"><span>Status</span><span class="ticket-inspector__status-line"><TicketStatusMenu value="not_started" placeholder /></span></div>
       </section>
-      <section class="ticket-inspector__section"><MenuItem className="ticket-inspector__block-action" action="block-ticket" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" tabIndex={-1} /></section>
-      <section class="ticket-inspector__section"><MenuHeader label="Details" /><div class="ticket-inspector__details-surface"><div class="ticket-inspector__ph-lines"><Skeleton lines={3} /></div></div></section>
-      <section class="ticket-inspector__section"><MenuHeader label="Tags" action="add-tag" actionLabel="Add tag" actionIcon={<LucideIcon icon={Plus} name="plus" />} /></section>
-      <section class="ticket-inspector__section"><MenuHeader label="Notes" action="add-note" actionLabel="Add note" actionIcon={<LucideIcon icon={Plus} name="plus" />} /><div class="ticket-inspector__ph-notes"><PlaceholderNote kind="activity" /><PlaceholderNote kind="activity" /><PlaceholderNote kind="regular" card /></div></section>
+      <section class="ticket-inspector__section"><ListItem className="ticket-inspector__block-action" action="block-ticket" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" tabIndex={-1} /></section>
+      <section class="ticket-inspector__section"><ListHeader label="Details" /><div class="ticket-inspector__details-surface"><div class="ticket-inspector__ph-lines"><Skeleton lines={3} /></div></div></section>
+      <section class="ticket-inspector__section"><ListHeader label="Tags" action="add-tag" actionLabel="Add tag" actionIcon={<LucideIcon icon={Plus} name="plus" />} /></section>
+      <section class="ticket-inspector__section"><ListHeader label="Notes" action="add-note" actionLabel="Add note" actionIcon={<LucideIcon icon={Plus} name="plus" />} /><div class="ticket-inspector__ph-notes"><PlaceholderNote kind="activity" /><PlaceholderNote kind="activity" /><PlaceholderNote kind="regular" card /></div></section>
       <footer class="ticket-inspector__ph-provenance"><Skeleton width="6rem" height="0.6875rem" /><Skeleton width="4rem" height="0.6875rem" /></footer>
     </div>
   </aside>;

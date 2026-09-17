@@ -1,8 +1,8 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Bell, CalendarDays, Clock3, PanelLeftClose } from 'lucide';
@@ -24,7 +24,7 @@ export function NotificationNavigation({ selected, counts, collapseControl = fal
     {collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide notification sidebar" title="Hide notification sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
     <div class="settings-navigation__content kui-pane__content">
       <p class="settings-navigation__heading">Notifications</p>
-      <nav aria-label="Notification views">{views.map(item => <MenuItem action="select-notification-view" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} trailing={<small class="kui-menu-item__count" data-attention={String(item.id === 'pending' && counts.pending > 0)}>{counts[item.id]}</small>} />)}</nav>
+      <nav aria-label="Notification views">{views.map(item => <ListItem action="select-notification-view" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} trailing={<small class="kui-list-item__count" data-attention={String(item.id === 'pending' && counts.pending > 0)}>{counts[item.id]}</small>} />)}</nav>
     </div>
   </aside>;
 }

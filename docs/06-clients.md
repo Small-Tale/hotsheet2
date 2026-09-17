@@ -349,7 +349,7 @@ and identity-less legacy entries remain conservatively blocking.
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
   The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,
-  Block ticket, and Add note reuse the shared sidebar `MenuHeader`/`MenuItem`
+  Block ticket, and Add note reuse the shared sidebar `ListHeader`/`ListItem`
   primitives; their text and icons share one inset while section surfaces stay flush
   beneath their headers instead of accumulating another indentation level.
 
@@ -886,7 +886,7 @@ and identity-less legacy entries remain conservatively blocking.
   keeping Git and external-provider creation behavior identical (HS2-CHZKR5).
   When the selected provider advertises attachment support, each attachment exposes one
   accessible Lucide ellipsis button. Activating it or right-clicking anywhere on the row
-  opens the same shared MenuItem-based menu for Open, Download, Copy reference,
+  opens the same shared ListItem-based menu for Open, Download, Copy reference,
   host-normalized reveal (Finder, File Explorer, or file manager), and Remove.
   Double-clicking the attachment row remains a direct Open shortcut, while
   activating the ellipsis never opens the file. Upload/removal progress and failures remain visible in the
@@ -941,7 +941,7 @@ and identity-less legacy entries remain conservatively blocking.
   exposing its internal ID. The forward “Duplicate of” relationship uses the same
   project-plus-slug, title, icon, and full-row action treatment as reverse “Duplicates”
   backlinks. The reverse relationship passes its result count through the shared
-  `MenuHeader` count contract, matching the neutral count badge used by Notes and
+  `ListHeader` count contract, matching the neutral count badge used by Notes and
   Attachments, then switches projects to open the exact canonical target even when it is
   outside the current list filter or loaded page.
   Checkout-scoped self-reference
@@ -1264,7 +1264,7 @@ conversation by click or keyboard. The global Workspace grid launcher uses the L
 Lucide `layout-grid` icon. The broader name leaves room for browser and other workspace
 surfaces later.
 The dashboard keeps a resizable left operations sidebar open by default. It presents one
-`MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
+`ListHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
 projects, a leading `All projects` group sums each aligned trend day plus the completed-today
 and in-progress counts. Every chart in that cross-project list uses the maximum of the summed
 `All projects` trend as its shared scale, so equal bar heights mean equal activity across the

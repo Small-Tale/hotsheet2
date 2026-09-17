@@ -2,9 +2,9 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './project-close-dialog.css';
 
+import {ListHeader} from '@kerfjs/ui/list-header';
+import {ListItem} from '@kerfjs/ui/list-item';
 import {LucideIcon} from '@kerfjs/ui/lucide-icon';
-import {MenuHeader} from '@kerfjs/ui/menu-header';
-import {MenuItem} from '@kerfjs/ui/menu-item';
 import {CircleAlert,MessageSquare,SquareTerminal} from 'lucide';
 
 import {type ConversationActivity,type ConversationMessage,type ConversationUsage} from '../ai-conversation';
@@ -73,7 +73,7 @@ export function ProjectCloseDialog({state}:{state?:ProjectCloseDialogState}){
   return <wa-dialog class="project-close-dialog" data-component="project-close-dialog" data-project-id={state.projectId} data-has-resources={String(hasResources)} label={`Close ${state.projectName}?`} aria-describedby={hasResources?'project-close-dialog-summary':undefined} open>
     {hasResources&&<div class="project-close-dialog__intro"><span><LucideIcon icon={CircleAlert} name="circle-alert"/></span><p id="project-close-dialog-summary">{projectCloseRunningSummary(state.resources)}</p></div>}
     {hasResources?<div class="project-close-dialog__layout" aria-busy={String(busy)}>
-      <aside aria-label="Running terminals and AI chats"><MenuHeader label="Running items"/>{state.resources.length?<nav>{state.resources.map(resource=>{const key=projectCloseResourceKey(resource),terminal=resource.kind==='terminal';return <MenuItem action="select-project-close-resource" itemId={key} selected={resource===selected} disabled={busy} icon={<LucideIcon icon={terminal?SquareTerminal:MessageSquare} name={terminal?'square-terminal':'message-square'}/>} label={resource.name} trailing={<small class="kui-menu-item__count">{terminal?'Terminal':resource.tool} · {resource.busy?'Busy':'Running'}</small>}/>})}</nav>:<p class="project-close-dialog__empty">Nothing is running.</p>}</aside>
+      <aside aria-label="Running terminals and AI chats"><ListHeader label="Running items"/>{state.resources.length?<nav>{state.resources.map(resource=>{const key=projectCloseResourceKey(resource),terminal=resource.kind==='terminal';return <ListItem action="select-project-close-resource" itemId={key} selected={resource===selected} disabled={busy} icon={<LucideIcon icon={terminal?SquareTerminal:MessageSquare} name={terminal?'square-terminal':'message-square'}/>} label={resource.name} trailing={<small class="kui-list-item__count">{terminal?'Terminal':resource.tool} · {resource.busy?'Busy':'Running'}</small>}/>})}</nav>:<p class="project-close-dialog__empty">Nothing is running.</p>}</aside>
       {selected?<ResourceDetail resource={selected} projectId={state.projectId}/>:<section class="project-close-dialog__detail project-close-dialog__detail--empty"><p>Close this project tab?</p></section>}
     </div>:<p class="project-close-dialog__simple">Close this project tab? You can reopen it later.</p>}
     {hasResources&&<p class="project-close-dialog__consequences"><strong>Keep running</strong> closes only this tab. Terminals and AI chat tabs return when reopened. Messages received in this app window return with their chat; after an app restart, the restored server session continues without reconstructing earlier messages. <strong>Stop all</strong> ends every item, then closes the tab.</p>}

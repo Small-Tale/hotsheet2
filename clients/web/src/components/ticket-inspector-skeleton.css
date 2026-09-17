@@ -6,7 +6,7 @@
 
 /* The chrome is shown for continuity only; nothing in it is interactive while loading. */
 .ticket-inspector--placeholder .ticket-inspector__tabs button,
-.ticket-inspector--placeholder .kui-menu-header__action,
+.ticket-inspector--placeholder .kui-list-header__action,
 .ticket-inspector--placeholder .ticket-inspector__block-action { pointer-events: none; }
 
 .ticket-inspector__ph-title { display: grid; margin: remify(6.4px) remify(16px) 0; gap: remify(6.4px); }

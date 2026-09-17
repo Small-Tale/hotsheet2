@@ -1,8 +1,8 @@
 import './ticket-notes.css';
 
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { MenuHeader } from '@kerfjs/ui/menu-header';
-import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Plus } from 'lucide';
 
 import type {AttachmentReferenceContext} from '../attachment-references';
@@ -14,9 +14,9 @@ export function TicketNotes({ notes, editingNoteId, noteDraft, composing = false
   const latestExchangeNote = [...notes].reverse().find(note => note.kind === 'regular' || note.kind === 'feedback_needed');
   const activeFeedbackNoteId = latestExchangeNote?.kind === 'feedback_needed' ? latestExchangeNote.id : undefined;
   return <section class="ticket-notes" data-component="ticket-notes">
-    <MenuHeader label="Notes" count={notes.length} countLabel={`${notes.length} ${notes.length===1?'note':'notes'}`} action={canAdd&&!composing?'add-ticket-note':undefined} actionLabel="Add note" actionIcon={canAdd&&!composing?<LucideIcon icon={Plus} name="plus"/>:undefined}/>
+    <ListHeader label="Notes" count={notes.length} countLabel={`${notes.length} ${notes.length===1?'note':'notes'}`} action={canAdd&&!composing?'add-ticket-note':undefined} actionLabel="Add note" actionIcon={canAdd&&!composing?<LucideIcon icon={Plus} name="plus"/>:undefined}/>
     {notes.length > 0 ? <div class="ticket-notes__list">{notes.map(note => <NoteCard {...note} editable={canEdit} deletable={canDelete} editing={note.id === editingNoteId} draft={note.id === editingNoteId ? noteDraft : undefined} readerMode={readerMode} respondToFeedback={!readerMode && note.id === activeFeedbackNoteId} inlineReplies={inlineFeedbackReplies[note.id]} selectedChoices={feedbackChoiceSelections[note.id]} attachmentContext={attachmentContext} />)}</div> : !composing && <p class="ticket-notes__empty">No notes added.</p>}
     {composing && <NoteComposer value={composerDraft} />}
-    {canAdd && !composing && <MenuItem className="ticket-notes__add" action="add-ticket-note" icon={<LucideIcon icon={Plus} name="plus"/>} label="Add note"/>}
+    {canAdd && !composing && <ListItem className="ticket-notes__add" action="add-ticket-note" icon={<LucideIcon icon={Plus} name="plus"/>} label="Add note"/>}
   </section>;
 }

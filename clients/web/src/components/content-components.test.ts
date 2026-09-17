@@ -21,8 +21,8 @@ describe('content components', () => {
   it('offers the visible Add note action when the note list is empty', () => {
     const markup = String(TicketNotes({ notes: [] }));
     expect(markup).toContain('No notes added.');
-    expect(markup).toContain('class="kui-menu-item ticket-notes__add"');
-    expect(markup).toContain('<span class="kui-menu-item__label">Add note</span>');
+    expect(markup).toContain('class="kui-list-item ticket-notes__add"');
+    expect(markup).toContain('<span class="kui-list-item__label">Add note</span>');
   });
   it('places a focused new-note composer after existing notes', () => {
     const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
@@ -126,7 +126,7 @@ describe('content components', () => {
     const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('<h2 class="kui-menu-header__label" aria-label="Notes, 1 note">Notes</h2><span class="kui-menu-header__count" aria-hidden="true">1</span>');
+    expect(markup).toContain('<h2 class="kui-list-header__label" aria-label="Notes, 1 note">Notes</h2><span class="kui-list-header__count" aria-hidden="true">1</span>');
     expect(markup).toContain('data-has-count="true"');
     expect(markup).toContain('<wa-dialog');
     expect(markup).toContain('label="Read and edit HS2-TEST"');
