@@ -73,6 +73,10 @@ export interface TicketInspectorProps {
   providerName?: string;
   updatedLabel?: string;
   presentation?: 'sidebar' | 'reader';
+  /** Where the ticket number sits in the header toolbar. Defaults to leading for the sidebar
+   * (HS2-9MCJ2B) and center for the reader; the terminal rail forces center so its overlaid
+   * back button never sits on top of the slug. */
+  slugPlacement?: 'leading' | 'center';
   largeText?: boolean;
   fieldConflict?: TicketFieldConflictState;
   fieldConflictResolution?: string;
@@ -85,15 +89,19 @@ const tabs = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canEditText = canUpdate, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', feedbackNeeded = false, closeReason, duplicateTarget, duplicateBacklinks = [], duplicateBacklinkInaccessibleProjects = [], timelineEntries, attachments, codeReview, codeReviewLoading = false, codeReviewMessage = '', expandedCodeReviewCommits, attachmentsEnabled = true, attachmentMessage = '', attachmentContext,notes, editingNoteId, noteDraft, inlineFeedbackReplies, feedbackChoiceSelections, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', largeText = false, fieldConflict, fieldConflictResolution = fieldConflict?.mine ?? '' }: TicketInspectorProps) {
+export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canEditText = canUpdate, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', feedbackNeeded = false, closeReason, duplicateTarget, duplicateBacklinks = [], duplicateBacklinkInaccessibleProjects = [], timelineEntries, attachments, codeReview, codeReviewLoading = false, codeReviewMessage = '', expandedCodeReviewCommits, attachmentsEnabled = true, attachmentMessage = '', attachmentContext,notes, editingNoteId, noteDraft, inlineFeedbackReplies, feedbackChoiceSelections, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', slugPlacement, largeText = false, fieldConflict, fieldConflictResolution = fieldConflict?.mine ?? '' }: TicketInspectorProps) {
   const star = <>{upNextEligible && <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>}</>;
   const close = <button type="button" data-dialog={presentation === 'reader' ? 'close' : undefined} data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'} aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}><LucideIcon icon={presentation === 'reader' ? X : PanelRightClose} name={presentation === 'reader' ? 'x' : 'panel-right-close'} /></button>;
   const actions = presentation === 'reader'
     ? <>{upNextEligible && <ToolbarControlGroup appearance="borderless" single>{star}</ToolbarControlGroup>}<ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single><button type="button" data-action="toggle-reader-text-size" aria-label={largeText?'Use standard reader text size':'Use large reader text size'} aria-pressed={String(largeText)} title={largeText?'Standard text size':'Large text size'}><LucideIcon icon={ALargeSmall} name="a-large-small" /></button></ToolbarControlGroup><ToolbarControlGroup appearance="borderless" single>{close}</ToolbarControlGroup></>
     : <ToolbarControlGroup appearance="borderless" label="Ticket actions">{star}<button type="button" data-action="open-ticket-reader" aria-label="Open ticket reader" title="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></button>{close}</ToolbarControlGroup>;
+  // The ticket number sits in the leading slot for the sidebar inspector (HS2-9MCJ2B); the
+  // wider reader modal keeps it centered.
+  const slugButton = <button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>;
+  const slugCentered = (slugPlacement ?? (presentation === 'reader' ? 'center' : 'leading')) === 'center';
   return <aside class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'} data-component="ticket-inspector" data-presentation={presentation} data-large-text={presentation==='reader'?String(largeText):undefined} data-ticket-slug={slug} data-needs-review={String(feedbackNeeded)} data-attachment-drop-target="true" aria-label={`${slug} inspector`}>
     <header class="ticket-inspector__header">
-      <Toolbar divider={false} center={<button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>} trailing={actions} />
+      <Toolbar divider={false} {...(slugCentered ? { center: slugButton } : { leading: slugButton })} trailing={actions} />
       {titleEditing ? <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} /> : <h1 data-action={canUpdate ? 'edit-ticket-title' : undefined} data-editable={String(canUpdate)} tabIndex={canUpdate ? 0 : undefined} title={canUpdate ? 'Double-click to edit title' : undefined}>{title}</h1>}
     </header>
     {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}

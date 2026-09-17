@@ -43,6 +43,20 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="external-link"');
   });
 
+  it('places the ticket number in the leading toolbar slot for the sidebar and centers it in the reader (HS2-9MCJ2B)', () => {
+    const slugChild = 'class="ticket-inspector__slug"';
+    const sidebar = String(TicketInspector({ ...base }));
+    expect(sidebar).toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
+    expect(sidebar).not.toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
+    const reader = String(TicketInspector({ ...base, presentation: 'reader' }));
+    expect(reader).toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
+    expect(reader).not.toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
+    // The terminal rail forces center (its overlaid back button sits at the leading edge).
+    const railScoped = String(TicketInspector({ ...base, slugPlacement: 'center' }));
+    expect(railScoped).toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
+    expect(railScoped).not.toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
+  });
+
   it('uses the same capability surface at reader scale with dialog close semantics', () => {
     const markup = String(TicketInspector({ ...base, presentation: 'reader', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('data-presentation="reader"');
