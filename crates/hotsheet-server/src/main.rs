@@ -303,6 +303,10 @@ async fn main() -> Result<()> {
     // ignores. Runtime `POST /stores` additions register themselves the same way.
     let started_at = Timestamp::from_datetime(OffsetDateTime::now_utc());
     state.publish_instances(url, started_at.as_str().to_string());
+    // Warm the AI model catalog now, in the background, so the first client's startup path
+    // finds it already discovered instead of paying the cold subprocess discovery inline
+    // (HS2-MYDN7C / HS2-10R4VV). Never blocks serving.
+    state.prewarm_ai_catalog();
     let lifecycle_state = state.clone();
 
     // Explicit shutdown only (HS2-59): serve until SIGTERM / Ctrl-C, then the guards drop

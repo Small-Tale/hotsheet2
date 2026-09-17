@@ -580,7 +580,10 @@ and identity-less legacy entries remain conservatively blocking.
   Drive is a production control, not demo-only state. Its split-button label reflects the
   machine-local default provider discovered from drivable plugin manifests. The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
-  Project activation starts catalog discovery without blocking the rest of project startup. If
+  Project activation starts catalog discovery without blocking the rest of project startup, and the
+  server prewarms the catalog in a background task at start so the first client typically finds it
+  already discovered rather than paying cold subprocess discovery on its startup path (HS2-MYDN7C /
+  HS2-10R4VV); discovery runs on the blocking pool so it never stalls concurrent clients (HS2-S66BZZ). If
   discovery is pending or fails, the arrow reports active discovery or the bounded error and retries
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and

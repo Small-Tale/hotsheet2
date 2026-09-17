@@ -603,6 +603,19 @@ impl AppState {
         self
     }
 
+    /// Warm the AI model catalog in the background at server start so the **first** client
+    /// doesn't pay cold discovery on its startup path (HS2-MYDN7C follow-up to HS2-10R4VV).
+    /// Discovery is blocking subprocess work, so it runs on the blocking pool
+    /// (`discovered_ai_tools_off_runtime`) and never delays binding/serving; a failure just
+    /// leaves the cache cold for the first on-demand discovery to fill. Call once, after the
+    /// runtime is up and this process has decided it is the serving instance.
+    pub fn prewarm_ai_catalog(&self) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            let _ = discovered_ai_tools_off_runtime(&state, false).await;
+        });
+    }
+
     /// Set the URL injected into interactively launched tools. The real server calls this
     /// after binding; tests may use it without publishing machine discovery files.
     pub fn set_terminal_server_url(&self, url: String) {

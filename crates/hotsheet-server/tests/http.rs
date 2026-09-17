@@ -380,8 +380,39 @@ async fn concurrent_ai_tool_discovery_stays_coherent_off_the_async_runtime() {
     let first = &bodies[0];
     assert!(first.is_array());
     for body in &bodies[1..] {
-        assert_eq!(body, first, "concurrent discovery returned divergent catalogs");
+        assert_eq!(
+            body, first,
+            "concurrent discovery returned divergent catalogs"
+        );
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn prewarming_the_catalog_coexists_with_a_concurrent_first_client() {
+    // HS2-MYDN7C warms the AI catalog in a background task at server start so the first
+    // client's startup path finds it already discovered. Warming and a client's own
+    // `/ai-tools` request both take the shared catalog mutex on the blocking pool, so a
+    // client that connects mid-warm must still get a coherent catalog without deadlocking.
+    let (_dir, state) = state();
+    state.prewarm_ai_catalog();
+    let router = app(state);
+    let first = router
+        .clone()
+        .oneshot(authed("GET", "/ai-tools", None))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let first = body_json(first).await;
+    let second = router
+        .oneshot(authed("GET", "/ai-tools", None))
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(second).await,
+        first,
+        "a client racing the background prewarm saw a divergent catalog"
+    );
 }
 
 #[tokio::test]
