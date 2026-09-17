@@ -491,6 +491,9 @@ function openManualModel(target:'settings'|'drive'|'conversation'){
   const connectionId=conversationConnectionId.value;
   const selection=target==='drive'?effectiveDriveSelection():target==='conversation'&&connectionId?conversationAiSelection(connectionId):aiDefaults.value,descriptor=aiTools.value.find(item=>item.id===selection.tool),custom=selection.model&&!descriptor?.models.some(model=>model.id===selection.model)?selection.model:'';
   if(target==='drive')driveOptionsOpen.value=false;
+  // The conversation model popup is a native wa-dropdown (no signal); close the open one so it
+  // does not stay open behind — and after — the modal manual-model dialog (HS2-0W8QD9).
+  else if(target==='conversation')document.querySelectorAll<Control>('.ai-conversation__model-menu[open]').forEach(menu=>menu.hide?.());
   manualModelDialogShown=false;
   manualModelDialog.value={target,providerName:descriptor?.display_name??selection.tool??'this provider',value:custom??''};
   requestAnimationFrame(()=>requestAnimationFrame(()=>{const dialog=document.querySelector<Control>('[data-component="manual-model-dialog"]');dialog?.show?.();dialog?.querySelector<Control>('[name="manual-model"]')?.focus()}));
