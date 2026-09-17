@@ -1,5 +1,9 @@
 .ticket-reader-dialog { position: fixed; inset: remify(24px) max(remify(24px), calc((100vw - remify(1024px)) / 2)); pointer-events: none; --width: min(remify(1024px), calc(100vw - remify(48px))); }
-.ticket-reader-dialog::part(dialog) { height: calc(100vh - remify(48px)); max-height: calc(100vh - remify(48px)); overflow: hidden; pointer-events: auto; transform: translateY(var(--ticket-reader-offset, 0)); transition: transform 140ms ease; }
+/* The active (top) reader sets no --ticket-reader-offset, so this transform is invalid and computes
+   to `none` — leaving `position: fixed` descendants (the attachment menu) viewport-positioned and
+   unclipped instead of relative to a transformed dialog (HS2-EZ10RS). Stacked layers below still
+   translate up by their offset. */
+.ticket-reader-dialog::part(dialog) { height: calc(100vh - remify(48px)); max-height: calc(100vh - remify(48px)); overflow: hidden; pointer-events: auto; transform: translateY(var(--ticket-reader-offset)); transition: transform 140ms ease; }
 .ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }
 .ticket-reader { display: grid; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--wa-color-surface-default); }
 .ticket-reader-dialog:not([data-reader-count="1"]) .ticket-reader { grid-template-rows: auto minmax(0, 1fr); }
