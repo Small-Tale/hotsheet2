@@ -25,6 +25,9 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project' 
       id={PROJECT_TAB_BAR_ID}
       label={label}
       className="project-tab-bar"
+      // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
+      // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
+      activation="manual"
       leading={
         <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
           <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Workspace grid" title="Workspace grid" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={Grid3X3} name="grid-3x3" /></button>
