@@ -204,6 +204,20 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
+test('remote clients pick from the server open-projects list instead of the file picker (HS2-VFNCXG)',async({page})=>{
+  await mockProject(page);
+  await page.route('**/__hotsheet/checkouts',route=>route.request().method()==='GET'?route.fulfill({json:[{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:['/work/demo.hs2']}]}):route.fallback());
+  await page.setViewportSize({width:1100,height:760});await page.goto('/?device=remote');
+  await page.getByRole('button',{name:'Open project'}).click();
+  const remote=page.locator('[data-remote-project-dialog]');await expect(remote).toHaveJSProperty('open',true);
+  await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open',false);
+  const item=remote.locator('[data-action="open-remote-checkout"]');await expect(item).toBeVisible();await expect(item).toContainText('demo');await expect(item).toContainText('/work/demo');
+  await page.waitForTimeout(350);await page.screenshot({path:'/private/tmp/hs2-vfncxg-remote-project-dialog.png'});
+  await item.click();
+  await expect(remote).toHaveJSProperty('open',false);
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+});
+
 test('offers explicit identity-guarded recovery for an unresponsive local server',async({page})=>{
   await page.setViewportSize({width:1100,height:760});await mockProject(page);
   let failOpen=true,recoveryBody:unknown;
