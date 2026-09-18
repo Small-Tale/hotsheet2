@@ -164,7 +164,11 @@ and identity-less legacy entries remain conservatively blocking.
   is restored when the viewport grows back to desktop (HS2-1XCHZT). Because there is no persistent
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
-  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
+  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP). The
+  horizontal project tab strip and the page-header view title also do not fit a narrow column, so on
+  mobile the project tabs are replaced with a project Select (the dashboard mode switcher and
+  Add-project action remain) and the view title is replaced with a view Select that switches ticket
+  views — both reusing the workspace-grid rail's Select controls and wiring (HS2-4C5RM7).
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,

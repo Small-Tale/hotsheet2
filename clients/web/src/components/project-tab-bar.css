@@ -20,3 +20,7 @@
 .project-tab-bar__actions wa-button::part(base) { display: grid; width: remify(32px); height: remify(32px); min-height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-pill); cursor: pointer; line-height: 0; place-items: center; }
 .project-tab-bar__actions wa-button:hover::part(base) { background: var(--wa-color-neutral-fill-normal); }
 .project-tab-bar__actions svg { display: block; width: remify(16px); height: remify(16px); }
+/* Mobile: a plain flex row (no TabBar) with the mode switcher, a flexible project Select, and the
+   Add-project action (HS2-4C5RM7). */
+.project-tab-bar--mobile { display: flex; align-items: center; }
+.project-tab-bar--mobile .project-tab-bar__select, .project-tab-bar--mobile .project-tab-bar__select-empty { flex: 1 1 auto; min-width: 0; }

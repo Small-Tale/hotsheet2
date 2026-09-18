@@ -113,6 +113,49 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
   await expect(inspector).toHaveAttribute('data-collapsed','false');
 });
 
+test('mobile replaces the project tabs and view title with select controls (HS2-4C5RM7)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.route('**/*',async route=>{
+    const request=route.request(),url=new URL(request.url()),path=url.pathname,other=path.includes('other-checkout');
+    if(path==='/__hotsheet/projects/open'){const root=request.postDataJSON().root as string;return route.fulfill({status:201,json:root==='/work/other'?project('other-checkout',root):project('demo-checkout',root)})}
+    // Only the mobile Add-project button reaches the folder chooser here (the first project opens via the dialog form).
+    if(path==='/__hotsheet/folders/choose')return route.fulfill({json:{path:'/work/other'}});
+    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]});
+    if(path.endsWith('/tickets'))return route.fulfill({json:{items:other?[ticket('HS2-OTHER1','started')]:[ticket('HS2-M1','started')],counts:{total:1,queued:1,backlog:0,archive:0,open:1,up_next:0,active:0,started:1,completed_today:0,completion_trend:[0,0,0,0,0,0,0]}}});
+    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
+    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(url.searchParams.get('since')??0),events:[],overflow:false}});
+    if(path.endsWith('/terminals')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
+    return route.continue();
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+
+  // The horizontal project tab strip is replaced by a project Select; no project tabs render.
+  const projectSelect=page.locator('wa-select[name="mobile-project"]');
+  await expect(projectSelect).toBeVisible();
+  await expect(projectSelect).toHaveAttribute('value','demo-checkout');
+  await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(0);
+  await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
+
+  // The page-header view title is replaced by a view Select that switches ticket views.
+  const viewSelect=page.locator('wa-select[name="mobile-view"]');
+  await expect(viewSelect).toBeVisible();
+  await expect(viewSelect).toHaveAttribute('value','all');
+  await viewSelect.click();await viewSelect.locator('wa-option[value="backlog"]').click();
+  await expect(viewSelect).toHaveJSProperty('value','backlog');
+  // Programmatic state → live control (bidirectional binding).
+  await viewSelect.evaluate((node:HTMLElement&{value:string})=>{node.value='all';node.dispatchEvent(new Event('change',{bubbles:true}))});
+  await expect(viewSelect).toHaveJSProperty('value','all');
+
+  // Adding a project opens and activates it; the project Select then switches the active project.
+  await page.locator('.project-tab-bar--mobile').getByRole('button',{name:'Add project'}).click();
+  await expect(projectSelect).toHaveAttribute('value','other-checkout');
+  await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
+  await projectSelect.click();await projectSelect.locator('wa-option[value="demo-checkout"]').click();
+  await expect(projectSelect).toHaveJSProperty('value','demo-checkout');
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+});
+
 test('resizing from mobile back to desktop restores the side-by-side layout (HS2-ZK51WP)',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await openDemoProject(page);

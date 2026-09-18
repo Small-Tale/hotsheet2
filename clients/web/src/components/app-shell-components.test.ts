@@ -163,6 +163,21 @@ describe('application shell components', () => {
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
   });
 
+  it('renders a project Select instead of the tab strip on mobile, keeping the mode switcher and add action (HS2-4C5RM7)', () => {
+    const markup = String(ProjectTabBar({ mobile: true, tabs: [{ id: 'one', name: 'One', location: 'local', selected: false }, { id: 'two', name: 'Two', location: 'local', selected: true }] }));
+    // No kerf TabBar / tablist on mobile — the tabs become a project Select whose value is the active tab.
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain('data-tab-kind="project"');
+    expect(markup).toContain('class="project-tab-bar project-tab-bar--mobile"');
+    expect(markup).toContain('name="mobile-project"');
+    expect(markup).toContain('value="two"');
+    expect(markup).toContain('<wa-option value="one"');
+    expect(markup).toContain('<wa-option value="two"');
+    // The dashboard mode switcher and Add-project action remain.
+    expect(markup).toContain('aria-label="Workspace grid"');
+    expect(markup).toContain('data-action="choose-project"');
+  });
+
   it('shares context-menu actions across project and terminal tabs with Option reversing direction',()=>{
     const project=String(AppTabContextMenu({kind:'project',id:'one',x:10,y:20}));
     const terminal=String(AppTabContextMenu({kind:'terminal',id:'term',x:10,y:20,direction:'left'}));
