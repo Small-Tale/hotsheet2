@@ -2746,6 +2746,7 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
     let mut refreshed_current = false;
+    let mut had_matching_store_checkout = false;
     for checkout in registry.list()? {
         let matches = checkout.stores.iter().any(|candidate| {
             Path::new(candidate)
@@ -2754,6 +2755,7 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
                 == store_path
         });
         if matches {
+            had_matching_store_checkout = true;
             refreshed_current |= Path::new(&checkout.root).canonicalize().ok().as_ref()
                 == cwd.canonicalize().ok().as_ref();
             let mut by_id: BTreeMap<Ulid, Ticket> = BTreeMap::new();
@@ -2773,7 +2775,12 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
             )?;
         }
     }
-    if !refreshed_current && FsStore::open(&store_path).is_ok() {
+    // Only fall back to a cwd-derived worklist when this store backs no registered checkout. When it
+    // does (the standard separate ticket-store + code-checkout setup), the registered checkout above
+    // already got the worklist, and this fallback would otherwise write a second one into the ticket
+    // store itself whenever a mutation runs with cwd resolving to the store (HS2-00Q744). A standalone
+    // store-that-is-also-the-project (no registered checkout) still gets its local worklist here.
+    if !refreshed_current && !had_matching_store_checkout && FsStore::open(&store_path).is_ok() {
         let checkout_root = local_checkout_root(&store_path, cwd);
         let store = FsStore::open(&store_path)?;
         let tickets = indexed_up_next_tickets(&store)?;

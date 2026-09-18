@@ -2984,6 +2984,56 @@ fn mutations_keep_worklist_current_and_inactive_tickets_off_up_next() {
 }
 
 #[test]
+fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
+    // HS2-00Q744: with a separate ticket store + code checkout, a mutation whose cwd resolves to the
+    // store must refresh only the registered checkout's worklist, never write a second one into the
+    // ticket store itself.
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    for dir in [&store, &project, &home] {
+        std::fs::create_dir(dir).unwrap();
+    }
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", &home)
+        .arg("-C")
+        .arg(&store)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    // Register `project` as a checkout of `store` (writes the STORE_LINK + registry entry).
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .env("HOTSHEET_HOME", &home)
+        .arg("link")
+        .arg(&store)
+        .assert()
+        .success();
+    // Run a mutation with cwd = the ticket store (the bug trigger).
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&store)
+        .env("HOTSHEET_HOME", &home)
+        .arg("-C")
+        .arg(&store)
+        .args(["new", "--title", "draft the readme", "--up-next"])
+        .assert()
+        .success();
+    let worklist = hotsheet_ticketing::worklist::CHECKOUT_WORKLIST;
+    assert!(
+        project.join(worklist).exists(),
+        "the registered code checkout still gets its worklist"
+    );
+    assert!(
+        !store.join(worklist).exists(),
+        "the ticket store must not also get a worklist (HS2-00Q744)"
+    );
+}
+
+#[test]
 fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
