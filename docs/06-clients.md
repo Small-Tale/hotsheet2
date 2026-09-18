@@ -158,7 +158,10 @@ and identity-less legacy entries remain conservatively blocking.
   standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
   side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
   from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
-  stay in sync (HS2-ZK51WP).
+  stay in sync (HS2-ZK51WP). On mobile the ticket workspace is also list-only: the column/board
+  view does not fit a single narrow column, so the Columns view toggle (and its overflow entry)
+  is hidden and a persisted board preference renders as a list without being overwritten, so it
+  is restored when the viewport grows back to desktop (HS2-1XCHZT).
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,

@@ -87,6 +87,21 @@ describe('WorkspaceHeader', () => {
     expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }))).toContain('<wa-option value="status"');
   });
 
+  it('hides the columns/board view toggle and its overflow entry when listOnly (mobile) (HS2-1XCHZT)', () => {
+    const desktop = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
+    // Desktop keeps the columns toggle button and its overflow entry.
+    expect(desktop).toContain('data-view-mode="board" aria-label="Columns view"');
+    expect(desktop).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
+    expect(desktop.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(4);
+
+    const mobile = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', listOnly: true }));
+    // Mobile drops the board toggle and its overflow entry, keeping list/notifications/settings.
+    expect(mobile).not.toContain('data-view-mode="board"');
+    expect(mobile).not.toContain('Show Columns View');
+    expect(mobile.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(3);
+    expect(mobile).toContain('data-view-mode="list" aria-label="List view" aria-pressed="true"');
+  });
+
   it('renders the collapsed find state as a single magnifier button', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', notificationCount: 7 }));
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="false"/);

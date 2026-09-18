@@ -36,6 +36,9 @@ export interface WorkspaceHeaderProps {
   selectedTicketsUpNext?: boolean;
   selectedTicketsUpNextEligible?: boolean;
   selectedTicketsMutable?: boolean;
+  /** Mobile: board/column view does not fit a single column, so hide the Columns toggle and its
+   * overflow entry and leave only the list ticket view (HS2-1XCHZT). */
+  listOnly?: boolean;
 }
 
 export function WorkspaceIdentity({ projectName }: { projectName: string }) {
@@ -98,10 +101,10 @@ export function wireWorkspaceOverflowKeyboard(root:Document|HTMLElement):()=>voi
   return()=>{root.removeEventListener('keydown',onKeydown);root.removeEventListener('wa-after-show',onAfterShow)};
 }
 
-function WorkspaceOverflowControls({mode,projectActionsDisabled,ticketActionsDisabled,searchOpen,sort,sortDirection,visibleSortOptions,notificationCount,selectedTicketsUpNext,selectedTicketsUpNextEligible}:{mode:WorkspaceViewMode;projectActionsDisabled:boolean;ticketActionsDisabled:boolean;searchOpen:boolean;sort:WorkspaceSort;sortDirection:WorkspaceSortDirection;visibleSortOptions:ReadonlyArray<{value:WorkspaceSort;label:string}>;notificationCount:number;selectedTicketsUpNext:boolean;selectedTicketsUpNextEligible:boolean}){
+function WorkspaceOverflowControls({mode,projectActionsDisabled,ticketActionsDisabled,searchOpen,sort,sortDirection,visibleSortOptions,notificationCount,selectedTicketsUpNext,selectedTicketsUpNextEligible,listOnly=false}:{mode:WorkspaceViewMode;projectActionsDisabled:boolean;ticketActionsDisabled:boolean;searchOpen:boolean;sort:WorkspaceSort;sortDirection:WorkspaceSortDirection;visibleSortOptions:ReadonlyArray<{value:WorkspaceSort;label:string}>;notificationCount:number;selectedTicketsUpNext:boolean;selectedTicketsUpNextEligible:boolean;listOnly?:boolean}){
   const modes:ReadonlyArray<{value:WorkspaceViewMode;label:string;icon:IconNode;iconName:string}>=[
     {value:'list',label:'Show List View',icon:List,iconName:'list'},
-    {value:'board',label:'Show Columns View',icon:Columns3,iconName:'columns-3'},
+    ...(listOnly?[]:[{value:'board' as const,label:'Show Columns View',icon:Columns3,iconName:'columns-3'}]),
     {value:'notifications',label:`Show Notifications${notificationCount?` (${notificationCount} pending)`:''}`,icon:Bell,iconName:'bell'},
     {value:'settings',label:'Show Settings',icon:Settings,iconName:'settings'},
   ];
@@ -121,7 +124,7 @@ function WorkspaceOverflowControls({mode,projectActionsDisabled,ticketActionsDis
 const localSearchDateExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short'}).format(new Date(2026,8,1));
 const localSearchDateTimeExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(new Date(2026,8,1,11,5));
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false,sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false,sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true,listOnly=false }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
   const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
@@ -130,7 +133,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
   return <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
-        <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
+        {listOnly ? <></> : <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />}
         <ModeButton mode="notifications" current={mode} label="Notifications" icon={Bell} iconName="bell" badge={notificationCount}/>
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
@@ -156,13 +159,13 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
           </>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
-      <WorkspaceOverflowControls mode={mode} projectActionsDisabled={projectActionsDisabled} ticketActionsDisabled={ticketActionsDisabled} searchOpen={searchOpen} sort={sort} sortDirection={sortDirection} visibleSortOptions={visibleSortOptions} notificationCount={notificationCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}/>
+      <WorkspaceOverflowControls mode={mode} projectActionsDisabled={projectActionsDisabled} ticketActionsDisabled={ticketActionsDisabled} searchOpen={searchOpen} sort={sort} sortDirection={sortDirection} visibleSortOptions={visibleSortOptions} notificationCount={notificationCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} listOnly={listOnly}/>
     </div>;
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '',searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false, sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '',searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false, sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true,listOnly=false }: WorkspaceHeaderProps) {
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} searchTokens={searchTokens} searchTagSuggestions={searchTagSuggestions} searchDatePrefix={searchDatePrefix} searchHelpOpen={searchHelpOpen} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} />}
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} searchTokens={searchTokens} searchTagSuggestions={searchTagSuggestions} searchDatePrefix={searchDatePrefix} searchHelpOpen={searchHelpOpen} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} listOnly={listOnly} />}
   </header>;
 }

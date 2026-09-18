@@ -67,6 +67,28 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await page.screenshot({path:'/private/tmp/hs2-zk51wp-mobile-single-column.png',fullPage:true});
 });
 
+test('mobile forces list view and hides the columns toggle, restoring board view on desktop (HS2-1XCHZT)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  await openDemoProject(page);
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+  // Desktop: the columns/board toggle is available and switches to a board.
+  await page.getByRole('button',{name:'Columns view'}).click();
+  await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
+  await expect(page.locator('[data-component="ticket-list"]')).toHaveCount(0);
+
+  // Shrinking below the floor forces the list view and removes the columns toggle entirely.
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole('button',{name:'Columns view'})).toHaveCount(0);
+  await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(page.locator('[data-component="ticket-board"]')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'List view'})).toHaveAttribute('aria-pressed','true');
+
+  // Growing back restores the desktop board preference (it was never overwritten).
+  await page.setViewportSize({width:1280,height:800});
+  await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Columns view'})).toBeVisible();
+});
+
 test('resizing from mobile back to desktop restores the side-by-side layout (HS2-ZK51WP)',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await openDemoProject(page);
