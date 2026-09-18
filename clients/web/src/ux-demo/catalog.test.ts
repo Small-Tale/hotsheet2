@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
@@ -12,7 +15,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'change-evidence-dialog', 'view-navigation', 'command-navigation', 'command-settings-editor', 'drive-control', 'drive-options-menu', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'settings-navigation', 'notification-navigation', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-inspector-skeleton', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'ticket-close-dialog', 'not-working-dialog', 'note-composer', 'note-card', 'ai-conversation', 'ai-tool-settings', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'terminal-operations-sidebar', 'terminal-ticket-rail', 'fixed-aspect-terminal-card', 'terminal-visibility-dialog', 'content-transition', 'app-tab', 'select', 'toolbar', 'list-item', 'list-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker', 'hs1-migration-dialog', 'hs1-migration-banner']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'change-evidence-dialog', 'view-navigation', 'command-navigation', 'command-settings-editor', 'drive-control', 'drive-options-menu', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'settings-navigation', 'notification-navigation', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-inspector-skeleton', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'ticket-close-dialog', 'not-working-dialog', 'bulk-ticket-dialog', 'saved-view-dialog', 'ticket-link-choice-dialog', 'note-composer', 'note-card', 'ai-conversation', 'ai-tool-settings', 'manual-model-dialog', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'terminal-operations-sidebar', 'terminal-ticket-rail', 'fixed-aspect-terminal-card', 'terminal-visibility-dialog', 'content-transition', 'app-tab', 'select', 'toolbar', 'list-item', 'list-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker', 'hs1-migration-dialog', 'hs1-migration-banner', 'keyboard-settings', 'trash-settings']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
@@ -31,6 +34,61 @@ describe('UX demo catalog', () => {
     expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header','value-table']);
     expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
+  });
+
+  // Every production component module must be represented in the UX-demo catalog (by matching
+  // catalog id or exported component name) or be explicitly exempt with a reason. This guards the
+  // "all app-level components are always included" invariant (HS2-3GE5ZA): a newly added component
+  // fails this test until it is either given a catalog entry or classified as a non-catalog helper.
+  it('accounts for every production component in the catalog or a documented exemption', () => {
+    // Helpers, sub-components, context menus, transient banners, and states rendered only within a
+    // demoed parent are not standalone catalog surfaces. Keep each reason accurate.
+    const EXEMPT: Record<string, string> = {
+      'ai-content-label': 'Inline AI attribution label rendered within AIConversation / NoteCard (both demoed).',
+      'app-error': 'Transient top-level error banner, not a standalone catalog surface.',
+      'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',
+      'corrupt-ticket-row': 'Parse-error row variant rendered within TicketList (demoed).',
+      'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',
+      'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',
+      'markdown-preview': 'Markdown rendering helpers used by MarkdownEditor and NoteCard (demoed).',
+      'model-input': 'Model-id sub-input used within AiToolSettings / ManualModelDialog (demoed).',
+      'project-restore-error': 'Project-restore failure state rendered within AppShell (demoed).',
+      'project-tab-context-menu': 'Context menu for ProjectTabBar (demoed via ProjectTabBar).',
+      'provider-icon': 'Provider glyph helper shown within ListItem and provider rows (demoed).',
+      'provider-model-effort-menu': 'Shared Provider/Model/Effort submenu composed into DriveOptionsMenu and AIConversation (demoed).',
+      'repository-setup': 'Initialize/remote setup steps rendered within RepositoryStatusPopover (demoed).',
+      'server-busy-bars': 'Small server-activity indicator composed into headers/banners.',
+      'ticket-duplicate-backlinks': 'Duplicate-of backlink panel rendered within TicketInfoPanel (demoed).',
+      'ticket-empty-state': 'Empty-collection state rendered within TicketList (demoed).',
+      'ticket-field-conflict': 'Concurrent-edit conflict affordance rendered within the inspector editors (demoed).',
+      'ticket-inspector-placeholder': 'No-selection placeholder rendered within the AppShell inspector (demoed).',
+      'ticket-notes': 'Notes section composed into TicketInspector / TicketInfoPanel (demoed).',
+      'ticket-row-context-menu': 'Context menu for TicketRow (demoed via TicketList/TicketBoard).',
+      'ticket-tag-editor': 'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
+      // Standalone dialogs whose demos need heavy fixtures or native-dialog show wiring — deferred, tracked in HS2-QKKS05.
+      'project-close-dialog': 'Standalone dialog; demo deferred (heavy multi-resource fixture) — tracked in HS2-QKKS05.',
+      'conversation-export-dialog': 'Standalone two-step wizard; demo deferred (heavy fixture) — tracked in HS2-QKKS05.',
+      'command-run-dialog': 'Standalone native <dialog> needing showModal wiring per demo-select; demo deferred — tracked in HS2-QKKS05.',
+    };
+    const componentsDir = fileURLToPath(new URL('../components', import.meta.url));
+    const files = readdirSync(componentsDir).filter(name => name.endsWith('.tsx') && !name.endsWith('.test.tsx'));
+    const catalogIds = new Set(flattenCatalog().map(entry => entry.id));
+    const catalogNames = new Set(flattenCatalog().map(entry => entry.name));
+    const unaccounted: string[] = [];
+    for (const file of files) {
+      const base = file.slice(0, -'.tsx'.length);
+      if (catalogIds.has(base)) continue;
+      const source = readFileSync(`${componentsDir}/${file}`, 'utf8');
+      const exports = [...source.matchAll(/export (?:function|const) ([A-Z]\w*)/g)].map(match => match[1]);
+      if (exports.some(name => catalogNames.has(name))) continue;
+      if (!EXEMPT[base]) unaccounted.push(base);
+    }
+    expect(unaccounted, 'components neither cataloged nor exempt (add a ux-demo entry or an exemption reason)').toEqual([]);
+    // No stale exemptions: every exempt module still exists and is genuinely not otherwise cataloged.
+    for (const base of Object.keys(EXEMPT)) {
+      expect(files, `exempt component ${base} no longer exists`).toContain(`${base}.tsx`);
+      expect(catalogIds.has(base), `exempt component ${base} is now cataloged by id — remove the exemption`).toBe(false);
+    }
   });
 
   it('records the planned ProjectSidebar composition', () => {

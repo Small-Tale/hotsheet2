@@ -61,6 +61,9 @@ export const demoCatalog: DemoCategory[] = [
       demo('attachment-gallery', 'AttachmentGallery', 'Full-screen keyboard, arrow, and swipe image viewer.', 'feature-floor', true),
       demo('ticket-close-dialog', 'TicketCloseDialog', 'Structured close outcomes with duplicate-target search and validation.', 'feature-floor', true, ['select', 'list-item']),
       demo('not-working-dialog', 'NotWorkingDialog', 'Completed-ticket verification failure report with notes and evidence.', 'feature-floor', true, ['pending-attachment-picker']),
+      demo('bulk-ticket-dialog', 'BulkTicketDialog', 'Confirm bulk tag, delete, and empty-trash actions across selected tickets.', 'feature-floor', true),
+      demo('saved-view-dialog', 'SavedViewDialog', 'Create or rename a saved ticket view from the current query.', 'feature-floor', true),
+      demo('ticket-link-choice-dialog', 'TicketLinkChoiceDialog', 'Disambiguate a ticket reference that matches more than one ticket.', 'feature-floor', true, ['list-item']),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
       demo('note-composer', 'NoteComposer', 'Create or cancel a provider-backed ticket note.', 'feature-floor', true),
@@ -72,6 +75,7 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'ai', name: 'AI and attention', demos: [
     demo('ai-conversation', 'AIConversation', 'Multi-turn streamed AI conversation with inline permissions and interruption.', 'feature-floor', true, ['permission-request','drive-control']),
     demo('ai-tool-settings', 'AiToolSettings', 'Machine-local default AI provider, model, and effort discovered from plugins.', 'feature-floor', true, ['select']),
+    demo('manual-model-dialog', 'ManualModelDialog', 'Enter an exact model identifier a provider accepts.', 'feature-floor', true),
     demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
     demo('permission-request', 'PermissionRequestCard', 'Human approval with timeout, project identity, and supported decision scopes.', 'feature-floor', true),
     demo('command-button', 'CommandButton', 'Configured safe command action.', 'later'),
@@ -108,6 +112,8 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'setup', name: 'Setup and settings', demos: [
     demo('hs1-migration-dialog', 'Hs1MigrationDialog', 'Detected Hot Sheet 1 source details and destination-only import flow.', 'feature-floor', true, ['value-table']),
     demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Non-blocking access to a dismissed Hot Sheet 1 import.', 'feature-floor', true),
+    demo('keyboard-settings', 'KeyboardSettings', 'Grouped reference and rebinding of documented keyboard shortcuts.', 'feature-floor', true),
+    demo('trash-settings', 'TrashSettings', 'Trash retention window and empty-trash entry point.', 'feature-floor', true),
     demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),
     demo('add-project-flow', 'AddProjectFlow', 'Discover or connect a local or remote project.'),
     demo('settings-window', 'SettingsWindow', 'Effective-first scoped settings.', 'later'),

@@ -54,15 +54,21 @@ import {
 
 import type { CommandDropTarget } from '../command-order';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
+import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
+import { KeyboardSettings } from '../components/keyboard-settings';
+import { ManualModelDialog } from '../components/manual-model-dialog';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
+import { SavedViewDialog } from '../components/saved-view-dialog';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
+import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
+import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
@@ -512,6 +518,15 @@ function demoContent(item: DemoDefinition) {
     query: 'UI stability',
     candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing', projectId: 'hotsheet2', projectName: 'Hot Sheet 2', connectionId: 'hs2-git', nativeId: 'target', qualifiedId: 'hs2-git:target' }],
   }}/>;
+  if (item.id === 'bulk-ticket-dialog') return <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />;
+  if (item.id === 'saved-view-dialog') return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
+  if (item.id === 'ticket-link-choice-dialog') return <TicketLinkChoiceDialog choice={{ kind: 'choose', reference: { raw: 'HS2-DEMO01', slug: 'HS2-DEMO01' }, matches: [
+    { projectId: 'hotsheet2', projectName: 'Hot Sheet 2', ticketId: '01', qualifiedId: 'hs2-git:01', connectionId: 'hs2-git', slug: 'HS2-DEMO01', title: 'Use real project tickets', status: 'started' },
+    { projectId: 'kerf', projectName: 'Kerf', ticketId: 'k1', qualifiedId: 'kerf-git:k1', connectionId: 'kerf-git', slug: 'HS2-DEMO01', title: 'Mirror the ticket reference in Kerf', status: 'not_started' },
+  ] }} />;
+  if (item.id === 'manual-model-dialog') return <ManualModelDialog state={{ target: 'settings', providerName: 'Codex', value: 'gpt-5.6-sol-preview' }} />;
+  if (item.id === 'keyboard-settings') return <KeyboardSettings overrides={{}} apple={true} />;
+  if (item.id === 'trash-settings') return <TrashSettings days={14} />;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
