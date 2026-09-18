@@ -1796,6 +1796,20 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await page.getByRole('button',{name:'Cross-project stats'}).click();await expect(page.getByRole('heading',{name:'Cross-project stats'})).toBeVisible();
 });
 
+test('keeps the priority select open when opened right after creating a ticket (HS2-43F14D)',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const launcher=page.getByRole('button',{name:'New ticket…'});await launcher.click();const form=page.locator('[data-action="create-ticket-form"]');
+  await form.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Race check';node.dispatchEvent(new Event('input',{bubbles:true}))});
+  await form.getByRole('button',{name:'Create ticket'}).click();
+  const inspector=page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),priority=inspector.locator('wa-select[name="inspector-priority"]');
+  await priority.click();
+  // The post-creation auto-focus of the details editor must not steal focus and close a popup the
+  // user opened within its ~300ms window (HS2-43F14D). Wait past that window and assert it stays open.
+  await page.waitForTimeout(450);
+  await expect(priority).toHaveJSProperty('open',true);
+  await page.screenshot({path:'/private/tmp/hs2-43f14d-priority-open-after-create.png'});
+});
+
 test('focuses the ticket title every time the real composer expands',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const launcher=page.getByRole('button',{name:'New ticket…'});await launcher.click();const title=page.locator('wa-input[name="new-ticket-title"]');await expect(title).toBeFocused();await page.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(title).toBeFocused();
 });
