@@ -17,10 +17,10 @@ describe('project dialog lifecycle', () => {
     expect(source).not.toMatch(/delegate\(document\.body,'wa-request-close','\[data-ticket-source-setup-dialog\]'/);
   });
 
-  it('routes the project-tab plus directly through the native chooser', () => {
+  it('routes the project-tab plus through the native chooser on same-device clients and the open-projects list on remote clients (HS2-VFNCXG)', () => {
     const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
 
-    expect(source).toMatch(/delegate\(document\.body,'click','\[data-action="choose-project"\]',\(\)=>\{void chooseAndOpenProject\(\)\}\)/);
+    expect(source).toMatch(/delegate\(document\.body,'click','\[data-action="choose-project"\]',\(\)=>\{if\(isRemoteClient\(\)\)void openRemoteProjectDialog\(\);else void chooseAndOpenProject\(\)\}\)/);
     expect(source).toMatch(/if\(result\.path\)await openProject\(result\.path\)/);
   });
 });
