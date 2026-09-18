@@ -68,9 +68,9 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .app-error > button:hover { background:color-mix(in srgb,currentColor 16%,transparent); }
 .app-error > button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
 .app-error > button svg { width:remify(16px); height:remify(16px); }
-.ticket-inspector-transition { position: relative; height: 100%; pointer-events: none; }
-.ticket-inspector-transition > [data-component="ticket-inspector"] { opacity: .72; }
-.ticket-inspector-transition::after { position: absolute; top: remify(4.8px); left: 50%; padding: remify(3.2px) remify(8px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); content: 'Loading ticket…'; font-size: var(--wa-font-size-2xs); transform: translateX(-50%); }
+/* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
+   (ticket-inspector-skeleton.css), which replaced the earlier dimmed-stale-inspector overlay
+   (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
 .project-settings { width: 100%; max-width: remify(864px); margin: 0 auto; padding: remify(24px); }
 .project-settings h2 { margin-top: 0; }
 .project-settings__source { display: grid; gap: remify(5.6px); margin: remify(16px) 0; padding: remify(16px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(12px); background: var(--wa-color-surface-default); }
