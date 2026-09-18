@@ -1700,6 +1700,13 @@ test('exercises the application-shell component slice and responsive composition
   await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('.project-tab-bar');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  // The tabs strip does not stretch, so the trailing Add-project (+) button follows the tabs instead of
+  // being pushed to the far right (HS2-HV52WR).
+  expect(await tabBar.locator('.kui-tab-bar__tabs').evaluate(n => getComputedStyle(n).flexGrow)).toBe('0');
+  expect(await page.evaluate(() => {
+    const t = document.querySelector('.project-tab-bar .kui-tab-bar__tabs'), p = document.querySelector('.project-tab-bar__actions [data-action="choose-project"]');
+    return t && p ? p.getBoundingClientRect().left - t.getBoundingClientRect().right : -1;
+  })).toBeLessThan(24);
   await expect(tabBar.getByRole('tab',{name:/Hot Sheet 2/}).locator('.project-tab__work')).toHaveCount(0);
   await expect(tabBar.getByRole('tab',{name:/Small Tale Website/}).locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 1 active ticket');
   await expect(tabBar.getByRole('tab',{name:/Internal API/}).locator('.project-tab__work-count')).toHaveText('99+');
