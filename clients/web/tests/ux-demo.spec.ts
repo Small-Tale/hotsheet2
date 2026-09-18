@@ -2386,3 +2386,24 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
   expect(geometry.within).toBe(true);
   await page.locator('.markdown-editor').screenshot({path:'/private/tmp/claude-501/-Users-westphal-Documents-hotsheet2/88cd2d15-f2a9-4f29-8bb4-c672b5069c22/scratchpad/0WD3YK-markdown-preview-focus-inset.png'});
 });
+
+test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('/ux-demo?component=project-close-dialog');
+  const projectClose=page.locator('[data-component="project-close-dialog"]');
+  await expect(projectClose).toHaveJSProperty('open',true);
+  await expect(projectClose).toHaveAttribute('data-has-resources','true');
+  // The selected AI-chat resource renders its embedded conversation preview.
+  await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
+  await expect(projectClose).toContainText('Kerf');
+  await page.screenshot({path:'/private/tmp/hs2-qkks05-project-close-dialog.png',fullPage:true});
+
+  await page.goto('/ux-demo?component=conversation-export-dialog');
+  const exportDialog=page.locator('[data-component="conversation-export-dialog"]');
+  await expect(exportDialog).toHaveJSProperty('open',true);
+  // Fixture opens on step 2 (destination + format + bundle options).
+  await expect(exportDialog).toHaveAttribute('data-step','2');
+  await expect(exportDialog).toContainText('Bundle contents');
+  await exportDialog.evaluate(node=>Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished)));
+  await page.screenshot({path:'/private/tmp/hs2-qkks05-conversation-export-dialog.png',fullPage:true});
+});

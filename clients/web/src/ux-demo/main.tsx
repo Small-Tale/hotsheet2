@@ -56,8 +56,10 @@ import type { CommandDropTarget } from '../command-order';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
+import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { ManualModelDialog } from '../components/manual-model-dialog';
+import { ProjectCloseDialog } from '../components/project-close-dialog';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { SavedViewDialog } from '../components/saved-view-dialog';
@@ -518,6 +520,30 @@ function demoContent(item: DemoDefinition) {
     query: 'UI stability',
     candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing', projectId: 'hotsheet2', projectName: 'Hot Sheet 2', connectionId: 'hs2-git', nativeId: 'target', qualifiedId: 'hs2-git:target' }],
   }}/>;
+  if (item.id === 'project-close-dialog') return <ProjectCloseDialog state={{
+    projectId: 'kerf', projectName: 'Kerf',
+    resources: [
+      { kind: 'ai-chat', id: 'codex-main', name: 'Codex', tool: 'codex', model: 'gpt-5.6-sol-preview', effort: 'high', progress: 'Reviewing the resize arbiter…',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Refactor the terminal resize arbiter to remove the hysteresis race.', sequence: 0 },
+          { id: 'm2', role: 'assistant', content: 'I split the focus-follow decision from the size claim and added a bounded settle window, so a late viewport claim can no longer shrink an already-committed grid.', status: 'completed', sequence: 1, usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
+        ],
+        activity: [{ id: 'a1', tool: 'codex', kind: 'read', summary: 'Read terminal-sizing.ts', importance: 'normal', sequence: 2 }],
+        totalUsage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
+      { kind: 'terminal', id: 'tests', name: 'Tests', cwd: '~/code/kerf', progress: 0.6 },
+    ],
+    selectedKey: 'ai-chat:codex-main',
+  }} />;
+  if (item.id === 'conversation-export-dialog') return <ConversationExportDialog state={{
+    source: { conversationId: 'conv-1', tool: 'codex', sessionId: 'sess-42', projectId: 'kerf', model: 'gpt-5.6-sol-preview', effort: 'high', resumable: true },
+    messages: [
+      { id: 'm1', role: 'user', content: 'Refactor the terminal resize arbiter to remove the hysteresis race.', sequence: 0 },
+      { id: 'm2', role: 'assistant', content: 'I split the focus-follow decision from the size claim and added a bounded settle window.', status: 'completed', sequence: 1, usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
+      { id: 'm3', role: 'user', content: 'Add a regression test for the late-claim case.', sequence: 2 },
+    ],
+    draft: { scope: { kind: 'all' }, writeMode: 'create', bundle: { includeAttachments: true, includeMedia: true, includeSummary: true }, destination: { selectionToken: 'sel-token', displayPath: '~/exports/kerf-resize-arbiter', kind: 'directory' } },
+    step: 2, summaryAvailable: true,
+  }} />;
   if (item.id === 'bulk-ticket-dialog') return <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />;
   if (item.id === 'saved-view-dialog') return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
   if (item.id === 'ticket-link-choice-dialog') return <TicketLinkChoiceDialog choice={{ kind: 'choose', reference: { raw: 'HS2-DEMO01', slug: 'HS2-DEMO01' }, matches: [
