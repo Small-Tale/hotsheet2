@@ -1098,7 +1098,8 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await category.click();
   const selectedOption = category.locator('wa-option[value="task"]');
   await expect(selectedOption).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
-  await expect(selectedOption).toHaveCSS('color', 'rgb(30, 110, 244)');
+  // Brand-on-quiet label uses kerf's AA-compliant #1a5dcf on the quiet fill (kerf 5.0.0-beta.15, HS2-228M1N).
+  await expect(selectedOption).toHaveCSS('color', 'rgb(26, 93, 207)');
   await expect(selectedOption.locator('.kui-select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
