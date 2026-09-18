@@ -81,6 +81,10 @@ describe('TicketRow', () => {
     expect(list).toContain('data-presentation="list"');
     expect(column).toContain('ticket-list-row--column');
     expect(column).toContain('data-presentation="column"');
+    // The board/column view groups cards by status, so the per-card status badge is redundant there and
+    // is shown only in list presentation (HS2-RESZJP).
+    expect(list).toContain('data-component="status-badge"');
+    expect(column).not.toContain('data-component="status-badge"');
     expect(column.match(/ticket-list-row__category/g)).toHaveLength(2);
     expect(column.indexOf('ticket-list-row__category')).toBeGreaterThan(column.indexOf('ticket-list-row__identity'));
     expect(column.indexOf('ticket-list-row__category')).toBeLessThan(column.indexOf('ticket-list-row__slug'));

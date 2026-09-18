@@ -129,7 +129,7 @@ export function TicketRow(raw: TicketRowProps) {
             </div>
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" className="ticket-list-row__up-next-icon" /></button>}
-              <StatusBadge status={props.status} compact />
+              {props.presentation === 'list' && <StatusBadge status={props.status} compact />}
               {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
               {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
