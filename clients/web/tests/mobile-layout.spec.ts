@@ -14,7 +14,8 @@ async function openDemoProject(page:import('@playwright/test').Page){
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project('demo-checkout',request.postDataJSON().root as string)});
     if(path==='/__hotsheet/folders/choose')return route.fulfill({json:{path:'/work/demo'}});
     if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]});
-    if(/\/tickets\/HS2-M1$/.test(path))return route.fulfill({json:{ticket:{...ticket('HS2-M1','started'),category:'bug',priority:'default',details:'',notes:[],attachments:[],created_at:'2026-09-01T00:00:00Z',updated_at:'2026-09-14T00:00:00Z',concurrency_token:'t1'}}});
+    // Flattened ticket + store, matching GET /checkouts/{ref}/tickets/{id} (the client wraps it itself).
+    if(/\/tickets\/HS2-M1$/.test(path))return route.fulfill({json:{store:'git-local',...ticket('HS2-M1','started'),category:'bug',priority:'default',details:'',blocked_reason:null,notes:[],attachments:[],created_at:'2026-09-01T00:00:00Z',updated_at:'2026-09-14T00:00:00Z',concurrency_token:'t1'}});
     if(path.endsWith('/tickets'))return route.fulfill({json:{items:[ticket('HS2-M1','started')],counts:{total:1,queued:1,backlog:0,archive:0,open:1,up_next:0,active:0,started:1,completed_today:0,completion_trend:[0,0,0,0,0,0,0]}}});
     if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
     if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(url.searchParams.get('since')??0),events:[],overflow:false}});
@@ -87,6 +88,29 @@ test('mobile forces list view and hides the columns toggle, restoring board view
   await page.setViewportSize({width:1280,height:800});
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(page.getByRole('button',{name:'Columns view'})).toBeVisible();
+});
+
+test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to the list (HS2-N7RPFP)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await openDemoProject(page);
+  const inspector=page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  const scrim=page.locator('.app-shell__scrim');
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+  // Inspector starts closed on mobile.
+  await expect(inspector).toHaveAttribute('data-collapsed','true');
+
+  // Tapping the ticket row auto-opens the inspector overlay and shows the ticket.
+  await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
+  await expect(inspector).toHaveAttribute('data-collapsed','false');
+  await expect(scrim).toBeVisible();
+  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+
+  // Tap-away on the scrim returns to the list; the selection persists so tapping reopens it.
+  await scrim.click({position:{x:10,y:400}});
+  await expect(inspector).toHaveAttribute('data-collapsed','true');
+  await expect(scrim).toHaveCount(0);
+  await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
+  await expect(inspector).toHaveAttribute('data-collapsed','false');
 });
 
 test('resizing from mobile back to desktop restores the side-by-side layout (HS2-ZK51WP)',async({page})=>{

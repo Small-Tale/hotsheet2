@@ -39,3 +39,16 @@ export function toggleMobileSidebar(state: MobileOverlayState): MobileOverlaySta
 export function closeMobileOverlay(state: MobileOverlayState, which: keyof MobileOverlayState): MobileOverlayState {
   return { ...state, [which]: false };
 }
+
+/** Whether tapping a ticket row should auto-open the inspector overlay (HS2-N7RPFP). Only on mobile,
+ * only for a plain tap in the main workspace list — a range/toggle multi-select tap or a tap inside
+ * the terminal ticket rail must not hijack the inspector. */
+export function shouldAutoOpenInspectorOnTap(input: {
+  mobile: boolean;
+  rail: boolean;
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+}): boolean {
+  return input.mobile && !input.rail && !input.shiftKey && !input.metaKey && !input.ctrlKey;
+}

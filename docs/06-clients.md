@@ -161,7 +161,10 @@ and identity-less legacy entries remain conservatively blocking.
   stay in sync (HS2-ZK51WP). On mobile the ticket workspace is also list-only: the column/board
   view does not fit a single narrow column, so the Columns view toggle (and its overflow entry)
   is hidden and a persisted board preference renders as a list without being overwritten, so it
-  is restored when the viewport grows back to desktop (HS2-1XCHZT).
+  is restored when the viewport grows back to desktop (HS2-1XCHZT). Because there is no persistent
+  side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
+  overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
+  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,

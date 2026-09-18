@@ -6,6 +6,7 @@ import {
   MOBILE_BREAKPOINT,
   MOBILE_OVERLAYS_CLOSED,
   openMobileOverlay,
+  shouldAutoOpenInspectorOnTap,
   toggleMobileSidebar,
 } from './mobile-layout';
 
@@ -32,6 +33,16 @@ describe('mobile layout', () => {
   it('closes a single overlay without opening the other', () => {
     expect(closeMobileOverlay({ sidebar: false, inspector: true }, 'inspector')).toEqual(MOBILE_OVERLAYS_CLOSED);
     expect(closeMobileOverlay({ sidebar: true, inspector: false }, 'sidebar')).toEqual(MOBILE_OVERLAYS_CLOSED);
+  });
+
+  it('auto-opens the inspector only on a plain mobile workspace tap (HS2-N7RPFP)', () => {
+    const base = { mobile: true, rail: false, shiftKey: false, metaKey: false, ctrlKey: false };
+    expect(shouldAutoOpenInspectorOnTap(base)).toBe(true);
+    expect(shouldAutoOpenInspectorOnTap({ ...base, mobile: false })).toBe(false); // desktop keeps the side inspector
+    expect(shouldAutoOpenInspectorOnTap({ ...base, rail: true })).toBe(false); // terminal ticket rail
+    expect(shouldAutoOpenInspectorOnTap({ ...base, shiftKey: true })).toBe(false); // range multi-select
+    expect(shouldAutoOpenInspectorOnTap({ ...base, metaKey: true })).toBe(false); // toggle multi-select
+    expect(shouldAutoOpenInspectorOnTap({ ...base, ctrlKey: true })).toBe(false);
   });
 
   it('walks a realistic open → switch → dismiss sequence', () => {
