@@ -2051,10 +2051,54 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toBeVisible();await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(205);await expect(more).toHaveCount(0);expect(requests.some(url=>url.searchParams.get('cursor')==='after-200'&&url.searchParams.get('page_size')==='200')).toBe(true);await page.screenshot({path:'/private/tmp/hs2-q9yq2b-load-more.png',fullPage:true});
 });
 
-test('keeps column pagination reachable and shows absolute lifecycle totals beyond loaded rows',async({page})=>{
-  await mockProject(page);const firstPage=Array.from({length:200},(_,index)=>({...row,id:`board-page-${index}`,native_id:`board-page-${index}`,qualified_id:`git-local:board-page-${index}`,slug:`HS2-BP${String(index).padStart(5,'0')}`,title:`Board paged ticket ${index+1}`,status:'not_started',up_next:false})),later=Array.from({length:5},(_,index)=>({...row,id:`board-page-${200+index}`,native_id:`board-page-${200+index}`,qualified_id:`git-local:board-page-${200+index}`,slug:`HS2-BP${String(200+index).padStart(5,'0')}`,title:`Board paged ticket ${201+index}`,status:'not_started',up_next:false})),requests:URL[]=[];
-  await page.route('**/checkouts/demo-checkout/tickets*',route=>{const request=route.request(),url=new URL(request.url());if(request.method()!=='GET')return route.fallback();requests.push(url);const counts={total:275,queued:260,backlog:10,archive:5,open:225,up_next:0,active:0,started:20,verified:15,completed_today:0};return route.fulfill({json:url.searchParams.get('cursor')?{items:[firstPage.at(-1),...later],counts}:{items:firstPage,next_cursor:'after-200',counts}})});
-  await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();const board=page.locator('[data-component="ticket-board"]'),more=board.getByRole('button',{name:'Load more tickets'}),owner=more.locator('xpath=ancestor::*[@data-component="ticket-board-column"]');await expect(owner).toHaveAttribute('data-column-id','not-started');await expect(more).not.toBeInViewport();await expect(board.getByRole('region',{name:'Not Started column'}).getByLabel('205 tickets')).toBeVisible();await expect(board.getByRole('region',{name:'Started column'}).getByLabel('20 tickets')).toBeVisible();await expect(board.getByRole('region',{name:'Completed column'}).getByLabel('20 tickets')).toBeVisible();await expect(board.getByRole('region',{name:'Verified column'}).getByLabel('15 tickets')).toBeVisible();await more.scrollIntoViewIfNeeded();await expect(more).toBeInViewport();await page.screenshot({path:'/private/tmp/hs2-x3k7vz-column-load-more-wide.png',fullPage:true});await page.setViewportSize({width:760,height:700});await more.scrollIntoViewIfNeeded();await page.screenshot({path:'/private/tmp/hs2-x3k7vz-column-load-more-narrow.png',fullPage:true});await page.setViewportSize({width:1440,height:900});await more.click();await expect(page.locator('[data-ticket-slug="HS2-BP00204"]')).toBeVisible();await expect(more).toHaveCount(0);expect(requests.some(url=>url.searchParams.get('cursor')==='after-200'&&url.searchParams.get('page_size')==='200')).toBe(true);await page.screenshot({path:'/private/tmp/hs2-q9yq2b-column-load-more-after.png',fullPage:true});
+test('paginates each board column independently so a short column is not starved by a long one (HS2-8NBGBX)',async({page})=>{
+  await mockProject(page);
+  // Whole-checkout totals: Not Started 205 (open-started), Started 20, Completed 20 (queued-open-verified), Verified 15.
+  const counts={total:275,queued:260,backlog:10,archive:5,open:225,up_next:0,active:0,started:20,verified:15,completed_today:0};
+  const make=(status:string,prefix:string,count:number,from=0)=>Array.from({length:count},(_,i)=>({...row,id:`${prefix}-${from+i}`,native_id:`${prefix}-${from+i}`,qualified_id:`git-local:${prefix}-${from+i}`,slug:`HS2-${prefix}${String(from+i).padStart(3,'0')}`,title:`${status} ticket ${from+i+1}`,status,up_next:false}));
+  const notStarted=make('not_started','NS',205),started=make('started','ST',20),completed=make('completed','CP',20),verified=make('verified','VF',15);
+  const statusRequests:string[]=[];
+  await page.route('**/checkouts/demo-checkout/tickets*',route=>{const request=route.request(),url=new URL(request.url());if(request.method()!=='GET')return route.fallback();
+    const status=url.searchParams.get('status'),cursor=url.searchParams.get('cursor');
+    if(status){statusRequests.push(cursor?`${status}:${cursor}`:status);
+      // Per-column status page. Not Started paginates (100 then the rest); the others fit in one page.
+      if(status==='not_started')return route.fulfill({json:cursor==='ns-100'?{items:notStarted.slice(100),counts}:{items:notStarted.slice(0,100),next_cursor:'ns-100',counts}});
+      if(status==='started')return route.fulfill({json:{items:started,counts}});
+      if(status==='completed')return route.fulfill({json:{items:completed,counts}});
+      if(status==='verified')return route.fulfill({json:{items:verified,counts}});
+    }
+    // Initial global page arrives starved: mostly Completed, only a couple Not Started (the reported bug).
+    return route.fulfill({json:{items:[...notStarted.slice(0,2),...started.slice(0,4),...completed.slice(0,10),...verified.slice(0,5)],next_cursor:'after-200',counts}});
+  });
+  await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();
+  const board=page.locator('[data-component="ticket-board"]');
+  const column=(name:string)=>board.getByRole('region',{name:`${name} column`,exact:true});
+  const columnMore=(name:string)=>column(name).getByRole('button',{name:'Load more tickets'});
+  // Every column shows its absolute lifecycle total even though few rows loaded.
+  await expect(column('Not Started').getByLabel('205 tickets')).toBeVisible();
+  await expect(column('Started').getByLabel('20 tickets')).toBeVisible();
+  await expect(column('Completed').getByLabel('20 tickets')).toBeVisible();
+  await expect(column('Verified').getByLabel('15 tickets')).toBeVisible();
+  // Each partial column offers its OWN Load more — the short Not Started column is not starved.
+  await expect(columnMore('Not Started')).toBeVisible();
+  await expect(columnMore('Started')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-8nbgbx-per-column-load-more-wide.png',fullPage:true});
+
+  // Loading Not Started pages ONLY its status; the others are untouched.
+  await columnMore('Not Started').scrollIntoViewIfNeeded();await columnMore('Not Started').click();
+  await expect(page.locator('[data-ticket-slug="HS2-NS050"]')).toBeVisible();
+  expect(statusRequests).toContain('not_started');
+  expect(statusRequests).not.toContain('started');
+  await expect(columnMore('Not Started')).toBeVisible(); // 100 of 205 — still more
+  await expect(columnMore('Started')).toBeVisible(); // untouched
+
+  // A different column pages independently.
+  await columnMore('Started').scrollIntoViewIfNeeded();await columnMore('Started').click();
+  await expect(page.locator('[data-ticket-slug="HS2-ST019"]')).toBeVisible();
+  expect(statusRequests).toContain('started');
+  await expect(columnMore('Started')).toHaveCount(0); // 20 of 20 — fully loaded, no button
+  await expect(columnMore('Not Started')).toBeVisible(); // Not Started unaffected by Started paging
+  await page.screenshot({path:'/private/tmp/hs2-8nbgbx-per-column-load-more-after.png',fullPage:true});
 });
 
 test('stores the shell-history inheritance opt-out locally and applies it only to new terminals',async({page})=>{

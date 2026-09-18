@@ -72,10 +72,18 @@ describe('TicketBoard', () => {
     expect(markup).toContain('1 of 300 loaded');
   });
 
-  it('places the continuation after the final loaded row in its owning column',()=>{
-    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201}],continuation:{loading:false,columnId:'active'}}));
+  it('places each column continuation after that column final loaded row (HS2-8NBGBX)',()=>{
+    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201,continuation:{loading:false}}]}));
     expect(markup).toContain('ticket-board-column__more');expect(markup).toContain('data-action="load-next-ticket-page"');expect(markup).toContain('Load more tickets');expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-board-column__more'));
-    expect(String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[]}],continuation:{loading:true,columnId:'active'}}))).toContain('Loading…');
+    expect(String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[],continuation:{loading:true}}]}))).toContain('Loading…');
+  });
+
+  it('paginates each column independently — a short column offers Load more while a long one does not (HS2-8NBGBX)',()=>{
+    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[ticket],totalCount:14,continuation:{loading:false}},{id:'completed',title:'Completed',tickets:[ticket],totalCount:1}]}));
+    // The short Not Started column gets its own Load more; the fully-loaded Completed column does not.
+    expect(markup.match(/ticket-board-column__more/g)).toHaveLength(1);
+    const notStarted=markup.slice(markup.indexOf('data-column-id="not-started"'),markup.indexOf('data-column-id="completed"'));
+    expect(notStarted).toContain('ticket-board-column__more');
   });
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {

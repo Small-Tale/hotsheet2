@@ -516,6 +516,14 @@ and identity-less legacy entries remain conservatively blocking.
   The aggregate also carries the exact Verified total, allowing Queue columns to derive
   absolute Not Started, Started, Completed, and Verified counts rather than capping their
   headings at the currently loaded page; Backlog and Archive use their absolute aggregates.
+  The **column (board) view paginates per column** (HS2-8NBGBX): each status column loads more with its
+  own status-filtered query and cursor, so a long column (e.g. Completed) never starves a short one and
+  every column that has fewer loaded rows than its absolute total offers its own Load more control —
+  rather than a single global cursor whose one continuation landed in whichever column happened to hold
+  the last loaded row. The loaded rows still live in one flat union, so selection, the inspector,
+  mutations, and cross-column drag are unaffected. A background refresh restores each column the user has
+  paged past the baseline back to its loaded length in one commit, so an external change does not reset a
+  column's pagination (single-collection Backlog/Archive/Trash boards and search keep the global cursor).
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
   Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do
