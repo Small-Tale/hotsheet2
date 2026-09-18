@@ -524,6 +524,10 @@ and identity-less legacy entries remain conservatively blocking.
   mutations, and cross-column drag are unaffected. A background refresh restores each column the user has
   paged past the baseline back to its loaded length in one commit, so an external change does not reset a
   column's pagination (single-collection Backlog/Archive/Trash boards and search keep the global cursor).
+  A column pages an *ordered list* of statuses, not just one: when the **Hide Verified column** setting
+  merges Verified into Completed, that column exhausts its `completed` stream and then continues into
+  `verified`, so verified rows beyond the initial global page stay reachable through its own Load more
+  and the column can reach its full done total (HS2-F2N4ZN).
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
   Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do

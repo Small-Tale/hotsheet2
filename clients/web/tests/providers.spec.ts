@@ -2118,6 +2118,55 @@ test('paginates each board column independently so a short column is not starved
   await page.screenshot({path:'/private/tmp/hs2-8nbgbx-per-column-load-more-after.png',fullPage:true});
 });
 
+test('paginates the merged Completed column through completed then verified when Verified is hidden (HS2-F2N4ZN)',async({page})=>{
+  await mockProject(page);
+  // Hide the Verified column so Completed absorbs verified rows.
+  await page.addInitScript(()=>{localStorage.setItem('hotsheet.project.demo-checkout.hide-verified-column','true')});
+  // Whole-checkout totals: open 10 (5 not_started + 5 started); merged Completed = queued-open = 110 (80 completed + 30 verified).
+  const counts={total:130,queued:120,backlog:0,archive:0,open:10,up_next:0,active:0,started:5,verified:30,completed_today:0};
+  const make=(status:string,prefix:string,count:number,from=0)=>Array.from({length:count},(_,i)=>({...row,id:`${prefix}-${from+i}`,native_id:`${prefix}-${from+i}`,qualified_id:`git-local:${prefix}-${from+i}`,slug:`HS2-${prefix}${String(from+i).padStart(3,'0')}`,title:`${status} ticket ${from+i+1}`,status,up_next:false}));
+  const notStarted=make('not_started','NS',5),started=make('started','ST',5),completed=make('completed','CP',80),verified=make('verified','VF',30);
+  const statusRequests:string[]=[];
+  await page.route('**/checkouts/demo-checkout/tickets*',route=>{const request=route.request(),url=new URL(request.url());if(request.method()!=='GET')return route.fallback();
+    const status=url.searchParams.get('status'),cursor=url.searchParams.get('cursor');
+    if(status){statusRequests.push(cursor?`${status}:${cursor}`:status);
+      if(status==='not_started')return route.fulfill({json:{items:notStarted,counts}});
+      if(status==='started')return route.fulfill({json:{items:started,counts}});
+      // Both done in one page (no next_cursor), so each stream exhausts and the walk advances.
+      if(status==='completed')return route.fulfill({json:{items:completed,counts}});
+      if(status==='verified')return route.fulfill({json:{items:verified,counts}});
+    }
+    // Starved initial global page: a handful of each, so the merged column starts partial.
+    return route.fulfill({json:{items:[...notStarted.slice(0,2),...started.slice(0,2),...completed.slice(0,10),...verified.slice(0,5)],next_cursor:'after-200',counts}});
+  });
+  await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();
+  const board=page.locator('[data-component="ticket-board"]');
+  const column=(name:string)=>board.getByRole('region',{name:`${name} column`,exact:true});
+  const completedMore=()=>column('Completed').getByRole('button',{name:'Load more tickets'});
+  // Verified is merged away; Completed carries the whole done total.
+  await expect(column('Verified')).toHaveCount(0);
+  await expect(column('Completed').getByLabel('110 tickets')).toBeVisible();
+  await expect(completedMore()).toBeVisible();
+  // A verified ticket beyond the baseline is not loaded yet.
+  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toHaveCount(0);
+
+  // First Load more exhausts the `completed` stream. The column must STILL offer more, because
+  // verified rows remain — before HS2-F2N4ZN it stopped here, stranding the verified rows.
+  await completedMore().scrollIntoViewIfNeeded();await completedMore().click();
+  await expect(page.locator('[data-ticket-slug="HS2-CP079"]')).toBeVisible();
+  expect(statusRequests).toContain('completed');
+  expect(statusRequests).not.toContain('verified');
+  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toHaveCount(0);
+  await expect(completedMore()).toBeVisible();
+
+  // Second Load more walks into the `verified` stream and completes the column.
+  await completedMore().scrollIntoViewIfNeeded();await completedMore().click();
+  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toBeVisible();
+  expect(statusRequests.indexOf('completed')).toBeLessThan(statusRequests.indexOf('verified'));
+  await expect(completedMore()).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png',fullPage:true});
+});
+
 test('stores the shell-history inheritance opt-out locally and applies it only to new terminals',async({page})=>{
   const writes:Array<{inherit_global_shell_history:boolean}>=[];await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/terminal-settings'))writes.push(request.postDataJSON())});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Terminals',exact:true}).click();const option=page.getByLabel('Use my global shell history');await expect(option).not.toBeChecked();await expect(page.getByText(/each terminal keeps private/)).toBeVisible();await option.check();await expect.poll(()=>writes).toEqual([{inherit_global_shell_history:true}]);await expect(page.getByRole('status')).toContainText('Saved locally. New terminals will use this setting.');await page.screenshot({path:'/private/tmp/hs2-a5v801-terminal-history-setting-wide.png',fullPage:true});await page.setViewportSize({width:760,height:700});await page.screenshot({path:'/private/tmp/hs2-a5v801-terminal-history-setting-narrow.png',fullPage:true});
 });

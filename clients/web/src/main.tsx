@@ -124,7 +124,7 @@ import { submitNotWorkingReport } from './not-working-workflow';
 import { activeTerminalVisibilityGroup,addTerminalVisibilityGroup,hideNewTerminalInNamedGroups,parseTerminalVisibilityState,removeTerminalVisibilityGroup,renameTerminalVisibilityGroup,selectTerminalVisibilityGroup,setAllTerminalsVisibleInGroup,setTerminalVisibleInGroup,TERMINAL_DASHBOARD_VISIBILITY_SCOPE,TERMINAL_VISIBILITY_STORAGE_KEY } from './terminal-visibility';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from './terminal-viewport';
 import { DEFAULT_PERMISSION_AUTOMATION,formatPermissionCountdown,parsePermissionAutomation,parsePermissionHistory,parsePermissionResolution,permissionBelongsToProject,PermissionInbox,PERMISSION_DELAYS,type PermissionAutomation,type PermissionDecision,type PermissionItem,type PermissionScope,VisiblePermissionTimer } from './permission-notifications';
-import { type BoardColumnPage, boardColumnHasMore, boardColumnStatus, isPerColumnBoardView } from './board-pagination';
+import { applyBoardColumnFetch, type BoardColumnPage, boardColumnHasMore, boardColumnStatus, boardColumnStatuses, nextBoardColumnFetch, isPerColumnBoardView } from './board-pagination';
 import { ticketBoardGroups,ticketBoardGroupTotal } from './ticket-board-layout';
 import {parseTicketLinkReference,resolveTicketLink,ticketLinkMatchKey,type TicketLinkMatch} from './ticket-link-resolution';
 import {activeTicketReaderProject,disposeTicketReaderFrames,popTicketReaderFrame,pushTicketReaderFrame,reconcileTicketReaderFrame,ticketReaderEditState,updateTicketReaderFrame,type TicketReaderFrame} from './ticket-reader-stack';
@@ -730,19 +730,25 @@ function countTicketsForStatus(rows:readonly WireTicketRow[],status:string){let 
 // `tickets.value` union (deduped) so selection/inspector/mutations are unaffected; only this column's
 // cursor + loaded count advance, leaving the other columns' pagination untouched.
 async function loadBoardColumnMore(columnId:string){
-  const status=boardColumnStatus(columnId);
-  if(!status){void loadNextTicketPage();return}
+  if(!boardColumnStatus(columnId)){void loadNextTicketPage();return}
   const current=project(),view=selectedView.value;
   if(!current||boardColumnLoading.value[columnId])return;
+  // A column pages its ordered statuses in turn (HS2-F2N4ZN): the merged Completed column exhausts
+  // `completed`, then continues into `verified`, so verified rows beyond the initial global page stay
+  // reachable through its own Load more. Single-status columns keep a one-entry status list.
+  const statuses=boardColumnStatuses(columnId,hideVerifiedColumn());
+  const target=nextBoardColumnFetch(statuses,boardColumnPages.value[columnId]);
+  if(!target)return;
   boardColumnLoading.value={...boardColumnLoading.value,[columnId]:true};
   try{
-    const query={...ticketViewQuery(view),status},cursor=boardColumnPages.value[columnId]?.cursor;
-    const page=await new Api(current.apiPath).checkoutTicketPage(current.id,BOARD_COLUMN_PAGE_SIZE,cursor,query);
+    const query={...ticketViewQuery(view),status:target.status};
+    const page=await new Api(current.apiPath).checkoutTicketPage(current.id,BOARD_COLUMN_PAGE_SIZE,target.cursor,query);
     if(project()?.id!==current.id||selectedView.value!==view)return;
     const next=appendUniqueTicketRows(tickets.value,page.items);
     tickets.value=next;ticketRowsByProject.value={...ticketRowsByProject.value,[current.id]:next};
     ticketCountsByProject.value={...ticketCountsByProject.value,[current.id]:page.counts};recordAuthoritativeTicketTrend(current.id,page.counts);
-    boardColumnPages.value={...boardColumnPages.value,[columnId]:{cursor:page.next_cursor,loaded:countTicketsForStatus(next,status),exhausted:!page.next_cursor}};
+    const loaded=statuses.reduce((sum,status)=>sum+countTicketsForStatus(next,status),0);
+    boardColumnPages.value={...boardColumnPages.value,[columnId]:applyBoardColumnFetch(statuses,boardColumnPages.value[columnId],target.status,page.next_cursor,loaded)};
     // Do not reset the global progressive-render cap here — that would collapse the already-rendered rows
     // in the other columns. The appended rows render within the current cap and grow via continueProgressiveTicketRendering.
     scheduleClaimLeaseExpiry();
@@ -755,17 +761,26 @@ async function loadBoardColumnMore(columnId:string){
 // state in one assignment (no collapse-then-expand flash). Only columns the user explicitly paged are
 // restored (HS2-8NBGBX). Returns undefined when there is nothing to restore.
 async function fetchExpandedBoardColumnRows(current:Project,view:TicketView,baseRows:readonly WireTicketRow[]):Promise<{rows:WireTicketRow[];pages:Record<string,BoardColumnPage>}|undefined>{
-  const expanded=Object.entries(boardColumnPages.value).filter(([columnId,page])=>page.loaded>countTicketsForStatus(baseRows,boardColumnStatus(columnId)??'')&&boardColumnStatus(columnId));
+  const hideVerified=hideVerifiedColumn(),previousRows=tickets.value,client=new Api(current.apiPath);
+  const columnStatuses=(columnId:string)=>boardColumnStatuses(columnId,hideVerified);
+  const loadedAcross=(rows:readonly WireTicketRow[],statuses:readonly string[])=>statuses.reduce((sum,status)=>sum+countTicketsForStatus(rows,status),0);
+  // A column is expanded (needs restoring) when the user had paged it past what the fresh baseline
+  // reloads. Each of its status streams is refetched only when its own rows shrank versus baseline,
+  // so the merged Completed column restores `completed` and `verified` independently (HS2-F2N4ZN).
+  const expanded=Object.entries(boardColumnPages.value).filter(([columnId])=>{const statuses=columnStatuses(columnId);return statuses.length&&loadedAcross(previousRows,statuses)>loadedAcross(baseRows,statuses)});
   if(!expanded.length)return undefined;
-  const client=new Api(current.apiPath);
-  const fetched=await Promise.all(expanded.map(async([columnId,page])=>{
-    const status=boardColumnStatus(columnId)!,size=Math.max(BOARD_COLUMN_PAGE_SIZE,page.loaded);
-    const result=await client.checkoutTicketPage(current.id,size,undefined,{...ticketViewQuery(view),status}).catch(()=>undefined);
-    return result?{columnId,status,result}:undefined;
-  }));
-  let rows=[...baseRows];for(const entry of fetched)if(entry)rows=appendUniqueTicketRows(rows,entry.result.items);
-  const pages={...boardColumnPages.value};
-  for(const entry of fetched)if(entry)pages[entry.columnId]={cursor:entry.result.next_cursor,loaded:countTicketsForStatus(rows,entry.status),exhausted:!entry.result.next_cursor};
+  let rows=[...baseRows];const pages={...boardColumnPages.value};
+  for(const [columnId,page] of expanded){
+    const statuses=columnStatuses(columnId),streams:Record<string,{cursor?:string;exhausted?:boolean}>={};
+    for(const status of statuses){
+      const want=countTicketsForStatus(previousRows,status);
+      if(want<=countTicketsForStatus(baseRows,status)){streams[status]=page.streams?.[status]??{};continue}
+      const result=await client.checkoutTicketPage(current.id,Math.max(BOARD_COLUMN_PAGE_SIZE,want),undefined,{...ticketViewQuery(view),status}).catch(()=>undefined);
+      if(result){rows=appendUniqueTicketRows(rows,result.items);streams[status]={cursor:result.next_cursor,exhausted:!result.next_cursor}}
+      else streams[status]=page.streams?.[status]??{};
+    }
+    pages[columnId]={loaded:loadedAcross(rows,statuses),exhausted:statuses.every(status=>streams[status]?.exhausted===true),streams};
+  }
   return {rows,pages};
 }
 const projectTabRefresh=createProjectTabRefreshCoordinator<Project,ProjectTicketRefresh>({
