@@ -66,6 +66,7 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-link-choice-dialog', 'TicketLinkChoiceDialog', 'Disambiguate a ticket reference that matches more than one ticket.', 'feature-floor', true, ['list-item']),
       demo('project-close-dialog', 'ProjectCloseDialog', 'Warn about running terminals and AI chats before closing a project, with a live resource preview.', 'feature-floor', true, ['list-item', 'ai-conversation']),
       demo('conversation-export-dialog', 'ConversationExportDialog', 'Two-step wizard to choose a message scope then a destination, format, and bundle options.', 'feature-floor', true, ['content-transition']),
+      demo('command-run-dialog', 'CommandRunDialog', 'Native modal dialog presenting the latest run state and output for a configured command, with a Close action.', 'feature-floor', true),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
       demo('note-composer', 'NoteComposer', 'Create or cancel a provider-backed ticket note.', 'feature-floor', true),

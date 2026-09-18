@@ -2407,3 +2407,19 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   await exportDialog.evaluate(node=>Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished)));
   await page.screenshot({path:'/private/tmp/hs2-qkks05-conversation-export-dialog.png',fullPage:true});
 });
+
+test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('/ux-demo?component=command-run-dialog');
+  const dialog=page.locator('[data-component="command-run-dialog"]');
+  // Native <dialog> opened via showModal wiring (not an inline wa-dialog).
+  await expect(dialog).toHaveJSProperty('open',true);
+  await expect(dialog).toContainText('Run checks');
+  await expect(dialog).toContainText('completed');
+  await expect(dialog).toContainText('Exit 0');
+  await expect(dialog.locator('[aria-label="Command output"]')).toContainText('All checks passed in 4.2s');
+  // stderr lines carry the 'error: ' prefix in the output presentation.
+  await expect(dialog.locator('[aria-label="Command output"]')).toContainText('error: note: 2 files skipped');
+  await expect(dialog.getByRole('button',{name:'Close'})).toBeVisible();
+  await page.screenshot({path:'/private/tmp/claude/hs2-z0cthn-command-run-dialog.png',fullPage:true});
+});

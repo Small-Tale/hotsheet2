@@ -52,9 +52,11 @@ import {
   Wrench,
 } from 'lucide';
 
+import type { CommandDefinition, CommandRun } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
+import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { KeyboardSettings } from '../components/keyboard-settings';
@@ -483,6 +485,15 @@ function demoNavigation(category: DemoCategory) {
   );
 }
 
+const commandRunDialogDemoCommand: CommandDefinition = { id: 'run-checks', title: 'Run checks', kind: 'program', program: 'npm', args: ['run', 'check'], group: 'Quality' };
+const commandRunDialogDemoRun: CommandRun = { id: 'run-42', command_id: 'run-checks', state: 'completed', exit_code: 0, output: [
+  { seq: 1, stream: 'stdout', text: '$ npm run check' },
+  { seq: 2, stream: 'stdout', text: 'Typecheck: 0 errors' },
+  { seq: 3, stream: 'stdout', text: 'Lint: 0 warnings' },
+  { seq: 4, stream: 'stderr', text: 'note: 2 files skipped (no changes)' },
+  { seq: 5, stream: 'stdout', text: 'All checks passed in 4.2s' },
+] };
+
 function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
@@ -544,6 +555,7 @@ function demoContent(item: DemoDefinition) {
     draft: { scope: { kind: 'all' }, writeMode: 'create', bundle: { includeAttachments: true, includeMedia: true, includeSummary: true }, destination: { selectionToken: 'sel-token', displayPath: '~/exports/kerf-resize-arbiter', kind: 'directory' } },
     step: 2, summaryAvailable: true,
   }} />;
+  if (item.id === 'command-run-dialog') return <CommandRunDialog command={commandRunDialogDemoCommand} run={commandRunDialogDemoRun} />;
   if (item.id === 'bulk-ticket-dialog') return <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />;
   if (item.id === 'saved-view-dialog') return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
   if (item.id === 'ticket-link-choice-dialog') return <TicketLinkChoiceDialog choice={{ kind: 'choose', reference: { raw: 'HS2-DEMO01', slug: 'HS2-DEMO01' }, matches: [
@@ -784,7 +796,16 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
+// CommandRunDialog is a standalone native <dialog> (hidden until showModal), so open it after the
+// demo mounts/selects the same way the app does — unlike the wa-dialog demos that render inline (HS2-Z0CTHN).
+function showCommandRunDialogDemo(): void {
+  requestAnimationFrame(() => {
+    const dialog = root.querySelector<HTMLDialogElement>('[data-component="command-run-dialog"]');
+    if (dialog && !dialog.open) dialog.showModal();
+  });
+}
 if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
+if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo();
 const terminalDemoMounts = new Map<HTMLElement, () => void>();
 const syncDemoTerminals = () => {
   syncTerminalDemoViewports(root, terminalDemoMounts);
@@ -838,6 +859,7 @@ function selectDemo(id: string, push = true): void {
   settingsOpen.value = false;
   contextMenu.value = undefined;
   terminalDashboardContextMenu.value = undefined;
+  if (id === 'command-run-dialog') showCommandRunDialogDemo();
   if (push) {
     const url = new URL(location.href);
     url.pathname = '/ux-demo';
