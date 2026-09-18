@@ -1432,7 +1432,11 @@ update arrives. Short-lived configured commands and shells without OSC integrati
 remain attributable to the correct project from their first response.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
-sidebar and ticket inspector at full height. Its compact rail switches between the decorated
+sidebar and ticket inspector at full height. It belongs to ticket views only: the
+Notifications and Settings views hide the drawer entirely — neither the drawer nor its
+"Show terminal drawer" restore affordance appears while either is open — and the user's
+open/closed drawer preference is preserved so it returns unchanged on the next ticket view
+(HS2-EQEJC7). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
 the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll

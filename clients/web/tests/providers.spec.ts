@@ -528,6 +528,23 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await page.getByRole('button',{name:'Show terminal drawer'}).click();await page.setViewportSize({width:1024,height:600});await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-586bvq-terminal-drawer-short.png',fullPage:true});
 });
 
+test('hides the bottom terminal drawer on Notifications and Settings views, preserving the open preference (HS2-EQEJC7)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const drawerRegion=page.locator('[data-component="resizable-region"][data-region-id="app-terminal-drawer"]'),restore=page.getByRole('button',{name:'Show terminal drawer'});
+  // Open the drawer on a ticket view.
+  await restore.click();await expect(drawerRegion).toBeVisible();await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+  // Notifications hides the whole drawer area — no drawer and no restore affordance.
+  await page.getByRole('button',{name:/Notifications view/}).click();
+  await expect(drawerRegion).toHaveCount(0);await expect(restore).toHaveCount(0);await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/claude/hs2-eqejc7-notifications-no-drawer.png',fullPage:true});
+  // Settings hides it the same way.
+  await page.getByRole('button',{name:/Settings view/}).click();
+  await expect(drawerRegion).toHaveCount(0);await expect(restore).toHaveCount(0);await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
+  // Returning to a ticket view restores the open drawer (preference preserved, not just collapsed).
+  await page.getByRole('button',{name:/List view/}).click();
+  await expect(drawerRegion).toBeVisible();await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+});
+
 test('changes the chat provider and re-seeds the new provider with the prior transcript (HS2-PRBGRB)',async({page})=>{
   const connectionPosts:Array<Record<string,unknown>>=[],turnPosts:Array<{id:string;content:string}>=[];
   await mockProject(page);
