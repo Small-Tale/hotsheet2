@@ -87,7 +87,9 @@ describe('TicketInspector', () => {
     expect(waiting).toContain('Needs review');
     expect(waiting).toContain('circle-alert');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    expect(css).toMatch(/data-presentation="reader"\]\[data-needs-review="true"[^}]*var\(--hs-ticket-state-needs-review\)/);
+    // The reader no longer paints a purple needs-review side rail; the "Needs review" pill is the only
+    // feedback-needed indicator in the reader (HS2-N6WA7Y).
+    expect(css).not.toMatch(/data-presentation="reader"\]\[data-needs-review="true"\]::before/);
   });
 
   it('renders the structured duplicate outcome and canonical ticket action', () => {

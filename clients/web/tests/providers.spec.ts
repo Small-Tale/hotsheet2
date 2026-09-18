@@ -738,7 +738,7 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
   await expect.poll(()=>inspector.evaluate(node=>getComputedStyle(node,'::before').width)).toBe('auto');
   await page.screenshot({path:'/private/tmp/hs2-9fa1bv-feedback-sidebar-without-rail-wide.png',fullPage:true});
-  await inspector.getByRole('button',{name:'Open ticket reader'}).click();const readerInspector=page.getByRole('dialog').locator('[data-component="ticket-inspector"]');await expect.poll(()=>readerInspector.evaluate(node=>getComputedStyle(node,'::before').width)).toBe('4px');await page.getByRole('button',{name:'Close ticket reader'}).click();
+  await inspector.getByRole('button',{name:'Open ticket reader'}).click();const readerInspector=page.getByRole('dialog').locator('[data-component="ticket-inspector"]');await expect(readerInspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');await expect.poll(()=>readerInspector.evaluate(node=>getComputedStyle(node,'::before').width)).toBe('auto');await page.screenshot({path:'/private/tmp/hs2-n6wa7y-reader-no-rail.png'});await page.getByRole('button',{name:'Close ticket reader'}).click();
   await page.setViewportSize({width:760,height:900});
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color','rgb(203, 48, 224)');
   await expect(inspector).toHaveAttribute('data-needs-review','true');
