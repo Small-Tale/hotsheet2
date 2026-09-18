@@ -64,4 +64,27 @@ body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizin
   .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__search-group { width: auto; min-width: remify(176px); flex: 1 1 auto; }
 }
 .app-shell__work-area[data-has-composer="true"] > .app-shell__workspace { padding-top: 0; }
+/* Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the shell drops its
+   1024px min-width and the two sidebars stop taking horizontal space: they become absolute
+   overlays on top of the single main column, sliding in with the same translateX transform the
+   desktop collapse already uses. Only one is ever open at a time (enforced by the caller), and a
+   click-away scrim dismisses whichever is open. The overlay panels anchor to .app-shell, so it
+   becomes the positioning context here. */
+.app-shell[data-mobile="true"] { position: relative; min-width: 0; }
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"],
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] { position: absolute; z-index: 41; top: 0; bottom: 0; }
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"] { left: 0; }
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] { right: 0; }
+/* A collapsed (off-screen) overlay must not intercept taps meant for the main column underneath. */
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-collapsed="true"] { pointer-events: none; }
+/* Cap the overlay width so a click-away scrim strip always remains, even on a ~390px phone where
+   the 352px inspector would otherwise cover the whole width. */
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"] .kui-resizable-region__content,
+.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] .kui-resizable-region__content { max-width: 85vw; box-shadow: var(--wa-shadow-l); }
+/* Resize handles are meaningless for overlays that no longer share horizontal space. */
+.app-shell[data-mobile="true"] > .kui-resizable-region .kui-resizable-region__handle { display: none; }
+/* Viewport-fixed so it reliably covers the whole shell regardless of the app-shell's flex/containing
+   block; .app-shell is not a stacking context (position:relative + z-index:auto), so the z-index:41
+   overlay panels still paint above this z-index:40 scrim. */
+.app-shell__scrim { position: fixed; z-index: 40; padding: 0; border: 0; background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 44%, transparent); cursor: pointer; inset: 0; }
 @media (prefers-reduced-motion: reduce) { .app-shell .kui-resizable-region, .app-shell .kui-resizable-region .kui-resizable-region__content { transition: none !important; } }

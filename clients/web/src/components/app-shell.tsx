@@ -27,6 +27,9 @@ export interface AppShellProps {
   inspectorSize?: number;
   mode?: ProjectTabBarMode;
   sidebarVisible?: boolean;
+  /** Mobile single-column layout: sidebar/inspector overlay the main column and a click-away
+   * scrim dismisses whichever one is open (only one is ever open at a time — HS2-ZK51WP). */
+  mobile?: boolean;
   workspacePresentation?: 'inset' | 'edge-to-edge';
   overlay?: SafeHtml;
   terminalDrawer?: SafeHtml;
@@ -36,8 +39,8 @@ export interface AppShellProps {
   terminalDrawerTransitioning?: boolean;
 }
 
-export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset',overlay,terminalDrawer,terminalDrawerVisible=false,terminalDrawerSize=320,terminalDrawerMax=520,terminalDrawerTransitioning=false }: AppShellProps) {
-  return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
+export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, mobile = false, workspacePresentation = 'inset',overlay,terminalDrawer,terminalDrawerVisible=false,terminalDrawerSize=320,terminalDrawerMax=520,terminalDrawerTransitioning=false }: AppShellProps) {
+  return <section class="app-shell" data-component="app-shell" data-mode={mode} data-mobile={String(mobile)} data-sidebar-visible={String(sidebarVisible)}>
     {mode !== 'stats' && sidebar && <ResizableRegion id="app-sidebar" label={mode==='terminals'?'Operations sidebar':'Project sidebar'} size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
     <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
       <Toolbar
@@ -60,6 +63,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
       {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={TERMINAL_DRAWER_MIN_SIZE} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
       {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
     </main>
+    {mobile && (sidebarVisible || inspectorVisible) && <div class="app-shell__scrim" data-action="dismiss-mobile-overlays" aria-hidden="true" />}
     {mode !== 'stats' && inspector && <ResizableRegion id="app-inspector" label={mode==='terminals'?'Ticket rail':'Ticket inspector'} size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}
   </section>;
 }

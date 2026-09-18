@@ -148,6 +148,18 @@ and identity-less legacy entries remain conservatively blocking.
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
+- **Responsive mobile layout.** The web client has a desktop size floor (the app-shell
+  `min-width`, 1024px). At and above it the two side panels — the left project sidebar and
+  the right ticket inspector — sit beside the main column and resize/persist as usual. Below
+  it the client switches to a single-column mobile layout: the app-shell drops its min-width
+  and both panels become absolute overlays that slide in over the main column instead of
+  taking horizontal space. Only one overlay is open at a time (opening one closes the other),
+  both start closed, and a viewport-fixed click-away scrim dismisses whichever is open —
+  standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
+  side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
+  from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
+  stay in sync (HS2-ZK51WP).
+
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,
   a maskable 512-pixel icon, and a 180-pixel Apple touch icon. Browser chrome and the
