@@ -301,7 +301,12 @@ and identity-less legacy entries remain conservatively blocking.
   Only divergent changes to that same active field open a reconciliation surface with
   the remote and local versions plus an editable merged value. Whole-ticket concurrency
   token failures use the same comparison: unrelated field drift retries once against
-  the fresh token instead of presenting a false conflict. Background refresh also leaves
+  the fresh token instead of presenting a false conflict. Single-ticket edits are
+  serialized per ticket: each edit bases off the previous edit's committed concurrency
+  token, so a user's own rapid sequential edits (e.g. setting a priority then the
+  description right after creating a ticket) are last-write-wins and never self-conflict,
+  while a genuine concurrent external write to the same field still surfaces the
+  reconciliation surface (HS2-K9SG2R). Background refresh also leaves
   an in-flight or queued autosave draft alone; the write response and token retry path
   distinguish this client's earlier partial save from a genuinely competing edit.
   The freeform blocked reason uses the same silent blur-flush path and is the single source

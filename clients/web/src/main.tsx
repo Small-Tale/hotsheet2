@@ -267,6 +267,15 @@ const notWorkingTarget=signal<NotWorkingTarget>(CLOSED_NOT_WORKING_TARGET),notWo
 let ticketSelectionAnchor: string | undefined;
 const histories = new Map<string, TicketHistory>();
 const mutationGenerations = new Map<string, number>();
+// Per-ticket single-edit mutation sequencing (HS2-K9SG2R). Rapid same-ticket field edits used to read
+// the same pre-first concurrency token and self-conflict ("the ticket was modified"). `committedTickets`
+// holds the latest server-committed full ticket per slug so each queued edit bases off the previous
+// edit's committed token (last-write-wins for the user's own sequential edits), while a genuine external
+// write still fails the token check and surfaces a real conflict. `ticketMutationChains` serializes the
+// network section per slug; the optimistic UI update stays immediate for responsiveness.
+const committedTickets = new Map<string, FullTicket>();
+// Reuse the same per-key serializer the bulk path uses, keyed by ticket slug for single-ticket edits.
+const singleTicketMutationSequencer = new BulkTicketMutationSequencer();
 const bulkTicketMutationSequencer = new BulkTicketMutationSequencer();
 let clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
 let draggedTickets: { slugs:string[];source:Project } | undefined;
@@ -689,6 +698,7 @@ function reconcileRefreshedSelected(previous:FullTicket,refreshed:FullTicket){
     if(next.kind==='conflict'&&!conflict){readerNoteAutosave.cancel();conflict={key:`note:${readerNoteId}`,field:'note',label:'Note',base:previousNote,mine:readerNoteDraft.value,theirs:remote}}
   }
   selectedTicket.value=refreshed;
+  committedTickets.set(refreshed.slug,refreshed);
   if(conflict)showFieldConflict(conflict);
   else if(fieldConflict.value?.key===settledConflictKey){fieldConflict.value=undefined;fieldConflictResolution.value=''}
 }
@@ -793,8 +803,13 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
   publishOptimisticTicketRows(current.id);
   if(selectedBefore)selectedTicket.value=projectTicketPatch(selectedBefore,patch);
   const optimistic=performance.now()-started;finishTiming();
+  // Serialize the network section per ticket so the user's own rapid sequential edits each base off the
+  // previous edit's committed token (last-write-wins) instead of self-conflicting (HS2-K9SG2R).
+  return singleTicketMutationSequencer.enqueue(slug,async()=>{
   try{
-    const base=selectedBefore??(await api().checkoutTicket(current.id,ticket.id)).ticket;
+    // Base off the last edit this client committed for the ticket (its up-to-date token), falling back to
+    // the pre-edit selection or a fresh fetch. A real external write still fails the token check below.
+    const base=committedTickets.get(slug)??selectedBefore??(await api().checkoutTicket(current.id,ticket.id)).ticket;
     let updated:FullTicket;
     try{
       updated=(await api().updateCheckoutTicket(current.id,ticket.id,base.concurrency_token?{...patch,expected_token:base.concurrency_token}:patch)).ticket;
@@ -802,6 +817,7 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
     }catch(reason){
       if(!isTicketConcurrencyConflict(reason))throw reason;
       const remote=(await api().checkoutTicket(current.id,ticket.id)).ticket,reconciled=reconcileTicketPatch(base,remote,patch);
+      committedTickets.set(slug,remote);
       rollbackRow=ticketRowFromFull(ticket,remote);rollbackSelected=remote;
       if(mutationGenerations.get(slug)!==generation)return true;
       tickets.value=tickets.value.map(item=>item.slug===slug?ticketRowFromFull(item,remote):item);
@@ -815,6 +831,9 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
         localTicketChangeAcknowledgements.acknowledge(current.id,{store:updated.connection_id,id:updated.id,kind:'updated'});
       }
     }
+    // Record the committed token even when this edit is stale for UI purposes: its server write advanced
+    // the token, so the next queued edit must base off it.
+    committedTickets.set(slug,updated);
     if(mutationGenerations.get(slug)!==generation){reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'stale'});return true}
     tickets.value=tickets.value.map(item=>item.slug===slug?ticketRowFromFull(item,updated):item);
     publishOptimisticTicketRows(current.id);
@@ -824,6 +843,7 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
     if(mutationGenerations.get(slug)===generation){tickets.value=tickets.value.map(item=>item.slug===slug?rollbackRow:item);publishOptimisticTicketRows(current.id);if(rollbackSelected&&selectedTicket.value?.slug===slug)selectedTicket.value=rollbackSelected;error.value=reason instanceof Error?reason.message:String(reason);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'rolled_back'})}
     return false;
   }finally{releaseRefresh()}
+  });
 }
 async function updateSelected(patch:Record<string,unknown>){const linked=linkedReaderStack.value.at(-1);return linked?updateLinkedReader(linked.id,patch):selectedTicket.value?applyTicketPatch(selectedTicket.value.slug,patch):false}
 function history(projectId=project()?.id??''){let value=histories.get(projectId);if(!value){value=new TicketHistory(ticketSnapshot,applyTicketPatch);histories.set(projectId,value)}return value}
@@ -983,7 +1003,7 @@ function selectionOrder(target:Element){const column=target.closest('[data-compo
 function presentTicket(ticket:FullTicket){
   const changed=selectedTicket.value?.id!==ticket.id,current=project(),backlinkKey=current?`${current.id}:${ticket.qualified_id}`:'';
   batch(()=>{
-    selectedCorruptKey.value=undefined;selectedTicket.value=ticket;duplicateBacklinkState.value={key:backlinkKey,backlinks:[],inaccessibleProjects:[]};
+    selectedCorruptKey.value=undefined;selectedTicket.value=ticket;committedTickets.clear();committedTickets.set(ticket.slug,ticket);duplicateBacklinkState.value={key:backlinkKey,backlinks:[],inaccessibleProjects:[]};
     if(changed){codeReview.value=undefined;codeReviewMessage.value='';codeReviewLoading.value=false;expandedCodeReviewCommits.value=[];readerInlineFeedbackReplies.value={};readerFeedbackChoiceSelections.value={};readerFeedbackChoiceAnchors.clear()}
     detailsEditGeneration+=1;readerDetailsEditGeneration+=1;detailsMode.value='preview';readerDetailsMode.value='preview';detailsDraft.value=ticket.details;readerDetailsDraft.value=ticket.details;detailsDraftBase=ticket.details;readerDetailsDraftBase=ticket.details;titleEditing.value=false;titleDraft.value=ticket.title;titleDraftBase=ticket.title;blockedReasonEditing.value=false;readerBlockedReasonEditing.value=false;blockedReasonDraft.value=ticket.blocked_reason??'';readerBlockedReasonDraft.value=ticket.blocked_reason??'';blockedReasonDraftBase=ticket.blocked_reason??'';readerBlockedReasonDraftBase=ticket.blocked_reason??'';noteDraftBase='';readerNoteDraftBase='';editingNoteId.value=undefined;readerEditingNoteId.value=undefined;fieldConflict.value=undefined;fieldConflictResolution.value='';inspectorVisible.value=true;error.value='';
   });
