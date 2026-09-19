@@ -5,6 +5,7 @@ import { devServerRouteExclude } from './dev-server-routes';
 describe('development server route boundary', () => {
   it.each([
     '/ux-demo',
+    '/__hotsheet/checkouts',
     '/__hotsheet/folders/choose',
     '/__hotsheet/conversation-exports/open',
     '/__hotsheet/projects/open',

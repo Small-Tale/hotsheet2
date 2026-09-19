@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,developmentSetupAssetsFingerprint,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, recoverUnhealthyServer, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireCurrentSetupAssets, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,developmentSetupAssetsFingerprint,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,listServerCheckouts,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, recoverUnhealthyServer, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireCurrentSetupAssets, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -257,6 +257,35 @@ describe('Git ticket-store remote setup',()=>{
   it('rejects option-like and multiline remote values before running Git',async()=>{const runner=vi.fn();await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','--upload-pack=bad',runner)).rejects.toThrow(/valid Git remote URL/);await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','good\nbad',runner)).rejects.toThrow(/valid Git remote URL/);expect(runner).not.toHaveBeenCalled()});
   it('exposes remote connection only through the local bridge',async()=>{const connect=vi.fn().mockResolvedValue(undefined),app=createDevApp(true,undefined,undefined,undefined,undefined,connect),request={method:'POST',headers:{'content-type':'application/json'},body:'{"store":"/tickets","remote":"git@example.com:team/tickets.git"}'};const response=await app.request('/__hotsheet/projects/setup-git-remote',request);expect(response.status).toBe(200);expect(connect).toHaveBeenCalledWith('/tickets','git@example.com:team/tickets.git');expect((await createDevApp(false,undefined,undefined,undefined,undefined,connect).request('/__hotsheet/projects/setup-git-remote',request)).status).toBe(404)});
   it('returns the complete actionable Git diagnostic through the local bridge',async()=>{const message='The remote repository was not found. Git details: ERROR: Repository not found.',connect=vi.fn().mockRejectedValue(new Error(message)),app=createDevApp(true,undefined,undefined,undefined,undefined,connect),response=await app.request('/__hotsheet/projects/setup-git-remote',{method:'POST',headers:{'content-type':'application/json'},body:'{"store":"/tickets","remote":"git@example.com:missing.git"}'});expect(response.status).toBe(400);expect(await response.json()).toEqual({error:message})});
+});
+
+describe('remote project checkouts (HS2-QMR41J, HS2-VFNCXG)', () => {
+  it('serves the cross-device checkouts endpoint ungated by dev mode, so a remote client can load the list', async () => {
+    const checkouts = [{ id: 'demo-checkout', root: '/work/demo', alias: 'demo', stores: ['/work/demo.hs2'] }];
+    const list = vi.fn().mockResolvedValue(checkouts);
+    // Unlike the local-filesystem endpoints (404 when !dev), this must work for a remote/production client.
+    for (const dev of [true, false]) {
+      const response = await createDevApp(dev, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, list).request('/__hotsheet/checkouts');
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(checkouts);
+    }
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+  it('surfaces a listing failure as a 502 with a message rather than falling through to the SPA', async () => {
+    const list = vi.fn().mockRejectedValue(new Error('server unreachable'));
+    const response = await createDevApp(true, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, list).request('/__hotsheet/checkouts');
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'server unreachable' });
+  });
+  it('queries the bootstrap server GET /checkouts through its running instance', async () => {
+    const ensure = vi.fn().mockResolvedValue({ pid: 1, url: 'http://127.0.0.1:9', secret: 'shh' });
+    const request = vi.fn().mockResolvedValue([{ id: 'x', root: '/r', alias: 'x', stores: [] }]);
+    const resolveStore = vi.fn().mockResolvedValue('/home/server-bootstrap.hs2');
+    const result = await listServerCheckouts(ensure as never, request as never, resolveStore as never);
+    expect(ensure).toHaveBeenCalledWith('/home/server-bootstrap.hs2');
+    expect(request).toHaveBeenCalledWith({ url: 'http://127.0.0.1:9', secret: 'shh', serverStore: '/home/server-bootstrap.hs2' }, '/checkouts');
+    expect(result).toEqual([{ id: 'x', root: '/r', alias: 'x', stores: [] }]);
+  });
 });
 
 describe('requireCompatibleServer', () => {

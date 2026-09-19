@@ -3,14 +3,21 @@ import { resolve } from 'node:path';
 
 import { Hono } from 'hono';
 
+import type { Checkout } from './api';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, migrateHs1Project, openLocalProject, proxyProjectRequest, recoverUnhealthyServer, removeImportedHs1Data, revealCorruptTicket, type UnhealthyServerRecovery,unhealthyServerRecovery } from './project-bridge';
+import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, listServerCheckouts, migrateHs1Project, openLocalProject, proxyProjectRequest, recoverUnhealthyServer, removeImportedHs1Data, revealCorruptTicket, type UnhealthyServerRecovery,unhealthyServerRecovery } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data,recover:(value:UnhealthyServerRecovery)=>Promise<unknown>=recoverUnhealthyServer): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data,recover:(value:UnhealthyServerRecovery)=>Promise<unknown>=recoverUnhealthyServer,listCheckouts:()=>Promise<Checkout[]>=listServerCheckouts): Hono {
   const app = new Hono();
   const conversationExports=createConversationExportBridge(chooseFolder);
+  // The cross-device project picker (a non-loopback client can't browse the filesystem) lists the
+  // checkouts the bootstrap server knows about. Unlike the local-filesystem endpoints this is NOT
+  // dev-gated — it is exactly the endpoint a remote client needs (HS2-QMR41J, HS2-VFNCXG).
+  app.get('/__hotsheet/checkouts',async context=>{
+    try{return context.json(await listCheckouts())}catch(error){return context.json({error:error instanceof Error?error.message:'Could not list the projects open on the Hot Sheet server.'},502)}
+  });
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
     try {

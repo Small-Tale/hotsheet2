@@ -4,6 +4,7 @@ import { access, readdir, readFile, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
+import type { Checkout } from './api';
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 
 export interface ProjectSession {
@@ -456,6 +457,21 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   sessions.set(opened.checkout.id, target);
   const activeStore=ticketStore??opened.checkout.stores[0],hs1SourcePath=resolve(root,'.hotsheet'),hs1DatabasePath=resolve(root,'.hotsheet/db'),hs1MarkerPath=resolve(root,HS1_MARKER),hs1DataPresent=await exists(hs1MarkerPath),imported=await receiptMatchesProject(activeStore,root),hs1PostgresVersion=hs1DataPresent?(await readFile(hs1MarkerPath,'utf8').catch(()=>'' )).trim():'';
   return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0,needsHs1Migration:hs1DataPresent&&!imported,hs1ImportCompleted:imported,hs1CleanupEligible:hs1DataPresent&&imported&&await hasGitRemote(activeStore),...(hs1DataPresent?{hs1SourcePath,hs1DatabasePath,hs1PostgresVersion}: {}) };
+}
+
+/** List the checkouts the bootstrap server currently knows about, for the remote/cross-device project
+ * picker: a non-loopback client can't browse the server filesystem, so it picks from these (HS2-VFNCXG).
+ * This queries the same singleton bootstrap server `openLocalProject` opens projects through — it was
+ * never wired to the client's `GET /__hotsheet/checkouts`, so the remote picker only ever errored
+ * (HS2-QMR41J). Dependencies are injectable for testing. */
+export async function listServerCheckouts(
+  ensure: (store: string) => Promise<InstanceInfo> = ensureServer,
+  request: <T>(target: SessionTarget, path: string) => Promise<T> = serverRequest,
+  resolveStore: () => Promise<string> = bootstrapStore,
+): Promise<Checkout[]> {
+  const store = await resolveStore();
+  const instance = await ensure(store);
+  return request<Checkout[]>({ url: instance.url, secret: instance.secret, serverStore: store }, '/checkouts');
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {
