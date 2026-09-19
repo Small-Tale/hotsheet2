@@ -23,4 +23,8 @@
 /* Mobile: a plain flex row (no TabBar) with the mode switcher, a flexible project Select, and the
    Add-project action (HS2-4C5RM7). */
 .project-tab-bar--mobile { display: flex; align-items: center; }
-.project-tab-bar--mobile .project-tab-bar__select, .project-tab-bar--mobile .project-tab-bar__select-empty { flex: 1 1 auto; min-width: 0; }
+/* Mobile project switcher: a borderless select sized to the selected project name (HS2-0SARDD) —
+   it shrinks and truncates rather than stretching to fill the bar. */
+.project-tab-bar--mobile .project-tab-bar__select, .project-tab-bar--mobile .project-tab-bar__select-empty { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.project-tab-bar--mobile .project-tab-bar__select::part(combobox) { min-height: remify(32px); padding-inline: remify(8px); border: 0; background: transparent; box-shadow: none; }
+.project-tab-bar--mobile .project-tab-bar__select::part(combobox):focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }

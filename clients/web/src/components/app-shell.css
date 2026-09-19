@@ -31,6 +31,11 @@
 .app-shell__main > .project-tab-bar { border-bottom: 0; background: var(--wa-color-surface-default); }
 .app-shell[data-mode="terminals"] .app-shell__main > .project-tab-bar { border-bottom: 1px solid var(--wa-color-surface-border); }
 .app-shell__main > .kui-toolbar .workspace-header { min-width: 0; align-items: center; }
+/* Mobile view switcher (the page-header Select that replaces the desktop view title): a borderless
+   select sized to the selected view name, shrinking/truncating rather than stretching (HS2-0SARDD). */
+.app-shell__mobile-view { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.app-shell__mobile-view::part(combobox) { min-height: remify(32px); padding-inline: remify(8px); border: 0; background: transparent; box-shadow: none; }
+.app-shell__mobile-view::part(combobox):focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }
 .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }
 .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header { align-items:start; }
 body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content { transition: none; }

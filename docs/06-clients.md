@@ -168,7 +168,11 @@ and identity-less legacy entries remain conservatively blocking.
   horizontal project tab strip and the page-header view title also do not fit a narrow column, so on
   mobile the project tabs are replaced with a project Select (the dashboard mode switcher and
   Add-project action remain) and the view title is replaced with a view Select that switches ticket
-  views — both reusing the workspace-grid rail's Select controls and wiring (HS2-4C5RM7).
+  views — both reusing the workspace-grid rail's Select controls and wiring (HS2-4C5RM7). To compact
+  the mobile toolbar (HS2-0SARDD): the redundant project name is dropped from the main toolbar (the
+  project Select already carries it), both the project and view Selects are borderless and sized to
+  their selected label rather than stretching, and while search is open the view-mode segmented
+  control is hidden so the search field gets the full toolbar row.
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,

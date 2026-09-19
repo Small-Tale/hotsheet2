@@ -45,6 +45,9 @@
 @media (max-width: remify(768px)) { .workspace-header { grid-template-columns: 1fr; } .workspace-header__actions { flex-wrap: wrap; } }
 @container kui-toolbar (max-width: remify(480px)) { .workspace-header__actions > .workspace-header__utility-group { display: none; } .workspace-header__actions > .workspace-header__overflow { display: inline-flex; } }
 @container kui-toolbar (max-width: remify(416px)) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }
+/* On a narrow (mobile) toolbar, hide the view-mode segmented control while search is open so the
+   search field gets the full row (sort/utility are already hidden at these widths) — HS2-0SARDD. */
+@container kui-toolbar (max-width: remify(480px)) { .workspace-header__actions[data-search-open="true"] > .view-mode-switcher { display: none; } }
 @container kui-toolbar (max-width: remify(224px)) { .workspace-header__actions > .workspace-header__search-group:not([data-expanded="true"]) { display: none; } .workspace-header__actions[data-search-open="true"] > .workspace-header__overflow.workspace-header__overflow,.workspace-header__actions[data-search-open="true"] > .view-mode-switcher.view-mode-switcher,.workspace-header__actions[data-search-open="true"] > .workspace-header__sort-group.workspace-header__sort-group,.workspace-header__actions[data-search-open="true"] > .workspace-header__utility-group.workspace-header__utility-group { display: none; } .workspace-header__actions > .workspace-header__search-group[data-expanded="true"] { display: flex; width: 100%; min-width: 0; } .workspace-header__search-group[data-expanded="true"] .kui-token-search__editor { min-width: 0; } .workspace-header__identity { display: none; } }
 @container kui-toolbar (max-width: remify(176px)) { .workspace-header__actions > .view-mode-switcher { display: none; } }
 .workspace-header__actions[data-search-open="true"] > .workspace-header__overflow { display: none; }

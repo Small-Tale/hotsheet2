@@ -156,6 +156,29 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
 });
 
+test('mobile toolbar drops the project name, uses borderless content-fit selects, and hides the segmented control while searching (HS2-0SARDD)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await openDemoProject(page);
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+  // 1. The project name is gone from the main toolbar (the mobile project Select carries it instead).
+  await expect(page.locator('[data-component="workspace-identity"]')).toHaveCount(0);
+  // 2 & 3. The project and view selects are borderless (their combobox part has no border).
+  const comboBorder=(name:string)=>page.locator(`wa-select[name="${name}"]`).evaluate(node=>{const part=(node as HTMLElement).shadowRoot?.querySelector('[part~="combobox"]');return part?getComputedStyle(part).borderTopWidth:'no-part'});
+  expect(await comboBorder('mobile-project')).toBe('0px');
+  expect(await comboBorder('mobile-view')).toBe('0px');
+  // ...and sized to the selected label rather than stretching to fill the bar.
+  const [selectBox,barBox]=await Promise.all([page.locator('wa-select[name="mobile-project"]').boundingBox(),page.locator('.project-tab-bar--mobile').boundingBox()]);
+  expect(selectBox!.width).toBeLessThan(barBox!.width*0.5);
+  await page.screenshot({path:'/private/tmp/claude/hs2-0sardd-mobile-toolbar.png',fullPage:true});
+  // 4. Opening search hides the view-mode segmented control to give the field more space.
+  const switcher=page.locator('.view-mode-switcher');
+  await expect(switcher).toBeVisible();
+  await page.getByRole('button',{name:'Search tickets'}).click();
+  await expect(page.getByLabel('Search tickets')).toBeVisible();
+  await expect(switcher).toBeHidden();
+  await page.screenshot({path:'/private/tmp/claude/hs2-0sardd-mobile-search.png',fullPage:true});
+});
+
 test('resizing from mobile back to desktop restores the side-by-side layout (HS2-ZK51WP)',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await openDemoProject(page);
