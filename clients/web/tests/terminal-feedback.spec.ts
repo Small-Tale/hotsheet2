@@ -100,3 +100,26 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await expect(mobileTile).toHaveAttribute('data-geometry-ready','true');await expect(mobileTile).toHaveAttribute('data-sizing-focus','true');
   await page.screenshot({path:'/private/tmp/hs2-3zbqdg-mobile-terminal-grid.png',fullPage:true});
 });
+
+// HS2-Z84F78: on a phone the magnified terminal keeps 80 columns but fills the available height
+// with M rows (M >> the desktop 24) and scales to fit width, instead of letterboxing a 5:3 80×24.
+test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F78)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await installTerminalFixture(page);await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Workspace grid'}).click();
+  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+  await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready','true');
+  await tile.click();
+  const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]');
+  await expect(viewport).toHaveAttribute('data-geometry-ready','true');
+  // 80 columns, and far more than the desktop 24 rows to fill the tall phone.
+  await expect(viewport).toHaveAttribute('data-grid-size',/^80x\d+$/);
+  await expect.poll(async()=>Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1])).toBeGreaterThan(30);
+  await expect(viewport).toHaveAttribute('data-pty-size',/^80x\d+$/);
+  // Scaled to fit the phone width (well under 1:1), with the 80-col screen contained in the frame.
+  const scale=Number(await viewport.getAttribute('data-physical-scale'));expect(scale).toBeGreaterThan(0);expect(scale).toBeLessThan(1);
+  const geometry=await viewport.evaluate(element=>{const screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),frame=element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();return{withinWidth:screen.left>=frame.left-1&&screen.right<=frame.right+1,frameFillsHeight:frame.height>500}});
+  expect(geometry.withinWidth).toBe(true);
+  expect(geometry.frameFillsHeight).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-z84f78-mobile-magnified.png',fullPage:true});
+});

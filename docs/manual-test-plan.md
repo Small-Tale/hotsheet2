@@ -29,6 +29,10 @@ When automation lands, remove the manual-only step and record it below.
    "empty"/clipped terminal on the phone). Then interact on the phone (tap/type) and
    confirm the PTY follows the phone after the focus-hold; interact back on the desktop
    and confirm it follows the desktop. Interaction, not the heartbeat, transfers control.
+5. HS2-Z84F78 — on a real phone, open the Workspace grid and magnify a terminal. Confirm it
+   fills the screen (no 5:3 letterbox), shows a full 80 columns scaled to the phone width, and
+   uses M rows to fill the height (many more than 24), and that a full-width TUI (e.g. `nano`,
+   `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
 
 ### Real-device mTLS enrollment
 

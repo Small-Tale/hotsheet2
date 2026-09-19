@@ -63,6 +63,13 @@
 .terminal-dashboard__magnified .terminal-tile__preview { min-height: 0; padding: var(--terminal-tile-frame-inset); flex: none; }
 .terminal-dashboard__magnified .terminal-tile__preview pre { position: absolute; inset: var(--terminal-tile-frame-inset); height: auto; }
 .terminal-dashboard__magnified .terminal-tile__viewport-frame { position: relative; inset: auto; width: 100%; aspect-ratio: 5 / 3; }
+/* On a phone the magnified terminal drops the 5:3 card and fills the screen so its 80×M grid
+   (HS2-Z84F78) uses the full available height. Gated on the same data-mobile signal as the JS
+   `isMobileViewport` check that drives the 80×M sizing, so CSS and layout agree. */
+.app-shell[data-mobile="true"] .terminal-dashboard__magnified { padding: remify(8px); place-items: stretch; }
+.app-shell[data-mobile="true"] .terminal-dashboard__magnified .terminal-tile { width: 100%; height: 100%; max-height: none; }
+.app-shell[data-mobile="true"] .terminal-dashboard__magnified .terminal-tile__preview { flex: 1; min-height: 0; }
+.app-shell[data-mobile="true"] .terminal-dashboard__magnified .terminal-tile__viewport-frame { aspect-ratio: auto; height: 100%; }
 .terminal-dashboard__context-menu { position: fixed; z-index: 1001; display: grid; width: remify(224px); padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 .terminal-dashboard__context-menu wa-dropdown-item { cursor: pointer; }
 .terminal-dashboard__context-menu [slot="icon"] { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
