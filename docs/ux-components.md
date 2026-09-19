@@ -1136,7 +1136,7 @@ select groups and named-tab context menus rename or delete them, while Default h
 menu. Each row toggles one terminal and Hide all / Show all act on the selected group. An
 adjacent compact label Select switches immediately, while an eye badge reports the active
 group's hidden count. The project drawer always shows its local terminals and exposes no
-visibility controls. Its UX demo initially presents an explicit Show / Hide Terminals button;
+visibility controls. Its UX demo initially presents an explicit Manage Workspace Visibility button;
 the dialog opens only after activation and can be dismissed and reopened repeatedly.
 New terminals appear in Default and begin hidden in named groups. Visibility and grouping
 changes never destroy sessions. The focused magnified or drawer consumer

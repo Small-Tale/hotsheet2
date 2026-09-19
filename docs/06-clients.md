@@ -1293,7 +1293,7 @@ HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 flow layout, magnification/hiding, and independent persisted width/high zoom
 controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-component
-Show / Hide Terminals dialog, its badge counts terminals hidden by the active group, and the
+Manage Workspace Visibility dialog, its badge counts terminals hidden by the active group, and the
 adjacent Select switches among device-local named groups. Default is permanent; named groups
 can be created, renamed, and removed, and each group records terminal inclusion without
 destroying sessions. The compact selector's open menu sizes to its option content instead of
