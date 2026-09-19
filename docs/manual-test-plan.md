@@ -24,6 +24,11 @@ When automation lands, remove the manual-only step and record it below.
 2. Move focus between viewers and verify the configured sizing policy, letterboxing,
    and lease expiry without oscillation.
 3. Disconnect the focused viewer and verify the remaining viewer takes ownership.
+4. HS2-3ZBQDG — with both devices attached and idle (only heartbeats), confirm the PTY
+   size stays put and neither device shows the other's size (no ~5s oscillation, no
+   "empty"/clipped terminal on the phone). Then interact on the phone (tap/type) and
+   confirm the PTY follows the phone after the focus-hold; interact back on the desktop
+   and confirm it follows the desktop. Interaction, not the heartbeat, transfers control.
 
 ### Real-device mTLS enrollment
 

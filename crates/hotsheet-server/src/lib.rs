@@ -7481,6 +7481,10 @@ struct ResizeClaim {
     focus: bool,
     #[serde(default = "default_true")]
     visible: bool,
+    /// This claim was driven by a genuine user interaction (tap/click/focus/keystroke) rather
+    /// than a heartbeat; only interacting claims advance the size-arbiter recency (HS2-3ZBQDG).
+    #[serde(default)]
+    interacting: bool,
 }
 
 enum TerminalText<'a> {
@@ -7615,6 +7619,7 @@ async fn terminal_attach_loop(
                                     rows: r.rows,
                                     focus: r.focus,
                                     visible: r.visible,
+                                    interacting: r.interacting,
                                     activity_at_ms: now,
                                 },
                                 now,
@@ -7700,6 +7705,7 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                                     rows: r.rows,
                                     focus: r.focus,
                                     visible: r.visible,
+                                    interacting: r.interacting,
                                 })
                                 .await
                         }

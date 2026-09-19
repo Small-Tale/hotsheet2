@@ -104,6 +104,10 @@ pub enum StreamIn {
         focus: bool,
         #[serde(default = "stream_default_true")]
         visible: bool,
+        /// This claim was driven by a genuine user interaction rather than a heartbeat; only
+        /// interacting claims advance the size-arbiter recency (HS2-3ZBQDG).
+        #[serde(default)]
+        interacting: bool,
     },
 }
 
@@ -322,11 +326,11 @@ async fn stream_terminal(
                     if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
                         match inbound {
                             StreamIn::Input { data } => { let _ = term.write(&data); }
-                            StreamIn::Resize { viewer_id, cols, rows, focus, visible } => {
+                            StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting } => {
                                 my_viewer = Some(viewer_id.clone());
                                 let now = now_ms();
                                 term.claim_size(
-                                    ViewportClaim { viewer_id, cols, rows, focus, visible, activity_at_ms: now },
+                                    ViewportClaim { viewer_id, cols, rows, focus, visible, interacting, activity_at_ms: now },
                                     now,
                                 );
                             }

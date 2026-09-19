@@ -1614,9 +1614,16 @@ point for local *and* remote viewers. Each viewport registers a **size claim** o
 the terminal WebSocket and keeps it alive with a heartbeat:
 
 ```
-viewer → server:  { viewerId, cols, rows, focus: bool, visible: bool, activityAt }
+viewer → server:  { viewerId, cols, rows, focus: bool, visible: bool, interacting: bool }
 server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast on change
 ```
+
+- `interacting` distinguishes a **genuine user interaction** (a tap/click, a focus gain, or a
+  keystroke) from the steady heartbeat/geometry claim every viewport streams. Only an
+  interacting claim advances the server's per-viewport interaction recency; a plain heartbeat
+  keeps the prior value. Without this, two focused devices' interleaved 5-second heartbeats
+  would ping-pong "most recent focus" and thrash the PTY size, leaving the device the user
+  isn't touching (e.g. a phone) rendering the other device's size (**HS2-3ZBQDG**).
 
 - `viewerId` is **per viewport, not per device** (`<clientId>:<paneId>`), so
   intra-device and cross-device viewports arbitrate uniformly — this *is* the
@@ -1633,10 +1640,12 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
 Default policy (= tmux `window-size latest`, which is exactly the maintainer's ask —
 "right-sized based on whichever device and view area had most recent focus"):
 
-- **The PTY follows the size of the viewport that most recently held input focus.**
-  When focus moves from the big macOS pane to the small iPhone view, the PTY
-  resizes to the iPhone (after the guards below); when focus returns, it resizes
-  back. `activityAt` breaks ties if two devices both believe they're focused.
+- **The PTY follows the size of the viewport the user most recently *interacted*
+  with.** When focus/interaction moves from the big macOS pane to the small iPhone
+  view, the PTY resizes to the iPhone (after the guards below); when it returns, it
+  resizes back. The interaction-recency tiebreak (advanced only by `interacting`
+  claims — see §6.7.2) decides between two viewports that both believe they're focused,
+  so one device's background heartbeats can never steal control (**HS2-3ZBQDG**).
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
   PTY's local sizing focus. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at

@@ -35,7 +35,14 @@ pub struct ViewportClaim {
     pub focus: bool,
     /// This viewport is on-screen at all (a background tab is `visible: false`).
     pub visible: bool,
-    /// When this viewport last saw user activity (focus/typing) — the recency tiebreak.
+    /// This claim was triggered by a genuine user interaction (a tap/click, a focus gain, or a
+    /// keystroke) rather than the steady heartbeat/geometry claim every viewport sends. Only an
+    /// interacting claim advances the recency tiebreak, so one device's heartbeats can't steal
+    /// size control from the device the user last actually touched (HS2-3ZBQDG).
+    pub interacting: bool,
+    /// When this viewport last saw a genuine interaction — the recency tiebreak. The arbiter
+    /// advances it only on an interacting claim, a focus gain, or a viewport's first claim; a
+    /// plain heartbeat preserves the prior value (see [`SizeArbiter::upsert`]).
     pub activity_at_ms: u64,
 }
 
@@ -72,8 +79,9 @@ pub struct SizeArbiter {
     applied_at_ms: u64,
     /// The viewport currently driving under focus-follows.
     driver: Option<String>,
-    /// When focus last moved to a viewport other than the driver — a different candidate must
-    /// stay focused for `SIZE_FOCUS_HOLD_MS` past this before it takes over (debounces flips).
+    /// When a non-driver viewport last became a takeover candidate — by gaining focus or by a
+    /// genuine interaction. A different candidate must persist for `SIZE_FOCUS_HOLD_MS` past this
+    /// before it takes over, debouncing rapid focus flips and stray double-taps.
     focus_changed_at_ms: u64,
 }
 
@@ -111,15 +119,29 @@ impl SizeArbiter {
 
     /// Add or update a viewport's claim. When a viewport *newly* takes focus and isn't already
     /// the driver, that starts the focus-hold clock so a rapid flip doesn't switch the driver.
-    pub fn upsert(&mut self, claim: ViewportClaim, now_ms: u64) {
-        let newly_focused = claim.focus
-            && self.driver.as_deref() != Some(claim.viewer_id.as_str())
-            && self
-                .claims
-                .get(&claim.viewer_id)
-                .is_none_or(|prev| !prev.focus);
-        if newly_focused {
+    ///
+    /// The recency tiebreak (`activity_at_ms`) tracks genuine **interaction**, not the steady
+    /// heartbeat every viewport streams: a first claim, a focus gain, or an explicitly
+    /// interacting claim advances it to `now_ms`; a plain heartbeat keeps the viewport's prior
+    /// interaction time. Without this, two focused devices' interleaved heartbeats would
+    /// ping-pong "latest focused" and thrash the PTY size, leaving the device the user isn't
+    /// touching (e.g. a phone) rendering the other device's size (HS2-3ZBQDG).
+    pub fn upsert(&mut self, mut claim: ViewportClaim, now_ms: u64) {
+        let prev = self.claims.get(&claim.viewer_id);
+        let gained_focus = claim.focus && prev.is_none_or(|p| !p.focus);
+        // A non-driver viewport that gains focus *or* is actively interacted with is a takeover
+        // candidate; arm the focus-hold so a rapid device flip (or a stray double-tap) must
+        // persist for SIZE_FOCUS_HOLD_MS before it actually switches the driver.
+        let starts_takeover = (gained_focus || claim.interacting)
+            && self.driver.as_deref() != Some(claim.viewer_id.as_str());
+        if starts_takeover {
             self.focus_changed_at_ms = now_ms;
+        }
+        if !(claim.interacting || gained_focus || prev.is_none()) {
+            // A non-interacting heartbeat: preserve the prior interaction recency.
+            if let Some(previous) = prev {
+                claim.activity_at_ms = previous.activity_at_ms;
+            }
         }
         self.claims.insert(claim.viewer_id.clone(), claim);
     }
@@ -267,7 +289,17 @@ mod tests {
             rows,
             focus,
             visible: true,
+            interacting: false,
             activity_at_ms: at,
+        }
+    }
+
+    /// A claim carrying a genuine user interaction (tap/keystroke), which advances the recency
+    /// tiebreak even when the viewport was already focused.
+    fn interacting_claim(id: &str, cols: u16, rows: u16, focus: bool, at: u64) -> ViewportClaim {
+        ViewportClaim {
+            interacting: true,
+            ..claim(id, cols, rows, focus, at)
         }
     }
 
@@ -347,8 +379,8 @@ mod tests {
         let mut a = SizeArbiter::default();
         a.upsert(claim("v1", 100, 40, true, 0), 0);
         a.upsert(claim("v2", 80, 24, true, 0), 0);
-        // v2 focused most recently at t=0; promote it past the hold.
-        a.upsert(claim("v2", 80, 24, true, 600), 600);
+        // The user interacts with v2 at t=600, promoting it past the hold (a heartbeat would not).
+        a.upsert(interacting_claim("v2", 80, 24, true, 600), 600);
         let d = a.decide(1000).unwrap();
         assert_eq!(d.driven_by.as_deref(), Some("v2"));
 
@@ -431,5 +463,62 @@ mod tests {
         a.upsert(claim("v1", 90, 30, true, t), t);
         let d = a.decide(t).unwrap();
         assert_eq!(d.driven_by.as_deref(), Some("v1"));
+    }
+
+    /// HS2-3ZBQDG regression: two focused devices of different sizes (e.g. a desktop and a
+    /// phone) both stream steady heartbeats. Heartbeats must NOT move the recency tiebreak, so
+    /// the driver stays the device the user last actually interacted with and the PTY size does
+    /// not thrash. (Before the interaction-aware recency, interleaved heartbeats flipped
+    /// "latest focused" every ~5s, resizing the PTY and leaving the phone rendering the
+    /// desktop's size — "terminals showing empty on mobile".)
+    #[test]
+    fn steady_heartbeats_do_not_steal_the_driver() {
+        let mut a = SizeArbiter::default();
+        // The phone (v2) attaches focused first; then the user interacts with the desktop (v1).
+        a.upsert(claim("v2", 80, 24, true, 0), 0);
+        a.upsert(interacting_claim("v1", 200, 50, true, 100), 100);
+        let first = a.decide(200).unwrap();
+        assert_eq!(first.driven_by.as_deref(), Some("v1"));
+        assert_eq!((first.cols, first.rows), (200, 50));
+
+        // Now both devices only heartbeat (focus stays true, no new interaction) for a long time.
+        let mut t = 300;
+        while t <= 30_000 {
+            a.upsert(claim("v2", 80, 24, true, t), t);
+            a.upsert(claim("v1", 200, 50, true, t), t);
+            if let Some(d) = a.decide(t) {
+                assert_eq!(
+                    d.driven_by.as_deref(),
+                    Some("v1"),
+                    "a heartbeat must never hand control to the phone at t={t}"
+                );
+                assert_eq!((d.cols, d.rows), (200, 50));
+            }
+            t += 700; // interleave the two devices' heartbeats at an odd cadence
+        }
+        assert_eq!(a.driver.as_deref(), Some("v1"));
+    }
+
+    /// The counterpart: when the user *actually interacts* with the other device (a tap/keystroke,
+    /// `interacting: true`) it takes over after the focus-hold — even though its focus never
+    /// toggled (dashboard tiles stay focused on every device).
+    #[test]
+    fn a_genuine_interaction_takes_over_after_the_hold() {
+        let mut a = SizeArbiter::default();
+        a.upsert(claim("v2", 80, 24, true, 0), 0);
+        a.upsert(interacting_claim("v1", 200, 50, true, 100), 100);
+        assert_eq!(a.decide(200).unwrap().driven_by.as_deref(), Some("v1"));
+
+        // The user picks up the phone and taps it at t=5000 (focus was already true — heartbeats).
+        a.upsert(interacting_claim("v2", 80, 24, true, 5000), 5000);
+        // Within the focus-hold, the desktop still drives (no thrash on the tap).
+        assert!(
+            a.decide(5300).is_none(),
+            "within the hold the phone's tap has not switched control yet"
+        );
+        // Past the hold, the phone (the last interacted device) takes control.
+        let d = a.decide(5600).expect("the phone takes over after the hold");
+        assert_eq!(d.driven_by.as_deref(), Some("v2"));
+        assert_eq!((d.cols, d.rows), (80, 24));
     }
 }

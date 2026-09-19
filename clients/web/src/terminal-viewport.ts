@@ -1,8 +1,8 @@
 export interface TerminalSizeMessage {pty_size:{cols:number;rows:number};driven_by?:string|null}
 
-export function terminalResizeClaim(viewerId:string,cols:number,rows:number,focus:boolean,visible:boolean):string {
+export function terminalResizeClaim(viewerId:string,cols:number,rows:number,focus:boolean,visible:boolean,interacting=false):string {
   const dimension=(value:number)=>Number.isFinite(value)?Math.max(1,Math.floor(value)):1;
-  return JSON.stringify({resize:{viewer_id:viewerId,cols:dimension(cols),rows:dimension(rows),focus,visible}});
+  return JSON.stringify({resize:{viewer_id:viewerId,cols:dimension(cols),rows:dimension(rows),focus,visible,interacting}});
 }
 
 export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undefined {
