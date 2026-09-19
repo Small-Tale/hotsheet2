@@ -44,6 +44,19 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
 });
 
+test('renders keyboard-shortcut chords as clean uniform chips (HS2-186WJT)',async({page})=>{
+  await page.setViewportSize({width:1000,height:800});
+  await page.goto('/ux-demo?component=keyboard-settings');
+  const chord=page.locator('.keyboard-settings__chord').first();
+  await expect(chord).toBeVisible();
+  // No WA-native keycap treatment (dark bottom box-shadow) and a uniform 1px border on every side,
+  // so there is no heavy/lopsided gray edge next to the clean action buttons.
+  const edges=await chord.evaluate(node=>{const style=getComputedStyle(node);return{shadow:style.boxShadow,widths:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth]};});
+  expect(edges.shadow).toBe('none');
+  expect(new Set(edges.widths).size).toBe(1);
+  await page.locator('.keyboard-settings__list').first().screenshot({path:'/private/tmp/claude/hs2-186wjt-keyboard-chips.png'});
+});
+
 test('reopens dialog demos and keeps Feedback above the modal top layer',async({page})=>{
   await page.setViewportSize({width:1280,height:800});
   await page.goto('/ux-demo?component=hs1-migration-dialog');
