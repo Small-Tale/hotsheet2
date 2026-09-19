@@ -287,8 +287,11 @@ describe('one-command migrate via hotsheet-migrate', () => {
         // The live CLI then lists what landed.
         const listed = execFileSync(hotsheetBin, ['-C', store, 'ls'], { encoding: 'utf8' });
         expect(listed).toContain('one-step migrate');
+        // The importer writes HS2 settings into the project's `.hotsheet2/`
+        // tree (leaving the legacy `.hotsheet/` files untouched), so the
+        // migrated typed `commands` land in `.hotsheet2/settings.local.json`.
         const localSettings = JSON.parse(
-          readFileSync(join(hs, 'settings.local.json'), 'utf8'),
+          readFileSync(join(project, '.hotsheet2', 'settings.local.json'), 'utf8'),
         );
         expect(localSettings.commands).toHaveLength(2);
         expect(localSettings.commands[0]).toMatchObject({
@@ -310,6 +313,14 @@ describe('one-command migrate via hotsheet-migrate', () => {
         });
         expect(localSettings.commands[1]).not.toHaveProperty('program');
         expect(localSettings.commands[1]).not.toHaveProperty('cwd');
+        // The legacy `.hotsheet/` tree is a read-only source: migration must
+        // leave the original HS1 `settings.local.json` (its `custom_commands`
+        // delta) untouched rather than rewriting it in place.
+        const legacyLocal = JSON.parse(
+          readFileSync(join(hs, 'settings.local.json'), 'utf8'),
+        );
+        expect(legacyLocal).toHaveProperty('custom_commands');
+        expect(legacyLocal).not.toHaveProperty('commands');
       } finally {
         rmSync(project, { recursive: true, force: true });
         rmSync(work, { recursive: true, force: true });
