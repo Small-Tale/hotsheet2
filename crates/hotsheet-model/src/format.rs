@@ -53,6 +53,7 @@ const KNOWN_KEYS: &[&str] = &[
     "copied_from",
     "transfer_operation_id",
     "transferred_from",
+    "legacy_number",
     "schema",
 ];
 
@@ -175,13 +176,10 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
     let mut ticket: Ticket = serde_yaml::from_value(value)?;
 
     // Retain keys the current schema doesn't know (forward-compat, docs/17 §17.4).
+    // `legacy_number` is a known field (the retained HS1 ticket number, HS2-4H2ZR1), so it is
+    // deserialized into the struct above and excluded here by KNOWN_KEYS.
     for (k, v) in &mapping {
         if let Some(key) = k.as_str() {
-            // HS1 identifiers were briefly persisted by the importer. They are not
-            // an HS2 identity and deliberately disappear on the next canonical write.
-            if key == "legacy_number" {
-                continue;
-            }
             if !KNOWN_KEYS.contains(&key) {
                 ticket.extra.insert(key.to_string(), v.clone());
             }
@@ -675,7 +673,10 @@ mod tests {
     }
 
     #[test]
-    fn retired_hs1_number_is_read_but_not_retained() {
+    fn hs1_legacy_number_is_retained_and_round_trips() {
+        // The retained HS1 ticket number (HS2-4H2ZR1) parses into the typed field, is not
+        // spilled into `extra`, and survives a canonical rewrite so old references stay
+        // resolvable/searchable.
         let canonical = to_file_string(&sample());
         let old = canonical.replacen(
             "schema: hotsheet/v2-bounded-notes",
@@ -683,8 +684,14 @@ mod tests {
             1,
         );
         let parsed = parse_file(&old).unwrap();
+        assert_eq!(parsed.legacy_number.as_deref(), Some("HS-1234"));
         assert!(!parsed.extra.contains_key("legacy_number"));
-        assert!(!to_file_string(&parsed).contains("legacy_number"));
+        let rewritten = to_file_string(&parsed);
+        assert!(rewritten.contains("legacy_number: HS-1234"));
+        assert_eq!(
+            parse_file(&rewritten).unwrap().legacy_number.as_deref(),
+            Some("HS-1234")
+        );
     }
 
     #[test]
@@ -702,6 +709,7 @@ mod tests {
         t.worker_label = Some("worktree-2".into());
         t.claim_count = 2;
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
+        t.legacy_number = Some("HS-1234".into());
         t.review_requests = vec![ReviewRequest {
             who: "dana@example.com".into(),
             kind: ReviewKind::Feedback,
@@ -1049,6 +1057,7 @@ mod tests {
         }];
         t.moved_to_store = Some("other".into());
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
+        t.legacy_number = Some("HS-1234".into());
         t
     }
 }

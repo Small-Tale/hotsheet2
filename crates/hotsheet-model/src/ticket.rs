@@ -232,6 +232,11 @@ pub struct Ticket {
     pub transfer_operation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transferred_from: Option<String>,
+    /// The HS1 ticket number (e.g. `HS-1234`) this ticket was imported from, retained so
+    /// legacy references in titles/details/notes resolve and search against the new ticket
+    /// (HS2-4H2ZR1). It is provenance metadata, not an HS2 identity; only the importer sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_number: Option<String>,
 
     pub schema: u32,
 

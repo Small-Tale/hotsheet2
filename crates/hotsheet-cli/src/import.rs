@@ -567,6 +567,9 @@ fn build_ticket(
         created,
         updated,
     );
+    // Retain the HS1 ticket number so legacy references (in titles/details/notes across the
+    // migrated project) resolve and search against the new ticket (HS2-4H2ZR1).
+    t.legacy_number = src.ticket_number.clone();
     t.priority = parse_priority(src.priority.as_deref());
     t.status = parse_status(src.status.as_deref());
     t.up_next = src.up_next;
@@ -742,6 +745,10 @@ mod tests {
         // blocked_by: HS-1200 remaps to root's ULID; the out-of-export HS-9999 is dropped.
         assert_eq!(dep.blocked_by, vec![root.id]);
         assert!(dep.up_next);
+
+        // The HS1 ticket numbers are retained so legacy references resolve/search (HS2-4H2ZR1).
+        assert_eq!(root.legacy_number.as_deref(), Some("HS-1200"));
+        assert_eq!(dep.legacy_number.as_deref(), Some("HS-1234"));
     }
 
     #[test]

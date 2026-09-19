@@ -499,6 +499,33 @@ fn fts_matches_prefixes_across_identity_and_content() {
 }
 
 #[test]
+fn fts_and_resolution_find_a_retained_legacy_number() {
+    // HS2-4H2ZR1: an imported ticket keeps its HS1 number so old references (in text or a
+    // navigate-to-ref) resolve/search against the new ticket.
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.legacy_number = Some("HS-8675309".into());
+    ix.upsert(&ticket, "first.md", "with-legacy").unwrap();
+
+    // Full-text search surfaces the ticket by its old number.
+    let rows = ix
+        .query(&TicketQuery {
+            text: Some("8675309".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, id.to_string());
+
+    // Exact reference resolution maps the legacy number (case-insensitive) to the new id.
+    assert_eq!(ix.resolve_id("HS-8675309").unwrap(), Some(id));
+    assert_eq!(ix.resolve_id("hs-8675309").unwrap(), Some(id));
+    // A number no ticket carries does not resolve.
+    assert_eq!(ix.resolve_id("HS-0000000").unwrap(), None);
+}
+
+#[test]
 fn fts_matches_attachment_filenames() {
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");

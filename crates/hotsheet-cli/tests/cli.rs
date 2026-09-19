@@ -569,7 +569,7 @@ fn provider_copy_retries_use_one_destination_ticket() {
 }
 
 #[test]
-fn import_normalizes_close_state_without_persisting_hs1_identity() {
+fn import_normalizes_close_state_and_retains_the_hs1_number() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");
     let export = root.path().join("hotsheet-export.json");
@@ -607,13 +607,16 @@ fn import_normalizes_close_state_without_persisting_hs1_identity() {
         .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
         .collect::<Vec<_>>();
     assert_eq!(files.len(), 2);
-    assert!(files.iter().all(|text| !text.contains("legacy_number")));
+    // The HS1 ticket numbers are retained (and survive the idempotent re-import) so old
+    // references resolve/search against the new tickets (HS2-4H2ZR1).
+    assert!(files.iter().all(|text| text.contains("legacy_number: HS-")));
     let done = files
         .iter()
         .find(|text| text.contains("title: done"))
         .unwrap();
     assert!(done.contains("status: completed"));
     assert!(done.contains("close_reason: completed"));
+    assert!(done.contains("legacy_number: HS-1"));
     assert!(!done.contains("up_next: true"));
     let removed = files
         .iter()
@@ -622,6 +625,7 @@ fn import_normalizes_close_state_without_persisting_hs1_identity() {
     assert!(removed.contains("status: deleted"));
     assert!(removed.contains("close_reason: obsolete"));
     assert!(removed.contains("closed_at: 2026-01-05T00:00:00Z"));
+    assert!(removed.contains("legacy_number: HS-2"));
     assert!(!removed.contains("up_next: true"));
 }
 

@@ -58,13 +58,15 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `copied_from` | ULID | no | shared | Set by a cross-store copy (§2.13) |
 | `transfer_operation_id` | string | no | shared | Stable idempotency key for an explicit provider transfer ([16](16-external-sync-interface.md) §16.7) |
 | `transferred_from` | qualified ticket ref | no | shared | Source connection + native id (`connection:native-id`) for that transfer |
+| `legacy_number` | string (e.g. `HS-1234`) | no | shared | The HS1 ticket number this ticket was imported from, retained so legacy references resolve/search against the new ticket (HS2-4H2ZR1). Provenance metadata, not an HS2 identity; only the importer sets it |
 | **Schema** | | | | |
 | `schema` | guarded string (`hotsheet/v2-bounded-notes`) | yes | shared | Current on-disk writer/version guard; normalized to model/API schema integer 2 after parse. Legacy numeric `1` remains read-compatible. |
 
 **Not in the file (Local / Derived):**
 
-- HS1 ticket numbers are migration inputs only. A legacy `legacy_number` key from an
-  earlier importer is accepted but discarded on canonical rewrite.
+- The HS1 ticket number is retained in the shared `legacy_number` frontmatter field
+  (above), so old `HS-N` references resolve and search against the new ticket
+  (HS2-4H2ZR1). It is provenance metadata, not an HS2 identity.
 
 | Field | Tier | Where |
 |---|---|---|

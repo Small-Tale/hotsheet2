@@ -139,7 +139,9 @@ locations.
 For each ticket:
 - **Derive a stable ULID** from the source project/ticket identity and creation time,
   then derive an all-caps slug ([02](02-ticket-storage.md) §2.4). The stable identity
-  makes retries idempotent without retaining the HS1 number in HS2.
+  makes retries idempotent. The HS1 number is also retained in the `legacy_number`
+  frontmatter field so old `HS-N` references resolve/search against the new ticket
+  (HS2-4H2ZR1); it is provenance, not the ticket's HS2 identity.
 - Map fields → HS2 frontmatter; body ← `details`; notes → the `## Notes` section
   (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
   close outcome and `archive`/soft-delete to `obsolete`, carrying the best available

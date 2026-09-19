@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -39,6 +39,7 @@ CREATE TABLE tickets (
   tags_json       TEXT NOT NULL DEFAULT '[]',
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   blocked_reason  TEXT,
+  legacy_number   TEXT,
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
   has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
@@ -55,7 +56,7 @@ CREATE INDEX idx_assignees ON assignees(store_id, assignee);
 CREATE TABLE reviews (store_id TEXT, ticket_id TEXT, who TEXT, requested_by TEXT);
 CREATE INDEX idx_reviews ON reviews(store_id, who);
 CREATE INDEX idx_reviews_requested_by ON reviews(store_id, requested_by);
-CREATE VIRTUAL TABLE tickets_fts USING fts5(slug, title, tags, details, notes, attachments);
+CREATE VIRTUAL TABLE tickets_fts USING fts5(slug, title, tags, details, notes, attachments, legacy_number);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 "#;
 
@@ -284,7 +285,20 @@ impl Index {
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
-        Ok(value.and_then(|id| Ulid::from_string(&id).ok()))
+        if let Some(id) = value {
+            return Ok(Ulid::from_string(&id).ok());
+        }
+        // Fall back to the retained HS1 ticket number so legacy references (e.g. `HS-1234`)
+        // resolve to the imported ticket (HS2-4H2ZR1).
+        let legacy = self
+            .conn
+            .query_row(
+                "SELECT id FROM tickets WHERE store_id=?1 AND legacy_number=?2 COLLATE NOCASE LIMIT 1",
+                params![self.store_id, needle],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(legacy.and_then(|id| Ulid::from_string(&id).ok()))
     }
 
     /// Record the bytes currently present for an already-indexed ticket without
@@ -328,8 +342,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -339,7 +353,8 @@ impl Index {
              completed_at=excluded.completed_at,verified_at=excluded.verified_at,claimed_by=excluded.claimed_by,\
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
-             content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation",
+             content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
+             legacy_number=excluded.legacy_number",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -350,6 +365,7 @@ impl Index {
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
                 file_path, content_hash, feedback_needed,
                 t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) as i64,
+                t.legacy_number,
             ],
         )?;
 
@@ -411,8 +427,8 @@ impl Index {
         self.conn
             .execute("DELETE FROM tickets_fts WHERE rowid=?1", params![rowid])?;
         self.conn.execute(
-            "INSERT INTO tickets_fts(rowid,slug,title,tags,details,notes,attachments) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-            params![rowid, t.slug, t.title, t.tags.join(" "), t.details, notes, attachments],
+            "INSERT INTO tickets_fts(rowid,slug,title,tags,details,notes,attachments,legacy_number) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![rowid, t.slug, t.title, t.tags.join(" "), t.details, notes, attachments, t.legacy_number.clone().unwrap_or_default()],
         )?;
         Ok(())
     }
