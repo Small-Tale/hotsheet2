@@ -58,16 +58,10 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .ticket-source-setup__remote code { display:block; padding:var(--wa-space-xs); border-radius:var(--wa-border-radius-s); background:var(--wa-color-surface-default); white-space:normal; overflow-wrap:anywhere; }
 .ticket-source-setup__remote-form { display:grid; gap:var(--wa-space-m); }
 .ticket-source-setup__remote-help { color:var(--wa-color-text-link); font-size:var(--wa-font-size-xs); }
-.ticket-source-setup__remote-actions { display:flex; justify-content:flex-end; gap:var(--wa-space-xs); }
 .terminal-rename { display: grid; gap: var(--wa-space-l); }
 .terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
-.app-loading, .app-error, .app-toast { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
-.app-error { display:flex; align-items:flex-start; gap:var(--wa-space-s); background:var(--wa-color-danger-fill-loud); max-width:remify(512px); line-height:1.4; }
-.app-error > span { flex:1; min-width:0; overflow-wrap:anywhere; }
-.app-error > button { display:grid; flex:0 0 auto; width:remify(28px); height:remify(28px); margin:remify(-3.2px) remify(-5.6px) remify(-3.2px) 0; padding:0; border:0; border-radius:var(--wa-border-radius-s); align-items:center; justify-items:center; color:inherit; background:transparent; cursor:pointer; }
-.app-error > button:hover { background:color-mix(in srgb,currentColor 16%,transparent); }
-.app-error > button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
-.app-error > button svg { width:remify(16px); height:remify(16px); }
+/* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
+.app-loading, .app-toast { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (ticket-inspector-skeleton.css), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */

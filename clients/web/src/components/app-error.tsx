@@ -1,3 +1,5 @@
+import './app-error.css';
+
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { X } from 'lucide';
 
