@@ -1066,7 +1066,11 @@ async function chooseAndOpenProject(){
 /** Open the appropriate project picker: the filesystem dialog on the same device, or the server's
  * known-projects list when the client is on a different device (HS2-VFNCXG). */
 function openProjectPicker(){error.value='';projectDialogError.value='';unhealthyServerRecovery.value=undefined;if(isRemoteClient())void openRemoteProjectDialog();else projectDialogOpen.value=true}
-async function openRemoteProjectDialog(){remoteProjectError.value='';remoteProjectLoading.value=true;remoteProjectDialogOpen.value=true;try{const response=await fetch(new URL('/__hotsheet/checkouts',window.location.href));if(!response.ok)throw new Error(`Could not load projects (${response.status}).`);remoteProjectCheckouts.value=await response.json() as Checkout[]}catch(reason){remoteProjectError.value=reason instanceof Error?reason.message:String(reason)}finally{remoteProjectLoading.value=false}}
+async function openRemoteProjectDialog(){remoteProjectError.value='';remoteProjectLoading.value=true;remoteProjectDialogOpen.value=true;try{
+  // Use a plain relative request (every other client fetch does) rather than `new URL(..., location.href)`,
+  // which surfaced a cryptic engine SyntaxError ("The string did not match the expected pattern.") on some
+  // mobile browsers, and always present a clear, actionable message instead of a raw browser exception (HS2-91PCDZ).
+  const response=await fetch('/__hotsheet/checkouts');if(!response.ok)throw new Error(`the server responded with ${response.status}`);remoteProjectCheckouts.value=await response.json() as Checkout[]}catch(reason){console.error('Could not load the server open-projects list',reason);remoteProjectError.value='Could not load the projects open on the Hot Sheet server. Check the connection to the server and try again.'}finally{remoteProjectLoading.value=false}}
 async function openRemoteCheckout(root:string){remoteProjectDialogOpen.value=false;await openProject(root)}
 function timeline(ticket:FullTicket){return ticketTimelineEntries(ticket).map(entry=>({...entry,time:ago(entry.timestamp)}));}
 function notes(ticket:FullTicket){return ticket.notes.map(note=>{const aiAuthored=note.text.includes('hotsheet:activity-distillation:v1:');return{id:note.id,kind:presentedNoteKind(note,ticket.notes),author:aiAuthored?'Hot Sheet AI':'Hot Sheet',time:ago(note.created_at),body:note.text,aiAuthored,aiTool:aiAuthored?'Hot Sheet AI':undefined} as const});}

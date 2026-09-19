@@ -214,12 +214,25 @@ test('remote clients pick from the server open-projects list instead of the file
   await page.setViewportSize({width:1100,height:760});await page.goto('/?device=remote');
   await page.getByRole('button',{name:'Open project'}).click();
   const remote=page.locator('[data-remote-project-dialog]');await expect(remote).toHaveJSProperty('open',true);
+  await expect(remote.locator('.project-dialog__error')).toHaveCount(0);
   await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open',false);
   const item=remote.locator('[data-action="open-remote-checkout"]');await expect(item).toBeVisible();await expect(item).toContainText('demo');await expect(item).toContainText('/work/demo');
   await page.waitForTimeout(350);await page.screenshot({path:'/private/tmp/hs2-vfncxg-remote-project-dialog.png'});
   await item.click();
   await expect(remote).toHaveJSProperty('open',false);
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+});
+
+test('shows a clear message, not a raw browser exception, when the remote project list fails to load (HS2-91PCDZ)',async({page})=>{
+  await mockProject(page);
+  await page.route('**/__hotsheet/checkouts',route=>route.request().method()==='GET'?route.fulfill({status:500,body:'boom'}):route.fallback());
+  await page.setViewportSize({width:1100,height:760});await page.goto('/?device=remote');
+  await page.getByRole('button',{name:'Open project'}).click();
+  const remote=page.locator('[data-remote-project-dialog]');await expect(remote).toHaveJSProperty('open',true);
+  const error=remote.locator('.project-dialog__error');
+  await expect(error).toContainText('Could not load the projects open on the Hot Sheet server');
+  // Never surface a cryptic engine exception (e.g. iOS Safari's "The string did not match the expected pattern.").
+  await expect(error).not.toContainText('did not match the expected pattern');
 });
 
 test('offers explicit identity-guarded recovery for an unresponsive local server',async({page})=>{
