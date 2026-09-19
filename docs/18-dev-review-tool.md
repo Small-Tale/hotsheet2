@@ -15,7 +15,10 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 - The main application and UX Demo enable a very small fixed `Feedback` launcher in the
   top-right top layer for every development build. It stays above application dialogs so
   those surfaces can be selected and reported. `?dev-review=false` is the sole explicit
-  opt-out; production builds never include the tool.
+  opt-out; production builds never include the tool. The visible overlay is desktop-only: it
+  is removed below the mobile breakpoint (`isMobileViewport`) and re-installed on resize back to
+  desktop, since it clutters a small screen and its modifier-gated review interactions do not
+  apply there. The headless UI-stability diagnostics remain installed regardless of viewport.
 - A disclosure button beside `Feedback` opens additional review utilities. **CSS Live
   Edit** captures the complete readable CSSOM immediately, replaces the ordinary launcher
   with a cancellable mode button plus `New Ticket`, and briefly explains that the reviewer

@@ -173,7 +173,16 @@ if(import.meta.env.DEV){
   if(devReviewRequested(location.href,true)){
     const [{installUiStabilityDiagnostics},devReview]=await Promise.all([import('./ui-stability-diagnostics'),import('./dev-review')]);
     uiStabilityDiagnostics=installUiStabilityDiagnostics({onThrash:async diagnostic=>{await submitDevReview({notes:'UI stability diagnostics detected repeated unexpected control dismissal or render thrashing.',captures:[],attachments:[diagnostic],actorRole:'system',pageUrl:location.href,viewport:{width:innerWidth,height:innerHeight}})}});
-    devReview.installDevReview({submit:submitDevReview,diagnostics:()=>uiStabilityDiagnostics!.attachment()});
+    // The visible Dev Review overlay is desktop-only: it clutters mobile-width viewports and its
+    // modifier-gated review interactions do not apply there. Install it only above the mobile
+    // breakpoint and re-sync on resize (HS2-9KT6RQ). The headless UI-stability diagnostics stay on.
+    let devReviewOverlay:{destroy():void}|undefined;
+    const syncDevReviewOverlay=()=>{
+      if(isMobileViewport(window.innerWidth)){devReviewOverlay?.destroy();devReviewOverlay=undefined;return}
+      devReviewOverlay??=devReview.installDevReview({submit:submitDevReview,diagnostics:()=>uiStabilityDiagnostics!.attachment()});
+    };
+    syncDevReviewOverlay();
+    window.addEventListener('resize',syncDevReviewOverlay);
   }
   (window as typeof window&{__hotsheetUiStabilityDiagnostics?:UiStabilityDiagnostics}).__hotsheetUiStabilityDiagnostics=uiStabilityDiagnostics;
 }
