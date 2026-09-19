@@ -1953,6 +1953,26 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toBeHidden();await expect(page.locator('.app-toast')).toContainText('Attachment reference copied to clipboard.');
 });
 
+test('suppresses background app shortcuts while a modal dialog is open (HS2-FW4PYZ)',async({page})=>{
+  await mockProject(page);await page.setViewportSize({width:1280,height:800});await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const searchField=page.getByRole('searchbox',{name:'Search tickets'});
+  // Open the modal ticket reader, then the Open-search shortcut must NOT reach the background search.
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').dblclick();
+  const reader=page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+  await expect(reader).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(searchField).toHaveCount(0);
+  await expect(reader).toBeVisible();
+  // Close the modal; once no modal remains the same shortcut opens search (it is only suppressed under a modal).
+  await page.keyboard.press('Escape');
+  await expect(reader).toBeHidden();
+  await expect.poll(()=>page.evaluate(()=>!document.querySelector('wa-dialog[open], dialog:modal'))).toBe(true);
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(searchField).toBeVisible();
+});
+
 test('renders canonical attachment references for filenames containing backticks',async({page})=>{
   await mockProject(page);const filename='proof`quote.txt',ticket={...full,details:'Backtick evidence is attached below.',notes:[{id:'N-BACKTICK',kind:'regular' as const,created_at:'2026-08-30T00:39:00Z',edited_at:'2026-08-30T00:39:00Z',text:'Canonical reference: ``attachment:proof`quote.txt``'}],attachments:[{id:'A-BACKTICK',filename,created_at:'2026-08-30T00:40:00Z'}]};await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...ticket}}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();const inspector=page.locator('[data-component="ticket-inspector"]'),reference=inspector.getByRole('link',{name:filename});await expect(reference).toBeVisible();await expect(reference).toHaveAttribute('href',/\/attachments\/A-BACKTICK$/);await inspector.screenshot({path:'/private/tmp/hs2-h2ptvz-backtick-reference-wide.png'});await page.setViewportSize({width:760,height:700});await expect(reference).toBeVisible();await inspector.screenshot({path:'/private/tmp/hs2-h2ptvz-backtick-reference-narrow.png'});
 });

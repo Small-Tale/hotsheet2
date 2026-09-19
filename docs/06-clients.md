@@ -367,7 +367,11 @@ and identity-less legacy entries remain conservatively blocking.
   all, with conflict warnings when two editable shortcuts collide. Overrides are stored
   device-locally and resolved through the shared registry (`matchesShortcut`) at the central
   keydown dispatcher, the ticket clipboard policy, and ticket-row selection, so a rebinding takes
-  effect immediately (HS2-9PR10F). Fixed ARIA structural affordances — list-arrow navigation, tab
+  effect immediately (HS2-9PR10F). While a modal dialog is open the central keydown dispatcher
+  suppresses these background app shortcuts — search focus, ticket undo/redo, and the ticket
+  clipboard — so, for example, Cmd-K cannot focus the workspace search from inside a dialog; they
+  resume once no modal remains, and the modal keeps its own text-field editing and shortcuts
+  (HS2-FW4PYZ). Fixed ARIA structural affordances — list-arrow navigation, tab
   navigation, media-gallery keys, control activation, and dismissal — remain non-rebindable
   **System** entries, since rebinding ARIA navigation would break screen-reader and platform
   expectations. Chords display platform-correctly (⌘ on Apple, Ctrl elsewhere). The
