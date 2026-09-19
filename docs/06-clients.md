@@ -1328,7 +1328,11 @@ aggregate and each project; a single-project summary continues to use its own ma
 divider below that aggregate keeps it distinct from the individual project list. Each constituent
 chart also draws the aligned aggregate values as slightly wider neutral-gray bars behind its blue
 project values, so the total scale remains visible in-place; the aggregate row and single-project
-case do not add that comparison layer. The project summaries open project statistics and the aggregate opens
+case do not add that comparison layer. Every bar is scaled proportionally to that shared maximum
+(a bar is `value / maximum` of the chart height, with only a tiny floor to keep a non-zero bar
+visible), so a project's blue fill never exceeds its gray aggregate bar and a small day's fill
+stays proportional instead of clamping up to a fixed minimum that would read as the whole day
+(HS2-C9JM65). The project summaries open project statistics and the aggregate opens
 cross-project statistics. The same bounded ticket-page response carries an exact seven-day
 completion summary using browser-local calendar boundaries, so archived completions and rows
 beyond the retained page remain represented without another request or polling. It remains usable beside

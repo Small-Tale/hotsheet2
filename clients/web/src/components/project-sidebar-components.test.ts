@@ -87,6 +87,22 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toMatch(/project-summary__bar-slot \{[^}]*min-width: remify\(4\.8px\);[^}]*max-width: remify\(14\.4px\);[^}]*flex: 1 1 remify\(14\.4px\)/);
   });
 
+  it('scales each project fill as a proportion of its aggregate background without clamping a small fill up toward the whole bar (HS2-C9JM65)', () => {
+    // Day 1: project 4 of aggregate 9; day 2: project 1 of aggregate 9; the tallest aggregate day is 9.
+    const markup = String(ProjectSummary({ completedToday: 1, inProgress: 0, trend: [4, 1], backgroundTrend: [9, 9], chartMaximum: 9 }));
+    // The gray aggregate bars fill the domain (100%) on both days.
+    expect(markup.match(/data-background-bar="\d" data-background-zero="false"/g)).toHaveLength(2);
+    expect(markup).toContain('--bar-height:100%');
+    // Fills are value/maximum: 44% and 11%. The 11% fill must stay proportional (an eleventh of the bar),
+    // not be floored up to ~12% where a fraction would read as the whole aggregate bar.
+    expect(markup).toContain('--bar-height:44%');
+    expect(markup).toContain('--bar-height:11%');
+    expect(markup).not.toContain('--bar-height:12%');
+    // A small non-zero fill relies on a low min-height for visibility (not a large clamp).
+    const css = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/project-summary__bar-background,\s*\.project-summary__bar-foreground \{[^}]*min-height: remify\(2px\)/);
+  });
+
   it('renders repository status as one discoverable action', () => {
     const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, behind: 2, uncommitted: 1 }));
     expect(markup).toContain('Repository status for main: 3 ahead, 2 behind, 1 uncommitted, 0 conflicted');

@@ -30,9 +30,14 @@ export function ProjectSummary({ completedToday, inProgress, trend, projectId, c
         {Array.from({ length: chartLength }, (_, index) => {
           const value = alignedTrend[index];
           const backgroundValue = backgroundTrend?.at(index - chartLength) ?? 0;
+          // Bars scale proportionally to the shared maximum (the tallest aggregate day = 100%), so a
+          // project's fill is exactly value/maximum and its aggregate background is aggregate/maximum —
+          // the fill therefore never exceeds the gray bar and per-day fills sum to the aggregate. Only a
+          // 1% floor keeps a non-zero bar renderable; the CSS min-height handles visibility without
+          // clamping small bars to a fixed height that would make a fraction look like the whole (HS2-C9JM65).
           return <span class="project-summary__bar-slot">
-            {backgroundTrend && <span class="project-summary__bar-background" aria-hidden="true" style={backgroundValue === 0 ? undefined : `--bar-height:${Math.max(12, Math.round(backgroundValue / maximum * 100))}%`} data-background-bar={index} data-background-zero={String(backgroundValue === 0)}></span>}
-            <span class="project-summary__bar-foreground" aria-hidden="true" style={value === 0 ? undefined : `--bar-height:${Math.max(12, Math.round(value / maximum * 100))}%`} data-bar={index} data-zero={String(value === 0)}></span>
+            {backgroundTrend && <span class="project-summary__bar-background" aria-hidden="true" style={backgroundValue === 0 ? undefined : `--bar-height:${Math.max(1, Math.round(backgroundValue / maximum * 100))}%`} data-background-bar={index} data-background-zero={String(backgroundValue === 0)}></span>}
+            <span class="project-summary__bar-foreground" aria-hidden="true" style={value === 0 ? undefined : `--bar-height:${Math.max(1, Math.round(value / maximum * 100))}%`} data-bar={index} data-zero={String(value === 0)}></span>
           </span>;
         })}
       </span>
