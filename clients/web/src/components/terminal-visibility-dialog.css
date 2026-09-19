@@ -2,11 +2,12 @@
 .terminal-visibility-dialog { display:grid; min-width:0; width:100%; max-height:min(remify(704px),calc(100vh - remify(128px))); grid-template-rows:auto minmax(0,1fr) auto; }
 [data-terminal-visibility-dialog]::part(body) { padding:0; }
 .terminal-visibility-dialog__toolbar { padding:var(--wa-space-xs) var(--wa-space-2xs); border-bottom:1px solid var(--wa-color-surface-border); background:transparent; }
-.terminal-visibility-dialog__tabs { display:flex; min-width:0; padding:var(--wa-space-2xs); overflow-x:auto; align-items:center; gap:var(--wa-space-xs); }
-.terminal-visibility-dialog__tab { min-height:remify(32px); padding:0 var(--wa-space-m); border:0; cursor:pointer; font:inherit; white-space:nowrap; }
+/* The visibility-group tabs render as the shared kerf AppTab (matching the project tab strip and the
+   bottom drawer tabs) rather than bespoke pills, so they style themselves (HS2-7226XR). */
+.terminal-visibility-dialog__tabs { display:flex; min-width:0; padding:var(--wa-space-2xs); overflow-x:auto; align-items:center; gap:var(--wa-space-2xs); }
 .terminal-visibility-dialog__tabs .terminal-visibility-dialog__add { display:inline-grid; width:remify(32px); height:remify(32px); padding:0; border:0; border-radius:var(--wa-border-radius-pill); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; flex:none; place-items:center; }
 .terminal-visibility-dialog__add:hover { background:var(--wa-color-neutral-fill-quiet); }
-.terminal-visibility-dialog__tabs button:focus-visible { outline:var(--wa-focus-ring); outline-offset:-2px; }
+.terminal-visibility-dialog__add:focus-visible { outline:var(--wa-focus-ring); outline-offset:-2px; }
 .terminal-visibility-dialog__tabs svg { width:remify(16px); height:remify(16px); }
 .terminal-visibility-dialog__body { min-height:0; padding:var(--wa-space-s); overflow:auto; }
 .terminal-visibility-dialog__project + .terminal-visibility-dialog__project { margin-top:var(--wa-space-l); }
