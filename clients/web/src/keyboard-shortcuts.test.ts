@@ -42,6 +42,39 @@ describe('keyboard-shortcuts registry', () => {
     for (const id of ['open-search', 'undo', 'redo']) expect(KEYBOARD_SHORTCUTS.find(s => s.id === id)?.editable).toBe(true);
   });
 
+  it('defines the view/panel and tab-cycling command shortcuts as rebindable (HS2-9SHYWD)', () => {
+    const expected: Record<string, ShortcutChord> = {
+      'toggle-left-sidebar': { key: 'b', mod: true },
+      'toggle-right-sidebar': { key: 'b', mod: true, alt: true },
+      'toggle-bottom-drawer': { key: 'j', mod: true },
+      'view-list': { key: 'l', mod: true, shift: true },
+      'view-board': { key: 'b', mod: true, shift: true },
+      'view-notifications': { key: 'm', mod: true, shift: true },
+      'view-settings': { key: ',', mod: true },
+      'view-workspace-grid': { key: 'g', mod: true, shift: true },
+      'view-all-stats': { key: 'd', mod: true, shift: true },
+      'new-ticket': { key: 'c' },
+      'project-tab-previous': { key: 'ArrowLeft', mod: true, alt: true },
+      'project-tab-next': { key: 'ArrowRight', mod: true, alt: true },
+      'drawer-tab-previous': { key: 'ArrowUp', mod: true, alt: true },
+      'drawer-tab-next': { key: 'ArrowDown', mod: true, alt: true },
+    };
+    for (const [id, chord] of Object.entries(expected)) {
+      const def = KEYBOARD_SHORTCUTS.find(s => s.id === id);
+      expect(def, id).toBeTruthy();
+      expect(def?.editable, id).toBe(true);
+      expect(def?.defaultChord, id).toEqual(chord);
+    }
+  });
+
+  it('has no two editable shortcuts sharing a default chord (no self-conflicts)', () => {
+    const editable = KEYBOARD_SHORTCUTS.filter(s => s.editable);
+    for (const shortcut of editable) {
+      const clash = editable.find(other => other.id !== shortcut.id && chordsEqual(other.defaultChord, shortcut.defaultChord));
+      expect(clash, `${shortcut.id} vs ${clash?.id}`).toBeUndefined();
+    }
+  });
+
   it('matches events against the effective chord with platform-correct modifiers', () => {
     const overrides: Record<string, ShortcutChord> = {};
     // Apple: mod is metaKey.

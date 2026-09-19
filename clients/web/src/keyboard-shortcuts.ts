@@ -35,6 +35,7 @@ export const KEYBOARD_SHORTCUT_STORAGE_KEY = 'hotsheet.keyboard-shortcuts';
 /** Group order for display. */
 export const KEYBOARD_SHORTCUT_GROUPS = [
   'Global',
+  'Views & panels',
   'Tickets',
   'Navigation & tabs',
   'Media gallery',
@@ -45,11 +46,26 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'open-search', label: 'Open search', description: 'Focus the workspace ticket search.', group: 'Global', defaultChord: { key: 'k', mod: true }, editable: true },
   { id: 'undo', label: 'Undo', description: 'Undo the last ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true }, editable: true },
   { id: 'redo', label: 'Redo', description: 'Redo the last undone ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true, shift: true }, editable: true },
+  // Views & panels — rebindable command chords resolved at the central dispatcher (HS2-9SHYWD).
+  // Defaults follow VS Code where it has an equivalent (⌘/Ctrl+B toggle sidebar, ⌘/Ctrl+⌥+B secondary
+  // sidebar, ⌘/Ctrl+J panel, ⌘/Ctrl+⌥+←/→ previous/next tab). `mod` is Cmd on Apple, Ctrl elsewhere.
+  { id: 'toggle-left-sidebar', label: 'Toggle left sidebar', description: 'Show or hide the project sidebar.', group: 'Views & panels', defaultChord: { key: 'b', mod: true }, editable: true },
+  { id: 'toggle-right-sidebar', label: 'Toggle right sidebar', description: 'Show or hide the ticket inspector.', group: 'Views & panels', defaultChord: { key: 'b', mod: true, alt: true }, editable: true },
+  { id: 'toggle-bottom-drawer', label: 'Toggle bottom drawer', description: 'Show or hide the terminal drawer.', group: 'Views & panels', defaultChord: { key: 'j', mod: true }, editable: true },
+  { id: 'view-list', label: 'List view', description: 'Switch the workspace to the list view.', group: 'Views & panels', defaultChord: { key: 'l', mod: true, shift: true }, editable: true },
+  { id: 'view-board', label: 'Column view', description: 'Switch the workspace to the column (board) view.', group: 'Views & panels', defaultChord: { key: 'b', mod: true, shift: true }, editable: true },
+  { id: 'view-notifications', label: 'Notifications view', description: 'Switch the workspace to the notifications view.', group: 'Views & panels', defaultChord: { key: 'm', mod: true, shift: true }, editable: true },
+  { id: 'view-settings', label: 'Settings view', description: 'Switch the workspace to the settings view.', group: 'Views & panels', defaultChord: { key: ',', mod: true }, editable: true },
+  { id: 'view-workspace-grid', label: 'Workspace grid', description: 'Toggle the all-project workspace terminal grid and the last selected project.', group: 'Views & panels', defaultChord: { key: 'g', mod: true, shift: true }, editable: true },
+  { id: 'view-all-stats', label: 'All-project stats', description: 'Toggle the all-project stats dashboard and the last selected project.', group: 'Views & panels', defaultChord: { key: 'd', mod: true, shift: true }, editable: true },
   // Ticket clipboard & select-all — app-level chords, rebindable (resolved via matchesShortcut).
   { id: 'select-all-tickets', label: 'Select all tickets', description: 'Select every ticket in the current view.', group: 'Tickets', defaultChord: { key: 'a', mod: true }, editable: true },
   { id: 'copy-tickets', label: 'Copy tickets', description: 'Copy the selected tickets.', group: 'Tickets', defaultChord: { key: 'c', mod: true }, editable: true },
   { id: 'cut-tickets', label: 'Cut tickets', description: 'Cut the selected tickets.', group: 'Tickets', defaultChord: { key: 'x', mod: true }, editable: true },
   { id: 'paste-tickets', label: 'Paste tickets', description: 'Paste tickets from the clipboard.', group: 'Tickets', defaultChord: { key: 'v', mod: true }, editable: true },
+  // Create a new ticket. A bare `c` follows the GitHub/Linear "create" convention; it only fires when no
+  // text field is focused (HS2-9SHYWD). Rebind to a modifier chord in Settings → Keyboard if preferred.
+  { id: 'new-ticket', label: 'New ticket', description: 'Open the new-ticket composer.', group: 'Tickets', defaultChord: { key: 'c' }, editable: true },
   { id: 'move-selection-up', label: 'Move selection up', description: 'Focus and select the previous ticket.', group: 'Tickets', defaultChord: { key: 'ArrowUp' }, editable: false },
   { id: 'move-selection-down', label: 'Move selection down', description: 'Focus and select the next ticket.', group: 'Tickets', defaultChord: { key: 'ArrowDown' }, editable: false },
   { id: 'activate', label: 'Activate control', description: 'Activate the focused row, control, or menu item.', group: 'Navigation & tabs', defaultChord: { key: 'Enter' }, editable: false },
@@ -61,6 +77,11 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'close-tab', label: 'Close tab', description: 'Close the focused terminal or chat tab.', group: 'Navigation & tabs', defaultChord: { key: 'Delete' }, editable: false },
   { id: 'reorder-tab-left', label: 'Move tab left', description: 'Reorder the focused drawer tab toward the start.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowLeft', alt: true, shift: true }, editable: false },
   { id: 'reorder-tab-right', label: 'Move tab right', description: 'Reorder the focused drawer tab toward the end.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowRight', alt: true, shift: true }, editable: false },
+  // Cycle the active project / drawer tab (rebindable, resolved at the central dispatcher — HS2-9SHYWD).
+  { id: 'project-tab-previous', label: 'Previous project tab', description: 'Activate the previous open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowLeft', mod: true, alt: true }, editable: true },
+  { id: 'project-tab-next', label: 'Next project tab', description: 'Activate the next open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowRight', mod: true, alt: true }, editable: true },
+  { id: 'drawer-tab-previous', label: 'Previous drawer tab', description: 'Select the previous bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowUp', mod: true, alt: true }, editable: true },
+  { id: 'drawer-tab-next', label: 'Next drawer tab', description: 'Select the next bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowDown', mod: true, alt: true }, editable: true },
   { id: 'gallery-previous', label: 'Previous attachment', description: 'Show the previous image in the attachment gallery.', group: 'Media gallery', defaultChord: { key: 'ArrowLeft' }, editable: false },
   { id: 'gallery-next', label: 'Next attachment', description: 'Show the next image in the attachment gallery.', group: 'Media gallery', defaultChord: { key: 'ArrowRight' }, editable: false },
   { id: 'gallery-toggle-playback', label: 'Play or pause video', description: 'Toggle playback of the gallery video.', group: 'Media gallery', defaultChord: { key: ' ' }, editable: false },

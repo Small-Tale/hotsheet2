@@ -56,7 +56,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/pending-created-tickets.ts # Retains just-created rows so a background refresh whose eventually-consistent index has not indexed them yet cannot drop them, releasing each once a fetched page contains it or a TTL elapses (HS2-Y5PDHW)
     src/server-busy.ts       #   Global "server busy" state from the in-flight authenticated-request count (idle long-polls excluded), with a short idle linger; plus the viewport-fill bar-count math
     src/components/server-busy-bars.tsx # Decorative fixed top-of-app 4px yellow bar strip that ripples while the server is busy (HS2-MW1V3M)
-    src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR)
+    src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global/view/panel/tab-cycling chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR, HS2-9SHYWD)
+    src/tab-cycle.ts # Pure next/previous wrap-around cycling over an ordered tab-id list, shared by the project-tab and drawer-tab keyboard shortcuts (HS2-9SHYWD)
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
