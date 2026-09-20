@@ -1251,6 +1251,22 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   });
   expect(selectedSpacing.actual).toBeCloseTo(selectedSpacing.expected, 1);
   const category = inspector.locator('wa-select[name="inspector-category"]');
+  const fieldLabelGeometry = await category.evaluate(node => {
+    const label = node.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!;
+    const combobox = node.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!;
+    const labelStyle = getComputedStyle(label);
+    const comboboxStyle = getComputedStyle(combobox);
+    return {
+      labelInset: Number.parseFloat(labelStyle.paddingInlineStart),
+      valueInset: Number.parseFloat(comboboxStyle.borderInlineStartWidth) + Number.parseFloat(comboboxStyle.paddingInlineStart),
+      textTransform: labelStyle.textTransform,
+      fontWeight: labelStyle.fontWeight,
+    };
+  });
+  expect(fieldLabelGeometry.labelInset).toBeCloseTo(fieldLabelGeometry.valueInset, 1);
+  expect(fieldLabelGeometry.labelInset).toBeCloseTo(9, 1);
+  expect(fieldLabelGeometry.textTransform).toBe('uppercase');
+  expect(fieldLabelGeometry.fontWeight).toBe('650');
   const selectCaret = await category.evaluate(node => {
     const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="expand-icon"]');
     return caret ? { transform: getComputedStyle(caret).transform, width: caret.getBoundingClientRect().width } : null;
@@ -1280,6 +1296,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
+  await inspector.locator('.ticket-inspector__metadata').screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(inspector.locator('wa-select[name="inspector-category"]')).toBeVisible();
+  await expect(inspector.locator('wa-select[name="inspector-priority"]')).toBeVisible();
+  await inspector.locator('.ticket-inspector__metadata').screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
@@ -1301,7 +1323,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
   );
   expect(sectionRhythm).toHaveLength(3);
-  expect(sectionRhythm.map(section => section.gap)).toEqual(['8.8px', '8.8px', '8.8px']);
+  expect(sectionRhythm.map(section => section.gap)).toEqual(['8px', '8px', '8px']);
   expect(sectionRhythm[0].headerHeight).toBeUndefined();expect(sectionRhythm[1].headerHeight).toBeCloseTo(44,1);expect(sectionRhythm[2].headerHeight).toBeCloseTo(44,1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
@@ -1449,7 +1471,8 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
     const style = getComputedStyle(node);
     return { horizontal: Number.parseFloat(style.paddingLeft), vertical: Number.parseFloat(style.paddingTop) };
   });
-  expect(padding.horizontal / padding.vertical).toBeCloseTo(2, 1);
+  expect(padding.horizontal).toBeCloseTo(8, 1);
+  expect(padding.vertical).toBeCloseTo(3.2, 1);
   const toggle = page.locator('[data-action="toggle-settings"]');
   await expect(toggle).toHaveCount(1);
   await expect(toggle).toContainText('Settings');

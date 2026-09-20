@@ -708,9 +708,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   padding, so their text lands at 17px; headers and other non-bordered content get a 1px
   transparent inline border + 8px padding to align their text to the same 17px column. There
   are **no negative margins** — nothing breaks out of a padded parent. The compact tabs use the
-  same 8px margin. Category and Priority are `ListHeader`s over label-suppressed selects in a
-  two-column grid: column 1 hugs the left (header 17px, select 8px from the left) and column 2
-  the right (header 17px, select 8px from the right). The Code Review and Attachments panels
+  same 8px margin. Since `@kerfjs/ui` 5.0.0-beta.17, Category and Priority use the selects'
+  native labels in a two-column grid: the shared Web Awesome theme gives each field the canonical
+  1px + 8px content inset and aligns its ListHeader-style label with its value, eliminating separate
+  inset wrappers and label-suppressed controls. The Code Review and Attachments panels
   follow the same rule (heading at 17px, evidence/commit/attachment surfaces at the 8px column).
   The wider reader modal keeps its own generous inline padding, so its sections do not add the
   8px margin on top. It reuses the same `ListHeader`/`ListItem`
@@ -849,7 +850,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `TagList`
 - `TagChip` — **built**: Web Awesome tag primitive, stable domain identity, compact
   filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
-  `/ux-demo` coverage. Tag padding uses a compact 2:1 horizontal-to-vertical ratio.
+  `/ux-demo` coverage. Kerf beta 17 owns the shared 8px inline Web Awesome tag inset;
+  Hot Sheet retains only its compact 3.2px block inset.
 
 The component catalog records composition relationships. A left-aligned “Related
 components” menu in the main demo footer uses the shared `Select`. It lists `Used by`

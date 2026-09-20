@@ -22,7 +22,7 @@ describe('TicketInspector', () => {
       expect(markup).toContain(`data-inspector-tab="${tab}" aria-label="${tab === 'info' ? 'Info' : tab === 'timeline' ? 'Timeline' : tab === 'code-review' ? 'Code Review' : 'Attachments'}" aria-current="page"`);
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
-      expect(markup).toContain('data-component="toolbar-text" data-size="small">HS2-TEST');
+      expect(markup).toContain('data-component="toolbar-text" data-size="small"><span class="kui-toolbar-text__text">HS2-TEST');
       expect(markup).toContain('data-action="copy-ticket-slug" aria-label="Copy ticket number HS2-TEST"');
       expect(markup).toContain('data-appearance="borderless"');
       if (tab === 'info') {
@@ -155,7 +155,7 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-    expect(panelCss).toContain('.ticket-inspector__meta-field .kui-select { width: 100%; min-width: 0; }');
+    expect(panelCss).toContain('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);

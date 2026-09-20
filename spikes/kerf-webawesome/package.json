@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@awesome.me/webawesome": "3.11.0",
-    "kerfjs": "4.4.0"
+    "kerfjs": "5.0.0-beta.17"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

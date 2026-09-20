@@ -41,11 +41,9 @@
 .ticket-inspector__blocked-editor > div { display: flex; justify-content: flex-end; gap: var(--kui-space-2xs); }
 .ticket-inspector__provenance { display: flex; padding-top: var(--kui-space-2xs); color: var(--wa-color-neutral-on-quiet); justify-content: space-between; gap: var(--kui-space-2xs); font-size: var(--wa-font-size-2xs); }
 .ticket-inspector__metadata { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* Each field stacks its ListHeader over its select; column 1 hugs the left, column 2 the right, so the
-   header text sits 17px and the select 8px from the respective outer edge (HS2-R64ETQ). */
-.ticket-inspector__meta-field { display: grid; min-width: 0; gap: var(--kui-space-2xs); }
-.ticket-inspector__meta-field--end { justify-items: end; text-align: right; }
-.ticket-inspector__meta-field .kui-select { width: 100%; min-width: 0; }
+/* Kerf beta 17 gives Web Awesome fields the canonical 1px + 8px inset and ListHeader-style label.
+   Category and Priority can therefore own their labels without an extra layout wrapper. */
+.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }
 .ticket-inspector__metadata > .ticket-inspector__status-field { display: grid; grid-column: 1 / -1; justify-items: start; gap: var(--kui-space-2xs); }
 .ticket-inspector__metadata > .ticket-inspector__status-field > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-inspector__status-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--kui-space-2xs); }

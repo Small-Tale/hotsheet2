@@ -9,7 +9,7 @@ describe('WorkspaceHeader', () => {
   it('exposes an accessible selected view mode and optional search field', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'NOT  AND tag:cl', searchTokens:[{kind:'tag',value:'server',raw:'tag:server',label:'tag:server',offset:4}],searchTagSuggestions:['client'], searchDatePrefix:'created-after',searchHelpOpen:true, sort: 'priority', sortDirection: 'descending' }));
     expect(markup).not.toContain('All Tickets');
-    expect(markup).toContain('data-component="toolbar-text" data-size="large">Hot Sheet 2');
+    expect(markup).toContain('data-component="toolbar-text" data-size="large"><span class="kui-toolbar-text__text">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
     expect(markup).toContain('data-token-search-editor="workspace-search"');

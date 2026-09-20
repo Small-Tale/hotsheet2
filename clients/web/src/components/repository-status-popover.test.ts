@@ -31,7 +31,7 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(RepositoryStatusPopover({status:status({branch:undefined,upstream:undefined,staged:0,unstaged:0,untracked:0,conflicted:0,files:[]}),initialized:false}));
     expect(markup).toContain('data-state="uninitialized"');
     expect(markup).toContain('data-setup-step="initialize"');
-    expect(markup).toMatch(/kui-panel-header__title[^>]*id="repository-status-title"[^>]*>This folder is not a Git repository</);
+    expect(markup).toMatch(/kui-panel-header__title[^>]*id="repository-status-title"[^>]*><span class="kui-toolbar-text__text">This folder is not a Git repository</);
     expect(markup).not.toContain('>Repository Status<');
     expect(markup).toContain('data-action="initialize-repository"');
     expect(markup).not.toContain('<dt>Branch</dt>');
