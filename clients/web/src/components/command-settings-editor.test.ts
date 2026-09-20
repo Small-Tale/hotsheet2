@@ -7,6 +7,11 @@ import {COMMAND_EDITOR_DIALOG_ID,CommandSettingsEditor} from './command-settings
 const css=readFileSync(new URL('./command-settings-editor.css',import.meta.url),'utf8');
 
 describe('CommandSettingsEditor',()=>{
+  it('uses the kerf semantic spacing scale for app-owned separation (HS2-4Y6SM9)',()=>{
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toContain('gap:var(--kui-space-l)');
+    expect(css).toContain('gap:var(--kui-space-none)');
+  });
   it('renders draggable grouped rows with an overflow menu and no arrows or Save button (HS2-D9JBXT)',()=>{
     const markup=String(CommandSettingsEditor({commands:[
       {id:'a',title:'Run tests',kind:'shell',command:'npm test',group:'Quality'},
