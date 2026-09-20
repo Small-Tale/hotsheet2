@@ -1397,6 +1397,8 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(stale).toHaveCount(0);
   await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role','group');
+  await expect(corrupt).toHaveCSS('padding','8px 16px');
+  await expect(corrupt).toHaveCSS('gap','8px');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
   const errorRowBefore=await corrupt.evaluate(node=>{const icon=node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),rail=getComputedStyle(node,'::before');return{iconX:icon.x,railWidth:rail.width,railColor:rail.backgroundColor}});
   await page.evaluate(()=>{(window as typeof window&{__corruptSelectionAnimations?:string[]}).__corruptSelectionAnimations=[];document.addEventListener('animationstart',event=>{if((event.target as HTMLElement).matches('[data-component="corrupt-ticket-row"]'))(window as typeof window&{__corruptSelectionAnimations:string[]}).__corruptSelectionAnimations.push(event.animationName)})});
@@ -1408,6 +1410,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   const errorRowAfter=await corrupt.evaluate(node=>{const icon=node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),rail=getComputedStyle(node,'::before');return{iconX:icon.x,railWidth:rail.width,railColor:rail.backgroundColor}});
   expect(errorRowAfter).toEqual(errorRowBefore);
   const inspector=page.locator('[data-component="corrupt-ticket-inspector"]');
+  await expect(inspector.locator('.corrupt-ticket-inspector__body')).toHaveCSS('gap','24px');
   await expect(inspector).toContainText('Ticket parsing error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
   await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');

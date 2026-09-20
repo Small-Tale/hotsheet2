@@ -613,7 +613,9 @@ and identity-less legacy entries remain conservatively blocking.
   without changing the owning surface's layout. Persistent inline status text is
   reserved for work that is still pending, actionable warnings, and failures. This
   applies consistently to diff-tool launches, settings saves, attachment operations,
-  and corrupt-ticket recovery actions.
+  and corrupt-ticket recovery actions. Corrupt-ticket rows use the canonical 8px
+  within-row rhythm and 16px inline inset; their recovery inspector separates major
+  diagnostic/action regions by 24px while retaining 8px within each region.
 
   The shared left project sidebar presents a centered `M open, N up next` summary
   immediately above Drive. Both counts derive from the existing checkout ticket collection:
