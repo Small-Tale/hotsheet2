@@ -798,7 +798,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   task lists, line breaks, links, images, fenced/inline code, blockquotes, lists, and
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected. Long
   tokens wrap, while intrinsically wide tables and code blocks remain locally
-  scrollable rather than widening an inspector or reader.
+  scrollable rather than widening an inspector or reader. Block rhythm uses Kerf's
+  16px group spacing, headings step from 16px to 24px by level, and tight inline/list
+  relationships use 4px or 8px.
   Ticket-aware note previews additionally resolve local and cross-ticket attachment
   references, inline supported images, and expose host-native actions.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard

@@ -59,7 +59,7 @@ describe('content components', () => {
     // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
     expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: remify\(8px\);/);
+    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');
@@ -81,7 +81,7 @@ describe('content components', () => {
     expect(markup).toContain('href="#" target="_blank" rel="noopener noreferrer"');
     expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
-    expect(css).toContain('.markdown-preview p { margin: var(--wa-space-m) 0; }');
+    expect(css).toContain('.markdown-preview p { margin: var(--kui-space-m) 0; }');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(panelCss).toContain('.ticket-inspector__content :where(p) { margin: 0;');
     expect(panelCss).not.toContain('.ticket-inspector__content p {');
