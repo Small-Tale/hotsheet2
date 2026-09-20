@@ -21,7 +21,7 @@ const kerfSpacingMigratedComponents = [
   'command-navigation.css', 'command-settings-editor.css', 'corrupt-ticket-row.css', 'flow-back-button.css',
   'keyboard-settings.css', 'manual-model-dialog.css', 'markdown-preview.css', 'not-working-dialog.css', 'pending-attachment-picker.css',
   'project-tab-bar.css', 'saved-view-dialog.css', 'terminal-rename-dialog.css', 'ticket-duplicate-backlinks.css',
-  'ticket-board-column.css', 'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-list.css',
+  'ticket-board-column.css', 'ticket-close-dialog.css', 'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-list.css',
   'ticket-inspector-panel.css', 'ticket-row.css', 'trash-settings.css', 'view-navigation.css',
 ].map(file => resolve(sourceRoot, 'components', file));
 

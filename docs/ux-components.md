@@ -678,6 +678,8 @@ owning provider advertises both close and close-reason support. `TicketCloseDial
 offers Completed, Not planned, Duplicate, and Obsolete; Duplicate requires searching for
 and selecting a distinct canonical ticket before submission. Search results reuse
 `ListItem`, the reason control reuses `Select`, and validation prevents self-reference.
+The form separates peer regions by 16px and uses 8px within result/selection groups,
+with a 4px inset around the result list.
 Closed tickets retain a visible outcome in the inspector, and duplicate outcomes link to
 the canonical ticket instead of relying on a freeform explanatory note. Canonical tickets
 render reverse duplicate backlinks as shared menu rows labeled with both project and slug;
