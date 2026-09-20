@@ -22,7 +22,8 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .ticket-source-setup__options .kui-list-item[data-action="create-project-git-source-custom"] { min-height:remify(84px); }
 .ticket-source-setup__options .kui-list-item + .kui-list-item::before { position: absolute; top: 0; right: var(--wa-space-s); left: var(--wa-space-s); border-top: 1px solid var(--wa-color-neutral-border-quiet); content: ''; }
 .ticket-source-setup__options .kui-list-item:hover { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-quiet); }
-.ticket-source-setup__options .kui-list-item__icon { width: var(--wa-space-l); height: var(--wa-space-l); color: var(--wa-color-brand-on-quiet); }
+.ticket-source-setup__options .kui-list-item__icon { width: var(--wa-space-l); height: var(--wa-space-l); color: var(--wa-color-brand-on-quiet); align-self: center; }
+.ticket-source-setup__options .kui-list-item[data-multiline="true"] .kui-list-item__icon { margin-block-start: 0; align-self: center; }
 .ticket-source-setup__options .kui-list-item__icon svg { width: var(--wa-space-l); height: var(--wa-space-l); }
 .ticket-source-setup__options .kui-list-item__trailing { align-self: center; color: var(--wa-color-neutral-on-quiet); }
 .ticket-source-setup__options .kui-list-item__trailing svg { width: var(--wa-space-m); height: var(--wa-space-m); }

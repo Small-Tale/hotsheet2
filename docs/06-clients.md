@@ -733,8 +733,10 @@ and identity-less legacy entries remain conservatively blocking.
   `/ws/sync` browser bridge. One long-poll handshake establishes the replay cursor and
   one zero-wait replay after the socket opens closes the subscribe race; an idle healthy
   socket issues no further requests. Disconnects, rejected upgrades, and older servers
-  fall back through `/ws/poll`, replay the missing cursor span, reconcile once, and retry
-  WebSocket with capped exponential backoff. The existing local-mutation barrier,
+  fall back through `/ws/poll`, replay the missing cursor span, and retry WebSocket with
+  capped exponential backoff. Replay refreshes ticket state only when it carries a ticket
+  invalidation or overflow; an empty replay after a rejected upgrade does not wake the
+  workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same
   `PollResponse` batches regardless of which transport delivered them.
   While the dialog is closed, streamed transcript/activity state remains retained but the

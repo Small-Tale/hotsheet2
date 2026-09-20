@@ -190,7 +190,11 @@ export function startProjectChangeStream(options:ProjectChangeStreamOptions):()=
       const fallbackStarted=Date.now();
       try{
         const replay=await poll(cursor,retryDelay);
-        cursor=replay.cursor;await consume(replay,true);
+        // The replay cursor is authoritative. An empty gap after a failed upgrade does not
+        // invalidate ticket state; forcing a refresh here made every unsupported WebSocket
+        // retry wake the entire workspace. Ticket events and overflow still reconcile through
+        // consume(), while an actual poll outage falls back to the fresh-handshake path below.
+        cursor=replay.cursor;await consume(replay);
       }catch(reason){
         options.onError?.(reason);cursor=undefined;
       }

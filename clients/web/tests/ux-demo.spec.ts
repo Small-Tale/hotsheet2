@@ -320,6 +320,9 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   expect(submitted).toBeUndefined();
   await utilities.click();
   await tool.getByRole('menuitem', { name: 'CSS Live Edit' }).click();
+  // Establish the evidence viewport before editing. Resizing can legitimately rerender the demo
+  // composition, which would replace a DevTools-authored inline declaration before capture.
+  await page.setViewportSize({ width: 760, height: 900 });
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = 'playwright-css-live-edit';
@@ -328,7 +331,6 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
     document.querySelector<HTMLElement>('.demo-detail__header')!.style.paddingTop = '31px';
   });
   await expect(page.locator('.demo-detail')).toHaveCSS('outline-width', '6px');
-  await page.setViewportSize({ width: 760, height: 900 });
   await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   await expect.poll(() => submitted).toBeTruthy();

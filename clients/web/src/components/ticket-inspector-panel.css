@@ -7,10 +7,10 @@
    column and own their 8px padding, so their text lands at 17px with no negative margins. */
 .ticket-inspector__content > * { margin-inline: remify(8px); }
 /* Headers and other non-bordered content align their text to the 17px column with a 1px transparent
-   border + 8px padding (8px section margin + 1px border + 8px padding). Only outermost headers are
-   targeted (a bare section > h2, or the header container), never an h2 already nested inside a padded
-   section-header/toolbar, so the inset is applied once. */
-.ticket-inspector__content :where(.kui-list-header, .ticket-inspector__section-header, .ticket-inspector__provenance, .ticket-inspector__status-field, .ticket-inspector__tags, .ticket-code-review__empty),
+   border + 8px padding (8px section margin + 1px border + 8px padding). ListHeader already owns that
+   inset in its title surface, so adding it to the root would double-indent the label. Only outermost
+   non-ListHeader containers are targeted, never an h2 already nested inside a padded toolbar. */
+.ticket-inspector__content :where(.ticket-inspector__section-header, .ticket-inspector__provenance, .ticket-inspector__status-field, .ticket-inspector__tags, .ticket-code-review__empty),
 .ticket-inspector__content > section > h2,
 .ticket-code-review .ticket-code-review__header { border-inline: 1px solid transparent; padding-inline: remify(8px); }
 /* The reader modal supplies its own generous inline padding on the content, so its sections keep that
@@ -28,6 +28,7 @@
 .ticket-inspector__details-surface { min-width: 0; max-width: 100%; padding: remify(8px); border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: remify(10.4px); background: var(--wa-color-surface-default); }
 /* The surface owns the 8px inset; the embedded editor sits flush (overriding markdown-editor's own
    8.8px inline padding) so preview and edit text both land on the 17px column (HS2-EQEGGG). */
+.ticket-inspector .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__preview,
 .ticket-inspector .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__surface textarea { padding: 0; }
 .ticket-inspector__details-surface[data-feedback-needed="true"] { display: grid; padding: remify(13.6px) remify(16px); border-color: var(--wa-color-warning-border-normal); background: var(--wa-color-warning-fill-quiet); gap: remify(8.8px); }
 .ticket-inspector__details-feedback { display: grid; min-width: 0; gap: var(--wa-space-s); }

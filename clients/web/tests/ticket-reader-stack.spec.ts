@@ -104,7 +104,7 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   await first.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(first).toHaveCount(0);
   await expect(inspectorLink).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Kerf' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', projects.source.id);
   await expect(workspaceInspector).toHaveAttribute('data-ticket-slug', 'KF-ROOT01');
 });
 

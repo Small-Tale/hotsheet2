@@ -28,8 +28,8 @@ test('recovers a project folder without Git and optionally connects origin',asyn
   await page.locator('[data-action="open-repository-status"]').click();
   const dialog=page.locator('[data-component="repository-status-popover"]');
   await expect(dialog).toHaveAttribute('data-state','uninitialized');
-  await expect(dialog.getByRole('heading',{name:'This folder is not a Git repository'})).toBeVisible();
-  await expect(dialog.getByRole('heading',{name:'Repository Status'})).toHaveCount(0);
+  await expect(dialog.locator('#repository-status-title')).toHaveText('This folder is not a Git repository');
+  await expect(dialog.getByText('Repository Status',{exact:true})).toHaveCount(0);
   const initialize=dialog.locator('[data-action="initialize-repository"]');await expect.poll(()=>initialize.evaluate(node=>{const button=node.getBoundingClientRect(),footer=node.closest('footer')!.getBoundingClientRect();return Math.max(Math.abs(button.x+button.width/2-footer.x-footer.width/2),Math.abs(button.y+button.height/2-footer.y-footer.height/2))})).toBeLessThan(1);
   await expect(dialog.getByText(/will not stage or commit/)).toBeVisible();
   await dialog.screenshot({path:'/private/tmp/hs2-9r3w53-no-git-wide.png'});

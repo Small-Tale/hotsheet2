@@ -212,7 +212,7 @@ describe('project change WebSocket stream',()=>{
     await vi.waitFor(()=>{expect(wait).toHaveBeenCalledWith(expect.any(Number),expect.any(AbortSignal))});
     expect(wait.mock.calls[0][0]).toBeGreaterThan(0);expect(wait.mock.calls[0][0]).toBeLessThanOrEqual(500);
     expect(onError.mock.calls.some(([reason])=>String(reason).includes('not replayable'))).toBe(true);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
     stop();waiting.resolve(undefined);
   });
 
