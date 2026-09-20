@@ -382,6 +382,9 @@ and identity-less legacy entries remain conservatively blocking.
   previous/next cycling for the project tabs (⌘/Ctrl+⌥+←/→) and drawer tabs (⌘/Ctrl+⌥+↑/↓).
   Defaults follow VS Code where it has an equivalent; every one is rebindable, and the bare
   `c` (like other non-modifier chords) never fires while a text field is focused (HS2-9SHYWD).
+  The settings surface follows Kerf's spacing rhythm: 24px between major groups, 16px
+  between peer regions, 8px within rows and controls, and 4px inside tight metadata clusters
+  (HS2-4Y6SM9).
   Overrides are stored
   device-locally and resolved through the shared registry (`matchesShortcut`) at the central
   keydown dispatcher, the ticket clipboard policy, and ticket-row selection, so a rebinding takes

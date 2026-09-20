@@ -19,7 +19,7 @@ const clientCss = [...productionCss, ...auxiliaryClientCss];
 const kerfSpacingMigratedComponents = [
   'app-error.css', 'attachment-context-menu.css', 'bulk-ticket-dialog.css',
   'command-navigation.css', 'command-settings-editor.css', 'flow-back-button.css',
-  'manual-model-dialog.css', 'not-working-dialog.css', 'pending-attachment-picker.css',
+  'keyboard-settings.css', 'manual-model-dialog.css', 'not-working-dialog.css', 'pending-attachment-picker.css',
   'saved-view-dialog.css', 'terminal-rename-dialog.css', 'ticket-duplicate-backlinks.css',
   'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-list.css',
   'ticket-inspector-panel.css', 'ticket-row.css', 'trash-settings.css',
