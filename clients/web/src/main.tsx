@@ -108,7 +108,6 @@ import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets, updateT
 import { addTicketTag, removeTicketTag } from './components/ticket-tag-editor';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard, WorkspaceControls, WorkspaceIdentity, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from './components/workspace-header';
 import {SavedViewContextMenu,type SavedViewContextMenuState} from './components/view-navigation';
 import { createDebouncedAutosave, type DebouncedAutosave } from './debounced-autosave';
@@ -1330,6 +1329,20 @@ mount(serverBusyRoot,()=><><ServerBusyBars count={serverBusyBarCount.value} busy
 document.addEventListener('pointerdown',event=>{if(savedViewMenu.value&&!(event.target as Element).closest('[data-component="saved-view-context-menu"], [data-action="open-saved-view-menu"]'))savedViewMenu.value=undefined},{capture:true});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')savedViewMenu.value=undefined});
 
+function beginDetailsEdit(reader=false,frame?:TicketReaderFrame){if(frame){if(!frame.capabilities.update)return;replaceLinkedReaderFrame(frame.id,current=>({...current,edit:{...current.edit,detailsMode:'write',detailsDraft:current.ticket.details,detailsBase:current.ticket.details,detailsGeneration:current.edit.detailsGeneration+1}}));queueMicrotask(()=>document.querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="markdown-source"]`)?.focus());return}if(!selectedTicket.value||!canUpdateSelected())return;const mode=reader?readerDetailsMode:detailsMode,draft=reader?readerDetailsDraft:detailsDraft;if(reader){readerDetailsEditGeneration+=1;readerDetailsDraftBase=selectedTicket.value.details}else{detailsEditGeneration+=1;detailsDraftBase=selectedTicket.value.details}draft.value=selectedTicket.value.details;mode.value='write';queueMicrotask(()=>activeTicketSurface().querySelector<HTMLElement>('[name="markdown-source"]')?.focus())}
+interface DetailsFinishTask {reader:boolean;ticketId?:string;generation:number;saved:Promise<boolean>}
+let pointerDetailsReader:boolean|undefined,pointerDetailsFinish:DetailsFinishTask|undefined,pointerDetailsTimer:number|undefined;
+function beginDetailsFinish(reader=false):DetailsFinishTask{return{reader,ticketId:selectedTicket.value?.id,generation:reader?readerDetailsEditGeneration:detailsEditGeneration,saved:(reader?readerDetailsAutosave:detailsAutosave).flush()}}
+async function settleDetailsFinish(task:DetailsFinishTask){const saved=await task.saved,mode=task.reader?readerDetailsMode:detailsMode;if(saved&&selectedTicket.value?.id===task.ticketId&&(task.reader?readerDetailsEditGeneration:detailsEditGeneration)===task.generation)mode.value='preview';return saved}
+async function finishDetailsEdit(reader=false){return settleDetailsFinish(beginDetailsFinish(reader))}
+function completePointerDetailsFinish(){if(pointerDetailsTimer!==undefined)window.clearTimeout(pointerDetailsTimer);pointerDetailsTimer=undefined;const reader=pointerDetailsReader,task=pointerDetailsFinish;pointerDetailsReader=undefined;pointerDetailsFinish=undefined;if(task)void settleDetailsFinish(task);else if(reader!==undefined)void finishDetailsEdit(reader)}
+function schedulePointerDetailsFinish(){if(pointerDetailsReader===undefined)return;if(pointerDetailsTimer!==undefined)window.clearTimeout(pointerDetailsTimer);pointerDetailsTimer=window.setTimeout(completePointerDetailsFinish,0)}
+function activeGalleryAttachment(){const active=attachmentGalleryUrl.value,image=active?galleryImages().find(item=>item.url===active||item.aliases?.includes(active)):undefined;return selectedTicket.value?.attachments.find(item=>item.id===image?.attachmentId)}
+function beginGalleryAnnotationSession(){const current=project(),ticket=selectedTicket.value,attachment=activeGalleryAttachment();if(!current||!ticket||!attachment)return;attachmentAnnotationSession={projectId:current.id,ticketId:ticket.id,attachmentId:attachment.id,before:attachmentGalleryAnnotations.value.map(item=>({...item}))}}
+function finishGalleryAnnotationSession(){const session=attachmentAnnotationSession;if(!session)return;attachmentAnnotationSession=undefined;const annotations=attachmentGalleryAnnotations.value.map(item=>({...item}));if(JSON.stringify(session.before)===JSON.stringify(annotations))return;attachmentAnnotationSave=attachmentAnnotationSave.then(async()=>{try{const result=await api().updateCheckoutAttachmentAnnotations(session.projectId,session.ticketId,session.attachmentId,annotations);if(selectedTicket.value?.id===session.ticketId)selectedTicket.value=result.ticket;showToast('Annotations saved.')}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}})}
+function shiftGallery(delta:number){const active=attachmentGalleryUrl.value;if(!active)return;const url=attachmentGalleryShiftUrl(galleryImages(),active,delta);if(url)resetAttachmentGallery(url)}
+function activeTicketSurface():ParentNode{return(readerOpen.value?document.querySelector('[data-component="ticket-reader"]'):null)??document}
+function wireProjectLifecycleInteractions(){
 delegate(document.body,'click','[data-action="add-project"]',()=>{openProjectPicker()});
 delegate(document.body,'click','[data-action="choose-project"]',()=>{if(isRemoteClient())void openRemoteProjectDialog();else void chooseAndOpenProject()});
 delegate(document.body,'click','[data-action="cancel-open-project"]',()=>{unhealthyServerRecovery.value=undefined;projectDialogOpen.value=false});
@@ -1354,6 +1367,9 @@ delegate(document.body,'click','[data-action="create-project-git-source-custom"]
 delegate(document.body,'click','[data-action="browse-project-path"]',(_event,target)=>{void chooseProjectPath(target)});
 delegate(document.body,'click','[data-action="recover-unhealthy-server"]',()=>{void recoverUnhealthyProjectServer()});
 delegate(document.body,'click','[data-action="reload-client"]',()=>{window.location.reload()});
+}
+wireProjectLifecycleInteractions();
+function wireRepositoryInteractions(){
 delegate(document.body,'click','[data-action="open-repository-status"]',()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)});
 delegate(document.body,'click','[data-action="refresh-repository-status"]',()=>{void refreshRepositoryStatus()});
 delegate(document.body,'click','[data-action="initialize-repository"]',()=>{void initializeRepository()});
@@ -1385,10 +1401,13 @@ delegate(document.body,'click','[data-action="open-change-evidence"]',(_event,ta
 delegate(document.body,'click','[data-action="select-change-evidence-view"]',(_event,target)=>{changeEvidenceView.value=data(target).itemId as ChangeEvidenceView;repositorySelectedFiles.value=[];repositoryFileSelectionAnchor=undefined});
 function openTicketFileDiff(paths:string[]){const current=project(),ticket=selectedTicket.value;if(!current||!ticket)return;codeReviewMessage.value=`Opening ${paths.length===1?'file diff':`${paths.length} file diffs`}…`;void Promise.all(paths.map(path=>new Api(current.apiPath).openCodeReview(current.id,ticket.id,{mode:'ticket_file',path}))).then(()=>{if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id){codeReviewMessage.value='';showToast(`Opened ${paths.length===1?'file diff':`${paths.length} file diffs`} in ${codeReview.value?.difftool??'the configured diff tool'}.`)}}).catch(reason=>{if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id)codeReviewMessage.value=reason instanceof Error?reason.message:String(reason)})}
 delegate(document.body,'submit','[data-action="open-project-form"]',(event,target)=>{event.preventDefault();const root=(target.querySelector('[name="project-root"]') as Control).value,store=(target.querySelector('[name="ticket-store"]') as Control).value;void openProject(root,store||undefined)});
+}
+wireRepositoryInteractions();
 function clearAppTabDrag(){draggedAppTab=undefined;document.querySelectorAll<HTMLElement>('[data-tab-dragging], [data-tab-drop-position]').forEach(tab=>{delete tab.dataset.tabDragging;delete tab.dataset.tabDropPosition})}
 let draggedCommandIds:string[]=[];
 function clearCommandDropIndicators(){document.querySelectorAll<HTMLElement>('[data-command-drop-position]').forEach(element=>delete element.dataset.commandDropPosition);document.querySelectorAll<HTMLElement>('[data-command-drop-active]').forEach(element=>delete element.dataset.commandDropActive)}
 function clearCommandDrag(){draggedCommandIds=[];document.querySelectorAll<HTMLElement>('[data-command-dragging]').forEach(element=>delete element.dataset.commandDragging);clearCommandDropIndicators()}
+function wireNavigationAndTabInteractions(){
 function tabDropPosition(event:DragEvent,target:Element):TabDropPosition{const bounds=target.getBoundingClientRect();return event.clientX<bounds.left+bounds.width/2?'before':'after'}
 // The project strip is a kerf TabBar, so its drag-reorder and manual-activation keyboard route through
 // kerf's wireTabBars below. These hand-rolled handlers own only the drawer strip (not yet a TabBar), so
@@ -1412,6 +1431,9 @@ delegate(document.body,'click','[data-action="open-project-stats"]',(_event,targ
 delegate(document.body,'click','[data-action="select-project-tab"]',(_event,target)=>{selectProjectTab(data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!)});
 delegate(document.body,'change','wa-select[name="mobile-project"]',(_event,target)=>{selectProjectTab((target as Control).value)});
 delegate(document.body,'click','[data-action="retry-project-restore"]',(_event,target)=>{const root=data(target).projectRoot;if(root)void retryProjectRestore(root)});
+}
+wireNavigationAndTabInteractions();
+function wireTerminalInteractions(){
 delegate(document.body,'click','[data-action="zoom-terminal-grid"]',(_event,target)=>{const drawer=Boolean(target.closest('[data-component="terminal-drawer"]')),bounds=drawer?terminalDrawerBounds.value:terminalDashboardSize.value,basis=drawer?'high':terminalGridBasis(bounds.height),direction=data(target).zoomDirection as 'in'|'out';if(drawer){terminalDrawerFitHigh.value=adjustTerminalFit(terminalDrawerFitHigh.value,basis,direction);localStorage.setItem('hotsheet.terminals.drawer-fit-high',String(terminalDrawerFitHigh.value))}else if(basis==='across'){terminalFitAcross.value=adjustTerminalFit(terminalFitAcross.value,basis,direction);localStorage.setItem('hotsheet.terminals.fit-across',String(terminalFitAcross.value))}else{terminalFitHigh.value=adjustTerminalFit(terminalFitHigh.value,basis,direction);localStorage.setItem('hotsheet.terminals.fit-high',String(terminalFitHigh.value))}});
 delegate(document.body,'click','[data-action="preview-terminal"]',(event,target)=>{if((event.target as Element).closest('button')||(event as MouseEvent).detail>1)return;if(terminalPreviewClickTimer!==undefined)window.clearTimeout(terminalPreviewClickTimer);const key=data(target).terminalKey;terminalPreviewClickTimer=window.setTimeout(()=>{terminalPreviewClickTimer=undefined;const session=terminalSession(key);if(!session)return;pendingTerminalFocus={projectId:session.projectId,terminalId:session.id};magnifiedTerminalKey.value=key},220)});
 delegate(document.body,'keydown','[data-action="preview-terminal"]',(event,target)=>{const keyboard=event as KeyboardEvent;if(keyboard.key!=='Enter'&&keyboard.key!==' ')return;event.preventDefault();const key=data(target).terminalKey,session=terminalSession(key);if(!session)return;pendingTerminalFocus={projectId:session.projectId,terminalId:session.id};magnifiedTerminalKey.value=key});
@@ -1459,6 +1481,9 @@ delegate(document.body,'click','[data-action="project-tab-context-action"], [dat
 delegate(document.body,'submit','[data-action="rename-terminal-form"]',(event,target)=>{event.preventDefault();const rename=terminalRename.value,name=target.querySelector<Control>('[name="terminal-name"]')?.value??'';if(!rename||!name.trim())return;saveTerminalName(rename.projectId,rename.terminalId,name);terminalRename.value=undefined});
 delegate(document.body,'click','[data-action="cancel-terminal-rename"]',()=>{terminalRename.value=undefined});
 delegate(document.body,'wa-hide','[data-terminal-rename-dialog]',()=>{terminalRename.value=undefined});
+}
+wireTerminalInteractions();
+function wireTicketSelectionInteractions(){
 delegate(document.body,'click','[data-action="select-ticket-row"]',(event,target)=>{if((event.target as Element).closest('[data-action="toggle-row-up-next"]'))return;const pointer=event as MouseEvent,rail=Boolean(target.closest('[data-component="terminal-ticket-rail"]'));
   // Mobile has no persistent side inspector, so a plain tap on a workspace-list ticket auto-opens the
   // right inspector overlay (tap-away on the scrim returns to the list) — HS2-N7RPFP. Range/toggle
@@ -1502,6 +1527,9 @@ delegate(document.body,'submit','[data-action="submit-not-working"]',(event)=>{e
 delegate(document.body,'click','[data-action="cancel-not-working"]',()=>{closeNotWorking()});
 delegate(document.body,'wa-hide','[data-component="not-working-dialog"]',(_event,dialog)=>{const target=notWorkingTarget.value,activeLabel=target.mode==='reopen'?`Reopen Ticket — ${target.slug}`:`Not Working — ${target.slug}`;if(!notWorkingSubmitting.value&&target.slug&&dialog.getAttribute('aria-label')===activeLabel)closeNotWorking()});
 delegate(document.body,'keydown','[data-action="select-ticket-row"]',(event,target)=>{const keyboard=event as KeyboardEvent,row=target as HTMLElement,slug=data(row).ticketSlug!,ordered=selectionOrder(row);if(matchesShortcut('select-all-tickets',keyboard,keyboardShortcutOverrides.value,appleShortcutPlatform)){event.preventDefault();const next=selectAllTickets(visibleTickets().map(ticket=>ticket.slug));ticketSelectionAnchor=next.anchor;selectedTicketSlugs.value=[...next.selected];return}if(keyboard.key==='ArrowUp'||keyboard.key==='ArrowDown'){event.preventDefault();const next=adjacentTicketSlug(ordered,slug,keyboard.key==='ArrowDown'?1:-1);if(next){document.querySelector<HTMLElement>(`[data-ticket-slug="${next}"]`)?.focus();void selectTickets(next,{range:keyboard.shiftKey},ordered)}return}if(keyboard.key==='Enter'||keyboard.key===' '){event.preventDefault();void selectTickets(slug,{range:keyboard.shiftKey,toggle:keyboard.metaKey||keyboard.ctrlKey},ordered)}});
+}
+wireTicketSelectionInteractions();
+function wireViewAndSavedViewInteractions(){
 delegate(document.body,'click','[data-ticket-selection-root="true"]',(event)=>{const pointer=event as MouseEvent;if((event.target as Element).closest('[data-action="select-ticket-row"]')||pointer.shiftKey||pointer.metaKey||pointer.ctrlKey)return;selectedCorruptKey.value=undefined;selectedTicketSlugs.value=[];ticketSelectionAnchor=undefined;selectedTicket.value=null});
 delegate(document.body,'click','[data-action="select-view"]',(_event,target)=>{selectTicketView((data(target).itemId??'all') as TicketView)});
 delegateCapture(document.body,'click','[data-action="add-view"]',(event)=>{if(isEditableEvent(event))return;openSavedViewDialog()});
@@ -1522,6 +1550,9 @@ delegate(document.body,'wa-hide','[data-component="saved-view-dialog"]',(event)=
 delegate(document.body,'click','[data-action="confirm-delete-saved-view"]',()=>{void deleteSavedView()});
 delegate(document.body,'click','[data-action="cancel-delete-saved-view"]',()=>{closeSavedViewDelete()});
 delegate(document.body,'wa-hide','[data-component="saved-view-delete-dialog"]',(event)=>{if(savedViewDeleteBusy.value){event.preventDefault();return}closeSavedViewDelete()});
+}
+wireViewAndSavedViewInteractions();
+function wireCommandAndAiInteractions(){
 delegate(document.body,'click','[data-action="toggle-command-group"]',()=>{commandGroupExpanded.value=!commandGroupExpanded.value;persistWorkspacePreferences()});
 delegate(document.body,'click','[data-action="toggle-command-section"]',(_event,target)=>{const current=project(),group=target.closest<HTMLElement>('[data-command-group]')?.dataset.commandGroup;if(!current||!group)return;commandGroupsCollapsed.value=toggleCollapsedCommandGroup(commandGroupsCollapsed.value,current.id,group);persistWorkspacePreferences()});
 delegate(document.body,'click','[data-action="toggle-drive"]',()=>{void toggleSidebarDrive()});
@@ -1605,6 +1636,9 @@ delegate(document.body,'click','[data-action="start-github-sign-in"]',(_event,ta
 delegate(document.body,'click','[data-action="cancel-github-sign-in"]',()=>{cancelGitHubSignIn()});
 delegate(document.body,'click','[data-action="submit-provider-setup"]',()=>document.querySelector<HTMLFormElement>('#provider-setup-form')?.requestSubmit());
 delegate(document.body,'submit','[data-action="save-provider-connection"]',(event,target)=>{event.preventDefault();void saveExternalProvider(target as HTMLFormElement)});
+}
+wireCommandAndAiInteractions();
+function wireNotificationAndLinkInteractions(){
 delegate(document.body,'click','[data-action="select-notification-view"]',(_event,target)=>{notificationView.value=(data(target).itemId??'pending') as NotificationView});
 delegate(document.body,'change','[name="permission-automation-action"], [name="permission-automation-delay"]',()=>{const current=project();if(!current)return;const action=(document.querySelector<Control>('[name="permission-automation-action"]')?.value??'off') as PermissionAutomation['action'],delayMs=Number(document.querySelector<Control>('[name="permission-automation-delay"]')?.value??60_000),next=parsePermissionAutomation({action,delayMs});permissionTimer.hide();permissionCountdown=undefined;permissionAutomationByProject.value={...permissionAutomationByProject.value,[current.id]:next};localStorage.setItem(`hotsheet.project.${current.id}.permission-automation`,JSON.stringify(next));updatePermissionTimer();permissionRevision.value+=1});
 delegate(document.body,'click','[data-action="ignore-permission"]',(_event,target)=>{const key=data(target).requestKey;if(!key)return;permissionTimer.hide();permissionInbox.ignore(key);updatePermissionTimer();permissionRevision.value+=1});
@@ -1617,6 +1651,9 @@ delegate(document.body,'click','[data-action="open-linked-ticket"]',(event,targe
 delegate(document.body,'click','[data-action="select-ticket-link-match"]',(_event,target)=>{const choice=ticketLinkChoice.value,key=data(target).matchKey,match=choice?.matches.find(item=>ticketLinkMatchKey(item)===key);if(match)void openTicketLinkMatch(match)});
 delegate(document.body,'click','[data-action="cancel-ticket-link-choice"]',()=>{cancelTicketLinkChoice()});
 delegateCapture(document.body,'wa-hide','[data-component="ticket-link-choice-dialog"]',()=>{if(ticketLinkChoice.value)cancelTicketLinkChoice()});
+}
+wireNotificationAndLinkInteractions();
+function wireSearchAndComposerInteractions(){
 // Kerf owns the token-search editor chrome + Enter submit, the adjacent-chip Backspace/Delete
 // keyboard, and caret restoration across controlled token deletion. The app keeps its own
 // input listener (for whitespace-commit gating), suggestions/date/help popovers, and the
@@ -1652,6 +1689,9 @@ delegate(document.body,'dragleave','[data-new-ticket-drop-target="true"]',(_even
 delegate(document.body,'drop','[data-new-ticket-drop-target="true"]',(event,target)=>{if(draggedTickets)return;event.preventDefault();event.stopPropagation();delete (target as HTMLElement).dataset.dragging;const files=(event as DragEvent).dataTransfer?.files;if(files?.length){if(!composerExpanded.value)openTicketComposer(target as HTMLElement);void addNewTicketFiles(files)}});
 delegate(document.body,'submit','[data-action="create-ticket-form"]',(event)=>{event.preventDefault();void submitNewTicket()});
 delegate(document.body,'click','[data-action="toggle-row-up-next"]',(event,target)=>{event.stopPropagation();const article=target.closest('[data-ticket-slug]') as HTMLElement,ticket=tickets.value.find(item=>item.slug===article.dataset.ticketSlug);if(ticket)void history().execute(ticket.slug,{up_next:!ticket.up_next})});
+}
+wireSearchAndComposerInteractions();
+function wireAttachmentAndGalleryInteractions(){
 delegate(document.body,'change','input[name="ticket-attachments"]',(_event,target)=>{const input=target as HTMLInputElement,slug=input.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug??selectedTicket.value?.slug;if(slug&&input.files?.length)void addAttachments(slug,input.files);input.value=''});
 delegate(document.body,'dragover','[data-attachment-drop-target="true"]',(event,target)=>{event.preventDefault();(target as HTMLElement).dataset.draggingAttachment='true'});
 delegate(document.body,'dragleave','[data-attachment-drop-target="true"]',(_event,target)=>{delete (target as HTMLElement).dataset.draggingAttachment});
@@ -1670,7 +1710,6 @@ delegate(document.body,'dragover','[data-attachment-group-drop-target], [data-at
 delegate(document.body,'dragleave','[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',(event,target)=>{const related=(event as DragEvent).relatedTarget;if(related instanceof Node&&target.contains(related))return;delete (target as HTMLElement).dataset.dragOver});
 delegate(document.body,'drop','[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',(event,target)=>{if(!draggedGroupedAttachmentId)return;event.preventDefault();event.stopPropagation();const id=draggedGroupedAttachmentId,surface=target.closest<HTMLElement>('[data-component="ticket-attachments"]'),source=surface?.querySelector<HTMLElement>(`[data-drag-attachment-id="${CSS.escape(id)}"]`)?.closest<HTMLElement>('[data-attachment-ids]'),destination=target.closest<HTMLElement>('[data-attachment-group-drop-target]'),newGroup=target.matches('[data-attachment-new-group-drop-target]');clearGroupedAttachmentDrag(surface??undefined);if(!source)return;if(newGroup){const role=source.dataset.attachmentActorRole as 'human'|'ai'|'system'|'unknown'|undefined;void persistAttachmentMetadata([id],{batch_id:crypto.randomUUID(),batch_label:'New group',actor:role?{role,identity:source.dataset.attachmentActorIdentity||undefined,display_name:source.dataset.attachmentActorName||undefined}:undefined});return}if(destination&&destination!==source)void persistAttachmentMetadata([id],metadataForBatch(destination))});
 delegate(document.body,'dblclick','[data-action="open-attachment-row"]',(event,target)=>{if((event.target as Element).closest('button, input, a'))return;void openSelectedAttachment(data(target).attachmentActionId!)});
-function shiftGallery(delta:number){const active=attachmentGalleryUrl.value;if(!active)return;const url=attachmentGalleryShiftUrl(galleryImages(),active,delta);if(url)resetAttachmentGallery(url)}
 delegate(document.body,'click','[data-action="open-attachment-gallery"]',(_event,target)=>{const selection=data(target),url=attachmentGallerySelectionUrl(galleryImages(),{url:selection.attachmentUrl,ticket:selection.attachmentTicket,name:selection.attachmentName,attachmentId:selection.galleryAttachmentId});if(url)resetAttachmentGallery(url)});
 delegate(document.body,'click','[data-action="close-attachment-gallery"]',()=>{resetAttachmentGallery()});
 delegate(document.body,'click','[data-action="previous-gallery-image"]',()=>{shiftGallery(-1)});
@@ -1684,9 +1723,6 @@ delegate(document.body,'click','[data-action="open-referenced-attachment"]',(eve
 delegate(document.body,'contextmenu','[data-attachment-url]',(event,target)=>{event.preventDefault();const ticket=data(target).attachmentTicket??selectedTicket.value?.slug,name=data(target).attachmentName,url=data(target).attachmentUrl,pointer=event as MouseEvent,kind:AttachmentContextMenuKind=data(target).attachmentMenuKind==='item'?'item':'host',id=data(target).attachmentActionId??data(target).galleryAttachmentId;if(ticket&&name&&url)attachmentMenu.value={...viewportSafeContextMenuPosition(pointer.clientX,pointer.clientY,window.innerWidth,window.innerHeight,{width:224,height:ATTACHMENT_CONTEXT_MENU_HEIGHT}),ticket,name,url,id,kind,reader:(target as HTMLElement).closest('[data-component="ticket-reader"]')?.getAttribute('data-reader-frame-id')??undefined}});
 async function attachmentMenuHostAction(menu:AttachmentMenu,action:'open'|'reveal'|'path'){const current=project(),ticket=selectedTicket.value;if(!current||!ticket)return undefined;return menu.id&&menu.ticket===ticket.slug?api().checkoutAttachmentAction(current.id,ticket.id,menu.id,action):api().checkoutAttachmentByNameAction(current.id,menu.ticket,menu.name,action)}
 delegate(document.body,'click','[data-action="attachment-menu-action"]',(_event,target)=>{const menu=attachmentMenu.value,action=data(target).itemId;if(!menu)return;attachmentMenu.value=undefined;if(action==='download'){const link=document.createElement('a');link.href=menu.url;link.download=menu.name;link.click();return}if(action==='copy-reference'){const local=menu.ticket===selectedTicket.value?.slug;void navigator.clipboard.writeText(`attachment:${local?'':`[${menu.ticket}]`}${menu.name}`).then(()=>{showToast('Attachment reference copied to clipboard.')}).catch(reason=>{error.value=`Copy failed: ${reason instanceof Error?reason.message:String(reason)}`});return}if(action==='copy-path'){void attachmentMenuHostAction(menu,'path').then(result=>result&&navigator.clipboard.writeText(result.path).then(()=>{showToast('Attachment path copied to clipboard.')})).catch(reason=>{error.value=reason instanceof Error?reason.message:String(reason)});return}if(action==='rename'){const current=project(),ticket=selectedTicket.value,filename=window.prompt('Attachment filename',menu.name);if(current&&ticket&&menu.id&&filename?.trim())void api().renameCheckoutAttachment(current.id,ticket.id,menu.id,filename.trim()).then(result=>{selectedTicket.value=result.ticket;showToast('Attachment renamed.');return refreshProject()}).catch(reason=>{error.value=reason instanceof Error?reason.message:String(reason)});return}if(action==='remove'){if(menu.kind==='host')resetAttachmentGallery();void removeSelectedAttachment(menu.id);return}if(action==='open'||action==='reveal')void attachmentMenuHostAction(menu,action).then(()=>{showToast(action==='open'?'Opened attachment.':'Opened attachment location.')}).catch(reason=>{error.value=reason instanceof Error?reason.message:String(reason)})});
-function activeGalleryAttachment(){const active=attachmentGalleryUrl.value,image=active?galleryImages().find(item=>item.url===active||item.aliases?.includes(active)):undefined;return selectedTicket.value?.attachments.find(item=>item.id===image?.attachmentId)}
-function beginGalleryAnnotationSession(){const current=project(),ticket=selectedTicket.value,attachment=activeGalleryAttachment();if(!current||!ticket||!attachment)return;attachmentAnnotationSession={projectId:current.id,ticketId:ticket.id,attachmentId:attachment.id,before:attachmentGalleryAnnotations.value.map(item=>({...item}))}}
-function finishGalleryAnnotationSession(){const session=attachmentAnnotationSession;if(!session)return;attachmentAnnotationSession=undefined;const annotations=attachmentGalleryAnnotations.value.map(item=>({...item}));if(JSON.stringify(session.before)===JSON.stringify(annotations))return;attachmentAnnotationSave=attachmentAnnotationSave.then(async()=>{try{const result=await api().updateCheckoutAttachmentAnnotations(session.projectId,session.ticketId,session.attachmentId,annotations);if(selectedTicket.value?.id===session.ticketId)selectedTicket.value=result.ticket;showToast('Annotations saved.')}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}})}
 const clampAnnotation=(value:number)=>Math.max(0,Math.min(10_000,Math.round(value)));
 function annotationPoint(event:PointerEvent,surface:DOMRect){return{x:clampAnnotation((event.clientX-surface.left)*10_000/surface.width),y:clampAnnotation((event.clientY-surface.top)*10_000/surface.height)}}
 delegate(document.body,'click','[data-action="toggle-gallery-markup"]',()=>{if(attachmentGalleryMarkup.value){attachmentGalleryMarkup.value=false;finishGalleryAnnotationSession()}else{beginGalleryAnnotationSession();attachmentGalleryMarkup.value=true}attachmentGalleryDrawMode.value=false;attachmentGallerySelectedAnnotation.value=undefined});
@@ -1721,6 +1757,9 @@ delegateCapture(document.body,'pointerdown','[data-component="attachment-gallery
 delegateCapture(document.body,'pointerup','[data-component="attachment-gallery"]',(event)=>{const pointer=event as PointerEvent,direction=attachmentGallerySwipeDirection(attachmentSwipeGesture,pointer.pointerId,pointer.clientX,pointer.clientY);attachmentSwipeGesture=undefined;if(direction)shiftGallery(direction)});
 document.addEventListener('pointercancel',event=>{if(event.pointerId===attachmentSwipeGesture?.pointerId)attachmentSwipeGesture=undefined});
 async function removeSelectedAttachment(id?:string){const current=project(),ticket=selectedTicket.value;if(!current||!ticket||!id||!canUseAttachments())return;attachmentMessage.value='Removing attachment…';try{const result=await api().deleteCheckoutAttachment(current.id,ticket.id,id);selectedTicket.value=result.ticket;attachmentMessage.value='';showToast('Attachment removed.');await refreshProject()}catch(reason){attachmentMessage.value=`Remove failed: ${reason instanceof Error?reason.message:String(reason)}`}}
+}
+wireAttachmentAndGalleryInteractions();
+function wireInspectorAndEditorInteractions(){
 delegate(document.body,'click','[data-action="toggle-inspector-up-next"]',()=>{if(selectedTicket.value)void updateSelectedTracked({up_next:!selectedTicket.value.up_next})});
 delegate(document.body,'click','[data-action="copy-ticket-slug"]',(_event,target)=>{const slug=target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug;if(!slug)return;void navigator.clipboard.writeText(slug).then(()=>{showToast(`${slug} copied to clipboard.`)}).catch(reason=>{error.value=`Copy failed: ${reason instanceof Error?reason.message:String(reason)}`})});
 delegate(document.body,'change','[name="inspector-category"]',(_event,target)=>{void updateSelectedTracked({category:(target as Control).value})});
@@ -1735,7 +1774,6 @@ function updateConflictDraft(field:string,value:string,base=value){
   else if(field==='note'&&readerOpen.value){readerNoteDraft.value=value;readerNoteDraftBase=base}
   else if(field==='note'){noteDraft.value=value;noteDraftBase=base}
 }
-function activeTicketSurface():ParentNode{return(readerOpen.value?document.querySelector('[data-component="ticket-reader"]'):null)??document}
 function isReaderSurface(target:Element){return Boolean(target.closest('[data-component="ticket-reader"]'))}
 function resolvedConflictPatch(conflict:TicketFieldConflict,value:string):TicketPatch{
   if(conflict.field==='note')return{note_id:conflict.key.slice('note:'.length),note:value};
@@ -1757,14 +1795,6 @@ function addTagFromInput(target:HTMLInputElement){const next=addTicketTag(select
 delegate(document.body,'keydown','[name="ticket-tag-input"]',(event,target)=>{const keyboard=event as KeyboardEvent;if(!['Enter',','].includes(keyboard.key))return;event.preventDefault();addTagFromInput(target as HTMLInputElement)});
 delegate(document.body,'focusout','[name="ticket-tag-input"]',(_event,target)=>{if((target as HTMLInputElement).value.trim())addTagFromInput(target as HTMLInputElement);void tagsAutosave.flush()});
 delegate(document.body,'wa-remove','[data-component="tag-chip"]',(_event,target)=>{const tag=data(target).tagId;if(tag)setSelectedTags(removeTicketTag(selectedTicket.value?.tags??[],tag))});
-function beginDetailsEdit(reader=false,frame?:TicketReaderFrame){if(frame){if(!frame.capabilities.update)return;replaceLinkedReaderFrame(frame.id,current=>({...current,edit:{...current.edit,detailsMode:'write',detailsDraft:current.ticket.details,detailsBase:current.ticket.details,detailsGeneration:current.edit.detailsGeneration+1}}));queueMicrotask(()=>document.querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="markdown-source"]`)?.focus());return}if(!selectedTicket.value||!canUpdateSelected())return;const mode=reader?readerDetailsMode:detailsMode,draft=reader?readerDetailsDraft:detailsDraft;if(reader){readerDetailsEditGeneration+=1;readerDetailsDraftBase=selectedTicket.value.details}else{detailsEditGeneration+=1;detailsDraftBase=selectedTicket.value.details}draft.value=selectedTicket.value.details;mode.value='write';queueMicrotask(()=>activeTicketSurface().querySelector<HTMLElement>('[name="markdown-source"]')?.focus())}
-interface DetailsFinishTask {reader:boolean;ticketId?:string;generation:number;saved:Promise<boolean>}
-let pointerDetailsReader:boolean|undefined,pointerDetailsFinish:DetailsFinishTask|undefined,pointerDetailsTimer:number|undefined;
-function beginDetailsFinish(reader=false):DetailsFinishTask{return{reader,ticketId:selectedTicket.value?.id,generation:reader?readerDetailsEditGeneration:detailsEditGeneration,saved:(reader?readerDetailsAutosave:detailsAutosave).flush()}}
-async function settleDetailsFinish(task:DetailsFinishTask){const saved=await task.saved,mode=task.reader?readerDetailsMode:detailsMode;if(saved&&selectedTicket.value?.id===task.ticketId&&(task.reader?readerDetailsEditGeneration:detailsEditGeneration)===task.generation)mode.value='preview';return saved}
-async function finishDetailsEdit(reader=false){return settleDetailsFinish(beginDetailsFinish(reader))}
-function completePointerDetailsFinish(){if(pointerDetailsTimer!==undefined)window.clearTimeout(pointerDetailsTimer);pointerDetailsTimer=undefined;const reader=pointerDetailsReader,task=pointerDetailsFinish;pointerDetailsReader=undefined;pointerDetailsFinish=undefined;if(task)void settleDetailsFinish(task);else if(reader!==undefined)void finishDetailsEdit(reader)}
-function schedulePointerDetailsFinish(){if(pointerDetailsReader===undefined)return;if(pointerDetailsTimer!==undefined)window.clearTimeout(pointerDetailsTimer);pointerDetailsTimer=window.setTimeout(completePointerDetailsFinish,0)}
 delegateCapture(document.body,'pointerdown','*',(event,target)=>{const active=document.activeElement;if(event.defaultPrevented||!(active instanceof HTMLTextAreaElement)||active.name!=='markdown-source'||active.closest('[data-component="markdown-editor"]')?.contains(target))return;pointerDetailsReader=isReaderSurface(active);pointerDetailsFinish=undefined});
 delegate(document.body,'dblclick','[data-action="edit-markdown"]',(_event,target)=>{beginDetailsEdit(isReaderSurface(target),linkedReaderFrame(target))});
 delegate(document.body,'click','[data-action="edit-markdown"]',(_event,target)=>{if(data(target).empty==='true')beginDetailsEdit(isReaderSurface(target),linkedReaderFrame(target))});
@@ -1808,6 +1838,9 @@ delegateCapture(document.body,'wa-after-hide','[data-component="ticket-reader"]'
 delegate(document.body,'click','[data-action="toggle-reader-text-size"]',()=>{readerLargeText.value=!readerLargeText.value;localStorage.setItem('hotsheet.reader.large-text',String(readerLargeText.value))});
 delegate(document.body,'click','[data-action="set-inspector-tab"]',(_event,target)=>{const tab=data(target).inspectorTab as InspectorTab,frameId=target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;if(frameId&&frameId!=='workspace-reader')linkedReaderStack.value=linkedReaderStack.value.map(frame=>frame.id===frameId?{...frame,activeTab:tab}:frame);else if(isReaderSurface(target))readerTab.value=tab;else inspectorTab.value=tab;scheduleProjectSessionPersistence();if((!frameId||frameId==='workspace-reader')&&tab==='code-review'&&!codeReviewLoading.value)void refreshCodeReview()});
 delegate(document.body,'click','[data-action="open-code-review"]',(_event,target)=>{const current=project(),ticket=selectedTicket.value,reviewTarget=codeReviewTarget(data(target));if(!current||!ticket||!reviewTarget)return;codeReviewMessage.value='Opening diff tool…';void new Api(current.apiPath).openCodeReview(current.id,ticket.id,reviewTarget).then(()=>{if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id){codeReviewMessage.value='';showToast(`Opened in ${codeReview.value?.difftool??'the configured diff tool'}.`)}}).catch(reason=>{if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id)codeReviewMessage.value=reason instanceof Error?reason.message:String(reason)})});
+}
+wireInspectorAndEditorInteractions();
+function wireShellAndGlobalInteractions(){
 delegate(document.body,'click','[data-action="close-ticket-inspector"]',()=>{if(viewportMobile.value)mobileOverlay.value=closeMobileOverlay(mobileOverlay.value,'inspector');else setInspectorVisible(false)});
 delegate(document.body,'click','[data-action="open-ticket-inspector"]',()=>{if(viewportMobile.value)mobileOverlay.value=openMobileOverlay('inspector');else setInspectorVisible(true)});
 delegate(document.body,'click','[data-action="toggle-project-sidebar"]',()=>{if(viewportMobile.value)mobileOverlay.value=toggleMobileSidebar(mobileOverlay.value);else setSidebarVisible(!sidebarVisible.value)});
@@ -1841,6 +1874,8 @@ document.addEventListener('keydown',event=>{if(!event.defaultPrevented&&attachme
 delegate(document.body,'click','*',completePointerDetailsFinish);
 delegateCapture(document.body,'pointerup','*',schedulePointerDetailsFinish);
 delegateCapture(document.body,'pointercancel','*',schedulePointerDetailsFinish);
+}
+wireShellAndGlobalInteractions();
 // Flush the debounced session (including the in-progress new-ticket composer draft) before the page
 // is hidden, reloaded, or restarted, so a background refresh/restart never loses typed text (HS2-D4PB9Y).
 const flushProjectSessionPersistence=()=>{if(projectSessionTimer!==undefined){window.clearTimeout(projectSessionTimer);projectSessionTimer=undefined}persistProjectSessionNow()};

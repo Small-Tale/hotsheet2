@@ -852,6 +852,12 @@ inspector surface live under `components/`, while `main.tsx` only derives their 
 props. Project-opening, notification-inspector, terminal-rename, initial empty/restore,
 and inspector surfaces are component modules rather than inline `main.tsx` definitions;
 the standalone visual states are represented in `/ux-demo`.
+Application interaction registration is organized as a matching feature hierarchy in
+`main.tsx`: project lifecycle, repository, navigation/tabs, terminals, ticket selection,
+views, commands/AI, notifications/links, search/composer, attachments, inspector/editor,
+and shell/global behavior each have a named wiring boundary. The boundaries run in their
+original order and retain the single `document.body` delegation root, so organization does
+not alter event ordering, propagation, or dynamically rendered target support.
 Both the real app and `/ux-demo` load `@kerfjs/ui/webawesome.css`, then
 `clients/web/src/hot-sheet-tokens.css`. Kerf owns the generic surface, text, brand,
 success/warning/danger, spacing, radius, focus, shadow, light/dark, and Web Awesome

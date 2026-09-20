@@ -54,8 +54,8 @@ import {
 
 import type { CommandDefinition, CommandRun } from '../api';
 import type { CommandDropTarget } from '../command-order';
-import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
+import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
 import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
@@ -548,7 +548,7 @@ function demoContent(item: DemoDefinition) {
     ],
     selectedKey: 'ai-chat:codex-main',
   }} />;
-  if (item.id === 'project-dialog') return <section class="dialog-demo-stack" aria-label="Project dialog variants"><ProjectDialog open root="/work/hotsheet2" error=""/><RemoteProjectDialog open checkouts={[{id:'demo',root:'/work/demo',alias:'Demo',stores:['/work/demo.hs2']}]}/></section>;
+  if (item.id === 'project-dialog') return <section class="dialog-demo-stack" aria-label="Project dialog variants"><ProjectDialog open root="/work/hotsheet2" error=""/><RemoteProjectDialog open checkouts={[{ id: 'demo', root: '/work/demo', alias: 'Demo', stores: ['/work/demo.hs2'] }]}/></section>;
   if (item.id === 'conversation-export-dialog') return <ConversationExportDialog state={{
     source: { conversationId: 'conv-1', tool: 'codex', sessionId: 'sess-42', projectId: 'kerf', model: 'gpt-5.6-sol-preview', effort: 'high', resumable: true },
     messages: [
@@ -603,7 +603,7 @@ function demoContent(item: DemoDefinition) {
     return <section class="fixed-aspect-terminal-card-demo terminal-dashboard" aria-label="Fixed aspect terminal card variants"><div><h2>Grid preview</h2><FixedAspectTerminalCard session={session}/></div><div class="fixed-aspect-terminal-card-demo__magnified"><h2>Magnified interactive</h2><FixedAspectTerminalCard session={session} mode="magnified"/></div></section>;
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
-  if (item.id === 'terminal-rename-dialog') return <TerminalRenameDialog target={{projectId:'demo',terminalId:'shell',value:'Development'}}/>;
+  if (item.id === 'terminal-rename-dialog') return <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development' }}/>;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
     return <ConnectionStateBannerDemo />;
