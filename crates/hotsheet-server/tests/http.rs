@@ -109,6 +109,12 @@ impl PreparedClientDrive for FakePreparedClientDrive {
                 cost_usd: None,
             },
         ));
+        if request.prompt == "complete" {
+            on_event(&hotsheet_aitools::TurnEvent::NativeActivity {
+                source: "codex-transcript".into(),
+                payload: serde_json::json!({"type":"reasoning","summary":[]}),
+            });
+        }
         on_event(&hotsheet_aitools::TurnEvent::NativeActivity {
             source: "codex-transcript".into(),
             payload: serde_json::json!({"type":"commandExecution","command":"cargo test"}),
@@ -620,7 +626,16 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .iter()
         .filter_map(|event| event["turn"]["event"]["type"].as_str())
         .collect::<Vec<_>>();
-    assert_eq!(turn_types, ["output", "usage", "native_activity", "done"]);
+    assert_eq!(
+        turn_types,
+        [
+            "output",
+            "usage",
+            "native_activity",
+            "native_activity",
+            "done"
+        ]
+    );
     let usage = replayed
         .iter()
         .find(|event| event["turn"]["event"]["type"] == "usage")
@@ -637,6 +652,7 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
             .unwrap(),
     )
     .await;
+    assert_eq!(activity.as_array().unwrap().len(), 1);
     assert_eq!(activity[0]["summary"], "codex ran `cargo test`");
     assert!(
         hotsheet_ticketing::metrics::summary(&FsStore::open(dir.path()).unwrap())

@@ -65,7 +65,9 @@ impl ActivityKind {
             .or_else(|| detail.get("command"))
             .or_else(|| detail.get("name"))
             .or_else(|| detail.get("text"))
-            .and_then(Value::as_str);
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|hint| !hint.is_empty());
         match (self, hint) {
             (Edit, Some(p)) => format!("{tool} edited {p}"),
             (Edit, None) => format!("{tool} edited a file"),
@@ -543,17 +545,21 @@ pub fn codex_activity(item: &Value, id: &str, ts: &str) -> Option<ActivityEvent>
             let text = item
                 .get("text")
                 .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
                 .map(str::to_string)
                 .or_else(|| {
                     item.get("summary").and_then(Value::as_array).map(|parts| {
                         parts
                             .iter()
                             .filter_map(Value::as_str)
+                            .map(str::trim)
+                            .filter(|part| !part.is_empty())
                             .collect::<Vec<_>>()
                             .join(" ")
                     })
                 })
-                .unwrap_or_default();
+                .filter(|text| !text.is_empty())?;
             (
                 if ty == "plan" {
                     ActivityKind::Plan
@@ -625,6 +631,21 @@ mod tests {
         let e = ev("01B", "2026-08-19", ActivityKind::TurnEnd, Value::Null);
         assert_eq!(e.summary, "codex finished a turn");
         assert_eq!(e.importance, Importance::High);
+
+        let decision = ev(
+            "01C",
+            "2026-08-19",
+            ActivityKind::Decision,
+            json!({"text": "   "}),
+        );
+        assert_eq!(decision.summary, "codex made a decision");
+        let command = ev(
+            "01D",
+            "2026-08-19",
+            ActivityKind::Command,
+            json!({"command": ""}),
+        );
+        assert_eq!(command.summary, "codex ran a command");
     }
 
     fn session_ev(id: &str, kind: ActivityKind) -> ActivityEvent {
@@ -919,9 +940,28 @@ mod tests {
         .unwrap();
         assert_eq!(e.kind, ActivityKind::Plan);
 
+        let e = codex_activity(
+            &json!({ "type": "reasoning", "summary": [" inspect ", "", "then fix"] }),
+            "01D",
+            "t",
+        )
+        .unwrap();
+        assert_eq!(e.kind, ActivityKind::Decision);
+        assert_eq!(e.summary, "codex decided: inspect then fix");
+
+        // Codex can emit private/encrypted reasoning with no public summary. There is no
+        // safe trailing text to display, so omit that milestone instead of persisting a
+        // dangling `codex decided:` row.
+        assert!(
+            codex_activity(&json!({ "type": "reasoning", "summary": [] }), "01E", "t").is_none()
+        );
+        assert!(
+            codex_activity(&json!({ "type": "decision", "text": " \n " }), "01F", "t").is_none()
+        );
+
         // Unknown / missing type → None.
-        assert!(codex_activity(&json!({ "type": "mystery" }), "01D", "t").is_none());
-        assert!(codex_activity(&json!({ "foo": 1 }), "01E", "t").is_none());
+        assert!(codex_activity(&json!({ "type": "mystery" }), "01G", "t").is_none());
+        assert!(codex_activity(&json!({ "foo": 1 }), "01H", "t").is_none());
     }
 
     #[test]

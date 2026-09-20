@@ -181,6 +181,9 @@ client adapter, never a server dependency; other clients can inject another
 - **Shipped (HS2-SW655F) — rich native drive events:** Codex 0.152.1
   `item/completed` notifications stream their completed `commandExecution`, `fileChange`,
   `plan`/`reasoning`, MCP/dynamic/collaboration tool, web-search, and image-view items.
+  Reasoning, decision, and plan items become public activity only when Codex supplies a
+  nonempty public text or summary. Private/encrypted reasoning with an empty public summary
+  is omitted rather than rendered as a content-free decision milestone.
   Claude Code 2.1.258 runs with hook lifecycle events enabled and projects authoritative
   assistant `tool_use` blocks into the same `PreToolUse` payload contract consumed by
   `claude_activity`. Both become tool-neutral `NativeActivity` turn events, then the
