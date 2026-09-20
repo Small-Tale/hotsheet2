@@ -129,7 +129,7 @@ describe('TicketInspector', () => {
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
-    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: remify\(13\.6px\) remify\(16px\);[^}]*warning-border-normal[^}]*warning-fill-quiet/);
+    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: var\(--kui-space-xs\);[^}]*warning-border-normal[^}]*warning-fill-quiet/);
   });
 
   it('shows a derived attachment count on the attachments segment', () => {
@@ -166,12 +166,12 @@ describe('TicketInspector', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(8px\) remify\(8px\);/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 remify\(8px\);/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/);
     // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
     // 8px column — no negative margins anywhere (HS2-R64ETQ).
-    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{ margin-inline: remify\(8px\); \}/);
-    expect(panelCss).toContain('border-inline: 1px solid transparent; padding-inline: remify(8px);');
+    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
+    expect(panelCss).toContain('border-inline: 1px solid transparent; padding-inline: var(--kui-space-xs);');
     expect(panelCss).not.toContain('margin-inline: calc((remify(8px) + 1px) * -1)');
   });
 

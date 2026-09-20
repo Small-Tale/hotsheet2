@@ -22,7 +22,7 @@ const kerfSpacingMigratedComponents = [
   'manual-model-dialog.css', 'not-working-dialog.css', 'pending-attachment-picker.css',
   'saved-view-dialog.css', 'terminal-rename-dialog.css', 'ticket-duplicate-backlinks.css',
   'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-list.css',
-  'ticket-row.css', 'trash-settings.css',
+  'ticket-inspector-panel.css', 'ticket-row.css', 'trash-settings.css',
 ].map(file => resolve(sourceRoot, 'components', file));
 
 function css(path: string): string {

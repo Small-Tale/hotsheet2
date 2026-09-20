@@ -710,6 +710,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.
+  App-owned spacing follows Kerf's semantic rhythm: 4px inside tight label/action
+  clusters, 8px within one surface, 16px between homogeneous attachment groups,
+  and 24px between the inspector's differing major sections (HS2-4Y6SM9).
   Editable tags use the shared `ListHeader` with a trailing icon-only Add tag action,
   matching the Views header, and a uniquely targeted anchored popover in sidebar and
   reader instances. The popover contains a labeled autocomplete field,
