@@ -1557,6 +1557,8 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
 
   await page.goto('/ux-demo?component=view-navigation');
   const views = page.locator('[data-component="view-navigation"]');
+  await expect(views).toHaveCSS('gap', '4px');
+  await expect(views.locator('ul')).toHaveCSS('gap', '0px');
   const navigationGeometry = await views.evaluate(node => {
     const header = node.querySelector('header')!.getBoundingClientRect();
     const button = node.querySelector('li button')!.getBoundingClientRect();
@@ -1573,6 +1575,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   const addView = views.getByRole('button', { name: 'Add view' });
   await expect(addView).toBeEnabled();
   await expect(addView).toHaveAttribute('title', 'Add view');
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-view-navigation.png', fullPage: true });
   await addView.click();
   await expect(page.locator('.component-stage__event')).toContainText('New view editor requested.');
 

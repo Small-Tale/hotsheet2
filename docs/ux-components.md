@@ -208,7 +208,8 @@ does not introduce polling or another network request.
   and whole-header disclosure variants. Notes uses the shared count slot instead of
   concatenating a bare number into its label (HS2-FYCAZC).
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
-  action, and controlled selection through `ListItem`.
+  action, and controlled selection through adjacent `ListItem` rows. The section uses
+  Kerf's 4px tight-cluster spacing while the shared rows remain gapless.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, Queue (active tickets), Backlog, Archive
