@@ -9,7 +9,7 @@ export interface ProviderModelEffortChoice { id: string; label: string }
 
 /** The Provider/Model/Effort submenu group, shared by every surface that lets a user pick
  * an AI provider, model, and optional effort (the Drive options popup and the in-conversation
- * model/effort popup; the command-editor field adopts it next — HS2-59DWHN). The caller owns
+ * model/effort popup, and the command-editor field). The caller owns
  * the enclosing `<wa-dropdown>` (its trigger, placement, and any leading rows such as Drive's
  * "Default" reset), and each submenu is included only when its data is supplied — so a surface
  * shows exactly the choices it supports. Selections are reported as delegated host-level

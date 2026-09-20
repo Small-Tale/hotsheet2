@@ -51,7 +51,7 @@ export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;
 export interface TerminalSettings {inherit_global_shell_history:boolean}
 export interface TrashSettings {trash_cleanup_days:number}
 export interface TerminalRead extends TerminalInfo {scrollback:string}
-export interface CommandDefinition {id:string;title:string;kind?:'program'|'shell'|'ai';program?:string;args?:string[];cwd?:string;group?:string;confirmation?:string;command?:string;prompt?:string;tool?:string;icon?:string;color?:string}
+export interface CommandDefinition {id:string;title:string;kind?:'program'|'shell'|'ai';program?:string;args?:string[];cwd?:string;group?:string;confirmation?:string;command?:string;prompt?:string;tool?:string;model?:string;effort?:string;icon?:string;color?:string}
 export interface CustomView {id:string;name:string;query:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}

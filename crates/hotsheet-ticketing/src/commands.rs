@@ -37,6 +37,10 @@ pub struct CommandDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
@@ -67,7 +71,7 @@ mod tests {
     fn parses_legacy_argv_and_native_ai_command_schemas() {
         let value = serde_json::json!([
             {"id":"test","title":"Test","program":"cargo","args":["test"],"cwd":"/code/project"},
-            {"id":"review","title":"Review","kind":"ai","prompt":"Review this","tool":"codex","icon":"send","color":"#3b82f6"}
+            {"id":"review","title":"Review","kind":"ai","prompt":"Review this","tool":"codex","model":"gpt-5.6","effort":"high","icon":"send","color":"#3b82f6"}
         ]);
         let defs: Vec<CommandDefinition> = serde_json::from_value(value).unwrap();
         assert_eq!(defs[0].args, ["test"]);
@@ -76,5 +80,7 @@ mod tests {
         assert!(defs[1].program.is_empty());
         assert_eq!(defs[1].icon.as_deref(), Some("send"));
         assert_eq!(defs[1].prompt.as_deref(), Some("Review this"));
+        assert_eq!(defs[1].model.as_deref(), Some("gpt-5.6"));
+        assert_eq!(defs[1].effort.as_deref(), Some("high"));
     }
 }

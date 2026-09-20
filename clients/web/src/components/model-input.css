@@ -1,8 +1,0 @@
-.model-input { display:grid; min-width:0; gap:var(--wa-space-3xs); }
-.model-input__label { color:var(--wa-color-text-normal); font-size:var(--wa-font-size-s); font-weight:var(--wa-font-weight-semibold); }
-.model-input__control { position:relative; display:flex; min-width:0; align-items:center; }
-.model-input__control input { width:100%; min-width:0; height:remify(40px); padding:0 remify(32px) 0 remify(12px); box-sizing:border-box; border:var(--wa-form-control-border-width) var(--wa-form-control-border-style) var(--wa-form-control-border-color); border-radius:var(--wa-form-control-border-radius); color:var(--wa-form-control-value-color); background:var(--wa-form-control-background-color); font:inherit; }
-.model-input__control input:hover:not(:disabled) { border-color:var(--wa-form-control-border-color-hover); }
-.model-input__control input:focus-visible { border-color:var(--wa-color-focus); outline:var(--wa-focus-ring); outline-offset:var(--wa-focus-ring-offset); }
-.model-input__control input:disabled { cursor:not-allowed; opacity:.5; }
-.model-input__control svg { position:absolute; right:remify(10.4px); width:remify(16px); height:remify(16px); color:var(--wa-color-neutral-on-quiet); pointer-events:none; }

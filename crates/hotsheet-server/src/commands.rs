@@ -397,6 +397,8 @@ mod tests {
                 command: None,
                 prompt: None,
                 tool: None,
+                model: None,
+                effort: None,
                 icon: None,
                 color: None,
             }],
@@ -434,6 +436,8 @@ mod tests {
             command: None,
             prompt: None,
             tool: None,
+            model: None,
+            effort: None,
             icon: None,
             color: None,
         };

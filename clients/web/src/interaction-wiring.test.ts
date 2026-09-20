@@ -37,7 +37,7 @@ describe('main interaction wiring (HS2-3KQ365)', () => {
     const wiringEnd = source.indexOf(`${groups.at(-1)}();`, wiringStart) + `${groups.at(-1)}();`.length;
     const registrations = [...source.matchAll(/delegate(?:Capture)?\(([^,]+),/g)];
 
-    expect(registrations).toHaveLength(404);
+    expect(registrations).toHaveLength(409);
     for (const registration of registrations) {
       expect(registration.index).toBeGreaterThan(wiringStart);
       expect(registration.index).toBeLessThan(wiringEnd);

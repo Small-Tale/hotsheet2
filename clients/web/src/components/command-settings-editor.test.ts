@@ -89,9 +89,18 @@ describe('CommandSettingsEditor',()=>{
   });
   it('shows type-specific shell and AI fields in the dialog',()=>{
     expect(String(CommandSettingsEditor({commands:[{id:'shell',title:'Shell',kind:'shell',command:'npm test'}],editingId:'shell'}))).toContain('name="command"');
-    const ai=String(CommandSettingsEditor({commands:[{id:'review',title:'Review',kind:'ai',prompt:'Review this',tool:'claude'}],editingId:'review'}));
+    const tools=[{id:'codex',display_name:'Codex',models:[{id:'gpt-6',label:'GPT-6',effort_levels:['low','high']}],default_model:'gpt-6',default_effort:'low',actions:[]},{id:'claude',display_name:'Claude',models:[{id:'sonnet',label:'Sonnet',effort_levels:['medium','high']}],default_model:'sonnet',default_effort:'medium',actions:[]}];
+    const inherited=String(CommandSettingsEditor({commands:[{id:'review',title:'Review',kind:'ai',prompt:'Review this'}],editingId:'review',aiTools:tools,aiDefaults:{tool:'codex',model:'gpt-6',effort:'high'}}));
+    expect(inherited).toContain('AI configuration: Project Default');
+    expect(inherited).toContain('data-action="select-command-ai-default"');
+    const ai=String(CommandSettingsEditor({commands:[{id:'review',title:'Review',kind:'ai',prompt:'Review this',tool:'claude',model:'sonnet',effort:'high'}],editingId:'review',aiTools:tools,aiDefaults:{tool:'codex'}}));
     expect(ai).toContain('name="prompt"');
-    expect(ai).toContain('name="tool"');
+    expect(ai).toContain('AI configuration: Claude · Sonnet · high');
+    expect(ai).toContain('data-action="select-command-ai-tool"');
+    expect(ai).toContain('data-action="select-command-ai-model"');
+    expect(ai).toContain('data-action="select-command-ai-effort"');
+    expect(ai).toContain('data-action="open-command-manual-model"');
+    expect(ai).not.toContain('name="tool"');
     expect(ai).not.toContain('name="program"');
   });
 

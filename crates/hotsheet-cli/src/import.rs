@@ -441,6 +441,8 @@ fn hs1_command_definition(
         command: (kind == CommandKind::Shell).then(|| command.prompt.clone()),
         prompt: (kind == CommandKind::Ai).then(|| command.prompt.clone()),
         tool: (kind == CommandKind::Ai).then(|| tool.to_string()),
+        model: None,
+        effort: None,
         icon: command.icon.clone(),
         color: command.color.clone(),
     }))

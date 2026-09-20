@@ -53,7 +53,6 @@ describe('UX demo catalog', () => {
       'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',
       'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',
       'markdown-preview': 'Markdown rendering helpers used by MarkdownEditor and NoteCard (demoed).',
-      'model-input': 'Model-id sub-input used within AiToolSettings / ManualModelDialog (demoed).',
       'project-restore-error': 'Project-restore failure state rendered within AppShell (demoed).',
       'project-tab-context-menu': 'Context menu for ProjectTabBar (demoed via ProjectTabBar).',
       'provider-icon': 'Provider glyph helper shown within ListItem and provider rows (demoed).',

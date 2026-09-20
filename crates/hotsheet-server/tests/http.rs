@@ -4808,6 +4808,8 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             command: None,
             prompt: None,
             tool: None,
+            model: None,
+            effort: None,
             icon: None,
             color: None,
         },
@@ -4823,6 +4825,8 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             command: None,
             prompt: None,
             tool: None,
+            model: None,
+            effort: None,
             icon: None,
             color: None,
         },
@@ -4881,7 +4885,7 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     let (_d, st) = state();
     let mut events = st.subscribe();
     let app = app(st);
-    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"cwd":".","group":"AI"}]"#;
+    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"cwd":".","group":"AI"},{"id":"ai-review","title":"AI review","kind":"ai","prompt":"Review the change","tool":"claude","model":"opus","effort":"high"}]"#;
     let saved = app
         .clone()
         .oneshot(authed("PUT", "/commands", Some(definitions)))
@@ -4897,6 +4901,10 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     let listed = body_json(listed).await;
     assert_eq!(listed[0]["id"], "review");
     assert_eq!(listed[0]["cwd"], ".");
+    assert_eq!(listed[1]["kind"], "ai");
+    assert_eq!(listed[1]["tool"], "claude");
+    assert_eq!(listed[1]["model"], "opus");
+    assert_eq!(listed[1]["effort"], "high");
     let started = app
         .clone()
         .oneshot(authed("POST", "/commands/review/run", None))

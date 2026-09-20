@@ -65,6 +65,10 @@
 .command-settings-editor__grid textarea { min-height:remify(80px); resize:vertical; }
 .command-settings-editor__grid small { color:var(--wa-color-text-quiet); font-weight:400; }
 .command-settings-editor__wide { grid-column:1 / -1; }
+.command-settings-editor__ai-selection { display:grid; min-width:0; color:var(--wa-color-text-normal); font-size:var(--wa-font-size-s); font-weight:600; gap:var(--wa-space-2xs); }
+.command-settings-editor__ai-selection wa-dropdown { min-width:0; }
+.command-settings-editor .command-settings-editor__ai-trigger { width:100%; min-width:0; justify-content:flex-start; font-weight:400; }
+.command-settings-editor__ai-trigger span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @container (max-width:remify(672px)) { .command-settings-editor__heading { align-items:stretch; flex-direction:column; } .command-settings-editor__heading-actions { flex-wrap:wrap; } }
 @media (max-width:remify(560px)) { .command-settings-editor__grid { grid-template-columns:1fr; } .command-settings-editor__wide { grid-column:auto; } }
 

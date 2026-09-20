@@ -335,7 +335,7 @@ and identity-less legacy entries remain conservatively blocking.
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
-  target fields, validation, and explicit save; raw command JSON is not exposed as the
+  target fields, validation, and debounced autosave; raw command JSON is not exposed as the
   primary editing interface. Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.
@@ -344,8 +344,12 @@ and identity-less legacy entries remain conservatively blocking.
   disables or discards that launch action; only a create already in flight suppresses a
   duplicate click. If the detached broker has
   exited during its empty five-minute grace, the server relaunches it transparently before
-  opening that terminal. `ai` definitions store only
-  the prompt and tool selection, never a hard-coded Hot Sheet executable or CLI argv.
+  opening that terminal. `ai` definitions store the prompt plus an optional provider/model/
+  effort override, never a hard-coded Hot Sheet executable or CLI argv. Their shared
+  hierarchical selector starts at **Project Default**, follows later project-default changes
+  while inherited, and offers the same provider catalog, compatible effort choices, and
+  exact-id `Other…` dialog as Drive. The optional override round-trips through project-local
+  settings and is included in the best-effort `$hotsheet` turn notification.
   Clicking one creates an urgent Up Next task whose title is the command label and whose
   details are the configured prompt; it does not execute that prompt directly. When an
   idle, sendable connection for the configured (or default) AI tool already exists, the
@@ -655,8 +659,9 @@ and identity-less legacy entries remain conservatively blocking.
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
-  submenu insets, including at the supported narrow width. Machine defaults and Drive overrides
-  keep the catalog as the primary model chooser and place manual entry behind an `Other…` action;
+  submenu insets, including at the supported narrow width. Machine defaults, Drive overrides,
+  and command overrides keep the catalog as the primary model chooser and place manual entry
+  behind an `Other…` action;
   the focused entry dialog accepts an exact nonblank id, shows that custom id in the chooser only
   while it remains selected, and forgets it after a catalog selection. Live conversations retain
   their compact editable catalog-backed control. These paths keep detected models convenient

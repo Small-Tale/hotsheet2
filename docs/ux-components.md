@@ -1021,7 +1021,10 @@ capability-aware sections when their underlying features and data contracts land
   "Transparent": a command with that color (or none) renders with no background fill and the
   default button styling, in the editor list and the sidebar alike. Field edits,
   reorders, and deletes autosave to a project-scoped draft on a debounce (no explicit Save
-  button), surfacing a status line and validation errors. The popover dialog only takes its
+  button), surfacing a status line and validation errors. AI commands additionally use the
+  shared Provider/Model/Effort submenus: **Project Default** stores no override, while an
+  explicit provider/model/compatible-effort selection (including an exact-id `Other…` model)
+  persists with the command and is sent with its `$hotsheet` notification. The popover dialog only takes its
   flex layout while open (`:popover-open`) so a closed, empty dialog stays UA-hidden rather
   than painting a stray strip. Named AI prompts use the same safe contract by invoking an
   appropriate configured CLI command. The retired worker target picker is deliberately

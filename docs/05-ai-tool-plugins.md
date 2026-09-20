@@ -594,10 +594,10 @@ catalog. `GET /ai-tools?refresh=true` explicitly retries same-version discovery,
 the last good catalog if that refresh fails. The web client uses that refresh path when
 loading AI settings, and `hotsheet-cli ai-tools --json` uses the same capability/merge
 core. Neither client maintains provider/model tables. Model catalogs are suggestions rather
-than allowlists: settings, Drive overrides, live conversations, and headless CLI settings may
+than allowlists: settings, Drive overrides, command overrides, live conversations, and headless CLI settings may
 name a nonblank model id that discovery did not return. Known models retain their model-specific
 effort validation; an unlisted model may use an effort value already declared by that provider.
-In the web client's Settings and Drive menus, `Other…` opens a focused exact-id dialog instead of
+In the web client's Settings, Drive, and command-editor menus, `Other…` opens a focused exact-id dialog instead of
 permanently occupying the main layout with a second model field. The selected custom id appears as
 an ephemeral choice and is removed as soon as a catalog model is selected.
 Machine-local defaults still validate the installed provider and are stored through
