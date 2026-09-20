@@ -39,7 +39,7 @@ describe('TicketBoard', () => {
     expect(rule).not.toMatch(/background|border|padding|border-radius/);
     expect(css).toMatch(/ticket-board-column > header h2[^}]*font: inherit/);
     expect(css).toMatch(/ticket-board-column__header[^}]*height: remify\(32px\)/);
-    expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: remify\(1\.6px\) remify\(8px\) remify\(16px\)/);
+    expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) var\(--kui-space-m\)/);
   });
 
   it('matches the outer margin and inter-column spacing (HS2-VX9E4Z)', () => {

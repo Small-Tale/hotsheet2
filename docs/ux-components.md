@@ -562,6 +562,8 @@ always retain native clipboard behavior.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
   affordance, and a full-width heading control that selects every ticket in that column.
+  The header, ticket gutter, row rhythm, and progressive-loading state use Kerf's 8px
+  within-group spacing; the scrolling region retains 16px of bottom breathing room.
   Its semantic `h2` resets inherited browser heading typography and the selectable
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
