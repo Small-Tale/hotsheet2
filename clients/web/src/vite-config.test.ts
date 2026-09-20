@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 
-import { stableDevHmr,stableDevInjectClientScript,viteDependencyIsolation } from '../vite.config';
+import { stableDevHmr,stableDevInjectClientScript,stripStableDevClientTag,viteDependencyIsolation } from '../vite.config';
 
 describe('Vite dependency isolation',()=>{
   it('disables runtime discovery and uses the stable session cache',()=>{
@@ -26,4 +26,12 @@ describe('Vite dependency isolation',()=>{
     // undefined → the dev-server injects the client as usual (npm run dev:hot / Playwright keep HMR).
     expect(stableDevInjectClientScript({})).toBeUndefined();
   });
+
+  it('removes Vite core client tags only from stable-dev index HTML (HS2-8JV12R)',()=>{
+    const html='<head><script type="module" src="/@vite/client"></script><script type="module" src="/src/main.tsx"></script></head>';
+    expect(stripStableDevClientTag(html,{HOTSHEET_WEB_STABLE_DEV:'1'})).toBe('<head><script type="module" src="/src/main.tsx"></script></head>');
+    expect(stripStableDevClientTag(html,{})).toBe(html);
+    expect(stripStableDevClientTag('<script src="/base/@vite/client" type="module"></script><main>ok</main>',{HOTSHEET_WEB_STABLE_DEV:'1'})).toBe('<main>ok</main>');
+  });
+
 });

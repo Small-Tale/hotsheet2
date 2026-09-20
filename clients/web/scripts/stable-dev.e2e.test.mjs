@@ -105,6 +105,52 @@ it('does not reload when a later route first imports another dependency', async 
   }
 }, 30_000);
 
+it('serves the app without a Vite reconnect client, HMR websocket, or reconnect logging', async () => {
+  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+  const port = await availablePort();
+  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
+    env: {
+      ...process.env,
+      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+    },
+    stdio: 'ignore',
+  });
+  const browser = await chromium.launch();
+  try {
+    const origin = `http://127.0.0.1:${port}`;
+    const rootHtml = await waitForSource(`${origin}/`);
+    const mainSource = await waitForSource(`${origin}/src/main.tsx`);
+    const demoHtml = await waitForSource(`${origin}/ux-demo`);
+    const stableClientShim = await waitForSource(`${origin}/@vite/client`);
+    expect(rootHtml).not.toContain('/@vite/client');
+    expect(mainSource).not.toContain('/@vite/client');
+    expect(demoHtml).not.toContain('/@vite/client');
+    expect(stableClientShim).toContain('/src/stable-vite-client.ts');
+
+    const page = await browser.newPage();
+    const requested = [];
+    const sockets = [];
+    const consoleMessages = [];
+    page.on('request', request => requested.push(request.url()));
+    page.on('websocket', socket => sockets.push(socket.url()));
+    page.on('console', message => consoleMessages.push(message.text()));
+    await page.goto(`${origin}/`);
+    await page.waitForTimeout(500);
+    expect(await page.locator('#app').count()).toBe(1);
+    expect(requested.filter(url => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
+    expect(sockets.filter(url => url.includes('vite-hmr'))).toEqual([]);
+    expect(consoleMessages.filter(message => message.includes('[vite] connecting') || message.includes('[vite] connected'))).toEqual([]);
+    await page.screenshot({ path: '/private/tmp/hs2-8jv12r-stable-client-after.png', fullPage: true });
+  } finally {
+    await browser.close();
+    child.kill('SIGTERM');
+    await new Promise(resolveExit => child.once('exit', resolveExit));
+    expect(await readdir(runtimeTemp)).toEqual([]);
+    await rm(runtimeTemp, { recursive: true, force: true });
+  }
+}, 30_000);
+
 it('does not reload when the terminal runtime first lazy-loads its xterm dependencies', async () => {
   // HS2-8JV12R ("client randomly restarts") investigation: a common cause of a dev-server full reload is
   // Vite discovering a new dependency at runtime and re-optimizing when a route first lazy-loads it. The

@@ -206,7 +206,11 @@ and identity-less legacy entries remain conservatively blocking.
   pressure) rather than an HMR update (HS2-8JV12R). The launcher
   passes the original repository root into the snapshot so the
   project bridge still resolves the real `target/debug/hotsheet-server` rather than a
-  nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate
+  nonexistent temporary `target` directory. The stable launcher serves no Vite websocket/reconnect
+  client (including on the root index route); Vite's transformed CSS modules use a local style-only
+  runtime so startup CSS still renders without an HMR connection. A transient dev-server connection
+  loss therefore cannot reload the application; reload manually after restarting the snapshot. Use `npm run dev:hot` only
+  when actively developing the web UI and immediate
   HMR is desired. Browser tests use `dev:hot` on a separate default port and never reuse
   an already-running maintainer server. Signal handling is active before snapshot creation:
   an interrupt during startup prevents Vite from launching, awaits the in-flight snapshot,
