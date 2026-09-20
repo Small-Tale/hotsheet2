@@ -3,7 +3,7 @@ import { defineConfig,type Plugin,type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
 import { devServerRouteExclude } from './src/dev-server-routes';
-import { installTerminalWebSocketBridge } from './src/terminal-ws-bridge';
+import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
 
 export function viteDependencyIsolation(environment:NodeJS.ProcessEnv=process.env):Pick<UserConfig,'cacheDir'|'optimizeDeps'> {
   const cacheDir=environment.HOTSHEET_VITE_CACHE_DIR;
@@ -63,7 +63,7 @@ export function stableDevClientStripPlugin(environment:NodeJS.ProcessEnv=process
 export default defineConfig(({ command }) => ({
   ...viteDependencyIsolation(),
   plugins: command === 'serve'
-    ? [{name:'hotsheet-terminal-websocket-bridge',configureServer:installTerminalWebSocketBridge},devServer({
+    ? [{name:'hotsheet-project-websocket-bridge',configureServer:installProjectWebSocketBridge},devServer({
         entry: 'src/dev-server.ts',
         exclude: [devServerRouteExclude, ...defaultOptions.exclude],
         injectClientScript: stableDevInjectClientScript(),

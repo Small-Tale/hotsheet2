@@ -3,10 +3,12 @@ import type { Duplex } from 'node:stream';
 
 import WebSocket,{ WebSocketServer } from 'ws';
 
-import { projectTerminalWebSocketUrl } from './project-bridge';
+import { projectChangeWebSocketUrl,projectTerminalWebSocketUrl } from './project-bridge';
 
 const browserAttach=/^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
+const browserSync=/^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
 type TargetResolver=(projectId:string,terminalId:string)=>string|undefined|Promise<string|undefined>;
+type SyncTargetResolver=(projectId:string)=>string|undefined|Promise<string|undefined>;
 
 export async function browserTerminalAttachTarget(requestUrl:string|undefined,resolveTarget:TargetResolver=projectTerminalWebSocketUrl):Promise<string|undefined> {
   if(!requestUrl)return undefined;
@@ -15,10 +17,17 @@ export async function browserTerminalAttachTarget(requestUrl:string|undefined,re
   try{return await resolveTarget(decodeURIComponent(match[1]),decodeURIComponent(match[2]))}catch{return undefined}
 }
 
-export function installTerminalWebSocketBridge(server:{httpServer?:{on(event:'upgrade',listener:(request:IncomingMessage,socket:Duplex,head:Buffer)=>void):unknown}|null},resolveTarget:TargetResolver=projectTerminalWebSocketUrl):void {
+export async function browserProjectWebSocketTarget(requestUrl:string|undefined,resolveTerminal:TargetResolver=projectTerminalWebSocketUrl,resolveSync:SyncTargetResolver=projectChangeWebSocketUrl):Promise<string|undefined>{
+  if(!requestUrl)return undefined;
+  const pathname=new URL(requestUrl,'http://localhost').pathname,sync=pathname.match(browserSync);
+  if(sync){try{return await resolveSync(decodeURIComponent(sync[1]))}catch{return undefined}}
+  return browserTerminalAttachTarget(requestUrl,resolveTerminal);
+}
+
+export function installProjectWebSocketBridge(server:{httpServer?:{on(event:'upgrade',listener:(request:IncomingMessage,socket:Duplex,head:Buffer)=>void):unknown}|null},resolveTerminal:TargetResolver=projectTerminalWebSocketUrl,resolveSync:SyncTargetResolver=projectChangeWebSocketUrl):void {
   const browserServer=new WebSocketServer({noServer:true});
   server.httpServer?.on('upgrade',(request,socket,head)=>{
-    void browserTerminalAttachTarget(request.url,resolveTarget).then(target=>{
+    void browserProjectWebSocketTarget(request.url,resolveTerminal,resolveSync).then(target=>{
       if(!target)return;
       browserServer.handleUpgrade(request,socket,head,browser=>{
         const upstream=new WebSocket(target),pending:Array<{data:WebSocket.RawData;binary:boolean}>=[];
@@ -31,4 +40,9 @@ export function installTerminalWebSocketBridge(server:{httpServer?:{on(event:'up
       });
     }).catch(()=>{socket.destroy()});
   });
+}
+
+/** Backward-compatible adapter for existing callers that only customize terminal resolution. */
+export function installTerminalWebSocketBridge(server:Parameters<typeof installProjectWebSocketBridge>[0],resolveTarget:TargetResolver=projectTerminalWebSocketUrl):void{
+  installProjectWebSocketBridge(server,resolveTarget);
 }

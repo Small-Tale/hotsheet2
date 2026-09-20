@@ -79,6 +79,9 @@ describe('repository setup transport',()=>{
 });
 
 describe('change polling transport',()=>{
+  it('builds a credential-free same-origin WebSocket URL',()=>{
+    expect(new Api('/__hotsheet/project-api/project%20one').changeWebSocketUrl()).toBe('ws://localhost/__hotsheet/project-api/project%20one/ws/sync');
+  });
   it('requests the secret-hiding project proxy with a cursor and abort signal',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({cursor:8,events:[],overflow:false}),{status:200}));
     const controller=new AbortController();

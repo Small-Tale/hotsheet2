@@ -13,6 +13,7 @@ describe('projectSessionRegistry',()=>{
     const configGraph=await import(`${moduleUrl}?graph=config`),ssrGraph=await import(`${moduleUrl}?graph=ssr`);
     configGraph.projectSessionRegistry().set('module-graph-checkout',{url:'http://127.0.0.1:1',secret:'private'});
     await expect(ssrGraph.projectTerminalWebSocketUrl('module-graph-checkout','terminal')).resolves.toBe('ws://127.0.0.1:1/terminals/terminal/attach?secret=private');
+    await expect(ssrGraph.projectChangeWebSocketUrl('module-graph-checkout')).resolves.toBe('ws://127.0.0.1:1/ws/sync?secret=private');
   });
 });
 

@@ -205,6 +205,13 @@ Responsibilities:
   both transports. A caught-up long poll blocks; after wake it snapshots the whole
   available span and its exact cursor atomically, so a burst cannot be skipped and an
   idle client cannot form a tight request loop.
+  The browser's development bridge proxies a credential-free project-scoped
+  `/ws/sync` URL to this authenticated loopback endpoint, keeping the server secret
+  outside browser JavaScript. The web client handshakes and closes the WebSocket
+  subscription race through the replay endpoint, consumes cursor-bearing push frames
+  while connected, and replays from its last cursor before reconnecting with bounded
+  backoff. Unsupported upgrades or older non-replayable event formats therefore fall
+  back to long polling without losing external changes.
 - **MCP** endpoint(s): the `hotsheet_*` tool surface for AI tools
   ([05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8).
 - **Owns the filesystem watcher** (→ incremental reindex) and the **terminal/PTY

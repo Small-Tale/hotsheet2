@@ -533,6 +533,18 @@ export async function projectTerminalWebSocketUrl(projectId:string,terminalId:st
   return authenticatedTerminalWebSocketUrl(target.url,terminalId,target.secret);
 }
 
+/** Resolve a browser-facing project session to its authenticated change-stream URL.
+ * The browser connects only to the credential-free Vite bridge path. */
+export async function projectChangeWebSocketUrl(projectId:string):Promise<string|undefined> {
+  const target=sessions.get(projectId);
+  if(!target)return undefined;
+  await refreshSupervisedTarget(target);
+  const url=new URL('/ws/sync',target.url);
+  url.protocol=url.protocol==='https:'?'wss:':'ws:';
+  url.searchParams.set('secret',target.secret);
+  return url.toString();
+}
+
 export function authenticatedTerminalWebSocketUrl(origin:string,terminalId:string,secret:string):string {
   const url=new URL(`/terminals/${encodeURIComponent(terminalId)}/attach`,origin);
   url.protocol=url.protocol==='https:'?'wss:':'ws:';

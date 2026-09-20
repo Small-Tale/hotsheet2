@@ -168,6 +168,7 @@ export class Api {
   runCommand=(id:string)=>this.request<CommandRun>(`/commands/${encodeURIComponent(id)}/run`,{method:'POST'});
   commandRun=(id:string,after=0)=>this.request<CommandRun>(`/command-runs/${encodeURIComponent(id)}?after=${after}`);
   cancelCommandRun=(id:string)=>this.request<CommandRun>(`/command-runs/${encodeURIComponent(id)}/cancel`,{method:'POST'});
+  changeWebSocketUrl=()=>{const url=new URL(`${this.origin}/ws/sync`,typeof location==='undefined'?'http://localhost':location.href);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url.toString()};
   pollEvents=(since?:number,signal?:AbortSignal,timeoutMs=25_000)=>this.request<PollResponse>(`/ws/poll?timeout_ms=${timeoutMs}${since===undefined?'':`&since=${since}`}`,{signal},false);
   resolvePermission=(id:number,decision:'allow'|'deny',scope:'once'|'always')=>this.request<{connection:string;decision:'allow'|'deny';persisted:boolean}>(`/permissions/${id}`,{method:'POST',body:JSON.stringify({decision,scope})});
 }

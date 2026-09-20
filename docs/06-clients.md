@@ -724,6 +724,14 @@ and identity-less legacy entries remain conservatively blocking.
   no effort support hide that control and
   omit effort entirely from subsequent turn requests. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
+  Each open project's primary transport is the credential-free, project-scoped
+  `/ws/sync` browser bridge. One long-poll handshake establishes the replay cursor and
+  one zero-wait replay after the socket opens closes the subscribe race; an idle healthy
+  socket issues no further requests. Disconnects, rejected upgrades, and older servers
+  fall back through `/ws/poll`, replay the missing cursor span, reconcile once, and retry
+  WebSocket with capped exponential backoff. The existing local-mutation barrier,
+  acknowledgement suppression, overflow recovery, and event consumers receive the same
+  `PollResponse` batches regardless of which transport delivered them.
   While the dialog is closed, streamed transcript/activity state remains retained but the
   conversation surface is not mounted and does not subscribe the application root to those
   high-frequency signals. Opening it projects the accumulated transcript in one pass; background
@@ -1035,7 +1043,7 @@ and identity-less legacy entries remain conservatively blocking.
   same-ticket references prefer immutable attachment IDs, while
   `attachment:[HS2-…]filename` resolves through that explicitly named ticket.
 
-  AI turn events carry the server event-log cursor through every project long-poll stream.
+  AI turn events carry the server event-log cursor through every project WebSocket or long-poll stream.
   The client applies each cursor-addressed turn event once globally, so multiple open
   projects cannot append the same provider-independent assistant output repeatedly.
 

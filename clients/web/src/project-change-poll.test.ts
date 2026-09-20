@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PollResponse } from './api';
-import { containsRepositoryChange, containsTicketChange, startProjectChangePoll } from './project-change-poll';
+import { containsRepositoryChange, containsTicketChange, startProjectChangePoll,startProjectChangeStream } from './project-change-poll';
 
 const response = (cursor: number, kind?: string, overflow = false): PollResponse => ({
   cursor,
@@ -13,6 +13,14 @@ function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(next => { resolve = next; });
   return { promise, resolve };
+}
+
+class FakeSocket extends EventTarget {
+  readyState=0;
+  open(){this.readyState=1;this.dispatchEvent(new Event('open'))}
+  message(value:unknown){const event=new Event('message') as MessageEvent;Object.defineProperty(event,'data',{value:JSON.stringify(value)});this.dispatchEvent(event)}
+  close(){if(this.readyState===3)return;this.readyState=3;this.dispatchEvent(new Event('close'))}
+  fail(){this.dispatchEvent(new Event('error'))}
 }
 
 describe('project change long polling', () => {
@@ -151,5 +159,77 @@ describe('project change long polling', () => {
     expect(wait.mock.calls.map(call => call[0])).toEqual([500, 1_000]);
     stop();
     pending.resolve(response(0));
+  });
+});
+
+describe('project change WebSocket stream',()=>{
+  it('uses one handshake and one subscribe-race replay while an idle socket stays open',async()=>{
+    const pollEvents=vi.fn().mockResolvedValueOnce(response(4)).mockResolvedValueOnce(response(4));
+    const refresh=vi.fn().mockResolvedValue(undefined),onEvents=vi.fn().mockResolvedValue(undefined),sockets:FakeSocket[]=[];
+    const stop=startProjectChangeStream({
+      client:{pollEvents,changeWebSocketUrl:()=> 'ws://localhost/project/ws/sync'},refresh,onEvents,
+      openWebSocket:()=>{const socket=new FakeSocket();sockets.push(socket);queueMicrotask(()=> { socket.open(); });return socket as unknown as WebSocket},
+    });
+    await vi.waitFor(()=>{expect(pollEvents).toHaveBeenCalledTimes(2)});
+    sockets[0].message({cursor:5,store:'local',kind:'updated',id:'01',slug:'HS2-ONE'});
+    await vi.waitFor(()=>{expect(refresh).toHaveBeenCalledTimes(1)});
+    expect(onEvents).toHaveBeenCalledWith({cursor:5,events:[{cursor:5,store:'local',kind:'updated',id:'01',slug:'HS2-ONE'}],overflow:false});
+    await new Promise(resolve=>setTimeout(resolve,10));
+    expect(pollEvents).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('replays the disconnect gap before reconnecting without duplicating queued socket events',async()=>{
+    const replay={cursor:6,events:[{cursor:5,store:'local',kind:'updated',id:'01',slug:'HS2-ONE'},{cursor:6,store:'local',kind:'activity',id:'02',slug:'HS2-TWO'}],overflow:false};
+    const pollEvents=vi.fn().mockResolvedValueOnce(response(4)).mockResolvedValueOnce(response(4)).mockResolvedValueOnce(replay).mockResolvedValueOnce(response(6));
+    const refresh=vi.fn().mockResolvedValue(undefined),onEvents=vi.fn().mockResolvedValue(undefined),wait=vi.fn().mockResolvedValue(undefined),sockets:FakeSocket[]=[];
+    const stop=startProjectChangeStream({
+      client:{pollEvents,changeWebSocketUrl:()=> 'ws://localhost/project/ws/sync'},refresh,onEvents,wait,
+      openWebSocket:()=>{const socket=new FakeSocket();sockets.push(socket);queueMicrotask(()=> { socket.open(); });return socket as unknown as WebSocket},
+    });
+    await vi.waitFor(()=>{expect(pollEvents).toHaveBeenCalledTimes(2)});
+    sockets[0].close();
+    await vi.waitFor(()=>{expect(sockets).toHaveLength(2)});
+    expect(onEvents).toHaveBeenCalledWith(replay);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(wait).toHaveBeenCalledWith(expect.any(Number),expect.any(AbortSignal));
+    expect(wait.mock.calls[0][0]).toBeGreaterThan(0);expect(wait.mock.calls[0][0]).toBeLessThanOrEqual(500);
+    sockets[1].message({cursor:6,store:'local',kind:'activity',id:'02',slug:'HS2-TWO'});
+    await Promise.resolve();
+    expect(onEvents).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('falls back and backs off when an older socket sends a non-replayable event',async()=>{
+    const waiting=deferred<undefined>(),pollEvents=vi.fn().mockResolvedValueOnce(response(9)).mockResolvedValueOnce(response(9)).mockResolvedValueOnce(response(9));
+    const refresh=vi.fn().mockResolvedValue(undefined),onError=vi.fn(),wait=vi.fn((milliseconds:number,signal:AbortSignal)=>{void milliseconds;void signal;return waiting.promise}),sockets:FakeSocket[]=[];
+    const stop=startProjectChangeStream({
+      client:{pollEvents,changeWebSocketUrl:()=> 'ws://localhost/project/ws/sync'},refresh,onError,wait,
+      openWebSocket:()=>{const socket=new FakeSocket();sockets.push(socket);queueMicrotask(()=> { socket.open(); });return socket as unknown as WebSocket},
+    });
+    await vi.waitFor(()=>{expect(pollEvents).toHaveBeenCalledTimes(2)});
+    sockets[0].message({store:'local',kind:'updated',id:'01',slug:'HS2-ONE'});
+    await vi.waitFor(()=>{expect(wait).toHaveBeenCalledWith(expect.any(Number),expect.any(AbortSignal))});
+    expect(wait.mock.calls[0][0]).toBeGreaterThan(0);expect(wait.mock.calls[0][0]).toBeLessThanOrEqual(500);
+    expect(onError.mock.calls.some(([reason])=>String(reason).includes('not replayable'))).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    stop();waiting.resolve(undefined);
+  });
+
+  it('caps repeated upgrade retry delays while long-poll remains available',async()=>{
+    const delays:number[]=[],done=deferred<undefined>(),pollEvents=vi.fn().mockResolvedValue(response(0));
+    let stop=()=>{};
+    const wait=vi.fn(async(milliseconds:number)=>{delays.push(milliseconds);if(delays.length===4){stop();done.resolve(undefined)}});
+    stop=startProjectChangeStream({
+      client:{pollEvents,changeWebSocketUrl:()=> 'ws://localhost/project/ws/sync'},refresh:vi.fn().mockResolvedValue(undefined),wait,retryMs:500,maxRetryMs:2_000,
+      openWebSocket:()=>{const socket=new FakeSocket();queueMicrotask(()=> { socket.fail(); });return socket as unknown as WebSocket},
+    });
+    await done.promise;
+    expect(delays).toHaveLength(4);
+    expect(delays[0]).toBeLessThanOrEqual(500);
+    expect(delays[1]).toBeLessThanOrEqual(1_000);
+    expect(delays[2]).toBeLessThanOrEqual(2_000);
+    expect(delays[3]).toBeLessThanOrEqual(2_000);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(2_000);
   });
 });
