@@ -2962,7 +2962,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)',asy
   await expect(screen.locator('[data-shortcut-id="undo"] .keyboard-settings__chord')).toHaveText(apple?'⌘Z':'Ctrl+Z');
   await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
   // The rebinding takes effect: mod+K no longer opens search, mod+G does.
-  await page.getByRole('button',{name:/List view/}).click();await page.locator('.app-shell__work-area').focus();
+  await page.getByRole('button',{name:'List view',exact:true}).click();await page.locator('.app-shell__work-area').focus();
   await page.keyboard.press(`${mod}+k`);await expect(page.getByRole('searchbox',{name:'Search tickets'})).toHaveCount(0);
   await page.keyboard.press(`${mod}+g`);await expect(page.getByRole('searchbox',{name:'Search tickets'})).toBeVisible();
 });
