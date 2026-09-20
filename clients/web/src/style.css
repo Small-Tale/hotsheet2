@@ -9,25 +9,6 @@ button, input, textarea, select { font: inherit; }
 .app-empty { min-height: 100%; display: grid; place-content: center; justify-items: center; gap: var(--wa-space-s); text-align: center; padding: remify(32px); }
 .app-empty h1, .app-empty p { margin: 0; }
 .app-empty p { color: var(--wa-color-neutral-on-quiet); }
-wa-dialog[data-project-dialog] { --width: min(remify(768px), calc(100vw - remify(32px))); }
-.project-dialog { display: grid; gap: remify(16px); width: 100%; }
-.project-dialog__path { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--wa-space-xs); }
-.project-dialog__path wa-button::part(base) { width: remify(40px); min-height: remify(40px); padding: 0; }
-.project-dialog__path svg { width: remify(16px); height: remify(16px); }
-.project-dialog > p { margin: 0; line-height: 1.5; color: var(--wa-color-neutral-on-quiet); }
-.project-dialog footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
-.project-dialog__error:empty { display: none; }
-.project-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
-/* Remote clients pick from the server's known projects instead of the file picker (HS2-VFNCXG). */
-.remote-project-dialog__list { display: grid; gap: remify(4px); width: 100%; max-height: min(remify(360px), 50vh); margin: 0; padding: 0; overflow: auto; list-style: none; }
-.remote-project-dialog__item { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: remify(2px); padding: remify(8px) remify(12px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); text-align: left; cursor: pointer; font: inherit; }
-.remote-project-dialog__item:hover, .remote-project-dialog__item:focus-visible { border-color: var(--wa-color-brand-border-normal); background: var(--wa-color-brand-fill-quiet); outline: none; }
-.remote-project-dialog__name { font-weight: var(--wa-font-weight-semibold); overflow-wrap: anywhere; }
-.remote-project-dialog__path { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); overflow-wrap: anywhere; }
-.remote-project-dialog__empty { margin: 0; color: var(--wa-color-neutral-on-quiet); }
-.project-dialog__server-recovery { display:grid; gap:var(--wa-space-s); padding:var(--wa-space-m); border:1px solid var(--wa-color-warning-border-normal); border-radius:var(--wa-border-radius-m); color:var(--wa-color-warning-on-quiet); background:var(--wa-color-warning-fill-quiet); }
-.project-dialog__server-recovery p { margin:0; line-height:1.45; }
-.project-dialog__server-recovery wa-button { justify-self:start; }
 wa-dialog[data-ticket-source-setup-dialog] { --width: min(remify(576px), calc(100vw - remify(32px))); }
 wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"], wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] { width:100%; }
 wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"] { font:inherit; }
@@ -58,8 +39,6 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .ticket-source-setup__remote code { display:block; padding:var(--wa-space-xs); border-radius:var(--wa-border-radius-s); background:var(--wa-color-surface-default); white-space:normal; overflow-wrap:anywhere; }
 .ticket-source-setup__remote-form { display:grid; gap:var(--wa-space-m); }
 .ticket-source-setup__remote-help { color:var(--wa-color-text-link); font-size:var(--wa-font-size-xs); }
-.terminal-rename { display: grid; gap: var(--wa-space-l); }
-.terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 /* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
 .app-loading, .app-toast { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
@@ -100,8 +79,6 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .project-settings__option span { grid-column: 2; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); }
 .project-settings__permission-grid { display: grid; max-width: remify(544px); margin: remify(16px) 0 remify(24px); grid-template-columns: repeat(2,minmax(0,1fr)); gap: remify(12.8px); }
 .project-settings__permission-grid p { grid-column: 1 / -1; margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.45; }
-.notification-inspector-empty { height: 100%; background: var(--wa-color-surface-default); }
-.notification-inspector-empty .kui-toolbar { border-bottom: 0; }
 .ticket-page-more { display:block; min-height:remify(40px); margin:var(--wa-space-m) auto; padding:0 var(--wa-space-l); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-pill); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); cursor:pointer; }
 .ticket-page-more:disabled { opacity:.55; cursor:wait; }
 @media (max-width: remify(640px)) { .project-settings__permission-grid { grid-template-columns: 1fr; } }

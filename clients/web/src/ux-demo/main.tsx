@@ -55,6 +55,7 @@ import {
 import type { CommandDefinition, CommandRun } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
+import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
 import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
@@ -62,11 +63,13 @@ import { ConversationExportDialog } from '../components/conversation-export-dial
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { ProjectCloseDialog } from '../components/project-close-dialog';
+import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { SavedViewDialog } from '../components/saved-view-dialog';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
+import { TerminalRenameDialog } from '../components/terminal-rename-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { showTicketReaderDialog } from '../components/ticket-reader';
@@ -545,6 +548,7 @@ function demoContent(item: DemoDefinition) {
     ],
     selectedKey: 'ai-chat:codex-main',
   }} />;
+  if (item.id === 'project-dialog') return <section class="dialog-demo-stack" aria-label="Project dialog variants"><ProjectDialog open root="/work/hotsheet2" error=""/><RemoteProjectDialog open checkouts={[{id:'demo',root:'/work/demo',alias:'Demo',stores:['/work/demo.hs2']}]}/></section>;
   if (item.id === 'conversation-export-dialog') return <ConversationExportDialog state={{
     source: { conversationId: 'conv-1', tool: 'codex', sessionId: 'sess-42', projectId: 'kerf', model: 'gpt-5.6-sol-preview', effort: 'high', resumable: true },
     messages: [
@@ -599,10 +603,12 @@ function demoContent(item: DemoDefinition) {
     return <section class="fixed-aspect-terminal-card-demo terminal-dashboard" aria-label="Fixed aspect terminal card variants"><div><h2>Grid preview</h2><FixedAspectTerminalCard session={session}/></div><div class="fixed-aspect-terminal-card-demo__magnified"><h2>Magnified interactive</h2><FixedAspectTerminalCard session={session} mode="magnified"/></div></section>;
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
+  if (item.id === 'terminal-rename-dialog') return <TerminalRenameDialog target={{projectId:'demo',terminalId:'shell',value:'Development'}}/>;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
     return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
+  if (item.id === 'app-empty-state') return <section class="empty-state-demo-stack" aria-label="Application empty state variants"><AppEmptyState/><ProjectRestoreState/></section>;
   if (item.id === 'note-card') return <NoteCardDemo />;
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;

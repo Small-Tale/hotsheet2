@@ -847,6 +847,11 @@ meaning and each option uses the same evocative component icon as the catalog si
 Production web component CSS is colocated in `clients/web/src/components/` and imported
 by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,
 and stage presentation, ensuring the demo exercises the same CSS the real app imports.
+Application-level render boundaries follow the same ownership rule: `MainShell` and the
+inspector surface live under `components/`, while `main.tsx` only derives their state and
+props. Project-opening, notification-inspector, terminal-rename, initial empty/restore,
+and inspector surfaces are component modules rather than inline `main.tsx` definitions;
+the standalone visual states are represented in `/ux-demo`.
 Both the real app and `/ux-demo` load `@kerfjs/ui/webawesome.css`, then
 `clients/web/src/hot-sheet-tokens.css`. Kerf owns the generic surface, text, brand,
 success/warning/danger, spacing, radius, focus, shadow, light/dark, and Web Awesome

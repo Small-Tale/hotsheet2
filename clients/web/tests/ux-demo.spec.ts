@@ -44,6 +44,24 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
 });
 
+test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
+  await page.goto('/ux-demo?component=project-dialog');
+  await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', true);
+  await expect(page.locator('[data-remote-project-dialog]')).toContainText('/work/demo');
+  await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-project-dialogs.png', fullPage: true });
+
+  await page.goto('/ux-demo?component=terminal-rename-dialog');
+  const rename = page.locator('[data-terminal-rename-dialog]');
+  await expect(rename).toHaveJSProperty('open', true);
+  await expect(rename.getByRole('textbox', { name: 'Terminal name' })).toHaveJSProperty('value', 'Development');
+  await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-terminal-rename.png', fullPage: true });
+
+  await page.goto('/ux-demo?component=app-empty-state');
+  await expect(page.getByRole('heading', { name: 'Open a Hot Sheet project' })).toBeVisible();
+  await expect(page.locator('[data-component="project-restore-state"]')).toContainText('Restoring projects, tickets, and terminals');
+  await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-app-empty-states.png', fullPage: true });
+});
+
 test('renders keyboard-shortcut chords as clean uniform chips (HS2-186WJT)',async({page})=>{
   await page.setViewportSize({width:1000,height:800});
   await page.goto('/ux-demo?component=keyboard-settings');
