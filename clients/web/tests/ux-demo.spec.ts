@@ -1735,6 +1735,8 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('.project-tab-bar');
+  await expect(tabBar).toHaveCSS('padding', '4px 8px');
+  await expect(tabBar).toHaveCSS('gap', '4px');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   // The tabs strip does not stretch, so the trailing Add-project (+) button follows the tabs instead of
   // being pushed to the far right (HS2-HV52WR).
@@ -1768,6 +1770,7 @@ test('exercises the application-shell component slice and responsive composition
   const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.kui-app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
   expect(focusPresentation).toMatchObject({rootOutlineStyle:'solid',rootOutlineWidth:'3px',rootOutlineOffset:'-2px',selectOutlineStyle:'none'});
   await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-wide.png'});
+  await tabBar.screenshot({path:'/private/tmp/hs2-4y6sm9-project-tab-bar.png'});
   await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-wide.png',fullPage:true});
   const tabActionCenters = await tabBar.evaluate(node => {
     const tab = node.querySelector('[data-tab-kind="project"]')!.getBoundingClientRect();

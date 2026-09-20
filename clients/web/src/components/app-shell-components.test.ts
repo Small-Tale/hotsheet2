@@ -137,7 +137,7 @@ describe('application shell components', () => {
     const projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
     expect(String(ProjectTab({id:'focus',name:'Focus',location:'local'}))).toContain('class="kui-app-tab project-tab"');
     expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
-    expect(barCss).toMatch(/\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*margin-block: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
+    expect(barCss).toMatch(/\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*padding: var\(--kui-space-2xs\);/);
     // The tabs strip does not stretch, so the trailing Add-project (+) follows the tabs rather than
     // sitting far-right (HS2-HV52WR).
     expect(barCss).toMatch(/\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*flex: 0 1 auto/);

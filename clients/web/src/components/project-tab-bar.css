@@ -2,13 +2,13 @@
    restyle the projects strip's chrome on top of it (HS2-Q6P9P0). The tabs container keeps a 2xs inset
    (padding, cancelled by a negative block margin so the bar height is unchanged) so a focused/selected
    tab's pill focus ring and shadow are not clipped at the scrolling-strip edges. */
-.project-tab-bar { height: remify(60px); min-height: remify(60px); padding: remify(5.6px) remify(7.2px); border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); gap: remify(5.6px); }
+.project-tab-bar { height: remify(60px); min-height: remify(60px); padding: var(--kui-space-2xs) var(--kui-space-xs); border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); gap: var(--kui-space-2xs); }
 /* Don't let the tabs container grow to fill the strip (kerf defaults it to flex:1); shrink-wrap it so
    the trailing Add-project (+) button sits immediately after the last tab instead of pushed to the far
    right, while min-width:0 + overflow-x still let it shrink and scroll when tabs overflow (HS2-HV52WR). */
-.project-tab-bar .kui-tab-bar__tabs { height: 100%; flex: 0 1 auto; margin-block: calc(var(--wa-space-2xs) * -1); padding: var(--wa-space-2xs); border: 0; border-radius: 0; background: transparent; gap: remify(3.2px); }
+.project-tab-bar .kui-tab-bar__tabs { height: 100%; flex: 0 1 auto; margin-block: calc(var(--kui-space-2xs) * -1); padding: var(--kui-space-2xs); border: 0; border-radius: 0; background: transparent; gap: var(--kui-space-2xs); }
 .project-tab-bar__modes, .project-tab-bar__actions { display: flex; flex: none; height: 100%; align-items: center; }
-.project-tab-bar__modes { gap: remify(1.6px); }
+.project-tab-bar__modes { gap: var(--kui-space-2xs); }
 .project-tab-bar__modes button { display: grid; width: remify(32px); height: remify(32px); padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; flex: none; place-items: center; }
 .project-tab-bar__modes button:hover { background: var(--wa-color-surface-default); }
 .project-tab-bar__modes button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s), inset 0 0 0 1px color-mix(in srgb, var(--wa-color-neutral-border-normal) 80%, transparent); }
@@ -26,5 +26,5 @@
 /* Mobile project switcher: a borderless select sized to the selected project name (HS2-0SARDD) —
    it shrinks and truncates rather than stretching to fill the bar. */
 .project-tab-bar--mobile .project-tab-bar__select, .project-tab-bar--mobile .project-tab-bar__select-empty { flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.project-tab-bar--mobile .project-tab-bar__select::part(combobox) { min-height: remify(32px); padding-inline: remify(8px); border: 0; background: transparent; box-shadow: none; }
+.project-tab-bar--mobile .project-tab-bar__select::part(combobox) { min-height: remify(32px); padding-inline: var(--kui-space-xs); border: 0; background: transparent; box-shadow: none; }
 .project-tab-bar--mobile .project-tab-bar__select::part(combobox):focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }

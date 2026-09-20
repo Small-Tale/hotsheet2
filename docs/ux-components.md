@@ -418,8 +418,10 @@ it does not carry local renderer wrappers for the package primitives.
   HS2-2ZCN7K and HS2-38RJMK respectively.
 
 Global dashboard modes precede project tabs; Add follows the project strip. Tabs
-represent server/project connections rather than embedded stores. The component
-must tolerate two tabs that expose the same store through different checkouts or
+represent server/project connections rather than embedded stores. The strip uses
+Kerf's 4px tight-cluster rhythm around and between controls, with an 8px outer
+inline inset, while retaining its fixed 60px geometry. The component must tolerate
+two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally without truncating identities; the overflow
 strip provides direct access to tabs outside the current viewport and reserves enough inset
 for the complete selected shadow and keyboard focus ring at both ends. Project tabs support
