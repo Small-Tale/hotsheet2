@@ -427,7 +427,7 @@ async function restartForUpgrade(store:string,target:SessionTarget,current:Insta
   });
 }
 
-async function serverRequest<T>(target: SessionTarget, path: string, init: RequestInit = {}): Promise<T> {
+async function serverRequest<T>(target: SessionTarget, path: string, init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}): Promise<T> {
   const response = await fetch(`${target.url}${path}`, { ...init, headers: { 'content-type': 'application/json', 'x-hotsheet-secret': target.secret, ...init.headers } });
   if (!response.ok) throw new Error((await response.json().catch(() => null) as {error?:string}|null)?.error || `${response.status}`);
   return response.json() as Promise<T>;

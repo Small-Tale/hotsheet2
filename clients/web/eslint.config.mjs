@@ -96,20 +96,6 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/project-bridge.ts'],
-    rules: { '@typescript-eslint/no-misused-spread': 'off' },
-  },
-  {
-    // MarkdownPreview's renderer escapes raw HTML and constrains URL schemes before
-    // the deliberately raw Kerf rendering boundary.
-    files: ['src/components/markdown-preview.tsx'],
-    rules: { 'kerfjs/no-raw-with-dynamic-arg': 'off' },
-  },
-  {
-    files: ['src/ux-demo/app-shell-demo.tsx'],
-    rules: { '@typescript-eslint/no-unnecessary-condition': 'off' },
-  },
-  {
     files: ['src/ux-demo/main.tsx'],
     rules: {
       '@typescript-eslint/no-unnecessary-condition': 'off',

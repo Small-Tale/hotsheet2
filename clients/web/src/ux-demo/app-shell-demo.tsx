@@ -55,7 +55,8 @@ export function regionSize(id: string): number {
 }
 
 export function setRegionSize(id: string, size: number): void {
-  const bounds = regionBounds[id];
+  // `id` is an arbitrary string, so the lookup can miss even though the index type omits undefined.
+  const bounds = regionBounds[id] as { min: number; max: number } | undefined;
   if (!bounds) return;
   const next = clampRegionSize(size, bounds.min, bounds.max);
   if (id === 'resize-demo-horizontal') resizeDemoWidth.value = next;

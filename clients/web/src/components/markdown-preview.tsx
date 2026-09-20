@@ -52,5 +52,8 @@ export function renderMarkdown(source: string,attachmentContext?:AttachmentRefer
 
 export function MarkdownPreview({ source, emptyLabel = 'Nothing to preview.',attachmentContext }: { source: string; emptyLabel?: string;attachmentContext?:AttachmentReferenceContext }) {
   if (!source.trim()) return <div class="markdown-preview markdown-preview--empty" data-component="markdown-preview">{emptyLabel}</div>;
+  // renderMarkdown escapes raw HTML and constrains URL schemes before this deliberately raw Kerf
+  // rendering boundary, so the dynamic value is already sanitized (documented at renderMarkdown).
+  // eslint-disable-next-line kerfjs/no-raw-with-dynamic-arg -- sanitized upstream by renderMarkdown
   return <div class="markdown-preview" data-component="markdown-preview">{raw(renderMarkdown(source,attachmentContext))}</div>;
 }
