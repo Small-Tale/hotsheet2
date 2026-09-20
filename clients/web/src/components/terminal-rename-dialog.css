@@ -1,2 +1,2 @@
-.terminal-rename { display: grid; gap: var(--wa-space-l); }
-.terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
+.terminal-rename { display: grid; gap: var(--kui-space-l); }
+.terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--kui-space-xs); }

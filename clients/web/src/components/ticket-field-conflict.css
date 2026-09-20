@@ -4,7 +4,7 @@
 .ticket-field-conflict > header span { display: grid; gap: remify(1.6px); min-width: 0; }
 .ticket-field-conflict > header strong { color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); }
 .ticket-field-conflict > header small { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); line-height: 1.35; }
-.ticket-field-conflict__versions { display: grid; gap: var(--wa-space-xs); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ticket-field-conflict__versions { display: grid; gap: var(--kui-space-xs); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ticket-field-conflict__versions label, .ticket-field-conflict__merge { display: grid; gap: remify(4px); min-width: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 650; }
 .ticket-field-conflict__versions output { display: block; min-height: remify(48px); max-height: remify(112px); padding: remify(7.2px) remify(8px); overflow: auto; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(6.4px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); font: 400 var(--wa-font-size-xs)/1.4 var(--wa-font-family-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ticket-field-conflict__merge textarea { min-height: remify(72px); padding: remify(7.2px) remify(8px); resize: vertical; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(6.4px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); font: 400 var(--wa-font-size-xs)/1.4 var(--wa-font-family-body); }

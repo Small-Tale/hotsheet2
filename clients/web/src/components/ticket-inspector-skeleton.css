@@ -23,4 +23,4 @@
 .ticket-inspector__ph-note-kind svg { width: remify(14.4px); height: remify(14.4px); }
 .ticket-inspector__ph-note-body { display: grid; gap: remify(6.4px); }
 
-.ticket-inspector__ph-provenance { display: flex; padding-top: remify(3.2px); justify-content: space-between; gap: var(--wa-space-s); }
+.ticket-inspector__ph-provenance { display: flex; padding-top: remify(3.2px); justify-content: space-between; gap: var(--kui-space-xs); }

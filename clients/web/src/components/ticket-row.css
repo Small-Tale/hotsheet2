@@ -7,7 +7,7 @@
 .ticket-list-row__indicator--up-next { background: var(--hs-ticket-state-up-next); }
 .ticket-list-row__indicator--blocked { background: var(--wa-color-neutral-on-quiet); }
 .ticket-list-row__indicator--needs-review { background: var(--hs-ticket-state-needs-review); }
-.ticket-list-row__body { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--wa-space-s); min-width: 0; padding: remify(10.4px) remify(13.6px); }
+.ticket-list-row__body { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--kui-space-xs); min-width: 0; padding: remify(10.4px) remify(13.6px); }
 .ticket-list-row__content { display: grid; gap: remify(4.8px); min-width: 0; }
 .ticket-list-row__first-line { display: block; min-width: 0; }
 .ticket-list-row__identity { display: block; min-width: 0; max-height: 2.6em; overflow: hidden; line-height: 1.3; }

@@ -6,7 +6,7 @@
 .pending-attachment-picker label svg { width: remify(14.4px); height: remify(14.4px); }
 .pending-attachment-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .pending-attachment-picker__items { display: grid; gap: remify(5.6px); }
-.pending-attachment-picker__item { display: flex; min-width: 0; min-height: remify(37.6px); padding: remify(6.4px) remify(8px); border-radius: remify(7.2px); background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: var(--wa-space-xs); font-size: var(--wa-font-size-xs); }
+.pending-attachment-picker__item { display: flex; min-width: 0; min-height: remify(37.6px); padding: remify(6.4px) remify(8px); border-radius: remify(7.2px); background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: var(--kui-space-xs); font-size: var(--wa-font-size-xs); }
 .pending-attachment-picker__item > svg { width: remify(14.4px); height: remify(14.4px); flex: none; color: var(--wa-color-neutral-on-quiet); }
 .pending-attachment-picker__item > span { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
 .pending-attachment-picker__item button { display: inline-grid; width: remify(28px); height: remify(28px); padding: 0; border: 0; border-radius: remify(5.6px); background: transparent; color: var(--wa-color-neutral-on-quiet); cursor: pointer; place-items: center; }

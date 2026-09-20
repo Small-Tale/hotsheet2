@@ -1,5 +1,5 @@
 .flow-back-button,
-.provider-setup-form__back { display:flex; width:fit-content; padding:0; align-items:center; border:0; color:var(--wa-color-brand-on-normal); background:transparent; font:inherit; cursor:pointer; gap:var(--wa-space-2xs); }
+.provider-setup-form__back { display:flex; width:fit-content; padding:0; align-items:center; border:0; color:var(--wa-color-brand-on-normal); background:transparent; font:inherit; cursor:pointer; gap:var(--kui-space-2xs); }
 .flow-back-button svg,
 .provider-setup-form__back svg { width:remify(16px); height:remify(16px); }
 .flow-back-button:hover:not(:disabled),

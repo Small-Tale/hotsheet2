@@ -16,6 +16,14 @@ const auxiliaryClientCss = [
   resolve(sourceRoot, 'ux-demo/style.css'),
 ];
 const clientCss = [...productionCss, ...auxiliaryClientCss];
+const kerfSpacingMigratedComponents = [
+  'app-error.css', 'attachment-context-menu.css', 'bulk-ticket-dialog.css',
+  'command-navigation.css', 'command-settings-editor.css', 'flow-back-button.css',
+  'manual-model-dialog.css', 'not-working-dialog.css', 'pending-attachment-picker.css',
+  'saved-view-dialog.css', 'terminal-rename-dialog.css', 'ticket-duplicate-backlinks.css',
+  'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-list.css',
+  'ticket-row.css', 'trash-settings.css',
+].map(file => resolve(sourceRoot, 'components', file));
 
 function css(path: string): string {
   return readFileSync(path, 'utf8');
@@ -99,6 +107,10 @@ describe('shared client theme', () => {
     const consumers = clientCss.map(css).join('\n');
     expect(consumers).toContain('var(--kui-space-xs)');
     expect(consumers).toContain('var(--kui-space-m)');
+    for (const path of kerfSpacingMigratedComponents) {
+      expect(css(path), `${path} regressed to Web Awesome spacing instead of the Kerf semantic scale`)
+        .not.toContain('--wa-space-');
+    }
   });
 
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
