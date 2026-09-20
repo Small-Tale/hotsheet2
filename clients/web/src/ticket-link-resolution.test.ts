@@ -39,6 +39,14 @@ describe('ticket link resolution', () => {
     expect('See HS2-LOCAL1 and @beta-02/HS2-REMOTE1.'.match(ticketReferencePattern())).toEqual(['HS2-LOCAL1', '@beta-02/HS2-REMOTE1']);
   });
 
+  it('detects only the single-digit legacy HS1 exception among one-character suffixes (HS2-T9TVYT)', () => {
+    expect(parseTicketLinkReference('HS-1')).toEqual({ raw: 'HS-1', slug: 'HS-1' });
+    expect(parseTicketLinkReference('@beta-02/HS-9')).toEqual({ raw: '@beta-02/HS-9', projectId: 'beta-02', slug: 'HS-9' });
+    expect('See HS-1, HS-9, AB-1, HS-A, and HS-10.'.match(ticketReferencePattern())).toEqual(['HS-1', 'HS-9', 'HS-10']);
+    expect(parseTicketLinkReference('AB-1')).toBeUndefined();
+    expect(parseTicketLinkReference('HS-A')).toBeUndefined();
+  });
+
   it('opens one exact match across every open project', () => {
     const reference = parseTicketLinkReference('HS2-REMOTE1')!;
     expect(resolveTicketLink(reference, projects, 'alpha-01')).toMatchObject({
@@ -86,6 +94,15 @@ describe('ticket link resolution', () => {
     expect(resolveTicketLink(parseTicketLinkReference('HS-777')!, lowerStored, 'alpha-01').kind).toBe('open');
     // A legacy number no ticket carries still reports not-found.
     expect(resolveTicketLink(parseTicketLinkReference('HS-9999')!, withLegacy, 'alpha-01').kind).toBe('not_found');
+  });
+
+  it('resolves a single-digit legacy HS-N reference to the imported ticket (HS2-T9TVYT)', () => {
+    const imported = { ...ticket('HS2-IMPORTED1', 'git'), legacy_number: 'HS-7' };
+    const withLegacy = [{ ...projects[0], tickets: [...projects[0].tickets, imported] }];
+    expect(resolveTicketLink(parseTicketLinkReference('HS-7')!, withLegacy, 'alpha-01')).toMatchObject({
+      kind: 'open',
+      match: { slug: 'HS2-IMPORTED1' },
+    });
   });
 
   it('offers the ambiguity chooser when a legacy number matches multiple imported tickets (HS2-XB5R3Y)', () => {

@@ -847,6 +847,9 @@ and identity-less legacy entries remain conservatively blocking.
   makes cross-project links unambiguous. A linked reader identifies its owning project and
   stack depth, and links inside it may push further layers without changing the workspace's
   selected project, ticket, or list/column view. Only the top reader is modal and interactive.
+  Imported HS1 references resolve through each ticket's retained legacy number, including
+  single-digit `HS-1` through `HS-9`; other one-character suffixes such as `AB-1` remain
+  ordinary text so the legacy exception does not broaden the general slug grammar.
   Close or Escape removes one layer and restores focus to the link that opened it; unwinding
   the final linked layer returns to the unchanged inspector or editable workspace reader.
   References already inside Markdown links, inline/fenced code, or attachment controls

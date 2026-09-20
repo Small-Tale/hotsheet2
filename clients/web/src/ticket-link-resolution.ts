@@ -1,6 +1,9 @@
 import type { TicketRow } from './api';
 
-const TICKET_SLUG_SOURCE = '[A-Z][A-Z0-9]{1,15}-[A-Z0-9]{2,24}';
+// Current slugs always have at least two suffix characters. Imported HS1 tickets can
+// retain the single-digit legacy numbers HS-1..HS-9, so admit exactly that narrow
+// exception without turning every one-character PREFIX-X token into a reference.
+const TICKET_SLUG_SOURCE = '(?:HS-[0-9]|[A-Z][A-Z0-9]{1,15}-[A-Z0-9]{2,24})';
 const PROJECT_ID_SOURCE = '[A-Za-z0-9][A-Za-z0-9._~-]{0,127}';
 const TICKET_REFERENCE = new RegExp(`^(?:@(${PROJECT_ID_SOURCE})/)?(${TICKET_SLUG_SOURCE})$`);
 
