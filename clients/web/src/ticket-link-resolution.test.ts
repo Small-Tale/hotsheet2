@@ -71,6 +71,36 @@ describe('ticket link resolution', () => {
     expect(result.matches.map(ticketLinkMatchKey)).toEqual(['alpha-01::git%3AHS2-SHARED1', 'alpha-01::jira%3AHS2-SHARED1', 'beta-02::github%3AHS2-SHARED1']);
   });
 
+  it('resolves a bare legacy HS-N reference to the imported ticket by legacy_number (HS2-XB5R3Y)', () => {
+    const imported = { ...ticket('HS2-IMPORTED1', 'git'), legacy_number: 'HS-1234' };
+    const withLegacy = [{ ...projects[0], tickets: [...projects[0].tickets, imported] }, projects[1]];
+    const reference = parseTicketLinkReference('HS-1234')!;
+    // Detection already handles HS-N (it matches the shared slug pattern).
+    expect(reference).toEqual({ raw: 'HS-1234', slug: 'HS-1234' });
+    expect(resolveTicketLink(reference, withLegacy, 'alpha-01')).toMatchObject({
+      kind: 'open',
+      match: { projectId: 'alpha-01', slug: 'HS2-IMPORTED1', qualifiedId: 'git:HS2-IMPORTED1' },
+    });
+    // The retained number matches case-insensitively even if stored in a different case.
+    const lowerStored = [{ ...projects[0], tickets: [{ ...ticket('HS2-IMPORTED2', 'git'), legacy_number: 'hs-777' }] }];
+    expect(resolveTicketLink(parseTicketLinkReference('HS-777')!, lowerStored, 'alpha-01').kind).toBe('open');
+    // A legacy number no ticket carries still reports not-found.
+    expect(resolveTicketLink(parseTicketLinkReference('HS-9999')!, withLegacy, 'alpha-01').kind).toBe('not_found');
+  });
+
+  it('offers the ambiguity chooser when a legacy number matches multiple imported tickets (HS2-XB5R3Y)', () => {
+    const importedA = { ...ticket('HS2-IMPA', 'git'), legacy_number: 'HS-42' };
+    const importedB = { ...ticket('HS2-IMPB', 'git'), legacy_number: 'HS-42' };
+    const withLegacy = [
+      { ...projects[0], tickets: [...projects[0].tickets, importedA] },
+      { ...projects[1], tickets: [...projects[1].tickets, importedB] },
+    ];
+    const result = resolveTicketLink(parseTicketLinkReference('HS-42')!, withLegacy, 'alpha-01');
+    expect(result.kind).toBe('choose');
+    if (result.kind !== 'choose') throw new Error('Expected multiple legacy matches.');
+    expect(result.matches.map(match => match.slug)).toEqual(['HS2-IMPA', 'HS2-IMPB']);
+  });
+
   it('uses an explicit project ID to resolve a cross-project reference', () => {
     const reference = parseTicketLinkReference('@beta-02/HS2-SHARED1')!;
     expect(resolveTicketLink(reference, projects, 'alpha-01')).toMatchObject({

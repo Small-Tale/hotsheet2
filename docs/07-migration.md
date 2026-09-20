@@ -141,7 +141,12 @@ For each ticket:
   then derive an all-caps slug ([02](02-ticket-storage.md) §2.4). The stable identity
   makes retries idempotent. The HS1 number is also retained in the `legacy_number`
   frontmatter field so old `HS-N` references resolve/search against the new ticket
-  (HS2-4H2ZR1); it is provenance, not the ticket's HS2 identity.
+  (HS2-4H2ZR1); it is provenance, not the ticket's HS2 identity. `legacy_number` is
+  carried on the wire ticket row and full ticket so clients can auto-link a bare
+  `HS-N` reference in rendered ticket text to the imported ticket — one match opens
+  directly, several offer the compact chooser — the same way HS2 slug references link
+  (HS2-XB5R3Y). Single-digit legacy numbers (`HS-1`…`HS-9`) are not auto-linked because
+  the shared reference pattern requires at least two trailing characters (HS2-T9TVYT).
 - Map fields → HS2 frontmatter; body ← `details`; notes → the `## Notes` section
   (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
   close outcome and `archive`/soft-delete to `obsolete`, carrying the best available

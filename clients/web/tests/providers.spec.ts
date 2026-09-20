@@ -2531,6 +2531,27 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   inspector=await openSource();await inspector.getByRole('link',{name:'@other-checkout/HS2-SHARED1',exact:true}).click();await expect(choice).toHaveCount(0);await expect(page.getByRole('dialog',{name:'Read and edit HS2-SHARED1 in other'})).toContainText('Chosen cross-project destination.');await expect(page.getByRole('tab',{name:'demo'})).toHaveAttribute('aria-selected','true');
 });
 
+test('auto-links a bare legacy HS-N reference to the imported ticket (HS2-XB5R3Y)',async({page})=>{
+  const imported={...row,id:'imp1',native_id:'imp1',qualified_id:'git-local:imp1',slug:'HS2-IMPORTED1',title:'Imported from Hot Sheet 1',legacy_number:'HS-1234'};
+  await mockProject(page);
+  // The source ticket's rendered details mention the old HS1 number.
+  await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...full,details:'Superseded by legacy HS-1234.',notes:[]}}):route.fallback());
+  // The FTS search the client runs on click surfaces the imported ticket carrying legacy_number.
+  await page.route('**/checkouts/*/tickets*',route=>{const url=new URL(route.request().url());return route.request().method()==='GET'&&url.searchParams.get('text')==='HS-1234'?route.fulfill({json:[imported]}):route.fallback()});
+  // Opening the resolved match loads the imported ticket by its ULID.
+  await page.route('**/tickets/imp1',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...imported,details:'The imported ticket body.',notes:[],attachments:[]}}):route.fallback());
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');
+  const legacyLink=inspector.getByRole('link',{name:'HS-1234',exact:true});
+  await expect(legacyLink).toBeVisible();
+  await legacyLink.click();
+  const linked=page.getByRole('dialog',{name:/Read and edit HS2-IMPORTED1/});
+  await expect(linked).toBeVisible();
+  await expect(linked).toContainText('The imported ticket body.');
+  await page.waitForTimeout(200);await page.screenshot({path:'/private/tmp/hs2-xb5r3y-legacy-link.png',fullPage:true});
+});
+
 test('ships TicketRow context-menu behavior through real list and board compositions',async({page})=>{
   const mutations:string[]=[];page.on('request',request=>{if(['PATCH','POST'].includes(request.method()))mutations.push(new URL(request.url()).pathname)});const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),menu=page.getByRole('menu',{name:'Ticket actions'});await first.click();await second.click({modifiers:['Meta']});await first.click({button:'right'});await expect(menu).toBeVisible();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);await menu.getByText('Toggle Up Next').click();await expect.poll(()=>patches.filter(patch=>patch.up_next===true).length).toBe(2);expect(mutations.filter(path=>path.endsWith('/batch'))).toHaveLength(1);expect(mutations.filter(path=>path.includes('/tickets/'))).toHaveLength(0);
   const choose=async(field:'category'|'priority'|'status',value:string)=>{await first.click({button:'right'});await menu.locator(`wa-dropdown-item:not([slot="submenu"])`,{hasText:`Change ${field}`}).hover();const option=menu.locator(`[data-context-field="${field}"][data-context-value="${value}"]`);await expect(option).toBeVisible();if(field==='category'){await page.waitForTimeout(200);await page.screenshot({path:'/private/tmp/hotsheet-real-context-submenu.png'})}await option.click();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);await expect.poll(()=>patches.filter(patch=>patch[field]===value).length).toBe(2)};

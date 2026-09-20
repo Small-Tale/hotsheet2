@@ -254,6 +254,7 @@ impl GitLabProvider {
             claimed_by: None,
             claim_lease_expires_at: None,
             worker_label: None,
+            legacy_number: None,
             claim_count: 0,
             assignees: issue
                 .assignees

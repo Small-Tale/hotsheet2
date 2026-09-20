@@ -61,6 +61,9 @@ pub struct ApiTicket {
     pub claimed_by: Option<String>,
     pub claim_lease_expires_at: Option<String>,
     pub worker_label: Option<String>,
+    /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when imported (HS2-XB5R3Y).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legacy_number: Option<String>,
     pub claim_count: u32,
     pub assignees: Vec<String>,
     pub review_requests: Vec<ReviewRequest>,
@@ -145,6 +148,7 @@ impl ApiTicket {
             claimed_by: t.claimed_by.clone(),
             claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             worker_label: t.worker_label.clone(),
+            legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             assignees: t.assignees.clone(),
             review_requests: t.review_requests.clone(),
@@ -243,6 +247,11 @@ pub struct TicketRow {
     pub claimed_by: Option<String>,
     pub claim_lease_expires_at: Option<String>,
     pub worker_label: Option<String>,
+    /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when it was imported,
+    /// so clients can recognize and resolve legacy references in ticket text without an
+    /// extra lookup (HS2-XB5R3Y). Absent for tickets that were not imported from HS1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_number: Option<String>,
     pub claim_count: u32,
     /// Computed standing guidance; never persisted in the index or ticket file.
     pub auto_context: Vec<TicketAutoContext>,
@@ -277,6 +286,7 @@ impl From<&Ticket> for TicketRow {
             claimed_by: t.claimed_by.clone(),
             claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             worker_label: t.worker_label.clone(),
+            legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             auto_context: Vec::new(),
         }
@@ -384,6 +394,42 @@ mod tests {
         assert_eq!(
             row.claim_lease_expires_at.as_deref(),
             Some("2026-08-20T00:30:00Z")
+        );
+    }
+
+    #[test]
+    fn legacy_number_round_trips_on_row_and_full_wire_and_is_omitted_when_absent() {
+        // Absent by default → dropped from both wire shapes' JSON.
+        let plain = ticket();
+        assert_eq!(TicketRow::from(&plain).legacy_number, None);
+        assert_eq!(ApiTicket::from(&plain).legacy_number, None);
+        let row_json = serde_json::to_value(TicketRow::from(&plain)).unwrap();
+        assert!(row_json.get("legacy_number").is_none());
+        let full_json = serde_json::to_value(ApiTicket::from(&plain)).unwrap();
+        assert!(full_json.get("legacy_number").is_none());
+
+        // A retained HS1 number is carried on the row, the compact row, and the full ticket.
+        let mut imported = ticket();
+        imported.legacy_number = Some("HS-1234".into());
+        assert_eq!(
+            TicketRow::from(&imported).legacy_number.as_deref(),
+            Some("HS-1234")
+        );
+        assert_eq!(
+            TicketRow::compact(&imported).legacy_number.as_deref(),
+            Some("HS-1234")
+        );
+        assert_eq!(
+            ApiTicket::from(&imported).legacy_number.as_deref(),
+            Some("HS-1234")
+        );
+        assert_eq!(
+            serde_json::to_value(TicketRow::from(&imported)).unwrap()["legacy_number"],
+            "HS-1234"
+        );
+        assert_eq!(
+            serde_json::to_value(ApiTicket::from(&imported)).unwrap()["legacy_number"],
+            "HS-1234"
         );
     }
 

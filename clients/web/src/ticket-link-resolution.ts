@@ -74,9 +74,12 @@ export function resolveTicketLink(
     : [...projects.filter(item => item.id === activeProjectId), ...projects.filter(item => item.id !== activeProjectId)];
   const matches: TicketLinkMatch[] = [];
   const seen = new Set<string>();
+  const needle = reference.slug.toLocaleLowerCase();
   for (const project of candidates) {
     for (const ticket of project.tickets) {
-      if (ticket.slug.toLocaleLowerCase() !== reference.slug.toLocaleLowerCase()) continue;
+      // Match the current HS2 slug or the retained Hot Sheet 1 number, so a bare legacy
+      // `HS-N` reference resolves to the imported ticket the same way a slug does (HS2-XB5R3Y).
+      if (ticket.slug.toLocaleLowerCase() !== needle && (ticket.legacy_number ?? '').toLocaleLowerCase() !== needle) continue;
       const key = `${project.id}\u0000${ticket.qualified_id}`;
       if (seen.has(key)) continue;
       seen.add(key);

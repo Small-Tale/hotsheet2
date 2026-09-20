@@ -517,6 +517,9 @@ fn fts_and_resolution_find_a_retained_legacy_number() {
         .unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, id.to_string());
+    // The queried row carries the legacy number on the wire so clients can link legacy
+    // references from already-loaded rows without an extra lookup (HS2-XB5R3Y).
+    assert_eq!(rows[0].legacy_number.as_deref(), Some("HS-8675309"));
 
     // Exact reference resolution maps the legacy number (case-insensitive) to the new id.
     assert_eq!(ix.resolve_id("HS-8675309").unwrap(), Some(id));

@@ -11,6 +11,13 @@ describe('Markdown ticket links', () => {
     expect(markup).toContain('>@beta-02/HS2-REMOTE1</a>');
   });
 
+  it('links a bare legacy HS-N reference like any other slug (HS2-XB5R3Y)', () => {
+    const markup = linkTicketReferences('See HS-1234 for history.');
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(1);
+    expect(markup).toContain('data-ticket-slug="HS-1234"');
+    expect(markup).toContain('>HS-1234</a>');
+  });
+
   it('does not link references inside existing links, buttons, or code', () => {
     const markup = linkTicketReferences('<a href="/ticket">HS2-LINKED1</a><button>HS2-BUTTON1</button><code>@beta-02/HS2-CODE01</code> HS2-PLAIN1');
     expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(1);

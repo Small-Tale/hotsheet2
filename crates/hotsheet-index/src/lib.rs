@@ -851,7 +851,7 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed \
+             t.feedback_needed,t.legacy_number \
              FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
             wheres.join(" AND ")
         );
@@ -886,6 +886,7 @@ impl Index {
                     claimed_by: r.get(18)?,
                     claim_lease_expires_at: r.get(19)?,
                     worker_label: r.get(20)?,
+                    legacy_number: r.get(23)?,
                     claim_count: r.get::<_, i64>(21)? as u32,
                     auto_context: Vec::new(),
                 })
