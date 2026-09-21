@@ -26,12 +26,6 @@ export function orderedDrawerTabIds(terminalIds:readonly string[],chatIds:readon
 
 export function reorderDrawerTabIds(ids:readonly string[],sourceId:string,targetId:string,position:TabDropPosition):string[]{return reorderTabs(ids,id=>id,sourceId,targetId,position)}
 
-export function keyboardReorderDrawerTabIds(ids:readonly string[],sourceId:string,direction:'left'|'right'):string[]{
-  const index=ids.indexOf(sourceId),targetIndex=index+(direction==='left'?-1:1);
-  if(index<0||targetIndex<0||targetIndex>=ids.length)return[...ids];
-  return reorderDrawerTabIds(ids,sourceId,ids[targetIndex],direction==='left'?'before':'after');
-}
-
 export function drawerTabFocusRequestStillOwned(scheduled: object|null, current: object|null, body: object): boolean {
   return current===scheduled||current===body;
 }

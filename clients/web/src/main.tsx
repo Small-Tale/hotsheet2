@@ -25,7 +25,7 @@ import { type AppRegionId, isAppRegionId, loadAppRegionSize, normalizeAppRegionS
 import {attachmentReferences,attachmentReferenceUrl,isGalleryMediaAttachment,isVideoAttachment,type AttachmentReferenceContext} from './attachment-references';
 import {attachmentRoundNumbers,attachmentUploadBatchId} from './attachment-grouping';
 import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView,toggleCollapsedCommandGroup } from './workspace-preferences';
-import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabSelectionAfterClose,type DrawerTabCloseAction,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabSelectionAfterClose,type DrawerTabCloseAction,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 import {terminalDrawerActivation,terminalProjectOwner} from './terminal-project-scope';
 import {customViewNameAvailable,uniqueCustomViewId} from './saved-views';
 import {chordFromEvent,isAppleShortcutPlatform,loadShortcutOverrides,matchesShortcut,saveShortcutOverrides,shortcutDef,type ShortcutChord} from './keyboard-shortcuts';
@@ -97,7 +97,7 @@ import { TicketInspectorSkeleton } from './components/ticket-inspector-skeleton'
 import { TicketList } from './components/ticket-list';
 import { showTicketReaderDialog, TicketReader, type TicketReaderDialogElement } from './components/ticket-reader';
 import { TerminalDashboard, TerminalDashboardControls, type TerminalDashboardGroup } from './components/terminal-dashboard';
-import { TerminalDrawer,type TerminalDrawerChatTab } from './components/terminal-drawer';
+import { TERMINAL_DRAWER_TAB_BAR_ID,TerminalDrawer,type TerminalDrawerChatTab } from './components/terminal-drawer';
 import { TerminalOperationsSidebar } from './components/terminal-operations-sidebar';
 import { TerminalTicketRail } from './components/terminal-ticket-rail';
 import {TerminalRenameDialog} from './components/terminal-rename-dialog';
@@ -145,7 +145,7 @@ import { canCreateTicketInView,createdTicketVisibleInView,customTicketViewId,cus
 import { ticketTimelineEntries } from './ticket-timeline-data';
 import {type DuplicateTarget,duplicateReference,duplicateTargetKey,parseDuplicateReference,resolveDuplicateReferenceTarget,validateTicketClose} from './ticket-close';
 import { ticketCompletionTrend } from './ticket-completion-trend';
-import {applyRememberedTabOrder,reorderTabs,replaceTabInPlace,type TabDropPosition} from './tab-order';
+import {applyRememberedTabOrder,reorderTabs,replaceTabInPlace} from './tab-order';
 import {animateTicketMotion,captureTicketMotion,waitForTicketMotionSettled} from './ticket-motion';
 import {captureTicketScrollState,restoreTicketScrollState} from './ticket-scroll-state';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from './new-ticket-attachments';
@@ -291,11 +291,6 @@ const singleTicketMutationSequencer = new BulkTicketMutationSequencer();
 const bulkTicketMutationSequencer = new BulkTicketMutationSequencer();
 let clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
 let draggedTickets: { slugs:string[];source:Project } | undefined;
-type DraggableAppTabKind=AppTabKind|'ai-chat';
-/** Drawer-strip tab kinds. The project strip is a kerf TabBar wired by wireTabBars; the hand-rolled
- * drag/keyboard handlers own only these drawer tabs (HS2-08ZG4J). */
-const DRAWER_APP_TAB_SELECTOR='[data-tab-kind="terminal"], [data-tab-kind="ai-chat"]';
-let draggedAppTab:{kind:DraggableAppTabKind;id:string;projectId?:string}|undefined;
 const projectChangeStreams = new Map<string, () => void>();
 const repositoryRefreshTimers=new Map<string,number>();
 let claimLeaseExpiryTimer:number|undefined;
@@ -1412,22 +1407,12 @@ function openTicketFileDiff(paths:string[]){const current=project(),ticket=selec
 delegate(document.body,'submit','[data-action="open-project-form"]',(event,target)=>{event.preventDefault();const root=(target.querySelector('[name="project-root"]') as Control).value,store=(target.querySelector('[name="ticket-store"]') as Control).value;void openProject(root,store||undefined)});
 }
 wireRepositoryInteractions();
-function clearAppTabDrag(){draggedAppTab=undefined;document.querySelectorAll<HTMLElement>('[data-tab-dragging], [data-tab-drop-position]').forEach(tab=>{delete tab.dataset.tabDragging;delete tab.dataset.tabDropPosition})}
 let draggedCommandIds:string[]=[];
 function clearCommandDropIndicators(){document.querySelectorAll<HTMLElement>('[data-command-drop-position]').forEach(element=>delete element.dataset.commandDropPosition);document.querySelectorAll<HTMLElement>('[data-command-drop-active]').forEach(element=>delete element.dataset.commandDropActive)}
 function clearCommandDrag(){draggedCommandIds=[];document.querySelectorAll<HTMLElement>('[data-command-dragging]').forEach(element=>delete element.dataset.commandDragging);clearCommandDropIndicators()}
 function wireNavigationAndTabInteractions(){
-function tabDropPosition(event:DragEvent,target:Element):TabDropPosition{const bounds=target.getBoundingClientRect();return event.clientX<bounds.left+bounds.width/2?'before':'after'}
-// The project strip is a kerf TabBar, so its drag-reorder and manual-activation keyboard route through
-// kerf's wireTabBars below. These hand-rolled handlers own only the drawer strip (not yet a TabBar), so
-// they are scoped to drawer tab kinds to avoid double-handling project drags (HS2-08ZG4J).
-delegate(document.body,'dragstart',DRAWER_APP_TAB_SELECTOR,(event,target)=>{const kind=data(target).tabKind as DraggableAppTabKind,id=data(target).tabId;if(!id)return;draggedAppTab={kind,id,projectId:target.closest<HTMLElement>('[data-component="terminal-drawer"]')?.dataset.projectId};(target as HTMLElement).dataset.tabDragging='true';const transfer=(event as DragEvent).dataTransfer;if(transfer){transfer.effectAllowed='move';transfer.setData('application/x-hotsheet-app-tab',`${kind}:${id}`)}});
-delegate(document.body,'dragover',DRAWER_APP_TAB_SELECTOR,(event,target)=>{const drag=draggedAppTab,id=data(target).tabId,projectId=target.closest<HTMLElement>('[data-component="terminal-drawer"]')?.dataset.projectId,valid=drag?.kind!=='project'&&drag?.projectId===projectId;if(!drag||!valid||drag.id===id)return;event.preventDefault();document.querySelectorAll<HTMLElement>('[data-tab-drop-position]').forEach(tab=>delete tab.dataset.tabDropPosition);(target as HTMLElement).dataset.tabDropPosition=tabDropPosition(event as DragEvent,target);if((event as DragEvent).dataTransfer)(event as DragEvent).dataTransfer!.dropEffect='move'});
-delegate(document.body,'dragleave',DRAWER_APP_TAB_SELECTOR,(event,target)=>{if(!(event as DragEvent).relatedTarget||!target.contains((event as DragEvent).relatedTarget as Node))delete (target as HTMLElement).dataset.tabDropPosition});
-delegate(document.body,'drop',DRAWER_APP_TAB_SELECTOR,(event,target)=>{const drag=draggedAppTab,targetId=data(target).tabId,projectId=target.closest<HTMLElement>('[data-component="terminal-drawer"]')?.dataset.projectId,valid=drag?.kind!=='project'&&drag?.projectId===projectId;if(!drag||!targetId||!valid||!projectId)return;event.preventDefault();event.stopPropagation();const position=tabDropPosition(event as DragEvent,target);clearAppTabDrag();persistDrawerTabOrder(projectId,reorderDrawerTabIds(currentDrawerTabIds(projectId),drag.id,targetId,position));focusDrawerTab(projectId,drag.id)});
-delegate(document.body,'dragend',DRAWER_APP_TAB_SELECTOR,clearAppTabDrag);
-wireTabBars(document.body,{activation:'manual',onReorder:({barId,sourceId,targetId,position})=>{if(barId!==PROJECT_TAB_BAR_ID)return;projects.value=reorderTabs(projects.value,item=>item.id,sourceId,targetId,position);localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()))}});
-delegate(document.body,'keydown','[role="tab"]',(event,target)=>{const keyboard=event as KeyboardEvent,key=keyboard.key,drawerTab=target.closest<HTMLElement>('[data-tab-kind="terminal"], [data-tab-kind="ai-chat"]');if(keyboard.altKey&&keyboard.shiftKey&&(key==='ArrowLeft'||key==='ArrowRight')&&drawerTab){const projectId=drawerTab.closest<HTMLElement>('[data-component="terminal-drawer"]')?.dataset.projectId,id=drawerTab.dataset.tabId;if(!projectId||!id)return;event.preventDefault();persistDrawerTabOrder(projectId,keyboardReorderDrawerTabIds(currentDrawerTabIds(projectId),id,key==='ArrowLeft'?'left':'right'));focusDrawerTab(projectId,id);return}if((key==='Delete'||key==='Backspace')&&target.closest('[data-tab-kind]')){event.preventDefault();target.closest<HTMLElement>('[data-tab-kind]')?.querySelector<HTMLButtonElement>('.kui-app-tab__close')?.click();return}if(!['ArrowLeft','ArrowRight','Home','End'].includes(key))return;if(target.closest('[data-component="tab-bar"]'))return;const tablist=target.closest<HTMLElement>('[role="tablist"]');if(!tablist)return;const tabs=[...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].filter(tab=>tab.closest('[role="tablist"]')===tablist&&!tab.hasAttribute('disabled')),index=tabs.indexOf(target as HTMLElement);if(index<0||tabs.length<2)return;event.preventDefault();const next=key==='Home'?0:key==='End'?tabs.length-1:key==='ArrowLeft'?(index-1+tabs.length)%tabs.length:(index+1)%tabs.length;tabs[next].focus()});
+wireTabBars(document.body,{activation:'manual',onReorder:({barId,sourceId,targetId,position})=>{if(barId===PROJECT_TAB_BAR_ID){projects.value=reorderTabs(projects.value,item=>item.id,sourceId,targetId,position);localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));return}if(barId!==TERMINAL_DRAWER_TAB_BAR_ID)return;const current=project();if(!current)return;persistDrawerTabOrder(current.id,reorderDrawerTabIds(currentDrawerTabIds(current.id),sourceId,targetId,position));focusDrawerTab(current.id,sourceId)}});
+delegate(document.body,'keydown','[role="tab"]',(event,target)=>{const keyboard=event as KeyboardEvent,key=keyboard.key;if(event.defaultPrevented)return;if((key==='Delete'||key==='Backspace')&&target.closest('[data-tab-kind]')){event.preventDefault();target.closest<HTMLElement>('[data-tab-kind]')?.querySelector<HTMLButtonElement>('.kui-app-tab__close')?.click();return}if(!['ArrowLeft','ArrowRight','Home','End'].includes(key))return;if(target.closest('[data-component="tab-bar"]'))return;const tablist=target.closest<HTMLElement>('[role="tablist"]');if(!tablist)return;const tabs=[...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].filter(tab=>tab.closest('[role="tablist"]')===tablist&&!tab.hasAttribute('disabled')),index=tabs.indexOf(target as HTMLElement);if(index<0||tabs.length<2)return;event.preventDefault();const next=key==='Home'?0:key==='End'?tabs.length-1:key==='ArrowLeft'?(index-1+tabs.length)%tabs.length:(index+1)%tabs.length;tabs[next].focus()});
 delegate(document.body,'click','[data-action="reveal-corrupt-ticket"]',(_event,target)=>{void revealCorruptTicket(data(target).corruptKey!)});
 delegate(document.body,'click','[data-action="repair-corrupt-ticket"]',(_event,target)=>{void queueCorruptTicketRepair(data(target).corruptKey!)});
 delegate(document.body,'click','[data-action="select-corrupt-ticket"]',(_event,target)=>{const key=data(target).corruptKey;if(!key||!corruptTickets.value.some(ticket=>corruptTicketKey(ticket)===key))return;selectedCorruptKey.value=key;selectedTicket.value=null;selectedTicketSlugs.value=[];ticketSelectionAnchor=undefined;setInspectorVisible(true);error.value=''});

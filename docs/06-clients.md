@@ -1597,7 +1597,10 @@ action closes both terminal and AI-chat targets; terminal tabs additionally offe
 Human-readable defaults replace generated
 ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
 identity. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
-one mixed drawer strip by dragging across either kind. Project order is stored with the
+one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
+`TabBar`/`AppTab` composition and one `wireTabBars` delegation: the project strip uses manual
+activation because changing projects loads data, while the inexpensive drawer strip uses
+automatic activation so Left/Right/Home/End both focus and select the destination. Project order is stored with the
 open-project roots and restored without changing the remembered active project. Each
 project's mixed drawer order is stored device-locally and remains stable across refresh and
 drawer reopen. Holding Option/Alt when opening the menu changes the directional action to the
@@ -1616,12 +1619,10 @@ it. Every selected and unselected tab is reachable in sequential Tab order, whil
 Left/Right/Home/End traverse the current tablist and Delete/Backspace closes the focused
 closeable tab. The segmented dashboard and view controls likewise expose each choice in Tab
 order. The horizontally scrolling tab strips reserve a canonical 4 px inset on every edge so pill shadows
-and focus rings remain complete at either end. The project strip is composed from kerf UI's
-`TabBar` primitive, with the dashboard-mode buttons in its leading slot and the add-project
-action in its trailing slot; its pointer drag-reorder and **manual-activation** keyboard
-traversal stay host-owned, because kerf's shared tab-bar wire helper activates a tab on every
-arrow key and activating a project loads it (HS2-Q6P9P0; adopting the wire helper is deferred
-to HS2-08ZG4J pending a manual-activation option upstream, KF-9136QY). A dedicated terminal uses a canonical 8 px inset and shares
+and focus rings remain complete at either end. The project strip places the dashboard-mode
+buttons in `TabBar`'s leading slot and the add-project action in its trailing slot. The drawer
+strip keeps its Project grid tab sticky at the start of the shared horizontal scroller and
+places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while

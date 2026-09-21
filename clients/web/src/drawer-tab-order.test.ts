@@ -1,17 +1,17 @@
 import {describe,expect,it} from 'vitest';
 
-import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabOrderStorageKey,drawerTabSelectionAfterClose,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabOrderStorageKey,drawerTabSelectionAfterClose,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 
 describe('drawer tab ordering',()=>{
   it('applies one remembered order across terminal and AI-chat tabs and appends new tabs',()=>{
     expect(orderedDrawerTabIds(['terminal-a','terminal-b','terminal-c'],['chat-a'],['terminal-b','chat-a','terminal-a'])).toEqual(['terminal-b','chat-a','terminal-a','terminal-c']);
   });
 
-  it('reorders across kinds for pointer and keyboard interactions',()=>{
+  it('reorders across kinds for the shared tab-bar pointer and keyboard contract',()=>{
     const ids=['terminal-a','terminal-b','chat-a'];
     expect(reorderDrawerTabIds(ids,'chat-a','terminal-a','before')).toEqual(['chat-a','terminal-a','terminal-b']);
-    expect(keyboardReorderDrawerTabIds(ids,'chat-a','left')).toEqual(['terminal-a','chat-a','terminal-b']);
-    expect(keyboardReorderDrawerTabIds(ids,'terminal-a','left')).toEqual(ids);
+    expect(reorderDrawerTabIds(ids,'chat-a','terminal-b','before')).toEqual(['terminal-a','chat-a','terminal-b']);
+    expect(reorderDrawerTabIds(ids,'terminal-a','missing','before')).toEqual(ids);
   });
 
   it('does not let deferred reorder focus steal a newer user focus',()=>{

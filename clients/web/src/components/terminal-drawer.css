@@ -1,16 +1,17 @@
+@import '@kerfjs/ui/tab-bar.css';
+
 .terminal-drawer { display: flex; width: 100%; height: 100%; min-height: 0; flex-direction: column; background: var(--wa-color-surface-default); }
-.terminal-drawer__rail { display: flex; min-height: remify(44px); padding: var(--kui-space-xs) var(--kui-space-m); align-items: center; border-bottom: 1px solid var(--wa-color-surface-border); gap: var(--kui-space-xs); user-select: none; }
-.terminal-drawer__views { display: flex; min-width: 0; max-width: calc(100% - remify(112px)); align-items: center; flex: 0 1 auto; gap: var(--kui-space-xs); }
-.terminal-drawer__tabs { display: flex; min-width: 0; margin: calc(var(--kui-space-2xs) * -1); padding: var(--kui-space-2xs); align-items: center; overflow-x: auto; gap: var(--kui-space-xs); scrollbar-width: none; }
-.terminal-drawer__tabs::-webkit-scrollbar { display: none; }
-.terminal-drawer__tabs .kui-app-tab { flex: none; }
-.terminal-drawer__views > [role="tab"] { flex: none; }
-.terminal-drawer__rail > button, .terminal-drawer__views > button, .terminal-drawer__create, .terminal-drawer__actions > button { display: inline-flex; min-width: remify(32px); height: remify(32px); padding: 0 var(--kui-space-xs); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--kui-space-2xs); font: inherit; }
-.terminal-drawer__views > [role="tab"][aria-selected="true"] { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-quiet); }
+.terminal-drawer__rail { display: flex; min-height: remify(44px); align-items: center; border-bottom: 1px solid var(--wa-color-surface-border); user-select: none; }
+.terminal-drawer__views { --kui-toolbar-group-size: remify(34px); --kui-toolbar-gap: var(--kui-space-xs); padding: var(--kui-space-xs) var(--kui-space-m); }
+.terminal-drawer__views .kui-tab-bar__tabs { margin: calc(var(--kui-space-2xs) * -1); padding: var(--kui-space-2xs); gap: var(--kui-space-xs); }
+.terminal-drawer__views .kui-tab-bar__trailing { gap: var(--kui-space-xs); }
+.terminal-drawer__grid-tab { position: sticky; z-index: 2; left: 0; background: var(--wa-color-surface-default); }
+.terminal-drawer__grid-tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
+.terminal-drawer__rail > button, .terminal-drawer__create, .terminal-drawer__actions > button { display: inline-flex; min-width: remify(32px); height: remify(32px); padding: 0 var(--kui-space-xs); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--kui-space-2xs); font: inherit; }
 .terminal-drawer__rail .terminal-tab .kui-app-tab__name { max-width: remify(144px); }
 .terminal-drawer__rail .terminal-tab i { width: remify(7.2px); height: remify(7.2px); border-radius: var(--wa-border-radius-circle); background: var(--wa-color-success-fill-loud); flex: none; }
-.terminal-drawer__rail > button:hover, .terminal-drawer__views > button:hover, .terminal-drawer__create:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
-.terminal-drawer__rail > button:focus-visible, .terminal-drawer__views > button:focus-visible, .terminal-drawer__create:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.terminal-drawer__rail > button:hover, .terminal-drawer__create:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.terminal-drawer__rail > button:focus-visible, .terminal-drawer__create:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .terminal-drawer__rail svg { width: remify(16px); height: remify(16px); flex: none; }
 .terminal-drawer__create-wrap { position: relative; flex: none; }
 .terminal-drawer__create { flex: none; }
