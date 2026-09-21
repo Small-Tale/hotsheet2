@@ -375,8 +375,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
-  if (item.id === 'menu-item') return <ListItemDemo />;
-  if (item.id === 'menu-header') return <ListHeaderDemo />;
+  if (item.id === 'list-item') return <ListItemDemo />;
+  if (item.id === 'list-header') return <ListHeaderDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
   if (item.id === 'ticket-priority-select') return <TicketPrioritySelectDemo />;
   if (item.id === 'ticket-status-menu') return <TicketStatusMenuDemo />;

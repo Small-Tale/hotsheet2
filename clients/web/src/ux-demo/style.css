@@ -70,6 +70,7 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .list-item-demo { display: grid; width: min(remify(480px), 100%); margin: auto; padding: remify(16px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(13.6px); background: var(--wa-color-surface-lowered); gap: remify(20px); }
 .list-item-demo h2 { margin: 0 0 remify(5.6px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); text-transform: uppercase; letter-spacing: .04em; }
 .list-item-demo small { color: var(--wa-color-neutral-on-quiet); font-variant-numeric: tabular-nums; }
+.list-item-demo__copy { display: grid; }
 .list-item-demo > p { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); }
 .note-card-demo { display: grid; width: min(remify(640px), 100%); margin: auto; gap: remify(12px); }
 .ticket-reader-demo, .markdown-editor-demo { display: grid; width: 100%; margin: auto; place-items: center; gap: remify(16px); }

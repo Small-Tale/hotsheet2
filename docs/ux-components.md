@@ -222,11 +222,13 @@ does not introduce polling or another network request.
   commit span. The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
 - `ListItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
-  labels, and interaction boundaries aligned across menu-like sidebar surfaces.
+  labels, and interaction boundaries aligned across menu-like sidebar surfaces. Its
+  canonical standalone demo route is `/ux-demo?component=list-item`.
 - `ListHeader` — **demo built**: shared section-label alignment with ListItem icons,
   including an optional subtle count badge, trailing actions, popover-targeted actions,
   and whole-header disclosure variants. Notes uses the shared count slot instead of
-  concatenating a bare number into its label (HS2-FYCAZC).
+  concatenating a bare number into its label (HS2-FYCAZC). Its canonical standalone
+  demo route is `/ux-demo?component=list-header`.
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
   action, and controlled selection through adjacent `ListItem` rows. The section uses
   Kerf's 4px tight-cluster spacing while the shared rows remain gapless.

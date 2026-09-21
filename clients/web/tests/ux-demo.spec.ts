@@ -64,6 +64,36 @@ test('reveals deep-linked and newly selected catalog entries without moving focu
   await expect(focus).toBeFocused();
 });
 
+test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/ux-demo?component=list-item&dev-review=false');
+  const listItemDemo=page.getByRole('region',{name:'ListItem demo'});
+  await expect(page.getByRole('heading',{name:'ListItem',exact:true})).toBeVisible();
+  await expect(listItemDemo).toBeVisible();
+  await expect(listItemDemo.getByRole('heading',{name:'Standard'})).toBeVisible();
+  await expect(listItemDemo.locator('[data-component="list-item"]')).toHaveCount(7);
+  await expect(listItemDemo.locator('.list-item-demo__copy small')).toHaveCSS('display','block');
+  await expect(page.getByRole('region',{name:'ListItem planned demo'})).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-item-wide.png',fullPage:true});
+
+  await page.goto('/ux-demo?component=list-header&dev-review=false');
+  const listHeaderDemo=page.getByRole('region',{name:'ListHeader demo'});
+  await expect(page.getByRole('heading',{name:'ListHeader',exact:true})).toBeVisible();
+  await expect(listHeaderDemo).toBeVisible();
+  await expect(listHeaderDemo.locator('[data-component="list-header"]')).toHaveCount(2);
+  await expect(listHeaderDemo.getByRole('button',{name:'Add view'})).toBeVisible();
+  await expect(page.getByRole('region',{name:'ListHeader planned demo'})).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-header-wide.png',fullPage:true});
+
+  await page.setViewportSize({width:390,height:844});
+  await expect(listHeaderDemo).toBeVisible();
+  await page.getByRole('button',{name:'Collapse UX components catalog'}).click();
+  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-header-narrow.png',fullPage:true});
+  await page.goto('/ux-demo?component=list-item&dev-review=false');
+  await expect(page.getByRole('region',{name:'ListItem demo'})).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-item-narrow.png',fullPage:true});
+});
+
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
   await page.goto('/ux-demo?component=project-dialog');
   await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', true);
