@@ -14,9 +14,12 @@ import { AppTabContextMenu } from './project-tab-context-menu';
 describe('application shell components', () => {
   it('uses canonical spacing for terminal-drawer motion and restore placement', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    const productionCss=readFileSync(new URL('../style.css',import.meta.url),'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/data-collapsed="true"[^}]*__content \{[^}]*translateY\(var\(--kui-space-l\)\)/);
-    expect(css).toMatch(/\.app-shell__terminal-drawer-restore \{[^}]*right: var\(--kui-space-m\); bottom: var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.app-shell__terminal-drawer-restore \{[^}]*right: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-right\)\); bottom: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom\)\)/);
+    expect(productionCss).toMatch(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
+    expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
   });
 
   it('defines the supported application floor as 1024 by 600 CSS pixels', () => {

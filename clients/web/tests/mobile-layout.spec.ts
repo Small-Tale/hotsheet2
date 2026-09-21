@@ -8,7 +8,7 @@ const capabilities={create:true,update:true,close:true,notes:true,note_edit:true
 const project=(id:string,root:string)=>({id,root,name:root.split('/').at(-1),stores:[`${root}.hs2`],apiPath:`/__hotsheet/project-api/${id}`});
 const ticket=(slug:string,status:string)=>({connection_id:'git-local',native_id:slug,qualified_id:`git-local:${slug}`,id:slug,slug,title:slug,status,up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0});
 
-async function openDemoProject(page:import('@playwright/test').Page){
+async function openDemoProject(page:import('@playwright/test').Page,withTerminal=false){
   await page.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url()),path=url.pathname;
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project('demo-checkout',request.postDataJSON().root as string)});
@@ -19,11 +19,21 @@ async function openDemoProject(page:import('@playwright/test').Page){
     if(path.endsWith('/tickets'))return route.fulfill({json:{items:[ticket('HS2-M1','started')],counts:{total:1,queued:1,backlog:0,archive:0,open:1,up_next:0,active:0,started:1,completed_today:0,completion_trend:[0,0,0,0,0,0,0]}}});
     if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
     if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(url.searchParams.get('since')??0),events:[],overflow:false}});
-    if(path.endsWith('/terminals')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
+    if(path.endsWith('/terminals'))return route.fulfill({json:withTerminal?[{id:'codex-main',alive:true,busy:false,cwd:'/work/demo'}]:[]});
+    if(path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
     return route.continue();
   });
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
 }
+
+test('mobile floating controls stay inside the dynamic viewport and safe area (HS2-43N9ZB)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await openDemoProject(page,true);
+  await page.evaluate(()=>{document.documentElement.style.setProperty('--hotsheet-safe-area-bottom','48px')});
+  const restore=page.getByRole('button',{name:'Show terminal drawer'});await expect(restore).toBeVisible();
+  const rootGeometry=await page.evaluate(()=>({innerHeight,html:document.documentElement.getBoundingClientRect().height,body:document.body.getBoundingClientRect().height,app:document.querySelector('#app')!.getBoundingClientRect().height,shell:document.querySelector('[data-component="app-shell"]')!.getBoundingClientRect().height}));expect(rootGeometry).toEqual({innerHeight:844,html:844,body:844,app:844,shell:844});
+  const restoreBottom=await restore.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(restoreBottom).toBeCloseTo(64,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-drawer-restore.png',fullPage:true});
+  await page.getByRole('button',{name:'Workspace grid'}).click();const zoom=page.getByRole('group',{name:'Workspace tile zoom'});await expect(zoom).toBeVisible();const zoomBottom=await zoom.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(zoomBottom).toBeCloseTo(60.8,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-floating-controls.png',fullPage:true});
+});
 
 test('mobile viewport uses a single-column layout with overlay sidebars, one at a time (HS2-ZK51WP)',async({page})=>{
   await page.setViewportSize({width:390,height:844});

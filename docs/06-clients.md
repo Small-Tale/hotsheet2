@@ -173,7 +173,11 @@ and identity-less legacy entries remain conservatively blocking.
   standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
   side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
   from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
-  stay in sync (HS2-ZK51WP). On mobile the ticket workspace is also list-only: the column/board
+  stay in sync (HS2-ZK51WP). The production root uses the dynamic viewport height rather than
+  iOS Safari's larger layout viewport, and bottom/right floating controls add the device safe-area
+  insets; the terminal-drawer restore and workspace-grid zoom controls therefore remain above the
+  browser's bottom chrome and home indicator as those appear or retract (HS2-43N9ZB). On mobile the
+  ticket workspace is also list-only: the column/board
   view does not fit a single narrow column, so the Columns view toggle (and its overflow entry)
   is hidden and a persisted board preference renders as a list without being overwritten, so it
   is restored when the viewport grows back to desktop (HS2-1XCHZT). Because there is no persistent

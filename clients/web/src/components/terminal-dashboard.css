@@ -54,7 +54,7 @@
 .terminal-tile__menu, .terminal-tile__open { display: grid; width: remify(32px); height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-m); flex: none; place-items: center; }
 .terminal-tile__menu:hover, .terminal-tile__open:hover { background: var(--wa-color-neutral-fill-quiet); }
 .terminal-tile__menu svg, .terminal-tile__open svg { width: remify(16px); height: remify(16px); }
-.terminal-dashboard__zoom { position: absolute; z-index: 4; right: remify(12.8px); bottom: remify(12.8px); display: flex; padding: remify(2.88px); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-m); }
+.terminal-dashboard__zoom { position: absolute; z-index: 4; right: calc(remify(12.8px) + var(--hotsheet-safe-area-right)); bottom: calc(remify(12.8px) + var(--hotsheet-safe-area-bottom)); display: flex; padding: remify(2.88px); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-m); }
 .terminal-dashboard__zoom button { display: grid; width: remify(32px); height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-pill); place-items: center; }
 .terminal-dashboard__zoom button:hover:not(:disabled) { background: var(--wa-color-neutral-fill-quiet); }
 .terminal-dashboard__zoom svg { width: remify(14.4px); height: remify(14.4px); }
