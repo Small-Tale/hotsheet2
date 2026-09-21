@@ -205,7 +205,7 @@ test('activates Dev Review by default in development and honors the explicit fal
 });
 
 test('opens a roomy project dialog with native browse controls and working cancel',async({page})=>{
-  await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
+  await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','.');expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
 test('remote clients pick from the server open-projects list instead of the file picker (HS2-VFNCXG)',async({page})=>{
@@ -262,6 +262,7 @@ test('falls back to the project dialog when the direct native chooser fails',asy
   await page.getByRole('button',{name:'Add project'}).click();
   const dialog=page.locator('[data-project-dialog]');
   await expect(dialog).toHaveJSProperty('open',true);
+  await expect(dialog.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/work/demo');
   await expect(dialog.locator('.project-dialog__error')).toContainText('The native folder chooser failed.');
   await dialog.getByRole('button',{name:'Close'}).click();
   await expect(dialog).toBeHidden();
@@ -299,17 +300,17 @@ test('opens the native folder chooser directly from Add project and only onboard
   await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;openedRoots.push(root);return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',stores:configured?['/work/other.hs2']:[],apiPath:'/__hotsheet/project-api/other-checkout',needsTicketSetup:!configured}:project})});
   await page.route('**/__hotsheet/projects/setup-git',route=>{configured=true;return route.fulfill({status:201,json:{ticketStore:'/work/other.hs2',connectionId:'git-other'}})});
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other']);await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');expect(openedRoots).toEqual(['.','/work/other']);await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-narrow.png',fullPage:true});
   await page.setViewportSize({width:1100,height:760});await setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true}).click();await expect(setup.getByText('Back up this ticket repository')).toBeVisible();await setup.getByRole('button',{name:'Close'}).click();
   const otherTab=page.locator('[data-tab-kind="project"]').filter({has:page.getByRole('tab',{name:'other'})});await otherTab.hover();await otherTab.getByRole('button',{name:'Close other'}).click();await page.locator('[data-component="project-close-dialog"]').getByRole('button',{name:'Close Project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveCount(0);
-  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);await expect(page.locator('[data-project-dialog]')).toBeHidden();expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other','/work/other']);
+  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);await expect(page.locator('[data-project-dialog]')).toBeHidden();expect(openedRoots).toEqual(['.','/work/other','/work/other']);
 });
 
 test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
   await page.setViewportSize({width:1100,height:760});
   await mockProject(page,true,false,0,0,0,true);
-  await page.route('**/__hotsheet/projects/open',route=>route.fulfill({status:201,json:{...project,root:'/Users/westphal/Documents/spotlight-cities/best-in-manila',stores:[],needsTicketSetup:true}}));
+  await page.route('**/__hotsheet/projects/open',route=>route.fulfill({status:201,json:{...project,root:'/work/best-in-manila',stores:[],needsTicketSetup:true}}));
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -1650,7 +1651,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
 test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{
   await mockProject(page);let submitted:Record<string,unknown>={};page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/tickets'))submitted=request.postDataJSON()});await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
-  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/Users/westphal/Documents/hotsheet2');
+  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','.');
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   const featureRow=page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'});

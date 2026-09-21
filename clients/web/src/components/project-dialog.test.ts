@@ -3,9 +3,14 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ProjectDialog, RemoteProjectDialog } from './project-dialog';
+import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from './project-dialog';
 
 describe('project dialogs', () => {
+  it('uses the selected project root and a portable first-run fallback', () => {
+    expect(projectDialogRoot({ root: '/work/current-project' })).toBe('/work/current-project');
+    expect(projectDialogRoot()).toBe('.');
+  });
+
   it('renders open-project input, errors, and exact recovery process context', () => {
     const markup = String(ProjectDialog({ open: true, root: '/work/demo', error: 'Unavailable', recovery: { expected: { pid: 42 } } }));
     expect(markup).toContain('value="/work/demo"');

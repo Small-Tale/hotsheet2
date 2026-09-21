@@ -9,6 +9,10 @@ export interface UnhealthyServerRecoveryView {
   expected: { pid: number };
 }
 
+export function projectDialogRoot(project?: { root: string }) {
+  return project?.root ?? '.';
+}
+
 export function ProjectDialog({ open, root, error, recovery, recoveryBusy = false }: {
   open: boolean;
   root: string;

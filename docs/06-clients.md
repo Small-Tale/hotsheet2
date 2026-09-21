@@ -28,6 +28,11 @@ are deleted only after destination creation, note creation, and provider-qualifi
 attachment copying all succeed. A paste is one history transaction: undo archives every
 created copy and restores cut originals, while redo reapplies the complete transfer.
 Failed transfers archive partial destination tickets and leave cut originals intact.
+
+The local Open project dialog derives its folder value from the selected checkout. Before
+any project is selected it uses the portable current-directory value (`.`), never a
+developer-specific clone path.
+
 Ticket copy/cut/paste shortcuts run only while the ticket work area owns focus and a
 ticket list or board is present. The work area shows one continuous focus outline around
 its composer and ticket surface. Pointer interaction outside it releases that ownership,
