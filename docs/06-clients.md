@@ -1545,7 +1545,11 @@ Their library-owned DOM is protected from application morphs, so committing a re
 the same xterm instance and WebSocket instead of reconnecting the shell.
 Global project/terminal jump actions open this drawer on the matching project and terminal.
 Drawer visibility, height, selected terminal per project, and independent short-container
-zoom are device-local. Drawer scale always uses the 1–3 short-container model. Level 1 makes
+zoom are device-local. Switching projects applies the destination project identity and its
+remembered drawer surface atomically, so a dedicated terminal never passes through a transient
+project-grid render or emits an unintended 80×24 sizing claim. Terminal metadata refreshes do
+not activate a grid; PTY resizing remains lazy and follows only the surface actually presented.
+Drawer scale always uses the 1–3 short-container model. Level 1 makes
 one 160px-minimum row fit the available drawer height and flows additional terminals
 horizontally. Levels 2 and 3 instead mean columns across the available width (treating widths
 below 240px as 240px), wrap left-to-right into additional rows, and scroll vertically. Its

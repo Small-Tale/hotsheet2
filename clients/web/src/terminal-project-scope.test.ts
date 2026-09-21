@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {terminalProjectOwner} from './terminal-project-scope';
+import {terminalDrawerActivation,terminalProjectOwner} from './terminal-project-scope';
 
 describe('terminalProjectOwner',()=>{
   const projects=[{id:'hotsheet',root:'/work/hotsheet2'},{id:'kerf',root:'/work/kerf'},{id:'procurement',root:'/work/procurement'}];
@@ -22,3 +22,18 @@ describe('terminalProjectOwner',()=>{
   });
 });
 
+describe('terminalDrawerActivation',()=>{
+  const values=new Map([['hotsheet.project.alpha.terminal-drawer-selection','alpha-shell'],['hotsheet.project.beta.terminal-drawer-selection','beta-shell']]),storage={getItem:(key:string)=>values.get(key)??null};
+
+  it('keeps the project and remembered terminal paired through repeated switches',()=>{
+    expect(['alpha','beta','alpha'].map(projectId=>terminalDrawerActivation(storage,projectId))).toEqual([
+      {projectId:'alpha',selectedId:'alpha-shell'},
+      {projectId:'beta',selectedId:'beta-shell'},
+      {projectId:'alpha',selectedId:'alpha-shell'},
+    ]);
+  });
+
+  it('falls back to the project grid only when that project has no remembered surface',()=>{
+    expect(terminalDrawerActivation(storage,'new-project')).toEqual({projectId:'new-project',selectedId:'grid'});
+  });
+});

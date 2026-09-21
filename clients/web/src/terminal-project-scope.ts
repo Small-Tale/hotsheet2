@@ -1,4 +1,5 @@
 export interface TerminalProjectScope {id:string;root:string}
+export interface TerminalDrawerActivation {projectId:string;selectedId:string}
 
 function normalizedRoot(root:string):string{return root.replace(/[\\/]+$/,'')||root}
 
@@ -13,3 +14,7 @@ export function terminalProjectOwner(projects:readonly TerminalProjectScope[],cw
   return projects.filter(project=>containsPath(project.root,cwd)).sort((left,right)=>normalizedRoot(right.root).length-normalizedRoot(left.root).length)[0]?.id;
 }
 
+/** Resolve the project and its remembered drawer surface as one activation snapshot. */
+export function terminalDrawerActivation(storage:Pick<Storage,'getItem'>,projectId:string):TerminalDrawerActivation{
+  return{projectId,selectedId:storage.getItem(`hotsheet.project.${projectId}.terminal-drawer-selection`)||'grid'};
+}
