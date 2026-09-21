@@ -1570,6 +1570,9 @@ post-reorder focus restoration yields when the user has already focused a differ
 so a pointer reorder cannot steal the following keyboard shortcut. Closing a
 selected terminal or chat chooses the nearest remaining tab to its right, then left, across
 both kinds before falling back to the grid.
+Closing a terminal is idempotent: if its process has stopped and the terminal host has
+already reaped it, Close Tab still removes the stale client tab instead of surfacing a
+not-found failure (HS2-DPTG65).
 Closeable tabs reserve the same trailing state slot even when it is empty, balancing the
 leading close control and preventing labels from shifting when status appears. Terminal tabs
 use that shared tab surface directly rather than layering a second selected background inside

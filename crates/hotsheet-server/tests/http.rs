@@ -6903,7 +6903,8 @@ async fn broker_mode_routes_terminals_and_survives_a_server_restart() {
         "the terminal survived the server restart: {list}"
     );
     let read = body_json(
-        app2.oneshot(authed("GET", "/terminals/tb", None))
+        app2.clone()
+            .oneshot(authed("GET", "/terminals/tb", None))
             .await
             .unwrap(),
     )
@@ -6911,6 +6912,22 @@ async fn broker_mode_routes_terminals_and_survives_a_server_restart() {
     assert_eq!(
         read["alive"], true,
         "the reattached terminal is still alive"
+    );
+
+    let deleted = app2
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/tb", None))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    let deleted_again = app2
+        .oneshot(authed("DELETE", "/terminals/tb", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        deleted_again.status(),
+        StatusCode::NO_CONTENT,
+        "closing a terminal that the broker already reaped is idempotent"
     );
 }
 
@@ -7050,6 +7067,15 @@ async fn terminals_open_read_input_and_kill() {
     assert!(saw, "cat echoed the input into the scrollback");
 
     // Kill it, then a read is 404.
+    let resp = app
+        .clone()
+        .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Closing again models a stopped process that housekeeping already reaped. The close
+    // action remains successful so clients can discard their stale tab.
     let resp = app
         .clone()
         .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))

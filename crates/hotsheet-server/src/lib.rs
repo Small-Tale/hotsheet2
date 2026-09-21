@@ -7404,19 +7404,16 @@ async fn kill_terminal(
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
             })?;
         return match resp {
-            hotsheet_terminals::BrokerResponse::Ok => Ok(StatusCode::NO_CONTENT),
+            hotsheet_terminals::BrokerResponse::Ok
+            | hotsheet_terminals::BrokerResponse::NotFound => Ok(StatusCode::NO_CONTENT),
             other => Err(broker_err(other)),
         };
     }
-    let killed = state
+    state
         .terminals
         .kill(&term_key(&state, &id))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if killed {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(ApiError::not_found(&id))
-    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
