@@ -68,6 +68,8 @@ source = "claude-usage"
 # Claude permission hooks (docs/05 §5.7, HS2-YMR9HE/HS2-N4R6F3) ask the running Hot
 # Sheet server for an allow/deny and emit no decision when the native flow should continue.
 target = ".claude/settings.local.json"
+format = "lifecycle-json"
+matcher = "*"
 machine_local = true
 # Interactive Claude exposes only genuine native prompts through PermissionRequest.
 # Headless `-p` sessions still require PreToolUse; the launcher marks those sessions so
@@ -75,6 +77,7 @@ machine_local = true
 event = "PermissionRequest"
 additional_events = ["PreToolUse"]
 command = "hotsheet-cli permission-hook"
+timeout_seconds = 86430
 
 [activity]
 # Claude's PreToolUse/UserPromptSubmit/Stop hook events + transcript map to activity events

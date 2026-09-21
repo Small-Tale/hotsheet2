@@ -2,7 +2,7 @@
 //! plugin directory into the machine plugin dir so the loader picks it up; remove
 //! deletes it. Listing lives in the binary (it just renders `all_plugins`).
 //!
-//! **Trust gate (HS2-93):** `verify` checks a plugin structurally (known MCP format,
+//! **Trust gate (HS2-93):** `verify` checks a plugin structurally (known config formats,
 //! **write targets stay inside the project** — no `..`/absolute escapes), `describe`
 //! discloses what it writes + launches, and `install` runs `verify` + shows the
 //! disclosure + requires confirmation before copying. What is **not** built yet: the
@@ -50,7 +50,7 @@ pub fn install(src: &Path, dest_root: &Path) -> Result<String> {
     Ok(id)
 }
 
-/// Structural verification of a plugin (loads, known MCP format, safe write targets).
+/// Structural verification of a plugin (loads, known config formats, safe write targets).
 /// Returns the list of issues; empty = passes. Behavioral conformance against the
 /// `hs-fake-agent` suite is HS2-64.
 pub fn verify(plugin: &Plugin) -> Vec<String> {
@@ -60,6 +60,15 @@ pub fn verify(plugin: &Plugin) -> Vec<String> {
         issues.push(format!(
             "unknown MCP config format '{fmt}' (known: {})",
             hotsheet_plugins::KNOWN_MCP_FORMATS.join(", ")
+        ));
+    }
+    if let Some(hooks) = &plugin.manifest.hooks
+        && !hotsheet_plugins::KNOWN_HOOK_FORMATS.contains(&hooks.format.as_str())
+    {
+        issues.push(format!(
+            "unknown hook config format '{}' (known: {})",
+            hooks.format,
+            hotsheet_plugins::KNOWN_HOOK_FORMATS.join(", ")
         ));
     }
     for t in plugin.unsafe_targets() {
@@ -205,6 +214,11 @@ format = "mystery-format"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--path", "{store}"]
+[hooks]
+target = ".bad/hooks.json"
+format = "mystery-hooks"
+event = "PermissionRequest"
+command = "hotsheet-cli permission-hook"
 "#,
         )
         .unwrap();
@@ -212,8 +226,9 @@ args = ["--path", "{store}"]
 
         let p = hotsheet_plugins::Plugin::from_fs_dir(&dir).unwrap();
         let issues = verify(&p);
-        assert_eq!(issues.len(), 2, "unknown format + escaping target");
+        assert_eq!(issues.len(), 3, "two unknown formats + escaping target");
         assert!(issues.iter().any(|i| i.contains("mystery-format")));
+        assert!(issues.iter().any(|i| i.contains("mystery-hooks")));
         assert!(issues.iter().any(|i| i.contains("escapes the project")));
 
         // A valid built-in verifies clean; describe discloses its writes/launch.

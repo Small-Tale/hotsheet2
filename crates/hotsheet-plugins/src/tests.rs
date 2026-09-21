@@ -134,6 +134,16 @@ fn codex_declares_its_project_local_skill() {
             "model_reasoning_effort=\"high\""
         ]
     );
+    let hooks = p
+        .manifest
+        .hooks
+        .as_ref()
+        .expect("codex declares native interactive permission hooks");
+    assert_eq!(hooks.target, ".codex/hooks.json");
+    assert_eq!(hooks.format, "lifecycle-json");
+    assert_eq!(hooks.matcher, ".*");
+    assert_eq!(hooks.event, "PermissionRequest");
+    assert_eq!(hooks.timeout_seconds, Some(86_430));
 
     // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
     // host maps via the `codex-usage` source.

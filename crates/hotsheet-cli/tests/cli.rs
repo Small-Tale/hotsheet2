@@ -718,6 +718,8 @@ fn launch_discovers_the_linked_store_and_injects_the_running_server() {
     let store = root.path().join("tickets");
     let home = root.path().join("home");
     std::fs::create_dir_all(&project).unwrap();
+    let nested = project.join("src/nested");
+    std::fs::create_dir_all(&nested).unwrap();
     hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let linked = project.join(".hotsheet");
@@ -778,13 +780,17 @@ command = "hotsheet-cli permission-hook"
 
     let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
     command
-        .current_dir(&project)
+        .current_dir(&nested)
         .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "hello"])
         .assert()
         .success()
         .stdout("http://127.0.0.1:4567|route-back|hello\n");
     assert!(project.join(".fake/settings.json").is_file());
+    assert!(
+        !nested.join(".fake/settings.json").is_file(),
+        "subdirectory launch installs provider config at the checkout root"
+    );
 
     // One exact adjacent source is accepted and persisted without -C or a legacy link.
     let adjacent_project = root.path().join("adjacent");
@@ -2515,6 +2521,71 @@ fn trigger_codex_isolates_codex_home_and_completes() {
     assert!(
         !p.join(".hotsheet").exists(),
         "no HS1 instance was launched (no .hotsheet)"
+    );
+}
+
+/// LIVE, gated drift oracle for Codex's documented native PermissionRequest hook contract.
+/// The temporary hook is explicitly vetted by this test, so this one invocation may bypass
+/// persisted hook trust; production `hotsheet-cli launch codex` deliberately never does.
+#[cfg(unix)]
+#[test]
+#[ignore = "live: needs a real codex + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn launch_codex_interactive_permission_contract() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the live codex hook contract");
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    std::fs::create_dir_all(project.join(".codex")).unwrap();
+    let capture = dir.path().join("permission-request.json");
+    let hook = dir.path().join("deny-hook.sh");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\ncat > '{}'\nprintf '%s\\n' '{{\"hookSpecificOutput\":{{\"hookEventName\":\"PermissionRequest\",\"decision\":{{\"behavior\":\"deny\",\"message\":\"live contract smoke\"}}}}}}'\n",
+            capture.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        project.join(".codex/hooks.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "hooks": {
+                "PermissionRequest": [{
+                    "matcher": "Bash",
+                    "hooks": [{"type": "command", "command": hook, "timeout": 30}]
+                }]
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let status = std::process::Command::new("codex")
+        .current_dir(&project)
+        .args([
+            "exec",
+            "--dangerously-bypass-hook-trust",
+            "--sandbox",
+            "read-only",
+            "--skip-git-repo-check",
+            "Run `touch SHOULD_NOT_EXIST` via Bash exactly once, then stop. Do not use any other tool.",
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success(), "real Codex turn completed");
+    let event: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&capture).expect("PermissionRequest hook ran"))
+            .unwrap();
+    assert_eq!(event["hook_event_name"], "PermissionRequest");
+    assert_eq!(event["tool_name"], "Bash");
+    assert!(
+        !project.join("SHOULD_NOT_EXIST").exists(),
+        "deny was honored"
     );
 }
 

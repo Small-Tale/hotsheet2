@@ -70,9 +70,10 @@ missing or mismatched digest refuses project setup with a rebuild command before
 managed file can be written; this covers instruction and manifest changes in addition to
 the explicit skill-version check.
 Machine-specific integrations never alter the shared ignore policy: Claude's permission
-hook uses `.claude/settings.local.json`, and a newly created, wholly Hot Sheet-owned MCP
-config is added only to that checkout's `.git/info/exclude`. A pre-existing config with
-unrelated user content remains visible to git while the Hot Sheet entry is merged into it.
+hook uses `.claude/settings.local.json`, Codex's uses `.codex/hooks.json`, and both are
+added only to that checkout's `.git/info/exclude`. A newly created, wholly Hot Sheet-owned
+MCP config is excluded the same way. A pre-existing config with unrelated user content
+remains visible to git while the Hot Sheet entry is merged into it.
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
@@ -361,6 +362,19 @@ sessions do not support that lifecycle event, so their launcher explicitly marks
 same installed adapter to retain `PreToolUse` bridging. Unmarked interactive
 `PreToolUse` events emit no decision and preserve Claude's native permission flow.
 
+Codex uses the same documented `PermissionRequest` input and nested allow/deny output
+contract. Its plugin declaratively installs the shared adapter in `.codex/hooks.json`;
+there is no tool-id setup branch. Codex loads the project hook from launch subdirectories
+through the repository config layer and runs the absolute `hotsheet-cli permission-hook`
+command installed by setup. Codex still owns the trust boundary: a new or changed project
+hook is skipped until the user reviews its hash with `/hooks`. Hot Sheet does not pass
+`--dangerously-bypass-hook-trust`. Before trust, or whenever route-back is absent or
+unreachable, the adapter emits no decision and Codex presents its normal native prompt.
+An unanswered request that reaches the generic bridge uses its existing eventual safe-deny
+timeout; the generated provider hook timeout is slightly longer so that denial can be
+returned rather than the hook process being killed first. Allow and deny use Codex's native
+result; retries remain independent.
+
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from
 looking like a missed click or allowing duplicate answers. The presumed history entry is
@@ -390,9 +404,11 @@ interactive `[launch]` command in the caller's existing terminal after installin
 setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`
 route-back. From a linked code checkout, the ordinary `.hotsheet2/store` machine-local
 link resolves the ticket store, so no `-C` is needed. This path is capability-gated:
-currently Claude's native `PermissionRequest` hook supports it; native interactive Codex is rejected
-until it has an adapter rather than being launched with misleading, unused environment.
-Codex permissions remain supported through Hot Sheet's app-server drive (`trigger`/`work`).
+Claude and Codex both declare native `PermissionRequest` adapters, so
+`hotsheet-cli launch claude` and `hotsheet-cli launch codex` are supported. A tool without
+that declared hook remains rejected rather than receiving misleading, unused route-back
+environment. Codex permissions also remain supported through Hot Sheet's app-server drive
+(`trigger`/`work`).
 
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)

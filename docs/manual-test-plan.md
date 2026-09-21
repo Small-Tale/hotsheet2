@@ -97,6 +97,15 @@ opencode_live_acp_turn -- --ignored --nocapture` with a configured OpenCode prov
 This verifies initialization, session creation, a streamed prompt, and completion against
 the installed executable. Last verified successfully on 2026-08-25 with OpenCode 1.17.18.
 
+### Codex interactive permission-hook compatibility
+
+Run `HOTSHEET_CODEX_LIVE=1 cargo test -p hotsheet-cli
+launch_codex_interactive_permission_contract -- --ignored --nocapture` with authenticated
+Codex CLI credentials. The test installs a vetted temporary project hook, causes a real
+Codex turn to request Bash approval, verifies the documented `PermissionRequest` payload,
+returns a native deny, and confirms the command did not run. Production launches retain
+Codex's `/hooks` hash-review gate; only this isolated drift test bypasses persisted trust.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and
@@ -104,3 +113,6 @@ the installed executable. Last verified successfully on 2026-08-25 with OpenCode
 - mTLS certificate/ACL behavior is automated; only physical-device enrollment UX remains.
 - ACP wire parsing has scripted unit and contract-fixture coverage; the provider-backed
   OpenCode smoke above guards executable/provider integration drift.
+- Codex hook generation, allow/deny/fallback/retry mapping, timeout behavior, setup merge
+  safety, and subdirectory launch are automated without credentials; the gated provider
+  smoke above guards the installed Codex lifecycle contract.

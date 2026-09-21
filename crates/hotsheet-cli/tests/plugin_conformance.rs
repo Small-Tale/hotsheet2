@@ -1,7 +1,7 @@
 //! **Plugin conformance suite** (HS2-64, docs/12 §12.7.7) — the hard CI gate every AI-tool
 //! plugin must pass. It is **parameterized over the whole registry** (`builtin_plugins()`),
 //! so a NEW tool inherits the gate simply by existing: add a plugin dir and it is validated
-//! here — identity, detection, instructions, skills (absence-as-feature), MCP config
+//! here — identity, detection, instructions, skills (absence-as-feature), MCP/hook config
 //! (writes a valid, re-parseable config), drive declaration (resolves to a real host
 //! Drive), write-target safety, and a full headless `setup` against a temp fixture project
 //! (idempotent). If a plugin is malformed or its setup produces junk, this test fails and
@@ -40,6 +40,7 @@ fn every_registered_plugin_passes_conformance() {
         check_instructions(p, &id);
         check_skills(p, &id);
         check_mcp(p, &id);
+        check_hooks(p, &id);
         check_drive(p, &id);
         check_target_safety(p, &id);
         check_headless_setup(p, &id);
@@ -171,6 +172,26 @@ fn check_target_safety(p: &Plugin, id: &str) {
     assert!(
         bad.is_empty(),
         "[{id}] declares unsafe write target(s) that escape the project: {bad:?}"
+    );
+}
+
+fn check_hooks(p: &Plugin, id: &str) {
+    let Some(hooks) = &p.manifest.hooks else {
+        return;
+    };
+    assert!(
+        hotsheet_plugins::KNOWN_HOOK_FORMATS.contains(&hooks.format.as_str()),
+        "[{id}] unknown hook config format '{}'",
+        hooks.format
+    );
+    assert!(!hooks.event.trim().is_empty(), "[{id}] hook event required");
+    assert!(
+        !hooks.matcher.trim().is_empty(),
+        "[{id}] hook matcher required"
+    );
+    assert!(
+        !hooks.command.trim().is_empty(),
+        "[{id}] hook command required"
     );
 }
 

@@ -1,14 +1,13 @@
-//! The **Claude Code PreToolUse hook** adapter (`docs/05` §5.7, HS2-YMR9HE) — the second
-//! permission transport (the codex approval path is HS2-Q1F6HV). Claude invokes a
-//! configured hook command before each tool use, passing the tool + input on stdin and
-//! reading a decision on stdout. This module is the pure mapping between Claude's hook JSON
-//! and the Hot Sheet permission bridge's `(tool, action)` key + allow/deny/ask decision;
+//! The native lifecycle-hook permission adapter (`docs/05` §5.7). Claude Code and Codex
+//! invoke a configured command with documented hook JSON on stdin and read a decision on
+//! stdout. Their `PermissionRequest` contracts intentionally share the same shape. This
+//! module is the pure mapping between that contract and Hot Sheet's `(tool, action)` key;
 //! the effectful part (read the running server's URL/secret from the env, POST
 //! `/permissions/ask`, block for a human) lives in the `permission-hook` subcommand.
 
 use serde_json::{Value, json};
 
-/// A PreToolUse permission decision Claude understands.
+/// A native lifecycle-hook permission decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookDecision {
     /// Auto-approve the tool use.
@@ -20,7 +19,7 @@ pub enum HookDecision {
     Ask,
 }
 
-/// Claude permission lifecycle event carried by the hook input.
+/// Permission lifecycle event carried by the hook input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermissionHookEvent {
     /// Fires before every tool use. Hot Sheet consumes this only for marked headless runs.
@@ -47,7 +46,7 @@ pub fn should_bridge_permission(event: PermissionHookEvent, headless_pre_tool: b
         || event == PermissionHookEvent::PreToolUse && headless_pre_tool
 }
 
-/// Map a Claude PreToolUse hook **input** to the bridge's `(tool, action)` rule key. The
+/// Map a native hook **input** to the bridge's `(tool, action)` rule key. The
 /// action is the command (Bash), else a file path (Edit/Write/Read), else empty — the same
 /// coarse key codex uses, so an `Always` rule remembered on one transport matches the other.
 pub fn hook_tool_action(input: &Value) -> (String, String) {
@@ -56,8 +55,8 @@ pub fn hook_tool_action(input: &Value) -> (String, String) {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let action = input
-        .get("tool_input")
+    let tool_input = input.get("tool_input");
+    let action = tool_input
         .and_then(|t| {
             t.get("command")
                 .and_then(Value::as_str)
@@ -65,21 +64,26 @@ pub fn hook_tool_action(input: &Value) -> (String, String) {
                 .or_else(|| t.get("path").and_then(Value::as_str))
                 .map(str::to_string)
         })
+        .or_else(|| {
+            tool_input
+                .filter(|value| !value.is_null())
+                .map(Value::to_string)
+        })
         .unwrap_or_default();
     (tool, action)
 }
 
-/// The connection id Claude reports (its `session_id`), for route-back attribution.
+/// The connection id the provider reports (its `session_id`), for route-back attribution.
 pub fn hook_connection(input: &Value) -> String {
     input
         .get("session_id")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-        .unwrap_or("claude")
+        .unwrap_or("interactive-hook")
         .to_string()
 }
 
-/// Render a [`HookDecision`] as the PreToolUse hook **output** JSON Claude reads.
+/// Render a [`HookDecision`] as the legacy/headless PreToolUse hook output.
 pub fn hook_decision_json(decision: HookDecision) -> Value {
     let (word, reason) = match decision {
         HookDecision::Allow => ("allow", "approved via the Hot Sheet permission bridge"),
@@ -95,8 +99,8 @@ pub fn hook_decision_json(decision: HookDecision) -> Value {
     })
 }
 
-/// Render a decision for Claude's interactive-only `PermissionRequest` hook. Unlike
-/// `PreToolUse`, this event uses a nested permission-result object.
+/// Render a decision for the native interactive `PermissionRequest` hook shared by Claude
+/// Code and Codex. Unlike `PreToolUse`, this event uses a nested permission-result object.
 pub fn permission_request_decision_json(decision: HookDecision) -> Option<Value> {
     let decision = match decision {
         HookDecision::Allow => json!({"behavior":"allow"}),
@@ -141,6 +145,20 @@ mod tests {
         );
         // Missing pieces degrade to empty, never panic.
         assert_eq!(hook_tool_action(&json!({})), (String::new(), String::new()));
+
+        // MCP/local-function arguments have no standard path field. Keep their complete
+        // deterministic JSON payload so Always rules and repeated prompts still match.
+        let mcp = json!({
+            "tool_name": "mcp__github__create_issue",
+            "tool_input": { "repo": "small-tale/hotsheet2", "title": "Retry me" }
+        });
+        assert_eq!(
+            hook_tool_action(&mcp),
+            (
+                "mcp__github__create_issue".into(),
+                r#"{"repo":"small-tale/hotsheet2","title":"Retry me"}"#.into()
+            )
+        );
     }
 
     #[test]
@@ -174,7 +192,7 @@ mod tests {
     #[test]
     fn connection_defaults_when_absent() {
         assert_eq!(hook_connection(&json!({ "session_id": "s-1" })), "s-1");
-        assert_eq!(hook_connection(&json!({})), "claude");
+        assert_eq!(hook_connection(&json!({})), "interactive-hook");
     }
 
     #[test]
@@ -193,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn permission_request_decision_uses_claudes_nested_result_shape() {
+    fn permission_request_decision_uses_the_shared_native_result_shape() {
         let allow = permission_request_decision_json(HookDecision::Allow).unwrap();
         assert_eq!(
             allow["hookSpecificOutput"]["hookEventName"],
@@ -218,5 +236,29 @@ mod tests {
         );
         // Garbage → deny (safe).
         assert_eq!(decision_from_server(&json!({})), HookDecision::Deny);
+    }
+
+    #[test]
+    fn repeated_permission_requests_are_stateless_and_keep_native_fallbacks() {
+        let input = json!({
+            "hook_event_name": "PermissionRequest",
+            "session_id": "thread-1",
+            "tool_name": "Bash",
+            "tool_input": { "command": "git push" }
+        });
+        for reply in [
+            json!({"decision":"allow"}),
+            json!({"decision":"deny"}),
+            json!({"decision":"allow"}),
+        ] {
+            let decision = decision_from_server(&reply);
+            assert!(permission_request_decision_json(decision).is_some());
+            assert_eq!(hook_tool_action(&input).1, "git push");
+        }
+        assert_eq!(
+            permission_request_decision_json(HookDecision::Ask),
+            None,
+            "a hook transport failure emits no decision so the native prompt retries"
+        );
     }
 }

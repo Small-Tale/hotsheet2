@@ -427,16 +427,16 @@ enum Cmd {
         #[arg(long)]
         team: bool,
     },
-    /// Claude PreToolUse **permission hook** (docs/05 §5.7, HS2-YMR9HE): reads the tool-use
-    /// JSON on stdin, asks the running Hot Sheet server (via $HOTSHEET_SERVER/$HOTSHEET_SECRET)
-    /// for an allow/deny, and writes the decision to stdout. With no server it emits `ask`
-    /// (defer to Claude's normal flow). Register it as a Claude `PreToolUse` hook.
+    /// Native lifecycle **permission hook** (docs/05 §5.7): reads PermissionRequest JSON
+    /// from Claude or Codex, asks the running Hot Sheet server (via
+    /// $HOTSHEET_SERVER/$HOTSHEET_SECRET), and writes the provider-native decision. With no
+    /// server or on transport failure it emits nothing, preserving the tool's normal prompt.
     PermissionHook,
     /// Launch an interactive AI tool in this terminal with permission requests routed to
     /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
     /// a `.hotsheet2/store` link (with legacy `.hotsheet/store` fallback), or conservative sibling discovery.
     Launch {
-        /// The tool to launch (currently `claude`; other tools require a native adapter).
+        /// The hook-capable tool to launch (currently `claude` or `codex`).
         tool: String,
         /// Project directory in which to run the tool (defaults to the current directory).
         #[arg(long)]
@@ -2494,10 +2494,10 @@ fn cmd_metrics(
     Ok(())
 }
 
-/// Claude permission hook (HS2-YMR9HE/HS2-N4R6F3): stdin hook JSON → ask the running
-/// server → stdout decision. Interactive PermissionRequest and marked headless PreToolUse
-/// events use their respective response schemas. Any error emits nothing so Claude's native
-/// flow remains authoritative, and the command always exits 0 so a hook failure cannot wedge it.
+/// Native permission hook: stdin hook JSON → ask the running server → stdout decision.
+/// Interactive PermissionRequest (Claude or Codex) and marked Claude headless PreToolUse
+/// events use their respective response schemas. Any error emits nothing so the provider's
+/// native flow remains authoritative, and the command always exits 0 so a hook cannot wedge it.
 fn cmd_permission_hook() -> Result<()> {
     use hotsheet_cli::permission_hook::{
         PermissionHookEvent, decision_from_server, hook_connection, hook_decision_json,
@@ -2559,10 +2559,11 @@ fn cmd_launch(
     create_ticket_store: Option<PathBuf>,
     args: Vec<String>,
 ) -> Result<()> {
-    let project = project.unwrap_or_else(|| cwd.to_path_buf());
-    let project = project
+    let launch_dir = project.unwrap_or_else(|| cwd.to_path_buf());
+    let launch_dir = launch_dir
         .canonicalize()
-        .with_context(|| format!("project path does not exist: {}", project.display()))?;
+        .with_context(|| format!("project path does not exist: {}", launch_dir.display()))?;
+    let project = hotsheet_cli::launch_project_root(&launch_dir);
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
@@ -2576,7 +2577,7 @@ fn cmd_launch(
         git_init(&path);
         path.canonicalize().unwrap_or(path)
     } else {
-        let discovery = hotsheet_cli::discover_launch_sources(&project, &registry)?;
+        let discovery = hotsheet_cli::discover_launch_sources(&launch_dir, &registry)?;
         if let Some(path) = discovery.selected {
             path
         } else if discovery.candidates.len() == 1 {
@@ -2631,7 +2632,7 @@ fn cmd_launch(
     let mut command = std::process::Command::new(&program);
     command
         .args(&launch.args)
-        .current_dir(&project)
+        .current_dir(&launch_dir)
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
         .env("HOTSHEET_PROJECT", permission_project);

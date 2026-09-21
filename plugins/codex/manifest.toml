@@ -64,6 +64,19 @@ effort_args = ["--config", "model_reasoning_effort=\"{effort}\""]
 # Codex reports token usage on its `turn/completed` notification; the host maps it to a
 # UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.
 source = "codex-usage"
+
+[hooks]
+# Interactive Codex emits PermissionRequest only when its native permission policy would
+# show a prompt. The project-local hooks file participates in Codex's hash-based `/hooks`
+# review flow; setup never weakens that trust boundary.
+target = ".codex/hooks.json"
+format = "lifecycle-json"
+matcher = ".*"
+machine_local = true
+event = "PermissionRequest"
+command = "hotsheet-cli permission-hook"
+timeout_seconds = 86430
+
 [activity]
 # Codex's app-server turn transcript (start/item/end) maps to activity events (docs/15,
 # HS2-KP31ZE). `source` selects the `codex_activity` mapper.

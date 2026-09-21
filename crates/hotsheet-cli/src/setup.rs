@@ -184,20 +184,33 @@ mod tests {
             .collect();
         assert_eq!(ours.len(), 1, "one interactive permission hook");
         assert_eq!(ours[0]["matcher"], "*");
-        // Codex declares no hook → its setup writes none.
+        assert_eq!(ours[0]["hooks"][0]["timeout"], 86_430);
+        // Codex declares its own native PermissionRequest hook in its own config.
         let d2 = project();
         let reports = run_setup(d2.path(), d2.path(), Some("codex"), false).unwrap();
+        assert!(reports[0].wrote.iter().any(|w| w == ".codex/hooks.json"));
+        let codex: serde_json::Value =
+            serde_json::from_str(&read(d2.path(), ".codex/hooks.json")).unwrap();
+        let requests = codex["hooks"]["PermissionRequest"].as_array().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["matcher"], ".*");
         assert!(
-            reports[0]
-                .wrote
-                .iter()
-                .all(|w| w != ".claude/settings.local.json")
+            requests[0]["hooks"][0]["command"]
+                .as_str()
+                .is_some_and(|command| command.ends_with("permission-hook"))
         );
+        assert_eq!(requests[0]["hooks"][0]["timeout"], 86_430);
     }
 
     #[test]
     fn setup_codex_writes_agents_skill_and_toml_idempotently() {
         let d = project();
+        std::fs::create_dir_all(d.path().join(".codex")).unwrap();
+        std::fs::write(
+            d.path().join(".codex/hooks.json"),
+            r#"{"description":"user hooks","hooks":{"PermissionRequest":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-policy"}]}]}}"#,
+        )
+        .unwrap();
         let custom_skill = d.path().join(".agents/skills/custom/SKILL.md");
         std::fs::create_dir_all(custom_skill.parent().unwrap()).unwrap();
         std::fs::write(&custom_skill, "user-authored custom skill\n").unwrap();
@@ -238,6 +251,31 @@ mod tests {
             read(d.path(), ".git/info/exclude")
                 .lines()
                 .any(|line| line == "/.codex/config.toml")
+        );
+        assert!(
+            read(d.path(), ".git/info/exclude")
+                .lines()
+                .any(|line| line == "/.codex/hooks.json")
+        );
+        let hooks: serde_json::Value =
+            serde_json::from_str(&read(d.path(), ".codex/hooks.json")).unwrap();
+        assert_eq!(hooks["description"], "user hooks");
+        let requests = hooks["hooks"]["PermissionRequest"].as_array().unwrap();
+        assert!(
+            requests
+                .iter()
+                .any(|entry| entry["hooks"][0]["command"] == "my-policy")
+        );
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|entry| {
+                    entry["hooks"][0]["command"]
+                        .as_str()
+                        .is_some_and(|command| command.ends_with("permission-hook"))
+                })
+                .count(),
+            1
         );
 
         run_setup(d.path(), d.path(), Some("codex"), false).unwrap();

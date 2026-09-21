@@ -31,8 +31,8 @@ pub fn instance_path(home: &Path, store: &Path) -> PathBuf {
     home.join("instances").join(format!("{id}.json"))
 }
 
-/// Resolve a capability-aware launch. Only tools declaring a permission hook may use this
-/// external-terminal path: injecting environment variables into an unrelated native prompt
+/// Resolve a capability-aware launch. Only tools declaring a native permission hook may use
+/// this external-terminal path: injecting environment variables into an unrelated prompt
 /// would otherwise misleadingly claim Hot Sheet is governing it.
 pub fn prepare(
     store: &Path,
@@ -107,11 +107,9 @@ mod tests {
     use super::*;
     use hotsheet_ticketing::{FsStore, StoreMetadata};
 
-    #[test]
-    fn resolves_the_server_for_a_hook_capable_interactive_tool() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let store = root.path().join("tickets");
+    fn write_instance(root: &Path) -> (PathBuf, PathBuf) {
+        let home = root.join("home");
+        let store = root.join("tickets");
         FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
         let path = instance_path(&home, &store);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -126,6 +124,13 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+        (home, store)
+    }
+
+    #[test]
+    fn resolves_the_server_for_a_hook_capable_interactive_tool() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, store) = write_instance(root.path());
 
         let launch = prepare(&store, "claude", vec!["--resume".into()], &home).unwrap();
         assert_eq!(launch.args, vec!["--resume"]);
@@ -133,9 +138,17 @@ mod tests {
     }
 
     #[test]
-    fn refuses_to_claim_native_codex_permissions_are_routed() {
+    fn resolves_native_codex_launch_now_that_it_declares_a_permission_hook() {
         let root = tempfile::tempdir().unwrap();
-        let error = prepare(root.path(), "codex", vec![], root.path()).unwrap_err();
-        assert!(error.to_string().contains("cannot yet route permissions"));
+        let (home, store) = write_instance(root.path());
+        let launch = prepare(
+            &store,
+            "codex",
+            vec!["--model".into(), "gpt-test".into()],
+            &home,
+        )
+        .unwrap();
+        assert_eq!(launch.program, "codex");
+        assert_eq!(launch.args, ["--model", "gpt-test"]);
     }
 }

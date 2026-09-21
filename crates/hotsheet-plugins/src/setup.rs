@@ -36,6 +36,8 @@ pub enum SetupError {
     UnsafeTargets { id: String, targets: String },
     #[error("unknown MCP config format '{format}' for plugin '{id}'")]
     UnknownMcpFormat { id: String, format: String },
+    #[error("unknown hook config format '{format}' for plugin '{id}'")]
+    UnknownHookFormat { id: String, format: String },
     #[error("writing {path}: {source}")]
     Io {
         path: String,
@@ -147,7 +149,7 @@ fn setup_plugins(
         }
         wrote.push(write_mcp(project_dir, &store_abs, &p)?);
         if let Some(hook) = write_hooks(project_dir, &p)? {
-            wrote.push(hook); // absent for tools with their own approval path (e.g. Codex)
+            wrote.push(hook); // absent when no native interactive adapter is declared
         }
         reports.push(SetupReport {
             tool: p.manifest.product_name.clone(),
@@ -363,8 +365,8 @@ fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
     write_file(&target, &format!("{existing}{separator}{entry}\n"))
 }
 
-/// Register the tool's permission hook (`docs/05` §5.7, HS2-YMR9HE) in its config, if it
-/// declares one. Claude's `.claude/settings.local.json` shape:
+/// Register the tool's permission hook (`docs/05` §5.7) in its config, if it declares one.
+/// Claude and Codex both currently document this lifecycle JSON shape:
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
 /// Merge-safe + idempotent: an existing Hot Sheet hook (same resolved command) is not
 /// duplicated. Returns the written path when a hook was registered.
@@ -375,6 +377,13 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
     let target = project.join(&spec.target);
     let locally_owned = spec.machine_local || !target.exists();
     let command = resolve_hook_command(&spec.command);
+
+    if spec.format != "lifecycle-json" {
+        return Err(SetupError::UnknownHookFormat {
+            id: p.id().to_string(),
+            format: spec.format.clone(),
+        });
+    }
 
     let mut root: serde_json::Value = std::fs::read_to_string(&target)
         .ok()
@@ -396,10 +405,14 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
         }
     }
 
-    // Our hook entry (matcher "*" = every relevant tool use/request).
+    // Our hook entry uses the provider-native matcher declared by the plugin.
+    let mut handler = serde_json::json!({ "type": "command", "command": command });
+    if let Some(timeout) = spec.timeout_seconds {
+        handler["timeout"] = serde_json::json!(timeout);
+    }
     let entry = serde_json::json!({
-        "matcher": "*",
-        "hooks": [ { "type": "command", "command": command } ],
+        "matcher": spec.matcher,
+        "hooks": [handler],
     });
     let mut events = vec![spec.event.as_str()];
     for event in &spec.additional_events {

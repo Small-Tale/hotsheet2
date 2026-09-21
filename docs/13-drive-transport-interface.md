@@ -86,7 +86,7 @@ shapes differ deeply:
 | trigger | inject a `<channel>` event into a long-lived session | `codex exec --json` per turn, *or* a JSON-RPC call to the app-server daemon | `session/prompt` |
 | done | Stop hook / channel idle | process exit / turn-end message | `stopReason` |
 | busy | hooks + spinner | process alive / turn in-flight | `session/update` |
-| permissions | channel permission notification | `.codex/hooks.json` PreToolUse | `session/request_permission` |
+| permissions | native `PermissionRequest` hook / channel notification | app-server approval request or interactive `.codex/hooks.json` `PermissionRequest` | `session/request_permission` |
 | lifecycle | one persistent process | one-shot **or** a warm daemon | one process per session |
 
 The interface must express all of these **without the caller ever branching on the
@@ -137,6 +137,11 @@ The ticket calls these out; here's how each is expressed once:
    host's **permission bridge** ([05](05-ai-tool-plugins.md) §5.7) through a
    per-transport adapter (channel notification / hooks CLI / ACP option response).
    The `DriveCtx` hands the drive a `PermissionSink`; the drive never talks to the UI.
+   External interactive Claude and Codex sessions use native `PermissionRequest` hooks:
+   the plugin declares the provider config target/event/command, setup installs the same
+   normalized adapter, and a hook transport failure preserves the provider's own prompt;
+   the bridge's eventual unattended timeout remains safe-deny. Codex keeps its documented
+   hash-review trust gate via `/hooks`.
 4. **Busy signaling + done-detection** — unified in the `TurnHandle` (§13.4).
 
 ## 13.4 `TurnHandle` — one way to observe any turn
@@ -289,6 +294,9 @@ including HS1 refusal, an isolated Codex home, permission bridging, and the cros
 Unix hosts reuse the shared Codex daemon; Windows uses the direct app-server transport
 because the daemon control channel is Unix-domain-socket based.
 The HTTP lifecycle is fake-backend E2E tested and has a credentials-gated real Codex test.
+Separately, `hotsheet-cli launch codex` uses the ordinary interactive CLI with a
+project-local `.codex/hooks.json` `PermissionRequest` adapter and running-server route-back;
+it is intentionally not the isolated app-server drive and does not bypass Codex hook trust.
 
 **Raw client stream (HS2-060HQJ):** every `TurnEvent` is projected into a stable tagged
 `turn_event` envelope carrying connection id and, for autonomous ticket work, ticket id.

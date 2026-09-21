@@ -89,10 +89,10 @@ pub struct Manifest {
     /// signal). Names the tool's native telemetry `source` so the host picks the right mapper.
     #[serde(default)]
     pub metrics: Option<MetricsSpec>,
-    /// Optional: a **permission hook** the tool runs before each tool use (`docs/05` §5.7,
-    /// HS2-YMR9HE). `setup` registers it in the tool's config so a Hot Sheet-driven run
-    /// routes approvals to the bridge. Absent = no hook (the tool has its own approval path,
-    /// e.g. codex's app-server ServerRequests).
+    /// Optional: a **permission hook** the tool runs when its native permission engine is
+    /// about to prompt (`docs/05` §5.7). `setup` registers it in the tool's own lifecycle
+    /// config so an interactive launch can route that prompt to the bridge. Absent = no
+    /// native interactive permission adapter; headless drives may still have another path.
     #[serde(default)]
     pub hooks: Option<HooksSpec>,
     /// Optional: the tool exposes narratable **activity** signals (`docs/15`, HS2-KP31ZE) —
@@ -130,6 +130,14 @@ pub struct ActivitySpec {
 pub struct HooksSpec {
     /// The tool config file the hook is written into (e.g. `.claude/settings.local.json`).
     pub target: String,
+    /// Hook configuration syntax. Both current providers use the documented lifecycle JSON
+    /// shape; this discriminator keeps generation selected by capability, never tool id.
+    #[serde(default = "default_hook_format")]
+    pub format: String,
+    /// Provider-native matcher syntax for the declared event (`*` for Claude glob matching,
+    /// `.*` for Codex regular expressions).
+    #[serde(default = "default_hook_matcher")]
+    pub matcher: String,
     /// The whole target is machine-local and should be excluded from checkout status.
     #[serde(default)]
     pub machine_local: bool,
@@ -142,6 +150,18 @@ pub struct HooksSpec {
     /// The command line to run (e.g. `hotsheet-cli permission-hook`); its first token is
     /// resolved to the absolute sibling binary at setup (no PATH reliance, HS2-103).
     pub command: String,
+    /// Provider hook-process timeout in seconds. Set longer than the bridge's safe-deny
+    /// timeout so the adapter can emit that terminal denial instead of being killed first.
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
+}
+
+fn default_hook_format() -> String {
+    "lifecycle-json".to_string()
+}
+
+fn default_hook_matcher() -> String {
+    "*".to_string()
 }
 
 /// A tool's metrics-capability declaration (`docs/14` §14.2). Declarative — the behavioral
@@ -426,6 +446,9 @@ impl Plugin {
         if let Some(s) = &self.manifest.skills {
             v.push(s.target.as_str());
         }
+        if let Some(hooks) = &self.manifest.hooks {
+            v.push(hooks.target.as_str());
+        }
         v
     }
 
@@ -442,6 +465,8 @@ impl Plugin {
 
 /// The MCP config formats the setup writer understands.
 pub const KNOWN_MCP_FORMATS: &[&str] = &["claude-json", "codex-toml", "opencode-json"];
+/// Permission-hook config formats the setup writer understands.
+pub const KNOWN_HOOK_FORMATS: &[&str] = &["lifecycle-json"];
 
 /// Whether `p` is a project-relative path that stays inside the project — no absolute
 /// path, no `..`, no drive prefix. This is the guardrail against a plugin declaring a

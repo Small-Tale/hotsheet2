@@ -50,6 +50,22 @@ pub fn select_launch_candidate(candidates: &[PathBuf], one_based: usize) -> Opti
         .cloned()
 }
 
+/// Root that owns project-scoped AI-tool setup when an interactive launch begins in a
+/// subdirectory. Prefer the nearest checkout/store marker; a standalone directory remains
+/// its own root. This keeps `.codex/hooks.json` discoverable from nested working directories.
+pub fn launch_project_root(start: &Path) -> PathBuf {
+    let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+    start
+        .ancestors()
+        .find(|dir| {
+            dir.join(".git").exists()
+                || dir.join(STORE_LINK).is_file()
+                || dir.join(LEGACY_STORE_LINK).is_file()
+        })
+        .map(Path::to_path_buf)
+        .unwrap_or(start)
+}
+
 /// Resolve registered/legacy launch sources and conservatively discover valid sibling
 /// `.hs2` stores. A selected source is authoritative; candidates require caller choice.
 pub fn discover_launch_sources(
