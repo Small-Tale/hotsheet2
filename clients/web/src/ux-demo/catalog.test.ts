@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
-import { demoCatalog, demosUsing, findDemo, flattenCatalog,kerfCatalogSections } from './catalog';
+import { demoCatalog, demoKind,demosUsing, findDemo, flattenCatalog,kerfCatalogSections } from './catalog';
 import { connectionDetailsAssessment,ConnectionDetailsDialogSettings,connectionDetailsScenario,resetConnectionDetailsDemo } from './connection-details-demo';
 import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
@@ -44,6 +44,19 @@ describe('UX demo catalog', () => {
     expect(ticketRow?.related?.filter(entry=>entry.group==='Used by').map(entry=>entry.id)).toEqual(['ticket-list','ticket-board-column']);
     expect(sections.find(section=>section.category==='Ticket inspector · Notes and activity')?.entries.map(entry=>entry.id)).toContain('note-card');
     expect(sections.find(section=>section.category==='Setup and settings')?.entries.find(entry=>entry.id==='welcome-screen')?.tags).toContain('Planned');
+  });
+
+  it('publishes every implemented app-owned catalog surface with the Kerf consumer metadata contract',()=>{
+    const extension=JSON.parse(readFileSync(new URL('../../ai/component-catalog-extension.json',import.meta.url),'utf8')) as {schemaVersion:number;package:string;entries:Array<{id:string;name:string;kind:string;purpose:string;useWhen:string[];avoidWhen:string[];publicClasses:string[];publicTokens:string[];geometry:{margin:string;border:string;padding:string;notes?:string[]};documentation:string}>},schema=JSON.parse(readFileSync(new URL('../../node_modules/@kerfjs/ui/ai/component-catalog-extension.schema.json',import.meta.url),'utf8')) as {$defs:{geometryOwner:{enum:string[]}}};
+    expect(extension.schemaVersion).toBe(1);expect(extension.package).toBe('hotsheet-web');expect(extension.entries.length).toBeGreaterThan(60);expect(new Set(extension.entries.map(entry=>entry.id)).size).toBe(extension.entries.length);
+    const owners=new Set(schema.$defs.geometryOwner.enum),implemented=new Map(flattenCatalog().filter(entry=>entry.implemented).map(entry=>[entry.id,entry]));
+    for(const entry of extension.entries){
+      expect(implemented.get(entry.id)?.name).toBe(entry.name);expect(entry.purpose).toBe(implemented.get(entry.id)?.description);expect(entry.useWhen.length).toBeGreaterThan(0);expect(entry.avoidWhen.length).toBeGreaterThan(0);expect(Array.isArray(entry.publicClasses)).toBe(true);expect(Array.isArray(entry.publicTokens)).toBe(true);expect(entry.documentation).toBe('docs/ux-components.md');
+      for(const owner of [entry.geometry.margin,entry.geometry.border,entry.geometry.padding])expect(owners.has(owner)).toBe(true);
+      if(Object.values(entry.geometry).includes('conditional'))expect(entry.geometry.notes?.length).toBeGreaterThan(0);
+      expect(demoKind(entry.id)).toBe(entry.kind);
+    }
+    expect(demoKind('app-shell')).toBe('composition');expect(demoKind('tag-chip')).toBe('component');expect(demoKind('toolbar')).toBe('component');
   });
 
   // Every production component module must be represented in the UX-demo catalog (by matching

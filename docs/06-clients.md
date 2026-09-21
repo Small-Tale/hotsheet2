@@ -146,7 +146,9 @@ and identity-less legacy entries remain conservatively blocking.
   adding its Tauri host. A `/ux-demo` route renders the real production components
   against deterministic mock service adapters for isolated and composed UX review. Its
   shell uses `@kerfjs/ui`'s `Catalog` and `wireCatalog`, with URL-addressable selection,
-  native responsive navigation/relationships/theme controls, and app-owned review tools.
+  native responsive navigation/relationships/theme controls, focus-preserving desktop
+  selection reveal, Kerf-native component bounds/margin inspection, app-owned review
+  tools, and a machine-readable Hot Sheet component metadata extension alongside Kerf's.
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 

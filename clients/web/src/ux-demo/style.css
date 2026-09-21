@@ -7,8 +7,6 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .demo-shell--settings-open { width: calc(100% - min(remify(432px), calc(100vw - remify(32px)))); }
 .demo-catalog-examples { width: 100%; }
 .command-settings-editor-demo { width: 100%; }
-.demo-shell--alignment-debug .kui-catalog__canvas { background-size:remify(8px) remify(8px); }
-.demo-shell--alignment-debug [data-catalog-example] { outline:1px dashed var(--wa-color-brand-border-normal); outline-offset:remify(4px); }
 .eyebrow { margin: 0; color: var(--wa-color-text-link) !important; font-size: var(--wa-font-size-xs); font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .component-stage, .planned-demo { max-width: remify(1120px); min-height: remify(448px); margin: auto; padding: clamp(remify(32px), 5vw, remify(80px)); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(16px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 .component-stage { display: grid; align-content: center; justify-items: center; gap: remify(20px); }

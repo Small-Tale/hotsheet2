@@ -1,5 +1,7 @@
 import type {CatalogEntry,CatalogSection} from '@kerfjs/ui/catalog';
 
+import componentCatalogExtension from '../../ai/component-catalog-extension.json';
+
 export type DemoPhase = 'feature-floor' | 'desktop' | 'later';
 export interface DemoDefinition { id: string; name: string; description: string; phase: DemoPhase; implemented?: boolean; uses?: string[] }
 export interface DemoCategory { id: string; name: string; children?: DemoCategory[]; demos?: DemoDefinition[] }
@@ -144,6 +146,12 @@ export function findDemo(id: string): DemoDefinition | undefined {
 
 export function demosUsing(id: string): DemoDefinition[] {
   return flattenCatalog().filter(item => item.uses?.includes(id));
+}
+
+const demoKinds=new Map(componentCatalogExtension.entries.map(entry=>[entry.id,entry.kind as 'component'|'composition'] as const));
+
+export function demoKind(id:string):'component'|'composition'{
+  return demoKinds.get(id)??'component';
 }
 
 const phaseLabel:Record<DemoPhase,string>={'feature-floor':'Feature floor',desktop:'Desktop',later:'Later'};

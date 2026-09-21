@@ -29,6 +29,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
+    ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and mixed terminal/AI Workspace grid state
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
@@ -79,11 +80,12 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/lucide-icon-picker.tsx # Reusable searchable icon picker (popular defaults + lazy full-catalog search); host-controlled query/selection via delegation (HS2-5VSNV3)
     src/components/provider-model-effort-menu.tsx # Reusable Provider/Model/Effort/Other wa-dropdown submenu group shared by the Drive options popup and the in-conversation model/effort popup; host-controlled via delegated data-action clicks (HS2-59DWHN)
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
+    scripts/sync-component-catalog-extension.mjs # Deterministically derives/checks the app-owned Kerf consumer catalog extension from the implemented UX inventory
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup and explicit unhealthy-server recovery, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
     src/components/          #   Production domain UI components, including SavedViewDialog, stable A/B ContentTransition, AttachmentContextMenu, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, provider/model/effort menus, ListItem/ListHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
-    src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
+    src/ux-demo/             #   Categorized master/detail catalog with native component bounds/margin inspection, focus-preserving selection reveal, dependency-aware modification recency, connected mock state, and optional settings inspector
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review

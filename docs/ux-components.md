@@ -850,7 +850,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `TagList`
 - `TagChip` — **built**: Web Awesome tag primitive, stable domain identity, compact
   filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
-  `/ux-demo` coverage. Kerf beta 17 owns the shared 8px inline Web Awesome tag inset;
+  `/ux-demo` coverage. Kerf beta 18 owns the shared 8px inline Web Awesome tag inset;
   Hot Sheet retains only its compact 3.2px block inset.
 
 The component catalog records composition relationships. A left-aligned “Related
@@ -1294,12 +1294,31 @@ while `wireCatalog` synchronizes the selected entry with `?component=`. The nest
 Sheet inventory is flattened into path-labelled Kerf sections; phase, implementation,
 and dependency metadata remain visible as tags and native related menus. The app retains
 ownership of the selected entry and persisted collapsed/theme state, its development-only
-Dev Review and alignment-guide toggles, and an optional manually closed settings inspector
+Dev Review and geometry-inspection toggles, and an optional manually closed settings inspector
 that keeps the demo visible during live adjustment. The settings action lives with the
 other catalog-header tools; while the inspector is open, its Close settings action stays
 viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
 reset restores its canonical mock state. The remaining catalog review-tooling package is
 tracked by HS2-89692E. It should grow to provide:
+
+Kerf beta 18's native geometry overlay replaces the catalog's local alignment-outline
+mode. Focused `component` entries pass `geometryOverlay={true}` so transparent outer
+bounds receive a dashed outline and positive computed margins receive orange bands;
+`composition` entries explicitly pass `false`, because their outer placement belongs to
+the embedding layout. `wireCatalogGeometryOverlay` keeps the layer synchronized across
+controlled renders and resize, while explanatory content may opt out with
+`data-catalog-geometry-overlay-skip`. Long desktop sidebars reveal both the initial deep
+link and later controlled selection without moving keyboard focus; compact layouts retain
+Kerf's default no-forced-scroll guard.
+
+Hot Sheet publishes its package-qualified consumer metadata in
+`clients/web/ai/component-catalog-extension.json`. Its generated entries record every
+implemented app-owned component or composition's purpose, appropriate and inappropriate
+uses, public CSS/token hooks, documentation, and explicit margin/border/padding owner.
+`clients/web/scripts/sync-component-catalog-extension.mjs` derives that extension from
+the catalog inventory, and `npm run catalog:check` prevents drift. AI and human consumers
+must search this extension before the installed Kerf component catalog, retain the source
+package identity, and use the ownership fields to avoid duplicate wrappers or insets.
 
 Implemented entries' tags include a dependency-aware last-modified time: changes to a demo, recursively
 imported component/style dependencies, or global catalog code make the demo current again.

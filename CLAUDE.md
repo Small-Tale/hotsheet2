@@ -116,6 +116,15 @@ consumer-specific descendant CSS overrides. A component's UX demo must expose ev
 supported public variant and state that consumers rely on, including appearance and
 size options, so the catalog is a complete interactive account of the component API.
 
+Before selecting or wrapping a visual component, read Hot Sheet's consumer catalog at
+`clients/web/ai/component-catalog-extension.json` together with Kerf's installed
+`@kerfjs/ui/ai/component-catalog.json`. Preserve the package source identity and use the
+declared `geometry` ownership (`self`, `parent`, `child`, `none`, or documented
+`conditional`) instead of inferring margin, border, or padding from a screenshot. When
+an app-owned reusable visual component or composition changes, update its UX-demo entry
+and run `npm run catalog:sync` from `clients/web`; CI/lint checks that the generated
+extension remains current.
+
 UX demos may replace production data sources and external side effects with deterministic
 fixtures, but they must not be the sole owners of component interaction behavior. When a
 component is composed into the real app, inventory every rendered action/event from that

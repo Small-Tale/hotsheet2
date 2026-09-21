@@ -18,7 +18,7 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-component="list-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="list-item"]')).not.toHaveCount(0);
-  await page.screenshot({path:'/private/tmp/hs2-n4desv-kerf-catalog-wide.png',fullPage:true});
+  await page.screenshot({path:'/private/tmp/hs2-ecdq5k-kerf-catalog-wide.png',fullPage:true});
   const firstCatalogList = catalog.locator('.kui-catalog__items').first();
   const firstCatalogItem = firstCatalogList.locator('[data-component="list-item"]').first();
   const [listBox, itemBox] = await Promise.all([firstCatalogList.boundingBox(), firstCatalogItem.boundingBox()]);
@@ -41,9 +41,27 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await page.reload();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   const collapse=page.getByRole('button',{name:'Collapse UX components catalog'});await collapse.click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','true');await page.getByRole('button',{name:'Expand UX components catalog'}).click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','false');
-  const align=page.locator('[data-action="toggle-alignment-debug"]');await align.click();await expect(align).toHaveAttribute('aria-pressed','true');await expect(catalogShell).toHaveClass(/demo-shell--alignment-debug/);
+  const geometry=page.locator('[data-action="toggle-geometry-overlay"]');await geometry.click();await expect(geometry).toHaveAttribute('aria-pressed','true');await expect(catalogShell).toHaveAttribute('data-geometry-overlay','true');
+  await catalog.getByRole('button',{name:/AppTab/}).click();await expect.poll(()=>page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);await page.screenshot({path:'/private/tmp/hs2-ecdq5k-geometry-wide.png',fullPage:true});
+  await catalog.getByRole('button',{name:/ValueTable/}).click();await expect(page.getByRole('heading',{name:'ValueTable',exact:true})).toBeVisible();await expect.poll(()=>page.locator('.kui-catalog__geometry-margin').count()).toBeGreaterThan(0);await page.screenshot({path:'/private/tmp/hs2-ecdq5k-geometry-margins-wide.png',fullPage:true});
+  await catalog.getByRole('button',{name:/AppShell/}).click();await expect(catalogShell).toHaveAttribute('data-geometry-overlay','false');await expect(page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-margin')).toHaveCount(0);
+  await catalog.getByRole('button',{name:/AppTab/}).click();await expect(catalogShell).toHaveAttribute('data-geometry-overlay','true');await expect.poll(()=>page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
   const theme=page.getByRole('button',{name:'Use dark theme'});await theme.click();await expect(page.locator('html')).toHaveClass(/wa-dark/);await expect(page.getByRole('button',{name:'Use light theme'})).toBeVisible();
-  await page.setViewportSize({width:760,height:800});await page.getByRole('button',{name:'Collapse UX components catalog'}).click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','true');await page.screenshot({path:'/private/tmp/hs2-n4desv-kerf-catalog-narrow.png',fullPage:true});
+  await page.setViewportSize({width:760,height:800});await page.getByRole('button',{name:'Collapse UX components catalog'}).click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','true');await page.screenshot({path:'/private/tmp/hs2-ecdq5k-kerf-catalog-narrow.png',fullPage:true});
+});
+
+test('reveals deep-linked and newly selected catalog entries without moving focus',async({page})=>{
+  await page.addInitScript(()=>{
+    (window as Window&{catalogReveals?:string[]}).catalogReveals=[];
+    Element.prototype.scrollIntoView=function(){(window as Window&{catalogReveals?:string[]}).catalogReveals?.push((this as HTMLElement).dataset.itemId??'')};
+  });
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/ux-demo?component=hs1-migration-banner');
+  await expect.poll(()=>page.evaluate(()=>(window as Window&{catalogReveals?:string[]}).catalogReveals??[])).toContain('hs1-migration-banner');
+  const focus=page.locator('[data-action="toggle-geometry-overlay"]');await focus.focus();
+  await page.locator('[data-item-id="tag-chip"]').first().evaluate(node=> { (node as HTMLElement).click(); });
+  await expect.poll(()=>page.evaluate(()=>(window as Window&{catalogReveals?:string[]}).catalogReveals??[])).toContain('tag-chip');
+  await expect(focus).toBeFocused();
 });
 
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {

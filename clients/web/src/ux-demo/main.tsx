@@ -9,7 +9,7 @@ import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
-import { Catalog, CatalogExample, CatalogExampleStack } from '@kerfjs/ui/catalog';
+import { Catalog, CatalogExampleStack } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   clampRegionSize,
@@ -17,7 +17,7 @@ import {
   resizeRegionFromPointer,
 } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { wireCatalog } from '@kerfjs/ui/wire-catalog';
+import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
@@ -82,6 +82,7 @@ import {
 import {
   demoCatalog,
   type DemoDefinition,
+  demoKind,
   findDemo,
   kerfCatalogSections,
 } from './catalog';
@@ -272,7 +273,7 @@ const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
 const catalogTheme = signal<'light' | 'dark'>(localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light');
-const alignmentDebug = signal(localStorage.getItem('hotsheet.ux-demo.alignment-debug') === 'true');
+const geometryOverlayEnabled = signal(localStorage.getItem('hotsheet.ux-demo.geometry-overlay') === 'true' || localStorage.getItem('hotsheet.ux-demo.alignment-debug') === 'true');
 const devReviewOn = signal(
   devReviewRequested(location.href, import.meta.env.DEV),
 );
@@ -516,7 +517,7 @@ function DemoApp() {
     selected.id === 'content-transition' ||
     selected.id === 'permission-request' ||
     selected.id === 'ai-conversation';
-  const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : '', alignmentDebug.value ? 'demo-shell--alignment-debug' : ''].filter(Boolean).join(' '), modified = demoModified.value[selected.id];
+  const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '), modified = demoModified.value[selected.id];
   return (
     <>
       <Catalog
@@ -526,11 +527,12 @@ function DemoApp() {
         active={selected.id}
         collapsed={catalogCollapsed.value}
         theme={catalogTheme.value}
-        content={<CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}><CatalogExample>{demoContent(selected)}</CatalogExample></CatalogExampleStack>}
+        geometryOverlay={geometryOverlayEnabled.value && demoKind(selected.id) === 'component'}
+        content={<CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}>{demoContent(selected)}</CatalogExampleStack>}
         status={<span><strong>{selected.phase.replace('-', ' ')}</strong>{selected.implemented ? ' · Implemented' : ' · Planned'}{modified ? ` · Updated ${new Date(modified).toLocaleString()}` : ''}</span>}
         headerActions={<ToolbarControlGroup label="Demo tools">
           {import.meta.env.DEV ? <button type="button" data-action="toggle-dev-review" aria-pressed={String(devReviewOn.value)} title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}><LucideIcon icon={MessageSquareText} name="message-square-text"/><span>Review</span></button> : <></>}
-          <button type="button" data-action="toggle-alignment-debug" aria-pressed={String(alignmentDebug.value)} title={`Alignment guides ${alignmentDebug.value ? 'On' : 'Off'}`}><LucideIcon icon={Grid3X3} name="grid-3-x-3"/><span>Align</span></button>
+          <button type="button" data-action="toggle-geometry-overlay" aria-pressed={String(geometryOverlayEnabled.value)} title={`Geometry overlay ${geometryOverlayEnabled.value ? 'On' : 'Off'}`}><LucideIcon icon={Grid3X3} name="grid-3-x-3"/><span>Bounds</span></button>
           {hasSettings && !settingsOpen.value ? <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings"><span>Settings</span></button> : <></>}
         </ToolbarControlGroup>}
       />
@@ -619,7 +621,10 @@ wireCatalog(root, {
     applyCatalogTheme();
   },
   urlParam: 'component',
+  revealSelection: true,
 });
+wireCatalogGeometryOverlay(root);
+revealCatalogEntry(root, selectedId.value, { block: 'center' });
 // CommandRunDialog is a standalone native <dialog> (hidden until showModal), so open it after the
 // demo mounts/selects the same way the app does — unlike the wa-dialog demos that render inline (HS2-Z0CTHN).
 function showCommandRunDialogDemo(): void {
@@ -698,9 +703,10 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
 });
-delegate(root, 'click', '[data-action="toggle-alignment-debug"]', () => {
-  alignmentDebug.value = !alignmentDebug.value;
-  localStorage.setItem('hotsheet.ux-demo.alignment-debug', String(alignmentDebug.value));
+delegate(root, 'click', '[data-action="toggle-geometry-overlay"]', () => {
+  geometryOverlayEnabled.value = !geometryOverlayEnabled.value;
+  localStorage.setItem('hotsheet.ux-demo.geometry-overlay', String(geometryOverlayEnabled.value));
+  localStorage.removeItem('hotsheet.ux-demo.alignment-debug');
 });
 function commandEditorRowId(target: Element): string | undefined {
   return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
