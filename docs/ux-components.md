@@ -197,6 +197,10 @@ does not introduce polling or another network request.
     files compose the shared `ListHeader` and `ListItem` primitives, and the complete
     dialog is represented as an embedded production component in `/ux-demo`
     (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
+- `RepositorySetup` — **production built**: initialize a project folder's Git repository and
+  optionally connect its origin without staging, committing, or pushing project files. Its major
+  surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message
+  columns and 8 px inside error and action groups (HS2-4Y6SM9).
 - `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
   summary opens a repository-style master/detail dialog whose Docs, Tests, Source, and
   Other views reuse `ListHeader`, `ListItem`, middle-truncated paths, and Git-letter

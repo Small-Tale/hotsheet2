@@ -33,5 +33,9 @@ describe('RepositorySetup',()=>{
     expect(css).toMatch(/@media \(max-width: remify\(512px\)\)/);
     expect(css).toMatch(/width: min\(remify\(480px\), 100%\)/);
     expect(css).toMatch(/data-step="initialize"[^}]*footer \{[^}]*align-items: center;[^}]*justify-content: center;/);
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.repository-setup \{[^}]*padding: var\(--kui-space-l\)[^}]*gap: var\(--kui-space-l\)/);
+    expect(css).toMatch(/\.repository-setup__error \{[^}]*padding: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.repository-setup footer \{[^}]*gap: var\(--kui-space-xs\)/);
   });
 });
