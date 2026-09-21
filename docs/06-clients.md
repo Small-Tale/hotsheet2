@@ -21,7 +21,9 @@ field-aware rule, and a new edit after undo clears redo.
 
 Following HS1, Cmd/Ctrl+C and X retain structured selected-ticket data while writing
 readable text to the system clipboard. Cmd/Ctrl+V copies the ticket content and uses
-` (Copy)`, ` (Copy 2)`, and so on for case-insensitive title collisions; cut originals
+` (Copy)`, ` (Copy 2)`, and so on for case-insensitive title collisions. Every pasted or
+cross-project-dropped copy starts in Not Started regardless of its source status while
+retaining its source Up Next choice; cut originals
 are deleted only after destination creation, note creation, and provider-qualified
 attachment copying all succeed. A paste is one history transaction: undo archives every
 created copy and restores cut originals, while redo reapplies the complete transfer.
