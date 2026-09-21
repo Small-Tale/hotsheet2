@@ -765,12 +765,15 @@ and identity-less legacy entries remain conservatively blocking.
   conversation total without a second counter; unknown cost is labeled unavailable. The same
   stream's normalized activity events are session/connection matched into the shared bounded
   transcript sequence, grouping adjacent activity while preserving their position between
-  messages, with persistent AI/tool attribution and an accessible may-contain-errors cue. The
+  messages. Each Activity card carries one persistent, accessible AI-generated/may-contain-errors
+  cue instead of repeating the disclosure on every row; row feedback retains its originating tool
+  identity. Long summaries remain contained, and backtick-delimited commands render as wrapping
+  monospace code (HS2-4NYP8C, HS2-3NG164, HS2-0YES4Y). The
   dialog uses the shared compact dialog header instead of stacking a second application header
   beneath the platform dialog title. Its secondary line reports useful ready/working/message-count
   state instead of continuously exposing the opaque session id. Plugin-provided model and effort
-  choices carry visible labels, user-authored Markdown keeps loud-surface contrast throughout its
-  nested content, and repeated activity-level disclaimers are shown only on their attributed rows.
+  choices carry visible labels, and user-authored Markdown keeps loud-surface contrast throughout
+  its nested content.
   Its full-width composer keeps the send action attached
   to the input at wide and narrow sizes. In the bottom drawer, the embedded conversation is a
   height-bounded column: header, session controls, and composer remain fixed while the transcript

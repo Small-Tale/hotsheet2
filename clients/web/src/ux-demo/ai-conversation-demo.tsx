@@ -16,7 +16,7 @@ const completed:ConversationMessage[]=[
   {id:'question-1',role:'user',content:'Review the client connection flow.'},
   {id:'answer-1',role:'assistant',status:'completed',content:'The connection uses the project event stream, so the transcript updates without simple polling.\n\n- Turns stay in one session.\n- Permissions appear inline.',usage:{tokensIn:18_234,tokensOut:2_101,costUsd:.0423,model:'codex-5.6'}},
 ];
-const activity:ConversationActivity[]=[{id:'activity-1',tool:'Codex',kind:'edit',summary:'Edited the conversation state boundary',importance:'normal'},{id:'activity-2',tool:'Codex',kind:'command',summary:'Ran the focused browser test',importance:'normal'}];
+const activity:ConversationActivity[]=[{id:'activity-1',tool:'Codex',kind:'edit',summary:'Edited the conversation state boundary',importance:'normal'},{id:'activity-2',tool:'Codex',kind:'command',summary:'Codex ran `zsh -ic \'npm run test -- --project chromium --grep ai-conversation-activity-presentation-with-a-deliberately-long-filter\'`',importance:'normal'}];
 const permission:PermissionItem={id:42,connection:'hotsheet-sidebar',tool:'Bash',action:'npm run test',always_allow_supported:true,key:'demo:42',projectId:'demo',projectName:'Hot Sheet 2',agent:'Codex',role:'main worker',receivedAt:Date.now(),ignored:false};
 
 function scenarioState(){

@@ -299,10 +299,12 @@ does not introduce polling or another network request.
   - the dialog header carries a conversation-total disclosure derived only from those received
     usage events, never a parallel client counter or analytics poll
   - narratable normalized activity for the connection/session appears as a bounded “Activity”
-    sequence alongside the transcript. Every item keeps persistent tool/AI attribution and the
-    group carries the accessible cue “AI-generated summaries may contain errors.” Raw native
-    activity may drive the immediate working label, but it does not substitute for normalized
-    activity entries in this sequence
+    sequence alongside the transcript. The group carries one persistent, accessible
+    “AI-generated summaries may contain errors” cue rather than repeating it on every row;
+    row-specific feedback controls retain the originating tool identity. Backtick-delimited
+    commands render as wrapping monospace code, and long summaries stay inside the card. Raw
+    native activity may drive the immediate working label, but it does not substitute for
+    normalized activity entries in this sequence (HS2-4NYP8C, HS2-3NG164, HS2-0YES4Y)
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
