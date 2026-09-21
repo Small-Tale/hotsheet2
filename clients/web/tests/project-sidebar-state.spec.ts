@@ -19,7 +19,7 @@ test('never renders one project sidebar with another project statistics',async({
     if(path.endsWith('/terminals')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
     return route.continue();
   });
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string},value)=>{node.value=value},'/work/hotsheet2');await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const summary=page.locator('[data-component="project-sidebar"] [data-component="project-summary"]'),chart=summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
@@ -69,7 +69,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     if(path.endsWith('/terminals')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/views')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
     return route.continue();
   });
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string},value)=>{node.value=value},'/work/hotsheet2');await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');
   await expect.poll(()=>Boolean(demoPoll)).toBe(true);
   await demoPoll!.fulfill({json:{cursor:2,events:[{store:'git-local',kind:'changed',id:'HS2-DEMO',slug:'HS2-DEMO'}],overflow:false}});

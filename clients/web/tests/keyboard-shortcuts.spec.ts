@@ -27,6 +27,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await installFixture(page);
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
+  await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string},value)=>{node.value=value},'/work/hotsheet2');
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
 
   const list=page.locator('[data-component="ticket-list"]');

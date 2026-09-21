@@ -1193,6 +1193,9 @@ both supported public variants with the real xterm frontend, a deterministic ANS
 reverse-video Nano bars explicitly paint all 80 terminal cells,
 and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.
+Late development-only source metadata waits for every open catalog Select or related-components
+dropdown to finish closing before it rerenders the shell, so background discovery never dismisses
+the popup a user is reading (HS2-S59CRP).
 
 `TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
 content-sized project and view selectors, a rectangular full-row list/notification switch, the
