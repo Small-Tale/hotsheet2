@@ -29,6 +29,10 @@ export function terminalShouldUseWebgl(userAgent:string):boolean {
   const appleWebKit=/AppleWebKit/i.test(userAgent),nonAppleWebKitDesktop=/(?:Chrome|Chromium|Edg|OPR)\//i.test(userAgent);
   return !appleWebKit||nonAppleWebKitDesktop;
 }
+
+export function terminalUsesMobile80xM(mobile:boolean,fixedDashboardGrid:boolean,scaledPreview:boolean,dedicatedDrawer:boolean):boolean {
+  return mobile&&!scaledPreview&&(fixedDashboardGrid||dedicatedDrawer);
+}
 // ANSI ESC is the external terminal protocol byte intentionally recognized here.
 // eslint-disable-next-line no-control-regex
 const ZSH_PROMPT_EOL_MARK=/^(?:\u001b\[(?:0|1)m)*\u001b\[7m%\u001b\[27m(?:\u001b\[(?:0|1|27)m)*(?:\r?\n)?/;

@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 
-import { parseTerminalSizeMessage,stripLeadingZshPromptEolMark,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DEDICATED_SCROLLBACK,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_MAGNIFIED_SCROLLBACK,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_PREVIEW_SCROLLBACK,TERMINAL_RESIZE_SETTLE_MS,terminalBrowserWebSocketUrl,terminalDedicatedGridSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalShouldUseWebgl,terminalViewportClaimsSizingFocus,terminalViewportScale,terminalViewportShouldAutoFocus } from './terminal-viewport';
+import { parseTerminalSizeMessage,stripLeadingZshPromptEolMark,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DEDICATED_SCROLLBACK,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_MAGNIFIED_SCROLLBACK,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_PREVIEW_SCROLLBACK,TERMINAL_RESIZE_SETTLE_MS,terminalBrowserWebSocketUrl,terminalDedicatedGridSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalShouldUseWebgl,terminalUsesMobile80xM,terminalViewportClaimsSizingFocus,terminalViewportScale,terminalViewportShouldAutoFocus } from './terminal-viewport';
 
 describe('terminal viewport protocol',()=>{
   it('builds a credential-free same-origin attach URL',()=> { expect(terminalBrowserWebSocketUrl('/__hotsheet/project-api/project%20one','codex/main',{protocol:'https:',host:'hs.test'})).toBe('wss://hs.test/__hotsheet/project-api/project%20one/terminals/codex%2Fmain/attach'); });
@@ -25,6 +25,13 @@ describe('terminal viewport protocol',()=>{
     expect(terminalShouldUseWebgl('Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/27.0 Safari/605.1.15')).toBe(false);
     expect(terminalShouldUseWebgl('Mozilla/5.0 AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36')).toBe(true);
     expect(terminalShouldUseWebgl('Mozilla/5.0 Gecko/20100101 Firefox/150.0')).toBe(true);
+  });
+  it('uses 80xM for mobile interactive surfaces but keeps preview tiles at 80x24',()=>{
+    expect(terminalUsesMobile80xM(true,true,false,false)).toBe(true);
+    expect(terminalUsesMobile80xM(true,false,false,true)).toBe(true);
+    expect(terminalUsesMobile80xM(true,true,true,false)).toBe(false);
+    expect(terminalUsesMobile80xM(false,true,false,false)).toBe(false);
+    expect(terminalUsesMobile80xM(false,false,false,true)).toBe(false);
   });
   it('removes only a leading styled zsh partial-line marker from late fixed-grid replay',()=>{const encode=(value:string)=>new TextEncoder().encode(value),decode=(value:Uint8Array)=>new TextDecoder().decode(value);expect(decode(stripLeadingZshPromptEolMark(encode('\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ')))).toBe('prompt % ');expect(decode(stripLeadingZshPromptEolMark(encode('%\r\nprompt % ')))).toBe('%\r\nprompt % ');expect(decode(stripLeadingZshPromptEolMark(encode('\u001b[7m% intentional\u001b[0m')))).toBe('\u001b[7m% intentional\u001b[0m')});
   it('reserves one physical containment row in dedicated terminals',()=>{expect(terminalDedicatedGridSize(100,30)).toEqual({cols:100,rows:29});expect(terminalDedicatedGridSize(1,1)).toEqual({cols:1,rows:1})});

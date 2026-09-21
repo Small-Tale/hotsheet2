@@ -1795,15 +1795,17 @@ scrolling below that floor. A non-driving overlay reports the broadcast dimensio
 invites focus; focusing sends a new claim and leaves the arbiter—not the browser—to decide
 whether and when the PTY actually resizes.
 
-**Mobile 80×M (HS2-Z84F78).** On a phone-width viewport (`isMobileViewport`, the same
+**Mobile 80×M (HS2-Z84F78, HS2-S708S3).** On a phone-width viewport (`isMobileViewport`, the same
 1024px breakpoint as the single-column layout) an interactive terminal keeps the canonical
 **80 columns** — so line wrapping matches every other device — and chooses **M rows to fill
 the available height**, scaling the whole grid to fit the phone width. The text ends up
 small (80 columns on a ~390px screen), which is the deliberate trade for consistent width.
-This is implemented today for the magnified/full-screen terminal (the fixed-80-column DOM
-render path): on mobile the magnified card drops its 5:3 aspect and fills the screen, and
-the runtime resizes the PTY to 80×M and applies a width-fit transform. Extending the same
-rule to the dedicated drawer terminal is tracked in a follow-up.
+The magnified/full-screen terminal drops its 5:3 aspect and fills the screen. The dedicated
+drawer terminal applies the same fixed-80-column DOM render path within the drawer's available
+height. Both resize the PTY to 80×M, width-fit the physical grid, and reclaim sizing with the
+final measured row count rather than the provisional 80×24 size. Read-only grid preview tiles
+deliberately remain uniform 80×24, 5:3 cards: they are glanceable non-input surfaces, not the
+phone's interactive terminal.
 
 ### 6.7.5 Escape hatch: a per-viewer *separate* terminal
 

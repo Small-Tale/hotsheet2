@@ -35,6 +35,9 @@ When automation lands, remove the manual-only step and record it below.
    `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
 6. HS2-3ZBQDG — on current Mobile Safari, open a dedicated drawer terminal and confirm live
    glyphs remain visible after attach, focus, typing, background/resume, and device rotation.
+7. HS2-S708S3 — in that dedicated drawer terminal, confirm the PTY stays 80 columns, chooses
+   M rows to fill the available drawer height, width-fits without clipping, and recomputes M
+   after rotation or drawer-height changes. Confirm read-only grid previews remain 80×24.
 
 ### Real-device mTLS enrollment
 
