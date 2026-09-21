@@ -313,9 +313,10 @@ does not introduce polling or another network request.
     WebSocket/long-poll stream is the only live update source, and no conversation timer
     issues network requests. Reopening a locally closed project reconciles eligible
     server-owned drawer chat connections back into tabs with their live provider, model,
-    effort, actions, session, and busy state. Messages already received in the same app
-    window remain attached to the stable connection id; an app restart resumes the server
-    session without reconstructing earlier transcript messages (HS2-D34C2V)
+    effort, actions, session, and busy state. Validated transcript/activity state remains
+    attached to the stable connection id in device-local storage; an app or server restart
+    pairs it with the newest durable provider session before restoring the chat tab
+    (HS2-D34C2V, HS2-YHQCS2)
   - public demo states: empty/idle, composing, streaming output, waiting for permission,
     completed, failed, interrupted, and narrow layout; the production ProjectSidebar
     composition exercises open, send, streamed rerender, inline permission, stop, and close

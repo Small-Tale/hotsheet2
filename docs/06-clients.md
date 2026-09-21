@@ -756,7 +756,12 @@ and identity-less legacy entries remain conservatively blocking.
   before a new turn is appended. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
-  turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
+  turn. Transcript and activity state is validated and persisted device-locally after every
+  transition, so a client reload restores the exact received history. On server restart, the
+  client pairs that history with the server's durable newest-first session catalog and recreates
+  each latest connection/session before restoring eligible drawer tabs; corrupt local entries or
+  one unavailable provider are isolated instead of discarding other conversations (HS2-YHQCS2).
+  Stop appears only for a busy connection advertising `interrupt`; Enter sends and
   Shift+Enter adds a line. Plugins may advertise live model and effort changes, which the
   conversation applies to subsequent turns without changing provider. Closing a nested
   model or effort popup does not dismiss the owning conversation; only the conversation
@@ -1327,9 +1332,9 @@ inset and 8px viewport gutter while preserving all preview/control geometry (HS2
 eligible drawer Chat, Drive, and resumed-saved-chat connection ids from the server into
 their original AI-chat tabs, including provider, model, effort, busy, action, and session
 state (HS2-D34C2V). Transcript state already received in the same app window remains keyed
-to that connection and returns with the tab; after an app restart, the live server session
-continues but earlier messages are not retrospectively reconstructed. The close dialog
-states that boundary explicitly. **Stop & Close** explicitly deletes
+to that connection and returns with the tab; after an app or server restart, validated
+device-local transcript state is paired with the latest durable provider session and returns
+with the reconstructed tab (HS2-YHQCS2). **Stop & Close** explicitly deletes
 every listed terminal and AI connection before removing the tab. Cancel and switching
 away from a borrowed terminal preview make the surviving interactive drawer terminal
 reclaim its fitted geometry after the preview disconnects. Cancel and native dialog

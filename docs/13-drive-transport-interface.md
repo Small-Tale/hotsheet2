@@ -325,6 +325,12 @@ interrupt releases the gate for a later resume. Autonomous ticket driving simila
 a per-ticket session id across Continued passes and uses a stable isolated home for each
 ticket.
 
+The web client also persists its validated receipt-ordered conversation projection locally.
+After a client or server restart it reads the catalog newest-first, recreates at most the latest
+session for each stable connection id, and attaches the retained messages/activity to that
+connection. Recovery is project-root scoped and failure-isolated, so stale/corrupt local data or
+one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2).
+
 ## 13.10 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
   drive) and **HS2-66** (Codex drive); the conformance checklist is built in **HS2-64**.

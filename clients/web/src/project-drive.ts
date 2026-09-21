@@ -1,4 +1,4 @@
-import type { Api, ToolConnection } from './api';
+import type { Api, ToolConnection, ToolSession } from './api';
 
 export const SIDEBAR_DRIVE_CONNECTION_ID = 'hotsheet-sidebar';
 export const PROJECT_CHAT_CONNECTION_ID = 'hotsheet-project-chat';
@@ -21,6 +21,7 @@ export interface DrawerAIChat {
 }
 
 type ProjectDriveClient = Pick<Api, 'createToolConnection' | 'sendToolTurn'>;
+type ProjectRecoveryClient=Pick<Api,'createToolConnection'>;
 
 export interface ProjectDriveControlState {
   connection?: ToolConnection;
@@ -57,6 +58,23 @@ export function restoreDrawerAIChats(connections:readonly ToolConnection[],check
     if(index>=0)restored[index]=chat;else restored.push(chat);
   }
   return restored;
+}
+
+function isClientConversationConnection(id:string,checkout:string):boolean{
+  return id.startsWith('hotsheet-drawer-chat-')||id.startsWith('hotsheet-saved-chat-')||id.startsWith(`${SIDEBAR_DRIVE_CONNECTION_ID}-`)&&id.endsWith(`-${checkout}`)||id.startsWith(`${PROJECT_CHAT_CONNECTION_ID}-`)&&id.endsWith(`-${checkout}`);
+}
+
+/** Recreate the latest durable provider session for each client-owned connection after a
+ * server restart. The catalog is newest-first, so an older session for the same stable
+ * connection never supersedes its latest thread. */
+export async function recoverProjectConnections(client:ProjectRecoveryClient,active:readonly ToolConnection[],sessions:readonly ToolSession[],checkout:string,projectRoot:string):Promise<ToolConnection[]>{
+  const recovered=[...active],seen=new Set(active.map(connection=>connection.id));
+  for(const session of sessions){
+    if(session.project!==projectRoot||seen.has(session.connection_id)||!isClientConversationConnection(session.connection_id,checkout))continue;
+    seen.add(session.connection_id);
+    try{recovered.push(await client.createToolConnection({tool:session.tool,checkout,connection_id:session.connection_id,session_id:session.session_id}))}catch{/* one unavailable provider must not hide other resumable conversations */}
+  }
+  return recovered;
 }
 
 export function projectDriveConnection(connections: readonly ToolConnection[], checkout: string, tool: ProjectDriveTool = 'codex'): ToolConnection | undefined {

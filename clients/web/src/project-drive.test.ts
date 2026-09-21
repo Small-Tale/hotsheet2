@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ToolConnection } from './api';
-import {compatibleAiEffort, prepareProjectConversation,projectChatConnectionId,projectDriveConnection, projectDriveControlState,restoreDrawerAIChats,runProjectDrive, SIDEBAR_DRIVE_PROMPT, sidebarDriveConnectionId } from './project-drive';
+import {compatibleAiEffort, prepareProjectConversation,projectChatConnectionId,projectDriveConnection, projectDriveControlState,recoverProjectConnections,restoreDrawerAIChats,runProjectDrive, SIDEBAR_DRIVE_PROMPT, sidebarDriveConnectionId } from './project-drive';
 
 const checkout='checkout-1';
 const connection = (value: Partial<ToolConnection> = {}): ToolConnection => ({
@@ -9,6 +9,19 @@ const connection = (value: Partial<ToolConnection> = {}): ToolConnection => ({
 });
 
 describe('production project drive control', () => {
+  it('recreates the newest durable connection sessions after a server restart (HS2-YHQCS2)',async()=>{
+    const createToolConnection=vi.fn().mockImplementation(async value=>connection({id:value.connection_id,tool:value.tool,session_id:value.session_id}));
+    const active=connection({id:'already-live'}),sessions=[
+      {connection_id:'hotsheet-drawer-chat-restored',tool:'codex',project:'/repo',session_id:'newest',updated_at_ms:3},
+      {connection_id:'hotsheet-drawer-chat-restored',tool:'codex',project:'/repo',session_id:'older',updated_at_ms:2},
+      {connection_id:'other-project',tool:'claude',project:'/elsewhere',session_id:'elsewhere',updated_at_ms:1},
+      {connection_id:'background-command',tool:'codex',project:'/repo',session_id:'worker',updated_at_ms:4},
+    ];
+    const recovered=await recoverProjectConnections({createToolConnection},[active],sessions,'checkout','/repo');
+    expect(recovered.map(item=>item.id)).toEqual(['already-live','hotsheet-drawer-chat-restored']);
+    expect(createToolConnection).toHaveBeenCalledOnce();
+    expect(createToolConnection).toHaveBeenCalledWith({tool:'codex',checkout:'checkout',connection_id:'hotsheet-drawer-chat-restored',session_id:'newest'});
+  });
   it('keeps project chat separate from the dedicated driven session',()=>{
     expect(projectChatConnectionId(checkout,'codex')).not.toBe(sidebarDriveConnectionId(checkout,'codex'));
   });
