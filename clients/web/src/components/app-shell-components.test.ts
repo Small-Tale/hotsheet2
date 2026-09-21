@@ -58,6 +58,9 @@ describe('application shell components', () => {
     expect(css).toMatch(/app-shell__work-area:focus-within::after \{[^}]*border-color: var\(--wa-color-focus\)/);
     expect(css).toContain('.app-shell__work-area:has(.terminal-dashboard__magnified) { z-index: 3; outline-color: transparent; transition: none; }');
     expect(css).toContain('.app-shell__work-area:has(.terminal-dashboard__magnified)::after { border-color: transparent; transition: none; }');
+    expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-sidebar"]::after { display: none; }');
+    expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region:is([data-region-id="app-sidebar"], [data-region-id="app-inspector"]) { --kui-resizable-region-separator-color: transparent; }');
+    expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-inspector"] { border-left-color: transparent; }');
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');

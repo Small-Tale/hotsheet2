@@ -8,6 +8,8 @@
 .app-shell > .kui-resizable-region[data-region-id="app-sidebar"] { border-right: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
 .app-shell > .kui-resizable-region[data-region-id="app-sidebar"]::after { position: absolute; z-index: 2; top: 0; right: -1px; bottom: 0; width: 1px; background: var(--hs-shell-divider); content: ''; pointer-events: none; }
 .app-shell > .kui-resizable-region[data-region-id="app-sidebar"][data-collapsed="true"]::after { display: none; }
+.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-sidebar"]::after { display: none; }
+.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region:is([data-region-id="app-sidebar"], [data-region-id="app-inspector"]) { --kui-resizable-region-separator-color: transparent; }
 .app-shell > .kui-resizable-region[data-collapsed="true"] { border-right-width: 0; }
 .app-shell > .kui-resizable-region[data-collapsed="true"] .kui-resizable-region__handle { display: none; }
 .app-shell > .kui-resizable-region .project-sidebar,
@@ -53,6 +55,7 @@ body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizin
 .app-shell__workspace { min-width: 0; min-height: 0; padding: remify(16px); overflow: auto; overflow-anchor: none; flex: 1; background: var(--wa-color-surface-lowered); }
 .app-shell__workspace[data-presentation="edge-to-edge"] { padding: remify(16px) 0 0; overflow: hidden; }
 .app-shell > .kui-resizable-region[data-region-id="app-inspector"] { border-left: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
+.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-inspector"] { border-left-color: transparent; }
 .app-shell > .kui-resizable-region[data-region-id="app-inspector"] .kui-resizable-region__content { width: var(--kui-resizable-region-expanded-size); min-width: var(--kui-resizable-region-expanded-size); transition: transform .2s ease; }
 .app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] { border-left-width: 0; }
 .app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] .kui-resizable-region__content { transform: translateX(100%); }

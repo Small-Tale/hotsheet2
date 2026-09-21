@@ -1503,7 +1503,8 @@ exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnif
 opens that exact same menu from the keyboard or pointer. The focused dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 While that magnified viewport is open, its containing workspace is promoted above adjacent
-sidebar dividers and suppresses its own focus presentation immediately, so neither shell chrome
+shell regions, both side-region separators are suppressed, and the workspace suppresses its own
+focus presentation immediately, so neither shell chrome
 nor a transitioning focus outline can paint over the modal. On the first replay payload for a
 fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
 `%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
