@@ -98,8 +98,6 @@ export default tseslint.config(
   {
     files: ['src/ux-demo/main.tsx'],
     rules: {
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/switch-exhaustiveness-check': 'off',
       '@stylistic/array-bracket-spacing': ['error', 'never'],
       '@stylistic/arrow-spacing': 'error',
       '@stylistic/block-spacing': 'error',

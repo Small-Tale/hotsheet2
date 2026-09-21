@@ -901,7 +901,7 @@ delegate(root, 'click', '[data-action="open-repository-status"]', () => {
 });
 delegate(root, 'click', '[data-action="select-repository-view"]', (_event, target) => {
   repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
-  repositoryDemoEvent.value = `${(target as HTMLElement).textContent?.trim() ?? 'Repository view'} selected.`;
+  repositoryDemoEvent.value = `${(target as HTMLElement).textContent.trim() || 'Repository view'} selected.`;
 });
 delegate(root, 'click', '[data-action="toggle-repository-comparison"]', () => {
   if (repositoryDemoComparison.value.active) {
@@ -1343,6 +1343,8 @@ delegate(
       case 'explanation':
         permissionRequestSettings.explanation.value = control.checked;
         break;
+      case null:
+        break;
     }
   },
 );
@@ -1385,6 +1387,8 @@ delegate(
         break;
       case 'disabled':
         tagChipSettings.disabled.value = control.checked;
+        break;
+      case null:
         break;
     }
   },
@@ -1434,7 +1438,7 @@ delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
   workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
 });
 delegate(root, 'input', '[data-token-search-editor="workspace-search"]', (_event, target) => {
-  workspaceSearchQuery.value = target.textContent ?? '';
+  workspaceSearchQuery.value = target.textContent;
 });
 delegate(
   root,
@@ -1924,6 +1928,8 @@ delegate(
       case 'busy':
         ticketRowSettings.busy.value = control.checked;
         break;
+      case null:
+        break;
     }
   },
 );
@@ -2032,12 +2038,10 @@ delegate(
             Math.min(rows.length - 1, index + (key === 'ArrowDown' ? 1 : -1)),
           )
         ];
-      if (next) {
-        next.focus();
-        selectCollectionTicket(next.dataset.ticketSlug!, {
-          range: keyboard.shiftKey,
-        });
-      }
+      next.focus();
+      selectCollectionTicket(next.dataset.ticketSlug!, {
+        range: keyboard.shiftKey,
+      });
       return;
     }
     if (key !== 'Enter' && key !== ' ') return;
@@ -2408,7 +2412,7 @@ delegate(root, 'drop', '[data-attachment-group-drop-target], [data-attachment-ne
   regroupAttachmentDemo(id, newGroup ? undefined : batch);
 });
 delegate(root, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
-  recordCollectionEvent(`${target.textContent?.trim() ?? 'Attachment action'} selected`);
+  recordCollectionEvent(`${target.textContent.trim() || 'Attachment action'} selected`);
   closeAttachmentDemoMenu();
 });
 addEventListener('pointerdown', (event) => {
