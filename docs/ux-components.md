@@ -293,7 +293,10 @@ does not introduce polling or another network request.
   - read-only contexts: the same complete embedded component renders saved exports and live
     project-close previews. Live previews retain the real transcript/activity/usage/error
     projection, label why editing is unavailable, omit Save and composer actions, and use a
-    stable preview identity while users switch between terminal and chat resources
+    stable preview identity while users switch between terminal and chat resources. The native
+    project-close dialog composes shared `ListHeader`/`ListItem` resource navigation with 24px
+    detail, 16px warning, 8px pane/action, and zero-gap connected-row spacing while retaining
+    explicit live-preview geometry (HS2-4Y6SM9)
   - state: Kerf owns per-connection transcript/draft/open state; the existing replay-safe
     WebSocket/long-poll stream is the only live update source, and no conversation timer
     issues network requests. Reopening a locally closed project reconciles eligible

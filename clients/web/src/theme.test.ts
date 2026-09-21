@@ -20,7 +20,7 @@ const kerfSpacingMigratedComponents = [
   'ai-content-label.css', 'ai-tool-settings.css', 'app-error.css', 'attachment-context-menu.css', 'bulk-ticket-dialog.css',
   'command-navigation.css', 'command-run-dialog.css', 'command-settings-editor.css', 'connection-details-dialog.css', 'conversation-export-dialog.css', 'corrupt-ticket-row.css', 'drive-options-menu.css', 'flow-back-button.css',
   'keyboard-settings.css', 'manual-model-dialog.css', 'markdown-preview.css', 'note-card.css', 'not-working-dialog.css', 'pending-attachment-picker.css', 'quick-ticket-composer.css',
-  'project-tab-bar.css', 'repository-setup.css', 'repository-status-popover.css', 'saved-view-dialog.css', 'terminal-drawer.css', 'terminal-rename-dialog.css', 'terminal-ticket-rail.css', 'ticket-duplicate-backlinks.css',
+  'project-close-dialog.css', 'project-tab-bar.css', 'repository-setup.css', 'repository-status-popover.css', 'saved-view-dialog.css', 'terminal-drawer.css', 'terminal-rename-dialog.css', 'terminal-ticket-rail.css', 'ticket-duplicate-backlinks.css',
   'ticket-board-column.css', 'ticket-close-dialog.css', 'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-link-choice-dialog.css', 'ticket-list.css',
   'ticket-inspector-panel.css', 'ticket-inspector.css', 'ticket-row.css', 'ticket-tag-editor.css', 'trash-settings.css', 'view-navigation.css',
 ].map(file => resolve(sourceRoot, 'components', file));

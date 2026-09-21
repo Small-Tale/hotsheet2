@@ -2484,14 +2484,19 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
 
 test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)',async({page})=>{
   await page.setViewportSize({width:1280,height:900});
-  await page.goto('/ux-demo?component=project-close-dialog');
+  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
   const projectClose=page.locator('[data-component="project-close-dialog"]');
   await expect(projectClose).toHaveJSProperty('open',true);
   await expect(projectClose).toHaveAttribute('data-has-resources','true');
   // The selected AI-chat resource renders its embedded conversation preview.
   await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
   await expect(projectClose).toContainText('Kerf');
+  await projectClose.evaluate(node=>Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished)));
+  const closeSpacing=await projectClose.evaluate(node=>{const intro=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__intro')!),aside=getComputedStyle(node.querySelector<HTMLElement>('aside')!),nav=getComputedStyle(node.querySelector<HTMLElement>('nav')!),consequences=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__consequences')!),actions=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__actions')!);return{introPadding:intro.padding,introGap:intro.gap,asidePadding:aside.padding,navGap:nav.gap,consequencesPadding:consequences.padding,actionGap:actions.gap}});expect(closeSpacing).toEqual({introPadding:'16px 24px',introGap:'16px',asidePadding:'8px',navGap:'0px',consequencesPadding:'16px 24px 0px',actionGap:'8px'});
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-close-wide.png',fullPage:true});
   await page.screenshot({path:'/private/tmp/hs2-qkks05-project-close-dialog.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await expect.poll(()=>projectClose.evaluate(node=>{const surface=node.shadowRoot?.querySelector('dialog')?.getBoundingClientRect();return surface!=null&&surface.left>=0&&surface.top>=0&&surface.right<=innerWidth&&surface.bottom<=innerHeight})).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-close-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:900});
 
   await page.goto('/ux-demo?component=conversation-export-dialog');
   const exportDialog=page.locator('[data-component="conversation-export-dialog"]');
