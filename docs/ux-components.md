@@ -1210,7 +1210,11 @@ owns this structure for both grid-preview and magnified-interactive variants. It
 xterm surface until bounded font-metric fitting is stable, so transitions do not expose each
 intermediate fitting pass. A plain activation
 magnifies and focuses an interactive copy in place over the same grid; clicking the surrounding
-overlay or pressing Escape restores the grid. A double
+overlay or pressing Escape restores the grid. Interactive magnified and dedicated variants
+turn current, legacy, and project-qualified ticket references in xterm's parsed buffer into
+pointer-underlined links that open the stacked ticket reader. Preview tiles remain inert, and
+the interactive magnified font fits without a CSS transform so link hit-testing and ordinary
+terminal selection stay on the rendered cells (HS2-2DW829). A double
 activation, or Open from the tile's shared ListItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. A permanent Lucide ellipsis footer button opens the same shared Open/Hide menu as

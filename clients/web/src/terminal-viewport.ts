@@ -81,10 +81,12 @@ export function terminalBrowserWebSocketUrl(apiPath:string,terminalId:string,loc
   return `${protocol}//${locationValue.host}${apiPath}/terminals/${encodeURIComponent(terminalId)}/attach`;
 }
 
-export function mountTerminalViewport(element:HTMLElement,{url,viewerId=crypto.randomUUID(),autoFocus=false}:{url:string;viewerId?:string;autoFocus?:boolean}):()=>void {
+export interface TerminalViewportOptions {url:string;viewerId?:string;autoFocus?:boolean;onTicketReference?:(reference:string)=>void}
+
+export function mountTerminalViewport(element:HTMLElement,{url,viewerId=crypto.randomUUID(),autoFocus=false,onTicketReference}:TerminalViewportOptions):()=>void {
   let disposed=false,disposeRuntime:(()=>void)|undefined;
   element.dataset.connection='loading';
-  void import('./terminal-viewport-runtime').then(({mountTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountTerminalViewportRuntime(element,{url,viewerId,autoFocus})});
+  void import('./terminal-viewport-runtime').then(({mountTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountTerminalViewportRuntime(element,{url,viewerId,autoFocus,onTicketReference})});
   return ()=>{disposed=true;disposeRuntime?.()};
 }
 

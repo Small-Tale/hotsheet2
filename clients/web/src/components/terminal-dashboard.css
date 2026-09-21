@@ -62,7 +62,7 @@
 .terminal-dashboard__magnified .terminal-tile { width: min(100%, remify(1152px)); height: auto; max-height: none; }
 .terminal-dashboard__magnified .terminal-tile__preview { min-height: 0; padding: var(--terminal-tile-frame-inset); flex: none; }
 .terminal-dashboard__magnified .terminal-tile__preview pre { position: absolute; inset: var(--terminal-tile-frame-inset); height: auto; }
-.terminal-dashboard__magnified .terminal-tile__viewport-frame { position: relative; inset: auto; width: 100%; aspect-ratio: 5 / 3; }
+.terminal-dashboard__magnified .terminal-tile__viewport-frame { position: relative; inset: auto; width: 100%; aspect-ratio: 5 / 3; pointer-events: auto; }
 /* On a phone the magnified terminal drops the 5:3 card and fills the screen so its 80×M grid
    (HS2-Z84F78) uses the full available height. Gated on the same data-mobile signal as the JS
    `isMobileViewport` check that drives the 80×M sizing, so CSS and layout agree. */

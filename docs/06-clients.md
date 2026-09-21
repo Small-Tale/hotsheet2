@@ -1676,12 +1676,24 @@ Client claims normalize transient non-finite geometry to bounded integer dimensi
 drops any JSON frame carrying a malformed `resize` member instead of forwarding that protocol
 text to the PTY, so a hidden or transitioning viewport cannot echo control JSON into the shell.
 
+Interactive magnified and dedicated terminals register an xterm link provider for the same
+ticket-reference grammar used by rendered ticket details: current slugs, retained `HS-N`
+legacy numbers, and explicit `@project-id/SLUG` references. Activation uses the owning
+terminal project as the preference for an unqualified match, then opens the existing stacked
+ticket reader or its not-found/ambiguity feedback. The provider reads xterm's parsed buffer
+and ranges rather than terminal DOM or HTML, so ANSI styling, wrapped rows, WebGL rendering,
+selection, focus, and normal input remain intact. Scaled dashboard previews deliberately do
+not register the provider. Magnified desktop terminals fit their real xterm font metrics to
+the fixed frame instead of CSS-transforming the interactive surface, keeping xterm pointer
+hit-testing and selection aligned with the visible 80×24 cells (HS2-2DW829).
+
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
 fallback after load failure or context loss). Apple WebKit, including every iOS browser, uses
 the DOM renderer because WebGL context creation is not sufficient proof that Safari will paint
 the glyph layer. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
-DOM renderer because those surfaces are uniformly CSS-scaled; scaling a WebGL raster makes
+DOM renderer. Read-only previews are uniformly CSS-scaled, while interactive magnified
+surfaces fit font metrics without transforming pointer coordinates; scaling a WebGL raster makes
 the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
 scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
