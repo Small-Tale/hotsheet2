@@ -26,6 +26,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
     expect(markup).not.toContain('<input type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
+    expect(markup).toContain('data-collapsible="true" data-expanded="true"');
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
     expect(markup).toContain('aria-label="Date and time helper"');
@@ -102,10 +103,16 @@ describe('WorkspaceHeader', () => {
     expect(mobile).toContain('data-view-mode="list" aria-label="List view" aria-pressed="true"');
   });
 
-  it('renders the collapsed find state as a single magnifier button', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', notificationCount: 7 }));
+  it('delegates the collapsed find state to the canonical TokenSearchField trigger', () => {
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', notificationCount: 7,searchTagSuggestions:['client'],searchDatePrefix:'created-after',searchHelpOpen:true }));
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="false"/);
-    expect(markup).toContain('data-action="open-workspace-search" aria-label="Search tickets"');
+    expect(markup).toContain('data-component="token-search-field" data-token-search-id="workspace-search"');
+    expect(markup).toContain('data-collapsible="true" data-expanded="false"');
+    expect(markup).toContain('class="kui-token-search__expand" data-action="expand-token-search" aria-label="Search tickets"');
+    expect(markup).not.toContain('class="workspace-header__search-button"');
+    expect(markup).not.toContain('aria-label="Matching tags"');
+    expect(markup).not.toContain('aria-label="Date and time helper"');
+    expect(markup).not.toContain('aria-label="Search syntax"');
     expect(markup).toContain('aria-label="Notifications view, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
     expect(markup.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(4);

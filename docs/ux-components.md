@@ -651,8 +651,11 @@ the neighbouring chip; ArrowRight steps past a trailing chip). The app keeps own
 token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken` /
 `fromTokenSearchTokens` keyed on each token's canonical `raw`), the whitespace-commit input
 gating, the suggestions/date/help popovers (marked `data-token-search-keep-open`), and the
-`searchOpen`-driven collapse — so kerf's own collapsible mode stays off. The same component
-backs both the workspace toolbar search and the saved-view dialog's query field.
+persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode
+and adopts that signal, so Kerf owns its canonical magnifier trigger, reveal/focus transfer,
+empty-field blur collapse, and Escape collapse while the app's responsive header continues
+to read the same state. The same component backs both the workspace toolbar search and the
+saved-view dialog's non-collapsible query field.
 
 - `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
   atomic chips in their expression order, with character-level text wrapping and token-level
