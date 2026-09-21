@@ -17,7 +17,7 @@ const auxiliaryClientCss = [
 ];
 const clientCss = [...productionCss, ...auxiliaryClientCss];
 const kerfSpacingMigratedComponents = [
-  'ai-content-label.css', 'ai-tool-settings.css', 'app-error.css', 'attachment-context-menu.css', 'attachment-gallery.css', 'bulk-ticket-dialog.css',
+  'ai-content-label.css', 'ai-tool-settings.css', 'app-error.css', 'app-shell.css', 'attachment-context-menu.css', 'attachment-gallery.css', 'bulk-ticket-dialog.css',
   'command-navigation.css', 'command-run-dialog.css', 'command-settings-editor.css', 'connection-details-dialog.css', 'conversation-export-dialog.css', 'corrupt-ticket-row.css', 'drive-options-menu.css', 'flow-back-button.css',
   'keyboard-settings.css', 'manual-model-dialog.css', 'markdown-preview.css', 'note-card.css', 'not-working-dialog.css', 'pending-attachment-picker.css', 'quick-ticket-composer.css',
   'project-close-dialog.css', 'project-dialog.css', 'project-tab-bar.css', 'repository-setup.css', 'repository-status-popover.css', 'saved-view-dialog.css', 'terminal-drawer.css', 'terminal-rename-dialog.css', 'terminal-ticket-rail.css', 'ticket-duplicate-backlinks.css',

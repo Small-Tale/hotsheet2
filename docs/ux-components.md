@@ -86,6 +86,9 @@ right; both regions remain explicitly hideable and restorable. It owns the top-l
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
+The bottom drawer's compositor-only collapse travels one canonical 24 px step, while
+its 40 px restore action remains 16 px from the shell's trailing and bottom edges
+(HS2-4Y6SM9).
 The composer wrapper owns equal top and bottom inset around the creation surface. When
 it is present, the scrolling workspace removes its own top padding so list and board
 presentations receive one gap rather than two; composer-free settings, Archive, and

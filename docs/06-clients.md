@@ -1539,7 +1539,8 @@ sidebar and ticket inspector at full height. It belongs to ticket views only: th
 Notifications and Settings views hide the drawer entirely — neither the drawer nor its
 "Show terminal drawer" restore affordance appears while either is open — and the user's
 open/closed drawer preference is preserved so it returns unchanged on the next ticket view
-(HS2-EQEJC7). Its compact rail switches between the decorated
+(HS2-EQEJC7). The compositor-only collapse travels one canonical 24 px step, and the 40 px
+restore action stays 16 px from the shell's trailing and bottom edges (HS2-4Y6SM9). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
 the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll

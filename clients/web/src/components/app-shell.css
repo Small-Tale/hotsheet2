@@ -23,9 +23,9 @@
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] .kui-resizable-region__content { transition: opacity .16s ease, transform .2s ease; }
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"] .kui-resizable-region__content { height: var(--kui-resizable-region-expanded-size); min-height: var(--kui-resizable-region-expanded-size); }
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] { overflow: hidden; border-top: 0; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__content { opacity: 0; transform: translateY(var(--wa-space-l)); }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__content { opacity: 0; transform: translateY(var(--kui-space-l)); }
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__handle { display: none; }
-.app-shell__terminal-drawer-restore { position: absolute; z-index: 4; right: var(--wa-space-m); bottom: var(--wa-space-m); display: grid; width: remify(40px); height: remify(40px); padding: 0; border: 0; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-neutral-fill-loud); box-shadow: var(--wa-shadow-m); cursor: pointer; place-items: center; }
+.app-shell__terminal-drawer-restore { position: absolute; z-index: 4; right: var(--kui-space-m); bottom: var(--kui-space-m); display: grid; width: remify(40px); height: remify(40px); padding: 0; border: 0; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-neutral-fill-loud); box-shadow: var(--wa-shadow-m); cursor: pointer; place-items: center; }
 .app-shell__terminal-drawer-restore svg { width: remify(16px); height: remify(16px); }
 .app-shell__terminal-drawer-restore:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
 .app-shell__main > .project-tab-bar { border-bottom: 0; background: var(--wa-color-surface-default); }

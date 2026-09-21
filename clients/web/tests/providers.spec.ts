@@ -769,6 +769,23 @@ test('animates drawer visibility without animating manual resize',async({page})=
   await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:1440,height:900});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Show terminal drawer'}).click();const region=page.locator('section[data-region-id="app-terminal-drawer"]'),drawer=page.locator('[data-component="terminal-drawer"]'),handle=page.getByRole('separator',{name:'Resize Terminal drawer'});await expect(region).toHaveAttribute('data-transitioning','true');expect(await region.evaluate(element=>getComputedStyle(element).transitionDuration)).toContain('0.2s');await expect(region).toHaveAttribute('data-transitioning','false');await handle.focus();await page.keyboard.press('ArrowUp');await expect(handle).toHaveAttribute('aria-valuenow','336');await expect(region).toHaveAttribute('data-transitioning','false');expect(await region.evaluate(element=>getComputedStyle(element).transitionDuration)).toBe('0s');await drawer.getByRole('button',{name:'Hide terminal drawer'}).click();await expect(region).toHaveAttribute('data-transitioning','true');await expect(region).toHaveAttribute('data-collapsed','true');await expect(drawer).toHaveCount(1);await expect(page.getByRole('button',{name:'Show terminal drawer'})).toHaveCount(0);await page.waitForTimeout(100);await page.screenshot({path:'/private/tmp/hs2-x8fg23-drawer-hiding.png',fullPage:true});await expect(drawer).toHaveCount(0);await expect(page.getByRole('button',{name:'Show terminal drawer'})).toBeVisible();
 });
 
+test('keeps the collapsed terminal-drawer restore action on canonical shell insets (HS2-4Y6SM9)',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const restore=page.getByRole('button',{name:'Show terminal drawer'});
+  await expect(restore).toBeVisible();
+  const insets=()=>restore.evaluate(node=>{const style=getComputedStyle(node);return{right:style.right,bottom:style.bottom}});
+  expect(await insets()).toEqual({right:'16px',bottom:'16px'});
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-app-shell-drawer-restore-wide.png',fullPage:true});
+  await page.setViewportSize({width:1024,height:600});
+  await expect(restore).toBeVisible();
+  expect(await insets()).toEqual({right:'16px',bottom:'16px'});
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-app-shell-drawer-restore-narrow.png',fullPage:true});
+});
+
 test('keeps feedback rectangle input within its frame budget in the populated main app',async({page},testInfo)=>{
   await page.setViewportSize({width:1280,height:900});await mockProject(page);await page.goto('/?dev-review=1');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const measurement=await measureFeedbackRectangle(page,{x:440,y:220},{x:820,y:520});await testInfo.attach('feedback-performance.json',{body:JSON.stringify(measurement,null,2),contentType:'application/json'});expectResponsiveFeedbackRectangle(measurement);
