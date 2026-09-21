@@ -404,6 +404,13 @@ and identity-less legacy entries remain conservatively blocking.
   surfaces likewise own their stylesheets. `style.css` is reserved for document/app-shell,
   empty/loading/toast, and shared pagination rules; a source test enforces that boundary
   so component selectors cannot drift back into the global sheet (HS2-JH0112).
+  The primary project and terminal layouts follow the same ownership boundary:
+  `components/workspace-composition-surfaces.tsx` owns the sidebar, ticket workspace,
+  terminal ticket rail, global terminal/statistics workspace, project terminal drawer,
+  and terminal-operations compositions. `main.tsx` derives typed props from application
+  state and retains effects and event handling, but no longer owns those surfaces' render
+  branches (HS2-KB7ZA4). Their constituent production components remain the cataloged
+  review units, so the component catalog does not duplicate internal composition wrappers.
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global

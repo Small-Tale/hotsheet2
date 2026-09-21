@@ -101,6 +101,7 @@ describe('UX demo catalog', () => {
       'ticket-notes': 'Notes section composed into TicketInspector / TicketInfoPanel (demoed).',
       'ticket-row-context-menu': 'Context menu for TicketRow (demoed via TicketList/TicketBoard).',
       'ticket-tag-editor': 'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
+      'workspace-composition-surfaces': 'Internal typed composition boundary whose constituent production surfaces are cataloged individually.',
     };
     const componentsDir = fileURLToPath(new URL('../components', import.meta.url));
     const files = readdirSync(componentsDir).filter(name => name.endsWith('.tsx') && !name.endsWith('.test.tsx'));
