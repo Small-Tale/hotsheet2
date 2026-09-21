@@ -26,4 +26,15 @@ describe('project dialogs', () => {
     expect(markup).toContain('>Demo</span>');
     expect(css).toContain('.remote-project-dialog__item');
   });
+
+  it('uses canonical dialog, field-group, and connected-item spacing', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'project-dialog.css'), 'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.project-dialog \{[^}]*gap: var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.project-dialog__path \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.project-dialog footer \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.remote-project-dialog__list \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/\.remote-project-dialog__item \{[^}]*gap: var\(--kui-space-2xs\);[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.project-dialog__server-recovery \{[^}]*gap:var\(--kui-space-xs\); padding:var\(--kui-space-m\)/);
+  });
 });

@@ -82,6 +82,23 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-app-empty-states.png', fullPage: true });
 });
 
+test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('/ux-demo?component=project-dialog');
+  const remote=page.locator('[data-remote-project-dialog]'),surface=remote.locator('.remote-project-dialog');
+  await expect(surface).toBeVisible();
+  const spacing=await page.evaluate(()=>{const style=(selector:string)=>getComputedStyle(document.querySelector(selector)!);return{dialogGap:style('.project-dialog').gap,pathGap:style('.project-dialog__path').gap,footerGap:style('.project-dialog footer').gap,listGap:style('.remote-project-dialog__list').gap,itemGap:style('.remote-project-dialog__item').gap,itemPadding:style('.remote-project-dialog__item').padding};});
+  expect(spacing).toEqual({dialogGap:'16px',pathGap:'8px',footerGap:'8px',listGap:'4px',itemGap:'4px',itemPadding:'8px 16px'});
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-dialog-remote-wide.png'});
+  await page.setViewportSize({width:390,height:844});
+  await expect(surface).toBeVisible();
+  const narrowBox=await surface.boundingBox();
+  expect(narrowBox).not.toBeNull();
+  expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
+  expect(narrowBox!.x+narrowBox!.width).toBeLessThanOrEqual(390);
+  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-dialog-remote-narrow.png'});
+});
+
 test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)',async({page})=>{
   await page.setViewportSize({width:1000,height:800});
   await page.goto('/ux-demo?component=keyboard-settings');

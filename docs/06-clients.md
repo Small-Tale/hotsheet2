@@ -31,7 +31,9 @@ Failed transfers archive partial destination tickets and leave cut originals int
 
 The local Open project dialog derives its folder value from the selected checkout. Before
 any project is selected it uses the portable current-directory value (`.`), never a
-developer-specific clone path.
+developer-specific clone path. Local and remote project variants use the canonical 16 px
+dialog rhythm, 8 px field/action clusters, and 4 px connected remote-project text/list
+spacing, with 16 px inline row insets (HS2-4Y6SM9).
 
 Ticket copy/cut/paste shortcuts run only while the ticket work area owns focus and a
 ticket list or board is present. The work area shows one continuous focus outline around

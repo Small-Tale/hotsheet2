@@ -122,6 +122,10 @@ Supporting components:
   popover light-dismiss behavior rather than a redundant Close action. Its body uses the
   canonical 24 px major-region rhythm; narrow metadata rows use 8 px insets and 4 px between
   their connected key/value pair (HS2-4Y6SM9).
+- `ProjectDialog` — **demo built**: local folder/store inputs and remote server-known
+  checkout choices retain native Web Awesome dialog/input/button behavior while the
+  app-owned composition uses 16 px dialog spacing, 8 px field/action clusters, and 4 px
+  connected remote-row text/list spacing with 16 px inline row insets (HS2-4Y6SM9).
 - `PanelHeader` / `ValueTable` — **demo built**: shared divider-free panel/dialog/page
   icon/title/subtitle/action geometry and borderless static metadata cells with inset
   separators. `PanelHeader` (the `@kerfjs/ui` beta.6 consolidation of the former `DialogHeader`
