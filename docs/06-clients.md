@@ -677,7 +677,8 @@ and identity-less legacy entries remain conservatively blocking.
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
-  submenu insets, including at the supported narrow width. Machine defaults, Drive overrides,
+  submenu insets, including at the supported narrow width. The menu floats 8 px above its Drive
+  control anchor and separates connected submenu groups by 4 px (HS2-4Y6SM9). Machine defaults, Drive overrides,
   and command overrides keep the catalog as the primary model chooser and place manual entry
   behind an `Other…` action;
   the focused entry dialog accepts an exact nonblank id, shows that custom id in the chooser only
