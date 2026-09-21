@@ -739,7 +739,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   matching the Views header, and a uniquely targeted anchored popover in sidebar and
   reader instances. The popover contains a labeled autocomplete field,
   supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
-  focus, and remains within the narrow viewport.
+  focus, remains within the narrow viewport, and follows the canonical 16/8/4 spacing hierarchy.
   An unblocked ticket exposes a full-width shared-menu `Block ticket` action without an
   otherwise-empty `Blocked reason` heading. Its controlled editor flushes on blur,
   preserves the saved reason, and creates the adjacent status `Blocked` pill.

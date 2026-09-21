@@ -28,6 +28,11 @@ describe('TicketTagEditor', () => {
   it('styles the editor as an anchored popup surface', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-tag-editor.css'), 'utf8');
     expect(css).not.toContain('.ticket-tag-editor__add');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.ticket-tag-editor \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__popover \{[^}]*margin: var\(--kui-space-2xs\) 0 0;[^}]*padding: var\(--kui-space-m\)/);
+    expect(css).toMatch(/__popover strong \{[^}]*margin-bottom: var\(--kui-space-m\)/);
+    expect(css).toMatch(/__popover label \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatch(/\.ticket-tag-editor__popover \{[^}]*position: fixed;[^}]*position-area: block-end span-inline-end;[^}]*box-shadow: var\(--wa-shadow-l\)/);
   });
 });

@@ -1254,8 +1254,10 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await titleEditor.blur();
   await expect(inspector.getByRole('heading', { name: 'Autosaved inspector title' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Add tag' }).click();
-  const tagEditor = page.getByRole('dialog', { name: 'Add tag' }).getByRole('combobox', { name: 'Tag name' });
+  const tagDialog=page.getByRole('dialog',{name:'Add tag'}),tagEditor = tagDialog.getByRole('combobox', { name: 'Tag name' });
   await expect(tagEditor).toBeFocused();
+  expect(await tagDialog.evaluate(node=>{const editor=getComputedStyle(node.parentElement!),popover=getComputedStyle(node),heading=getComputedStyle(node.querySelector('strong')!),label=getComputedStyle(node.querySelector('label')!),input=getComputedStyle(node.querySelector('input')!),help=getComputedStyle(node.querySelector('small')!);return{editorGap:editor.gap,popoverMargin:popover.marginTop,popoverPadding:popover.paddingTop,headingMargin:heading.marginBottom,labelGap:label.gap,inputPadding:input.paddingLeft,helpMargin:help.marginTop}})).toEqual({editorGap:'8px',popoverMargin:'4px',popoverPadding:'16px',headingMargin:'16px',labelGap:'4px',inputPadding:'16px',helpMargin:'8px'});
+  await tagDialog.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-tag-editor-wide.png'});const addTagButton=inspector.getByRole('button',{name:'Add tag'});await page.keyboard.press('Escape');await page.setViewportSize({width:390,height:844});await addTagButton.scrollIntoViewIfNeeded();await addTagButton.click();await expect(tagEditor).toBeFocused();await tagDialog.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-tag-editor-narrow.png'});await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:720});await addTagButton.scrollIntoViewIfNeeded();await addTagButton.click();await expect(tagEditor).toBeFocused();
   await tagEditor.fill('regression');
   await tagEditor.press('Enter');
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
