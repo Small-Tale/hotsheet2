@@ -1,9 +1,17 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { KEYBOARD_SHORTCUTS } from '../keyboard-shortcuts';
 import { KeyboardSettings } from './keyboard-settings';
 
 describe('KeyboardSettings', () => {
+  it('resets inherited list-item margins so every row fills the list surface', () => {
+    const css = readFileSync(new URL('./keyboard-settings.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.keyboard-settings__list \{[^}]*background: var\(--wa-color-surface-default\);/);
+    expect(css).toMatch(/\.keyboard-settings__row \{[^}]*margin: 0;/);
+  });
+
   it('lists every shortcut grouped, with editable rows editable and fixed rows marked System', () => {
     const markup = String(KeyboardSettings({ overrides: {}, capturingId: undefined, apple: true }));
     expect(markup).toContain('data-component="keyboard-settings"');

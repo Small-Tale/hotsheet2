@@ -82,17 +82,29 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-app-empty-states.png', fullPage: true });
 });
 
-test('renders keyboard-shortcut chords as clean uniform chips (HS2-186WJT)',async({page})=>{
+test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)',async({page})=>{
   await page.setViewportSize({width:1000,height:800});
   await page.goto('/ux-demo?component=keyboard-settings');
+  const list=page.locator('.keyboard-settings__list').first();
   const chord=page.locator('.keyboard-settings__chord').first();
   await expect(chord).toBeVisible();
-  // No WA-native keycap treatment (dark bottom box-shadow) and a uniform 1px border on every side,
-  // so there is no heavy/lopsided gray edge next to the clean action buttons.
+  // Browser/Web Awesome list defaults add inline-start margin to list items. The app-owned row reset
+  // must keep the white row surface flush with the list's inner border instead of exposing the page.
+  const readGeometry=()=>list.evaluate(node=>{const listBox=node.getBoundingClientRect(),row=node.querySelector('.keyboard-settings__row');if(!row)throw new Error('missing keyboard shortcut row');const rowBox=row.getBoundingClientRect(),listStyle=getComputedStyle(node),rowStyle=getComputedStyle(row);return{inset:rowBox.left-listBox.left,marginLeft:rowStyle.marginLeft,widthGap:listBox.right-rowBox.right,listBackground:listStyle.backgroundColor,rowBackground:rowStyle.backgroundColor};});
+  const geometry=await readGeometry();
+  expect(geometry.marginLeft).toBe('0px');
+  expect(geometry.inset).toBe(1);
+  expect(geometry.widthGap).toBe(1);
+  expect(geometry.listBackground).toBe(geometry.rowBackground);
+  // The chord itself also remains free of the native keycap shadow and uneven bottom border.
   const edges=await chord.evaluate(node=>{const style=getComputedStyle(node);return{shadow:style.boxShadow,widths:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth]};});
   expect(edges.shadow).toBe('none');
   expect(new Set(edges.widths).size).toBe(1);
-  await page.locator('.keyboard-settings__list').first().screenshot({path:'/private/tmp/claude/hs2-186wjt-keyboard-chips.png'});
+  await list.screenshot({path:'/private/tmp/hs2-186wjt-keyboard-list.png'});
+  await page.setViewportSize({width:390,height:844});
+  const narrowGeometry=await readGeometry();
+  expect(narrowGeometry).toEqual(geometry);
+  await list.screenshot({path:'/private/tmp/hs2-186wjt-keyboard-list-narrow.png'});
 });
 
 test('reopens dialog demos and keeps Feedback above the modal top layer',async({page})=>{

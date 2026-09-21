@@ -7,8 +7,8 @@
 .keyboard-settings__reset-all svg { width: remify(14.4px); height: remify(14.4px); }
 .keyboard-settings__group { display: grid; gap: var(--kui-space-2xs); }
 .keyboard-settings__group-title { margin: 0 0 var(--kui-space-2xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.keyboard-settings__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: var(--wa-border-radius-l); overflow: hidden; }
-.keyboard-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--kui-space-m); min-height: remify(52px); padding: var(--kui-space-xs); border-top: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-default); }
+.keyboard-settings__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: var(--wa-border-radius-l); overflow: hidden; background: var(--wa-color-surface-default); }
+.keyboard-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--kui-space-m); min-height: remify(52px); margin: 0; padding: var(--kui-space-xs); border-top: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-default); }
 .keyboard-settings__row:first-child { border-top: 0; }
 .keyboard-settings__row[data-capturing="true"] { background: var(--wa-color-brand-fill-quiet); }
 .keyboard-settings__meta { display: grid; gap: var(--kui-space-2xs); min-width: 0; }
