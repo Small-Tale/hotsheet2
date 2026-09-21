@@ -1231,7 +1231,9 @@ same chip-based advanced search control used by the main workspace (placed last 
 ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
 Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
-directly in the UX catalog.
+directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,
+and `Select` primitives; its app-owned responsive control grid uses an 8px within-group rhythm and
+a 4px connected top inset while preserving explicit control and transition geometry (HS2-4Y6SM9).
 
 ## 7. Overlays and shared interaction components
 

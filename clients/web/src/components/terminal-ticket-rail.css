@@ -1,7 +1,7 @@
 .terminal-ticket-rail { width:100%; height:100%; min-height:0; overflow:hidden; background:var(--wa-color-surface-default); }
 .terminal-ticket-rail > .content-transition, .terminal-ticket-rail > .content-transition > .content-transition__side { width:100%; height:100%; min-height:0; }
 .terminal-ticket-rail__root { display:flex; width:100%; height:100%; min-height:0; overflow:hidden; flex-direction:column; }
-.terminal-ticket-rail__project { min-height:remify(52px); padding-inline:var(--wa-space-s); }
+.terminal-ticket-rail__project { min-height:remify(52px); padding-inline:var(--kui-space-xs); }
 .terminal-ticket-rail__project .kui-toolbar__leading { min-width:0; }
 .terminal-ticket-rail__project .kui-toolbar__trailing { justify-self:end; }
 .terminal-ticket-rail__project .kui-select { width:max-content; max-width:100%; }
@@ -10,8 +10,8 @@
    overflow:hidden ancestor can never crop it (HS2-HEYASQ). */
 .terminal-ticket-rail .kui-select::part(combobox) { outline-offset:-3px; }
 .terminal-ticket-rail__project .kui-select__custom-selected { color:var(--wa-color-neutral-on-normal); font-size:var(--wa-font-size-m); white-space:nowrap; }
-.terminal-ticket-rail__controls { padding:var(--wa-space-2xs) var(--wa-space-s) var(--wa-space-s); }
-.terminal-ticket-rail__controls .workspace-header__actions { display:grid; grid-template-columns:auto auto minmax(remify(40.4px),1fr); row-gap:var(--wa-space-xs); }
+.terminal-ticket-rail__controls { padding:var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-xs); }
+.terminal-ticket-rail__controls .workspace-header__actions { display:grid; grid-template-columns:auto auto minmax(remify(40.4px),1fr); row-gap:var(--kui-space-xs); }
 .terminal-ticket-rail__controls .view-mode-switcher { width:100%; border-radius:var(--wa-border-radius-m); grid-column:1 / -1; }
 .terminal-ticket-rail__controls .view-mode-switcher > * { flex:1; }
 .terminal-ticket-rail__controls .view-mode-switcher > :is(button,wa-button) { border-radius:var(--wa-border-radius-s); }
@@ -21,14 +21,14 @@
 .terminal-ticket-rail__controls .workspace-header__search-group { grid-column:3; grid-row:2; width:remify(40.4px); justify-self:end; transition:width .25s ease; }
 .terminal-ticket-rail__controls .workspace-header__search-group[data-expanded="true"] { width:100%; grid-column:1 / -1; grid-row:3; animation:terminal-ticket-rail-search-enter .25s ease; }
 .terminal-ticket-rail__controls .kui-token-search { width:100%; }
-.terminal-ticket-rail__heading { min-height:remify(60px); padding:var(--wa-space-s); }
+.terminal-ticket-rail__heading { min-height:remify(60px); padding:var(--kui-space-xs); }
 .terminal-ticket-rail__heading .kui-toolbar-text { font-size:var(--wa-font-size-l); }
 .terminal-ticket-rail__view { width:max-content; max-width:remify(192px); }
 .terminal-ticket-rail__view::part(combobox) { min-height:remify(36px); padding:0 remify(21.6px) 0 0; border:0; background:transparent; box-shadow:none; }
 .terminal-ticket-rail__view::part(expand-icon) { position:absolute; inset-inline-end:remify(2.4px); }
 .terminal-ticket-rail__view .kui-select__custom-selected { color:var(--wa-color-neutral-on-normal); font-size:var(--wa-font-size-l); font-weight:var(--wa-font-weight-bold); white-space:nowrap; }
 .terminal-ticket-rail .quick-ticket-composer__launcher { min-height:remify(36px); padding-inline:remify(12.8px); }
-.terminal-ticket-rail__content { min-height:0; padding:var(--wa-space-s); overflow:auto; background:var(--wa-color-surface-lowered); flex:1; }
+.terminal-ticket-rail__content { min-height:0; padding:var(--kui-space-xs); overflow:auto; background:var(--wa-color-surface-lowered); flex:1; }
 .terminal-ticket-rail__content .notification-center { padding:0; }
 .terminal-ticket-rail__inspector { position:relative; width:100%; height:100%; min-height:0; }
 .terminal-ticket-rail__inspector > .ticket-inspector { width:100%; height:100%; min-height:0; border:0; border-radius:0; box-shadow:none; }
@@ -40,5 +40,5 @@
 .terminal-ticket-rail__back:hover { background:var(--wa-color-neutral-fill-quiet); }
 .terminal-ticket-rail__back:focus-visible { outline:var(--wa-focus-ring); outline-offset:1px; }
 .terminal-ticket-rail__back svg { width:remify(24px); height:remify(24px); }
-@keyframes terminal-ticket-rail-search-enter { from { transform:translateY(calc(-100% - var(--wa-space-xs))); } to { transform:translateY(0); } }
+@keyframes terminal-ticket-rail-search-enter { from { transform:translateY(calc(-100% - var(--kui-space-xs))); } to { transform:translateY(0); } }
 @media (prefers-reduced-motion:reduce) { .terminal-ticket-rail__controls .workspace-header__search-group { transition:none; } .terminal-ticket-rail__controls .workspace-header__search-group[data-expanded="true"] { animation:none; } }

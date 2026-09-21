@@ -1412,7 +1412,10 @@ launcher; board and settings modes are deliberately absent. The rectangular list
 segmented control owns its full first row, while sort, selection actions, and the compact search
 launcher share the second row. Activating search animates it onto a dedicated full-width third
 row, where tag-autocomplete options stretch across the popup with consistently left-aligned
-labels. This is the same advanced search surface and state as the main workspace, including chips,
+labels. The rail uses 8px within its project/header/content groups, a 4px top inset for the
+connected control cluster, and an 8px search-row transition offset; its toolbar, selector,
+button, and transition dimensions remain explicit geometry (HS2-4Y6SM9). This is the same
+advanced search surface and state as the main workspace, including chips,
 tag completion, attachment/presence filters, relative or local dates, and syntax help. A
 well-formed structured value becomes a chip only after an explicit impossible continuation
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
