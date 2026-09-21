@@ -418,6 +418,10 @@ and identity-less legacy entries remain conservatively blocking.
   `main.tsx` derives their typed models and retains lifecycle/event wiring (HS2-BMASD4).
   Those adapters are catalog-exempt because they compose production components whose
   standalone and in-context states already have catalog coverage.
+  Together with the setup/settings extraction, these boundaries complete the inline
+  component migration tracked by HS2-VBRC6A: `main.tsx` contains application-state
+  derivation and event/effect wiring, while exported PascalCase UI components live under
+  `components/` with their ownership tests and catalog accounting.
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global
