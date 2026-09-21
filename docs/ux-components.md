@@ -815,7 +815,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   annotations. High-frequency playback and scrub updates stay inside the gallery DOM, and gallery
   teardown releases the video decoder/resource. Native video controls stay disabled so the component
   has one consistent cross-browser control surface. The `/ux-demo` state exercises popup open,
-  mute, volume, click-away dismissal, timed annotations, and close/reopen transitions.
+  mute, volume, click-away dismissal, timed annotations, and close/reopen transitions. Its Kerf
+  `Toolbar`/`ToolbarControlGroup` chrome follows a 24px media inset, 16px peer-group/popup rhythm,
+  and 8px within-control rhythm while retaining explicit media-control geometry (HS2-4Y6SM9).
 - `TicketNotesSection`
 
 ### 4.2 Details and reader surfaces — feature floor

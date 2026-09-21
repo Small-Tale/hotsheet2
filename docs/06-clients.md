@@ -952,7 +952,11 @@ and identity-less legacy entries remain conservatively blocking.
   gallery does not add corner rounding to either the media or its sizing wrapper.
   Its filename uses inverse toolbar text, while navigation, action, close, and zoom
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
-  borders, icons, and hover states retain contrast over arbitrary images.
+  borders, icons, and hover states retain contrast over arbitrary images. Gallery chrome
+  uses canonical Kerf spacing: 24px between the media and viewport, 16px between peer
+  toolbar groups and around the volume popup, and 8px within toolbars, timeline controls,
+  footer controls, and connected popup actions; media-control dimensions remain explicit
+  geometry rather than spacing tokens (HS2-4Y6SM9).
   Note-referenced images resolve to the same gallery identity as their attached-file
   thumbnail. Known Markdown images carry their immutable attachment id, and the gallery
   resolves that id (then ticket plus filename) before consulting potentially shared

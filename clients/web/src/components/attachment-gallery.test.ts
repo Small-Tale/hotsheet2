@@ -11,6 +11,19 @@ describe('AttachmentGallery',()=>{
     expect(css).toMatch(/\.attachment-gallery__media-wrap \{[^}]*border-radius:0/);
     expect(css).toMatch(/\.attachment-gallery__media-wrap :is\(img,video\) \{[^}]*border-radius:0/);
   });
+  it('uses canonical gallery-chrome spacing while keeping media-control geometry explicit',()=>{
+    const css=readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).not.toMatch(/\.attachment-gallery__toolbar \{[^}]*padding:/);
+    expect(css).toMatch(/__toolbar \.kui-toolbar__trailing \{ gap: var\(--kui-space-m\)/);
+    expect(css).toMatch(/__canvas \{[^}]*padding: var\(--kui-space-l\)/);
+    expect(css).toMatch(/__footer \{[^}]*padding:var\(--kui-space-xs\) var\(--kui-space-m\) var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__timeline \{[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__volume-popup \{[^}]*padding:var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.attachment-gallery svg \{ width: remify\(24px\); height: remify\(24px\)/);
+    expect(css).toMatch(/__annotation i \{[^}]*width:remify\(12px\); height:remify\(12px\)/);
+    expect(css).toMatch(/__range-handle \{[^}]*width:remify\(16px\); height:remify\(32px\)/);
+  });
   it('shows the active image with accessible cyclic navigation controls',()=>{
     const markup=String(AttachmentGallery({images,activeUrl:'/b.svg'}));
     expect(markup).toContain('<dialog');expect(markup).toContain('Image 2 of 2: b.svg');
