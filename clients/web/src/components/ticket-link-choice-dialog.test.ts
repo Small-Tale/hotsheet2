@@ -35,5 +35,9 @@ describe('TicketLinkChoiceDialog', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-link-choice-dialog.css'), 'utf8');
     expect(css).toContain('@media (max-width: remify(512px))');
     expect(css).toContain('grid-template-areas: "status ticket arrow" ". source ."');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/__matches \{[^}]*gap: var\(--kui-space-none\)/);
+    expect(css).toMatch(/__matches > li > button \{[^}]*min-height: remify\(72px\)[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__ticket, \.ticket-link-choice-dialog__source \{[^}]*gap: var\(--kui-space-2xs\)/);
   });
 });

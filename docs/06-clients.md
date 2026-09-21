@@ -884,7 +884,9 @@ and identity-less legacy entries remain conservatively blocking.
   as accessible links. Activating one searches exact slugs across every open project:
   one match opens an exact, read-only reader layer above the current inspector or reader,
   no match reports a transient toast, and multiple matches open a compact source chooser
-  rather than the advanced-search surface. The explicit `@<project-id>/<ticket-slug>`
+  rather than the advanced-search surface. The chooser separates its major regions by 16 px,
+  keeps adjacent result rows connected at zero gap, uses 8 px row insets with a 72 px minimum
+  row height, and gives connected ticket/source metadata 4 px of air (HS2-4Y6SM9). The explicit `@<project-id>/<ticket-slug>`
   form, for example `@product-docs/HS2-BD09B6`, limits resolution to one open project and
   makes cross-project links unambiguous. A linked reader identifies its owning project and
   stack depth, and links inside it may push further layers without changing the workspace's
