@@ -411,6 +411,13 @@ and identity-less legacy entries remain conservatively blocking.
   state and retains effects and event handling, but no longer owns those surfaces' render
   branches (HS2-KB7ZA4). Their constituent production components remain the cataloged
   review units, so the component catalog does not duplicate internal composition wrappers.
+  Reader layers and app-level transient surfaces use the parallel
+  `components/reader-overlay-surfaces.tsx` boundary. It owns the reader stack and the
+  permission, AI conversation, repository/evidence, ticket/attachment menu, gallery,
+  command, connection, compatibility, app-tab, and not-working render adapters while
+  `main.tsx` derives their typed models and retains lifecycle/event wiring (HS2-BMASD4).
+  Those adapters are catalog-exempt because they compose production components whose
+  standalone and in-context states already have catalog coverage.
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global

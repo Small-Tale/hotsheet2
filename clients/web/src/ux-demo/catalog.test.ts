@@ -92,6 +92,7 @@ describe('UX demo catalog', () => {
       'provider-icon': 'Provider glyph helper shown within ListItem and provider rows (demoed).',
       'provider-model-effort-menu': 'Shared Provider/Model/Effort submenu composed into DriveOptionsMenu and AIConversation (demoed).',
       'repository-setup': 'Initialize/remote setup steps rendered within RepositoryStatusPopover (demoed).',
+      'reader-overlay-surfaces': 'Internal typed composition boundary for individually cataloged reader, dialog, menu, gallery, and transient surfaces.',
       'server-busy-bars': 'Small server-activity indicator composed into headers/banners.',
       'ticket-duplicate-backlinks': 'Duplicate-of backlink panel rendered within TicketInfoPanel (demoed).',
       'ticket-empty-state': 'Empty-collection state rendered within TicketList (demoed).',
