@@ -773,7 +773,9 @@ and identity-less legacy entries remain conservatively blocking.
   transcript sequence, grouping adjacent activity while preserving their position between
   messages. Each Activity card carries one persistent, accessible AI-generated/may-contain-errors
   cue instead of repeating the disclosure on every row; row feedback retains its originating tool
-  identity. Long summaries remain contained, and backtick-delimited commands render as wrapping
+  identity. The cue uses 8px between attribution and feedback, 4px inside each connected cluster,
+  and keeps its 32px feedback targets plus 12px glyphs as explicit geometry (HS2-4Y6SM9).
+  Long summaries remain contained, and backtick-delimited commands render as wrapping
   monospace code (HS2-4NYP8C, HS2-3NG164, HS2-0YES4Y). The
   dialog uses the shared compact dialog header instead of stacking a second application header
   beneath the platform dialog title. Its secondary line reports useful ready/working/message-count

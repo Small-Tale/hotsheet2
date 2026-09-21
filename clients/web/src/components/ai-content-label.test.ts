@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import {describe,expect,it} from 'vitest';
 
 import {AIContentLabel} from './ai-content-label';
@@ -10,4 +12,5 @@ describe('AIContentLabel',()=>{
     expect(markup).toContain('Not helpful — stop suggestions like this');
     expect(markup).toContain('data-ai-feedback-target="note:one"');
   });
+  it('uses semantic spacing while keeping feedback targets and glyphs explicit geometry',()=>{const css=readFileSync(new URL('./ai-content-label.css',import.meta.url),'utf8');expect(css).not.toContain('--wa-space-');expect(css).toMatch(/\.ai-content-label \{[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/__attribution \{ gap: var\(--kui-space-2xs\)/);expect(css).toMatch(/__feedback \{ gap: var\(--kui-space-2xs\)/);expect(css).toMatch(/__feedback button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);expect(css).toMatch(/__feedback svg \{ width: remify\(12px\); height: remify\(12px\)/)});
 });

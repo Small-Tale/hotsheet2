@@ -309,7 +309,9 @@ does not introduce polling or another network request.
   - narratable normalized activity for the connection/session appears as a bounded “Activity”
     sequence alongside the transcript. The group carries one persistent, accessible
     “AI-generated summaries may contain errors” cue rather than repeating it on every row;
-    row-specific feedback controls retain the originating tool identity. Backtick-delimited
+    row-specific feedback controls retain the originating tool identity. This app-specific
+    disclosure/feedback adapter uses the canonical 8px group and 4px cluster rhythm while
+    retaining explicit 32px feedback targets. Backtick-delimited
     commands render as wrapping monospace code, and long summaries stay inside the card. Raw
     native activity may drive the immediate working label, but it does not substitute for
     normalized activity entries in this sequence (HS2-4NYP8C, HS2-3NG164, HS2-0YES4Y)
