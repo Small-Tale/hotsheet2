@@ -165,7 +165,7 @@ describe('TicketInspector', () => {
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);
-    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }');
+    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }');
   });
 
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {

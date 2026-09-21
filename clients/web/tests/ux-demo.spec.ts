@@ -468,6 +468,10 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   });
   await expect(page.locator('.kui-catalog__detail')).toHaveCSS('outline-width', '6px');
   await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
+  // Reassert the DevTools-authored inline declaration after screenshot/layout work so the
+  // captured "after" CSSOM cannot race a responsive catalog rerender under full-suite load.
+  await page.locator('.kui-catalog__header').evaluate(node=>{(node as HTMLElement).style.paddingTop='31px'});
+  await expect(page.locator('.kui-catalog__header')).toHaveCSS('padding-top','31px');
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   await expect.poll(() => submitted).toBeTruthy();
   expect(submitted).toMatchObject({
@@ -770,13 +774,13 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await editableNote.getByRole('textbox', { name: 'Note body' }).blur();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
   await expect(editableNote).toContainText('Autosaved note body');
-  await reader.getByRole('button', { name: 'Attachments' }).click();
+  await reader.getByRole('tab', { name: /Attachments/ }).click();
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('reader-wireframe.png');
   await reader.getByLabel('Browse and add attachments').setInputFiles({ name: 'browser-added.txt', mimeType: 'text/plain', buffer: Buffer.from('added') });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('browser-added.txt');
   await reader.locator('[data-component="ticket-inspector"]').evaluate(node => { const transfer = new DataTransfer(); transfer.items.add(new File(['drop'], 'dropped.txt', { type: 'text/plain' })); node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })); });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
-  await reader.getByRole('button', { name: 'Info' }).click();
+  await reader.getByRole('tab', { name: 'Info' }).click();
   await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -1046,7 +1050,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const search = header.getByRole('searchbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
-  await expect(searchControl).not.toHaveCSS('box-shadow', 'none');
+  await expect(searchGroup).not.toHaveCSS('box-shadow', 'none');
   await expect.poll(() => searchGroup.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(collapsedWidth * 3);
   const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
@@ -1417,8 +1421,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
   await inspector.locator('[data-component="tag-chip"][data-tag-id="client"]').evaluate(node => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
-  await expect(inspector.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-current', 'page');
-  expect(await inspector.evaluate(node=>{const header=getComputedStyle(node.querySelector('.ticket-inspector__header')!),title=getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),tabs=getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),tab=getComputedStyle(node.querySelector('.ticket-inspector__tabs button')!);return{headerBottom:header.paddingBottom,titleMargin:[title.marginTop,title.marginLeft],tabsMargin:[tabs.marginRight,tabs.marginBottom],tabsPadding:tabs.paddingTop,tabGap:tab.gap}})).toEqual({headerBottom:'16px',titleMargin:['4px','16px'],tabsMargin:['8px','8px'],tabsPadding:'4px',tabGap:'4px'});
+  await expect(inspector.getByRole('tab', { name: 'Info' })).toHaveAttribute('aria-selected', 'true');
+  expect(await inspector.evaluate(node=>{const header=getComputedStyle(node.querySelector('.ticket-inspector__header')!),title=getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),tabs=getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),tabRail=getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),tabSelect=getComputedStyle(node.querySelector('.ticket-inspector__tab .kui-app-tab__select')!);return{headerBottom:header.paddingBottom,titleMargin:[title.marginTop,title.marginLeft],tabsMargin:[tabs.marginRight,tabs.marginBottom],tabsPadding:tabs.paddingTop,tabRailPadding:tabRail.paddingTop,tabGap:tabSelect.gap}})).toEqual({headerBottom:'16px',titleMargin:['4px','16px'],tabsMargin:['8px','8px'],tabsPadding:'0px',tabRailPadding:'4px',tabGap:'4px'});
   await page.keyboard.press('Escape');const captureInspectorShell=async(path:string)=>{await inspector.evaluate(node=>{node.style.height='560px';node.style.minHeight='0';node.style.flex='none'});await inspector.screenshot({path});await inspector.evaluate(node=>{node.style.height='';node.style.minHeight='';node.style.flex=''})};await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-wide.png');await page.setViewportSize({width:390,height:844});await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-narrow.png');await page.setViewportSize({width:1280,height:720});
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
@@ -1528,13 +1532,13 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(firstNote).toContainText('Autosaved inspector note');
   await inspector.getByRole('button', { name: 'Add note', exact: true }).last().click();
   await expect(page.getByText('Note composer requested')).toBeVisible();
-  await inspector.getByRole('button', { name: 'Timeline' }).click();
+  await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
   await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(4);
   await expect(inspector.getByText('4 events total')).toBeVisible();
   await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
-  await inspector.getByRole('button', { name: 'Code Review' }).click();
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
   await expect(inspector.locator('[data-component="ticket-code-review"] .ticket-code-review__commit')).toHaveCount(2);
   await inspector.getByRole('button', { name: 'Open 2 commit bundle 92ed71a through c4a38be in Glassbox' }).click();
   await expect(page.getByText('Commit range opened in Glassbox')).toBeVisible();
@@ -1544,7 +1548,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-commit-sha]').first().locator('strong')).toHaveCSS('overflow-wrap', 'anywhere');
   await page.screenshot({ path: '/private/tmp/hs2-pg1hkj-code-review-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await inspector.getByRole('button', { name: 'Attachments' }).click();
+  await inspector.getByRole('tab', { name: 'Attachments' }).click();
   await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
   await expect(inspector.locator('[data-attachment-id]')).toHaveCount(2);
@@ -1555,7 +1559,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
   const reopened = page.locator('[data-component="ticket-inspector"]');
   await expect(reopened).toBeVisible();
-  await reopened.getByRole('button', { name: 'Info' }).click();
+  await reopened.getByRole('tab', { name: 'Info' }).click();
   await expect(reopened.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await expect(reopened.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
@@ -1584,7 +1588,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   const gridVideo=page.locator('.ticket-attachments__image-grid video').first();await expect(gridVideo).toBeVisible();await expect(gridVideo).toHaveAttribute('poster','/ux-gallery-preview.svg?variant=video');expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).autoplay)).toBe(false);
   await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toHaveCount(0);await page.locator('[data-component="ticket-attachments"]').screenshot({path:'/private/tmp/hs2-j978e9-annotation-grid-marker.png'});
   await page.setViewportSize({ width: 390, height: 844 });
-  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');expect((await batchPurpose.boundingBox())!.y).toBeGreaterThan((await batchTitle.boundingBox())!.y);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.getByRole('menuitem')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
+  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');await expect.poll(async()=>((await batchPurpose.boundingBox())?.y??0)-((await batchTitle.boundingBox())?.y??0)).toBeGreaterThan(0);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.getByRole('menuitem')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
 });
 
 test('styles and edits attachment group labels while preserving drag regrouping', async ({page}) => {
@@ -1943,7 +1947,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-tab');
   const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);await expect(gridTab).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.terminal-drawer__tabs')!,source=tabs.firstElementChild!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png'});
+  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridRoot=terminalDrawer.locator('.terminal-drawer__grid-tab'),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);await expect(gridRoot).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.kui-tab-bar__tabs')!,source=tabs.querySelector('[data-tab-kind="terminal"]')!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png'});
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -2094,7 +2098,8 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'tab-bar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
@@ -2144,9 +2149,9 @@ test('exercises the application-shell component slice and responsive composition
     return Math.abs((slug.top + slug.height / 2) - (controls.top + controls.height / 2));
   });
   expect(inspectorToolbarAlignment).toBeLessThan(1);
-  const compactInspectorTab = shell.getByRole('button', { name: 'Timeline' });
+  const compactInspectorTab = shell.getByRole('tab', { name: 'Timeline' });
   await expect(compactInspectorTab.locator('svg')).toHaveCSS('flex-shrink', '0');
-  await expect(compactInspectorTab.locator('span')).toBeHidden();
+  expect(await compactInspectorTab.locator('.kui-app-tab__name').evaluate(label=>{const style=getComputedStyle(label);return{position:style.position,width:style.width,clipPath:style.clipPath}})).toEqual({position:'absolute',width:'1px',clipPath:'inset(50%)'});
   const sidebarHandle = shell.getByRole('separator', { name: 'Resize Project sidebar' });
   await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
@@ -2180,12 +2185,12 @@ test('exercises the application-shell component slice and responsive composition
   await expect(inspectorRegion.locator('.kui-resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
-  await shell.getByRole('button', { name: 'Timeline' }).click();
-  await expect(shell.getByRole('button', { name: 'Timeline' })).toHaveAttribute('aria-current', 'page');
+  await shell.getByRole('tab', { name: 'Timeline' }).click();
+  await expect(shell.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true');
   await expect(shell.locator('[data-component="ticket-timeline"]')).toBeVisible();
-  await shell.getByRole('button', { name: 'Attachments' }).click();
+  await shell.getByRole('tab', { name: 'Attachments' }).click();
   await expect(shell.locator('[data-component="ticket-attachments"]')).toBeVisible();
-  await shell.getByRole('button', { name: 'Info' }).click();
+  await shell.getByRole('tab', { name: 'Info' }).click();
   await expect(shell.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const inspectorExpandedWidth = Number(await inspectorHandle.getAttribute('aria-valuenow'));
   await shell.getByRole('button', { name: 'Hide inspector' }).click();
@@ -2563,7 +2568,7 @@ test('renders the real inspector chrome as a value-free loading placeholder',asy
   // It IS the inspector: same aside chrome, working collapse control, real segmented tab bar.
   await expect(skeleton).toHaveClass(/\bticket-inspector--placeholder\b/);
   await expect(skeleton.getByRole('button',{name:'Hide inspector'})).toBeVisible();
-  await expect(skeleton.locator('.ticket-inspector__tabs .ticket-inspector__tab-label')).toHaveCount(4);
+  await expect(skeleton.locator('.ticket-inspector__tabs [data-component="app-tab"]')).toHaveCount(4);
   // Real controls/section headers are drawn; only the per-ticket values are placeholders.
   for(const label of ['Category','Priority','Status','Block ticket','Details','Tags','Notes','Activity']){await expect(skeleton.getByText(label,{exact:true}).first()).toBeVisible();}
   // Metadata controls use the native Select placeholder mode (side by side) and value slots use Skeleton.

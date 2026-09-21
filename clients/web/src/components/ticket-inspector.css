@@ -27,4 +27,4 @@
 .ticket-inspector__tab-count { display: inline-grid; min-width: remify(16px); height: remify(16px); padding: 0 var(--kui-space-2xs); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); place-items: center; font-size: var(--wa-font-size-3xs); font-weight: 700; line-height: 1; }
 .ticket-inspector__tab[data-selected="true"] .ticket-inspector__tab-count { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); }
 .ticket-inspector__tab-count-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@container (max-width: remify(832px)) { .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }

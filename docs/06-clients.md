@@ -267,7 +267,10 @@ and identity-less legacy entries remain conservatively blocking.
   emit `hotsheet:interaction-timing` after the next painted frame for project/view/mode
   navigation, ticket selection, Up Next and status changes, bulk changes, and permission
   decisions. Each event reports state-update and painted-UI latency against a 100 ms
-  budget and is copied into the bounded, value-free UI-stability event log. The
+  budget and is copied into the bounded, value-free UI-stability event log. Ticket selection
+  measures the immediate row response; its asynchronous detail fetch and inspector presentation
+  are a follow-up rather than blocking the interaction sample. Optimistic list and inspector
+  ticket mutations are committed in one reactive batch. The
   138-ticket browser profile enforces that budget for the primary paths. Render events include cumulative
   counters plus per-pass deltas so a captured storm distinguishes reactive rerenders
   from unrelated DOM activity. Three unexpected quick select dismissals within ten
@@ -1510,7 +1513,9 @@ stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to t
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
-changing rows, columns, or glyph proportions. Magnifying a grid tile preserves
+changing rows, columns, or glyph proportions. Magnified interactive grids first fit their font
+metrics to the fixed frame, then apply only the measured uniform residual scale so at least one
+screen edge is flush without stretching either axis. Magnifying a grid tile preserves
 the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
 never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
 remain fitted to their actual interactive viewport and reserve one physical containment row;
@@ -1579,8 +1584,11 @@ open/closed drawer preference is preserved so it returns unchanged on the next t
 restore action stays 16 px from the shell's trailing and bottom edges (HS2-4Y6SM9). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
 the content area. Its grid tab
-never shrinks when terminal tabs consume the available width. The terminal tabs scroll
-horizontally, with the explicit quiet pill-shaped plus action immediately after them; plus
+never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
+its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
+the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
+at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
+one-shot input focus; plus
 opens a direct shared-menu choice of Default shell, AI shell, or AI chat. The menu has no
 redundant heading, and leaf actions do not display submenu chevrons. The rail and terminal inset
 use Kerf's canonical 8 px within-group rhythm, the tab-strip focus gutter and icon-label clusters
@@ -1716,8 +1724,9 @@ ticket reader or its not-found/ambiguity feedback. The provider reads xterm's pa
 and ranges rather than terminal DOM or HTML, so ANSI styling, wrapped rows, WebGL rendering,
 selection, focus, and normal input remain intact. Scaled dashboard previews deliberately do
 not register the provider. Magnified desktop terminals fit their real xterm font metrics to
-the fixed frame instead of CSS-transforming the interactive surface, keeping xterm pointer
-hit-testing and selection aligned with the visible 80×24 cells (HS2-2DW829).
+the fixed frame and apply a uniform measured residual physical scale, keeping glyph proportions,
+pointer hit-testing, selection, and a flush frame edge aligned with the visible 80×24 cells
+(HS2-2DW829).
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
@@ -1725,7 +1734,7 @@ fallback after load failure or context loss). Apple WebKit, including every iOS 
 the DOM renderer because WebGL context creation is not sufficient proof that Safari will paint
 the glyph layer. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
 DOM renderer. Read-only previews are uniformly CSS-scaled, while interactive magnified
-surfaces fit font metrics without transforming pointer coordinates; scaling a WebGL raster makes
+surfaces fit font metrics before a small uniform residual scale; scaling a WebGL raster makes
 the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
 scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.

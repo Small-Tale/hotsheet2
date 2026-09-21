@@ -29,10 +29,10 @@ async function openDemoProject(page:import('@playwright/test').Page,withTerminal
 test('mobile floating controls stay inside the dynamic viewport and safe area (HS2-43N9ZB)',async({page})=>{
   await page.setViewportSize({width:390,height:844});await openDemoProject(page,true);
   await page.evaluate(()=>{document.documentElement.style.setProperty('--hotsheet-safe-area-bottom','48px')});
-  const restore=page.getByRole('button',{name:'Show terminal drawer'});await expect(restore).toBeVisible();
+  const restore=page.getByRole('button',{name:'Show terminal drawer'}),restoreToolbar=page.locator('.app-shell__terminal-drawer-restore');await expect(restore).toBeVisible();
   const rootGeometry=await page.evaluate(()=>({innerHeight,html:document.documentElement.getBoundingClientRect().height,body:document.body.getBoundingClientRect().height,app:document.querySelector('#app')!.getBoundingClientRect().height,shell:document.querySelector('[data-component="app-shell"]')!.getBoundingClientRect().height}));expect(rootGeometry).toEqual({innerHeight:844,html:844,body:844,app:844,shell:844});
-  const restoreBottom=await restore.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(restoreBottom).toBeCloseTo(64,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-drawer-restore.png',fullPage:true});
-  await page.getByRole('button',{name:'Workspace grid'}).click();const zoom=page.getByRole('group',{name:'Workspace tile zoom'});await expect(zoom).toBeVisible();const zoomBottom=await zoom.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(zoomBottom).toBeCloseTo(60.8,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-floating-controls.png',fullPage:true});
+  const restoreBottom=await restoreToolbar.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(restoreBottom).toBeCloseTo(64,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-drawer-restore.png',fullPage:true});
+  await page.getByRole('button',{name:'Workspace grid'}).click();const zoom=page.getByRole('toolbar',{name:'Workspace tile zoom'}),zoomToolbar=page.locator('.terminal-dashboard__zoom');await expect(zoom).toBeVisible();const zoomBottom=await zoomToolbar.evaluate(node=>innerHeight-node.getBoundingClientRect().bottom);expect(zoomBottom).toBeCloseTo(64,0);await page.screenshot({path:'/private/tmp/hs2-43n9zb-mobile-floating-controls.png',fullPage:true});
 });
 
 test('mobile viewport uses a single-column layout with overlay sidebars, one at a time (HS2-ZK51WP)',async({page})=>{
@@ -85,8 +85,8 @@ test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays witho
   const sidebar=page.locator('.kui-resizable-region[data-region-id="app-sidebar"]'),inspector=page.locator('.kui-resizable-region[data-region-id="app-inspector"]'),scrim=page.locator('.app-shell__scrim');
   await page.locator('[data-ticket-slug="HS2-M1"]').click();await expect(inspector).toHaveAttribute('data-collapsed','false');await scrim.click({position:{x:10,y:400}});await expect(inspector).toHaveAttribute('data-collapsed','true');
   await page.keyboard.press(`${modifier}+b`);await expect(sidebar).toHaveAttribute('data-collapsed','false');await expect(inspector).toHaveAttribute('data-collapsed','true');await expect(scrim).toBeVisible();
-  await page.keyboard.press(`${modifier}+Alt+b`);await expect(sidebar).toHaveAttribute('data-collapsed','true');await expect(inspector).toHaveAttribute('data-collapsed','false');await expect(scrim).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-kn79xp-mobile-keyboard-overlays.png',fullPage:true});
-  await page.keyboard.press(`${modifier}+Alt+b`);await expect(inspector).toHaveAttribute('data-collapsed','true');await expect(scrim).toHaveCount(0);
+  await page.keyboard.press(`${modifier}+Alt+Shift+b`);await expect(sidebar).toHaveAttribute('data-collapsed','true');await expect(inspector).toHaveAttribute('data-collapsed','false');await expect(scrim).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-kn79xp-mobile-keyboard-overlays.png',fullPage:true});
+  await page.keyboard.press(`${modifier}+Alt+Shift+b`);await expect(inspector).toHaveAttribute('data-collapsed','true');await expect(scrim).toHaveCount(0);
   await page.setViewportSize({width:1280,height:800});await expect(sidebar).toHaveAttribute('data-collapsed','false');await expect(inspector).toHaveAttribute('data-collapsed','false');
 });
 

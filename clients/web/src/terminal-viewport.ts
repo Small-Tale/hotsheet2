@@ -64,6 +64,11 @@ export function terminalPhysicalScale(screenWidth:number,screenHeight:number,tar
   return Math.min(targetWidth/screenWidth,targetHeight/screenHeight);
 }
 
+export function terminalFittedFontSize(current:number,physicalScale:number):number {
+  if(!Number.isFinite(current)||!Number.isFinite(physicalScale)||current<=0||physicalScale<=0)return 4;
+  return Math.max(4,current*physicalScale);
+}
+
 export function terminalDedicatedGridSize(cols:number,rows:number) {
   return {cols:Math.max(1,cols),rows:Math.max(1,rows-1)};
 }

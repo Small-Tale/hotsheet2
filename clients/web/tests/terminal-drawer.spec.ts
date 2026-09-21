@@ -6,7 +6,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
 
   const drawer = page.locator('[data-component="terminal-drawer"]');
   const gridTab = drawer.getByRole('tab', { name: 'Project grid' });
-  const tabs = drawer.locator('.terminal-drawer__tabs');
+  const tabs = drawer.locator('.kui-tab-bar__tabs');
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
 
   const shadowGutter = await tabs.evaluate(node => {
@@ -25,8 +25,8 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   });
   await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-narrow.png' });
   await drawer.evaluate(node => {
-    const tabs = node.querySelector('.terminal-drawer__tabs')!;
-    const source = tabs.firstElementChild!;
+    const tabs = node.querySelector('.kui-tab-bar__tabs')!;
+    const source = tabs.querySelector('[data-tab-kind="terminal"]')!;
     for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));
   });
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);

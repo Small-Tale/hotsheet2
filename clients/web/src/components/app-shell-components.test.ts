@@ -17,7 +17,7 @@ describe('application shell components', () => {
     const productionCss=readFileSync(new URL('../style.css',import.meta.url),'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/data-collapsed="true"[^}]*__content \{[^}]*translateY\(var\(--kui-space-l\)\)/);
-    expect(css).toMatch(/\.app-shell__terminal-drawer-restore \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-right\)\); inset-block-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-bottom\)\)/);
+    expect(css).toMatch(/\.app-shell__terminal-drawer-restore\.kui-floating-toolbar\[data-position="bottom-end"\] \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-right\)\); inset-block-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-bottom\)\)/);
     expect(productionCss).toMatch(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
   });
@@ -61,6 +61,10 @@ describe('application shell components', () => {
     expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-sidebar"]::after { display: none; }');
     expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region:is([data-region-id="app-sidebar"], [data-region-id="app-inspector"]) { --kui-resizable-region-separator-color: transparent; }');
     expect(css).toContain('.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-inspector"] { border-left-color: transparent; }');
+  });
+  it('keeps inspector-sidebar tabs icon-only independently of the reader width', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    expect(css).toContain('.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }');
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');

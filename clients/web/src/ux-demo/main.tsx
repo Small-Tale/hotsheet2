@@ -1530,8 +1530,7 @@ delegate(
   'click',
   '[data-action="set-inspector-tab"]',
   (_event, target) => {
-    const tab = (target as HTMLElement).dataset
-      .inspectorTab as typeof inspectorTab.value;
+    const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
     if (selectedId.value === 'ticket-reader') readerTab.value = tab;
     else inspectorTab.value = tab;
   },
