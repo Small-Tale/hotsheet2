@@ -1,12 +1,15 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 import './ticket-inspector-panel.css';
 import './ticket-inspector-skeleton.css';
 
+import { AppTab } from '@kerfjs/ui/app-tab';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Skeleton } from '@kerfjs/ui/skeleton';
+import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -37,7 +40,7 @@ function PlaceholderNote({ kind, card = false }: { kind: 'activity' | 'regular';
 
 /**
  * Loading placeholder for the ticket inspector (HS2-REG3A2): it renders the REAL inspector
- * chrome — header, segmented tab bar, metadata controls, and section headers — with the unknown
+ * chrome — header, Kerf tab bar, metadata controls, and section headers — with the unknown
  * ticket values shown as subtle, unanimated placeholder blocks. Since kerf-ui 5.0.0-beta.7 the
  * value slots use the framework's native component `placeholder` mode and `Skeleton` block, so the
  * metadata controls track the real Select sizes automatically instead of hand-maintained CSS
@@ -53,7 +56,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
       <Toolbar divider={false} center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width="5.5rem" height="1rem" />} trailing={actions} />
       <div class="ticket-inspector__ph-title" aria-hidden="true"><Skeleton height="1.25rem" /><Skeleton width="62%" height="1.25rem" /></div>
     </header>
-    <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections" aria-hidden="true">{TABS.map(tab => <button type="button" tabIndex={-1} aria-current={tab.id === 'info' ? 'page' : undefined} data-key={tab.id}><LucideIcon icon={tab.icon} name={tab.iconName} /><span class="ticket-inspector__tab-label">{tab.label}</span></button>)}</nav>
+    <div aria-hidden="true"><TabBar id="ticket-inspector-loading" label="Ticket inspector sections" className="ticket-inspector__tabs">{TABS.map(tab => <AppTab id={tab.id} name={tab.label} selected={tab.id === 'info'} closable={false} placeholder leading={<LucideIcon icon={tab.icon} name={tab.iconName} />} />)}</TabBar></div>
     <div class="ticket-inspector__content" aria-hidden="true">
       <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
         <TicketCategorySelect name="inspector-category" value="" placeholder />

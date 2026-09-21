@@ -2023,7 +2023,12 @@ remembered when the reader closes and applies the next time any ticket opens.
 The sidebar inspector and reader each own and persist their selected tab for the project.
 Changing one surface's tab never changes the other; reopening or restoring the project
 returns each surface to its own last selection. Feedback-response entry intentionally
-opens the reader's Info tab without disturbing the sidebar selection.
+opens the reader's Info tab without disturbing the sidebar selection. The Info, Timeline,
+Code Review, and Attachments panels use Kerf's controlled `TabBar`/`AppTab` composition in
+the sidebar, reader, and terminal ticket rail. Exactly one tab is selected and keyboard
+focusable; Arrow, Home, and End keys move focus and activate the corresponding panel, while
+narrow inspectors retain the same accessible tab names when their visible labels collapse
+to icons. Attachments keeps its visible and accessible count badge.
 Leaving the details editor flushes its pending autosave and returns that surface to
 preview. When a pointer action outside the editor causes that blur, the save begins
 immediately but the editor remains mounted until the originating click has reached its

@@ -23,7 +23,9 @@ describe('TicketInspector', () => {
     for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
       const markup = String(TicketInspector({ ...base, activeTab: tab }));
       expect(markup).toContain('HS2-TEST');
-      expect(markup).toContain(`data-inspector-tab="${tab}" aria-label="${tab === 'info' ? 'Info' : tab === 'timeline' ? 'Timeline' : tab === 'code-review' ? 'Code Review' : 'Attachments'}" aria-current="page"`);
+      expect(markup).toContain('data-component="tab-bar" data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST" data-tab-activation="automatic" aria-label="Ticket inspector sections"');
+      expect(markup).toContain(`data-inspector-tab="${tab}" class="kui-app-tab ticket-inspector__tab" data-component="app-tab" data-tab-id="${tab}" data-selected="true"`);
+      expect(markup).toContain(`role="tab" aria-selected="true" data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`);
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
       expect(markup).toContain('data-component="toolbar-text" data-size="small"><span class="kui-toolbar-text__text">HS2-TEST');
@@ -38,7 +40,7 @@ describe('TicketInspector', () => {
     }
   });
 
-  it('changes only the Code Review segment icon', () => {
+  it('changes only the Code Review tab icon', () => {
     const markup = String(TicketInspector({ ...base, activeTab: 'code-review', codeReview: { difftool: 'Glassbox', truncated: false, ranges: [], commits: [{ sha: 'abcdef', short_sha: 'abcdef', subject: 'Review action', committed_at: '2026-09-02T08:00:00Z' }] } }));
     expect(markup).toContain('data-inspector-tab="code-review"');
     expect(markup).toContain('data-lucide="message-square-code"');
@@ -136,11 +138,11 @@ describe('TicketInspector', () => {
     expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: var\(--kui-space-xs\);[^}]*warning-border-normal[^}]*warning-fill-quiet/);
   });
 
-  it('shows a derived attachment count on the attachments segment', () => {
+  it('shows a visible and accessible derived attachment count on the attachments tab', () => {
     const markup = String(TicketInspector({ ...base, attachments: [{ id: 'one', name: 'one.png' }, { id: 'two', name: 'two.md' }] }));
-    expect(markup).toContain('aria-label="Attachments, 2"');
     expect(markup).toContain('ticket-inspector__tab-count');
-    expect(markup).toContain('>2</span>');
+    expect(markup).toContain('<span aria-hidden="true">2</span>');
+    expect(markup).toContain('ticket-inspector__tab-count-label">2 attachments</span>');
     expect(String(TicketInspector({ ...base, attachments: [] }))).not.toContain('ticket-inspector__tab-count');
   });
 
@@ -156,20 +158,21 @@ describe('TicketInspector', () => {
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
     expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
-    expect(inspectorCss).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tab \{[^}]*min-width: 0;[^}]*flex: 1 1 0/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
     expect(panelCss).toContain('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);
-    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tab-label { display: none; } }');
+    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }');
   });
 
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: var\(--kui-space-2xs\)/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \.kui-tab-bar__tabs \{[^}]*padding: var\(--kui-space-2xs\)/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/);
     // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the

@@ -1,7 +1,10 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
+import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -110,7 +113,9 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
     {closeReason==='duplicate'&&(duplicateTarget?<TicketDuplicateTarget target={duplicateTarget}/>:<div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate"><LucideIcon icon={CopyX} name="copy-x"/><span>Duplicate of another ticket</span></div>)}
     <TicketDuplicateBacklinks backlinks={duplicateBacklinks} inaccessibleProjects={duplicateBacklinkInaccessibleProjects}/>
     {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
-    <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.id === 'attachments' && attachments?.length ? `${tab.label}, ${attachments.length}` : tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span class="ticket-inspector__tab-label">{tab.label}</span>{tab.id === 'attachments' && Boolean(attachments?.length) && <span class="ticket-inspector__tab-count" aria-hidden="true">{attachments!.length}</span>}</button>)}</nav>
+    <TabBar id={`ticket-inspector-${presentation}-${slug}`} label="Ticket inspector sections" className="ticket-inspector__tabs" activation="automatic">
+      {tabs.map(tab => <AppTab id={tab.id} name={tab.label} selected={activeTab === tab.id} closable={false} selectAction="set-inspector-tab" className="ticket-inspector__tab" rootAttributes={{'data-inspector-tab':tab.id}} leading={<LucideIcon icon={tab.icon} name={tab.iconName} />} trailing={tab.id === 'attachments' && attachments?.length ? <span class="ticket-inspector__tab-count"><span aria-hidden="true">{attachments.length}</span><span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span></span> : undefined} />)}
+    </TabBar>
     {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} tagSuggestions={tagSuggestions} tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`} canUpdate={canUpdate} canEditText={canEditText} canAddNotes={canAddNotes} canEditNotes={canEditNotes} canDeleteNotes={canDeleteNotes} composingNote={composingNote} composerDraft={composerDraft} details={details} detailsMode={detailsMode} detailsDirty={detailsDirty} readerPresentation={presentation === 'reader'} feedbackNeeded={feedbackNeeded} notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} inlineFeedbackReplies={inlineFeedbackReplies} feedbackChoiceSelections={feedbackChoiceSelections} blockedReason={blockedReason} blockedReasonEditing={blockedReasonEditing} blockedReasonDraft={blockedReasonDraft} providerName={providerName} updatedLabel={updatedLabel} attachmentContext={attachmentContext} />}
     {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
     {activeTab === 'code-review' && <TicketCodeReview review={codeReview} loading={codeReviewLoading} message={codeReviewMessage} expandedCommits={expandedCodeReviewCommits} />}
