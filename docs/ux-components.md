@@ -1020,8 +1020,10 @@ capability-aware sections when their underlying features and data contracts land
 - A context or overflow menu owns alternate actions: “Run in new terminal” for shell
   commands and capability-aware “Create task from command” for AI commands. These do not
   replace the history gesture (HS2-NT3F3Q).
-- `CommandRunDialog` owns output and cancellation presentation. Completion and stop
-  changes arrive through the existing long poll; the client never interval-polls.
+- `CommandRunDialog` owns output and cancellation presentation. Its dialog surface uses a
+  24 px major inset, 16 px between regions, 8 px within output/action groups, and 4 px between
+  an action icon and its label (HS2-4Y6SM9). Completion and stop changes arrive through the
+  existing long poll; the client never interval-polls.
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
   whose group headers come from each command's `group`, with ungrouped commands at the top.
