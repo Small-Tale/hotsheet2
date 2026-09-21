@@ -910,6 +910,25 @@ test('omits status sorting from column view and restores it in list view', async
   await page.screenshot({ path: '/private/tmp/hs2-nydfqf-column-sort-options.png', fullPage: true });
 });
 
+test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  const header=page.locator('[data-component="workspace-header"]');
+  const sort=header.locator('wa-select[name="workspace-sort"]');
+  const group=header.locator('.workspace-header__sort-group');
+  await header.getByRole('button',{name:'Settings view'}).focus();
+  await page.keyboard.press('Tab');
+  await expect.poll(()=>sort.evaluate(node=>node.matches(':focus-within'))).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(sort).toHaveJSProperty('open',true);
+  const geometry=await group.evaluate(node=>{const style=getComputedStyle(node),box=node.getBoundingClientRect(),combobox=node.querySelector<HTMLElement>('wa-select')!.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!,comboboxStyle=getComputedStyle(combobox);return{width:box.width,height:box.height,radius:style.borderRadius,outlineStyle:style.outlineStyle,outlineWidth:style.outlineWidth,outlineOffset:style.outlineOffset,comboboxOutlineStyle:comboboxStyle.outlineStyle}});
+  expect(geometry.width).toBeGreaterThan(geometry.height);
+  expect(Number.parseFloat(geometry.radius)).toBeGreaterThan(geometry.height);
+  expect(geometry).toMatchObject({outlineStyle:'solid',outlineWidth:'3px',outlineOffset:'1px',comboboxOutlineStyle:'none'});
+  const box=(await group.boundingBox())!,x=Math.max(0,box.x-12),y=Math.max(0,box.y-12);
+  await page.screenshot({path:'/private/tmp/hs2-m1df1d-pill-focus-ring-wide.png',clip:{x,y,width:Math.min(360,1280-x),height:Math.min(360,800-y)}});
+});
+
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');

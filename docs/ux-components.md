@@ -332,7 +332,9 @@ does not introduce polling or another network request.
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   compact shared `Select` sort control whose popup carries simple direction arrows while
   its tightly spaced trigger uses a semantic field-and-direction icon and accessible
-  label without clipping the chevron, and toggles
+  label without clipping the chevron. Its Web Awesome combobox ring is suppressed in favor
+  of one outer-group ring that remains visible while the popup is open and uses a true pill
+  radius even after the outline expands beyond the 44px group (HS2-M1DF1D). It toggles
   ascending/descending direction when reselected. Status follows workflow order, ascending
   priority runs from low through urgent, and list/column views remember independent sort
   settings. The demo connects those controls to its list/column/settings workspace. When its owning

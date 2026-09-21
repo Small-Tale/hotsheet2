@@ -1186,6 +1186,10 @@ and identity-less legacy entries remain conservatively blocking.
   with no selection or unsupported providers. After a successful status mutation, any
   ticket no longer present in Queue, Backlog, or Archive is removed from selection, and
   a hidden single-ticket inspector is cleared.
+  The compact sort `Select` draws exactly one focus ring on its enclosing control group:
+  the inner Web Awesome combobox ring is suppressed, the outer ring remains visible while
+  the popup is open, and a true pill radius keeps the expanded outline from reading as a
+  rounded rectangle around the 44px group (HS2-M1DF1D).
   When the center column contracts around an open sidebar/inspector or at 200% zoom,
   every control removed from the toolbar remains available from its keyboard- and
   touch-operable overflow menu. Utility actions relocate first, followed by sort,

@@ -15,17 +15,19 @@
 .workspace-header__actions wa-button[aria-pressed="true"]::part(base) { border-color: var(--kui-toolbar-control-selected-border); color: var(--kui-toolbar-control-selected-color); background: var(--kui-toolbar-control-selected-background); box-shadow: var(--kui-toolbar-control-selected-shadow); }
 .workspace-header__actions wa-button.workspace-header__text-action::part(base),wa-button.workspace-header__text-action::part(base) { width: auto; padding-inline: var(--wa-space-s); white-space: nowrap; }
 .workspace-header__text-action-label { display: inline-flex; align-items: center; gap: var(--wa-space-2xs); white-space: nowrap; }
+.workspace-header__sort-group { border-radius: var(--wa-border-radius-pill); }
 .workspace-header__sort { width: remify(44px); }
 /* The single sort group already paints the pill container/background; keep the Select's own
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
    out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
    control groups. */
-.workspace-header__sort::part(combobox) { position: relative; min-height: remify(32px); border: 0; border-radius: var(--wa-border-radius-pill); background: transparent; box-shadow: none; }
+.workspace-header__sort::part(combobox) { position: relative; min-height: remify(32px); border: 0; border-radius: var(--wa-border-radius-pill); outline: none; background: transparent; box-shadow: none; }
 /* Show one focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
    combobox, whose shape does not match the pill (HS2-M1DF1D). :focus-within reflects the wa-select's
-   shadow-internal focus onto the group; the group's own pill radius makes the ring a matching pill. */
-.workspace-header__sort::part(combobox):focus-visible, .workspace-header__sort::part(combobox):focus { outline: none; }
-.workspace-header__sort-group:focus-within { outline: var(--wa-focus-ring); outline-offset: var(--wa-focus-ring-offset); }
+   shadow-internal focus onto the group; [open] retains that ring while the listbox owns focus. The
+   explicit 999px pill radius stays pill-shaped after the outline expands beyond the 44px group
+   instead of retaining a 22px rounded-rectangle radius. */
+.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has(.workspace-header__sort[open]) { outline: var(--wa-focus-ring); outline-offset: var(--wa-focus-ring-offset); }
 .workspace-header__sort::part(display-input) { position: absolute; width: 1px; overflow: hidden; clip-path: inset(50%); }
 .workspace-header__sort::part(expand-icon) { position: absolute; inset-inline-end: remify(3.2px); }
 .workspace-header__sort .kui-select__custom-selected { width: remify(16px); height: remify(16px); color: var(--kui-toolbar-control-color); flex: none; }
