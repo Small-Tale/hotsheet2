@@ -694,7 +694,9 @@ and identity-less legacy entries remain conservatively blocking.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
   submenu insets, including at the supported narrow width. The menu floats 8 px above its Drive
-  control anchor and separates connected submenu groups by 4 px (HS2-4Y6SM9). Machine defaults, Drive overrides,
+  control anchor and separates connected submenu groups by 4 px (HS2-4Y6SM9). Choosing Default,
+  provider, model, or effort keeps the menu open so related overrides can be set in sequence;
+  its toggle and an outside pointer action dismiss it (HS2-S010QF). Machine defaults, Drive overrides,
   and command overrides keep the catalog as the primary model chooser and place manual entry
   behind an `Other…` action. The machine-default settings surface uses 24 px between major regions,
   16 px between provider/model/effort fields, and 8 px within its empty state (HS2-4Y6SM9);
