@@ -207,6 +207,14 @@ may not have open at once):
    cleanup records the same dismissal so a stale or concurrently recreated marker does
    not make the banner recur.
 
+The migration prompt and the persistent import/cleanup banners keep their app-owned
+composition on Kerf's canonical spacing scale: the prompt separates major regions by
+24 px, its icon/copy pair by 16 px, and fields/actions by 8 px, with a 4 px connected
+copy offset. Banners use 8 px block and 16 px inline padding, 16 px column separation,
+and 4 px between their connected title and path. Compact actions retain their explicit
+28.8 px minimum height and use 8 px inline padding. Adopting Kerf's shared
+`StateBanner` primitive for these notices is tracked separately by HS2-750WSY.
+
 The same migration is runnable **by hand** in one command, independent of the UI
 prompt: **`hotsheet-migrate <old-project>/.hotsheet -C <new-store>`** spawns the Node
 exporter against a copy of the old database and imports the result. It is a

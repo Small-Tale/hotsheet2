@@ -1,8 +1,20 @@
+import {readFileSync} from 'node:fs';
+
 import {describe,expect,it} from 'vitest';
 
 import {Hs1CleanupBanner,Hs1MigrationBanner,Hs1MigrationDialog} from './hs1-migration';
 
 describe('HS1 migration presentation',()=>{
+  it('uses canonical dialog, banner, and connected-copy spacing',()=>{
+    const css=readFileSync(new URL('./hs1-migration.css',import.meta.url),'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.hs1-migration-dialog \{[^}]*gap:var\(--kui-space-l\)/);
+    expect(css).toMatch(/__intro \{[^}]*gap:var\(--kui-space-m\)/);
+    expect(css).toMatch(/__destination \{[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*padding:var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*gap:var\(--kui-space-m\)/);
+    expect(css).toMatch(/__copy,\.hs1-migration-banner > div \{[^}]*gap:var\(--kui-space-2xs\)/);
+  });
+
   it('asks only where to store tickets and describes the complete import',()=>{
     const markup=String(Hs1MigrationDialog({projectName:'Demo',projectRoot:'/work/demo',sourcePath:'/work/demo/.hotsheet',databasePath:'/work/demo/.hotsheet/db',postgresVersion:'17',defaultStore:'/work/demo.hs2',open:true,busy:false}));
     expect(markup).toContain('Hot Sheet 1 data found in Demo');

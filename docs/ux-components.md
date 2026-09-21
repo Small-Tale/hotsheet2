@@ -468,6 +468,12 @@ full height and uses the same animated slide/collapse contract as the project si
 its panel-right control replaces a generic close glyph. Inspector tab
 icons never shrink, and compact inspectors switch to icon-only labels.
 
+The HS1 conversion prompt and persistent migration/cleanup notices use the canonical
+24 px major-region, 16 px icon/column, 8 px field/action, and 4 px connected-copy
+rhythm. Notice surfaces use 8 px block by 16 px inline padding; their compact actions
+retain the established 28.8 px minimum height with 8 px inline padding. Migration of
+these notices to Kerf's shared `StateBanner` primitive is tracked by HS2-750WSY.
+
 ## 3. Ticket workspace
 
 ### 3.1 `Workspace` — feature floor
