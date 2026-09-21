@@ -19,6 +19,21 @@ const review: CodeReview = {
 };
 
 describe('TicketCodeReview', () => {
+  it('uses canonical review-region spacing while keeping row and action geometry explicit', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/__heading \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/__compare-banner \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__range \{[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) 0[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__commit-summary \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/__notice \{ padding: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__empty \{[^}]*padding: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__refs \{[^}]*gap: var\(--kui-space-2xs\); margin-top: var\(--kui-space-2xs\)/);
+  });
+
   it('resets the native list-item indent so commit rows align with their list', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatch(/\.ticket-code-review__commit \{[^}]*margin-inline-start: 0;/);

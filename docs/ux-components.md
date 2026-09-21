@@ -761,7 +761,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     configured-tool status, individual commit actions, adjacent-range actions, and the
     repository A/B comparison banner/labels. The catalog exposes configured,
     unconfigured, empty, loading, and error states; actions are disabled without a
-    configured Git diff tool.
+    configured Git diff tool. Its shared sidebar/reader/repository presentation uses 16px
+    between major review regions, 8px within cards and rows, and 4px for connected
+    metadata/icon clusters while retaining explicit graph/control geometry (HS2-4Y6SM9).
   - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
     the aligned section heading, plus native browse and drop entry points; no redundant
     total line is rendered below the collection.

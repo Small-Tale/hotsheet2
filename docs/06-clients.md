@@ -1023,6 +1023,10 @@ and identity-less legacy entries remain conservatively blocking.
   test files. The summary is an action that opens a repository-browser-style master/detail
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
   card grows to contain every count and test-change line even in the narrow inspector.
+  The shared review surface uses 16px between evidence/comparison/history regions, 8px
+  within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
+  commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions
+  remain explicit geometry (HS2-4Y6SM9).
   Clicking a file row selects it; only its visible ellipsis or a right-click opens the
   action menu. Platform-additive and range selection permit batch Show Diff and path-copy
   operations, while single-file-only Open and host-native reveal actions are disabled for
