@@ -45,19 +45,19 @@ describe('keyboard-shortcuts registry', () => {
   it('defines the view/panel and tab-cycling command shortcuts as rebindable (HS2-9SHYWD)', () => {
     const expected: Record<string, ShortcutChord> = {
       'toggle-left-sidebar': { key: 'b', mod: true },
-      'toggle-right-sidebar': { key: 'b', mod: true, alt: true },
+      'toggle-right-sidebar': { key: 'b', mod: true, alt: true, shift: true },
       'toggle-bottom-drawer': { key: 'j', mod: true },
       'view-list': { key: 'l', mod: true, shift: true },
       'view-board': { key: 'b', mod: true, shift: true },
       'view-notifications': { key: 'm', mod: true, shift: true },
-      'view-settings': { key: ',', mod: true },
+      'view-settings': { key: 's', mod: true, alt: true },
       'view-workspace-grid': { key: 'g', mod: true, shift: true },
       'view-all-stats': { key: 'd', mod: true, shift: true },
       'new-ticket': { key: 'c' },
-      'project-tab-previous': { key: 'ArrowLeft', mod: true, alt: true },
-      'project-tab-next': { key: 'ArrowRight', mod: true, alt: true },
-      'drawer-tab-previous': { key: 'ArrowUp', mod: true, alt: true },
-      'drawer-tab-next': { key: 'ArrowDown', mod: true, alt: true },
+      'project-tab-previous': { key: 'ArrowLeft', mod: true, alt: true, shift: true },
+      'project-tab-next': { key: 'ArrowRight', mod: true, alt: true, shift: true },
+      'drawer-tab-previous': { key: 'ArrowUp', mod: true, alt: true, shift: true },
+      'drawer-tab-next': { key: 'ArrowDown', mod: true, alt: true, shift: true },
     };
     for (const [id, chord] of Object.entries(expected)) {
       const def = KEYBOARD_SHORTCUTS.find(s => s.id === id);
@@ -65,6 +65,22 @@ describe('keyboard-shortcuts registry', () => {
       expect(def?.editable, id).toBe(true);
       expect(def?.defaultChord, id).toEqual(chord);
     }
+  });
+
+  it('does not assign the Safari-reserved chords reported by HS2-Q1BH0V', () => {
+    const safariReserved: ShortcutChord[] = [
+      { key: ',', mod: true },
+      { key: 'b', mod: true, alt: true },
+      { key: 'ArrowLeft', mod: true, alt: true },
+      { key: 'ArrowRight', mod: true, alt: true },
+      { key: 'ArrowUp', mod: true, alt: true },
+      { key: 'ArrowDown', mod: true, alt: true },
+    ];
+    const collisions = KEYBOARD_SHORTCUTS
+      .filter(shortcut => shortcut.editable)
+      .filter(shortcut => safariReserved.some(chord => chordsEqual(shortcut.defaultChord, chord)))
+      .map(shortcut => shortcut.id);
+    expect(collisions).toEqual([]);
   });
 
   it('has no two editable shortcuts sharing a default chord (no self-conflicts)', () => {

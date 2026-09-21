@@ -398,13 +398,16 @@ and identity-less legacy entries remain conservatively blocking.
   paste) and select-all are rebindable: record a new chord, reset one to its default, or reset
   all, with conflict warnings when two editable shortcuts collide. A **Views & panels** group
   adds rebindable chords to toggle the left sidebar (⌘/Ctrl+B), right sidebar/inspector
-  (⌘/Ctrl+⌥+B), and bottom terminal drawer (⌘/Ctrl+J); switch the workspace to the list
-  (⌘/Ctrl+⇧+L), column (⌘/Ctrl+⇧+B), notifications (⌘/Ctrl+⇧+M), and settings (⌘/Ctrl+,)
+  (⌘/Ctrl+⌥+⇧+B), and bottom terminal drawer (⌘/Ctrl+J); switch the workspace to the list
+  (⌘/Ctrl+⇧+L), column (⌘/Ctrl+⇧+B), notifications (⌘/Ctrl+⇧+M), and settings (⌘/Ctrl+⌥+S)
   views; and toggle the all-project terminal grid (⌘/Ctrl+⇧+G) or stats dashboard
   (⌘/Ctrl+⇧+D) against the last selected project. A **New ticket** chord (a bare `c`, in the
   spirit of GitHub/Linear "create") opens the composer, and **Navigation & tabs** adds
-  previous/next cycling for the project tabs (⌘/Ctrl+⌥+←/→) and drawer tabs (⌘/Ctrl+⌥+↑/↓).
-  Defaults follow VS Code where it has an equivalent; every one is rebindable, and the bare
+  previous/next cycling for the project tabs (⌘/Ctrl+⌥+⇧+←/→) and drawer tabs
+  (⌘/Ctrl+⌥+⇧+↑/↓). Defaults follow VS Code where it has an equivalent except when
+  Safari reserves the chord: HS2-Q1BH0V moved the inspector, settings, and tab-cycling defaults
+  away from Safari's bookmark editor, application settings, and browser tab/tab-group commands.
+  Every shortcut remains rebindable, and the bare
   `c` (like other non-modifier chords) never fires while a text field is focused (HS2-9SHYWD).
   The settings surface follows Kerf's spacing rhythm: 24px between major groups, 16px
   between peer regions, 8px within rows and controls, and 4px inside tight metadata clusters

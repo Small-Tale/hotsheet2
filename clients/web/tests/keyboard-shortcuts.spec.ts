@@ -33,6 +33,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   const list=page.locator('[data-component="ticket-list"]');
   const board=page.locator('[data-component="ticket-board"]');
   const appShell=page.locator('[data-component="app-shell"]');
+  const inspectorRegion=appShell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');
   const drawer=page.locator('[data-component="terminal-drawer"]');
   const composer=page.locator('[data-component="quick-ticket-composer"]');
   await expect(list).toBeVisible();
@@ -62,13 +63,46 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await page.keyboard.press('ControlOrMeta+j');
   await expect(page.getByRole('button',{name:'Show terminal drawer'})).toBeVisible();
 
-  // Project-tab cycling with two open projects.
+  // The right-sidebar default adds Shift so Safari's ⌘⌥B bookmark editor keeps its chord.
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed','false');
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+B');
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed','true');
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+B');
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed','false');
+
+  // Project-tab cycling with two open projects uses shifted chords so browsers retain their
+  // unshifted ⌘/Ctrl+⌥+Arrow tab navigation.
   await page.getByRole('button',{name:'Add project'}).click();
   await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');
-  await page.keyboard.press('ControlOrMeta+Alt+ArrowLeft');
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+ArrowLeft');
   await expect(page.getByRole('tab',{name:'hotsheet2'})).toHaveAttribute('aria-selected','true');
-  await page.keyboard.press('ControlOrMeta+Alt+ArrowRight');
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+ArrowRight');
   await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');
+
+  // Settings uses a mnemonic chord instead of Safari's application-settings shortcut (⌘,).
+  await page.keyboard.press('ControlOrMeta+Alt+S');
+  await expect(page.getByRole('complementary',{name:'Settings categories'})).toBeVisible();
+  await page.getByRole('button',{name:'Keyboard'}).click();
+  const keyboardSettings=page.locator('[data-component="keyboard-settings"]');
+  await expect(keyboardSettings.locator('li[data-shortcut-id="toggle-right-sidebar"]')).toContainText(/(Ctrl\+Alt\+Shift\+B|⌘⌥⇧B)/);
+  await expect(keyboardSettings.locator('li[data-shortcut-id="view-settings"]')).toContainText(/(Ctrl\+Alt\+S|⌘⌥S)/);
+  await expect(keyboardSettings.locator('li[data-shortcut-id="project-tab-previous"]')).toContainText(/(Ctrl\+Alt\+Shift\+Left|⌘⌥⇧←)/);
+  await page.screenshot({path:'/private/tmp/hs2-q1bh0v-browser-safe-shortcuts-wide.png',fullPage:true});
+  await keyboardSettings.locator('li[data-shortcut-id="toggle-right-sidebar"]').screenshot({path:'/private/tmp/hs2-q1bh0v-right-sidebar-shortcut-after.png'});
+  await keyboardSettings.locator('li[data-shortcut-id="view-settings"]').screenshot({path:'/private/tmp/hs2-q1bh0v-settings-shortcut-after.png'});
+  const firstTabDefault=keyboardSettings.locator('li[data-shortcut-id="project-tab-previous"]');
+  const lastTabDefault=keyboardSettings.locator('li[data-shortcut-id="drawer-tab-next"]');
+  const captureTabDefaults=async(path:string)=>{
+    await firstTabDefault.scrollIntoViewIfNeeded();
+    const firstBox=await firstTabDefault.boundingBox(),lastBox=await lastTabDefault.boundingBox();
+    if(!firstBox||!lastBox)throw new Error('Browser-safe tab shortcut rows were not measurable');
+    await page.screenshot({path,clip:{x:firstBox.x,y:firstBox.y,width:firstBox.width,height:lastBox.y+lastBox.height-firstBox.y}});
+  };
+  await captureTabDefaults('/private/tmp/hs2-q1bh0v-navigation-shortcuts-after-wide.png');
+  await page.setViewportSize({width:760,height:700});
+  await captureTabDefaults('/private/tmp/hs2-q1bh0v-navigation-shortcuts-after-narrow.png');
+  await page.setViewportSize({width:1440,height:900});
+  await page.locator('.view-mode-switcher [aria-label="List view"]').click();
 
   // Bare `c` opens the new-ticket composer; Escape closes it.
   await expect(composer).toBeHidden();

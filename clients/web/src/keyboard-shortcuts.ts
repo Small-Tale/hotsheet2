@@ -47,15 +47,17 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'undo', label: 'Undo', description: 'Undo the last ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true }, editable: true },
   { id: 'redo', label: 'Redo', description: 'Redo the last undone ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true, shift: true }, editable: true },
   // Views & panels — rebindable command chords resolved at the central dispatcher (HS2-9SHYWD).
-  // Defaults follow VS Code where it has an equivalent (⌘/Ctrl+B toggle sidebar, ⌘/Ctrl+⌥+B secondary
-  // sidebar, ⌘/Ctrl+J panel, ⌘/Ctrl+⌥+←/→ previous/next tab). `mod` is Cmd on Apple, Ctrl elsewhere.
+  // Defaults follow VS Code where it has an equivalent, except where the browser owns the chord.
+  // In particular Safari consumes ⌘⌥B (bookmarks), ⌘, (settings), and the ⌘⌥+Arrow family
+  // (browser tabs/tab groups) before the page can handle them (HS2-Q1BH0V). `mod` is Cmd on Apple,
+  // Ctrl elsewhere.
   { id: 'toggle-left-sidebar', label: 'Toggle left sidebar', description: 'Show or hide the project sidebar.', group: 'Views & panels', defaultChord: { key: 'b', mod: true }, editable: true },
-  { id: 'toggle-right-sidebar', label: 'Toggle right sidebar', description: 'Show or hide the ticket inspector.', group: 'Views & panels', defaultChord: { key: 'b', mod: true, alt: true }, editable: true },
+  { id: 'toggle-right-sidebar', label: 'Toggle right sidebar', description: 'Show or hide the ticket inspector.', group: 'Views & panels', defaultChord: { key: 'b', mod: true, alt: true, shift: true }, editable: true },
   { id: 'toggle-bottom-drawer', label: 'Toggle bottom drawer', description: 'Show or hide the terminal drawer.', group: 'Views & panels', defaultChord: { key: 'j', mod: true }, editable: true },
   { id: 'view-list', label: 'List view', description: 'Switch the workspace to the list view.', group: 'Views & panels', defaultChord: { key: 'l', mod: true, shift: true }, editable: true },
   { id: 'view-board', label: 'Column view', description: 'Switch the workspace to the column (board) view.', group: 'Views & panels', defaultChord: { key: 'b', mod: true, shift: true }, editable: true },
   { id: 'view-notifications', label: 'Notifications view', description: 'Switch the workspace to the notifications view.', group: 'Views & panels', defaultChord: { key: 'm', mod: true, shift: true }, editable: true },
-  { id: 'view-settings', label: 'Settings view', description: 'Switch the workspace to the settings view.', group: 'Views & panels', defaultChord: { key: ',', mod: true }, editable: true },
+  { id: 'view-settings', label: 'Settings view', description: 'Switch the workspace to the settings view.', group: 'Views & panels', defaultChord: { key: 's', mod: true, alt: true }, editable: true },
   { id: 'view-workspace-grid', label: 'Workspace grid', description: 'Toggle the all-project workspace terminal grid and the last selected project.', group: 'Views & panels', defaultChord: { key: 'g', mod: true, shift: true }, editable: true },
   { id: 'view-all-stats', label: 'All-project stats', description: 'Toggle the all-project stats dashboard and the last selected project.', group: 'Views & panels', defaultChord: { key: 'd', mod: true, shift: true }, editable: true },
   // Ticket clipboard & select-all — app-level chords, rebindable (resolved via matchesShortcut).
@@ -78,10 +80,10 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'reorder-tab-left', label: 'Move tab left', description: 'Reorder the focused drawer tab toward the start.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowLeft', alt: true, shift: true }, editable: false },
   { id: 'reorder-tab-right', label: 'Move tab right', description: 'Reorder the focused drawer tab toward the end.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowRight', alt: true, shift: true }, editable: false },
   // Cycle the active project / drawer tab (rebindable, resolved at the central dispatcher — HS2-9SHYWD).
-  { id: 'project-tab-previous', label: 'Previous project tab', description: 'Activate the previous open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowLeft', mod: true, alt: true }, editable: true },
-  { id: 'project-tab-next', label: 'Next project tab', description: 'Activate the next open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowRight', mod: true, alt: true }, editable: true },
-  { id: 'drawer-tab-previous', label: 'Previous drawer tab', description: 'Select the previous bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowUp', mod: true, alt: true }, editable: true },
-  { id: 'drawer-tab-next', label: 'Next drawer tab', description: 'Select the next bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowDown', mod: true, alt: true }, editable: true },
+  { id: 'project-tab-previous', label: 'Previous project tab', description: 'Activate the previous open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowLeft', mod: true, alt: true, shift: true }, editable: true },
+  { id: 'project-tab-next', label: 'Next project tab', description: 'Activate the next open project tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowRight', mod: true, alt: true, shift: true }, editable: true },
+  { id: 'drawer-tab-previous', label: 'Previous drawer tab', description: 'Select the previous bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowUp', mod: true, alt: true, shift: true }, editable: true },
+  { id: 'drawer-tab-next', label: 'Next drawer tab', description: 'Select the next bottom-drawer tab.', group: 'Navigation & tabs', defaultChord: { key: 'ArrowDown', mod: true, alt: true, shift: true }, editable: true },
   { id: 'gallery-previous', label: 'Previous attachment', description: 'Show the previous image in the attachment gallery.', group: 'Media gallery', defaultChord: { key: 'ArrowLeft' }, editable: false },
   { id: 'gallery-next', label: 'Next attachment', description: 'Show the next image in the attachment gallery.', group: 'Media gallery', defaultChord: { key: 'ArrowRight' }, editable: false },
   { id: 'gallery-toggle-playback', label: 'Play or pause video', description: 'Toggle playback of the gallery video.', group: 'Media gallery', defaultChord: { key: ' ' }, editable: false },
