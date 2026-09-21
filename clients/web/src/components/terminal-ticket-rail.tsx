@@ -29,7 +29,7 @@ export function TerminalTicketRail({projects,selectedProjectId,views=[],selected
   const root=<section class="terminal-ticket-rail__root" aria-label="Project tickets">
     <Toolbar className="terminal-ticket-rail__project" divider={false} leading={<Select name="terminal-rail-project" value={selectedProjectId} ariaLabel="Ticket rail project" choices={projects.map(project=>({value:project.id,label:project.name}))} renderSelected={choice=><span>{choice.label}</span>}/>} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="close-ticket-inspector" aria-label="Hide ticket rail" title="Hide ticket rail"><LucideIcon icon={PanelRightClose} name="panel-right-close"/></button></ToolbarControlGroup>}/>
     <div class="terminal-ticket-rail__controls">{controls}</div>
-    <Toolbar className="terminal-ticket-rail__heading" divider={false} leading={heading} trailing={action?<ToolbarControlGroup appearance="borderless" single>{action}</ToolbarControlGroup>:undefined}/>
+    <Toolbar className="terminal-ticket-rail__heading" divider={false} leading={heading} trailing={action}/>
     <div class="terminal-ticket-rail__content">{content}</div>
   </section>;
   return <aside class="terminal-ticket-rail" data-component="terminal-ticket-rail" data-screen={active} aria-label="Ticket rail">

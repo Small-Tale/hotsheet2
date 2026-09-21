@@ -29,6 +29,9 @@ describe('QuickTicketComposer', () => {
     expect(collapsed).toContain('data-action="expand-ticket-composer"');
     expect(collapsed).toContain('data-component="quick-ticket-composer-launcher"');
     expect(collapsed).toContain('data-new-ticket-drop-target="true"');
+    expect(collapsed).toContain('New ticket…');
+    expect(String(QuickTicketLauncher({label:'Ticket…'}))).toContain('Ticket…');
+    expect(String(QuickTicketLauncher({label:'Ticket…'}))).not.toContain('New ticket…');
     const collapsedComposer = String(QuickTicketComposer({ expanded: false }));
     expect(collapsedComposer).toContain('data-component="quick-ticket-composer"');
     expect(collapsedComposer).toContain('aria-hidden="true"');

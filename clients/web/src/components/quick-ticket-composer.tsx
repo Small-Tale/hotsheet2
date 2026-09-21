@@ -54,8 +54,8 @@ export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   return true;
 }
 
-export function QuickTicketLauncher({attachmentsEnabled=true}:{attachmentsEnabled?:boolean}={}){
-  return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer-launcher" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" title={attachmentsEnabled ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here' : 'Create a new ticket or drop tickets to duplicate'}><LucideIcon icon={Plus} name="plus" />New ticket…</button>;
+export function QuickTicketLauncher({attachmentsEnabled=true,label='New ticket…'}:{attachmentsEnabled?:boolean;label?:string}={}){
+  return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer-launcher" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" title={attachmentsEnabled ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here' : 'Create a new ticket or drop tickets to duplicate'}><LucideIcon icon={Plus} name="plus" />{label}</button>;
 }
 
 export function QuickTicketComposer({ expanded = false, title = '', details = '', category = 'task', upNext = false, providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {

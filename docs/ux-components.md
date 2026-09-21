@@ -1264,6 +1264,8 @@ the popup a user is reading (HS2-S59CRP).
 content-sized project and view selectors, a rectangular full-row list/notification switch, the
 same chip-based advanced search control used by the main workspace (placed last on its action row),
 ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
+The header/scroller boundary has a quiet one-pixel separator. Its launcher is the same blue pill
+component used by list and column views, with the compact rail label `Ticket…` to prevent wrapping.
 Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
 directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,

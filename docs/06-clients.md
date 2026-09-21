@@ -1442,7 +1442,11 @@ the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
-launcher; board and settings modes are deliberately absent. The rectangular list/notification
+launcher; board and settings modes are deliberately absent. Its view heading ends with the same
+quiet separator used at the top of ticket collections, clearly dividing the white header from the
+lowered scrolling ticket surface. The launcher retains the shared blue pill presentation used by
+list and column views but shortens its rail label to `Ticket…` so it stays on one line. The
+rectangular list/notification
 segmented control owns its full first row, while sort, selection actions, and the compact search
 launcher share the second row. Activating search animates it onto a dedicated full-width third
 row, where tag-autocomplete options stretch across the popup with consistently left-aligned
