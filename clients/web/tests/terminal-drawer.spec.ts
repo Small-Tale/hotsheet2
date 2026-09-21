@@ -17,10 +17,14 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   expect(shadowGutter.above).toBeGreaterThanOrEqual(2);
   expect(shadowGutter.below).toBeGreaterThanOrEqual(4);
   await tabs.screenshot({ path: '/private/tmp/hs2-fhqgjn-terminal-tab-shadow-after.png' });
+  await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-wide.png' });
 
   const gridWidth = (await gridTab.boundingBox())!.width;
   await drawer.evaluate(node => {
     node.style.width = '520px';
+  });
+  await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-narrow.png' });
+  await drawer.evaluate(node => {
     const tabs = node.querySelector('.terminal-drawer__tabs')!;
     const source = tabs.firstElementChild!;
     for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));

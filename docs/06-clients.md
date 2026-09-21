@@ -1511,7 +1511,9 @@ the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll
 horizontally, with the explicit quiet pill-shaped plus action immediately after them; plus
 opens a direct shared-menu choice of Default shell, AI shell, or AI chat. The menu has no
-redundant heading, and leaf actions do not display submenu chevrons. Option/Alt on either AI choice prompts for a
+redundant heading, and leaf actions do not display submenu chevrons. The rail and terminal inset
+use Kerf's canonical 8 px within-group rhythm, the tab-strip focus gutter and icon-label clusters
+use 4 px, and connected create-menu rows use no extra gap (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
 plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed
 `connect` launch path rather than treating the provider id as a shell command. A dedicated
 xterm viewport receives focus as soon as it
@@ -1539,13 +1541,13 @@ use that shared tab surface directly rather than layering a second selected back
 it. Every selected and unselected tab is reachable in sequential Tab order, while
 Left/Right/Home/End traverse the current tablist and Delete/Backspace closes the focused
 closeable tab. The segmented dashboard and view controls likewise expose each choice in Tab
-order. The horizontally scrolling tab strips reserve an inset on every edge so pill shadows
+order. The horizontally scrolling tab strips reserve a canonical 4 px inset on every edge so pill shadows
 and focus rings remain complete at either end. The project strip is composed from kerf UI's
 `TabBar` primitive, with the dashboard-mode buttons in its leading slot and the add-project
 action in its trailing slot; its pointer drag-reorder and **manual-activation** keyboard
 traversal stay host-owned, because kerf's shared tab-bar wire helper activates a tab on every
 arrow key and activating a project loads it (HS2-Q6P9P0; adopting the wire helper is deferred
-to HS2-08ZG4J pending a manual-activation option upstream, KF-9136QY). A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
+to HS2-08ZG4J pending a manual-activation option upstream, KF-9136QY). A dedicated terminal uses a canonical 8 px inset and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while

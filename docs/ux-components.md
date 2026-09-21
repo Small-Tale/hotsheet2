@@ -1090,6 +1090,9 @@ The shipped terminal drawer is a center-column-only vertical `ResizableRegion` w
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
 persisted 228 px-to-workspace-boundary height, and a floating restore button when collapsed. The
 splitter resists below 228 px and treats a continued 48 px overshoot as an intentional collapse.
+The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar groups and
+terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the
+connected rows in its create menu (HS2-4Y6SM9).
 Terminal tabs can be pointer-dragged into a new same-project order, which survives session
 list refreshes for the current client lifetime. Grid and
 dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.
