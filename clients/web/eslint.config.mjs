@@ -88,14 +88,6 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-unsafe-return': 'off' },
   },
   {
-    files: ['src/main.tsx'],
-    rules: {
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
-      'simple-import-sort/imports': 'off',
-    },
-  },
-  {
     files: ['src/ux-demo/main.tsx'],
     rules: {
       '@stylistic/array-bracket-spacing': ['error', 'never'],

@@ -115,7 +115,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 - Logging: `tracing` structured logs.
 - Workspace-level dependency versions; `rustfmt` + the repository `cargo lint` Clippy
   alias are enforced in CI. Every code package also exposes a zero-warning lint command;
-  TypeScript clients use the shared Glassbox-derived ESLint baseline.
+  TypeScript clients use the shared Glassbox-derived ESLint baseline. The web application
+  root has no per-file rule override: Promise rejection values are typed `unknown`, and
+  defensive checks that intentionally exceed a total static type use explained,
+  single-next-line exceptions so new code remains subject to the full baseline
+  (HS2-W3RDCB).
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
