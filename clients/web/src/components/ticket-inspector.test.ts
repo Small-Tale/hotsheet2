@@ -10,6 +10,10 @@ const base = { slug: 'HS2-TEST', title: 'Inspect this ticket', status: 'started'
 describe('TicketInspector', () => {
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0 0 var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.ticket-inspector__close-outcome \{[^}]*gap: var\(--kui-space-2xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/);
     const titleRule = css.match(/\.ticket-inspector__header h1 \{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('overflow-wrap: anywhere');
     expect(titleRule).not.toContain('line-clamp');
@@ -165,7 +169,7 @@ describe('TicketInspector', () => {
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(8px\) remify\(8px\);/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: var\(--kui-space-2xs\)/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/);
     // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the

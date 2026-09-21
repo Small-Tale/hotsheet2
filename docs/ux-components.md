@@ -683,7 +683,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
 The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar
 inspector (HS2-9MCJ2B) and the reader dialog (HS2-FZ5HB2); it centers only for the terminal
 ticket rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`
-overrides this per composition (the rail passes `center`).
+overrides this per composition (the rail passes `center`). Migrating the remaining custom
+tabpanel strip to Kerf `TabBar`/`AppTab` is tracked separately by HS2-GZN2HZ so its keyboard,
+count-badge, and responsive-label behavior can be verified independently from spacing work.
 
 Structured close outcomes are available from the single-ticket context menu when the
 owning provider advertises both close and close-reason support. `TicketCloseDialog`

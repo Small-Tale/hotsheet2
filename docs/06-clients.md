@@ -426,7 +426,9 @@ and identity-less legacy entries remain conservatively blocking.
   The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,
   Block ticket, and Add note reuse the shared sidebar `ListHeader`/`ListItem`
   primitives; their text and icons share one inset while section surfaces stay flush
-  beneath their headers instead of accumulating another indentation level.
+  beneath their headers instead of accumulating another indentation level. Its shell uses
+  16px between header/status regions, 8px within status surfaces and outer gutters, and 4px
+  for connected title/tab details (HS2-4Y6SM9).
 
 - **Persistent shell splitters.** The project sidebar and ticket inspector are
   independently resizable by pointer or keyboard. Dragging updates only splitter
