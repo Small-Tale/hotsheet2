@@ -7,6 +7,7 @@ import {
   MOBILE_OVERLAYS_CLOSED,
   openMobileOverlay,
   shouldAutoOpenInspectorOnTap,
+  toggleMobileInspector,
   toggleMobileSidebar,
 } from './mobile-layout';
 
@@ -28,6 +29,12 @@ describe('mobile layout', () => {
     expect(toggleMobileSidebar({ sidebar: false, inspector: true })).toEqual({ sidebar: true, inspector: false });
     // Toggling an open sidebar closes everything.
     expect(toggleMobileSidebar({ sidebar: true, inspector: false })).toEqual(MOBILE_OVERLAYS_CLOSED);
+  });
+
+  it('toggles the inspector and closes the sidebar when opening it', () => {
+    expect(toggleMobileInspector(MOBILE_OVERLAYS_CLOSED)).toEqual({ sidebar: false, inspector: true });
+    expect(toggleMobileInspector({ sidebar: true, inspector: false })).toEqual({ sidebar: false, inspector: true });
+    expect(toggleMobileInspector({ sidebar: false, inspector: true })).toEqual(MOBILE_OVERLAYS_CLOSED);
   });
 
   it('closes a single overlay without opening the other', () => {

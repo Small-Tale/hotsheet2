@@ -34,6 +34,11 @@ export function toggleMobileSidebar(state: MobileOverlayState): MobileOverlaySta
   return state.sidebar ? MOBILE_OVERLAYS_CLOSED : openMobileOverlay('sidebar');
 }
 
+/** Toggle the inspector overlay: open it (closing the sidebar) if closed, otherwise close it. */
+export function toggleMobileInspector(state: MobileOverlayState): MobileOverlayState {
+  return state.inspector ? MOBILE_OVERLAYS_CLOSED : openMobileOverlay('inspector');
+}
+
 /** Close a single overlay, leaving the other untouched (it is already closed under the
  * one-at-a-time rule, but this keeps the close path independent of that invariant). */
 export function closeMobileOverlay(state: MobileOverlayState, which: keyof MobileOverlayState): MobileOverlayState {

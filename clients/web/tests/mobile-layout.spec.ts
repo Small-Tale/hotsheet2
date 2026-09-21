@@ -68,6 +68,18 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await page.screenshot({path:'/private/tmp/hs2-zk51wp-mobile-single-column.png',fullPage:true});
 });
 
+test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays without changing desktop preferences (HS2-KN79XP)',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await openDemoProject(page);
+  const modifier=await page.evaluate(()=>/macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent)?'Meta':'Control');
+  const sidebar=page.locator('.kui-resizable-region[data-region-id="app-sidebar"]'),inspector=page.locator('.kui-resizable-region[data-region-id="app-inspector"]'),scrim=page.locator('.app-shell__scrim');
+  await page.locator('[data-ticket-slug="HS2-M1"]').click();await expect(inspector).toHaveAttribute('data-collapsed','false');await scrim.click({position:{x:10,y:400}});await expect(inspector).toHaveAttribute('data-collapsed','true');
+  await page.keyboard.press(`${modifier}+b`);await expect(sidebar).toHaveAttribute('data-collapsed','false');await expect(inspector).toHaveAttribute('data-collapsed','true');await expect(scrim).toBeVisible();
+  await page.keyboard.press(`${modifier}+Alt+b`);await expect(sidebar).toHaveAttribute('data-collapsed','true');await expect(inspector).toHaveAttribute('data-collapsed','false');await expect(scrim).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-kn79xp-mobile-keyboard-overlays.png',fullPage:true});
+  await page.keyboard.press(`${modifier}+Alt+b`);await expect(inspector).toHaveAttribute('data-collapsed','true');await expect(scrim).toHaveCount(0);
+  await page.setViewportSize({width:1280,height:800});await expect(sidebar).toHaveAttribute('data-collapsed','false');await expect(inspector).toHaveAttribute('data-collapsed','false');
+});
+
 test('mobile forces list view and hides the columns toggle, restoring board view on desktop (HS2-1XCHZT)',async({page})=>{
   await page.setViewportSize({width:1280,height:800});
   await openDemoProject(page);

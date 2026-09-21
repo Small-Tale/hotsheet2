@@ -27,8 +27,8 @@ describe('keyboard-shortcut dispatcher wiring (HS2-9SHYWD)', () => {
   });
 
   it('wires each binding to its corresponding app action', () => {
-    expect(source).toMatch(/toggle-left-sidebar'[^}]*setSidebarVisible\(!sidebarVisible\.value\)/);
-    expect(source).toMatch(/toggle-right-sidebar'[^}]*setInspectorVisible\(!inspectorVisible\.value\)/);
+    expect(source).toMatch(/toggle-left-sidebar'[^}]*viewportMobile\.value[^}]*toggleMobileSidebar\(mobileOverlay\.value\)[^}]*setSidebarVisible\(!sidebarVisible\.value\)/);
+    expect(source).toMatch(/toggle-right-sidebar'[^}]*viewportMobile\.value[^}]*toggleMobileInspector\(mobileOverlay\.value\)[^}]*setInspectorVisible\(!inspectorVisible\.value\)/);
     expect(source).toMatch(/toggle-bottom-drawer'[^}]*setTerminalDrawerVisible\(!terminalDrawerVisible\.value\)/);
     expect(source).toMatch(/view-list'[^}]*switchWorkspaceView\('list'\)/);
     expect(source).toMatch(/view-board'[^}]*switchWorkspaceView\('board'\)/);
