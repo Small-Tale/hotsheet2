@@ -123,6 +123,10 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'setup', name: 'Setup and settings', demos: [
     demo('hs1-migration-dialog', 'Hs1MigrationDialog', 'Detected Hot Sheet 1 source details and destination-only import flow.', 'feature-floor', true, ['value-table']),
     demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Import and post-backup cleanup notices for Hot Sheet 1.', 'feature-floor', true),
+    demo('ticket-source-setup-dialog', 'TicketSourceSetupDialog', 'Choose and configure a git or external ticket source.', 'feature-floor', true, ['content-transition', 'list-item']),
+    demo('provider-setup-form', 'ProviderSetupForm', 'Provider credentials, repository locator, and default-source settings.', 'feature-floor', true),
+    demo('ticket-sources-settings', 'TicketSourcesSettings', 'Connected git and external ticket-source inventory.', 'feature-floor', true, ['list-item']),
+    demo('settings-workspace', 'SettingsWorkspace', 'One category-selected project or app settings surface.', 'feature-floor', true, ['ticket-sources-settings']),
     demo('keyboard-settings', 'KeyboardSettings', 'Grouped reference and rebinding of documented keyboard shortcuts.', 'feature-floor', true),
     demo('trash-settings', 'TrashSettings', 'Trash retention window and empty-trash entry point.', 'feature-floor', true),
     demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),

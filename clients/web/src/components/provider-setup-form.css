@@ -1,0 +1,17 @@
+.provider-setup-form { display:grid; gap:var(--wa-space-m); }
+.provider-setup-form small { color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); }
+.provider-setup-form__github-auth { display:grid; padding:var(--wa-space-m); border-radius:var(--wa-border-radius-m); background:var(--wa-color-neutral-fill-quiet); gap:var(--wa-space-s); }
+.provider-setup-form__github-auth p { margin:0; font-size:var(--wa-font-size-s); }
+.provider-setup-form__github-auth > button { width:fit-content; min-height:remify(40px); padding:0 var(--wa-space-m); border:0; border-radius:var(--wa-border-radius-pill); color:var(--wa-color-brand-on-normal); background:var(--wa-color-brand-fill-normal); font:inherit; font-weight:var(--wa-font-weight-semibold); cursor:pointer; }
+.provider-setup-form__github-auth > button:disabled { opacity:.55; cursor:wait; }
+.provider-setup-form__github-auth > button + button { color:var(--wa-color-text-normal); background:var(--wa-color-neutral-fill-normal); }
+.provider-setup-form details > summary { color:var(--wa-color-brand-on-normal); cursor:pointer; font-size:var(--wa-font-size-s); }
+.provider-setup-form details > label { margin-top:var(--wa-space-s); }
+.provider-setup-form__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--wa-space-m); }
+.provider-setup-form label { display:grid; min-width:0; gap:var(--wa-space-2xs); font-size:var(--wa-font-size-xs); font-weight:650; }
+.provider-setup-form label input:not([type="checkbox"]), .provider-setup-form label select { width:100%; min-height:remify(40px); padding:0 var(--wa-space-s); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-s); color:inherit; background:var(--wa-color-surface-default); }
+.provider-setup-form__wide { grid-column:1 / -1; }
+.provider-setup-form__option { grid-template-columns:auto 1fr; width:fit-content; align-items:center; gap:remify(4px) remify(8px); cursor:pointer; }
+.provider-setup-form__option span { grid-column:2; color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-s); }
+.provider-setup-form__error { color:var(--wa-color-danger-on-quiet); }
+@media (max-width:remify(768px)) { .provider-setup-form__grid { grid-template-columns:1fr; } }

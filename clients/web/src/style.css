@@ -9,79 +9,10 @@ button, input, textarea, select { font: inherit; }
 .app-empty { min-height: 100%; display: grid; place-content: center; justify-items: center; gap: var(--wa-space-s); text-align: center; padding: remify(32px); }
 .app-empty h1, .app-empty p { margin: 0; }
 .app-empty p { color: var(--wa-color-neutral-on-quiet); }
-wa-dialog[data-ticket-source-setup-dialog] { --width: min(remify(576px), calc(100vw - remify(32px))); }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"], wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] { width:100%; }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"] { font:inherit; }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .content-transition__side { display:flex; width:100%; align-items:center; gap:var(--wa-space-xs); }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .content-transition__side[data-side="a"] { justify-content:flex-start; }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .content-transition__side[data-side="b"] { justify-content:flex-end; }
-.ticket-source-setup { display: grid; gap: var(--wa-space-m); }
-.ticket-source-setup__intro { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.5; }
-.ticket-source-setup__options { display: grid; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); grid-auto-rows:max-content; }
-.ticket-source-setup__options .kui-list-item { position: relative; min-height: remify(68px); padding: var(--wa-space-s); border-radius: 0; grid-template-columns: var(--wa-space-l) minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-s); }
-.ticket-source-setup__options .kui-list-item[data-action="create-project-git-source-custom"] { min-height:remify(84px); }
-.ticket-source-setup__options .kui-list-item + .kui-list-item::before { position: absolute; top: 0; right: var(--wa-space-s); left: var(--wa-space-s); border-top: 1px solid var(--wa-color-neutral-border-quiet); content: ''; }
-.ticket-source-setup__options .kui-list-item:hover { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-quiet); }
-.ticket-source-setup__options .kui-list-item__icon { width: var(--wa-space-l); height: var(--wa-space-l); color: var(--wa-color-brand-on-quiet); align-self: center; }
-.ticket-source-setup__options .kui-list-item[data-multiline="true"] .kui-list-item__icon { margin-block-start: 0; align-self: center; }
-.ticket-source-setup__options .kui-list-item__icon svg { width: var(--wa-space-l); height: var(--wa-space-l); }
-.ticket-source-setup__options .kui-list-item__trailing { align-self: center; color: var(--wa-color-neutral-on-quiet); }
-.ticket-source-setup__options .kui-list-item__trailing svg { width: var(--wa-space-m); height: var(--wa-space-m); }
-.ticket-source-setup__options .kui-list-item__label { min-width: 0; max-width: 100%; overflow: hidden; }
-.ticket-source-setup__option-copy { display: grid; min-width: 0; max-width: 100%; gap: var(--wa-space-2xs); }
-.ticket-source-setup__option-copy strong { display: flex; min-width: 0; align-items: center; gap: var(--wa-space-xs); line-height: 1.25; }
-.ticket-source-setup__option-copy strong small { padding: remify(1.6px) remify(6.4px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); font-size: var(--wa-font-size-2xs); }
-.ticket-source-setup__option-copy > small { min-width: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.4; overflow-wrap: anywhere; }
-.ticket-source-setup__option-copy code { white-space: normal; overflow-wrap: anywhere; }
-.ticket-source-setup__error { color: var(--wa-color-danger-on-quiet) !important; }
-.ticket-source-setup__remote { display:grid; padding:var(--wa-space-m); border:1px solid var(--wa-color-brand-border-quiet); border-radius:var(--wa-border-radius-l); color:var(--wa-color-brand-on-normal); background:var(--wa-color-brand-fill-quiet); grid-template-columns:var(--wa-space-l) minmax(0,1fr); gap:var(--wa-space-s); }
-.ticket-source-setup__remote > svg { width:var(--wa-space-l); }
-.ticket-source-setup__remote p { margin:var(--wa-space-xs) 0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
-.ticket-source-setup__remote code { display:block; padding:var(--wa-space-xs); border-radius:var(--wa-border-radius-s); background:var(--wa-color-surface-default); white-space:normal; overflow-wrap:anywhere; }
-.ticket-source-setup__remote-form { display:grid; gap:var(--wa-space-m); }
-.ticket-source-setup__remote-help { color:var(--wa-color-text-link); font-size:var(--wa-font-size-xs); }
 /* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
 .app-loading, .app-toast { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (ticket-inspector-skeleton.css), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
-.project-settings { width: 100%; max-width: remify(864px); margin: 0 auto; padding: remify(24px); }
-.project-settings h2 { margin-top: 0; }
-.project-settings__source { display: grid; gap: remify(5.6px); margin: remify(16px) 0; padding: remify(16px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(12px); background: var(--wa-color-surface-default); }
-.project-settings__source code { overflow: hidden; text-overflow: ellipsis; color: var(--wa-color-neutral-on-quiet); }
-.project-settings__source strong { display: flex; align-items: center; gap: var(--wa-space-xs); }
-.project-settings__source strong small { padding: remify(1.6px) remify(6.4px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); font-size: var(--wa-font-size-2xs); }
-.ticket-provider-settings { display: grid; gap: var(--wa-space-xl); }
-.ticket-provider-settings section > h2, .provider-setup-form h2 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-m); }
-.ticket-provider-settings section > p, .ticket-provider-settings > p { color: var(--wa-color-neutral-on-quiet); }
-.ticket-provider-settings__header { display: flex; align-items: center; justify-content: space-between; gap: var(--wa-space-m); }
-.ticket-provider-settings__header h2 { margin: 0; }
-.ticket-provider-settings__connections { display: grid; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); }
-.ticket-provider-settings__connections .kui-list-item { min-height: remify(64px); padding: var(--wa-space-s); border-radius: 0; }
-.ticket-provider-settings__connections .kui-list-item + .kui-list-item { border-top: 1px solid var(--wa-color-neutral-border-quiet); }
-.ticket-provider-settings__connections .kui-list-item__trailing { color: var(--wa-color-neutral-on-quiet); }
-.ticket-provider-settings__connections .kui-list-item__trailing svg { width: var(--wa-space-m); height: var(--wa-space-m); }
-.provider-setup-form small { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.provider-setup-form { display: grid; gap: var(--wa-space-m); }
-.provider-setup-form__github-auth { display:grid; padding:var(--wa-space-m); border-radius:var(--wa-border-radius-m); background:var(--wa-color-neutral-fill-quiet); gap:var(--wa-space-s); }
-.provider-setup-form__github-auth p { margin:0; font-size:var(--wa-font-size-s); }
-.provider-setup-form__github-auth > button { width:fit-content; min-height:remify(40px); padding:0 var(--wa-space-m); border:0; border-radius:var(--wa-border-radius-pill); color:var(--wa-color-brand-on-normal); background:var(--wa-color-brand-fill-normal); font:inherit; font-weight:var(--wa-font-weight-semibold); cursor:pointer; }
-.provider-setup-form__github-auth > button:disabled { opacity:.55; cursor:wait; }
-.provider-setup-form__github-auth > button + button { color:var(--wa-color-text-normal); background:var(--wa-color-neutral-fill-normal); }
-.provider-setup-form details > summary { color:var(--wa-color-brand-on-normal); cursor:pointer; font-size:var(--wa-font-size-s); }
-.provider-setup-form details > label { margin-top:var(--wa-space-s); }
-.provider-setup-form__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-m); }
-.provider-setup-form label { display: grid; min-width: 0; gap: var(--wa-space-2xs); font-size: var(--wa-font-size-xs); font-weight: 650; }
-.provider-setup-form label input:not([type="checkbox"]), .provider-setup-form label select { width: 100%; min-height: remify(40px); padding: 0 var(--wa-space-s); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-s); color: inherit; background: var(--wa-color-surface-default); }
-.provider-setup-form__wide { grid-column: 1 / -1; }
-.provider-setup-form footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
-.project-settings__provider-error { color: var(--wa-color-danger-on-quiet) !important; }
-.project-settings__option { display: grid; grid-template-columns: auto 1fr; width: fit-content; align-items: center; gap: remify(4px) remify(8px); cursor: pointer; }
-.project-settings__option span { grid-column: 2; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); }
-.project-settings__permission-grid { display: grid; max-width: remify(544px); margin: remify(16px) 0 remify(24px); grid-template-columns: repeat(2,minmax(0,1fr)); gap: remify(12.8px); }
-.project-settings__permission-grid p { grid-column: 1 / -1; margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.45; }
 .ticket-page-more { display:block; min-height:remify(40px); margin:var(--wa-space-m) auto; padding:0 var(--wa-space-l); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-pill); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); cursor:pointer; }
 .ticket-page-more:disabled { opacity:.55; cursor:wait; }
-@media (max-width: remify(640px)) { .project-settings__permission-grid { grid-template-columns: 1fr; } }
-@media (max-width: remify(768px)) { .provider-setup-form__grid { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { wa-dialog[data-ticket-source-setup-dialog] .content-transition__side { animation-duration:1ms !important; } }

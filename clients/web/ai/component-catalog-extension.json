@@ -1475,6 +1475,94 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "ticket-source-setup-dialog",
+      "name": "TicketSourceSetupDialog",
+      "kind": "component",
+      "purpose": "Choose and configure a git or external ticket source.",
+      "useWhen": [
+        "Hot Sheet needs choose and configure a git or external ticket source."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSourceSetupDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-source-setup-dialog"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "provider-setup-form",
+      "name": "ProviderSetupForm",
+      "kind": "component",
+      "purpose": "Provider credentials, repository locator, and default-source settings.",
+      "useWhen": [
+        "Hot Sheet needs provider credentials, repository locator, and default-source settings."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProviderSetupForm behavior."
+      ],
+      "publicClasses": [
+        "provider-setup-form"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "ticket-sources-settings",
+      "name": "TicketSourcesSettings",
+      "kind": "component",
+      "purpose": "Connected git and external ticket-source inventory.",
+      "useWhen": [
+        "Hot Sheet needs connected git and external ticket-source inventory."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."
+      ],
+      "publicClasses": [
+        "ticket-sources-settings"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "settings-workspace",
+      "name": "SettingsWorkspace",
+      "kind": "component",
+      "purpose": "One category-selected project or app settings surface.",
+      "useWhen": [
+        "Hot Sheet needs one category-selected project or app settings surface."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific SettingsWorkspace behavior."
+      ],
+      "publicClasses": [
+        "settings-workspace"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "keyboard-settings",
       "name": "KeyboardSettings",
       "kind": "component",

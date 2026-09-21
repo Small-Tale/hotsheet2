@@ -395,6 +395,11 @@ and identity-less legacy entries remain conservatively blocking.
   heading and the device-local categories under an **App Settings** heading (HS2-QT6PGR).
   Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page.
+  The settings workspace and ticket-source setup flow are component-owned surfaces:
+  `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
+  `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup and
+  colocated styles. The application root retains reactive signals, API mutations, and
+  delegated event wiring and passes typed render data into those surfaces (HS2-HTB5RR).
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global

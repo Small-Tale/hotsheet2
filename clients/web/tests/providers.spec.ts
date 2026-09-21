@@ -321,6 +321,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
   const setup=page.locator('[data-ticket-source-setup-dialog]'),sourceOptions=setup.locator('.ticket-source-setup__options .kui-list-item');
   await expect(setup).toHaveJSProperty('open',true);
+  await expect(setup).toHaveAttribute('data-component','ticket-source-setup-dialog');
   await expect(sourceOptions).toHaveCount(5);
   await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true})).toBeVisible();
   await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository in a custom location'})).toBeVisible();
@@ -367,6 +368,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page.getByLabel('Settings view').click();
+  await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(page.getByRole('heading',{name:'Connected sources'})).toBeVisible();
   await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add data source'})).toBeVisible();
@@ -1339,7 +1341,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await command.click();await expect(page.getByRole('button',{name:'Running Run checks'})).toBeVisible();
   await page.getByRole('button',{name:'Running Run checks'}).click();const stop=page.locator('[data-component="command-cancellation-dialog"]');await expect(stop).toBeVisible();await stop.getByRole('button',{name:'Stop command'}).click();await expect(page.getByRole('button',{name:'Run checks'})).toHaveAttribute('title',/Last run: cancelled/);
   await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerdown');await page.waitForTimeout(600);await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerup');const history=page.locator('[data-component="command-run-dialog"]');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-wide.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:390,height:844});const hiddenNarrowCommand=page.locator('[data-action="run-command"]');await hiddenNarrowCommand.dispatchEvent('pointerdown');await page.waitForTimeout(600);await hiddenNarrowCommand.dispatchEvent('pointerup');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-narrow.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:1280,height:720});
-  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[data-component="command-settings-editor"]');const firstRow=editor.locator('.command-settings-editor__row').first();await firstRow.locator('.command-settings-editor__row-menu-trigger').click();await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');const commandDialog=page.locator('#command-editor-dialog');await commandDialog.getByLabel('Button label').fill('Review');await commandDialog.getByRole('textbox',{name:'Program'}).fill('/usr/bin/true');await commandDialog.getByRole('button',{name:'Done'}).click();await expect(editor.getByRole('status')).toContainText('Saved.');await page.getByLabel('List view').click();await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
+  const settingsView=page.getByLabel('Settings view');await settingsView.dispatchEvent('click');await expect(settingsView).toHaveAttribute('aria-pressed','true');await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[data-component="command-settings-editor"]');const firstRow=editor.locator('.command-settings-editor__row').first();await firstRow.locator('.command-settings-editor__row-menu-trigger').click();await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');const commandDialog=page.locator('#command-editor-dialog');await commandDialog.getByLabel('Button label').fill('Review');await commandDialog.getByRole('textbox',{name:'Program'}).fill('/usr/bin/true');await commandDialog.getByRole('button',{name:'Done'}).click();await expect(editor.getByRole('status')).toContainText('Saved.');await page.getByLabel('List view').click();await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
 });
 
 test('aligns project sidebar highlights, content, and icon hit targets to shared rails',async({page})=>{
