@@ -27,6 +27,13 @@ test("accepts semicolon-separated requirement documents", () => {
   assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
 });
 
+test("accepts evidence descriptions after a file reference", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = fixture().replace("`unit.rs`", "`unit.rs # runs the --check mode`");
+  assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
+});
+
 test("accepts a Hot Sheet ticket slug for externally attached manual evidence", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
   for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
