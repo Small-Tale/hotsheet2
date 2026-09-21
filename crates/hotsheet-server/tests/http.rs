@@ -6362,6 +6362,9 @@ async fn setup_endpoint_prepares_the_project_like_the_cli() {
     // Same artifacts the CLI's `setup codex` writes, into the served store.
     let agents = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
     assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
+    let skill =
+        std::fs::read_to_string(dir.path().join(".agents/skills/hotsheet/SKILL.md")).unwrap();
+    assert_eq!(skill, include_str!("../../../plugins/codex/SKILL.md"));
     let cfg = std::fs::read_to_string(dir.path().join(".codex/config.toml")).unwrap();
     assert!(cfg.contains("mcp_servers") && cfg.contains("hotsheet"));
 }

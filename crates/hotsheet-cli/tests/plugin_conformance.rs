@@ -99,7 +99,7 @@ fn check_skills(p: &Plugin, id: &str) {
                 "[{id}] declared skill body is empty"
             );
         }
-        (None, None) => {} // a tool with no skills concept (e.g. Codex) — the correct signal
+        (None, None) => {} // a tool with no skills concept (e.g. Antigravity)
         _ => panic!("[{id}] skills manifest/accessor disagree (absence-as-feature broken)"),
     }
 }

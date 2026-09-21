@@ -15,7 +15,7 @@ binaries = ["agy"]
 target = "AGENTS.md"
 section = "instructions.md"
 
-# No [skills] — Antigravity has no skills concept (like Codex).
+# No [skills] — Antigravity does not currently expose a project-local skill convention.
 
 [mcp]
 # Antigravity CONSUMES MCP via a standard `mcpServers` object (official docs); the

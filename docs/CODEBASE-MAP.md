@@ -209,7 +209,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/no_tool_id_branches.rs # HS2-9 plugin-first lint: core must not branch on a tool id (ids derived from the registry)
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
     claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; [drive] claude-channel (async)
-    codex/                   #   AGENTS.md instructions; no skill; codex-toml MCP; [drive] app-server (persistent)
+    codex/                   #   AGENTS.md instructions + project-local .agents/skills/hotsheet/SKILL.md; codex-toml MCP; [drive] app-server (persistent)
     antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)

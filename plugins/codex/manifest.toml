@@ -1,7 +1,7 @@
 # First-party Hot Sheet plugin for Codex CLI. Loaded through the same loader as any
 # other plugin (docs/05 §5.11) — and deliberately a different SHAPE than Claude, to
-# keep the plugin interface honest (docs/05 §5.1): AGENTS.md instead of CLAUDE.md, no
-# skills concept, and a TOML MCP config instead of JSON.
+# keep the plugin interface honest (docs/05 §5.1): AGENTS.md instead of CLAUDE.md,
+# project-local skills under `.agents/skills/`, and a TOML MCP config instead of JSON.
 
 id = "codex"
 display_name = "Codex"
@@ -16,8 +16,11 @@ binaries = ["codex"]
 target = "AGENTS.md"
 section = "instructions.md"
 
-# NOTE: no [skills] table — Codex has no skills concept. The loader treats the
-# skills capability as absent (docs/05 §5.3, "absence is the signal").
+[skills]
+# Codex discovers project-local skills from `.agents/skills/`. The bundled adapter is
+# kept byte-identical to the repository's shared `.agents` workflow by a sync test.
+target = ".agents/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
 
 [mcp]
 # Codex stores MCP servers as TOML under [mcp_servers.<name>] in $CODEX_HOME/config.toml

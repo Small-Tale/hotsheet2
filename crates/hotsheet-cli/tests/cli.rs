@@ -175,6 +175,12 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
         "User text.\n\n<!-- BEGIN hotsheet:codex -->\nstale\n<!-- END hotsheet:codex -->\n",
     )
     .unwrap();
+    let stale_skill = project.join(".agents/skills/hotsheet/SKILL.md");
+    std::fs::create_dir_all(stale_skill.parent().unwrap()).unwrap();
+    std::fs::write(&stale_skill, "stale Codex adapter\n").unwrap();
+    let custom_skill = project.join(".agents/skills/custom/SKILL.md");
+    std::fs::create_dir_all(custom_skill.parent().unwrap()).unwrap();
+    std::fs::write(&custom_skill, "user-authored custom skill\n").unwrap();
 
     let refresh = || {
         hs(&store)
@@ -188,9 +194,15 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     };
     refresh();
     let instructions = std::fs::read(project.join("AGENTS.md")).unwrap();
+    let skill = std::fs::read(&stale_skill).unwrap();
     let mcp = std::fs::read(project.join(".codex/config.toml")).unwrap();
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
     assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
+    assert_eq!(skill, include_bytes!("../../../plugins/codex/SKILL.md"));
+    assert_eq!(
+        std::fs::read_to_string(&custom_skill).unwrap(),
+        "user-authored custom skill\n"
+    );
     let settings: serde_json::Value =
         serde_json::from_slice(&std::fs::read(project.join(".hotsheet2/settings.json")).unwrap())
             .unwrap();
@@ -209,6 +221,11 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     assert_eq!(
         std::fs::read(project.join(".codex/config.toml")).unwrap(),
         mcp
+    );
+    assert_eq!(std::fs::read(&stale_skill).unwrap(), skill);
+    assert_eq!(
+        std::fs::read_to_string(&custom_skill).unwrap(),
+        "user-authored custom skill\n"
     );
 }
 

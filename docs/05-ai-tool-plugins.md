@@ -57,8 +57,12 @@ invoke the core merge-safe writers. They migrate only settings files that alread
 and refresh detected or previously managed enabled plugins, which repairs stale or
 partial setup without opting a clean project into an absent tool. Identical output is a
 byte-level no-op, and managed instruction markers remain the boundary around content
-Hot Sheet may replace. Bundled skill versions are checked against the current shared
-adapter, and Windows detection honors command wrappers from `PATHEXT`, so freshness does
+Hot Sheet may replace. Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
+`.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized
+with their canonical shared workflows; refresh replaces a stale Hot Sheet adapter while
+preserving unrelated user-authored skills and instruction content. Bundled skill versions
+are checked against the current shared adapters, and Windows detection honors command
+wrappers from `PATHEXT`, so freshness does
 not silently skip npm-installed tools or replace a newer workflow with an older bundle.
 In the source-backed web development bridge, the compiled CLI reports a digest of all
 embedded setup assets and the bridge independently hashes the live `plugins/` tree. A

@@ -143,7 +143,7 @@ fn setup_plugins(
         }
         let mut wrote = vec![write_instructions(project_dir, &p)?];
         if let Some(skill) = write_skill(project_dir, &p)? {
-            wrote.push(skill); // absent for tools with no skills concept (e.g. Codex)
+            wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
         }
         wrote.push(write_mcp(project_dir, &store_abs, &p)?);
         if let Some(hook) = write_hooks(project_dir, &p)? {
@@ -252,7 +252,7 @@ fn replace_or_append_block(existing: &str, begin: &str, end: &str, block: &str) 
 }
 
 /// Write the worklist skill (a fully managed file), or nothing if the tool has no skills
-/// concept (Codex). Returns the written path when present.
+/// concept. Returns the written path when present.
 fn write_skill(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError> {
     match p.skill() {
         Some((target, body)) => {
@@ -741,7 +741,7 @@ args = ["--path", "{store}"]
     }
 
     #[test]
-    fn bundled_claude_skill_matches_the_canonical_skill_and_codex_adapter() {
+    fn bundled_tool_skills_match_their_canonical_shared_workflows() {
         fn version(contents: &str) -> &str {
             contents
                 .lines()
@@ -756,16 +756,18 @@ args = ["--path", "{store}"]
                 .collect::<Vec<_>>()
                 .join("\n")
         }
-        let bundled = include_str!("../../../plugins/claude/SKILL.md");
-        let canonical = include_str!("../../../.claude/skills/hotsheet/SKILL.md");
-        let adapter = include_str!("../../../.agents/skills/hotsheet/SKILL.md");
+        let bundled_claude = include_str!("../../../plugins/claude/SKILL.md");
+        let bundled_codex = include_str!("../../../plugins/codex/SKILL.md");
+        let canonical_claude = include_str!("../../../.claude/skills/hotsheet/SKILL.md");
+        let canonical_codex = include_str!("../../../.agents/skills/hotsheet/SKILL.md");
 
-        assert_eq!(bundled, canonical);
+        assert_eq!(bundled_claude, canonical_claude);
+        assert_eq!(bundled_codex, canonical_codex);
         assert_eq!(
-            without_claude_tool_metadata(bundled),
-            without_claude_tool_metadata(adapter)
+            without_claude_tool_metadata(bundled_claude),
+            without_claude_tool_metadata(canonical_codex)
         );
-        assert_eq!(version(bundled), version(adapter));
+        assert_eq!(version(bundled_claude), version(bundled_codex));
     }
 
     #[test]

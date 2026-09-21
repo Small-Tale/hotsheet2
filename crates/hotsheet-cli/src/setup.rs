@@ -196,8 +196,11 @@ mod tests {
     }
 
     #[test]
-    fn setup_codex_uses_agents_md_and_toml_and_no_skill() {
+    fn setup_codex_writes_agents_skill_and_toml_idempotently() {
         let d = project();
+        let custom_skill = d.path().join(".agents/skills/custom/SKILL.md");
+        std::fs::create_dir_all(custom_skill.parent().unwrap()).unwrap();
+        std::fs::write(&custom_skill, "user-authored custom skill\n").unwrap();
         let reports = run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
         assert_eq!(reports[0].tool, "Codex CLI");
 
@@ -212,7 +215,21 @@ mod tests {
         assert!(agents.contains("Double coverage"));
         assert!(agents.contains("Pushing is up to this repository"));
         assert!(!d.path().join(".claude").exists());
-        assert!(reports[0].wrote.iter().all(|w| !w.contains("SKILL")));
+        assert!(
+            reports[0]
+                .wrote
+                .iter()
+                .any(|w| w == ".agents/skills/hotsheet/SKILL.md")
+        );
+
+        let skill = read(d.path(), ".agents/skills/hotsheet/SKILL.md");
+        assert_eq!(skill, include_str!("../../../plugins/codex/SKILL.md"));
+        assert!(skill.contains("name: hotsheet"));
+        assert!(skill.contains("not a stopping condition"));
+        assert_eq!(
+            read(d.path(), ".agents/skills/custom/SKILL.md"),
+            "user-authored custom skill\n"
+        );
 
         let cfg: toml::Table = toml::from_str(&read(d.path(), ".codex/config.toml")).unwrap();
         let hs = cfg["mcp_servers"]["hotsheet"].as_table().unwrap();
@@ -221,6 +238,14 @@ mod tests {
             read(d.path(), ".git/info/exclude")
                 .lines()
                 .any(|line| line == "/.codex/config.toml")
+        );
+
+        run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
+        assert_eq!(read(d.path(), "AGENTS.md"), agents);
+        assert_eq!(read(d.path(), ".agents/skills/hotsheet/SKILL.md"), skill);
+        assert_eq!(
+            read(d.path(), ".agents/skills/custom/SKILL.md"),
+            "user-authored custom skill\n"
         );
     }
 

@@ -76,11 +76,14 @@ fn every_builtin_carries_the_full_default_guidance() {
 }
 
 #[test]
-fn codex_is_a_second_first_party_plugin_with_no_skills() {
+fn codex_declares_its_project_local_skill() {
     let p = find_in("codex", &[]).expect("codex plugin present");
     assert_eq!(p.manifest.product_name, "Codex CLI");
     assert!(p.manifest.detection.binaries.iter().any(|b| b == "codex"));
-    assert!(p.skill().is_none(), "codex has no skills concept");
+    let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
+    assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
+    assert!(skill_body.contains("name: hotsheet"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 47 -->"));
     assert_eq!(p.manifest.instructions.target, "AGENTS.md");
     assert_eq!(p.manifest.mcp.format, "codex-toml");
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");

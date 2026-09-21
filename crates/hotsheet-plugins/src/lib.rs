@@ -70,7 +70,7 @@ pub struct Manifest {
     #[serde(default)]
     pub detection: Detection,
     pub instructions: Instructions,
-    /// Optional: some tools (e.g. Codex) have no "skills" concept. Absence = the tool
+    /// Optional: some tools (e.g. Antigravity) have no "skills" concept. Absence = the tool
     /// gets no skill artifact (docs/05 §5.3, "absence is the signal").
     #[serde(default)]
     pub skills: Option<Skills>,
