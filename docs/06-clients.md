@@ -796,7 +796,9 @@ and identity-less legacy entries remain conservatively blocking.
   step because the full transcript is the only possible result. The bundle-contents step presents
   optional contents as one vertical list and opens the host folder picker from Save, without a
   redundant review step or internal bundle-file inventory. Popup lifecycle events from
-  controls inside the wizard never dismiss the wizard itself. It creates a portable `.hotsheet-chat`
+  controls inside the wizard never dismiss the wizard itself. Its major regions, body, within-group
+  controls, and connected labels use Kerf's canonical 24/16/8/4 px spacing relationships
+  (HS2-4Y6SM9). It creates a portable `.hotsheet-chat`
   directory bundle. Every bundle contains `manifest.json`, a
   readable `transcript.md`, and lossless `conversation.json`; optional `summary.md`, attachment,
   and original-media entries are explicit. Structured file references emitted with assistant

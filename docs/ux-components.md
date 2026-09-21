@@ -272,8 +272,10 @@ does not introduce polling or another network request.
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected range
     without presenting another picker; if no range exists it skips directly to the vertically
     stacked set of optional local summary/attachments/original-media
-    contents and invoke the host `.hotsheet-chat` folder picker from Save; nested popup hide events do
-    not close the wizard and existing
+    contents and invokes the host `.hotsheet-chat` folder picker from Save; nested popup hide events do
+    not close the wizard;
+    dialog regions follow Kerf's canonical 24 px major, 16 px body, 8 px within-group, and
+    4 px connected-label spacing relationships (HS2-4Y6SM9); existing
     destinations receive explicit collision handling; structured per-message file references render
     in both live/export transcripts and selected enabled assets retain bytes, MIME type, filename,
     stable id, and range scoping; `TerminalDrawer` can open a saved bundle
