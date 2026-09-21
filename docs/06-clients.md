@@ -631,6 +631,15 @@ and identity-less legacy entries remain conservatively blocking.
   menu action metadata, resize action wiring, and tab identity. The shared package owns their generic anatomy and CSS,
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
+  The web client and its Kerf/Web Awesome spike pin `kerfjs` and `@kerfjs/ui` in
+  lockstep at 5.0.0-beta.22. The client follows that release's stricter component
+  contracts: every shared `Select` supplies exactly one accessible naming mode, and
+  `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
+  instead of passing partial optional action props. The browser test runtime is kept at
+  the package's Playwright 1.63 peer floor so package and application browser checks use
+  one compatible installation. Token-search input state is consumed through beta 22's
+  `wireTokenSearchFields.onEdit` callback in both the application and UX catalog rather
+  than through a second competing delegated input listener (HS2-HJ585K).
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries

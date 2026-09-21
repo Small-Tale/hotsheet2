@@ -27,6 +27,7 @@ describe('content components', () => {
   it('places a focused new-note composer after existing notes', () => {
     const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
     expect(markup.indexOf('data-component="note-card"')).toBeLessThan(markup.indexOf('data-component="note-composer"'));
+    expect(markup).not.toContain('data-action="add-ticket-note"');
   });
   it('offers Respond to Feedback only below the active inspector feedback note', () => {
     const notes = [

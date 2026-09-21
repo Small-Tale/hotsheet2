@@ -19,6 +19,8 @@ describe('ticket metadata controls and inspector panels', () => {
     const priority = String(TicketPrioritySelect({ name: 'priority', value: 'urgent' }));
     expect(priority).toContain('data-lucide="chevrons-up"');
     expect(priority).toContain('data-lucide="minus"');
+    expect(String(TicketCategorySelect({ name: 'category', value: 'bug', ariaLabel: 'Compact category' }))).toContain('aria-label="Compact category"');
+    expect(String(TicketPrioritySelect({ name: 'priority', value: 'urgent', ariaLabel: 'Compact priority' }))).toContain('aria-label="Compact priority"');
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
     expect(status).toContain('kui-select kui-select--custom-selected ticket-status-menu');
@@ -60,6 +62,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(blocked).toContain('Waiting');
     expect(blocked.match(/data-component="list-header"/g)).toHaveLength(4);
     expect(info).toContain('data-component="ticket-notes"');
+    const readOnly=String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: [], details: '', canUpdate: false, canAddNotes: false }));
+    expect(readOnly).toContain('<h2 class="kui-list-header__label">Tags</h2>');
+    expect(readOnly).not.toContain('data-action="open-ticket-tag-popover"');
+    expect(readOnly).not.toContain('data-action="add-ticket-note"');
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);
     expect(timeline).toContain('One event');

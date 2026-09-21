@@ -20,6 +20,7 @@ import {
 } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
+import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
@@ -606,6 +607,12 @@ const applyCatalogTheme = () => {
 };
 applyCatalogTheme();
 mount(root, DemoApp);
+wireTokenSearchFields(root, {
+  collapsible: { signals: { 'workspace-search': workspaceSearchOpen } },
+  onEdit: ({ id, editor }) => {
+    if (id === 'workspace-search') workspaceSearchQuery.value = editor.textContent;
+  },
+});
 wireCatalog(root, {
   onSelect: id => { selectDemo(id, false); },
   onToggleSidebar: () => {
@@ -1425,17 +1432,8 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
     `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`,
   );
 });
-delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
-  workspaceSearchOpen.value = true;
-  queueMicrotask(() => {
-    focusWorkspaceSearch(root);
-  });
-});
 delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
   workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
-});
-delegate(root, 'input', '[data-token-search-editor="workspace-search"]', (_event, target) => {
-  workspaceSearchQuery.value = target.textContent;
 });
 delegate(
   root,
@@ -1452,13 +1450,6 @@ delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
   if (input) input.textContent = '';
   queueMicrotask(() => {
     focusWorkspaceSearch(root);
-  });
-});
-delegate(root, 'focusout', '[data-token-search-editor="workspace-search"]', () => {
-  queueMicrotask(() => {
-    if (root.querySelector('.workspace-header__search-group:focus-within')) return;
-    if (workspaceSearchQuery.value === '' && !workspaceSearchHelpOpen.value)
-      workspaceSearchOpen.value = false;
   });
 });
 delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {

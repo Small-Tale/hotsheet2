@@ -393,6 +393,13 @@ These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `AppTab`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.
+Hot Sheet pins `kerfjs` and `@kerfjs/ui` together at 5.0.0-beta.22 and treats the
+release's strengthened declaration unions as integration requirements: Select adapters
+choose one accessible-name branch, while ListHeader compositions choose a complete
+passive or action branch. This keeps disabled/read-only surfaces semantically passive
+rather than emitting incomplete hidden actions. The production shell and UX catalog also
+adopt the package-owned `wireTokenSearchFields.onEdit` path so beta 22 remains the sole
+owner of editor normalization before the controlled query state rerenders (HS2-HJ585K).
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
   with accessible pressed state. The notifications mode projects its pending count in
@@ -656,7 +663,8 @@ controlled token deletion, and the opt-in adjacent-chip keyboard (Backspace/Dele
 the neighbouring chip; ArrowRight steps past a trailing chip). The app keeps ownership of the
 token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken` /
 `fromTokenSearchTokens` keyed on each token's canonical `raw`), the whitespace-commit input
-gating, the suggestions/date/help popovers (marked `data-token-search-keep-open`), and the
+gating (reported by the helper's `onEdit` callback), the suggestions/date/help popovers
+(marked `data-token-search-keep-open`), and the
 persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode
 and adopts that signal, so Kerf owns its canonical magnifier trigger, reveal/focus transfer,
 empty-field blur collapse, and Escape collapse while the app's responsive header continues

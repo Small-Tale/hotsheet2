@@ -11,5 +11,6 @@ const PRIORITIES: readonly { value: TicketPriority; label: string; color: string
 ];
 export interface TicketPrioritySelectProps { name: string; value: TicketPriority; label?: string; ariaLabel?: string; disabled?: boolean; placeholder?: boolean }
 export function TicketPrioritySelect({ name, value, label = 'Priority', ariaLabel, disabled = false, placeholder = false }: TicketPrioritySelectProps) {
-  return <Select className="ticket-priority-select" name={name} value={value} label={ariaLabel ? undefined : label} ariaLabel={ariaLabel} choices={PRIORITIES} disabled={disabled} placeholder={placeholder} />;
+  const accessibleName=ariaLabel?{ariaLabel}:{label};
+  return <Select className="ticket-priority-select" name={name} value={value} {...accessibleName} choices={PRIORITIES} disabled={disabled} placeholder={placeholder} />;
 }
