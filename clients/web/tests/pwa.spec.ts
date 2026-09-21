@@ -9,15 +9,21 @@ test('serves installable PWA identity and decodable branding assets', async ({ p
   const manifestResponse = await request.get('/manifest.webmanifest');
   expect(manifestResponse.ok()).toBe(true);
   expect(manifestResponse.headers()['content-type']).toContain('application/manifest+json');
-  const manifest = await manifestResponse.json() as { display: string; icons: Array<{ src: string }> };
+  const manifest = (await manifestResponse.json()) as { display: string; icons: Array<{ src: string }> };
   expect(manifest.display).toBe('standalone');
-  expect(manifest.icons.map(icon => icon.src)).toEqual([
+  expect(manifest.icons.map((icon) => icon.src)).toEqual([
     '/app-icon-192.png',
     '/app-icon-512.png',
     '/app-icon-maskable-512.png',
   ]);
 
-  for (const src of ['/favicon.svg', '/favicon-32.png', '/favicon-256.png', '/apple-touch-icon.png', ...manifest.icons.map(icon => icon.src)]) {
+  for (const src of [
+    '/favicon.svg',
+    '/favicon-32.png',
+    '/favicon-256.png',
+    '/apple-touch-icon.png',
+    ...manifest.icons.map((icon) => icon.src),
+  ]) {
     const image = await request.get(src);
     expect(image.ok(), src).toBe(true);
     expect(image.headers()['content-type'], src).toMatch(/^image\/(?:svg\+xml|png)/);

@@ -6,7 +6,7 @@ test('sort hover stays within one centered pill surface', async ({ page }) => {
 
   const group = page.locator('.workspace-header__sort-group');
   const select = group.locator('.workspace-header__sort');
-  const idleBackground = await group.evaluate(node => getComputedStyle(node).backgroundColor);
+  const idleBackground = await group.evaluate((node) => getComputedStyle(node).backgroundColor);
 
   await select.hover();
   await expect(group).toHaveCSS('background-color', idleBackground);

@@ -32,9 +32,7 @@ export interface QuickTicketDialogElement extends HTMLElement {
 }
 
 export function showQuickTicketComposer(root: ParentNode): boolean {
-  const dialog = root.querySelector<QuickTicketDialogElement>(
-    '[data-component="quick-ticket-composer"]',
-  );
+  const dialog = root.querySelector<QuickTicketDialogElement>('[data-component="quick-ticket-composer"]');
   if (!dialog) return false;
   if (dialog.childElementCount === 0) {
     requestAnimationFrame(() => showQuickTicketComposer(root));
@@ -54,25 +52,175 @@ export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   return true;
 }
 
-export function QuickTicketLauncher({attachmentsEnabled=true,label='New ticket…'}:{attachmentsEnabled?:boolean;label?:string}={}){
-  return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer-launcher" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" title={attachmentsEnabled ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here' : 'Create a new ticket or drop tickets to duplicate'}><LucideIcon icon={Plus} name="plus" />{label}</button>;
+export function QuickTicketLauncher({
+  attachmentsEnabled = true,
+  label = 'New ticket…',
+}: { attachmentsEnabled?: boolean; label?: string } = {}) {
+  return (
+    <button
+      type="button"
+      class="quick-ticket-composer__launcher"
+      data-component="quick-ticket-composer-launcher"
+      data-action="expand-ticket-composer"
+      data-new-ticket-drop-target="true"
+      data-ticket-drop-action="duplicate"
+      title={
+        attachmentsEnabled
+          ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
+          : 'Create a new ticket or drop tickets to duplicate'
+      }
+    >
+      <LucideIcon icon={Plus} name="plus" />
+      {label}
+    </button>
+  );
 }
 
-export function QuickTicketComposer({ expanded = false, title = '', details = '', category = 'task', upNext = false, providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {
-  return <wa-dialog class="quick-ticket-dialog" data-component="quick-ticket-composer" data-key="quick-ticket-composer" label="Create ticket" role="dialog" aria-modal={expanded ? 'true' : undefined} aria-label="Create ticket" aria-hidden={expanded ? undefined : 'true'} inert={expanded ? undefined : true} open={expanded || undefined}>{expanded && <form class="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" data-submitting={String(submitting)}>
-    <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
-    <div class="quick-ticket-composer__metadata"><TicketCategorySelect name="new-ticket-category" label="Category" value={category} /><button type="button" class="quick-ticket-composer__up-next" data-action="toggle-new-ticket-up-next" aria-pressed={String(upNext)} aria-label={upNext?'Remove new ticket from Up Next':'Add new ticket to Up Next'} title={upNext?'Remove from Up Next':'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button></div>
-    <label class="quick-ticket-composer__details"><span>Details</span><textarea name="new-ticket-details" rows={1} data-morph-skip>{details}</textarea></label>
-    <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">
-      <header><span><LucideIcon icon={Paperclip} name="paperclip" />Attachments</span>{attachmentsEnabled && <label><LucideIcon icon={Plus} name="plus" />Add<input type="file" multiple name="new-ticket-attachments" aria-label="Browse attachments for new ticket" /></label>}</header>
-      {attachments.length > 0 && <div class="quick-ticket-composer__attachment-list">{attachments.map(item => <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}><LucideIcon icon={Paperclip} name="paperclip" /><span title={item.name}>{item.name}</span><button type="button" data-action="remove-new-ticket-attachment" data-pending-attachment-id={item.id} aria-label={`Remove ${item.name}`} title={`Remove ${item.name}`}><LucideIcon icon={Trash2} name="trash-2" /></button></div>)}</div>}
-      {attachmentsEnabled ? <label class="quick-ticket-composer__drop"><LucideIcon icon={Upload} name="upload" /><span>Drop attachment files anywhere in this area or browse</span><input type="file" multiple name="new-ticket-attachments" aria-label="Drop or browse attachments for new ticket" /></label> : <p class="quick-ticket-composer__notice">This ticket provider does not support attachments.</p>}
-      {attachmentMessage && <p class={attachmentError ? 'quick-ticket-composer__message quick-ticket-composer__message--error' : 'quick-ticket-composer__message'} role={attachmentError ? 'alert' : 'status'}>{attachmentMessage}</p>}
-    </section>
-    <div class="quick-ticket-composer__footer">
-      <span>Creating in {providerName}</span>
-      <div><wa-button type="button" appearance="plain" data-dialog="close" data-action="cancel-ticket-composer" disabled={submitting}>Cancel</wa-button><wa-button type="submit" appearance="accent" disabled={!canCreate || busy || submitting}>{submitting ? 'Creating…' : 'Create ticket'}</wa-button></div>
-    </div>
-    {!canCreate && <p class="quick-ticket-composer__notice" role="status">This ticket provider does not support creating tickets.</p>}
-  </form>}</wa-dialog>;
+export function QuickTicketComposer({
+  expanded = false,
+  title = '',
+  details = '',
+  category = 'task',
+  upNext = false,
+  providerName = 'Hot Sheet',
+  canCreate = true,
+  attachments = [],
+  attachmentsEnabled = true,
+  attachmentMessage = '',
+  attachmentError = false,
+  busy = false,
+  submitting = false,
+}: QuickTicketComposerProps) {
+  return (
+    <wa-dialog
+      class="quick-ticket-dialog"
+      data-component="quick-ticket-composer"
+      data-key="quick-ticket-composer"
+      label="Create ticket"
+      role="dialog"
+      aria-modal={expanded ? 'true' : undefined}
+      aria-label="Create ticket"
+      aria-hidden={expanded ? undefined : 'true'}
+      inert={expanded ? undefined : true}
+      open={expanded || undefined}
+    >
+      {expanded && (
+        <form
+          class="quick-ticket-composer"
+          data-action="create-ticket-form"
+          data-new-ticket-drop-target="true"
+          data-ticket-drop-action="duplicate"
+          data-submitting={String(submitting)}
+        >
+          <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
+          <div class="quick-ticket-composer__metadata">
+            <TicketCategorySelect name="new-ticket-category" label="Category" value={category} />
+            <button
+              type="button"
+              class="quick-ticket-composer__up-next"
+              data-action="toggle-new-ticket-up-next"
+              aria-pressed={String(upNext)}
+              aria-label={upNext ? 'Remove new ticket from Up Next' : 'Add new ticket to Up Next'}
+              title={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+            >
+              <LucideIcon icon={Star} name="star" />
+            </button>
+          </div>
+          <label class="quick-ticket-composer__details">
+            <span>Details</span>
+            <textarea name="new-ticket-details" rows={1} data-morph-skip>
+              {details}
+            </textarea>
+          </label>
+          <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">
+            <header>
+              <span>
+                <LucideIcon icon={Paperclip} name="paperclip" />
+                Attachments
+              </span>
+              {attachmentsEnabled && (
+                <label>
+                  <LucideIcon icon={Plus} name="plus" />
+                  Add
+                  <input
+                    type="file"
+                    multiple
+                    name="new-ticket-attachments"
+                    aria-label="Browse attachments for new ticket"
+                  />
+                </label>
+              )}
+            </header>
+            {attachments.length > 0 && (
+              <div class="quick-ticket-composer__attachment-list">
+                {attachments.map((item) => (
+                  <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}>
+                    <LucideIcon icon={Paperclip} name="paperclip" />
+                    <span title={item.name}>{item.name}</span>
+                    <button
+                      type="button"
+                      data-action="remove-new-ticket-attachment"
+                      data-pending-attachment-id={item.id}
+                      aria-label={`Remove ${item.name}`}
+                      title={`Remove ${item.name}`}
+                    >
+                      <LucideIcon icon={Trash2} name="trash-2" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {attachmentsEnabled ? (
+              <label class="quick-ticket-composer__drop">
+                <LucideIcon icon={Upload} name="upload" />
+                <span>Drop attachment files anywhere in this area or browse</span>
+                <input
+                  type="file"
+                  multiple
+                  name="new-ticket-attachments"
+                  aria-label="Drop or browse attachments for new ticket"
+                />
+              </label>
+            ) : (
+              <p class="quick-ticket-composer__notice">This ticket provider does not support attachments.</p>
+            )}
+            {attachmentMessage && (
+              <p
+                class={
+                  attachmentError
+                    ? 'quick-ticket-composer__message quick-ticket-composer__message--error'
+                    : 'quick-ticket-composer__message'
+                }
+                role={attachmentError ? 'alert' : 'status'}
+              >
+                {attachmentMessage}
+              </p>
+            )}
+          </section>
+          <div class="quick-ticket-composer__footer">
+            <span>Creating in {providerName}</span>
+            <div>
+              <wa-button
+                type="button"
+                appearance="plain"
+                data-dialog="close"
+                data-action="cancel-ticket-composer"
+                disabled={submitting}
+              >
+                Cancel
+              </wa-button>
+              <wa-button type="submit" appearance="accent" disabled={!canCreate || busy || submitting}>
+                {submitting ? 'Creating…' : 'Create ticket'}
+              </wa-button>
+            </div>
+          </div>
+          {!canCreate && (
+            <p class="quick-ticket-composer__notice" role="status">
+              This ticket provider does not support creating tickets.
+            </p>
+          )}
+        </form>
+      )}
+    </wa-dialog>
+  );
 }

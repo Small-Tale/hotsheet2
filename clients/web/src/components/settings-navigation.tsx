@@ -5,9 +5,20 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArchiveRestore, Bot, Columns3, Database, Keyboard, PanelLeftClose, ShieldCheck, SlidersHorizontal, TerminalSquare } from 'lucide';
+import {
+  ArchiveRestore,
+  Bot,
+  Columns3,
+  Database,
+  Keyboard,
+  PanelLeftClose,
+  ShieldCheck,
+  SlidersHorizontal,
+  TerminalSquare,
+} from 'lucide';
 
-export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'general' | 'keyboard';
+export type SettingsCategory =
+  'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'general' | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
 const projectCategories = [
@@ -29,26 +40,61 @@ const allCategories = [...projectCategories, ...appCategories];
 
 /** Whether a settings category is app-scoped (device-local) rather than project-scoped. */
 export function isAppSettingsCategory(category: SettingsCategory): boolean {
-  return appCategories.some(item => item.id === category);
+  return appCategories.some((item) => item.id === category);
 }
 
 export function settingsCategoryTitle(category: SettingsCategory): string {
-  const item = allCategories.find(entry => entry.id === category);
+  const item = allCategories.find((entry) => entry.id === category);
   if (!item) return 'Settings';
   return category === 'keyboard' ? 'Keyboard shortcuts' : item.label;
 }
 
-export function SettingsNavigation({ selected, collapseControl = false }: { selected: SettingsCategory; collapseControl?: boolean }) {
-  const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][]) =>
-    <><p class="settings-navigation__heading">{heading}</p>
+export function SettingsNavigation({
+  selected,
+  collapseControl = false,
+}: {
+  selected: SettingsCategory;
+  collapseControl?: boolean;
+}) {
+  const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][]) => (
+    <>
+      <p class="settings-navigation__heading">{heading}</p>
       <nav aria-label={heading}>
-        {items.map(item => <ListItem action="select-settings-category" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} />)}
-      </nav></>;
-  return <aside class="settings-navigation kui-pane" data-component="settings-navigation" aria-label="Settings categories">
-    {collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide settings sidebar" title="Hide settings sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
-    <div class="settings-navigation__content kui-pane__content">
-      {renderGroup('Project Settings', projectCategories)}
-      {renderGroup('App Settings', appCategories)}
-    </div>
-  </aside>;
+        {items.map((item) => (
+          <ListItem
+            action="select-settings-category"
+            itemId={item.id}
+            selected={selected === item.id}
+            icon={<LucideIcon icon={item.icon} name={item.iconName} />}
+            label={item.label}
+          />
+        ))}
+      </nav>
+    </>
+  );
+  return (
+    <aside class="settings-navigation kui-pane" data-component="settings-navigation" aria-label="Settings categories">
+      {collapseControl && (
+        <Toolbar
+          divider={false}
+          trailing={
+            <ToolbarControlGroup appearance="borderless" single>
+              <button
+                type="button"
+                data-action="toggle-project-sidebar"
+                aria-label="Hide settings sidebar"
+                title="Hide settings sidebar"
+              >
+                <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
+              </button>
+            </ToolbarControlGroup>
+          }
+        />
+      )}
+      <div class="settings-navigation__content kui-pane__content">
+        {renderGroup('Project Settings', projectCategories)}
+        {renderGroup('App Settings', appCategories)}
+      </div>
+    </aside>
+  );
 }

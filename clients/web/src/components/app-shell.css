@@ -1,97 +1,362 @@
-.app-shell { display: flex; width: 100%; min-width: remify(1024px); height: min(remify(736px), calc(100vh - remify(128px))); min-height: remify(600px); overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: remify(13.6px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.app-shell {
+  display: flex;
+  width: 100%;
+  min-width: remify(1024px);
+  height: min(remify(736px), calc(100vh - remify(128px)));
+  min-height: remify(600px);
+  overflow: hidden;
+  border: 1px solid var(--wa-color-surface-border);
+  border-radius: remify(13.6px);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
 /* Collapsing/expanding a region changes its flex width, which reflows .app-shell__main and
    every ticket row. Animating that width relayouts the whole list per frame (HS2-4KZBTT:
    "very choppy when there are too many tickets"), so the width change is instant — one reflow,
    not sixty. The fixed-width content still slides (transform only, composited off the main
    thread, and clipped by .app-shell's overflow:hidden), so the collapse stays animated without
    touching layout. The pointer-drag resize path stays un-animated via the data-resizing-region guard. */
-.app-shell > .kui-resizable-region[data-region-id="app-sidebar"] { border-right: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]::after { position: absolute; z-index: 2; top: 0; right: -1px; bottom: 0; width: 1px; background: var(--hs-shell-divider); content: ''; pointer-events: none; }
-.app-shell > .kui-resizable-region[data-region-id="app-sidebar"][data-collapsed="true"]::after { display: none; }
-.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-sidebar"]::after { display: none; }
-.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region:is([data-region-id="app-sidebar"], [data-region-id="app-inspector"]) { --kui-resizable-region-separator-color: transparent; }
-.app-shell > .kui-resizable-region[data-collapsed="true"] { border-right-width: 0; }
-.app-shell > .kui-resizable-region[data-collapsed="true"] .kui-resizable-region__handle { display: none; }
+.app-shell > .kui-resizable-region[data-region-id='app-sidebar'] {
+  border-right: 1px solid var(--wa-color-surface-border);
+  background: var(--wa-color-surface-default);
+}
+.app-shell > .kui-resizable-region[data-region-id='app-sidebar']::after {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 1px;
+  background: var(--hs-shell-divider);
+  content: '';
+  pointer-events: none;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-sidebar'][data-collapsed='true']::after {
+  display: none;
+}
+.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id='app-sidebar']::after {
+  display: none;
+}
+.app-shell:has(.terminal-dashboard__magnified)
+  > .kui-resizable-region:is([data-region-id='app-sidebar'], [data-region-id='app-inspector']) {
+  --kui-resizable-region-separator-color: transparent;
+}
+.app-shell > .kui-resizable-region[data-collapsed='true'] {
+  border-right-width: 0;
+}
+.app-shell > .kui-resizable-region[data-collapsed='true'] .kui-resizable-region__handle {
+  display: none;
+}
 .app-shell > .kui-resizable-region .project-sidebar,
 .app-shell > .kui-resizable-region .terminal-operations-sidebar,
-.app-shell > .kui-resizable-region .settings-navigation { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
-.app-shell > .kui-resizable-region[data-region-id="app-sidebar"] .kui-resizable-region__content { width: var(--kui-resizable-region-expanded-size); min-width: var(--kui-resizable-region-expanded-size); transition: transform .2s ease; }
-.app-shell > .kui-resizable-region[data-region-id="app-sidebar"][data-collapsed="true"] .kui-resizable-region__content { transform: translateX(-100%); }
-.app-shell__main { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"] { border-top: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) { z-index: 5; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) .kui-resizable-region__content { overflow: visible; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] { overflow: hidden; transition: height .2s ease, flex-basis .2s ease; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] .kui-resizable-region__content { transition: opacity .16s ease, transform .2s ease; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"] .kui-resizable-region__content { height: var(--kui-resizable-region-expanded-size); min-height: var(--kui-resizable-region-expanded-size); }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] { overflow: hidden; border-top: 0; }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__content { opacity: 0; transform: translateY(var(--kui-space-l)); }
-.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__handle { display: none; }
-.app-shell__terminal-drawer-restore.kui-floating-toolbar[data-position="bottom-end"] { inset-inline-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-right)); inset-block-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-bottom)); }
-.app-shell__main > .project-tab-bar { border-bottom: 0; background: var(--wa-color-surface-default); }
-.app-shell[data-mode="terminals"] .app-shell__main > .project-tab-bar { border-bottom: 1px solid var(--wa-color-surface-border); }
-.app-shell__main > .kui-toolbar .workspace-header { min-width: 0; align-items: center; }
+.app-shell > .kui-resizable-region .settings-navigation {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-sidebar'] .kui-resizable-region__content {
+  width: var(--kui-resizable-region-expanded-size);
+  min-width: var(--kui-resizable-region-expanded-size);
+  transition: transform 0.2s ease;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-sidebar'][data-collapsed='true'] .kui-resizable-region__content {
+  transform: translateX(-100%);
+}
+.app-shell__main {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'] {
+  border-top: 1px solid var(--wa-color-surface-border);
+  background: var(--wa-color-surface-default);
+}
+.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer']:has(.terminal-drawer__create-menu) {
+  z-index: 5;
+}
+.app-shell__main
+  > .kui-resizable-region[data-region-id='app-terminal-drawer']:has(.terminal-drawer__create-menu)
+  .kui-resizable-region__content {
+  overflow: visible;
+}
+.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-transitioning='true'] {
+  overflow: hidden;
+  transition:
+    height 0.2s ease,
+    flex-basis 0.2s ease;
+}
+.app-shell__main
+  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-transitioning='true']
+  .kui-resizable-region__content {
+  transition:
+    opacity 0.16s ease,
+    transform 0.2s ease;
+}
+.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'] .kui-resizable-region__content {
+  height: var(--kui-resizable-region-expanded-size);
+  min-height: var(--kui-resizable-region-expanded-size);
+}
+.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true'] {
+  overflow: hidden;
+  border-top: 0;
+}
+.app-shell__main
+  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true']
+  .kui-resizable-region__content {
+  opacity: 0;
+  transform: translateY(var(--kui-space-l));
+}
+.app-shell__main
+  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true']
+  .kui-resizable-region__handle {
+  display: none;
+}
+.app-shell__terminal-drawer-restore.kui-floating-toolbar[data-position='bottom-end'] {
+  inset-inline-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-right));
+  inset-block-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-bottom));
+}
+.app-shell__main > .project-tab-bar {
+  border-bottom: 0;
+  background: var(--wa-color-surface-default);
+}
+.app-shell[data-mode='terminals'] .app-shell__main > .project-tab-bar {
+  border-bottom: 1px solid var(--wa-color-surface-border);
+}
+.app-shell__main > .kui-toolbar .workspace-header {
+  min-width: 0;
+  align-items: center;
+}
 /* Mobile view switcher (the page-header Select that replaces the desktop view title): a borderless
    select sized to the selected view name, shrinking/truncating rather than stretching (HS2-0SARDD). */
-.app-shell__mobile-view { flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.app-shell__mobile-view::part(combobox) { min-height: remify(32px); padding-inline: remify(8px); border: 0; background: transparent; box-shadow: none; }
-.app-shell__mobile-view::part(combobox):focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }
-.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }
-.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header { align-items:start; }
-body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content { transition: none; }
-.app-shell__work-area { position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden; flex: 1; flex-direction: column; border-top: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); outline: 0 solid transparent; outline-offset: -2px; transition: outline-color .12s ease; }
+.app-shell__mobile-view {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.app-shell__mobile-view::part(combobox) {
+  min-height: remify(32px);
+  padding-inline: remify(8px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell__mobile-view::part(combobox):focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 1px;
+}
+.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) {
+  height: auto;
+  align-items: start;
+}
+.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) .workspace-header {
+  align-items: start;
+}
+body[data-resizing-region] .app-shell > .kui-resizable-region,
+body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content {
+  transition: none;
+}
+.app-shell__work-area {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+  flex-direction: column;
+  border-top: 1px solid var(--wa-color-surface-border);
+  background: var(--wa-color-surface-lowered);
+  outline: 0 solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 0.12s ease;
+}
 /* Terminals mode draws its separator on the project tab bar's bottom edge instead (the tab
    bar sits directly above the work area with no page header between them), so the work-area
    border would double it there. HS2-WH6CCR. */
-.app-shell[data-mode="terminals"] .app-shell__work-area { border-top: 0; }
-.app-shell__work-area::after { position: absolute; z-index: 20; border: 2px solid transparent; content: ''; pointer-events: none; inset: 0; transition: border-color .12s ease; }
-.app-shell__work-area:focus, .app-shell__work-area:focus-within { z-index: 1; outline: 2px solid var(--wa-color-focus); }
-.app-shell__work-area:focus::after, .app-shell__work-area:focus-within::after { border-color: var(--wa-color-focus); }
-.app-shell__work-area:has(.terminal-dashboard__magnified) { z-index: 3; outline-color: transparent; transition: none; }
-.app-shell__work-area:has(.terminal-dashboard__magnified)::after { border-color: transparent; transition: none; }
-.app-shell__composer { position: relative; z-index: 3; padding: remify(12px) remify(16px); flex: none; }
-.app-shell__workspace { min-width: 0; min-height: 0; padding: remify(16px); overflow: auto; overflow-anchor: none; flex: 1; background: var(--wa-color-surface-lowered); }
-.app-shell__workspace[data-presentation="edge-to-edge"] { padding: remify(16px) 0 0; overflow: hidden; }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"] { border-left: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-inspector"] { border-left-color: transparent; }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .kui-resizable-region__content { width: var(--kui-resizable-region-expanded-size); min-width: var(--kui-resizable-region-expanded-size); transition: transform .2s ease; }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] { border-left-width: 0; }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] .kui-resizable-region__content { transform: translateX(100%); }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
-.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.app-shell[data-mode='terminals'] .app-shell__work-area {
+  border-top: 0;
+}
+.app-shell__work-area::after {
+  position: absolute;
+  z-index: 20;
+  border: 2px solid transparent;
+  content: '';
+  pointer-events: none;
+  inset: 0;
+  transition: border-color 0.12s ease;
+}
+.app-shell__work-area:focus,
+.app-shell__work-area:focus-within {
+  z-index: 1;
+  outline: 2px solid var(--wa-color-focus);
+}
+.app-shell__work-area:focus::after,
+.app-shell__work-area:focus-within::after {
+  border-color: var(--wa-color-focus);
+}
+.app-shell__work-area:has(.terminal-dashboard__magnified) {
+  z-index: 3;
+  outline-color: transparent;
+  transition: none;
+}
+.app-shell__work-area:has(.terminal-dashboard__magnified)::after {
+  border-color: transparent;
+  transition: none;
+}
+.app-shell__composer {
+  position: relative;
+  z-index: 3;
+  padding: remify(12px) remify(16px);
+  flex: none;
+}
+.app-shell__workspace {
+  min-width: 0;
+  min-height: 0;
+  padding: remify(16px);
+  overflow: auto;
+  overflow-anchor: none;
+  flex: 1;
+  background: var(--wa-color-surface-lowered);
+}
+.app-shell__workspace[data-presentation='edge-to-edge'] {
+  padding: remify(16px) 0 0;
+  overflow: hidden;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-inspector'] {
+  border-left: 1px solid var(--wa-color-surface-border);
+  background: var(--wa-color-surface-default);
+}
+.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id='app-inspector'] {
+  border-left-color: transparent;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .kui-resizable-region__content {
+  width: var(--kui-resizable-region-expanded-size);
+  min-width: var(--kui-resizable-region-expanded-size);
+  transition: transform 0.2s ease;
+}
+.app-shell > .kui-resizable-region[data-region-id='app-inspector'][data-collapsed='true'] {
+  border-left-width: 0;
+}
+.app-shell
+  > .kui-resizable-region[data-region-id='app-inspector'][data-collapsed='true']
+  .kui-resizable-region__content {
+  transform: translateX(100%);
+}
+.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell
+  > .kui-resizable-region[data-region-id='app-inspector']
+  .ticket-inspector__tabs
+  .ticket-inspector__tab
+  .kui-app-tab__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 @media (max-width: remify(672px)) {
-  .app-shell__workspace { padding: remify(11.2px); }
-  .app-shell__composer { padding: remify(11.2px); }
+  .app-shell__workspace {
+    padding: remify(11.2px);
+  }
+  .app-shell__composer {
+    padding: remify(11.2px);
+  }
 }
 @media (max-width: remify(768px)) {
-  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { grid-template-columns: minmax(0, 1fr); row-gap: remify(6.4px); }
-  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .kui-toolbar__leading { padding-inline: remify(8px) 0; }
-  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .kui-toolbar__trailing { grid-column: 1; width: 100%; padding-inline: remify(12px) 0; justify-content: stretch; }
-  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__actions { width: 100%; }
-  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__search-group { width: auto; min-width: remify(176px); flex: 1 1 auto; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: remify(6.4px);
+  }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) > .kui-toolbar__leading {
+    padding-inline: remify(8px) 0;
+  }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) > .kui-toolbar__trailing {
+    grid-column: 1;
+    width: 100%;
+    padding-inline: remify(12px) 0;
+    justify-content: stretch;
+  }
+  .app-shell__main
+    > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true'])
+    .workspace-header__actions {
+    width: 100%;
+  }
+  .app-shell__main
+    > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true'])
+    .workspace-header__search-group {
+    width: auto;
+    min-width: remify(176px);
+    flex: 1 1 auto;
+  }
 }
-.app-shell__work-area[data-has-composer="true"] > .app-shell__workspace { padding-top: 0; }
+.app-shell__work-area[data-has-composer='true'] > .app-shell__workspace {
+  padding-top: 0;
+}
 /* Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the shell drops its
    1024px min-width and the two sidebars stop taking horizontal space: they become absolute
    overlays on top of the single main column, sliding in with the same translateX transform the
    desktop collapse already uses. Only one is ever open at a time (enforced by the caller), and a
    click-away scrim dismisses whichever is open. The overlay panels anchor to .app-shell, so it
    becomes the positioning context here. */
-.app-shell[data-mobile="true"] { position: relative; min-width: 0; }
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"],
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] { position: absolute; z-index: 41; top: 0; bottom: 0; }
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"] { left: 0; }
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] { right: 0; }
+.app-shell[data-mobile='true'] {
+  position: relative;
+  min-width: 0;
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'],
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] {
+  position: absolute;
+  z-index: 41;
+  top: 0;
+  bottom: 0;
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] {
+  left: 0;
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] {
+  right: 0;
+}
 /* A collapsed (off-screen) overlay must not intercept taps meant for the main column underneath. */
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-collapsed="true"] { pointer-events: none; }
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-collapsed='true'] {
+  pointer-events: none;
+}
 /* Cap the overlay width so a click-away scrim strip always remains, even on a ~390px phone where
    the 352px inspector would otherwise cover the whole width. */
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-sidebar"] .kui-resizable-region__content,
-.app-shell[data-mobile="true"] > .kui-resizable-region[data-region-id="app-inspector"] .kui-resizable-region__content { max-width: 85vw; box-shadow: var(--wa-shadow-l); }
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] .kui-resizable-region__content,
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .kui-resizable-region__content {
+  max-width: 85vw;
+  box-shadow: var(--wa-shadow-l);
+}
 /* Resize handles are meaningless for overlays that no longer share horizontal space. */
-.app-shell[data-mobile="true"] > .kui-resizable-region .kui-resizable-region__handle { display: none; }
+.app-shell[data-mobile='true'] > .kui-resizable-region .kui-resizable-region__handle {
+  display: none;
+}
 /* Viewport-fixed so it reliably covers the whole shell regardless of the app-shell's flex/containing
    block; .app-shell is not a stacking context (position:relative + z-index:auto), so the z-index:41
    overlay panels still paint above this z-index:40 scrim. */
-.app-shell__scrim { position: fixed; z-index: 40; padding: 0; border: 0; background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 44%, transparent); cursor: pointer; inset: 0; }
-@media (prefers-reduced-motion: reduce) { .app-shell .kui-resizable-region, .app-shell .kui-resizable-region .kui-resizable-region__content { transition: none !important; } }
+.app-shell__scrim {
+  position: fixed;
+  z-index: 40;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 44%, transparent);
+  cursor: pointer;
+  inset: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .kui-resizable-region,
+  .app-shell .kui-resizable-region .kui-resizable-region__content {
+    transition: none !important;
+  }
+}

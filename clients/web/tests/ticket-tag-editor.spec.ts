@@ -17,11 +17,19 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
   await trigger.click();
   await expect(popover).toBeVisible();
   await expect(input).toBeFocused();
-  expect(await popover.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(['accessibility', 'regression', 'server']);
+  expect(
+    await popover
+      .locator('option')
+      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)),
+  ).toEqual(['accessibility', 'regression', 'server']);
 
   const wideLayout = await page.evaluate(() => {
-    const triggerBox = document.querySelector<HTMLElement>('[data-component="list-header"] button[aria-label="Add tag"]')!.getBoundingClientRect();
-    const popoverBox = document.querySelector<HTMLElement>('[data-component="ticket-tag-popover"]')!.getBoundingClientRect();
+    const triggerBox = document
+      .querySelector<HTMLElement>('[data-component="list-header"] button[aria-label="Add tag"]')!
+      .getBoundingClientRect();
+    const popoverBox = document
+      .querySelector<HTMLElement>('[data-component="ticket-tag-popover"]')!
+      .getBoundingClientRect();
     return {
       belowTrigger: popoverBox.top >= triggerBox.bottom,
       withinViewport: popoverBox.left >= 0 && popoverBox.right <= innerWidth && popoverBox.bottom <= innerHeight,

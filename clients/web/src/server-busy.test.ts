@@ -3,7 +3,15 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerBusyBars, ServerBusyMessage } from './components/server-busy-bars';
-import { beginServerRequest, computeServerBusyBarCount, describeServerRequest, endServerRequest, serverBusy, serverBusyMessage, serverInFlightCount } from './server-busy';
+import {
+  beginServerRequest,
+  computeServerBusyBarCount,
+  describeServerRequest,
+  endServerRequest,
+  serverBusy,
+  serverBusyMessage,
+  serverInFlightCount,
+} from './server-busy';
 
 describe('computeServerBusyBarCount', () => {
   it('returns zero for a non-positive or non-finite width', () => {
@@ -113,8 +121,16 @@ describe('describeServerRequest', () => {
 });
 
 describe('serverBusyMessage', () => {
-  beforeEach(() => { vi.useFakeTimers(); while (serverInFlightCount() > 0) endServerRequest(); serverBusyMessage.value = ''; });
-  afterEach(() => { while (serverInFlightCount() > 0) endServerRequest(); vi.runAllTimers(); vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+    while (serverInFlightCount() > 0) endServerRequest();
+    serverBusyMessage.value = '';
+  });
+  afterEach(() => {
+    while (serverInFlightCount() > 0) endServerRequest();
+    vi.runAllTimers();
+    vi.useRealTimers();
+  });
   it('reflects the latest labeled request and clears after the idle linger', () => {
     beginServerRequest('Loading tickets');
     expect(serverBusyMessage.value).toBe('Loading tickets');
@@ -137,7 +153,9 @@ describe('serverBusyMessage', () => {
     const css = readFileSync(new URL('./components/server-busy-bars.css', import.meta.url), 'utf8');
     // The pill background is the up-next yellow; the text uses the theme-stable dark companion token, not
     // the theme-flipping warning-on-normal color that was unreadable in dark mode.
-    expect(css).toMatch(/\.server-busy-message \{[^}]*color: var\(--hs-ticket-state-up-next-on\);[^}]*background: var\(--hs-ticket-state-up-next\);/);
+    expect(css).toMatch(
+      /\.server-busy-message \{[^}]*color: var\(--hs-ticket-state-up-next-on\);[^}]*background: var\(--hs-ticket-state-up-next\);/,
+    );
     expect(css).not.toContain('--wa-color-warning-on-normal');
   });
 });

@@ -15,10 +15,9 @@ export function isPlainTicketReselection(
   slug: string,
   intent: TicketSelectionIntent = {},
 ): boolean {
-  return !intent.range && !intent.toggle
-    && loadedSlug === slug
-    && selectedSlugs.length === 1
-    && selectedSlugs[0] === slug;
+  return (
+    !intent.range && !intent.toggle && loadedSlug === slug && selectedSlugs.length === 1 && selectedSlugs[0] === slug
+  );
 }
 
 export function updateTicketSelection(
@@ -36,7 +35,8 @@ export function updateTicketSelection(
   }
   if (intent.toggle) {
     const selected = new Set(state.selected);
-    if (selected.has(slug)) selected.delete(slug); else selected.add(slug);
+    if (selected.has(slug)) selected.delete(slug);
+    else selected.add(slug);
     return { anchor: slug, selected };
   }
   return { anchor: slug, selected: new Set([slug]) };

@@ -1,7 +1,7 @@
 # 14. Usage/Cost Metrics Interface
 
 > **Status: Design (HS2-69).** A **unified usage/cost metrics interface** every AI
-> tool conforms to, based on what HS1 actually *showed* in the UI — **not** the HS1
+> tool conforms to, based on what HS1 actually _showed_ in the UI — **not** the HS1
 > debugging telemetry (tracing / span trees / waterfalls, docs/68), which is dropped
 > (maintainer, 2026-08-19). Storage is **files, no DB**. This is the spec + storage
 > design + build plan.
@@ -9,6 +9,7 @@
 ## 14.1 What we keep (only usage/cost)
 
 HS1's telemetry served two audiences; we keep **one**:
+
 - **KEEP — usage/cost** that appeared in the UI: today's-cost widget, per-ticket cost
   attribution, and the cost / model-donut analytics (HS1 docs/67, 70, 71).
 - **DROP — debugging** telemetry: enhanced tracing, span trees, latency waterfalls
@@ -25,16 +26,16 @@ tool's telemetry into one shape — a **usage event**:
 ```jsonc
 {
   "ts": "2026-08-19T14:03:11.482Z",
-  "tool": "claude",              // plugin id
+  "tool": "claude", // plugin id
   "model": "claude-opus-4-8",
   "tokens_in": 18234,
   "tokens_out": 2101,
-  "cache_read": 15000,           // optional, when the tool reports it
+  "cache_read": 15000, // optional, when the tool reports it
   "cache_write": 0,
-  "cost_usd": 0.0423,            // tool-reported, else computed from a price table
-  "project": "01J9Z…",          // project id
-  "ticket": "01J9ZK…",          // ULID when attributable, else null
-  "session": "…"                // opaque, for de-dup
+  "cost_usd": 0.0423, // tool-reported, else computed from a price table
+  "project": "01J9Z…", // project id
+  "ticket": "01J9ZK…", // ULID when attributable, else null
+  "session": "…", // opaque, for de-dup
 }
 ```
 
@@ -43,7 +44,7 @@ tool's telemetry into one shape — a **usage event**:
   everything else. A tool with no telemetry omits the capability.
 - **Cost:** prefer the tool's own reported cost; where absent, compute from a
   per-model **price table** (a small, updatable data file) so cost is always present.
-- **Per-ticket attribution** reuses HS1's proven trick: the *active ticket* at emit
+- **Per-ticket attribution** reuses HS1's proven trick: the _active ticket_ at emit
   time (the channel/worklist knows which ticket is being worked) tags the event; a
   session with no active ticket attributes to the project only.
 
@@ -87,8 +88,8 @@ Metrics can be shared across a team **through git** — no server sync needed:
 - **Merge:** rollup files are additive per (period, tool, model) — a semantic merge
   (sum counters, union periods) keeps two people's rollups from clobbering; or shard
   rollups **per contributor** (`rollups/daily/<user>/2026-08.json`) so they never
-  conflict and a team view sums across contributors. *Recommend per-contributor
-  sharding* — it's conflict-free and attributes cost per person, which teams want.
+  conflict and a team view sums across contributors. _Recommend per-contributor
+  sharding_ — it's conflict-free and attributes cost per person, which teams want.
 - **Privacy:** sharing is opt-in per store; a solo/local project shares nothing.
   Decide what a rollup exposes (cost + tokens by model/period/person — no prompt
   content, ever).
@@ -108,6 +109,7 @@ Metrics can be shared across a team **through git** — no server sync needed:
   raw/rollup store remains authoritative for historical reporting.
 
 ## 14.6 Resolved implementation decisions
+
 - **Price table maintenance** ships a default with a local override (HS2-8BCRHS).
 - **Rollup cadence + tail size** is caller-controlled; settled reads combine the latest
   rollup with its raw tail so dashboards can tune cadence without losing events.
@@ -116,6 +118,7 @@ Metrics can be shared across a team **through git** — no server sync needed:
   Codex/Claude/ACP mappings are version-pinned and drift-tested.
 
 ## 14.7 Build plan (follow-ups)
+
 - HS2-69 (this) = the spec.
 - **Shipped:** the raw-JSONL writer + aggregation + DB-free read (HS2-69); the price
   table (`record_priced`, HS2-8BCRHS); the **rollup files** + settled-plus-tail read
@@ -154,6 +157,7 @@ Metrics can be shared across a team **through git** — no server sync needed:
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references
+
 - The `metrics` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3
 - Dashboards that consume it: docs/11 area 25 (HS2-47)
 - Git sharing rides the sync engine: [02-ticket-storage.md](02-ticket-storage.md) §2.12

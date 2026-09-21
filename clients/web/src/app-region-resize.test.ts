@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAppRegionId, loadAppRegionSize, normalizeAppRegionSize, saveAppRegionSize, TERMINAL_DRAWER_MIN_SIZE,terminalDrawerDragDecision,terminalDrawerMaximum } from './app-region-resize';
+import {
+  isAppRegionId,
+  loadAppRegionSize,
+  normalizeAppRegionSize,
+  saveAppRegionSize,
+  TERMINAL_DRAWER_MIN_SIZE,
+  terminalDrawerDragDecision,
+  terminalDrawerMaximum,
+} from './app-region-resize';
 
 describe('production app region sizing', () => {
   it('recognizes only production shell regions and clamps their independent bounds', () => {
@@ -14,16 +22,36 @@ describe('production app region sizing', () => {
     expect(normalizeAppRegionSize('app-inspector', 900)).toBe(520);
   });
 
-  it('persists drawer heights above the old fixed cap for layout-time clamping',()=>{const storage=new Map<string,string>(),adapter={getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>{storage.set(key,value)}};expect(saveAppRegionSize(adapter,'app-terminal-drawer',700)).toBe(700);expect(loadAppRegionSize(adapter,'app-terminal-drawer')).toBe(700)});
+  it('persists drawer heights above the old fixed cap for layout-time clamping', () => {
+    const storage = new Map<string, string>(),
+      adapter = {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storage.set(key, value);
+        },
+      };
+    expect(saveAppRegionSize(adapter, 'app-terminal-drawer', 700)).toBe(700);
+    expect(loadAppRegionSize(adapter, 'app-terminal-drawer')).toBe(700);
+  });
 
-  it('measures the drawer maximum from the shell bottom to the work-area top',()=>{expect(terminalDrawerMaximum(900,164)).toBe(736);expect(terminalDrawerMaximum(220,100)).toBe(TERMINAL_DRAWER_MIN_SIZE)});
-  it('pins the drawer at its usable minimum before a persistent collapse overshoot',()=>{expect(terminalDrawerDragDecision(220,520)).toEqual({size:228,collapse:false});expect(terminalDrawerDragDecision(181,520)).toEqual({size:228,collapse:false});expect(terminalDrawerDragDecision(180,520)).toEqual({size:228,collapse:true});expect(terminalDrawerDragDecision(700,520)).toEqual({size:520,collapse:false})});
+  it('measures the drawer maximum from the shell bottom to the work-area top', () => {
+    expect(terminalDrawerMaximum(900, 164)).toBe(736);
+    expect(terminalDrawerMaximum(220, 100)).toBe(TERMINAL_DRAWER_MIN_SIZE);
+  });
+  it('pins the drawer at its usable minimum before a persistent collapse overshoot', () => {
+    expect(terminalDrawerDragDecision(220, 520)).toEqual({ size: 228, collapse: false });
+    expect(terminalDrawerDragDecision(181, 520)).toEqual({ size: 228, collapse: false });
+    expect(terminalDrawerDragDecision(180, 520)).toEqual({ size: 228, collapse: true });
+    expect(terminalDrawerDragDecision(700, 520)).toEqual({ size: 520, collapse: false });
+  });
 
   it('loads defaults for missing or invalid values and persists normalized values', () => {
     const values = new Map<string, string>();
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => { values.set(key, value); },
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
     };
     expect(loadAppRegionSize(storage, 'app-sidebar')).toBe(272);
     values.set('hotsheet.layout.app-inspector.size', 'not-a-number');

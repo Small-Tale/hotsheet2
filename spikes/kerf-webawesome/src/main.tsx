@@ -32,16 +32,29 @@ mount(app, () => {
       <output data-events></output>
       <wa-button data-action="rerender">Morph</wa-button>
       <wa-button data-action="theme">Theme</wa-button>
-      <wa-button data-action="open" variant="brand">Open dialog</wa-button>
+      <wa-button data-action="open" variant="brand">
+        Open dialog
+      </wa-button>
       <wa-dialog data-testid="dialog" label="Confirm">
         Dialog body
-        <wa-button slot="footer" data-action="close">Close</wa-button>
+        <wa-button slot="footer" data-action="close">
+          Close
+        </wa-button>
       </wa-dialog>
     </section>
   );
 });
 
-for (const name of ['input', 'change', 'wa-input', 'wa-change', 'wa-show', 'wa-hide', 'wa-after-show', 'wa-after-hide']) {
+for (const name of [
+  'input',
+  'change',
+  'wa-input',
+  'wa-change',
+  'wa-show',
+  'wa-hide',
+  'wa-after-show',
+  'wa-after-hide',
+]) {
   void delegate(app, name, 'wa-input, wa-dialog', (event, target) => {
     record(event.type);
     if (target.matches('wa-input') && (event.type === 'input' || event.type === 'wa-input')) {
@@ -52,11 +65,20 @@ for (const name of ['input', 'change', 'wa-input', 'wa-change', 'wa-show', 'wa-h
 
 void delegate(app, 'click', '[data-action]', (_event, target) => {
   switch ((target as HTMLElement).dataset.action) {
-    case 'rerender': structuralRevision.value += 1; break;
-    case 'theme': dark.value = !dark.value; break;
-    case 'open': (document.querySelector('[data-testid="dialog"]') as WaDialog).show(); break;
-    case 'close': (document.querySelector('[data-testid="dialog"]') as WaDialog).hide(); break;
-    case undefined: break;
+    case 'rerender':
+      structuralRevision.value += 1;
+      break;
+    case 'theme':
+      dark.value = !dark.value;
+      break;
+    case 'open':
+      (document.querySelector('[data-testid="dialog"]') as WaDialog).show();
+      break;
+    case 'close':
+      (document.querySelector('[data-testid="dialog"]') as WaDialog).hide();
+      break;
+    case undefined:
+      break;
   }
 });
 

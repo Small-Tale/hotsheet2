@@ -65,7 +65,8 @@ export function describeServerRequest(method: string, path: string): string {
   const writing = verb === 'POST' || verb === 'PUT' || verb === 'PATCH' || verb === 'DELETE';
   const has = (segment: string) => path.includes(segment);
   if (has('/search')) return 'Searching tickets';
-  if (has('/attachments') || has('/thumbnail') || has('/media')) return writing ? 'Uploading attachment' : 'Loading attachment';
+  if (has('/attachments') || has('/thumbnail') || has('/media'))
+    return writing ? 'Uploading attachment' : 'Loading attachment';
   if (has('/notes')) return 'Saving note';
   if (has('/code-review')) return 'Loading code review';
   if (has('/repository') || has('/git')) return writing ? 'Updating repository' : 'Checking repository';

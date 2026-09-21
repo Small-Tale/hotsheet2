@@ -6,22 +6,22 @@ export const SIDEBAR_DRIVE_PROMPT = '$hotsheet';
 export type ProjectDriveTool = string;
 
 export interface DrawerAIChat {
-  id:string;
-  connectionId:string;
-  tool:ProjectDriveTool;
-  name:string;
-  model?:string;
-  effort?:string;
-  drive?:boolean;
-  readOnly?:boolean;
-  localOnly?:boolean;
-  savedSource?:string;
-  sourceConversationId?:string;
-  sourceSessionId?:string;
+  id: string;
+  connectionId: string;
+  tool: ProjectDriveTool;
+  name: string;
+  model?: string;
+  effort?: string;
+  drive?: boolean;
+  readOnly?: boolean;
+  localOnly?: boolean;
+  savedSource?: string;
+  sourceConversationId?: string;
+  sourceSessionId?: string;
 }
 
 type ProjectDriveClient = Pick<Api, 'createToolConnection' | 'sendToolTurn'>;
-type ProjectRecoveryClient=Pick<Api,'createToolConnection'>;
+type ProjectRecoveryClient = Pick<Api, 'createToolConnection'>;
 
 export interface ProjectDriveControlState {
   connection?: ToolConnection;
@@ -30,78 +30,177 @@ export interface ProjectDriveControlState {
   disabledReason?: string;
 }
 
-export function compatibleAiEffort(levels:readonly string[],...candidates:readonly (string|undefined)[]):string|undefined{
-  return candidates.find((candidate):candidate is string=>Boolean(candidate&&levels.includes(candidate)))??levels[0];
+export function compatibleAiEffort(
+  levels: readonly string[],
+  ...candidates: readonly (string | undefined)[]
+): string | undefined {
+  return (
+    candidates.find((candidate): candidate is string => Boolean(candidate && levels.includes(candidate))) ?? levels[0]
+  );
 }
 
 export function sidebarDriveConnectionId(checkout: string, tool: ProjectDriveTool): string {
   return `${SIDEBAR_DRIVE_CONNECTION_ID}-${tool}-${checkout}`;
 }
 
-export function projectChatConnectionId(checkout:string,tool:ProjectDriveTool):string{
+export function projectChatConnectionId(checkout: string, tool: ProjectDriveTool): string {
   return `${PROJECT_CHAT_CONNECTION_ID}-${tool}-${checkout}`;
 }
 
-function drawerConnectionKind(connection:ToolConnection,checkout:string):'chat'|'drive'|'saved'|undefined{
-  if(connection.role!=='main')return;
-  if(connection.id===sidebarDriveConnectionId(checkout,connection.tool))return'drive';
-  if(connection.id.startsWith('hotsheet-drawer-chat-'))return'chat';
-  if(connection.id.startsWith('hotsheet-saved-chat-'))return'saved';
+function drawerConnectionKind(connection: ToolConnection, checkout: string): 'chat' | 'drive' | 'saved' | undefined {
+  if (connection.role !== 'main') return;
+  if (connection.id === sidebarDriveConnectionId(checkout, connection.tool)) return 'drive';
+  if (connection.id.startsWith('hotsheet-drawer-chat-')) return 'chat';
+  if (connection.id.startsWith('hotsheet-saved-chat-')) return 'saved';
 }
 
-export function restoreDrawerAIChats(connections:readonly ToolConnection[],checkout:string,current:readonly DrawerAIChat[]=[],toolLabel:(tool:string)=>string=tool=>`${tool.slice(0,1).toUpperCase()}${tool.slice(1)}`):DrawerAIChat[]{
-  const restored=[...current];
-  for(const connection of connections){
-    const kind=drawerConnectionKind(connection,checkout);
-    if(!kind)continue;
-    const index=restored.findIndex(chat=>chat.connectionId===connection.id),previous=index>=0?restored[index]:undefined,label=toolLabel(connection.tool),chat:DrawerAIChat={...(previous??{}),id:`ai-chat:${connection.id}`,connectionId:connection.id,tool:connection.tool,name:previous?.name??`${label} ${kind==='drive'?'Drive':kind==='saved'?'saved chat':'chat'}`,model:connection.model??previous?.model,effort:connection.effort??previous?.effort,drive:kind==='drive'||undefined,readOnly:connection.actions?.includes('send_turn')?false:previous?.readOnly};
-    if(index>=0)restored[index]=chat;else restored.push(chat);
+export function restoreDrawerAIChats(
+  connections: readonly ToolConnection[],
+  checkout: string,
+  current: readonly DrawerAIChat[] = [],
+  toolLabel: (tool: string) => string = (tool) => `${tool.slice(0, 1).toUpperCase()}${tool.slice(1)}`,
+): DrawerAIChat[] {
+  const restored = [...current];
+  for (const connection of connections) {
+    const kind = drawerConnectionKind(connection, checkout);
+    if (!kind) continue;
+    const index = restored.findIndex((chat) => chat.connectionId === connection.id),
+      previous = index >= 0 ? restored[index] : undefined,
+      label = toolLabel(connection.tool),
+      chat: DrawerAIChat = {
+        ...(previous ?? {}),
+        id: `ai-chat:${connection.id}`,
+        connectionId: connection.id,
+        tool: connection.tool,
+        name: previous?.name ?? `${label} ${kind === 'drive' ? 'Drive' : kind === 'saved' ? 'saved chat' : 'chat'}`,
+        model: connection.model ?? previous?.model,
+        effort: connection.effort ?? previous?.effort,
+        drive: kind === 'drive' || undefined,
+        readOnly: connection.actions?.includes('send_turn') ? false : previous?.readOnly,
+      };
+    if (index >= 0) restored[index] = chat;
+    else restored.push(chat);
   }
   return restored;
 }
 
-function isClientConversationConnection(id:string,checkout:string):boolean{
-  return id.startsWith('hotsheet-drawer-chat-')||id.startsWith('hotsheet-saved-chat-')||id.startsWith(`${SIDEBAR_DRIVE_CONNECTION_ID}-`)&&id.endsWith(`-${checkout}`)||id.startsWith(`${PROJECT_CHAT_CONNECTION_ID}-`)&&id.endsWith(`-${checkout}`);
+function isClientConversationConnection(id: string, checkout: string): boolean {
+  return (
+    id.startsWith('hotsheet-drawer-chat-') ||
+    id.startsWith('hotsheet-saved-chat-') ||
+    (id.startsWith(`${SIDEBAR_DRIVE_CONNECTION_ID}-`) && id.endsWith(`-${checkout}`)) ||
+    (id.startsWith(`${PROJECT_CHAT_CONNECTION_ID}-`) && id.endsWith(`-${checkout}`))
+  );
 }
 
 /** Recreate the latest durable provider session for each client-owned connection after a
  * server restart. The catalog is newest-first, so an older session for the same stable
  * connection never supersedes its latest thread. */
-export async function recoverProjectConnections(client:ProjectRecoveryClient,active:readonly ToolConnection[],sessions:readonly ToolSession[],checkout:string,projectRoot:string):Promise<ToolConnection[]>{
-  const recovered=[...active],seen=new Set(active.map(connection=>connection.id));
-  for(const session of sessions){
-    if(session.project!==projectRoot||seen.has(session.connection_id)||!isClientConversationConnection(session.connection_id,checkout))continue;
+export async function recoverProjectConnections(
+  client: ProjectRecoveryClient,
+  active: readonly ToolConnection[],
+  sessions: readonly ToolSession[],
+  checkout: string,
+  projectRoot: string,
+): Promise<ToolConnection[]> {
+  const recovered = [...active],
+    seen = new Set(active.map((connection) => connection.id));
+  for (const session of sessions) {
+    if (
+      session.project !== projectRoot ||
+      seen.has(session.connection_id) ||
+      !isClientConversationConnection(session.connection_id, checkout)
+    )
+      continue;
     seen.add(session.connection_id);
-    try{recovered.push(await client.createToolConnection({tool:session.tool,checkout,connection_id:session.connection_id,session_id:session.session_id}))}catch{/* one unavailable provider must not hide other resumable conversations */}
+    try {
+      recovered.push(
+        await client.createToolConnection({
+          tool: session.tool,
+          checkout,
+          connection_id: session.connection_id,
+          session_id: session.session_id,
+        }),
+      );
+    } catch {
+      /* one unavailable provider must not hide other resumable conversations */
+    }
   }
   return recovered;
 }
 
-export function projectDriveConnection(connections: readonly ToolConnection[], checkout: string, tool: ProjectDriveTool = 'codex'): ToolConnection | undefined {
-  return connections.find(connection => connection.id === sidebarDriveConnectionId(checkout, tool));
+export function projectDriveConnection(
+  connections: readonly ToolConnection[],
+  checkout: string,
+  tool: ProjectDriveTool = 'codex',
+): ToolConnection | undefined {
+  return connections.find((connection) => connection.id === sidebarDriveConnectionId(checkout, tool));
 }
 
-export function projectDriveControlState(connections: readonly ToolConnection[], checkout: string, pending = false, tool: ProjectDriveTool = 'codex'): ProjectDriveControlState {
+export function projectDriveControlState(
+  connections: readonly ToolConnection[],
+  checkout: string,
+  pending = false,
+  tool: ProjectDriveTool = 'codex',
+): ProjectDriveControlState {
   const connection = projectDriveConnection(connections, checkout, tool);
-  const label = `${tool.slice(0,1).toUpperCase()}${tool.slice(1)}`;
-  if (pending) return { connection, running: Boolean(connection?.busy), disabled: true, disabledReason: `Updating the ${label} connection…` };
-  if (connection?.busy)return {connection,running:true,disabled:true,disabledReason:`The ${label} workflow is already running in its chat tab.`};
+  const label = `${tool.slice(0, 1).toUpperCase()}${tool.slice(1)}`;
+  if (pending)
+    return {
+      connection,
+      running: Boolean(connection?.busy),
+      disabled: true,
+      disabledReason: `Updating the ${label} connection…`,
+    };
+  if (connection?.busy)
+    return {
+      connection,
+      running: true,
+      disabled: true,
+      disabledReason: `The ${label} workflow is already running in its chat tab.`,
+    };
   return { connection, running: Boolean(connection?.busy), disabled: false };
 }
 
-export async function prepareProjectConversation(client: ProjectDriveClient, connections: readonly ToolConnection[], checkout: string, tool: ProjectDriveTool = 'codex',options:{connectionId?:string;model?:string;effort?:string}={}): Promise<ToolConnection> {
-  const id = options.connectionId??sidebarDriveConnectionId(checkout, tool);
-  const connection = connections.find(item=>item.id===id);
+export async function prepareProjectConversation(
+  client: ProjectDriveClient,
+  connections: readonly ToolConnection[],
+  checkout: string,
+  tool: ProjectDriveTool = 'codex',
+  options: { connectionId?: string; model?: string; effort?: string } = {},
+): Promise<ToolConnection> {
+  const id = options.connectionId ?? sidebarDriveConnectionId(checkout, tool);
+  const connection = connections.find((item) => item.id === id);
   if (connection?.actions?.includes('send_turn')) return connection;
-  const prepared = await client.createToolConnection({ tool, checkout, connection_id: id,...(options.model?{model:options.model}:{}),...(options.effort?{effort:options.effort}:{}) });
-  if (!prepared.actions?.includes('send_turn')) throw new Error(`This ${tool === 'codex' ? 'Codex' : 'Claude'} connection cannot accept a turn.`);
+  const prepared = await client.createToolConnection({
+    tool,
+    checkout,
+    connection_id: id,
+    ...(options.model ? { model: options.model } : {}),
+    ...(options.effort ? { effort: options.effort } : {}),
+  });
+  if (!prepared.actions?.includes('send_turn'))
+    throw new Error(`This ${tool === 'codex' ? 'Codex' : 'Claude'} connection cannot accept a turn.`);
   return prepared;
 }
 
-export async function runProjectDrive(client:ProjectDriveClient,connections:readonly ToolConnection[],checkout:string,tool:ProjectDriveTool='codex',selection:{model?:string;effort?:string}={}):Promise<ToolConnection>{
-  const existing=projectDriveConnection(connections,checkout,tool);
-  if(existing?.busy)throw new Error(`This ${tool} drive session is already running.`);
-  const prepared=existing?.actions?.includes('send_turn')?existing:await client.createToolConnection({tool,checkout,connection_id:sidebarDriveConnectionId(checkout,tool),...selection});
-  if(!prepared.actions?.includes('send_turn'))throw new Error(`This ${tool} connection cannot accept a turn.`);
-  return client.sendToolTurn(prepared.id,SIDEBAR_DRIVE_PROMPT,prepared.session_id,selection);
+export async function runProjectDrive(
+  client: ProjectDriveClient,
+  connections: readonly ToolConnection[],
+  checkout: string,
+  tool: ProjectDriveTool = 'codex',
+  selection: { model?: string; effort?: string } = {},
+): Promise<ToolConnection> {
+  const existing = projectDriveConnection(connections, checkout, tool);
+  if (existing?.busy) throw new Error(`This ${tool} drive session is already running.`);
+  const prepared = existing?.actions?.includes('send_turn')
+    ? existing
+    : await client.createToolConnection({
+        tool,
+        checkout,
+        connection_id: sidebarDriveConnectionId(checkout, tool),
+        ...selection,
+      });
+  if (!prepared.actions?.includes('send_turn')) throw new Error(`This ${tool} connection cannot accept a turn.`);
+  return client.sendToolTurn(prepared.id, SIDEBAR_DRIVE_PROMPT, prepared.session_id, selection);
 }

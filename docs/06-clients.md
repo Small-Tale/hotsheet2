@@ -41,80 +41,80 @@ its composer and ticket surface. Pointer interaction outside it releases that ow
 including non-focusable inspector text; an ordinary non-collapsed text selection, native
 or Web Awesome editable control, or open dialog always retains native Cmd/Ctrl+C/X/V.
 Dragging an unselected ticket moves only it, while
-  dragging a selected ticket moves the selection; Queue, Backlog, Archive, and (when shown)
-  Trash sidebar destinations apply the corresponding status — Trash soft-deletes — and
-  visibly highlight during dragover.
-  Right-clicking either a list or board TicketRow preserves an existing multi-selection
-  (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
-  menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
-  all measured popup flipping and shifting to Web Awesome; the app does not pre-clamp
-  against an estimated menu size that can vary with ticket state. Production handlers cover reader opening, category/status/priority changes, batch
-  Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. A provider
-  advertising atomic batch support receives one checkout-scoped request with every
-  concurrency token validated before any write. Other update-capable providers degrade to
-  visible, best-effort per-ticket progress; successful writes remain applied and each failed
-  ticket is restored and reported. Every metadata/tag/delete write is provider-capability
-  gated and carries the freshly read opaque
-  concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
-  In the inspector and reader, Add tag is a distinct button that opens its own anchored,
-  viewport-contained popover with a labeled autocomplete field. Enter or comma can add
-  repeated tags, Escape restores focus to the trigger, and read-only providers omit the
-  action entirely instead of presenting a disabled input/button hybrid. The editor uses a
-  16px outer/title/input rhythm, 8px within the chip/editor group, and 4px between connected
-  label/input content (HS2-4Y6SM9).
-  The complete selection remains one field-aware Undo transaction. A capture-phase,
-  composed-path-aware outside pointer-down dismisses the menu reliably across native and
-  Web Awesome shadow-DOM controls (including an ordinary click on another ticket row),
-  while interactions inside the menu remain open; Escape also dismisses it. A
-  single completed selection also exposes Verified and Not Working. The latter accepts
-  notes and/or attachments and submits them through one provider-neutral operation that
-  atomically records one attributed timeline activity before the user's regular note,
-  publishes all evidence, and returns the ticket to Not Started + Up Next. The activity
-  subsumes the implied status transition rather than adding a second status event and
-  carries a concise single-line summary. The actor comes from the store's git `user.name`; when no name is configured,
-  the timeline uses an unattributed `Reported as not working` label. The explicit
-  `not_working_report` capability hides the action for
-  providers that cannot guarantee all-or-nothing behavior; the client never emulates it
-  with uploads, patches, or compensating deletes. A single Verified or Archive ticket
-  instead exposes **Reopen Ticket** when its provider supports updates. Reopening is one
-  undoable update that returns the ticket to Not Started and places it in Up Next; its
-  terminal lifecycle timestamps are cleared by the service. Completed/verified selections never
-  offer Up Next. Changing between Queue, Backlog, Archive, Trash, or ticket-error views clears
-  the complete ticket selection and its editing state; changing only the list/column or
-  other presentation mode preserves that selection.
-  A Trash view appears directly below Archive while the project has soft-deleted
-  (`deleted`) tickets, and stays while it is the selected view; Archive holds only archived
-  tickets and moved tombstones, never Queue-owned Verified tickets. The board projection
-  enforces that boundary even if a provider returns a mixed-status page. When every selected ticket is in Trash, the ticket menu
-  offers Restore from Trash, which returns each ticket to the status recorded before it was
-  deleted (Not Started when that is unknown). The Trash header also offers Empty Trash when
-  the checkout has a git-backed ticket source. Its confirmation states the number of tickets
-  that will be permanently removed from the active store and that git history retains the
-  files. Confirming closes the dialog immediately, projects an empty Trash, and returns to a
-  loading Queue while the request runs; success reconciles that Queue and removes the now-empty
-  Trash destination, while failure restores Trash and presents a persistent server error. The
-  header action keeps its icon and label on one line at every supported size.
-  The server
-  purges Trash tickets after the project's shared retention period (30 days by default);
-  git history still holds every purged file. `hotsheet-cli restore` and
-  `hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).
+dragging a selected ticket moves the selection; Queue, Backlog, Archive, and (when shown)
+Trash sidebar destinations apply the corresponding status — Trash soft-deletes — and
+visibly highlight during dragover.
+Right-clicking either a list or board TicketRow preserves an existing multi-selection
+(or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
+menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
+all measured popup flipping and shifting to Web Awesome; the app does not pre-clamp
+against an estimated menu size that can vary with ticket state. Production handlers cover reader opening, category/status/priority changes, batch
+Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. A provider
+advertising atomic batch support receives one checkout-scoped request with every
+concurrency token validated before any write. Other update-capable providers degrade to
+visible, best-effort per-ticket progress; successful writes remain applied and each failed
+ticket is restored and reported. Every metadata/tag/delete write is provider-capability
+gated and carries the freshly read opaque
+concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
+In the inspector and reader, Add tag is a distinct button that opens its own anchored,
+viewport-contained popover with a labeled autocomplete field. Enter or comma can add
+repeated tags, Escape restores focus to the trigger, and read-only providers omit the
+action entirely instead of presenting a disabled input/button hybrid. The editor uses a
+16px outer/title/input rhythm, 8px within the chip/editor group, and 4px between connected
+label/input content (HS2-4Y6SM9).
+The complete selection remains one field-aware Undo transaction. A capture-phase,
+composed-path-aware outside pointer-down dismisses the menu reliably across native and
+Web Awesome shadow-DOM controls (including an ordinary click on another ticket row),
+while interactions inside the menu remain open; Escape also dismisses it. A
+single completed selection also exposes Verified and Not Working. The latter accepts
+notes and/or attachments and submits them through one provider-neutral operation that
+atomically records one attributed timeline activity before the user's regular note,
+publishes all evidence, and returns the ticket to Not Started + Up Next. The activity
+subsumes the implied status transition rather than adding a second status event and
+carries a concise single-line summary. The actor comes from the store's git `user.name`; when no name is configured,
+the timeline uses an unattributed `Reported as not working` label. The explicit
+`not_working_report` capability hides the action for
+providers that cannot guarantee all-or-nothing behavior; the client never emulates it
+with uploads, patches, or compensating deletes. A single Verified or Archive ticket
+instead exposes **Reopen Ticket** when its provider supports updates. Reopening is one
+undoable update that returns the ticket to Not Started and places it in Up Next; its
+terminal lifecycle timestamps are cleared by the service. Completed/verified selections never
+offer Up Next. Changing between Queue, Backlog, Archive, Trash, or ticket-error views clears
+the complete ticket selection and its editing state; changing only the list/column or
+other presentation mode preserves that selection.
+A Trash view appears directly below Archive while the project has soft-deleted
+(`deleted`) tickets, and stays while it is the selected view; Archive holds only archived
+tickets and moved tombstones, never Queue-owned Verified tickets. The board projection
+enforces that boundary even if a provider returns a mixed-status page. When every selected ticket is in Trash, the ticket menu
+offers Restore from Trash, which returns each ticket to the status recorded before it was
+deleted (Not Started when that is unknown). The Trash header also offers Empty Trash when
+the checkout has a git-backed ticket source. Its confirmation states the number of tickets
+that will be permanently removed from the active store and that git history retains the
+files. Confirming closes the dialog immediately, projects an empty Trash, and returns to a
+loading Queue while the request runs; success reconciles that Queue and removes the now-empty
+Trash destination, while failure restores Trash and presents a persistent server error. The
+header action keeps its icon and label on one line at every supported size.
+The server
+purges Trash tickets after the project's shared retention period (30 days by default);
+git history still holds every purged file. `hotsheet-cli restore` and
+`hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client
 is only ever a view. Sharp contrast with HS1, where the server rendered HTML via a
 custom JSX runtime, the client re-derived logic in a hand-rolled `kerfjs` SPA, and
-the Tauri app *owned* a Node sidecar that died with it.
+the Tauri app _owned_ a Node sidecar that died with it.
 
 ## 6.2 One access model: talk to a server (local or remote)
 
 There is **one** way a client gets data — over the API to a server. "Local" vs.
-"remote" is only *which* server:
+"remote" is only _which_ server:
 
-| | **Local project** | **Remote project** |
-|---|---|---|
-| Server | A **localhost** `hotsheet-server` (the client auto-starts it if absent) | A server on another device/machine |
-| Transport | HTTP/WS on loopback (+ secret; mTLS optional) | HTTP/WS over **mTLS** |
-| Who runs it | This machine's one shared server instance | That device's server |
+|             | **Local project**                                                       | **Remote project**                 |
+| ----------- | ----------------------------------------------------------------------- | ---------------------------------- |
+| Server      | A **localhost** `hotsheet-server` (the client auto-starts it if absent) | A server on another device/machine |
+| Transport   | HTTP/WS on loopback (+ secret; mTLS optional)                           | HTTP/WS over **mTLS**              |
+| Who runs it | This machine's one shared server instance                               | That device's server               |
 
 A client can show local and remote projects side by side (tabs); each tab carries
 its server's `(origin, secret)` — carried from HS1's multi-server remote-client
@@ -613,7 +613,7 @@ and identity-less legacy entries remain conservatively blocking.
   mutations, and cross-column drag are unaffected. A background refresh restores each column the user has
   paged past the baseline back to its loaded length in one commit, so an external change does not reset a
   column's pagination (single-collection Backlog/Archive/Trash boards and search keep the global cursor).
-  A column pages an *ordered list* of statuses, not just one: when the **Hide Verified column** setting
+  A column pages an _ordered list_ of statuses, not just one: when the **Hide Verified column** setting
   merges Verified into Completed, that column exhausts its `completed` stream and then continues into
   `verified`, so verified rows beyond the initial global page stay reachable through its own Load more
   and the column can reach its full done total (HS2-F2N4ZN).
@@ -1319,7 +1319,7 @@ and identity-less legacy entries remain conservatively blocking.
 - **Why native (not just Tauri on iOS):** a first-class iOS experience — real
   navigation, share sheet, notifications, widgets — and macOS menu-bar integration.
   The identical domain behavior across surfaces comes from every surface talking to
-  the *same server*, not from sharing a linked library.
+  the _same server_, not from sharing a linked library.
 - **macOS:** auto-starts + supervises the local server (like Tauri, §6.3).
 - **iOS is remote-first — and structurally so.** A phone can't run an independent
   background server (iOS background-execution limits), and it rarely hosts the git
@@ -1329,7 +1329,7 @@ and identity-less legacy entries remain conservatively blocking.
   [08-distributed-and-remote.md](08-distributed-and-remote.md).
 - **Terminals/AI-drive on mobile:** out of first scope. Mobile watches and
   triages; driving AI tools stays on the desktop/server. Answering permission
-  prompts and reading busy state *do* work on mobile (they're just API events).
+  prompts and reading busy state _do_ work on mobile (they're just API events).
 
 ## 6.5 Android (last)
 
@@ -1785,21 +1785,21 @@ so resizing is disruptive and must be rare and deliberate. Meanwhile many
 
 - several views on **one** device (the drawer terminal, a dashboard tile, a
   magnified view — HS1's borrow-stack case), **and**
-- views on **different** devices at once (a macOS window *and* an iPhone).
+- views on **different** devices at once (a macOS window _and_ an iPhone).
 
-You cannot give each viewport its own native size of the *same* session: a single
+You cannot give each viewport its own native size of the _same_ session: a single
 PTY emits one size's worth of output, and an alternate-screen TUI was drawn for one
 grid — it can't be losslessly re-flowed to another (only line-wrapped scrollback
 can). So the model is **one arbitrated PTY size + graceful handling in every other
 viewport** — the same reality tmux lives with. (If per-viewer native size is ever
-truly needed, that's a *separate PTY per viewer* — a different shell, not this
+truly needed, that's a _separate PTY per viewer_ — a different shell, not this
 shared session — see §6.7.5.)
 
-### 6.7.2 The model: the server arbitrates, viewports make *claims*
+### 6.7.2 The model: the server arbitrates, viewports make _claims_
 
 The server owns the PTY, so it is the single arbiter of its size — matching the
 "server is authoritative" principle and, crucially, giving **one** coordination
-point for local *and* remote viewers. Each viewport registers a **size claim** over
+point for local _and_ remote viewers. Each viewport registers a **size claim** over
 the terminal WebSocket and keeps it alive with a heartbeat:
 
 ```
@@ -1815,7 +1815,7 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
   isn't touching (e.g. a phone) rendering the other device's size (**HS2-3ZBQDG**).
 
 - `viewerId` is **per viewport, not per device** (`<clientId>:<paneId>`), so
-  intra-device and cross-device viewports arbitrate uniformly — this *is* the
+  intra-device and cross-device viewports arbitrate uniformly — this _is_ the
   borrow-stack, generalized to every viewport everywhere.
 - Claims are **leased** (reusing the claim/lease pattern, [05](05-ai-tool-plugins.md)
   §5.7): a viewport heartbeats; on disconnect (a phone that drops off Wi-Fi) its
@@ -1829,7 +1829,7 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
 Default policy (= tmux `window-size latest`, which is exactly the maintainer's ask —
 "right-sized based on whichever device and view area had most recent focus"):
 
-- **The PTY follows the size of the viewport the user most recently *interacted*
+- **The PTY follows the size of the viewport the user most recently _interacted_
   with.** When focus/interaction moves from the big macOS pane to the small iPhone
   view, the PTY resizes to the iPhone (after the guards below); when it returns, it
   resizes back. The interaction-recency tiebreak (advanced only by `interacting`
@@ -1847,6 +1847,7 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   it.
 
 **Anti-thrash guards** (named so implementation has targets; tune later):
+
 - `SIZE_FOCUS_HOLD_MS` (~500 ms) — a newly-focused viewport must hold focus this
   long before its size is applied (kills ping-pong when focus flickers).
 - `SIZE_MIN_DELTA` (≥2 cols/rows) — ignore sub-threshold differences.
@@ -1857,7 +1858,8 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
 
 **Alternative policies (configurable per terminal), for when focus-follows isn't
 wanted:**
-- `smallest` — size to the smallest *visible* viewport so everyone sees the whole
+
+- `smallest` — size to the smallest _visible_ viewport so everyone sees the whole
   screen without scroll (tmux's default; good for "we're both watching").
 - `largest-visible` — one big screen drives; small screens observe (scroll/scale).
 - `pinned` — a fixed size the user sets; all viewports letterbox/scroll. Good for
@@ -1875,7 +1877,7 @@ Every non-driving viewport reconciles its viewport against the broadcast `ptySiz
   Never stretch. (HS1 already handles the gutter/padding — §22.6.)
 - **Viewport smaller than the PTY** → **scale-to-fit then scroll**: shrink the font
   toward a readable floor to fit; below that floor, scroll within the pane. A phone
-  glancing at a desktop-sized terminal scales to fit for reading; to *interact* it
+  glancing at a desktop-sized terminal scales to fit for reading; to _interact_ it
   takes focus and the PTY resizes to it.
 - Show a subtle affordance when a viewport isn't driving the size (e.g. "viewing at
   120×40 — tap to resize to this screen") so the mismatch is legible, not confusing.
@@ -1898,13 +1900,13 @@ final measured row count rather than the provisional 80×24 size. Read-only grid
 deliberately remain uniform 80×24, 5:3 cards: they are glanceable non-input surfaces, not the
 phone's interactive terminal.
 
-### 6.7.5 Escape hatch: a per-viewer *separate* terminal
+### 6.7.5 Escape hatch: a per-viewer _separate_ terminal
 
 When someone genuinely needs a natively-sized terminal on each device
 simultaneously, that's **not** one shared session — it's **separate PTYs** (the
 multi-terminal model, HS1 §22.17). Each is its own shell/program at its own size,
-no arbitration needed. Hot Sheet supports both: *share this terminal* (arbitrated,
-this section) vs *open my own terminal* (independent). The arbitration only governs
+no arbitration needed. Hot Sheet supports both: _share this terminal_ (arbitrated,
+this section) vs _open my own terminal_ (independent). The arbitration only governs
 the shared case.
 
 ### 6.7.6 Why this beats HS1
@@ -2007,7 +2009,7 @@ regions. Fixed action targets, choice indicators, and glyphs remain explicit geo
   and `verified_at`) so the timeline is never blank. Show `edited_at` when it differs
   from creation. Render status-transition entries as the concise destination label
   as past-tense actions (`Started`, `Completed`, `Moved to backlog`, `Moved out of
-  backlog`, `Re-enqueued`) while retaining the full durable note text and using the
+backlog`, `Re-enqueued`) while retaining the full durable note text and using the
   source state where it changes the action's meaning.
   Rich native tool events and distilled background/subtask milestones remain tracked by
   HS2-SW655F and HS2-3GRNZW respectively.
@@ -2097,9 +2099,9 @@ Closing the reader performs the same save-and-exit transition, so its shared
 editing state never leaks into the sidebar inspector; stale save completions cannot close
 a newer editor generation or a different selected ticket.
 While editing details/notes **in the detail panel**, the **reader button stays
-  available**; clicking it **launches directly into the larger reader/editing mode**,
-  carrying the in-progress edit — so you can escalate from the tight inline editor to
-  the roomy one without losing your place.
+available**; clicking it **launches directly into the larger reader/editing mode**,
+carrying the in-progress edit — so you can escalate from the tight inline editor to
+the roomy one without losing your place.
 
 Net: one consistent reader mode, kind-driven rendering, and a smooth path from the
 constrained detail-panel editor to a spacious full-surface editor.
@@ -2211,6 +2213,7 @@ newest (`to`) commit, so the bundle action stays attached to the change it concl
 even when multiple disjoint ticket ranges are present.
 
 ## 6.11 Cross-references
+
 - UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
 - The server clients talk to + its auto-start lifecycle: [04-core-server-cli.md](04-core-server-cli.md) §4.3.1

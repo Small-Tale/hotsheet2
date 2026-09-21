@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyBoardColumnFetch, boardColumnHasMore, type BoardColumnPage,boardColumnStatus, boardColumnStatuses, isPerColumnBoardView, nextBoardColumnFetch } from './board-pagination';
+import {
+  applyBoardColumnFetch,
+  boardColumnHasMore,
+  type BoardColumnPage,
+  boardColumnStatus,
+  boardColumnStatuses,
+  isPerColumnBoardView,
+  nextBoardColumnFetch,
+} from './board-pagination';
 
 describe('board pagination', () => {
   it('maps each status column to its primary wire status', () => {
@@ -55,26 +63,58 @@ describe('board pagination', () => {
       // No page yet → start the first status from the beginning.
       expect(nextBoardColumnFetch(statuses, undefined)).toEqual({ status: 'completed', cursor: undefined });
       // First status mid-stream → continue its cursor.
-      expect(nextBoardColumnFetch(statuses, { loaded: 100, streams: { completed: { cursor: 'c1' } } })).toEqual({ status: 'completed', cursor: 'c1' });
+      expect(nextBoardColumnFetch(statuses, { loaded: 100, streams: { completed: { cursor: 'c1' } } })).toEqual({
+        status: 'completed',
+        cursor: 'c1',
+      });
       // First status exhausted, second not started → start the second.
-      expect(nextBoardColumnFetch(statuses, { loaded: 120, streams: { completed: { exhausted: true } } })).toEqual({ status: 'verified', cursor: undefined });
+      expect(nextBoardColumnFetch(statuses, { loaded: 120, streams: { completed: { exhausted: true } } })).toEqual({
+        status: 'verified',
+        cursor: undefined,
+      });
       // First exhausted, second mid-stream → continue the second.
-      expect(nextBoardColumnFetch(statuses, { loaded: 150, streams: { completed: { exhausted: true }, verified: { cursor: 'v1' } } })).toEqual({ status: 'verified', cursor: 'v1' });
+      expect(
+        nextBoardColumnFetch(statuses, {
+          loaded: 150,
+          streams: { completed: { exhausted: true }, verified: { cursor: 'v1' } },
+        }),
+      ).toEqual({ status: 'verified', cursor: 'v1' });
       // Every status exhausted → nothing left to fetch.
-      expect(nextBoardColumnFetch(statuses, { loaded: 150, exhausted: true, streams: { completed: { exhausted: true }, verified: { exhausted: true } } })).toBeUndefined();
+      expect(
+        nextBoardColumnFetch(statuses, {
+          loaded: 150,
+          exhausted: true,
+          streams: { completed: { exhausted: true }, verified: { exhausted: true } },
+        }),
+      ).toBeUndefined();
     });
 
     it('folds a fetch into the column page and only exhausts the column when every status is done', () => {
       const statuses = ['completed', 'verified'];
       // Fetch completed with more to come.
       const afterCompletedPage1 = applyBoardColumnFetch(statuses, undefined, 'completed', 'c1', 100);
-      expect(afterCompletedPage1).toEqual({ loaded: 100, exhausted: false, streams: { completed: { cursor: 'c1', exhausted: false } } });
+      expect(afterCompletedPage1).toEqual({
+        loaded: 100,
+        exhausted: false,
+        streams: { completed: { cursor: 'c1', exhausted: false } },
+      });
       // Completed exhausts, but verified is untouched → column not yet exhausted.
       const afterCompletedDone = applyBoardColumnFetch(statuses, afterCompletedPage1, 'completed', undefined, 120);
-      expect(afterCompletedDone).toEqual({ loaded: 120, exhausted: false, streams: { completed: { cursor: undefined, exhausted: true } } });
+      expect(afterCompletedDone).toEqual({
+        loaded: 120,
+        exhausted: false,
+        streams: { completed: { cursor: undefined, exhausted: true } },
+      });
       // Verified exhausts → the whole column is exhausted.
       const afterVerifiedDone = applyBoardColumnFetch(statuses, afterCompletedDone, 'verified', undefined, 150);
-      expect(afterVerifiedDone).toEqual({ loaded: 150, exhausted: true, streams: { completed: { cursor: undefined, exhausted: true }, verified: { cursor: undefined, exhausted: true } } });
+      expect(afterVerifiedDone).toEqual({
+        loaded: 150,
+        exhausted: true,
+        streams: {
+          completed: { cursor: undefined, exhausted: true },
+          verified: { cursor: undefined, exhausted: true },
+        },
+      });
     });
 
     it('drives a full completed→verified walk with next/apply until exhausted', () => {
@@ -105,7 +145,11 @@ describe('board pagination', () => {
     it('exhausts a single-status column immediately when its one stream ends (adversarial: re-query after done)', () => {
       const statuses = ['not_started'];
       const page = applyBoardColumnFetch(statuses, undefined, 'not_started', undefined, 14);
-      expect(page).toEqual({ loaded: 14, exhausted: true, streams: { not_started: { cursor: undefined, exhausted: true } } });
+      expect(page).toEqual({
+        loaded: 14,
+        exhausted: true,
+        streams: { not_started: { cursor: undefined, exhausted: true } },
+      });
       // A repeated fetch attempt after exhaustion finds nothing to do.
       expect(nextBoardColumnFetch(statuses, page)).toBeUndefined();
       expect(boardColumnHasMore(14, 14, page)).toBe(false);

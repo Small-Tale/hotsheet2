@@ -26,9 +26,21 @@ export const EXPORT_VERSION = 1;
 /** Ticket columns we read, in output order. Absent columns are skipped (older
  * schemas lack some), so the SELECT never references a column that isn't there. */
 const TICKET_COLUMNS = [
-  'id', 'ticket_number', 'title', 'details', 'category', 'priority', 'status',
-  'up_next', 'tags', 'notes', 'created_at', 'updated_at', 'completed_at',
-  'verified_at', 'deleted_at',
+  'id',
+  'ticket_number',
+  'title',
+  'details',
+  'category',
+  'priority',
+  'status',
+  'up_next',
+  'tags',
+  'notes',
+  'created_at',
+  'updated_at',
+  'completed_at',
+  'verified_at',
+  'deleted_at',
 ];
 
 /**
@@ -69,9 +81,7 @@ export async function exportFromDb(db, project = {}, settings = {}) {
       }
     }
   } catch (err) {
-    console.warn(
-      `warning: could not read ticket_blocked_by (${err.message}); dependency edges not exported`,
-    );
+    console.warn(`warning: could not read ticket_blocked_by (${err.message}); dependency edges not exported`);
   }
 
   // Promoted attachments (draft_id IS NULL, or no draft_id column on old schemas).
@@ -178,10 +188,7 @@ export async function exportDatadir(hotsheetDir, outPath) {
     try {
       const local = JSON.parse(fs.readFileSync(localSettingsPath, 'utf8'));
       if (Object.hasOwn(local, 'custom_commands')) {
-        settings.custom_commands = resolveCustomCommands(
-          settings.custom_commands,
-          local.custom_commands,
-        );
+        settings.custom_commands = resolveCustomCommands(settings.custom_commands, local.custom_commands);
       }
     } catch (err) {
       console.warn(`warning: could not read settings.local.json (${err.message})`);
@@ -259,21 +266,16 @@ export function resolveCustomCommands(sharedValue, localValue) {
 
   const hidden = new Set(Array.isArray(localValue.hidden) ? localValue.hidden : []);
   const overrides =
-    typeof localValue.overrides === 'object' && localValue.overrides !== null
-      ? localValue.overrides
-      : {};
+    typeof localValue.overrides === 'object' && localValue.overrides !== null ? localValue.overrides : {};
   const childAdded =
-    typeof localValue.childAdded === 'object' && localValue.childAdded !== null
-      ? localValue.childAdded
-      : {};
+    typeof localValue.childAdded === 'object' && localValue.childAdded !== null ? localValue.childAdded : {};
   const out = [];
   const seenGroups = new Set();
 
   for (const item of shared) {
     const id = commandId(item);
     if (hidden.has(id)) continue;
-    const override =
-      typeof overrides[id] === 'object' && overrides[id] !== null ? overrides[id] : {};
+    const override = typeof overrides[id] === 'object' && overrides[id] !== null ? overrides[id] : {};
     if (commandGroup(item)) {
       seenGroups.add(id);
       const children = [];
@@ -281,9 +283,7 @@ export function resolveCustomCommands(sharedValue, localValue) {
         const childId = commandId(child);
         if (hidden.has(childId)) continue;
         const childOverride =
-          typeof overrides[childId] === 'object' && overrides[childId] !== null
-            ? overrides[childId]
-            : {};
+          typeof overrides[childId] === 'object' && overrides[childId] !== null ? overrides[childId] : {};
         children.push({ ...child, ...childOverride });
       }
       const addition = childAdded[id];

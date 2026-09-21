@@ -9,12 +9,36 @@ import { codeReviewTarget, TicketCodeReview } from './ticket-code-review';
 const review: CodeReview = {
   difftool: 'glassbox',
   truncated: false,
-  ranges: [{ from: 'aaa1111', to: 'bbb2222', count: 2 }, { from: 'ccc3333', to: 'ddd4444', count: 2 }],
+  ranges: [
+    { from: 'aaa1111', to: 'bbb2222', count: 2 },
+    { from: 'ccc3333', to: 'ddd4444', count: 2 },
+  ],
   commits: [
-    { sha: 'ddd4444', short_sha: 'ddd4444', subject: 'HS2-TEST: finish later review run', body: 'First detail line\n\nSecond **Markdown** line\nThird hidden line', committed_at: '2026-09-02T10:00:00Z' },
-    { sha: 'ccc3333', short_sha: 'ccc3333', subject: 'HS2-TEST: start later review run', committed_at: '2026-09-02T09:00:00Z' },
-    { sha: 'bbb2222', short_sha: 'bbb2222', subject: 'HS2-TEST: finish review UI', committed_at: '2026-09-02T08:00:00Z' },
-    { sha: 'aaa1111', short_sha: 'aaa1111', subject: 'HS2-TEST: add server route', committed_at: '2026-09-01T08:00:00Z' },
+    {
+      sha: 'ddd4444',
+      short_sha: 'ddd4444',
+      subject: 'HS2-TEST: finish later review run',
+      body: 'First detail line\n\nSecond **Markdown** line\nThird hidden line',
+      committed_at: '2026-09-02T10:00:00Z',
+    },
+    {
+      sha: 'ccc3333',
+      short_sha: 'ccc3333',
+      subject: 'HS2-TEST: start later review run',
+      committed_at: '2026-09-02T09:00:00Z',
+    },
+    {
+      sha: 'bbb2222',
+      short_sha: 'bbb2222',
+      subject: 'HS2-TEST: finish review UI',
+      committed_at: '2026-09-02T08:00:00Z',
+    },
+    {
+      sha: 'aaa1111',
+      short_sha: 'aaa1111',
+      subject: 'HS2-TEST: add server route',
+      committed_at: '2026-09-01T08:00:00Z',
+    },
   ],
 };
 
@@ -23,15 +47,19 @@ describe('TicketCodeReview', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/__heading \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/__compare-banner \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(
+      /__compare-banner \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/,
+    );
     expect(css).toMatch(/__range \{[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) 0[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(
+      /__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) 0[^}]*gap: var\(--kui-space-xs\)/,
+    );
     expect(css).toMatch(/__commit-summary \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/__notice \{ padding: var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/__notice \{ padding: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__empty \{[^}]*padding: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/__refs \{[^}]*gap: var\(--kui-space-2xs\); margin-top: var\(--kui-space-2xs\)/);
+    expect(css).toMatchSource(/__refs \{[^}]*gap: var\(--kui-space-2xs\); margin-top: var\(--kui-space-2xs\)/);
   });
 
   it('resets the native list-item indent so commit rows align with their list', () => {
@@ -63,12 +91,18 @@ describe('TicketCodeReview', () => {
     const decorated: CodeReview = {
       ...review,
       commits: [
-        { sha: 'ddd4444', short_sha: 'ddd4444', subject: 'Tip commit', committed_at: '2026-09-02T10:00:00Z', refs: [
-          { label: 'HEAD → main', kind: 'head' },
-          { label: 'origin/main', kind: 'remote' },
-          { label: 'v1.2.0', kind: 'tag' },
-          { label: 'release', kind: 'branch' },
-        ] },
+        {
+          sha: 'ddd4444',
+          short_sha: 'ddd4444',
+          subject: 'Tip commit',
+          committed_at: '2026-09-02T10:00:00Z',
+          refs: [
+            { label: 'HEAD → main', kind: 'head' },
+            { label: 'origin/main', kind: 'remote' },
+            { label: 'v1.2.0', kind: 'tag' },
+            { label: 'release', kind: 'branch' },
+          ],
+        },
         { sha: 'aaa1111', short_sha: 'aaa1111', subject: 'Older commit', committed_at: '2026-09-01T08:00:00Z' },
       ],
     };
@@ -88,17 +122,24 @@ describe('TicketCodeReview', () => {
     expect(markup.match(/ticket-code-review__refs"/g)).toHaveLength(1);
   });
 
-  it('summarizes classified changes and calls out modified existing tests',()=>{
-    const markup=String(TicketCodeReview({review:{...review,summary:{files:{total:8,docs:2,tests:3,source:2,other:1},tests_added:2,tests_modified:1}}}));
+  it('summarizes classified changes and calls out modified existing tests', () => {
+    const markup = String(
+      TicketCodeReview({
+        review: {
+          ...review,
+          summary: { files: { total: 8, docs: 2, tests: 3, source: 2, other: 1 }, tests_added: 2, tests_modified: 1 },
+        },
+      }),
+    );
     expect(markup).toContain('aria-label="Open change evidence"');
     expect(markup).toContain('data-action="open-change-evidence"');
     expect(markup).toContain('<strong>2</strong> docs');
     expect(markup).toContain('<strong>3</strong> tests');
     expect(markup).toContain('2 new test files · 1 existing test file modified');
     expect(markup).toContain('data-tests-modified="true"');
-    const css=readFileSync(resolve(import.meta.dirname,'ticket-code-review.css'),'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatch(/__evidence \{[^}]*height: auto;[^}]*overflow: hidden;[^}]*box-sizing: border-box;/);
-    expect(css).toContain('.ticket-code-review__evidence-grid { grid-template-columns: 1fr; }');
+    expect(css).toContainSource('.ticket-code-review__evidence-grid { grid-template-columns: 1fr; }');
   });
 
   it('keeps history readable but disables launching without a configured tool', () => {
@@ -110,11 +151,22 @@ describe('TicketCodeReview', () => {
 
   it('renders loading and empty states', () => {
     expect(String(TicketCodeReview({ loading: true }))).toContain('Finding ticket commits');
-    expect(String(TicketCodeReview({ review: { commits: [], ranges: [], difftool: 'meld', truncated: false } }))).toContain('No commits referencing this ticket');
+    expect(
+      String(TicketCodeReview({ review: { commits: [], ranges: [], difftool: 'meld', truncated: false } })),
+    ).toContain('No commits referencing this ticket');
   });
 
   it('supports the repository dialog while preserving the shared commit presentation', () => {
-    const markup = String(TicketCodeReview({ review, embedded: true, title: 'Commits', action: 'open-repository-review', comparison: {active:true,side:'b',a:'aaa1111',b:'ddd4444'}, expandedCommits:['ddd4444'] }));
+    const markup = String(
+      TicketCodeReview({
+        review,
+        embedded: true,
+        title: 'Commits',
+        action: 'open-repository-review',
+        comparison: { active: true, side: 'b', a: 'aaa1111', b: 'ddd4444' },
+        expandedCommits: ['ddd4444'],
+      }),
+    );
     expect(markup).not.toContain('ticket-inspector__content');
     expect(markup).toContain('<h2>Commits</h2>');
     expect(markup).toContain('data-action="open-repository-review"');
@@ -128,8 +180,8 @@ describe('TicketCodeReview', () => {
     expect(markup).not.toContain('start-repository-comparison');
   });
 
-  it('limits collapsed commit detail to two Markdown lines',()=>{
-    const markup=String(TicketCodeReview({review}));
+  it('limits collapsed commit detail to two Markdown lines', () => {
+    const markup = String(TicketCodeReview({ review }));
     expect(markup).toContain('First detail line');
     expect(markup).toContain('Second <strong>Markdown</strong> line');
     expect(markup).not.toContain('Third hidden line');
@@ -137,11 +189,26 @@ describe('TicketCodeReview', () => {
 
   it('decodes only complete action datasets', () => {
     expect(codeReviewTarget({ reviewMode: 'commit', reviewCommit: 'abc' })).toEqual({ mode: 'commit', commit: 'abc' });
-    expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({ mode: 'range', from: 'abc', to: 'def' });
-    expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({ mode: 'compare', from: 'abc', to: 'def' });
+    expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({
+      mode: 'range',
+      from: 'abc',
+      to: 'def',
+    });
+    expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({
+      mode: 'compare',
+      from: 'abc',
+      to: 'def',
+    });
     expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'abc' })).toBeUndefined();
-    expect(codeReviewTarget({ reviewMode: 'ticket_file', reviewPath: 'src/main.ts' })).toEqual({ mode: 'ticket_file', path: 'src/main.ts' });
-    expect(codeReviewTarget({ reviewMode: 'worktree_file', reviewPath: 'src/main.ts', reviewArea: 'staged' })).toEqual({ mode: 'worktree_file', path: 'src/main.ts', area: 'staged' });
+    expect(codeReviewTarget({ reviewMode: 'ticket_file', reviewPath: 'src/main.ts' })).toEqual({
+      mode: 'ticket_file',
+      path: 'src/main.ts',
+    });
+    expect(codeReviewTarget({ reviewMode: 'worktree_file', reviewPath: 'src/main.ts', reviewArea: 'staged' })).toEqual({
+      mode: 'worktree_file',
+      path: 'src/main.ts',
+      area: 'staged',
+    });
     expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc' })).toBeUndefined();
   });
 });

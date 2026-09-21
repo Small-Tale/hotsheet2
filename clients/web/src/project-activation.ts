@@ -5,5 +5,5 @@ export interface PaintScheduler {
 
 /** Resume in a task after the next animation frame so signal updates can paint first. */
 export function afterBrowserPaint(scheduler: PaintScheduler = window): Promise<void> {
-  return new Promise(resolve => scheduler.requestAnimationFrame(() => scheduler.setTimeout(resolve, 0)));
+  return new Promise((resolve) => scheduler.requestAnimationFrame(() => scheduler.setTimeout(resolve, 0)));
 }

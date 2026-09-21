@@ -4,26 +4,103 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArrowDownAZ, ChevronLeft, ChevronRight, Columns3, GitCompare, List, MoreHorizontal, PanelLeftOpen, Pin, Settings, Star } from 'lucide';
+import {
+  ArrowDownAZ,
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+  GitCompare,
+  List,
+  MoreHorizontal,
+  PanelLeftOpen,
+  Pin,
+  Settings,
+  Star,
+} from 'lucide';
 
 export function ToolbarControlGroupDemo() {
-  return <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">
-    <div><h2>Segmented choices</h2><ToolbarControlGroup label="View mode">
-      <button class="view-mode-switcher__button" aria-label="List view" aria-pressed="true"><LucideIcon icon={List} name="list" /></button>
-      <button class="view-mode-switcher__button" aria-label="Columns view" aria-pressed="false"><LucideIcon icon={Columns3} name="columns-3" /></button>
-      <button class="view-mode-switcher__button" aria-label="Settings view" aria-pressed="false"><LucideIcon icon={Settings} name="settings" /></button>
-    </ToolbarControlGroup></div>
-    <div><h2>Popup menu</h2><ToolbarControlGroup single>
-      <wa-dropdown placement="bottom-start"><wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button><wa-dropdown-item>Recently updated</wa-dropdown-item><wa-dropdown-item>Priority</wa-dropdown-item></wa-dropdown>
-    </ToolbarControlGroup></div>
-    <div><h2>Button group</h2><ToolbarControlGroup label="View actions">
-      <wa-button appearance="plain" aria-label="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
-      <wa-button appearance="plain" aria-label="More actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
-    </ToolbarControlGroup></div>
-    <div><h2>Single button</h2><ToolbarControlGroup single><wa-button appearance="plain" aria-label="Pin view"><LucideIcon icon={Pin} name="pin" /></wa-button></ToolbarControlGroup></div>
-    <div><h2>Borderless group</h2><ToolbarControlGroup appearance="borderless" single><button type="button" aria-label="Show sidebar"><LucideIcon icon={PanelLeftOpen} name="panel-left-open" /></button></ToolbarControlGroup></div>
-    <div><h2>Push button, resting</h2><ToolbarControlGroup buttonAppearance="push" single><button type="button" aria-label="Resting comparison" aria-pressed="false"><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup></div>
-    <div><h2>Push button, pressed</h2><ToolbarControlGroup buttonAppearance="push" single><button type="button" aria-label="Pressed comparison" aria-pressed="true"><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup></div>
-    <div><h2>Dark group</h2><ToolbarControlGroup label="Dark navigation" tone="dark"><button type="button" aria-label="Previous"><LucideIcon icon={ChevronLeft} name="chevron-left" /></button><button type="button" aria-label="Next"><LucideIcon icon={ChevronRight} name="chevron-right" /></button></ToolbarControlGroup></div>
-  </section>;
+  return (
+    <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">
+      <div>
+        <h2>Segmented choices</h2>
+        <ToolbarControlGroup label="View mode">
+          <button class="view-mode-switcher__button" aria-label="List view" aria-pressed="true">
+            <LucideIcon icon={List} name="list" />
+          </button>
+          <button class="view-mode-switcher__button" aria-label="Columns view" aria-pressed="false">
+            <LucideIcon icon={Columns3} name="columns-3" />
+          </button>
+          <button class="view-mode-switcher__button" aria-label="Settings view" aria-pressed="false">
+            <LucideIcon icon={Settings} name="settings" />
+          </button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Popup menu</h2>
+        <ToolbarControlGroup single>
+          <wa-dropdown placement="bottom-start">
+            <wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets">
+              <LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" />
+            </wa-button>
+            <wa-dropdown-item>Recently updated</wa-dropdown-item>
+            <wa-dropdown-item>Priority</wa-dropdown-item>
+          </wa-dropdown>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Button group</h2>
+        <ToolbarControlGroup label="View actions">
+          <wa-button appearance="plain" aria-label="Favorite view">
+            <LucideIcon icon={Star} name="star" />
+          </wa-button>
+          <wa-button appearance="plain" aria-label="More actions">
+            <LucideIcon icon={MoreHorizontal} name="ellipsis" />
+          </wa-button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Single button</h2>
+        <ToolbarControlGroup single>
+          <wa-button appearance="plain" aria-label="Pin view">
+            <LucideIcon icon={Pin} name="pin" />
+          </wa-button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Borderless group</h2>
+        <ToolbarControlGroup appearance="borderless" single>
+          <button type="button" aria-label="Show sidebar">
+            <LucideIcon icon={PanelLeftOpen} name="panel-left-open" />
+          </button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Push button, resting</h2>
+        <ToolbarControlGroup buttonAppearance="push" single>
+          <button type="button" aria-label="Resting comparison" aria-pressed="false">
+            <LucideIcon icon={GitCompare} name="git-compare" />
+          </button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Push button, pressed</h2>
+        <ToolbarControlGroup buttonAppearance="push" single>
+          <button type="button" aria-label="Pressed comparison" aria-pressed="true">
+            <LucideIcon icon={GitCompare} name="git-compare" />
+          </button>
+        </ToolbarControlGroup>
+      </div>
+      <div>
+        <h2>Dark group</h2>
+        <ToolbarControlGroup label="Dark navigation" tone="dark">
+          <button type="button" aria-label="Previous">
+            <LucideIcon icon={ChevronLeft} name="chevron-left" />
+          </button>
+          <button type="button" aria-label="Next">
+            <LucideIcon icon={ChevronRight} name="chevron-right" />
+          </button>
+        </ToolbarControlGroup>
+      </div>
+    </section>
+  );
 }

@@ -15,7 +15,7 @@ authority over it. The CLI shares it directly for its direct-to-disk path.
 
 The core is **I/O-capable but policy-free**: it performs file and process I/O
 through injected adapters, so hosts inject real implementations and tests inject
-fakes. Nothing in the core decides *where* to bind a port or *whether* to open a
+fakes. Nothing in the core decides _where_ to bind a port or _whether_ to open a
 browser — those are host policy.
 
 Core modules (mirrors [01-architecture.md](01-architecture.md) §1.2):
@@ -30,9 +30,10 @@ CLI runs the one-shot half headless (`hotsheet setup`, `hotsheet plugin …`,
 `hotsheet settings …`) with no server, and the server runs the same code for
 client-driven flows and hosts the persistent half (terminals, drive, busy). This is
 the §4.5 no-duplication rule applied to setup + settings, not just ticket ops — and
-it's the reversal of HS1, where the *app layer* owned tool setup and project config.
+it's the reversal of HS1, where the _app layer_ owned tool setup and project config.
 
 ### Why a library, not just a server
+
 So the **CLI can operate directly on disk with no server running** (a chartered
 requirement — "a cli for direct reading/manipulation of tickets on disk"), running
 the exact same tested engine the server runs. The server and CLI are two thin Rust
@@ -193,6 +194,7 @@ chartered goal, made absolute by the maintainer 2026-08-19: there is no
 embedded-in-client mode). One instance per machine serves all local projects.
 
 Responsibilities:
+
 - **HTTP REST** for CRUD + query (JSON, not HTML — the client/service split).
 - **WebSocket** (`/ws/sync`) for live push: index changes, claim/lease events,
   terminal streams, permission prompts. `GET /ws/poll` is the cursor/replay
@@ -222,7 +224,7 @@ Responsibilities:
   checkout must choose one, and providers without local activity persistence fail with an
   explicit capability error. Native activity, usage, and turn events are then recorded and
   identified against that linked source rather than the server's unrelated default store. `POST
-  /drive/connections/{id}/turns` sends a free-form turn and resumes the retained tool
+/drive/connections/{id}/turns` sends a free-form turn and resumes the retained tool
   session; and `/interrupt` exists as an advertised connection action only when the
   concrete drive implements interruption. `GET /connections` reports state, session,
   errors, and semantic actions; `GET /drive/sessions` lists machine-local resumable
@@ -256,15 +258,15 @@ The server's life is **decoupled from any client's** (maintainer requirement,
   instead of starting a duplicate. Carried over from HS1's instance model, minus
   the DB-lock recycling complexity (there's no DB cluster to protect, only the
   disposable index).
-- **Supervised, not owned.** A client may *supervise* the local server it started
-  (restart it if it crashed, surface its health) but never *owns* it — any client
+- **Supervised, not owned.** A client may _supervise_ the local server it started
+  (restart it if it crashed, surface its health) but never _owns_ it — any client
   can attach to a server another client started, and none closing it takes it down.
 - **Shutdown is explicit** — `hotsheet serve --stop` / a tray/menu "Quit server"
   action / OS service stop — never an implicit side effect of a client exiting. Server
   shutdown preserves broker-hosted terminals by default; the project-scoped destructive
   variant is `hotsheet serve --stop --kill-all-terminals`.
 - **On iOS** there is no local server to auto-start (background-execution limits
-  make an independent daemon impractical); iOS connects to a *remote* server on a
+  make an independent daemon impractical); iOS connects to a _remote_ server on a
   Mac. See [06-clients.md](06-clients.md) §6.4.
 
 **Built (HS2-59, server-side; HS2-5A01DC/HS2-4072GM, CLI and client supervision):**
@@ -339,7 +341,7 @@ specific upgrade-required result.
 ## 4.4 The CLI (`hotsheet-cli`)
 
 A thin binary that wraps the same core for **direct-to-disk** operations, usable
-with **or without** a running server. AI tools can use the CLI *or* the MCP; humans
+with **or without** a running server. AI tools can use the CLI _or_ the MCP; humans
 use it in a terminal.
 
 > **Binary name (dev):** the compiled binary is currently **`hotsheet-cli`**, not
@@ -351,6 +353,7 @@ use it in a terminal.
 Two families of commands:
 
 **Ticket ops (direct to disk; server not required):**
+
 ```
 hotsheet new "Fix dashboard flicker" --category bug --priority high --up-next
 hotsheet ls --up-next --status started
@@ -375,6 +378,7 @@ hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
 ```
+
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved
 without shell-escape interpretation. `--note-file` works for both appended notes and
@@ -455,22 +459,24 @@ saturation: deterministic child-spawn and remote-hook handshakes establish that 
 is blocked before the bounded local-return assertion, without relying on a startup-speed
 deadline. The shared
 `ops` layer routes every mutation through `FsStore::write_ticket_committing`, so CLI + MCP
-+ server all commit. After the one-time legacy Finder-metadata cleanup, single-ticket and
-attachment mutations stage and commit only their exact touched paths, preserving unrelated staged/user work;
-the subsequent checkout worklist refresh queries only indexed active Up Next rows instead
-of scanning the store. It's a no-op when the store isn't a git repo, and
-`HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
-Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
-semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
-slug resolution for `show` use the same file-backed SQLite index as the server. Opening
-that index reconciles committed and uncommitted Git ticket deltas first, so direct external
-file edits remain visible while warm read cost follows changed files and result size rather
-than total store size. Exact-ULID `show` remains a direct one-file read. A missing, stale-
-schema, or corrupt index is disposable and rebuilt from the source files; `hotsheet
+
+- server all commit. After the one-time legacy Finder-metadata cleanup, single-ticket and
+  attachment mutations stage and commit only their exact touched paths, preserving unrelated staged/user work;
+  the subsequent checkout worklist refresh queries only indexed active Up Next rows instead
+  of scanning the store. It's a no-op when the store isn't a git repo, and
+  `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
+  Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
+  semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
+  slug resolution for `show` use the same file-backed SQLite index as the server. Opening
+  that index reconciles committed and uncommitted Git ticket deltas first, so direct external
+  file edits remain visible while warm read cost follows changed files and result size rather
+  than total store size. Exact-ULID `show` remains a direct one-file read. A missing, stale-
+  schema, or corrupt index is disposable and rebuilt from the source files; `hotsheet
 reindex` performs the same explicit full rebuild. If a server is running, its watcher also
-observes CLI file changes and reindexes + broadcasts them live.
+  observes CLI file changes and reindexes + broadcasts them live.
 
 **Ops / lifecycle:**
+
 ```
 hotsheet init          # create/register a project + default store (+ install the merge driver)
 hotsheet init --standalone [--at <path>] [--remote <url>]  # create/link a standalone store
@@ -485,6 +491,7 @@ hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-t
 ```
 
 **AI-tool setup + plugins (core-owned, headless — [05](05-ai-tool-plugins.md) §5.1a, §5.11):**
+
 ```
 hotsheet setup claude          # write CLAUDE.md/skills/MCP config for a tool   [built: HS2-98]
 hotsheet setup --detect        # set up every AI tool detected on this machine   [built: HS2-98]
@@ -493,9 +500,10 @@ hotsheet plugin install <path|url>   # add an external plugin (trust-gated)     
 hotsheet plugin verify <id>    # run the conformance suite against a plugin      [HS2-93]
 hotsheet plugin remove <id>                                                    # [HS2-92]
 ```
+
 These run **with no server and no client** — the loader + setup writers live in the
 core (§4.1), so a purely terminal workflow prepares a project for its AI tools on
-its own. When a client is in play it asks the *server* to run the same code.
+its own. When a client is in play it asks the _server_ to run the same code.
 `setup <tool>` is **built (HS2-98)**: it writes a merge-safe managed block into the
 tool's instruction file (e.g. `CLAUDE.md`), the worklist skill, and an `.mcp.json`
 entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
@@ -549,10 +557,12 @@ changes tool configuration or starts migration; interactive prompting and option
 continuous config sync remain client work (HS2-8B0YZX).
 
 **Drive a tool (the headless "play") + the work loop:**
+
 ```
 hotsheet trigger <tool> [--prompt …] [--project DIR] [--mcp-config F] [--env K=V]
 hotsheet work <tool> [--max 50] [--max-stall 3] [--project DIR] [--worker]
 ```
+
 `work` is the **headless loop (HS2-118)**, the north-star bootstrap step: it drives the
 tool one turn at a time — each turn takes the single highest-priority Up Next ticket —
 until Up Next is drained, a turn cap (`--max`) is hit, or the queue stops changing for
@@ -577,11 +587,13 @@ bare `trigger codex` can't load the user's global MCP servers (pass `--env CODEX
 to override). The safety primitives live in `crates/hotsheet-aitools/src/launch_safety.rs`.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
+
 ```
 hotsheet settings get <key> [--scope shared|local]
 hotsheet settings set <key> <value> [--scope shared|local]
 hotsheet settings list [--scope shared|local]
 ```
+
 Terminal history isolation is the default. The explicit opt-out is local-only:
 `hotsheet-cli settings set terminal.inherit_global_shell_history true --scope local`.
 The browser's Project Settings → Terminals control writes the same key.
@@ -607,7 +619,7 @@ logic separately.
 
 There is exactly one implementation of every operation (in the core). The server
 and CLI are its only two adapters, and both call the same functions; clients call
-those operations *through the server's API*, never a re-implementation. This is
+those operations _through the server's API_, never a re-implementation. This is
 enforceable the way HS1 enforces its structural rules (an ESLint-style lint / a
 Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 "client mirror" of core logic is a bug, not a pattern.
@@ -647,10 +659,10 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 > **local** `<project-root>/.hotsheet2/settings.local.json` (auto-added to the code
 > project's `.gitignore`). The effective value resolves in precedence **global < shared < local**
 > (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
-> [--scope global|shared|local]`. Client/device-only settings still never enter core.
+[--scope global|shared|local]`. Client/device-only settings still never enter core.
 >
 > **Decided (maintainer, 2026-08-20):** project settings are **core-owned and
-> CLI-manageable**, not app-only. The client owns *only* device-specific settings.
+> CLI-manageable**, not app-only. The client owns _only_ device-specific settings.
 > Build: **HS2-94**.
 
 The `.hotsheet2` project directory is intentionally distinct from HS1's `.hotsheet`
@@ -665,14 +677,14 @@ Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:
 
-| Scope | Examples | On disk | Managed by |
-|---|---|---|---|
-| **Global** | cross-project personal defaults (default AI tool, editor) set once per machine | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store) | core → **CLI + server** |
-| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, `trash_cleanup_days` retention policy, enabled-plugin set for the *project* | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
-| **Local** | which tools are enabled *on this machine*, index location, machine paths | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
-| **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |
+| Scope                    | Examples                                                                                                                                                         | On disk                                                                                                                   | Managed by                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Global**               | cross-project personal defaults (default AI tool, editor) set once per machine                                                                                   | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store)                                                  | core → **CLI + server**                                 |
+| **Shared**               | auto-context guidance (HS2-25), categories, per-category instructions, custom views, `trash_cleanup_days` retention policy, enabled-plugin set for the _project_ | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources      | core → **CLI + server + client**                        |
+| **Local**                | which tools are enabled _on this machine_, index location, machine paths                                                                                         | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
+| **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7)                                                                                                         | the client's own app storage                                                                                              | **client only — never enters core**                     |
 
-The dividing test: *does a headless CLI or the server ever need this value?* If yes,
+The dividing test: _does a headless CLI or the server ever need this value?_ If yes,
 it's shared or local and lives in core-owned settings. If it only means something to
 a running GUI on one device, it's client-only and the core never sees it. This is
 why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
@@ -730,7 +742,7 @@ setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
 > **Built (HS2-M1XMSX):** `hotsheet_ticketing::secrets` provides an injected
 > `SecretStore` port, native macOS Security.framework Keychain, Linux Secret Service
 > (`secret-tool`), and Windows Credential Manager adapters, plus a global provider registry. `hotsheet key
-> set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt when
+set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt when
 > stdin is a terminal and accepts piped stdin for automation. `${HOTSHEET_HOME}/keys.json` contains provider names and fallback environment
 > variable names only, is mode `0600` on Unix, and never contains secret values.
 
@@ -742,12 +754,14 @@ fallback: an unavailable keychain makes writes fail closed. Secret values must n
 placed in project/global settings, ticket files, logs, diagnostics, or command arguments.
 
 ## 4.8 Open items
+
 - **Language confirmation** (Rust vs Go) — [09-technology-decisions.md](09-technology-decisions.md) §9.2.
 - **MCP transport for the new server** — HS1 spawns a separate `channel.ts` MCP
   process per project. In HS2 the plugin host may let the server itself expose MCP,
   or keep a small per-project MCP shim; decided in [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8.
 
 ## 4.9 Cross-references
+
 - Storage: [02-ticket-storage.md](02-ticket-storage.md) · Index: [03-indexing-and-query.md](03-indexing-and-query.md)
 - AI-tool plugins (loader, setup ownership, external plugins): [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.1a, §5.11
 - Clients (API consumers) + server auto-start lifecycle: [06-clients.md](06-clients.md) §6.2

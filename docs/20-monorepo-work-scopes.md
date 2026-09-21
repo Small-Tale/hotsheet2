@@ -38,12 +38,12 @@ despite appearing as separate projects.
 
 Use four orthogonal concepts instead of stretching one concept across all jobs:
 
-| Concept | Owns | Does not own |
-|---|---|---|
-| **Checkout** | canonical filesystem root, repository runtime, watchers, setup, server resources, project tab | package organization or ticket authority |
-| **Source/store** | authoritative ticket system, identity, permissions, sync, retention, creation target | code working directory or UI grouping |
-| **Tag/saved view** | portable ticket metadata and ad hoc query/display | filesystem context, integrity, permissions, or exclusive ownership |
-| **Work scope** | optional named slice of a checkout: relative code roots, ticket selector, and defaults | ticket identity, authorization, repository lifecycle, or a new server instance |
+| Concept            | Owns                                                                                          | Does not own                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Checkout**       | canonical filesystem root, repository runtime, watchers, setup, server resources, project tab | package organization or ticket authority                                       |
+| **Source/store**   | authoritative ticket system, identity, permissions, sync, retention, creation target          | code working directory or UI grouping                                          |
+| **Tag/saved view** | portable ticket metadata and ad hoc query/display                                             | filesystem context, integrity, permissions, or exclusive ownership             |
+| **Work scope**     | optional named slice of a checkout: relative code roots, ticket selector, and defaults        | ticket identity, authorization, repository lifecycle, or a new server instance |
 
 The recommended product term is **work scope**. “Project” is already overloaded,
 “package” excludes services and cross-cutting domains, and “component” collides
@@ -55,13 +55,13 @@ configure another scope behave exactly as they do today.
 
 ## 20.3 Alternatives considered
 
-| Approach | Strengths | Weaknesses | Appropriate use |
-|---|---|---|---|
-| Nested checkouts/subroots | already possible; distinct cwd and client tab | duplicates overlapping repository/watch/setup/resource ownership; path-derived identity; unclear parent store inheritance | a truly independent nested repository or lifecycle boundary |
-| Store per package | hard source/ACL/sync separation; clear creation route | fragments backlog and history; increases provider administration; does not inherently define code cwd | packages with genuinely different ticket authority or access policy |
-| Tags and saved views | available now; portable, cheap, overlapping | free-form and drift-prone; provider capabilities vary; no path/cwd; not a security boundary | small-team organization and early conventions |
-| Singular `project` field on every ticket | easy exclusive reporting when universally supported | requires provider/file-format support and bulk mutation; cannot express cross-cutting work; rename/move semantics are costly | not recommended as the foundation |
-| First-class work scopes | separates organization from authority; supports cwd plus overlapping queries; zero-ticket migration | new config/API/UI concept; selectors can overlap or drift; needs strict path validation | recommended general monorepo model |
+| Approach                                 | Strengths                                                                                           | Weaknesses                                                                                                                   | Appropriate use                                                     |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Nested checkouts/subroots                | already possible; distinct cwd and client tab                                                       | duplicates overlapping repository/watch/setup/resource ownership; path-derived identity; unclear parent store inheritance    | a truly independent nested repository or lifecycle boundary         |
+| Store per package                        | hard source/ACL/sync separation; clear creation route                                               | fragments backlog and history; increases provider administration; does not inherently define code cwd                        | packages with genuinely different ticket authority or access policy |
+| Tags and saved views                     | available now; portable, cheap, overlapping                                                         | free-form and drift-prone; provider capabilities vary; no path/cwd; not a security boundary                                  | small-team organization and early conventions                       |
+| Singular `project` field on every ticket | easy exclusive reporting when universally supported                                                 | requires provider/file-format support and bulk mutation; cannot express cross-cutting work; rename/move semantics are costly | not recommended as the foundation                                   |
+| First-class work scopes                  | separates organization from authority; supports cwd plus overlapping queries; zero-ticket migration | new config/API/UI concept; selectors can overlap or drift; needs strict path validation                                      | recommended general monorepo model                                  |
 
 Tags are still a good implementation primitive for a scope selector, and stores
 remain the correct authority boundary. A scope does not replace either one.
@@ -79,7 +79,7 @@ name and directory name:
   "ticketQuery": "tag:ui",
   "defaultSource": "team-github",
   "ticketDefaults": { "tags": ["ui"] },
-  "archived": false
+  "archived": false,
 }
 ```
 
@@ -104,13 +104,13 @@ Recommended invariants:
 
 Example for Kerf:
 
-| Scope | Root | Selector/default |
-|---|---|---|
-| All | `.` | no selector |
-| Core | `src` | `tag:core`, default tag `core` |
-| UI | `ui` | `tag:ui`, default tag `ui` |
-| ESLint plugin | `eslint-plugin` | `tag:eslint-plugin` |
-| Component tooling | `create-kerf-component` | `tag:component-tooling` |
+| Scope             | Root                    | Selector/default               |
+| ----------------- | ----------------------- | ------------------------------ |
+| All               | `.`                     | no selector                    |
+| Core              | `src`                   | `tag:core`, default tag `core` |
+| UI                | `ui`                    | `tag:ui`, default tag `ui`     |
+| ESLint plugin     | `eslint-plugin`         | `tag:eslint-plugin`            |
+| Component tooling | `create-kerf-component` | `tag:component-tooling`        |
 
 This does not require separate stores. Kerf could add a separate source for a
 private security backlog later and choose it as a scope default only where that

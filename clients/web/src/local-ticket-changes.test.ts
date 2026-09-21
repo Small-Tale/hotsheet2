@@ -9,13 +9,18 @@ describe('local ticket change acknowledgements', () => {
   it('consumes one exact stream event for each locally acknowledged write', () => {
     const acknowledgements = new LocalTicketChangeAcknowledgements();
     acknowledgements.acknowledge('project-one', event('one'));
-    expect(acknowledgements.unacknowledged('project-one', [event('one'), event('one'), event('two')])).toEqual([event('one'), event('two')]);
+    expect(acknowledgements.unacknowledged('project-one', [event('one'), event('one'), event('two')])).toEqual([
+      event('one'),
+      event('two'),
+    ]);
   });
 
   it('does not hide a different event kind for the same ticket', () => {
     const acknowledgements = new LocalTicketChangeAcknowledgements();
     acknowledgements.acknowledge('project-one', event('one', 'created'));
-    expect(acknowledgements.unacknowledged('project-one', [event('one', 'updated')])).toEqual([event('one', 'updated')]);
+    expect(acknowledgements.unacknowledged('project-one', [event('one', 'updated')])).toEqual([
+      event('one', 'updated'),
+    ]);
   });
 
   it('expires acknowledgements that were never observed', () => {

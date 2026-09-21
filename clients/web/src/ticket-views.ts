@@ -4,12 +4,22 @@ export type BuiltInTicketView = 'all' | 'backlog' | 'archive' | 'trash' | 'error
 export type TicketView = BuiltInTicketView | `custom:${string}`;
 
 export const customTicketViewId = (id: string): TicketView => `custom:${id}`;
-export const customTicketViewKey = (view: TicketView): string | undefined => view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
-export const ticketSearchCountViews = (customViewIds: readonly string[] = []): TicketView[] => ['all', 'backlog', 'archive', ...customViewIds.map(customTicketViewId)];
+export const customTicketViewKey = (view: TicketView): string | undefined =>
+  view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
+export const ticketSearchCountViews = (customViewIds: readonly string[] = []): TicketView[] => [
+  'all',
+  'backlog',
+  'archive',
+  ...customViewIds.map(customTicketViewId),
+];
 
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'trash', 'errors'].includes(view);
-export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
-export const newTicketCreationPlacement = (view: TicketView, upNext: boolean) => ({status:upNext?'not_started' as const:newTicketStatusForView(view),up_next:upNext});
+export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' =>
+  view === 'backlog' ? 'backlog' : 'not_started';
+export const newTicketCreationPlacement = (view: TicketView, upNext: boolean) => ({
+  status: upNext ? ('not_started' as const) : newTicketStatusForView(view),
+  up_next: upNext,
+});
 
 /** Match a built-in collection on the server before its page size is applied. */
 export function ticketViewQuery(view: TicketView): CheckoutTicketQuery {
@@ -44,7 +54,7 @@ export function ticketsForView(tickets: readonly TicketRow[], view: TicketView):
   if (view === 'errors') return [];
   if (view === 'archive') return tickets.filter(isArchivedTicket);
   if (view === 'trash') return tickets.filter(isTrashedTicket);
-  if (view === 'backlog') return tickets.filter(ticket => ticket.status === 'backlog');
+  if (view === 'backlog') return tickets.filter((ticket) => ticket.status === 'backlog');
   return tickets.filter(isQueuedTicket);
 }
 
@@ -58,11 +68,19 @@ export function createdTicketVisibleInView(ticket: TicketRow, view: TicketView):
   return ticketsForView([ticket], view).length > 0;
 }
 
-export function selectionVisibleInView(tickets: readonly TicketRow[], selectedSlugs: readonly string[], view: TicketView): string[] {
-  const visible = new Set(ticketsForView(tickets, view).map(ticket => ticket.slug));
-  return selectedSlugs.filter(slug => visible.has(slug));
+export function selectionVisibleInView(
+  tickets: readonly TicketRow[],
+  selectedSlugs: readonly string[],
+  view: TicketView,
+): string[] {
+  const visible = new Set(ticketsForView(tickets, view).map((ticket) => ticket.slug));
+  return selectedSlugs.filter((slug) => visible.has(slug));
 }
 
-export function selectionAfterTicketViewChange(current: TicketView, next: TicketView, selectedSlugs: readonly string[]): string[] {
+export function selectionAfterTicketViewChange(
+  current: TicketView,
+  next: TicketView,
+  selectedSlugs: readonly string[],
+): string[] {
   return current === next ? [...selectedSlugs] : [];
 }

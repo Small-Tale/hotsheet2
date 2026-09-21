@@ -18,7 +18,9 @@ export interface ProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTa
 }
 
 /** Coalesce per-project invalidations while preserving refreshes for every open tab. */
-export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget, Snapshot>(options: ProjectTabRefreshCoordinatorOptions<Target, Snapshot>): ProjectTabRefreshCoordinator<Target> {
+export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget, Snapshot>(
+  options: ProjectTabRefreshCoordinatorOptions<Target, Snapshot>,
+): ProjectTabRefreshCoordinator<Target> {
   const pending = new Map<string, Target>();
   const revisions = new Map<string, number>();
   let running: Promise<void> | undefined;
@@ -42,9 +44,9 @@ export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefr
   const drain = async () => {
     await options.waitUntilSafe();
     while (pending.size > 0) {
-      const batch = [...pending.values()].map(target => ({ target, revision: revision(target.id) }));
+      const batch = [...pending.values()].map((target) => ({ target, revision: revision(target.id) }));
       pending.clear();
-      await Promise.all(batch.map(item => refresh(item.target, item.revision)));
+      await Promise.all(batch.map((item) => refresh(item.target, item.revision)));
     }
   };
 
@@ -52,7 +54,9 @@ export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefr
     request(target) {
       revisions.set(target.id, revision(target.id) + 1);
       pending.set(target.id, target);
-      running ??= drain().finally(() => { running = undefined; });
+      running ??= drain().finally(() => {
+        running = undefined;
+      });
       return running;
     },
     activate(projectId) {

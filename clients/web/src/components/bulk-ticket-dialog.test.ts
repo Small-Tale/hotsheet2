@@ -7,7 +7,9 @@ describe('BulkTicketDialog', () => {
     const add = String(BulkTicketDialog({ state: { kind: 'tag', mode: 'add', count: 3, choices: [] } }));
     expect(add).toContain('label="Add tag — 3 selected"');
     expect(add).toContain('data-action="submit-bulk-tag" data-tag-mode="add"');
-    const remove = String(BulkTicketDialog({ state: { kind: 'tag', mode: 'remove', count: 2, choices: ['bug', 'client'] } }));
+    const remove = String(
+      BulkTicketDialog({ state: { kind: 'tag', mode: 'remove', count: 2, choices: ['bug', 'client'] } }),
+    );
     expect(remove).toContain('label="Remove tag — 2 selected"');
     expect(remove).toContain('data-action="choose-bulk-tag" data-tag="bug"');
   });
@@ -20,7 +22,9 @@ describe('BulkTicketDialog', () => {
   });
 
   it('warns that emptying Trash is permanent and exposes busy and error states', () => {
-    const markup = String(BulkTicketDialog({ state: { kind: 'empty-trash', count: 3, busy: true, error: 'Try again' } }));
+    const markup = String(
+      BulkTicketDialog({ state: { kind: 'empty-trash', count: 3, busy: true, error: 'Try again' } }),
+    );
     expect(markup).toContain('label="Empty Trash?"');
     expect(markup).toContain('Permanently remove 3 tickets');
     expect(markup).toContain('Git history will still contain the removed files');

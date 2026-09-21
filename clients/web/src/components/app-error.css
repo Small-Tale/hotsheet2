@@ -1,9 +1,50 @@
 /* Floating error toast rendered by AppError (app-error.tsx). Shares the fixed bottom-right
    placement of the neutral .app-loading/.app-toast chrome (main.tsx) but carries its own
    danger presentation and dismiss control. */
-.app-error { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); display: flex; max-width: remify(512px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-danger-fill-loud); align-items: flex-start; gap: var(--kui-space-xs); line-height: 1.4; }
-.app-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.app-error > button { display: grid; flex: 0 0 auto; width: remify(28px); height: remify(28px); margin: remify(-3.2px) remify(-5.6px) remify(-3.2px) 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); align-items: center; justify-items: center; color: inherit; background: transparent; cursor: pointer; }
-.app-error > button:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
-.app-error > button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.app-error > button svg { width: remify(16px); height: remify(16px); }
+.app-error {
+  position: fixed;
+  z-index: 1000;
+  right: remify(16px);
+  bottom: remify(16px);
+  display: flex;
+  max-width: remify(512px);
+  padding: remify(10.4px) remify(13.6px);
+  border-radius: var(--wa-border-radius-m);
+  box-shadow: var(--wa-shadow-l);
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-danger-fill-loud);
+  align-items: flex-start;
+  gap: var(--kui-space-xs);
+  line-height: 1.4;
+}
+.app-error > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app-error > button {
+  display: grid;
+  flex: 0 0 auto;
+  width: remify(28px);
+  height: remify(28px);
+  margin: remify(-3.2px) remify(-5.6px) remify(-3.2px) 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-s);
+  align-items: center;
+  justify-items: center;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.app-error > button:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.app-error > button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.app-error > button svg {
+  width: remify(16px);
+  height: remify(16px);
+}

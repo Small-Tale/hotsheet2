@@ -26,14 +26,14 @@ state boundaries, and user-facing vocabulary. A `TicketRow`, `TicketInspector`, 
 `TerminalDrawer` should mean the same feature on both platforms. They do not need to
 share rendering mechanics or reproduce one another's primitive hierarchy.
 
-| Feature component | Web implementation | macOS SwiftUI implementation |
-|---|---|---|
-| Application shell and regions | Kerf composition, CSS grid/split panes | `NavigationSplitView`, split views, window scenes |
-| State and API resources | Kerf signals, array signals, resources | observable models and async API services |
-| Standard controls | Cherry-picked Web Awesome Core elements | Native SwiftUI controls |
-| Lists and selection | Kerf virtualized list + semantic rows | `List`/lazy containers + native selection |
-| Menus, dialogs, drawers | Web Awesome primitives where suitable | Native menus, sheets, popovers, inspectors |
-| Terminal viewport | Imperative terminal widget behind a Kerf `ref`/scope | Native terminal surface wrapper |
+| Feature component             | Web implementation                                   | macOS SwiftUI implementation                      |
+| ----------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| Application shell and regions | Kerf composition, CSS grid/split panes               | `NavigationSplitView`, split views, window scenes |
+| State and API resources       | Kerf signals, array signals, resources               | observable models and async API services          |
+| Standard controls             | Cherry-picked Web Awesome Core elements              | Native SwiftUI controls                           |
+| Lists and selection           | Kerf virtualized list + semantic rows                | `List`/lazy containers + native selection         |
+| Menus, dialogs, drawers       | Web Awesome primitives where suitable                | Native menus, sheets, popovers, inspectors        |
+| Terminal viewport             | Imperative terminal widget behind a Kerf `ref`/scope | Native terminal surface wrapper                   |
 
 Rules for both clients:
 
@@ -400,6 +400,7 @@ passive or action branch. This keeps disabled/read-only surfaces semantically pa
 rather than emitting incomplete hidden actions. The production shell and UX catalog also
 adopt the package-owned `wireTokenSearchFields.onEdit` path so beta 22 remains the sole
 owner of editor normalization before the controlled query state rerenders (HS2-HJ585K).
+
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
   with accessible pressed state. The notifications mode projects its pending count in
@@ -961,6 +962,7 @@ reintroduce either kind of drift. One-off layout geometry may remain local when 
 describes an actual component measurement rather than a reusable visual meaning.
 Actionable context-menu entries consistently pair their text with meaningful Lucide
 icons; structural separators do not require icons.
+
 - `TicketTagEditor` — **built**: shared tag list, compact add control, autocomplete,
   normalization, duplicate prevention, removal, and unsupported-provider state
 

@@ -5,14 +5,25 @@ import { createProjectTabRefreshCoordinator } from './project-tab-refresh';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(next => { resolve = next; });
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
   return { promise, resolve };
 }
 
 const ticket = (id: string): TicketRow => ({
-  connection_id: 'git', native_id: id, qualified_id: `git:${id}`, id,
-  slug: `HS2-${id}`, title: id, status: 'not_started', up_next: true,
-  feedback_needed: false, tags: [], blocked_by: [], claim_count: 0,
+  connection_id: 'git',
+  native_id: id,
+  qualified_id: `git:${id}`,
+  id,
+  slug: `HS2-${id}`,
+  title: id,
+  status: 'not_started',
+  up_next: true,
+  feedback_needed: false,
+  tags: [],
+  blocked_by: [],
+  claim_count: 0,
 });
 
 describe('project tab refresh coordination', () => {

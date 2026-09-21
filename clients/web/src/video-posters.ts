@@ -14,7 +14,9 @@ const localPosterUrls = new Map<HTMLVideoElement, string>();
 
 function waitForMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked'): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => { finish(new Error('video poster generation timed out')); }, 8_000);
+    const timeout = window.setTimeout(() => {
+      finish(new Error('video poster generation timed out'));
+    }, 8_000);
     const finish = (error?: Error) => {
       window.clearTimeout(timeout);
       video.removeEventListener(event, ready);
@@ -22,8 +24,12 @@ function waitForMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked'): 
       if (error) reject(error);
       else resolve();
     };
-    const ready = () => { finish(); };
-    const failed = () => { finish(new Error('the browser cannot decode this video')); };
+    const ready = () => {
+      finish();
+    };
+    const failed = () => {
+      finish(new Error('the browser cannot decode this video'));
+    };
     video.addEventListener(event, ready, { once: true });
     video.addEventListener('error', failed, { once: true });
   });
@@ -31,10 +37,14 @@ function waitForMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked'): 
 
 function canvasJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => {
-      if (blob) resolve(blob);
-      else reject(new Error('canvas could not encode a JPEG'));
-    }, 'image/jpeg', 0.84);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('canvas could not encode a JPEG'));
+      },
+      'image/jpeg',
+      0.84,
+    );
   });
 }
 
@@ -138,7 +148,7 @@ export function syncVideoPosters(root: ParentNode, fetcher: Fetcher = fetch): vo
       continue;
     }
     assignedPosters.set(video, posterUrl);
-    void ensureVideoPoster(posterUrl, () => sourceBlob(videoUrl, fetcher), fetcher).then(result => {
+    void ensureVideoPoster(posterUrl, () => sourceBlob(videoUrl, fetcher), fetcher).then((result) => {
       if (!result.poster || !video.isConnected) return;
       const previous = localPosterUrls.get(video);
       const localPoster = URL.createObjectURL(result.poster);

@@ -12,7 +12,7 @@ export const CUSTOMIZATION_COLORS = [
 ] as const;
 
 export function resolveCustomizationColor(color?: string): string {
-  return CUSTOMIZATION_COLORS.some(option => option.value === color) ? color! : CUSTOMIZATION_COLORS[0].value;
+  return CUSTOMIZATION_COLORS.some((option) => option.value === color) ? color! : CUSTOMIZATION_COLORS[0].value;
 }
 
 /** The command-button palette: like {@link CUSTOMIZATION_COLORS} but the neutral slot is "Transparent" (no fill). */
@@ -33,7 +33,7 @@ export function isTransparentCommandColor(color?: string): boolean {
  */
 export function resolveCommandColor(color?: string): string {
   if (isTransparentCommandColor(color)) return TRANSPARENT_CUSTOMIZATION_COLOR;
-  return CUSTOMIZATION_COLORS.some(option => option.value === color) ? color! : TRANSPARENT_CUSTOMIZATION_COLOR;
+  return CUSTOMIZATION_COLORS.some((option) => option.value === color) ? color! : TRANSPARENT_CUSTOMIZATION_COLOR;
 }
 
 export function customizationContrastColor(color: string): '#1a1a1a' | '#ffffff' {

@@ -2,26 +2,34 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from './quick-ticket-composer';
+import { QuickTicketComposer, QuickTicketLauncher, showQuickTicketComposer } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
-    const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
+    const css = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.quick-ticket-composer \{[^}]*padding: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-m\)/);
     expect(css).toMatch(/__metadata \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__details \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/__attachment \{[^}]*padding: var\(--kui-space-2xs\) var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(remify\(928px\), calc\(100vw - remify\(32px\)\)\)/);
+    expect(css).toMatch(
+      /__attachment \{[^}]*padding: var\(--kui-space-2xs\) var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/,
+    );
+    expect(css).toMatchSource(
+      /\.quick-ticket-dialog \{[^}]*--width:min\(remify\(928px\), calc\(100vw - remify\(32px\)\)\)/,
+    );
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px))');
-    expect(css).toMatch(/@media \(max-width: remify\(608px\)\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
+    expect(css).toMatchSource(
+      /@media \(max-width: remify\(608px\)\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/,
+    );
     // HS2-Q7WJ6T: the form sits inside the dialog panel, so its base rule must not draw its own
     // border or box-shadow (that redundant brand-colored rounded border read as a stray outline
     // below the dialog title). The drag drop-target highlight keeps its own box-shadow ring.
-    const baseRule=css.match(/\n\.quick-ticket-composer \{([^}]*)\}/)![1];
+    const baseRule = css.match(/\n\.quick-ticket-composer \{([^}]*)\}/)![1];
     expect(baseRule).not.toMatch(/(^|;|\s)border:/);
     expect(baseRule).not.toContain('box-shadow:');
-    expect(css).toMatch(/\.quick-ticket-composer:is\(\[data-dragging="true"\], \[data-dragging-ticket="true"\]\) \{[^}]*box-shadow:/);
+    expect(css).toMatchSource(
+      /\.quick-ticket-composer:is\(\[data-dragging="true"\], \[data-dragging-ticket="true"\]\) \{[^}]*box-shadow:/,
+    );
   });
   it('has distinct collapsed, editable, and provider-disabled presentations', () => {
     const collapsed = String(QuickTicketLauncher());
@@ -30,15 +38,24 @@ describe('QuickTicketComposer', () => {
     expect(collapsed).toContain('data-component="quick-ticket-composer-launcher"');
     expect(collapsed).toContain('data-new-ticket-drop-target="true"');
     expect(collapsed).toContain('New ticket…');
-    expect(String(QuickTicketLauncher({label:'Ticket…'}))).toContain('Ticket…');
-    expect(String(QuickTicketLauncher({label:'Ticket…'}))).not.toContain('New ticket…');
+    expect(String(QuickTicketLauncher({ label: 'Ticket…' }))).toContain('Ticket…');
+    expect(String(QuickTicketLauncher({ label: 'Ticket…' }))).not.toContain('New ticket…');
     const collapsedComposer = String(QuickTicketComposer({ expanded: false }));
     expect(collapsedComposer).toContain('data-component="quick-ticket-composer"');
     expect(collapsedComposer).toContain('aria-hidden="true"');
     expect(collapsedComposer).toContain(' inert');
     expect(collapsedComposer).not.toContain(' open');
     expect(collapsedComposer).not.toContain('data-action="create-ticket-form"');
-    const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', details: 'Why this matters', category: 'bug', upNext: true, attachments: [{ id: 'proof', name: 'proof.png' }] }));
+    const expanded = String(
+      QuickTicketComposer({
+        expanded: true,
+        title: 'New work',
+        details: 'Why this matters',
+        category: 'bug',
+        upNext: true,
+        attachments: [{ id: 'proof', name: 'proof.png' }],
+      }),
+    );
     expect(expanded).toContain('data-ticket-drop-action="duplicate"');
     expect(expanded).toContain('<wa-dialog');
     expect(expanded).toContain('label="Create ticket"');
@@ -60,7 +77,14 @@ describe('QuickTicketComposer', () => {
     expect(expanded).toContain('aria-label="Remove proof.png" title="Remove proof.png"');
     expect(expanded).not.toContain('data-lucide="x"');
     expect(expanded).toContain('data-dialog="close"');
-    const disabled = String(QuickTicketComposer({ expanded: true, canCreate: false, attachmentsEnabled: false, providerName: 'Read-only Jira' }));
+    const disabled = String(
+      QuickTicketComposer({
+        expanded: true,
+        canCreate: false,
+        attachmentsEnabled: false,
+        providerName: 'Read-only Jira',
+      }),
+    );
     expect(disabled).toContain('does not support creating tickets');
     expect(disabled).toContain('does not support attachments');
     expect(disabled).not.toContain('name="new-ticket-attachments"');
@@ -70,7 +94,14 @@ describe('QuickTicketComposer', () => {
   it('opens the persistent live Web Awesome dialog so it can remember its trigger', () => {
     const calls: string[] = [];
     const nativeDialog = { open: false, setAttribute: (name: string, value: string) => calls.push(`${name}:${value}`) };
-    const dialog = { open: false, shadowRoot: { querySelector: () => nativeDialog }, show: () => { calls.push('show'); return Promise.resolve(); } };
+    const dialog = {
+      open: false,
+      shadowRoot: { querySelector: () => nativeDialog },
+      show: () => {
+        calls.push('show');
+        return Promise.resolve();
+      },
+    };
     const root = { querySelector: () => dialog } as unknown as ParentNode;
     expect(showQuickTicketComposer(root)).toBe(true);
     expect(calls).toEqual(['role:presentation', 'show']);
@@ -80,15 +111,25 @@ describe('QuickTicketComposer', () => {
     expect(calls).toEqual(['role:presentation', 'show', 'role:presentation']);
   });
 
-  it('keeps one-line details vertically resizable and places Up Next after category',()=>{
-    const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8'),markup=String(QuickTicketComposer({expanded:true}));
+  it('keeps one-line details vertically resizable and places Up Next after category', () => {
+    const css = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8'),
+      markup = String(QuickTicketComposer({ expanded: true }));
     expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
     expect(markup).toMatch(/name="new-ticket-details"[^>]*data-morph-skip/);
-    expect(css).toMatch(/__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, remify\(40px\)\);[^}]*resize: vertical/);
+    expect(css).toMatch(
+      /__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, remify\(40px\)\);[^}]*resize: vertical/,
+    );
   });
 
   it('shows creation progress and attachment errors accessibly', () => {
-    const markup = String(QuickTicketComposer({ expanded: true, submitting: true, attachmentMessage: 'proof.png could not be read', attachmentError: true }));
+    const markup = String(
+      QuickTicketComposer({
+        expanded: true,
+        submitting: true,
+        attachmentMessage: 'proof.png could not be read',
+        attachmentError: true,
+      }),
+    );
     expect(markup).toContain('data-submitting="true"');
     expect(markup).toContain('Creating…');
     expect(markup).toContain('role="alert"');

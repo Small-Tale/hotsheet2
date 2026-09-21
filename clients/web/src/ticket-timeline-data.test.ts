@@ -3,29 +3,51 @@ import { describe, expect, it } from 'vitest';
 import type { FullTicket, Note } from './api';
 import { ticketTimelineEntries } from './ticket-timeline-data';
 
-const note = (id: string, kind: Note['kind'], created_at: string, text: string): Note => ({ id, kind, created_at, edited_at: created_at, text });
+const note = (id: string, kind: Note['kind'], created_at: string, text: string): Note => ({
+  id,
+  kind,
+  created_at,
+  edited_at: created_at,
+  text,
+});
 const ticket = (overrides: Partial<FullTicket> = {}): FullTicket => ({
-  id: '01TEST', native_id: '01TEST', qualified_id: 'git:01TEST', connection_id: 'git', slug: 'HS2-TEST', title: 'Timeline test',
-  details: '', status: 'verified', up_next: false, feedback_needed: false, tags: [], blocked_by: [], claim_count: 0,
-  created_at: '2026-09-02T01:00:00Z', updated_at: '2026-09-02T04:00:00Z', completed_at: '2026-09-02T03:00:00Z',
-  notes: [], attachments: [], ...overrides,
+  id: '01TEST',
+  native_id: '01TEST',
+  qualified_id: 'git:01TEST',
+  connection_id: 'git',
+  slug: 'HS2-TEST',
+  title: 'Timeline test',
+  details: '',
+  status: 'verified',
+  up_next: false,
+  feedback_needed: false,
+  tags: [],
+  blocked_by: [],
+  claim_count: 0,
+  created_at: '2026-09-02T01:00:00Z',
+  updated_at: '2026-09-02T04:00:00Z',
+  completed_at: '2026-09-02T03:00:00Z',
+  notes: [],
+  attachments: [],
+  ...overrides,
 });
 
 describe('ticketTimelineEntries', () => {
   it('backfills legacy lifecycle timestamps so an old ticket timeline is never empty', () => {
-    expect(ticketTimelineEntries(ticket()).map(entry => entry.title)).toEqual([
-      'Ticket created',
-      'Completed',
-    ]);
+    expect(ticketTimelineEntries(ticket()).map((entry) => entry.title)).toEqual(['Ticket created', 'Completed']);
   });
 
   it('orders activity/status notes chronologically and keeps detail out of the timeline', () => {
-    const entries = ticketTimelineEntries(ticket({ notes: [
-      note('regular', 'regular', '2026-09-02T01:30:00Z', 'Discussion'),
-      note('done', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
-      note('start', 'activity', '2026-09-02T02:00:00Z', 'Claude started work\nImplement the fix.'),
-    ] }));
-    expect(entries.map(entry => entry.id)).toEqual(['01TEST-created', 'start', 'done']);
+    const entries = ticketTimelineEntries(
+      ticket({
+        notes: [
+          note('regular', 'regular', '2026-09-02T01:30:00Z', 'Discussion'),
+          note('done', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
+          note('start', 'activity', '2026-09-02T02:00:00Z', 'Claude started work\nImplement the fix.'),
+        ],
+      }),
+    );
+    expect(entries.map((entry) => entry.id)).toEqual(['01TEST-created', 'start', 'done']);
     expect(entries[1]).toMatchObject({ title: 'Claude started work' });
     expect(entries[1].subtitle).toBeUndefined();
     expect(entries[2].emphasized).toBe(true);
@@ -33,36 +55,52 @@ describe('ticketTimelineEntries', () => {
   });
 
   it('deduplicates a persisted transition but not unrelated activity at the same time', () => {
-    const entries = ticketTimelineEntries(ticket({ notes: [
-      note('work', 'activity', '2026-09-02T03:00:00Z', 'Finished implementation'),
-      note('done', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
-    ] }));
-    expect(entries.map(entry => entry.title)).toEqual([
-      'Ticket created',
-      'Completed',
-      'Finished implementation',
-    ]);
+    const entries = ticketTimelineEntries(
+      ticket({
+        notes: [
+          note('work', 'activity', '2026-09-02T03:00:00Z', 'Finished implementation'),
+          note('done', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
+        ],
+      }),
+    );
+    expect(entries.map((entry) => entry.title)).toEqual(['Ticket created', 'Completed', 'Finished implementation']);
   });
 
   it('keeps repeated and reversed transitions concise without collapsing history', () => {
-    const entries = ticketTimelineEntries(ticket({ completed_at: undefined, notes: [
-      note('one', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Not Started to Started'),
-      note('two', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
-      note('three', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Completed to Not Started'),
-      note('four', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Not Started to Started'),
-    ] }));
-    expect(entries.map(entry => entry.title)).toEqual(['Ticket created', 'Started', 'Completed', 'Re-enqueued', 'Started']);
+    const entries = ticketTimelineEntries(
+      ticket({
+        completed_at: undefined,
+        notes: [
+          note('one', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Not Started to Started'),
+          note('two', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
+          note('three', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Completed to Not Started'),
+          note('four', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Not Started to Started'),
+        ],
+      }),
+    );
+    expect(entries.map((entry) => entry.title)).toEqual([
+      'Ticket created',
+      'Started',
+      'Completed',
+      'Re-enqueued',
+      'Started',
+    ]);
   });
 
   it('renders every status destination as a past-tense action and uses the source when reopening', () => {
-    const entries = ticketTimelineEntries(ticket({ completed_at: undefined, notes: [
-      note('backlog', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Started to Backlog'),
-      note('unbacklog', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Backlog to Not Started'),
-      note('archive', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Verified to Archive'),
-      note('delete', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Archive to Deleted'),
-      note('move', 'activity', '2026-09-02T06:00:00Z', 'Status changed from Deleted to Moved'),
-    ] }));
-    expect(entries.map(entry => entry.title)).toEqual([
+    const entries = ticketTimelineEntries(
+      ticket({
+        completed_at: undefined,
+        notes: [
+          note('backlog', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Started to Backlog'),
+          note('unbacklog', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Backlog to Not Started'),
+          note('archive', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Verified to Archive'),
+          note('delete', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Archive to Deleted'),
+          note('move', 'activity', '2026-09-02T06:00:00Z', 'Status changed from Deleted to Moved'),
+        ],
+      }),
+    );
+    expect(entries.map((entry) => entry.title)).toEqual([
       'Ticket created',
       'Moved to backlog',
       'Moved out of backlog',
@@ -73,13 +111,27 @@ describe('ticketTimelineEntries', () => {
   });
 
   it('prefers a durable summary and deterministically bounds legacy activity headlines', () => {
-    const entries = ticketTimelineEntries(ticket({ notes: [
-      {
-        ...note('report', 'activity', '2026-09-02T04:00:00Z', 'Full implementation and verification detail that belongs only in Notes.'),
-        summary: 'Resolved the refresh regression',
-      },
-      note('legacy','activity','2026-09-02T05:00:00Z','## A very long legacy activity headline with enough words that it must be shortened before being presented in the compact timeline index'),
-    ] }));
+    const entries = ticketTimelineEntries(
+      ticket({
+        notes: [
+          {
+            ...note(
+              'report',
+              'activity',
+              '2026-09-02T04:00:00Z',
+              'Full implementation and verification detail that belongs only in Notes.',
+            ),
+            summary: 'Resolved the refresh regression',
+          },
+          note(
+            'legacy',
+            'activity',
+            '2026-09-02T05:00:00Z',
+            '## A very long legacy activity headline with enough words that it must be shortened before being presented in the compact timeline index',
+          ),
+        ],
+      }),
+    );
     expect(entries.at(-2)).toMatchObject({ title: 'Resolved the refresh regression' });
     expect(entries.at(-2)?.subtitle).toBeUndefined();
     expect(entries.at(-1)?.title).toBe('A very long legacy activity headline with enough words that it must be…');

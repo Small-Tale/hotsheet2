@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Capabilities, FullTicket } from './api';
-import { activeTicketReaderProject, disposeTicketReaderFrames, popTicketReaderFrame, pushTicketReaderFrame, reconcileTicketReaderFrame, ticketReaderEditState, type TicketReaderFrame } from './ticket-reader-stack';
+import {
+  activeTicketReaderProject,
+  disposeTicketReaderFrames,
+  popTicketReaderFrame,
+  pushTicketReaderFrame,
+  reconcileTicketReaderFrame,
+  ticketReaderEditState,
+  type TicketReaderFrame,
+} from './ticket-reader-stack';
 
 const ticket = (id: string, slug: string): FullTicket => ({
   id,
@@ -34,8 +42,8 @@ const frame = (id: string, projectId: string, slug: string): TicketReaderFrame =
   apiPath: `/api/${projectId}`,
   ticket: ticket(id, slug),
   activeTab: 'info',
-  capabilities: {update:true,notes:true,note_edit:true,note_delete:true} as Capabilities,
-  edit: ticketReaderEditState(ticket(id,slug)),
+  capabilities: { update: true, notes: true, note_edit: true, note_delete: true } as Capabilities,
+  edit: ticketReaderEditState(ticket(id, slug)),
 });
 
 describe('layered ticket reader stack', () => {
@@ -43,7 +51,7 @@ describe('layered ticket reader stack', () => {
     const first = frame('one', 'alpha', 'HS2-SAME01');
     const second = frame('two', 'beta', 'HS2-SAME01');
     const stacked = pushTicketReaderFrame(pushTicketReaderFrame([], first), second);
-    expect(stacked.map(item => [item.projectId, item.ticket.qualified_id])).toEqual([
+    expect(stacked.map((item) => [item.projectId, item.ticket.qualified_id])).toEqual([
       ['alpha', 'git-one:one'],
       ['beta', 'git-two:two'],
     ]);
@@ -56,12 +64,41 @@ describe('layered ticket reader stack', () => {
   });
 
   it('reconciles remote values without replacing independent dirty drafts', () => {
-    const current=frame('one','alpha','HS2-SAME01');
-    current.edit={...current.edit,detailsMode:'write',detailsDraft:'local details',blockedReasonEditing:true,blockedReasonDraft:'local reason',editingNoteId:'note-1',noteBase:'old note',noteDraft:'local note'};
-    const remote={...current.ticket,details:'remote details',blocked_reason:'remote reason',notes:[{id:'note-1',kind:'regular' as const,created_at:'2026-09-11T00:00:00Z',edited_at:'2026-09-11T00:00:00Z',text:'remote note'}]};
-    const reconciled=reconcileTicketReaderFrame(current,remote);
+    const current = frame('one', 'alpha', 'HS2-SAME01');
+    current.edit = {
+      ...current.edit,
+      detailsMode: 'write',
+      detailsDraft: 'local details',
+      blockedReasonEditing: true,
+      blockedReasonDraft: 'local reason',
+      editingNoteId: 'note-1',
+      noteBase: 'old note',
+      noteDraft: 'local note',
+    };
+    const remote = {
+      ...current.ticket,
+      details: 'remote details',
+      blocked_reason: 'remote reason',
+      notes: [
+        {
+          id: 'note-1',
+          kind: 'regular' as const,
+          created_at: '2026-09-11T00:00:00Z',
+          edited_at: '2026-09-11T00:00:00Z',
+          text: 'remote note',
+        },
+      ],
+    };
+    const reconciled = reconcileTicketReaderFrame(current, remote);
     expect(reconciled.ticket).toBe(remote);
-    expect(reconciled.edit).toMatchObject({detailsDraft:'local details',detailsBase:'remote details',blockedReasonDraft:'local reason',blockedReasonBase:'remote reason',noteDraft:'local note',noteBase:'remote note'});
+    expect(reconciled.edit).toMatchObject({
+      detailsDraft: 'local details',
+      detailsBase: 'remote details',
+      blockedReasonDraft: 'local reason',
+      blockedReasonBase: 'remote reason',
+      noteDraft: 'local note',
+      noteBase: 'remote note',
+    });
   });
 
   it('does not mutate the caller-owned stack while pushing or popping', () => {
@@ -73,10 +110,12 @@ describe('layered ticket reader stack', () => {
     expect(popped.stack).not.toBe(pushed);
   });
 
-  it('disposes every frame owned by a closing project without disturbing the others',()=>{
-    const alpha=frame('one','alpha','HS2-ONE01'),beta=frame('two','beta','HS2-TWO02'),again=frame('three','alpha','HS2-THREE3');
-    const result=disposeTicketReaderFrames([alpha,beta,again],new Set(['alpha']));
+  it('disposes every frame owned by a closing project without disturbing the others', () => {
+    const alpha = frame('one', 'alpha', 'HS2-ONE01'),
+      beta = frame('two', 'beta', 'HS2-TWO02'),
+      again = frame('three', 'alpha', 'HS2-THREE3');
+    const result = disposeTicketReaderFrames([alpha, beta, again], new Set(['alpha']));
     expect(result.retained).toEqual([beta]);
-    expect(result.disposed).toEqual([alpha,again]);
+    expect(result.disposed).toEqual([alpha, again]);
   });
 });

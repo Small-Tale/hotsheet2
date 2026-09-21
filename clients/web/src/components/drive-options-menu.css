@@ -1,9 +1,39 @@
-.project-sidebar__drive-row { position:relative; }
-.drive-options-menu { position:absolute; z-index:80; right:remify(44px); bottom:calc(100% + var(--kui-space-xs)); width:remify(288px); }
-.drive-options-menu__anchor { position:absolute; width:1px; height:1px; }
-.drive-options-menu wa-dropdown-item::part(details) { color:var(--wa-color-neutral-on-quiet); }
-.drive-options-menu wa-dropdown-item[slot="submenu"] { min-width:remify(208px); padding-inline:remify(12px); }
-.drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] { display:inline-flex; width:remify(16px); justify-content:center; }
-.drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] svg { width:remify(14.4px); height:remify(14.4px); }
-.drive-options-menu wa-dropdown-item[slot="submenu"][aria-current="true"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-normal); font-weight:650; }
-.drive-options-menu wa-divider[slot="submenu"] { margin-block:var(--kui-space-2xs); }
+.project-sidebar__drive-row {
+  position: relative;
+}
+.drive-options-menu {
+  position: absolute;
+  z-index: 80;
+  right: remify(44px);
+  bottom: calc(100% + var(--kui-space-xs));
+  width: remify(288px);
+}
+.drive-options-menu__anchor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+}
+.drive-options-menu wa-dropdown-item::part(details) {
+  color: var(--wa-color-neutral-on-quiet);
+}
+.drive-options-menu wa-dropdown-item[slot='submenu'] {
+  min-width: remify(208px);
+  padding-inline: remify(12px);
+}
+.drive-options-menu wa-dropdown-item[slot='submenu'] [slot='icon'] {
+  display: inline-flex;
+  width: remify(16px);
+  justify-content: center;
+}
+.drive-options-menu wa-dropdown-item[slot='submenu'] [slot='icon'] svg {
+  width: remify(14.4px);
+  height: remify(14.4px);
+}
+.drive-options-menu wa-dropdown-item[slot='submenu'][aria-current='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-normal);
+  font-weight: 650;
+}
+.drive-options-menu wa-divider[slot='submenu'] {
+  margin-block: var(--kui-space-2xs);
+}

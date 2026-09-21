@@ -1,7 +1,7 @@
 # 09. Technology Decisions (ADR log)
 
 Consolidated core technology decisions for Hot Sheet 2, each with rationale,
-alternatives, and status. This is the doc to read to understand *why* the stack is
+alternatives, and status. This is the doc to read to understand _why_ the stack is
 what it is.
 
 > Status legend: **Decided** · **Proposed** (recommendation, wants maintainer
@@ -31,8 +31,8 @@ binary format (rejected — not inspectable). Detail: [02](02-ticket-storage.md)
 
 ## 9.1a Automatic conflict resolution: **semantic merge driver** — **Decided** (maintainer, 2026-08-19)
 
-**Decision.** Conflict resolution is a first-class goal: it must be *almost
-entirely automatic*. A per-store git **merge driver** (`hotsheet merge-driver`,
+**Decision.** Conflict resolution is a first-class goal: it must be _almost
+entirely automatic_. A per-store git **merge driver** (`hotsheet merge-driver`,
 registered via `.gitattributes` on `tickets/**/*.md`) performs a **format-aware
 3-way merge** instead of git's line merge — frontmatter merged field-by-field
 (last-writer-wins by `updated_at`; sets unioned), notes unioned by their
@@ -49,7 +49,7 @@ note merges a clean union. Detail: [02](02-ticket-storage.md) §2.7.
 
 **Decision.** For every `git-remote` store, Hot Sheet **aggressively** fetches,
 auto-integrates (rebase/merge via the §9.1a driver), auto-commits local edits, and
-auto-pushes — offline-tolerant, backing off on failure. Users *can* run git by hand
+auto-pushes — offline-tolerant, backing off on failure. Users _can_ run git by hand
 but should almost never need to. Detail: [02](02-ticket-storage.md) §2.12; build:
 HS2-19.
 
@@ -99,8 +99,8 @@ even locally** where it adds security (a shared multi-user machine). Detail:
 wants operationally: in-flight AI work, terminals, and the watcher keep running
 when the GUI is closed; any client can attach to the already-running server; the
 system has exactly one authority. It reverses HS1's Tauri-owns-a-Node-sidecar model
-(server died with the app). The trade — a client must be able to *spawn and
-supervise* a detached process (double-fork / `setsid` / a launchd/systemd user
+(server died with the app). The trade — a client must be able to _spawn and
+supervise_ a detached process (double-fork / `setsid` / a launchd/systemd user
 service) — is well-trodden and worth it. **Consequence:** the earlier
 embedded-core / `uniffi` client plan is retired, which also reshapes the language
 rationale (§9.2) and the client design (§9.5).
@@ -113,13 +113,14 @@ binaries for the server (`axum`/`tokio`) and CLI (`clap`). The core is used by t
 bindings are needed.
 
 > **Rationale update (2026-08-19).** Earlier drafts made "one core embedded in
-> every native client via `uniffi`" the *decisive* Rust-over-Go argument. The
+> every native client via `uniffi`" the _decisive_ Rust-over-Go argument. The
 > maintainer's server-always-separate decision (§9.1e) **retires that argument** —
 > clients are pure API consumers now. Rust nonetheless stands, on the reasons
 > below, and the maintainer has re-confirmed it. This entry is kept honest about
 > the shift rather than pretending the original reason still holds.
 
 **Why Rust still wins for the server + CLI:**
+
 - **The Tauri shell is Rust regardless.** It launches/supervises the local server
   and holds the mTLS proxy (HS1 already scaffolded this in Rust). One systems
   language across server, CLI, and the desktop shell.
@@ -133,7 +134,7 @@ bindings are needed.
   can't drift because they call the same functions.
 
 **The cost, stated honestly.** Rust iterates slower than Go, and this app has a
-*lot* of small glue features (the HS1 long tail); Go's simplicity would genuinely
+_lot_ of small glue features (the HS1 long tail); Go's simplicity would genuinely
 help there. With the client-embedding argument gone, **Go is now a closer call than
 before** — a Go server + CLI would be perfectly viable, and clients (already
 API-only) wouldn't care. The maintainer nonetheless **re-confirmed Rust**
@@ -178,11 +179,12 @@ field. Detail: [02](02-ticket-storage.md) §2.4.
 ## 9.5 Clients: **Tauri + native SwiftUI, all pure API consumers** — **Decided** (maintainer, 2026-08-19)
 
 **Decision.** Every client is a pure API consumer (HTTP/WS/MCP) — **none embeds the
-core** (§9.1e). Tauri desktop (Rust shell that *launches/supervises* the local
+core** (§9.1e). Tauri desktop (Rust shell that _launches/supervises_ the local
 server + holds the mTLS proxy for remote) + native SwiftUI (macOS/iOS, HTTP/WS,
 remote-first on iOS). Android later, same API. No `uniffi`/JNI bindings.
 
 **Sequencing (confirmed, revised 2026-08-26):**
+
 1. **Browser web UX** to feature floor first for the fastest iteration. Its
    `/ux-demo` route uses real production components with deterministic mock adapters.
 2. **Tauri host** for that web client, adding desktop server lifecycle and proxy work.
@@ -207,8 +209,8 @@ match). It ships exactly the primitives this client needs: `signal` / `array-sig
 (keyed list reactivity for live, WS-driven ticket updates — the same fine-grained
 class as Solid), `ref` / `scope` (imperative mount + lifecycle cleanup, e.g. an
 xterm terminal), and **tree-shakable list virtualization** (kerf 4.2) for large
-ticket lists; a small tree-shakable **router** is a planned kerf addition. *Rationale
-for the reversal:* kerf is now a **mature, published, well-tested** framework (v4.x),
+ticket lists; a small tree-shakable **router** is a planned kerf addition. _Rationale
+for the reversal:_ kerf is now a **mature, published, well-tested** framework (v4.x),
 not the hand-rolled runtime the earlier note worried about — so the maintenance-tax
 argument that motivated Solid no longer holds. Using kerf also keeps the entire
 self-hosting loop (including the AI agents that build HS2) in tooling the maintainer
@@ -320,11 +322,11 @@ subprocess overhead on hot local paths without a native C dependency. Detail:
 **Decision.** Terminals are their own crate (`hotsheet-terminals`) so a full process
 split is cheap later, but v1 starts with **one ticket+terminal server + the detached
 PTY broker**: PTYs survive a server restart; a restart only briefly drops terminal
-WebSockets. A fully separate durable terminal *server* is revisited when survivability
+WebSockets. A fully separate durable terminal _server_ is revisited when survivability
 needs are concrete.
 
 **Why.** The detached broker already delivers PTY survival; a separate terminal
-*process* adds a third thing to launch/secure/discover before it's clearly needed.
+_process_ adds a third thing to launch/secure/discover before it's clearly needed.
 The crate boundary keeps that split a later, cheap change. Detail:
 [12](12-code-organization-and-testing.md) §12.5.
 
@@ -351,38 +353,38 @@ authority; capability negotiation honestly handles tracker differences. Detail:
 
 **Resolved by the maintainer (2026-08-19):**
 
-| # | Decision | Resolution |
-|---|---|---|
-| L1 | Server/CLI/core language | **Rust core** — §9.2 |
-| — | Default-provider storage / ID / index | Git files, ULID + all-caps slug, SQLite+FTS5; external providers retain native ids — §9.1/§9.15 |
-| — | Automatic conflict resolution | Required; semantic merge driver — §9.1a / [02](02-ticket-storage.md) §2.7 |
-| S1 | Notes storage | **Inline**, each note a timestamp-ordered UUID — [02](02-ticket-storage.md) §2.6 |
-| C1 | Client sequencing | **Browser web UX → Tauri host → SwiftUI macOS → SwiftUI iOS → Android** — §9.5 |
-| — | Attachments | Supported (first-class) — [02](02-ticket-storage.md) §2.5 |
-| — | Server topology | **One server per machine** (all local projects) — [04](04-core-server-cli.md) §4.3 |
-| — | MCP delivery | **Per-project MCP shim** (not server-direct) — [05](05-ai-tool-plugins.md) §5.8 |
-| — | Statuses + close-reason | **Keep HS1's status set unchanged**; `close_reason` is a *separate optional* field (completed/not_planned/duplicate/obsolete), orthogonal to status — [02](02-ticket-storage.md) §2.6a |
-| HS2-Y99VDF | Ticket-file sharding | **Random id-suffix (2-char)** — [02](02-ticket-storage.md) §2.3 |
-| — | Multi-viewer PTY sizing | **Focus-follows** default — [06](06-clients.md) §6.7 |
-| — | Human assignment | git email + **committed `people.json`**; **one "People…" control**; review = **soft** — [10](10-assignment-and-collaboration.md) §10.5 |
-| — | Orchestration | **Live-mount only** — no auto-clone (users clone by hand → a normal local project) — [08](08-distributed-and-remote.md) O1 |
-| — | Multi-machine coordination | **Git-native decentralized self-claim** (ref/tag CAS), no central coordinator — [08](08-distributed-and-remote.md) §8.5 |
-| — | Client UI framework | **Kerf (`kerfjs`)** — maintainer's own fine-grained-signals framework (revises the earlier Solid pick) — §9.5 |
-| — | Async model | **Sync core + async facade**; WAL read-pool + single writer — §9.12 |
-| — | Git access | **gix local, git CLI network** — §9.13 |
-| — | Terminal topology | **Separable crate, one server + broker; split deferred** — §9.14 |
-| — | Ticket providers | **Normalized provider contract; git default; external trackers direct; no continuous mirroring** — §9.15 / [16](16-external-sync-interface.md) |
-| — | Plugin crates | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`) — [12](12-code-organization-and-testing.md) §12.2.1 |
-| — | Deferred past v1 | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4) |
+| #          | Decision                              | Resolution                                                                                                                                                                             |
+| ---------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1         | Server/CLI/core language              | **Rust core** — §9.2                                                                                                                                                                   |
+| —          | Default-provider storage / ID / index | Git files, ULID + all-caps slug, SQLite+FTS5; external providers retain native ids — §9.1/§9.15                                                                                        |
+| —          | Automatic conflict resolution         | Required; semantic merge driver — §9.1a / [02](02-ticket-storage.md) §2.7                                                                                                              |
+| S1         | Notes storage                         | **Inline**, each note a timestamp-ordered UUID — [02](02-ticket-storage.md) §2.6                                                                                                       |
+| C1         | Client sequencing                     | **Browser web UX → Tauri host → SwiftUI macOS → SwiftUI iOS → Android** — §9.5                                                                                                         |
+| —          | Attachments                           | Supported (first-class) — [02](02-ticket-storage.md) §2.5                                                                                                                              |
+| —          | Server topology                       | **One server per machine** (all local projects) — [04](04-core-server-cli.md) §4.3                                                                                                     |
+| —          | MCP delivery                          | **Per-project MCP shim** (not server-direct) — [05](05-ai-tool-plugins.md) §5.8                                                                                                        |
+| —          | Statuses + close-reason               | **Keep HS1's status set unchanged**; `close_reason` is a _separate optional_ field (completed/not_planned/duplicate/obsolete), orthogonal to status — [02](02-ticket-storage.md) §2.6a |
+| HS2-Y99VDF | Ticket-file sharding                  | **Random id-suffix (2-char)** — [02](02-ticket-storage.md) §2.3                                                                                                                        |
+| —          | Multi-viewer PTY sizing               | **Focus-follows** default — [06](06-clients.md) §6.7                                                                                                                                   |
+| —          | Human assignment                      | git email + **committed `people.json`**; **one "People…" control**; review = **soft** — [10](10-assignment-and-collaboration.md) §10.5                                                 |
+| —          | Orchestration                         | **Live-mount only** — no auto-clone (users clone by hand → a normal local project) — [08](08-distributed-and-remote.md) O1                                                             |
+| —          | Multi-machine coordination            | **Git-native decentralized self-claim** (ref/tag CAS), no central coordinator — [08](08-distributed-and-remote.md) §8.5                                                                |
+| —          | Client UI framework                   | **Kerf (`kerfjs`)** — maintainer's own fine-grained-signals framework (revises the earlier Solid pick) — §9.5                                                                          |
+| —          | Async model                           | **Sync core + async facade**; WAL read-pool + single writer — §9.12                                                                                                                    |
+| —          | Git access                            | **gix local, git CLI network** — §9.13                                                                                                                                                 |
+| —          | Terminal topology                     | **Separable crate, one server + broker; split deferred** — §9.14                                                                                                                       |
+| —          | Ticket providers                      | **Normalized provider contract; git default; external trackers direct; no continuous mirroring** — §9.15 / [16](16-external-sync-interface.md)                                         |
+| —          | Plugin crates                         | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`) — [12](12-code-organization-and-testing.md) §12.2.1                                                           |
+| —          | Deferred past v1                      | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4)                                                                                          |
 
 **Still open:**
 
-| # | Decision | Note | Doc |
-|---|---|---|---|
-| F1 | Which HS1 features to port / change / drop | Per-area decision tickets from the survey | doc 11 / HS2-22 |
-| — | git-claim marker: custom ref vs reserved tag (per-remote support) | De-risking spike | [08](08-distributed-and-remote.md) §8.5 / HS2-63 |
-| — | Assignment: off-server notification transport; GitHub-collaborators as roster seed | Smaller follow-ups | [10](10-assignment-and-collaboration.md) §10.5 |
-| — | Release / distribution strategy (npm likely wrong; GitHub Releases too rough) | Deferred; decide with real artifacts | HS2-72 |
+| #   | Decision                                                                           | Note                                      | Doc                                              |
+| --- | ---------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
+| F1  | Which HS1 features to port / change / drop                                         | Per-area decision tickets from the survey | doc 11 / HS2-22                                  |
+| —   | git-claim marker: custom ref vs reserved tag (per-remote support)                  | De-risking spike                          | [08](08-distributed-and-remote.md) §8.5 / HS2-63 |
+| —   | Assignment: off-server notification transport; GitHub-collaborators as roster seed | Smaller follow-ups                        | [10](10-assignment-and-collaboration.md) §10.5   |
+| —   | Release / distribution strategy (npm likely wrong; GitHub Releases too rough)      | Deferred; decide with real artifacts      | HS2-72                                           |
 
 **Decided housekeeping:** License = **MIT**, © Small Tale Inc. (see `LICENSE`);
 project attribution = **Small Tale Inc.** (see `CLAUDE.md` → Project attribution).

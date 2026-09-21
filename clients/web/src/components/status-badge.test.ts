@@ -4,14 +4,34 @@ import { StatusBadge, statusPresentation, type TicketStatus } from './status-bad
 
 describe('StatusBadge', () => {
   it('maps every supported status to stable readable presentation', () => {
-    const statuses: TicketStatus[] = ['not_started', 'started', 'completed', 'verified', 'backlog', 'archive', 'deleted'];
-    expect(statuses.map(status => statusPresentation(status).label)).toEqual([
-      'Not started', 'Started', 'Completed', 'Verified', 'Backlog', 'Archive', 'Deleted',
+    const statuses: TicketStatus[] = [
+      'not_started',
+      'started',
+      'completed',
+      'verified',
+      'backlog',
+      'archive',
+      'deleted',
+    ];
+    expect(statuses.map((status) => statusPresentation(status).label)).toEqual([
+      'Not started',
+      'Started',
+      'Completed',
+      'Verified',
+      'Backlog',
+      'Archive',
+      'Deleted',
     ]);
-    expect(statuses.map(status => statusPresentation(status).iconName)).toEqual([
-      'circle', 'clock', 'circle-check', 'badge-check', 'clock-3', 'archive', 'trash-2',
+    expect(statuses.map((status) => statusPresentation(status).iconName)).toEqual([
+      'circle',
+      'clock',
+      'circle-check',
+      'badge-check',
+      'clock-3',
+      'archive',
+      'trash-2',
     ]);
-    expect(statuses.every(status => statusPresentation(status).icon.length > 0)).toBe(true);
+    expect(statuses.every((status) => statusPresentation(status).icon.length > 0)).toBe(true);
   });
 
   it('offers independent plain and compact variants without changing readable status text', () => {

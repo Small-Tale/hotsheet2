@@ -16,9 +16,9 @@
 
 ## 3.1 Why an index at all
 
-The ticket calls it out directly: we must *"search the text of tickets
-efficiently"* and *"draw tickets and their information efficiently, so we can't
-necessarily be loading from disk in real time for every UI operation."*
+The ticket calls it out directly: we must _"search the text of tickets
+efficiently"_ and _"draw tickets and their information efficiently, so we can't
+necessarily be loading from disk in real time for every UI operation."_
 
 So there is a **derived index** between authoritative provider records and every read
 the UI/CLI/API performs. Today those records are git-backed files; direct external
@@ -65,7 +65,7 @@ tags, details, and notes.
 **The invariant (repeated because it's load-bearing): the index is a disposable
 cache.** It can be deleted and rebuilt from configured providers. For the git
 provider, files win; for an external provider, its native tracker wins. Nothing
-durable is ever *only* in the index.
+durable is ever _only_ in the index.
 
 ## 3.2 The choice: SQLite + FTS5
 
@@ -73,9 +73,10 @@ durable is ever *only* in the index.
 machine per project (not committed — it's a cache).
 
 Why SQLite:
+
 - **Embedded, zero-config, transactional** — no server, single file, mature.
 - **Both query shapes in one store.** Structured filtering/sorting (status,
-  priority, category, tags, up_next, claim state, blocked reason) *and* full-text
+  priority, category, tags, up_next, claim state, blocked reason) _and_ full-text
   search (FTS5 over slug + title + tags + body + notes) in the same database,
   joined in one query. No second system to keep in sync.
 - **Excellent bindings in both candidate core languages** (`rusqlite` for Rust,
@@ -148,7 +149,7 @@ the same process. On change:
    failure keeps the last healthy indexed row for cache resilience but still emits a
    `changed` invalidation so clients refresh the separate corrupt-ticket diagnostics.
 4. **Deletions:** a file that disappeared → delete its index rows (a soft-deleted
-   ticket is a `status: deleted` file, not a missing file; a *missing* file means
+   ticket is a `status: deleted` file, not a missing file; a _missing_ file means
    the ticket was hard-removed or moved).
 5. **Record and emit a change event.** The server appends it to the bounded replay
    ring before broadcasting it, so both WebSocket subscribers and cursor-based
@@ -175,6 +176,7 @@ One query API, consumed by the server (REST/WS) and the CLI:
 ```
 query(filter, sort, text?, paging) -> TicketRow[]
 ```
+
 - **filter:** status set, priority set, category, tags (any/all), up_next,
   claimed/unclaimed, blocked/unblocked, **store (by `store_id`)**,
   **`close_reason`** (§2.6a — e.g. "closed as not_planned"), **assignee /
@@ -220,6 +222,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
   match-everyone.
 
 **Store + move handling (§2.2.1, §2.13):**
+
 - Every row carries `store_id`, so the UI can filter or group by store and show the
   store-prefixed slug. "Which store is this ticket in?" is a column, not a lookup.
 - **`status = 'moved'` tombstones are excluded** from ticket lists by default. When
@@ -250,13 +253,13 @@ embedded so these files remain useful to an AI tool without the skill or API. Se
 
 ## 3.7 Alternatives considered
 
-| Option | Verdict |
-|---|---|
-| **SQLite + FTS5** (recommended) | One store for structured + text queries; embedded; great bindings; transactional; disposable. **Chosen.** |
-| Tantivy (Rust) / Bleve (Go) full-text engine | Excellent search, but structured queries + facets still need a second store to join against. Adds a system. Keep as a *later* option if FTS5 relevance proves weak — layer it for search only, SQLite still holds structured data. |
-| In-memory index only | Fast, but slow cold start on large stores and nothing to page against; lost on restart. Rejected as the primary index (we may keep hot subsets in memory as a cache above SQLite). |
-| DuckDB | Analytics-oriented; overkill for OLTP-ish ticket queries. |
-| Re-embed Postgres (PGLite/real PG) | Reintroduces exactly the opaque-blob fragility the rewrite is removing. Rejected. |
+| Option                                       | Verdict                                                                                                                                                                                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SQLite + FTS5** (recommended)              | One store for structured + text queries; embedded; great bindings; transactional; disposable. **Chosen.**                                                                                                                          |
+| Tantivy (Rust) / Bleve (Go) full-text engine | Excellent search, but structured queries + facets still need a second store to join against. Adds a system. Keep as a _later_ option if FTS5 relevance proves weak — layer it for search only, SQLite still holds structured data. |
+| In-memory index only                         | Fast, but slow cold start on large stores and nothing to page against; lost on restart. Rejected as the primary index (we may keep hot subsets in memory as a cache above SQLite).                                                 |
+| DuckDB                                       | Analytics-oriented; overkill for OLTP-ish ticket queries.                                                                                                                                                                          |
+| Re-embed Postgres (PGLite/real PG)           | Reintroduces exactly the opaque-blob fragility the rewrite is removing. Rejected.                                                                                                                                                  |
 
 ## 3.8 Concurrency & safety
 
@@ -270,5 +273,6 @@ embedded so these files remain useful to an AI tool without the skill or API. Se
   rebuild," never data migrations.
 
 ## 3.9 Cross-references
+
 - What's indexed (the file format): [02-ticket-storage.md](02-ticket-storage.md).
 - Who runs the watcher and serves queries: [04-core-server-cli.md](04-core-server-cli.md).

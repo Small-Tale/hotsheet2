@@ -6,15 +6,38 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
-import { PermissionRequestCard, PermissionRequestPopup, updatePermissionCountdownText } from './permission-request-card';
+import {
+  PermissionRequestCard,
+  PermissionRequestPopup,
+  updatePermissionCountdownText,
+} from './permission-request-card';
 
-const pending: PermissionItem = { id: 7, connection: 'claude-main', tool: 'Bash', action: 'npm run test\nnpm run lint', always_allow_supported: true, key: 'project:7', projectId: 'project', projectName: 'Hot Sheet 2', agent: 'Claude', role: 'main worker', receivedAt: 10, ignored: false };
+const pending: PermissionItem = {
+  id: 7,
+  connection: 'claude-main',
+  tool: 'Bash',
+  action: 'npm run test\nnpm run lint',
+  always_allow_supported: true,
+  key: 'project:7',
+  projectId: 'project',
+  projectName: 'Hot Sheet 2',
+  agent: 'Claude',
+  role: 'main worker',
+  receivedAt: 10,
+  ignored: false,
+};
 const history: PermissionHistoryItem = { ...pending, decision: 'external', resolvedAt: 20 };
 
 describe('permission presentation components', () => {
   it('renders the complete always-allow decision set and scoped action contract', () => {
     vi.spyOn(Date, 'now').mockReturnValue(10);
-    const markup = String(PermissionRequestCard({ item: pending, countdown: '0:13', explanation: 'The project test suite needs a local process.' }));
+    const markup = String(
+      PermissionRequestCard({
+        item: pending,
+        countdown: '0:13',
+        explanation: 'The project test suite needs a local process.',
+      }),
+    );
     expect(markup).toContain('Wants permission to run a command');
     expect(markup).toContain('Hot Sheet 2');
     expect(markup).toContain('npm run test\nnpm run lint');
@@ -27,11 +50,15 @@ describe('permission presentation components', () => {
     expect(markup).toContain('aria-label="Stop auto-allow countdown"');
     expect(markup).toContain('title="Stop auto-allow countdown for this request"');
     expect(markup).toContain('data-lucide="pause"');
-    expect(readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8')).toContain('.permission-request-card__timer strong { margin-left: .3em; }');
+    expect(readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8')).toContainSource(
+      '.permission-request-card__timer strong { margin-left: .3em; }',
+    );
   });
 
   it('uses only the first action line as an edit target', () => {
-    const markup = String(PermissionRequestCard({ item: { ...pending, tool: 'Edit', action: '/tmp/file.ts\nA detailed patch summary' } }));
+    const markup = String(
+      PermissionRequestCard({ item: { ...pending, tool: 'Edit', action: '/tmp/file.ts\nA detailed patch summary' } }),
+    );
     expect(markup).toContain('Wants permission to edit /tmp/file.ts</strong>');
     expect(markup).not.toContain('edit /tmp/file.ts\nA detailed');
   });
@@ -66,17 +93,34 @@ describe('permission presentation components', () => {
     expect(markup).not.toContain('Always Allow');
   });
 
-  it('restores a failed decision as an actionable popup with its communication error',()=>{
-    const markup=String(PermissionRequestPopup({item:pending,state:'failed',error:'Could not send the permission decision. Bridge unavailable.'}));
+  it('restores a failed decision as an actionable popup with its communication error', () => {
+    const markup = String(
+      PermissionRequestPopup({
+        item: pending,
+        state: 'failed',
+        error: 'Could not send the permission decision. Bridge unavailable.',
+      }),
+    );
     expect(markup).toContain('data-state="failed"');
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('Could not send the permission decision. Bridge unavailable.');
-    expect(markup).not.toContain('data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key="project:7" disabled');
+    expect(markup).not.toContain(
+      'data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key="project:7" disabled',
+    );
   });
 
   it('renders the selected notification slice without hiding external decisions', () => {
-    const allowed: PermissionHistoryItem = { ...pending, key: 'project:8', id: 8, decision: 'allow', scope: 'once', resolvedAt: 30 };
-    const markup = String(NotificationCenter({ pending: [pending], history: [allowed, history], countdowns: { 'project:7': '1:00' } }));
+    const allowed: PermissionHistoryItem = {
+      ...pending,
+      key: 'project:8',
+      id: 8,
+      decision: 'allow',
+      scope: 'once',
+      resolvedAt: 30,
+    };
+    const markup = String(
+      NotificationCenter({ pending: [pending], history: [allowed, history], countdowns: { 'project:7': '1:00' } }),
+    );
     expect(markup).toContain('allowed permission');
     expect(markup).toContain('Decision made outside Hot Sheet');
     expect(markup).toContain('1:00');
@@ -89,22 +133,30 @@ describe('permission presentation components', () => {
     expect(markup).toContain('data-resolved="true"');
     expect(markup).not.toContain('permission-request-card__details');
     expect(markup).not.toContain('permission-request-card__footer');
-    expect(css).toMatch(/permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: remify\(16px\)/);
+    expect(css).toMatchSource(
+      /permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: remify\(16px\)/,
+    );
   });
 
   it('renders explicit empty states', () => {
     const markup = String(NotificationCenter({ pending: [], history: [], title: 'Pending' }));
     expect(markup).toContain('No requests need your attention.');
-    expect(String(NotificationCenter({ pending: [], history: [], title: 'Last 7 Days' }))).toContain('No notification history in last 7 days.');
+    expect(String(NotificationCenter({ pending: [], history: [], title: 'Last 7 Days' }))).toContain(
+      'No notification history in last 7 days.',
+    );
   });
 
   it('offers the three notification views with counts and current state', () => {
-    const markup = String(NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }));
+    const markup = String(
+      NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }),
+    );
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
     expect(markup.match(/class="kui-list-item__count"/g)).toHaveLength(3);
     expect(markup).toContain('class="kui-list-item__count" data-attention="true">2</small>');
     expect(markup).toContain('data-item-id="day"');
     expect(markup).toContain('aria-current="page"');
-    expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain('class="kui-list-item__count" data-attention="false">0</small>');
+    expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain(
+      'class="kui-list-item__count" data-attention="false">0</small>',
+    );
   });
 });

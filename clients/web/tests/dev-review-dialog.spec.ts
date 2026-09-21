@@ -20,7 +20,9 @@ test('dev-review new-ticket dialog uses the current PanelHeader anatomy', async 
   await expect(actions).toHaveAttribute('aria-label', 'New ticket actions');
   await expect(actions.locator('.hs-dev-review__close')).toBeVisible();
   // The summary is a sibling below the toolbar, not nested inside the title.
-  await expect(header.locator('.kui-panel-header__summary')).toHaveText('Attach visual context and describe the change you need.');
+  await expect(header.locator('.kui-panel-header__summary')).toHaveText(
+    'Attach visual context and describe the change you need.',
+  );
   expect(await header.locator('.kui-toolbar .kui-panel-header__summary').count()).toBe(0);
   await header.screenshot({ path: '/private/tmp/hs2-m4x0ws-devreview-header-wide.png' });
 });

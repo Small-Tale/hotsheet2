@@ -7,20 +7,62 @@
 /* The chrome is shown for continuity only; nothing in it is interactive while loading. */
 .ticket-inspector--placeholder .ticket-inspector__tabs button,
 .ticket-inspector--placeholder .kui-list-header__action,
-.ticket-inspector--placeholder .ticket-inspector__block-action { pointer-events: none; }
+.ticket-inspector--placeholder .ticket-inspector__block-action {
+  pointer-events: none;
+}
 
-.ticket-inspector__ph-title { display: grid; margin: remify(6.4px) remify(16px) 0; gap: remify(6.4px); }
+.ticket-inspector__ph-title {
+  display: grid;
+  margin: remify(6.4px) remify(16px) 0;
+  gap: remify(6.4px);
+}
 
 /* Skeleton details lines sit inside the real Details surface with its own padding. */
-.ticket-inspector__ph-lines { display: grid; padding: remify(13.6px) remify(16px); gap: remify(9.6px); }
+.ticket-inspector__ph-lines {
+  display: grid;
+  padding: remify(13.6px) remify(16px);
+  gap: remify(9.6px);
+}
 
 /* Placeholder note entries mirror the note-card header (kind + time) with skeleton bodies. */
-.ticket-inspector__ph-notes { display: grid; gap: remify(16px); }
-.ticket-inspector__ph-note { display: grid; gap: remify(8px); }
-.ticket-inspector__ph-note--card { padding: remify(12px); border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: remify(10.4px); }
-.ticket-inspector__ph-note-header { display: flex; align-items: center; justify-content: space-between; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.ticket-inspector__ph-note-kind { display: inline-flex; align-items: center; gap: remify(6.4px); font-weight: 650; }
-.ticket-inspector__ph-note-kind svg { width: remify(14.4px); height: remify(14.4px); }
-.ticket-inspector__ph-note-body { display: grid; gap: remify(6.4px); }
+.ticket-inspector__ph-notes {
+  display: grid;
+  gap: remify(16px);
+}
+.ticket-inspector__ph-note {
+  display: grid;
+  gap: remify(8px);
+}
+.ticket-inspector__ph-note--card {
+  padding: remify(12px);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: remify(10.4px);
+}
+.ticket-inspector__ph-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.ticket-inspector__ph-note-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: remify(6.4px);
+  font-weight: 650;
+}
+.ticket-inspector__ph-note-kind svg {
+  width: remify(14.4px);
+  height: remify(14.4px);
+}
+.ticket-inspector__ph-note-body {
+  display: grid;
+  gap: remify(6.4px);
+}
 
-.ticket-inspector__ph-provenance { display: flex; padding-top: remify(3.2px); justify-content: space-between; gap: var(--kui-space-xs); }
+.ticket-inspector__ph-provenance {
+  display: flex;
+  padding-top: remify(3.2px);
+  justify-content: space-between;
+  gap: var(--kui-space-xs);
+}

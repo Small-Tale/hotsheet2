@@ -44,13 +44,19 @@ export class ProgressiveTerminalWorkQueue<T> {
     this.#ensureScheduled();
   }
 
-  get pendingMountCount() { return this.#mountSet.size; }
-  get pendingDisposalCount() { return this.#disposals.length; }
+  get pendingMountCount() {
+    return this.#mountSet.size;
+  }
+  get pendingDisposalCount() {
+    return this.#disposals.length;
+  }
 
   #ensureScheduled() {
     if (this.#scheduled) return;
     this.#scheduled = true;
-    this.#scheduleWork(() => { this.#drain(); });
+    this.#scheduleWork(() => {
+      this.#drain();
+    });
   }
 
   #drain() {

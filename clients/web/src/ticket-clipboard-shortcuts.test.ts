@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { ticketClipboardAction } from './ticket-clipboard-shortcuts';
 
-const base = { action: 'copy' as const, ticketWorkAreaFocused: true, editable: false, textSelected: false, hasTicketSelection: true, hasTicketClipboard: true };
+const base = {
+  action: 'copy' as const,
+  ticketWorkAreaFocused: true,
+  editable: false,
+  textSelected: false,
+  hasTicketSelection: true,
+  hasTicketClipboard: true,
+};
 
 describe('ticketClipboardAction', () => {
   it('allows the resolved copy, cut, and paste action only while the ticket work area owns focus', () => {

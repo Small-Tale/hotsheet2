@@ -5,94 +5,138 @@ import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './d
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
-  const catalogShell=page.locator('[data-component="catalog"]'),reviewToggle = page.locator('[data-action="toggle-dev-review"]');
+  const catalogShell = page.locator('[data-component="catalog"]'),
+    reviewToggle = page.locator('[data-action="toggle-dev-review"]');
   await expect(catalogShell).toBeVisible();
   await expect(page.locator('.hs-dev-review')).toBeVisible();
-  await expect(reviewToggle).toHaveAttribute('aria-pressed','true');
+  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
   await reviewToggle.click();
   await expect(page).toHaveURL('/ux-demo?dev-review=false');
-  await expect(reviewToggle).toHaveAttribute('aria-pressed','false');
+  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  const catalog = page.getByRole('navigation',{name:'UX components components'});
+  const catalog = page.getByRole('navigation', { name: 'UX components components' });
   await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-component="list-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="list-item"]')).not.toHaveCount(0);
-  await page.screenshot({path:'/private/tmp/hs2-ecdq5k-kerf-catalog-wide.png',fullPage:true});
+  await page.screenshot({ path: '/private/tmp/hs2-ecdq5k-kerf-catalog-wide.png', fullPage: true });
   const firstCatalogList = catalog.locator('.kui-catalog__items').first();
   const firstCatalogItem = firstCatalogList.locator('[data-component="list-item"]').first();
   const [listBox, itemBox] = await Promise.all([firstCatalogList.boundingBox(), firstCatalogItem.boundingBox()]);
-  expect(itemBox!.x-listBox!.x).toBeCloseTo(8, 0);
-  await expect(catalog.getByText('Ticket workspace · List',{exact:true})).toBeVisible();
+  expect(itemBox!.x - listBox!.x).toBeCloseTo(8, 0);
+  await expect(catalog.getByText('Ticket workspace · List', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   await catalog.getByRole('button', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
-  const catalogTop = await page.getByRole('complementary', { name: 'UX components catalog' }).evaluate(node => node.getBoundingClientRect().top);
-  await page.evaluate(() => { window.scrollTo(0, 500); });
-  await expect.poll(() => page.getByRole('complementary', { name: 'UX components catalog' }).evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(catalogTop, 0);
+  const catalogTop = await page
+    .getByRole('complementary', { name: 'UX components catalog' })
+    .evaluate((node) => node.getBoundingClientRect().top);
+  await page.evaluate(() => {
+    window.scrollTo(0, 500);
+  });
+  await expect
+    .poll(() =>
+      page
+        .getByRole('complementary', { name: 'UX components catalog' })
+        .evaluate((node) => node.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(catalogTop, 0);
   const relationships = page.locator('.kui-catalog__related-menu');
-  await relationships.getByRole('button',{name:/Component/}).click();
-  await expect(relationships.getByText('Used by',{exact:true})).toBeVisible();
-  await expect(relationships.getByText('Uses',{exact:true})).toBeVisible();
-  await relationships.getByText('TagChip',{exact:true}).click();
+  await relationships.getByRole('button', { name: /Component/ }).click();
+  await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();
+  await expect(relationships.getByText('Uses', { exact: true })).toBeVisible();
+  await relationships.getByText('TagChip', { exact: true }).click();
   await expect(page).toHaveURL('/ux-demo?dev-review=false&component=tag-chip');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
-  const collapse=page.getByRole('button',{name:'Collapse UX components catalog'});await collapse.click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','true');await page.getByRole('button',{name:'Expand UX components catalog'}).click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','false');
+  const collapse = page.getByRole('button', { name: 'Collapse UX components catalog' });
+  await collapse.click();
+  await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
+  await page.getByRole('button', { name: 'Expand UX components catalog' }).click();
+  await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
-  await expect(catalogShell).toHaveAttribute('data-geometry-overlay','true');
-  await catalog.getByRole('button',{name:/AppTab/}).click();await expect.poll(()=>page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);await page.screenshot({path:'/private/tmp/hs2-yrhp2f-geometry-bounds-wide.png',fullPage:true});
-  await catalog.getByRole('button',{name:/ValueTable/}).click();await expect(page.getByRole('heading',{name:'ValueTable',exact:true})).toBeVisible();await expect.poll(()=>page.locator('.kui-catalog__geometry-margin').count()).toBeGreaterThan(0);await page.screenshot({path:'/private/tmp/hs2-yrhp2f-geometry-margins-wide.png',fullPage:true});
-  await catalog.getByRole('button',{name:/AppShell/}).click();await expect(catalogShell).toHaveAttribute('data-geometry-overlay','false');await expect(page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-margin')).toHaveCount(0);
-  await catalog.getByRole('button',{name:/AppTab/}).click();await expect(catalogShell).toHaveAttribute('data-geometry-overlay','true');await expect.poll(()=>page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
-  const theme=page.getByRole('button',{name:'Use dark theme'});await theme.click();await expect(page.locator('html')).toHaveClass(/wa-dark/);await expect(page.getByRole('button',{name:'Use light theme'})).toBeVisible();
-  await page.setViewportSize({width:760,height:800});await page.getByRole('button',{name:'Collapse UX components catalog'}).click();await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed','true');await page.screenshot({path:'/private/tmp/hs2-yrhp2f-geometry-bounds-narrow.png',fullPage:true});
+  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
+  await catalog.getByRole('button', { name: /AppTab/ }).click();
+  await expect.poll(() => page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
+  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-bounds-wide.png', fullPage: true });
+  await catalog.getByRole('button', { name: /ValueTable/ }).click();
+  await expect(page.getByRole('heading', { name: 'ValueTable', exact: true })).toBeVisible();
+  await expect.poll(() => page.locator('.kui-catalog__geometry-margin').count()).toBeGreaterThan(0);
+  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-margins-wide.png', fullPage: true });
+  await catalog.getByRole('button', { name: /AppShell/ }).click();
+  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'false');
+  await expect(page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-margin')).toHaveCount(0);
+  await catalog.getByRole('button', { name: /AppTab/ }).click();
+  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
+  await expect.poll(() => page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
+  const theme = page.getByRole('button', { name: 'Use dark theme' });
+  await theme.click();
+  await expect(page.locator('html')).toHaveClass(/wa-dark/);
+  await expect(page.getByRole('button', { name: 'Use light theme' })).toBeVisible();
+  await page.setViewportSize({ width: 760, height: 800 });
+  await page.getByRole('button', { name: 'Collapse UX components catalog' }).click();
+  await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
+  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-bounds-narrow.png', fullPage: true });
 });
 
-test('reveals deep-linked and newly selected catalog entries without moving focus',async({page})=>{
-  await page.addInitScript(()=>{
-    (window as Window&{catalogReveals?:string[]}).catalogReveals=[];
-    Element.prototype.scrollIntoView=function(){(window as Window&{catalogReveals?:string[]}).catalogReveals?.push((this as HTMLElement).dataset.itemId??'')};
+test('reveals deep-linked and newly selected catalog entries without moving focus', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as Window & { catalogReveals?: string[] }).catalogReveals = [];
+    Element.prototype.scrollIntoView = function () {
+      (window as Window & { catalogReveals?: string[] }).catalogReveals?.push(
+        (this as HTMLElement).dataset.itemId ?? '',
+      );
+    };
   });
-  await page.setViewportSize({width:1280,height:800});
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-banner');
-  await expect.poll(()=>page.evaluate(()=>(window as Window&{catalogReveals?:string[]}).catalogReveals??[])).toContain('hs1-migration-banner');
-  const focus=page.locator('[data-action="toggle-dev-review"]');await focus.focus();
-  await page.locator('[data-item-id="tag-chip"]').first().evaluate(node=> { (node as HTMLElement).click(); });
-  await expect.poll(()=>page.evaluate(()=>(window as Window&{catalogReveals?:string[]}).catalogReveals??[])).toContain('tag-chip');
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { catalogReveals?: string[] }).catalogReveals ?? []))
+    .toContain('hs1-migration-banner');
+  const focus = page.locator('[data-action="toggle-dev-review"]');
+  await focus.focus();
+  await page
+    .locator('[data-item-id="tag-chip"]')
+    .first()
+    .evaluate((node) => {
+      (node as HTMLElement).click();
+    });
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { catalogReveals?: string[] }).catalogReveals ?? []))
+    .toContain('tag-chip');
   await expect(focus).toBeFocused();
 });
 
-test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});
+test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=list-item&dev-review=false');
-  const listItemDemo=page.getByRole('region',{name:'ListItem demo'});
-  await expect(page.getByRole('heading',{name:'ListItem',exact:true})).toBeVisible();
+  const listItemDemo = page.getByRole('region', { name: 'ListItem demo' });
+  await expect(page.getByRole('heading', { name: 'ListItem', exact: true })).toBeVisible();
   await expect(listItemDemo).toBeVisible();
-  await expect(listItemDemo.getByRole('heading',{name:'Standard'})).toBeVisible();
+  await expect(listItemDemo.getByRole('heading', { name: 'Standard' })).toBeVisible();
   await expect(listItemDemo.locator('[data-component="list-item"]')).toHaveCount(7);
-  await expect(listItemDemo.locator('.list-item-demo__copy small')).toHaveCSS('display','block');
-  await expect(page.getByRole('region',{name:'ListItem planned demo'})).toHaveCount(0);
-  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-item-wide.png',fullPage:true});
+  await expect(listItemDemo.locator('.list-item-demo__copy small')).toHaveCSS('display', 'block');
+  await expect(page.getByRole('region', { name: 'ListItem planned demo' })).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-item-wide.png', fullPage: true });
 
   await page.goto('/ux-demo?component=list-header&dev-review=false');
-  const listHeaderDemo=page.getByRole('region',{name:'ListHeader demo'});
-  await expect(page.getByRole('heading',{name:'ListHeader',exact:true})).toBeVisible();
+  const listHeaderDemo = page.getByRole('region', { name: 'ListHeader demo' });
+  await expect(page.getByRole('heading', { name: 'ListHeader', exact: true })).toBeVisible();
   await expect(listHeaderDemo).toBeVisible();
   await expect(listHeaderDemo.locator('[data-component="list-header"]')).toHaveCount(2);
-  await expect(listHeaderDemo.getByRole('button',{name:'Add view'})).toBeVisible();
-  await expect(page.getByRole('region',{name:'ListHeader planned demo'})).toHaveCount(0);
-  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-header-wide.png',fullPage:true});
+  await expect(listHeaderDemo.getByRole('button', { name: 'Add view' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'ListHeader planned demo' })).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-header-wide.png', fullPage: true });
 
-  await page.setViewportSize({width:390,height:844});
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(listHeaderDemo).toBeVisible();
-  await page.getByRole('button',{name:'Collapse UX components catalog'}).click();
-  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-header-narrow.png',fullPage:true});
+  await page.getByRole('button', { name: 'Collapse UX components catalog' }).click();
+  await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-header-narrow.png', fullPage: true });
   await page.goto('/ux-demo?component=list-item&dev-review=false');
-  await expect(page.getByRole('region',{name:'ListItem demo'})).toBeVisible();
-  await page.screenshot({path:'/private/tmp/hs2-ygwny7-list-item-narrow.png',fullPage:true});
+  await expect(page.getByRole('region', { name: 'ListItem demo' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-item-narrow.png', fullPage: true });
 });
 
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
@@ -109,191 +153,722 @@ test('represents the application states extracted from main.tsx in the UX catalo
 
   await page.goto('/ux-demo?component=app-empty-state');
   await expect(page.getByRole('heading', { name: 'Open a Hot Sheet project' })).toBeVisible();
-  await expect(page.locator('[data-component="project-restore-state"]')).toContainText('Restoring projects, tickets, and terminals');
+  await expect(page.locator('[data-component="project-restore-state"]')).toContainText(
+    'Restoring projects, tickets, and terminals',
+  );
   await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-app-empty-states.png', fullPage: true });
 });
 
-test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});
+test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-dialog');
-  const remote=page.locator('[data-remote-project-dialog]'),surface=remote.locator('.remote-project-dialog');
+  const remote = page.locator('[data-remote-project-dialog]'),
+    surface = remote.locator('.remote-project-dialog');
   await expect(surface).toBeVisible();
-  const spacing=await page.evaluate(()=>{const style=(selector:string)=>getComputedStyle(document.querySelector(selector)!);return{dialogGap:style('.project-dialog').gap,pathGap:style('.project-dialog__path').gap,footerGap:style('.project-dialog footer').gap,listGap:style('.remote-project-dialog__list').gap,itemGap:style('.remote-project-dialog__item').gap,itemPadding:style('.remote-project-dialog__item').padding};});
-  expect(spacing).toEqual({dialogGap:'16px',pathGap:'8px',footerGap:'8px',listGap:'4px',itemGap:'4px',itemPadding:'8px 16px'});
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-dialog-remote-wide.png'});
-  await page.setViewportSize({width:390,height:844});
+  const spacing = await page.evaluate(() => {
+    const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+    return {
+      dialogGap: style('.project-dialog').gap,
+      pathGap: style('.project-dialog__path').gap,
+      footerGap: style('.project-dialog footer').gap,
+      listGap: style('.remote-project-dialog__list').gap,
+      itemGap: style('.remote-project-dialog__item').gap,
+      itemPadding: style('.remote-project-dialog__item').padding,
+    };
+  });
+  expect(spacing).toEqual({
+    dialogGap: '16px',
+    pathGap: '8px',
+    footerGap: '8px',
+    listGap: '4px',
+    itemGap: '4px',
+    itemPadding: '8px 16px',
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-dialog-remote-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(surface).toBeVisible();
-  const narrowBox=await surface.boundingBox();
+  const narrowBox = await surface.boundingBox();
   expect(narrowBox).not.toBeNull();
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
-  expect(narrowBox!.x+narrowBox!.width).toBeLessThanOrEqual(390);
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-dialog-remote-narrow.png'});
+  expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-dialog-remote-narrow.png' });
 });
 
-test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)',async({page})=>{
-  await page.setViewportSize({width:1000,height:800});
+test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=keyboard-settings');
-  const list=page.locator('.keyboard-settings__list').first();
-  const chord=page.locator('.keyboard-settings__chord').first();
+  const list = page.locator('.keyboard-settings__list').first();
+  const chord = page.locator('.keyboard-settings__chord').first();
   await expect(chord).toBeVisible();
   // Browser/Web Awesome list defaults add inline-start margin to list items. The app-owned row reset
   // must keep the white row surface flush with the list's inner border instead of exposing the page.
-  const readGeometry=()=>list.evaluate(node=>{const listBox=node.getBoundingClientRect(),row=node.querySelector('.keyboard-settings__row');if(!row)throw new Error('missing keyboard shortcut row');const rowBox=row.getBoundingClientRect(),listStyle=getComputedStyle(node),rowStyle=getComputedStyle(row);return{inset:rowBox.left-listBox.left,marginLeft:rowStyle.marginLeft,widthGap:listBox.right-rowBox.right,listBackground:listStyle.backgroundColor,rowBackground:rowStyle.backgroundColor};});
-  const geometry=await readGeometry();
+  const readGeometry = () =>
+    list.evaluate((node) => {
+      const listBox = node.getBoundingClientRect(),
+        row = node.querySelector('.keyboard-settings__row');
+      if (!row) throw new Error('missing keyboard shortcut row');
+      const rowBox = row.getBoundingClientRect(),
+        listStyle = getComputedStyle(node),
+        rowStyle = getComputedStyle(row);
+      return {
+        inset: rowBox.left - listBox.left,
+        marginLeft: rowStyle.marginLeft,
+        widthGap: listBox.right - rowBox.right,
+        listBackground: listStyle.backgroundColor,
+        rowBackground: rowStyle.backgroundColor,
+      };
+    });
+  const geometry = await readGeometry();
   expect(geometry.marginLeft).toBe('0px');
   expect(geometry.inset).toBe(1);
   expect(geometry.widthGap).toBe(1);
   expect(geometry.listBackground).toBe(geometry.rowBackground);
   // The chord itself also remains free of the native keycap shadow and uneven bottom border.
-  const edges=await chord.evaluate(node=>{const style=getComputedStyle(node);return{shadow:style.boxShadow,widths:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth]};});
+  const edges = await chord.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      shadow: style.boxShadow,
+      widths: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
+    };
+  });
   expect(edges.shadow).toBe('none');
   expect(new Set(edges.widths).size).toBe(1);
-  await list.screenshot({path:'/private/tmp/hs2-186wjt-keyboard-list.png'});
-  await page.setViewportSize({width:390,height:844});
-  const narrowGeometry=await readGeometry();
+  await list.screenshot({ path: '/private/tmp/hs2-186wjt-keyboard-list.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrowGeometry = await readGeometry();
   expect(narrowGeometry).toEqual(geometry);
-  await list.screenshot({path:'/private/tmp/hs2-186wjt-keyboard-list-narrow.png'});
+  await list.screenshot({ path: '/private/tmp/hs2-186wjt-keyboard-list-narrow.png' });
 });
 
-test('reopens dialog demos and keeps Feedback above the modal top layer',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});
+test('reopens dialog demos and keeps Feedback above the modal top layer', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-dialog');
-  const migration=page.locator('[data-component="hs1-migration-dialog"]');
-  await expect(migration).toHaveJSProperty('open',true);
-  const feedback=page.locator('.hs-dev-review__feedback');
+  const migration = page.locator('[data-component="hs1-migration-dialog"]');
+  await expect(migration).toHaveJSProperty('open', true);
+  const feedback = page.locator('.hs-dev-review__feedback');
   await expect(feedback).toBeVisible();
-  expect(await feedback.evaluate(node=>{const box=node.getBoundingClientRect(),top=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return top===node||Boolean(top?.closest('.hs-dev-review__feedback'))})).toBe(true);
-  await migration.getByRole('button',{name:'Not now'}).click();
-  await expect(migration).toHaveJSProperty('open',false);
-  await page.getByRole('button',{name:'Open import dialog'}).click();
-  await expect(migration).toHaveJSProperty('open',true);
-  await page.mouse.move(1000,700);
+  expect(
+    await feedback.evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return top === node || Boolean(top?.closest('.hs-dev-review__feedback'));
+    }),
+  ).toBe(true);
+  await migration.getByRole('button', { name: 'Not now' }).click();
+  await expect(migration).toHaveJSProperty('open', false);
+  await page.getByRole('button', { name: 'Open import dialog' }).click();
+  await expect(migration).toHaveJSProperty('open', true);
+  await page.mouse.move(1000, 700);
   await page.waitForTimeout(200);
-  await page.screenshot({path:'/private/tmp/hs2-9a6ssk-dialog-reopened-wide.png',fullPage:true});
-  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({ path: '/private/tmp/hs2-9a6ssk-dialog-reopened-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(feedback).toBeVisible();
-  await page.screenshot({path:'/private/tmp/hs2-9a6ssk-dialog-feedback-narrow.png',fullPage:true});
+  await page.screenshot({ path: '/private/tmp/hs2-9a6ssk-dialog-feedback-narrow.png', fullPage: true });
 });
 
-test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});
+test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-banner&dev-review=false');
-  const migration=page.locator('.hs1-migration-banner'),cleanup=page.locator('.hs1-cleanup-banner');
-  for(const [banner,tone] of [[migration,'info'],[cleanup,'success']] as const){await expect(banner).toBeVisible();await expect(banner).toHaveAttribute('data-component','state-banner');await expect(banner).toHaveAttribute('data-tone',tone);await expect(banner).toHaveAttribute('role','status');await expect(banner).toHaveAttribute('aria-live','polite');expect(await banner.evaluate(node=>{const style=getComputedStyle(node),copy=getComputedStyle(node.querySelector('.kui-state-banner__copy')!),button=getComputedStyle(node.querySelector('button')!);return{padding:style.padding,gap:style.gap,copyGap:copy.gap,buttonPadding:[button.paddingLeft,button.paddingRight]}})).toEqual({padding:'8px 16px',gap:'16px',copyGap:'4px',buttonPadding:['8px','8px']})}
+  const migration = page.locator('.hs1-migration-banner'),
+    cleanup = page.locator('.hs1-cleanup-banner');
+  for (const [banner, tone] of [
+    [migration, 'info'],
+    [cleanup, 'success'],
+  ] as const) {
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute('data-component', 'state-banner');
+    await expect(banner).toHaveAttribute('data-tone', tone);
+    await expect(banner).toHaveAttribute('role', 'status');
+    await expect(banner).toHaveAttribute('aria-live', 'polite');
+    expect(
+      await banner.evaluate((node) => {
+        const style = getComputedStyle(node),
+          copy = getComputedStyle(node.querySelector('.kui-state-banner__copy')!),
+          button = getComputedStyle(node.querySelector('button')!);
+        return {
+          padding: style.padding,
+          gap: style.gap,
+          copyGap: copy.gap,
+          buttonPadding: [button.paddingLeft, button.paddingRight],
+        };
+      }),
+    ).toEqual({ padding: '8px 16px', gap: '16px', copyGap: '4px', buttonPadding: ['8px', '8px'] });
+  }
   await expect(cleanup.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
-  await page.locator('.dialog-layout-demo').screenshot({path:'/private/tmp/hs2-750wsy-hs1-state-banners-wide.png'});
-  await page.setViewportSize({width:390,height:844});
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.locator('.dialog-layout-demo').screenshot({path:'/private/tmp/hs2-750wsy-hs1-state-banners-narrow.png'});
+  await page.locator('.dialog-layout-demo').screenshot({ path: '/private/tmp/hs2-750wsy-hs1-state-banners-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page
+    .locator('.dialog-layout-demo')
+    .screenshot({ path: '/private/tmp/hs2-750wsy-hs1-state-banners-narrow.png' });
 });
 
-test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});
+test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-dialog&dev-review=false');
-  const dialog=page.locator('[data-component="hs1-migration-dialog"]'),form=dialog.locator('.hs1-migration-dialog');
-  await expect(dialog).toHaveJSProperty('open',true);
-  expect(await form.evaluate(node=>{const style=(selector:string)=>getComputedStyle(node.querySelector(selector)!);return{dialogGap:getComputedStyle(node).gap,introGap:style('.hs1-migration-dialog__intro').gap,introCopyTop:style('.hs1-migration-dialog__intro p').marginTop,destinationGap:style('.hs1-migration-dialog__destination').gap,footerGap:style('footer').gap}})).toEqual({dialogGap:'24px',introGap:'16px',introCopyTop:'4px',destinationGap:'8px',footerGap:'8px'});
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-hs1-dialog-wide.png'});
-  await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-hs1-dialog-narrow.png'});
+  const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
+    form = dialog.locator('.hs1-migration-dialog');
+  await expect(dialog).toHaveJSProperty('open', true);
+  expect(
+    await form.evaluate((node) => {
+      const style = (selector: string) => getComputedStyle(node.querySelector(selector)!);
+      return {
+        dialogGap: getComputedStyle(node).gap,
+        introGap: style('.hs1-migration-dialog__intro').gap,
+        introCopyTop: style('.hs1-migration-dialog__intro p').marginTop,
+        destinationGap: style('.hs1-migration-dialog__destination').gap,
+        footerGap: style('footer').gap,
+      };
+    }),
+  ).toEqual({ dialogGap: '24px', introGap: '16px', introCopyTop: '4px', destinationGap: '8px', footerGap: '8px' });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-hs1-dialog-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-hs1-dialog-narrow.png' });
 });
 
-test('represents the shared repository-status composition in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1600,height:900});await page.goto('/ux-demo?component=repository-status-popover&dev-review=false');const dialog=page.locator('[data-component="repository-status-popover"]');await expect(dialog).toBeVisible();const compare=dialog.getByRole('button',{name:'Compare two commits'}),refresh=dialog.getByRole('button',{name:'Refresh repository status'});expect(await refresh.evaluate(node=>getComputedStyle(node).color)).toBe(await compare.evaluate(node=>getComputedStyle(node).color));await expect(dialog).toHaveAttribute('data-embedded','true');await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);const paneSpacing=await dialog.evaluate(node=>{const aside=node.querySelector<HTMLElement>('aside')!,detail=node.querySelector<HTMLElement>('.repository-status-popover__detail')!,values=[...node.querySelectorAll<HTMLElement>('.repository-status-popover__values')],nav=node.querySelector<HTMLElement>('nav')!,header=nav.querySelector<HTMLElement>('[data-component="list-header"]')!.getBoundingClientRect(),items=[...nav.querySelectorAll<HTMLElement>(':scope > [data-component="list-item"]')].map(item=>item.getBoundingClientRect());return{asidePadding:getComputedStyle(aside).padding,detailPadding:getComputedStyle(detail).padding,valueGap:values[1].getBoundingClientRect().top-values[0].getBoundingClientRect().bottom,headerGap:items[0].top-header.bottom,rowGaps:items.slice(1).map((item,index)=>item.top-items[index].bottom)}});expect(paneSpacing).toEqual({asidePadding:'24px',detailPadding:'24px',valueGap:16,headerGap:4,rowGaps:[0,0,0,0]});await page.locator('[data-action="toggle-settings"]').click();const inspector=page.getByRole('complementary',{name:'RepositoryStatusPopover settings'}),scenario=inspector.locator('wa-select[name="scenario"]');for(const [value,state,copy,icon] of [['clean','clean','Working tree is clean','circle-check'],['dirty','dirty','Local changes have not been committed','git-branch'],['ahead','ahead','Local commits have not been pushed','git-branch'],['behind','behind','Remote commits have not been integrated','git-branch'],['diverged','diverged','Local and remote histories have diverged','git-branch'],['conflicted','conflicted','Repository has unresolved conflicts','triangle-alert'],['error','error','Repository status is unavailable','triangle-alert']] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toHaveAttribute('data-state',state);await expect(dialog.locator('.kui-panel-header__summary')).toHaveText(copy);await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1)}await inspector.getByRole('button',{name:'Reset'}).click();await expect(scenario).toHaveJSProperty('value','conflicted');await expect(dialog).toHaveAttribute('data-state','conflicted');await page.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenario-settings.png',fullPage:true});await page.locator('[data-action="toggle-settings"]').click();await dialog.getByRole('button',{name:/Staged 2/}).click();await expect(dialog).toHaveAttribute('data-view','staged');const file=dialog.locator('[data-action="select-repository-file"]').first(),fileMenu=file.locator('[data-action="open-repository-file-menu-trigger"]');await fileMenu.click();await expect(dialog.getByRole('menuitem',{name:'Show Diff'})).toBeVisible();await dialog.getByRole('menuitem',{name:'Show Diff'}).click();await expect(page.locator('.component-stage__event')).toContainText('Would review');await file.dblclick();await expect(page.locator('.component-stage__event')).toContainText('Would open');await dialog.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenarios-wide.png'});await dialog.screenshot({path:'/private/tmp/hs2-4y6sm9-repository-status-wide.png'});await dialog.getByRole('button',{name:/Commits 24/}).click();await dialog.getByRole('button',{name:'Compare two commits'}).click();const rows=dialog.locator('.ticket-code-review__commit-summary');await rows.nth(1).click();await rows.nth(0).click();await expect(dialog.getByRole('button',{name:'Open comparison in Glassbox'})).toBeEnabled();await dialog.screenshot({path:'/private/tmp/hs2-qe4j38-repository-comparison.png'});await page.setViewportSize({width:760,height:640});await expect(dialog.locator('aside')).toHaveCSS('padding','16px');await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding','16px');await dialog.screenshot({path:'/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png'});await dialog.screenshot({path:'/private/tmp/hs2-4y6sm9-repository-status-narrow.png'});
-});
-
-test('contains the embedded repository status dialog and header actions (HS2-MCHTAW)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});
+test('represents the shared repository-status composition in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover&dev-review=false');
-  const dialog=page.locator('[data-component="repository-status-popover"]');
-  const compare=dialog.getByRole('button',{name:'Compare two commits'});
-  const refresh=dialog.getByRole('button',{name:'Refresh repository status'});
+  const dialog = page.locator('[data-component="repository-status-popover"]');
+  await expect(dialog).toBeVisible();
+  const compare = dialog.getByRole('button', { name: 'Compare two commits' }),
+    refresh = dialog.getByRole('button', { name: 'Refresh repository status' });
+  expect(await refresh.evaluate((node) => getComputedStyle(node).color)).toBe(
+    await compare.evaluate((node) => getComputedStyle(node).color),
+  );
+  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');
+  await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);
+  const paneSpacing = await dialog.evaluate((node) => {
+    const aside = node.querySelector<HTMLElement>('aside')!,
+      detail = node.querySelector<HTMLElement>('.repository-status-popover__detail')!,
+      values = [...node.querySelectorAll<HTMLElement>('.repository-status-popover__values')],
+      nav = node.querySelector<HTMLElement>('nav')!,
+      header = nav.querySelector<HTMLElement>('[data-component="list-header"]')!.getBoundingClientRect(),
+      items = [...nav.querySelectorAll<HTMLElement>(':scope > [data-component="list-item"]')].map((item) =>
+        item.getBoundingClientRect(),
+      );
+    return {
+      asidePadding: getComputedStyle(aside).padding,
+      detailPadding: getComputedStyle(detail).padding,
+      valueGap: values[1].getBoundingClientRect().top - values[0].getBoundingClientRect().bottom,
+      headerGap: items[0].top - header.bottom,
+      rowGaps: items.slice(1).map((item, index) => item.top - items[index].bottom),
+    };
+  });
+  expect(paneSpacing).toEqual({
+    asidePadding: '24px',
+    detailPadding: '24px',
+    valueGap: 16,
+    headerGap: 4,
+    rowGaps: [0, 0, 0, 0],
+  });
+  await page.locator('[data-action="toggle-settings"]').click();
+  const inspector = page.getByRole('complementary', { name: 'RepositoryStatusPopover settings' }),
+    scenario = inspector.locator('wa-select[name="scenario"]');
+  for (const [value, state, copy, icon] of [
+    ['clean', 'clean', 'Working tree is clean', 'circle-check'],
+    ['dirty', 'dirty', 'Local changes have not been committed', 'git-branch'],
+    ['ahead', 'ahead', 'Local commits have not been pushed', 'git-branch'],
+    ['behind', 'behind', 'Remote commits have not been integrated', 'git-branch'],
+    ['diverged', 'diverged', 'Local and remote histories have diverged', 'git-branch'],
+    ['conflicted', 'conflicted', 'Repository has unresolved conflicts', 'triangle-alert'],
+    ['error', 'error', 'Repository status is unavailable', 'triangle-alert'],
+  ] as const) {
+    await scenario.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await expect(dialog).toHaveAttribute('data-state', state);
+    await expect(dialog.locator('.kui-panel-header__summary')).toHaveText(copy);
+    await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1);
+  }
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(scenario).toHaveJSProperty('value', 'conflicted');
+  await expect(dialog).toHaveAttribute('data-state', 'conflicted');
+  await page.screenshot({ path: '/private/tmp/hs2-s6f817-repository-scenario-settings.png', fullPage: true });
+  await page.locator('[data-action="toggle-settings"]').click();
+  await dialog.getByRole('button', { name: /Staged 2/ }).click();
+  await expect(dialog).toHaveAttribute('data-view', 'staged');
+  const file = dialog.locator('[data-action="select-repository-file"]').first(),
+    fileMenu = file.locator('[data-action="open-repository-file-menu-trigger"]');
+  await fileMenu.click();
+  await expect(dialog.getByRole('menuitem', { name: 'Show Diff' })).toBeVisible();
+  await dialog.getByRole('menuitem', { name: 'Show Diff' }).click();
+  await expect(page.locator('.component-stage__event')).toContainText('Would review');
+  await file.dblclick();
+  await expect(page.locator('.component-stage__event')).toContainText('Would open');
+  await dialog.screenshot({ path: '/private/tmp/hs2-s6f817-repository-scenarios-wide.png' });
+  await dialog.screenshot({ path: '/private/tmp/hs2-4y6sm9-repository-status-wide.png' });
+  await dialog.getByRole('button', { name: /Commits 24/ }).click();
+  await dialog.getByRole('button', { name: 'Compare two commits' }).click();
+  const rows = dialog.locator('.ticket-code-review__commit-summary');
+  await rows.nth(1).click();
+  await rows.nth(0).click();
+  await expect(dialog.getByRole('button', { name: 'Open comparison in Glassbox' })).toBeEnabled();
+  await dialog.screenshot({ path: '/private/tmp/hs2-qe4j38-repository-comparison.png' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await expect(dialog.locator('aside')).toHaveCSS('padding', '16px');
+  await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '16px');
+  await dialog.screenshot({ path: '/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png' });
+  await dialog.screenshot({ path: '/private/tmp/hs2-4y6sm9-repository-status-narrow.png' });
+});
+
+test('contains the embedded repository status dialog and header actions (HS2-MCHTAW)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=repository-status-popover&dev-review=false');
+  const dialog = page.locator('[data-component="repository-status-popover"]');
+  const compare = dialog.getByRole('button', { name: 'Compare two commits' });
+  const refresh = dialog.getByRole('button', { name: 'Refresh repository status' });
   await expect(dialog).toBeVisible();
   await expect(compare).toBeVisible();
   await expect(refresh).toBeVisible();
-  const measureContainment=()=>dialog.evaluate((node)=>{
-    const bounds=(element:Element)=>{const rect=element.getBoundingClientRect();return{left:rect.left,right:rect.right}};
-    return{viewport:innerWidth,dialog:bounds(node),compare:bounds(node.querySelector('[data-action="toggle-repository-comparison"]')!),refresh:bounds(node.querySelector('[data-action="refresh-repository-status"]')!)};
-  });
-  const assertContained=(containment:Awaited<ReturnType<typeof measureContainment>>)=>{
+  const measureContainment = () =>
+    dialog.evaluate((node) => {
+      const bounds = (element: Element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      };
+      return {
+        viewport: innerWidth,
+        dialog: bounds(node),
+        compare: bounds(node.querySelector('[data-action="toggle-repository-comparison"]')!),
+        refresh: bounds(node.querySelector('[data-action="refresh-repository-status"]')!),
+      };
+    });
+  const assertContained = (containment: Awaited<ReturnType<typeof measureContainment>>) => {
     expect(containment.dialog.left).toBeGreaterThanOrEqual(0);
     expect(containment.dialog.right).toBeLessThanOrEqual(containment.viewport);
-    for(const action of [containment.compare,containment.refresh]){
+    for (const action of [containment.compare, containment.refresh]) {
       expect(action.left).toBeGreaterThanOrEqual(containment.dialog.left);
       expect(action.right).toBeLessThanOrEqual(containment.dialog.right);
     }
   };
   assertContained(await measureContainment());
-  await dialog.screenshot({path:'/private/tmp/hs2-mchtaw-repository-status-wide.png'});
-  await page.addStyleTag({content:'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}'});
-  await page.setViewportSize({width:760,height:640});
+  await dialog.screenshot({ path: '/private/tmp/hs2-mchtaw-repository-status-wide.png' });
+  await page.addStyleTag({
+    content:
+      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+  });
+  await page.setViewportSize({ width: 760, height: 640 });
   assertContained(await measureContainment());
-  await dialog.screenshot({path:'/private/tmp/hs2-mchtaw-repository-status-constrained.png'});
+  await dialog.screenshot({ path: '/private/tmp/hs2-mchtaw-repository-status-constrained.png' });
 });
 
-test('represents the ticket change-evidence master-detail dialog in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=change-evidence-dialog');const dialog=page.locator('[data-component="change-evidence-dialog"]');await expect(dialog).toBeVisible();await expect(dialog).toHaveAttribute('data-embedded','true');await expect(dialog).toHaveAttribute('data-view','tests');await expect(dialog.getByRole('button',{name:/Tests 1/})).toHaveAttribute('aria-current','page');const file=dialog.locator('[data-action="open-repository-file-menu-trigger"]');await expect(file).toHaveAttribute('data-item-id','clients/web/src/change-evidence.test.ts');await expect(file).toHaveAttribute('data-file-menu-source','ticket');await file.click();await expect(dialog.getByRole('menuitem',{name:'Show Diff'})).toBeVisible();await dialog.getByRole('menuitem',{name:'Show Diff'}).click();await expect(page.locator('.component-stage__event')).toContainText('Would review');await dialog.getByRole('button',{name:/Source 1/}).click();await expect(dialog).toHaveAttribute('data-view','source');await dialog.screenshot({path:'/private/tmp/hs2-s7x4sb-change-evidence-demo-wide.png'});await page.setViewportSize({width:760,height:640});await dialog.screenshot({path:'/private/tmp/hs2-s7x4sb-change-evidence-demo-narrow.png'});
-});
-
-test('keeps repository file action menus visible at wide and narrow sizes',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});
-  await page.goto('/ux-demo?component=repository-status-popover');
-  const repository=page.locator('[data-component="repository-status-popover"]');
-  await repository.getByRole('button',{name:/Staged 2/}).click();
-  await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
-  const repositoryMenu=repository.getByRole('menu');
-  await expect(repositoryMenu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Show Diff','Open','Show in Finder','Copy Relative Path','Copy Absolute Path']);
-  expect(await repositoryMenu.evaluate(node=>{const menu=getComputedStyle(node),item=getComputedStyle(node.querySelector('button')!);return{padding:menu.padding,itemPadding:item.padding,gap:item.gap}})).toEqual({padding:'4px',itemPadding:'0px 16px',gap:'8px'});
-  await repository.screenshot({path:'/private/tmp/hs2-3yzn0s-repository-file-menu-wide.png'});
-  await page.setViewportSize({width:760,height:640});
-  await repository.locator('[data-action="open-repository-file-menu-trigger"]').last().click();
-  const narrowBounds=(await repositoryMenu.boundingBox())!;
-  expect(narrowBounds.x+narrowBounds.width).toBeLessThanOrEqual(752);
-  expect(narrowBounds.y+narrowBounds.height).toBeLessThanOrEqual(632);
-  await repository.screenshot({path:'/private/tmp/hs2-3yzn0s-repository-file-menu-narrow.png'});
-
-  await page.setViewportSize({width:1280,height:900});
+test('represents the ticket change-evidence master-detail dialog in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=change-evidence-dialog');
-  const evidence=page.locator('[data-component="change-evidence-dialog"]');
+  const dialog = page.locator('[data-component="change-evidence-dialog"]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog).toHaveAttribute('data-view', 'tests');
+  await expect(dialog.getByRole('button', { name: /Tests 1/ })).toHaveAttribute('aria-current', 'page');
+  const file = dialog.locator('[data-action="open-repository-file-menu-trigger"]');
+  await expect(file).toHaveAttribute('data-item-id', 'clients/web/src/change-evidence.test.ts');
+  await expect(file).toHaveAttribute('data-file-menu-source', 'ticket');
+  await file.click();
+  await expect(dialog.getByRole('menuitem', { name: 'Show Diff' })).toBeVisible();
+  await dialog.getByRole('menuitem', { name: 'Show Diff' }).click();
+  await expect(page.locator('.component-stage__event')).toContainText('Would review');
+  await dialog.getByRole('button', { name: /Source 1/ }).click();
+  await expect(dialog).toHaveAttribute('data-view', 'source');
+  await dialog.screenshot({ path: '/private/tmp/hs2-s7x4sb-change-evidence-demo-wide.png' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await dialog.screenshot({ path: '/private/tmp/hs2-s7x4sb-change-evidence-demo-narrow.png' });
+});
+
+test('keeps repository file action menus visible at wide and narrow sizes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=repository-status-popover');
+  const repository = page.locator('[data-component="repository-status-popover"]');
+  await repository.getByRole('button', { name: /Staged 2/ }).click();
+  await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
+  const repositoryMenu = repository.getByRole('menu');
+  await expect(repositoryMenu.getByRole('menuitem').allTextContents()).resolves.toEqual([
+    'Show Diff',
+    'Open',
+    'Show in Finder',
+    'Copy Relative Path',
+    'Copy Absolute Path',
+  ]);
+  expect(
+    await repositoryMenu.evaluate((node) => {
+      const menu = getComputedStyle(node),
+        item = getComputedStyle(node.querySelector('button')!);
+      return { padding: menu.padding, itemPadding: item.padding, gap: item.gap };
+    }),
+  ).toEqual({ padding: '4px', itemPadding: '0px 16px', gap: '8px' });
+  await repository.screenshot({ path: '/private/tmp/hs2-3yzn0s-repository-file-menu-wide.png' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await repository.locator('[data-action="open-repository-file-menu-trigger"]').last().click();
+  const narrowBounds = (await repositoryMenu.boundingBox())!;
+  expect(narrowBounds.x + narrowBounds.width).toBeLessThanOrEqual(752);
+  expect(narrowBounds.y + narrowBounds.height).toBeLessThanOrEqual(632);
+  await repository.screenshot({ path: '/private/tmp/hs2-3yzn0s-repository-file-menu-narrow.png' });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=change-evidence-dialog');
+  const evidence = page.locator('[data-component="change-evidence-dialog"]');
   await evidence.locator('[data-action="open-repository-file-menu-trigger"]').click();
-  await expect(evidence.getByRole('menuitem',{name:'Show Diff'})).toBeEnabled();
-  await evidence.screenshot({path:'/private/tmp/hs2-3yzn0s-change-evidence-file-menu-wide.png'});
+  await expect(evidence.getByRole('menuitem', { name: 'Show Diff' })).toBeEnabled();
+  await evidence.screenshot({ path: '/private/tmp/hs2-3yzn0s-change-evidence-file-menu-wide.png' });
 });
 
-test('represents every server-build details state with shared dialog geometry',async({page})=>{
-  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=connection-details-dialog');const dialog=page.locator('[data-component="connection-details-dialog"]'),header=dialog.locator('[data-component="panel-header"]');await expect(dialog).toBeVisible();await expect(dialog).toHaveAttribute('data-embedded','true');await expect(header).toBeVisible();await expect(header).toHaveCSS('border-bottom-width','0px');await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();await expect(dialog.getByRole('button',{name:'Close'})).toHaveCount(0);
-  await page.locator('[data-action="toggle-settings"]').click();const scenario=page.getByRole('complementary',{name:'ConnectionDetailsDialog settings'}).locator('wa-select[name="scenario"]');for(const [value,kind,copy] of [['source-stale','compatible','cargo build -p hotsheet-server'],['revision-mismatch','compatible','detached build is intentional'],['server-too-old-safe','server_too_old','quiescence-safe restart'],['server-too-old-manual','server_too_old','Automatic restart is unavailable'],['client-too-old','client_too_old','Update this Hot Sheet client'],['unknown','unknown','inspect the server log']] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toHaveAttribute('data-kind',kind);await expect(dialog).toContainText(copy)}await page.getByRole('complementary',{name:'ConnectionDetailsDialog settings'}).getByRole('button',{name:'Reset'}).click();await expect(scenario).toHaveJSProperty('value','source-stale');const settingsTrigger=page.locator('[data-action="toggle-settings"]');await settingsTrigger.click();await settingsTrigger.evaluate(node=>{(node as HTMLElement).hidden=true});await dialog.screenshot({path:'/private/tmp/hs2-0fe73q-connection-details-wide-after.png'});await page.setViewportSize({width:390,height:844});await expect(header).toHaveCSS('border-bottom-width','0px');await dialog.screenshot({path:'/private/tmp/hs2-0fe73q-connection-details-narrow-after.png'});
+test('represents every server-build details state with shared dialog geometry', async ({ page }) => {
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await page.goto('/ux-demo?component=connection-details-dialog');
+  const dialog = page.locator('[data-component="connection-details-dialog"]'),
+    header = dialog.locator('[data-component="panel-header"]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(header).toBeVisible();
+  await expect(header).toHaveCSS('border-bottom-width', '0px');
+  await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0);
+  await page.locator('[data-action="toggle-settings"]').click();
+  const scenario = page
+    .getByRole('complementary', { name: 'ConnectionDetailsDialog settings' })
+    .locator('wa-select[name="scenario"]');
+  for (const [value, kind, copy] of [
+    ['source-stale', 'compatible', 'cargo build -p hotsheet-server'],
+    ['revision-mismatch', 'compatible', 'detached build is intentional'],
+    ['server-too-old-safe', 'server_too_old', 'quiescence-safe restart'],
+    ['server-too-old-manual', 'server_too_old', 'Automatic restart is unavailable'],
+    ['client-too-old', 'client_too_old', 'Update this Hot Sheet client'],
+    ['unknown', 'unknown', 'inspect the server log'],
+  ] as const) {
+    await scenario.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await expect(dialog).toHaveAttribute('data-kind', kind);
+    await expect(dialog).toContainText(copy);
+  }
+  await page
+    .getByRole('complementary', { name: 'ConnectionDetailsDialog settings' })
+    .getByRole('button', { name: 'Reset' })
+    .click();
+  await expect(scenario).toHaveJSProperty('value', 'source-stale');
+  const settingsTrigger = page.locator('[data-action="toggle-settings"]');
+  await settingsTrigger.click();
+  await settingsTrigger.evaluate((node) => {
+    (node as HTMLElement).hidden = true;
+  });
+  await dialog.screenshot({ path: '/private/tmp/hs2-0fe73q-connection-details-wide-after.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(header).toHaveCSS('border-bottom-width', '0px');
+  await dialog.screenshot({ path: '/private/tmp/hs2-0fe73q-connection-details-narrow-after.png' });
 });
 
-test('represents the production terminal dashboard and its shared context menu in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Workspace grid'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);const chat=dashboard.locator('[data-component="workspace-chat-tile"]');await expect(chat).toHaveCount(1);await expect(chat).toContainText('Codex AI chat');await expect(chat).toContainText('Reviewing the latest workspace changes');const menu=dashboard.getByRole('menu');await expect(menu).toHaveCount(0);const first=dashboard.locator('[data-component="terminal-tile"]').first();await first.getByRole('button',{name:/More actions/}).click();await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await first.click({button:'right'});await expect(menu).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-wide.png',fullPage:true});
-  await page.keyboard.press('Escape');await page.setViewportSize({width:700,height:700});await expect(chat).toBeVisible();await expect.poll(()=>dashboard.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-narrow.png',fullPage:true});
+test('represents the production terminal dashboard and its shared context menu in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-dashboard');
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  await expect(dashboard).toBeVisible();
+  await expect(dashboard).toHaveAttribute('data-basis', 'high');
+  await expect(dashboard).toHaveAttribute('data-fit', '3');
+  await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);
+  const chat = dashboard.locator('[data-component="workspace-chat-tile"]');
+  await expect(chat).toHaveCount(1);
+  await expect(chat).toContainText('Codex AI chat');
+  await expect(chat).toContainText('Reviewing the latest workspace changes');
+  const menu = dashboard.getByRole('menu');
+  await expect(menu).toHaveCount(0);
+  const first = dashboard.locator('[data-component="terminal-tile"]').first();
+  await first.getByRole('button', { name: /More actions/ }).click();
+  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  await expect(menu.getByText('Open')).toBeVisible();
+  await expect(menu.getByText('Hide Terminal')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await first.click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 700, height: 700 });
+  await expect(chat).toBeVisible();
+  await expect.poll(() => dashboard.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-narrow.png', fullPage: true });
 });
 
-test('represents aggregate and per-project terminal operations in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-operations-sidebar');const sidebar=page.getByRole('complementary',{name:'Terminal operations sidebar'});await expect(sidebar).toBeVisible();await expect(sidebar.locator('[data-component="list-header"]')).toHaveCount(4);const summaries=sidebar.locator('[data-component="project-summary"]');await expect(summaries).toHaveCount(4);await expect(sidebar.getByText('All projects',{exact:true})).toBeVisible();await expect(sidebar.getByText('HotSheet2',{exact:true})).toBeVisible();await expect(sidebar.getByText('Best-in-Manila',{exact:true})).toBeVisible();await expect(sidebar.getByText('Kerf',{exact:true})).toBeVisible();const aggregate=sidebar.locator('[data-project-id="all"] [data-component="project-summary"]'),hotsheet=sidebar.locator('[data-project-id="hotsheet2"] [data-component="project-summary"]'),kerf=sidebar.locator('[data-project-id="kerf"] [data-component="project-summary"]');await expect(aggregate).toContainText('2 completed today');await expect(aggregate).toHaveAttribute('data-chart-tone','success');await expect(aggregate).toHaveAttribute('data-chart-background','false');await expect(hotsheet).toHaveAttribute('data-chart-tone','brand');await expect(hotsheet).toHaveAttribute('data-chart-background','true');await expect(kerf).toHaveAttribute('data-chart-background','true');for(const summary of [aggregate,hotsheet,kerf])await expect(summary).toHaveAttribute('data-chart-maximum','9');await expect(aggregate.locator('[data-bar="5"]')).toHaveAttribute('style','--bar-height:100%');await expect(hotsheet.locator('[data-background-bar="5"]')).toHaveAttribute('style','--bar-height:100%');await expect(hotsheet.locator('[data-bar="4"]')).toHaveAttribute('style','--bar-height:56%');await expect(kerf.locator('[data-bar="5"]')).toHaveAttribute('style','--bar-height:56%');await page.screenshot({path:'/private/tmp/hs2-mh8qn2-terminal-operations-green-aggregate.png',fullPage:true});await sidebar.screenshot({path:'/private/tmp/hs2-hph6c5-operations-comparison-demo.png'});
+test('represents aggregate and per-project terminal operations in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-operations-sidebar');
+  const sidebar = page.getByRole('complementary', { name: 'Terminal operations sidebar' });
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.locator('[data-component="list-header"]')).toHaveCount(4);
+  const summaries = sidebar.locator('[data-component="project-summary"]');
+  await expect(summaries).toHaveCount(4);
+  await expect(sidebar.getByText('All projects', { exact: true })).toBeVisible();
+  await expect(sidebar.getByText('HotSheet2', { exact: true })).toBeVisible();
+  await expect(sidebar.getByText('Best-in-Manila', { exact: true })).toBeVisible();
+  await expect(sidebar.getByText('Kerf', { exact: true })).toBeVisible();
+  const aggregate = sidebar.locator('[data-project-id="all"] [data-component="project-summary"]'),
+    hotsheet = sidebar.locator('[data-project-id="hotsheet2"] [data-component="project-summary"]'),
+    kerf = sidebar.locator('[data-project-id="kerf"] [data-component="project-summary"]');
+  await expect(aggregate).toContainText('2 completed today');
+  await expect(aggregate).toHaveAttribute('data-chart-tone', 'success');
+  await expect(aggregate).toHaveAttribute('data-chart-background', 'false');
+  await expect(hotsheet).toHaveAttribute('data-chart-tone', 'brand');
+  await expect(hotsheet).toHaveAttribute('data-chart-background', 'true');
+  await expect(kerf).toHaveAttribute('data-chart-background', 'true');
+  for (const summary of [aggregate, hotsheet, kerf]) await expect(summary).toHaveAttribute('data-chart-maximum', '9');
+  await expect(aggregate.locator('[data-bar="5"]')).toHaveAttribute('style', '--bar-height:100%');
+  await expect(hotsheet.locator('[data-background-bar="5"]')).toHaveAttribute('style', '--bar-height:100%');
+  await expect(hotsheet.locator('[data-bar="4"]')).toHaveAttribute('style', '--bar-height:56%');
+  await expect(kerf.locator('[data-bar="5"]')).toHaveAttribute('style', '--bar-height:56%');
+  await page.screenshot({ path: '/private/tmp/hs2-mh8qn2-terminal-operations-green-aggregate.png', fullPage: true });
+  await sidebar.screenshot({ path: '/private/tmp/hs2-hph6c5-operations-comparison-demo.png' });
 });
 
-test('represents the compact terminal ticket rail in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');const rail=page.locator('[data-component="terminal-ticket-rail"]'),project=rail.locator('wa-select[name="terminal-rail-project"]'),view=rail.locator('wa-select[name="terminal-rail-view"]'),launcher=rail.getByRole('button',{name:'Ticket…'});await expect(rail).toBeVisible();await expect(project).toHaveAttribute('value','demo');await expect(view).toHaveAttribute('value','all');await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);await expect(launcher).toContainText('Ticket…');await expect(launcher).not.toContainText('New ticket');await expect(rail.getByRole('button',{name:'Hide ticket rail'})).toBeVisible();await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style','push');const geometry=await rail.evaluate(node=>{const modeElement=node.querySelector<HTMLElement>('.view-mode-switcher')!,mode=modeElement.getBoundingClientRect(),sort=node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),search=node.querySelector('.workspace-header__search-group')!.getBoundingClientRect(),utility=node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),project=node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),projectChrome=getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__project')!),controls=getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),heading=getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),content=getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__content')!),launcherStyle=getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);return{mode:{top:mode.top,bottom:mode.bottom,width:mode.width,radius:getComputedStyle(modeElement).borderRadius},sortTop:sort.top,searchTop:search.top,searchLeft:search.left,utilityTop:utility.top,utilityRight:utility.right,projectWidth:project.width,railWidth:node.getBoundingClientRect().width,projectPadding:projectChrome.padding,controlsPadding:controls.padding,headingPadding:heading.padding,headingBorderBottom:heading.borderBottomWidth,contentPadding:content.padding,launcherBackground:launcherStyle.backgroundColor,launcherRadius:launcherStyle.borderRadius}});expect(geometry.mode.bottom).toBeLessThanOrEqual(geometry.sortTop);expect(geometry.searchTop).toBeCloseTo(geometry.sortTop,0);expect(geometry.utilityTop).toBeCloseTo(geometry.sortTop,0);expect(geometry.searchLeft).toBeGreaterThanOrEqual(geometry.utilityRight);expect(geometry.mode.radius).not.toBe('9999px');expect(geometry.mode.width).toBeGreaterThan(geometry.railWidth*.8);expect(geometry.projectWidth).toBeLessThan(geometry.railWidth*.8);expect({project:geometry.projectPadding,controls:geometry.controlsPadding,heading:geometry.headingPadding,content:geometry.contentPadding}).toEqual({project:'8px',controls:'4px 8px 8px',heading:'8px',content:'8px'});expect(geometry.headingBorderBottom).toBe('1px');expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth/4);await rail.screenshot({path:'/private/tmp/hs2-r292m4-terminal-ticket-rail-wide.png'});await project.click();const longProject=project.locator('wa-option[value="docs"]');await expect(longProject).toBeVisible();const menuGeometry=await project.evaluate(node=>{const listbox=node.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!,listboxBox=listbox.getBoundingClientRect(),option=node.querySelector<HTMLElement>('wa-option[value="docs"]')!,label=option.shadowRoot!.querySelector<HTMLElement>('[part="label"]')!;return{triggerWidth:node.getBoundingClientRect().width,listboxWidth:listboxBox.width,listboxLeft:listboxBox.left,listboxRight:listboxBox.right,viewportWidth:innerWidth,labelClientWidth:label.clientWidth,labelScrollWidth:label.scrollWidth,labelClientHeight:label.clientHeight,labelScrollHeight:label.scrollHeight}});expect(menuGeometry.listboxWidth).toBeGreaterThan(menuGeometry.triggerWidth);expect(menuGeometry.listboxLeft).toBeGreaterThanOrEqual(0);expect(menuGeometry.listboxRight).toBeLessThanOrEqual(menuGeometry.viewportWidth);expect(menuGeometry.labelScrollWidth-menuGeometry.labelClientWidth).toBeLessThanOrEqual(1);expect(menuGeometry.labelScrollHeight-menuGeometry.labelClientHeight).toBeLessThanOrEqual(1);await page.screenshot({path:'/private/tmp/hs2-fpftyy-terminal-ticket-rail-project-menu-wide.png',fullPage:true});
+test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  const rail = page.locator('[data-component="terminal-ticket-rail"]'),
+    project = rail.locator('wa-select[name="terminal-rail-project"]'),
+    view = rail.locator('wa-select[name="terminal-rail-view"]'),
+    launcher = rail.getByRole('button', { name: 'Ticket…' });
+  await expect(rail).toBeVisible();
+  await expect(project).toHaveAttribute('value', 'demo');
+  await expect(view).toHaveAttribute('value', 'all');
+  await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
+  await expect(launcher).toContainText('Ticket…');
+  await expect(launcher).not.toContainText('New ticket');
+  await expect(rail.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
+  await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);
+  await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style', 'push');
+  const geometry = await rail.evaluate((node) => {
+    const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
+      mode = modeElement.getBoundingClientRect(),
+      sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
+      search = node.querySelector('.workspace-header__search-group')!.getBoundingClientRect(),
+      utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
+      project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      projectChrome = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__project')!),
+      controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
+      heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
+      content = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__content')!),
+      launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
+    return {
+      mode: {
+        top: mode.top,
+        bottom: mode.bottom,
+        width: mode.width,
+        radius: getComputedStyle(modeElement).borderRadius,
+      },
+      sortTop: sort.top,
+      searchTop: search.top,
+      searchLeft: search.left,
+      utilityTop: utility.top,
+      utilityRight: utility.right,
+      projectWidth: project.width,
+      railWidth: node.getBoundingClientRect().width,
+      projectPadding: projectChrome.padding,
+      controlsPadding: controls.padding,
+      headingPadding: heading.padding,
+      headingBorderBottom: heading.borderBottomWidth,
+      contentPadding: content.padding,
+      launcherBackground: launcherStyle.backgroundColor,
+      launcherRadius: launcherStyle.borderRadius,
+    };
+  });
+  expect(geometry.mode.bottom).toBeLessThanOrEqual(geometry.sortTop);
+  expect(geometry.searchTop).toBeCloseTo(geometry.sortTop, 0);
+  expect(geometry.utilityTop).toBeCloseTo(geometry.sortTop, 0);
+  expect(geometry.searchLeft).toBeGreaterThanOrEqual(geometry.utilityRight);
+  expect(geometry.mode.radius).not.toBe('9999px');
+  expect(geometry.mode.width).toBeGreaterThan(geometry.railWidth * 0.8);
+  expect(geometry.projectWidth).toBeLessThan(geometry.railWidth * 0.8);
+  expect({
+    project: geometry.projectPadding,
+    controls: geometry.controlsPadding,
+    heading: geometry.headingPadding,
+    content: geometry.contentPadding,
+  }).toEqual({ project: '8px', controls: '4px 8px 8px', heading: '8px', content: '8px' });
+  expect(geometry.headingBorderBottom).toBe('1px');
+  expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
+  expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
+  await rail.screenshot({ path: '/private/tmp/hs2-r292m4-terminal-ticket-rail-wide.png' });
+  await project.click();
+  const longProject = project.locator('wa-option[value="docs"]');
+  await expect(longProject).toBeVisible();
+  const menuGeometry = await project.evaluate((node) => {
+    const listbox = node.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!,
+      listboxBox = listbox.getBoundingClientRect(),
+      option = node.querySelector<HTMLElement>('wa-option[value="docs"]')!,
+      label = option.shadowRoot!.querySelector<HTMLElement>('[part="label"]')!;
+    return {
+      triggerWidth: node.getBoundingClientRect().width,
+      listboxWidth: listboxBox.width,
+      listboxLeft: listboxBox.left,
+      listboxRight: listboxBox.right,
+      viewportWidth: innerWidth,
+      labelClientWidth: label.clientWidth,
+      labelScrollWidth: label.scrollWidth,
+      labelClientHeight: label.clientHeight,
+      labelScrollHeight: label.scrollHeight,
+    };
+  });
+  expect(menuGeometry.listboxWidth).toBeGreaterThan(menuGeometry.triggerWidth);
+  expect(menuGeometry.listboxLeft).toBeGreaterThanOrEqual(0);
+  expect(menuGeometry.listboxRight).toBeLessThanOrEqual(menuGeometry.viewportWidth);
+  expect(menuGeometry.labelScrollWidth - menuGeometry.labelClientWidth).toBeLessThanOrEqual(1);
+  expect(menuGeometry.labelScrollHeight - menuGeometry.labelClientHeight).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/private/tmp/hs2-fpftyy-terminal-ticket-rail-project-menu-wide.png', fullPage: true });
   // HS2-7N6F67: the compact view selector must not clip its longer option labels either.
-  await page.keyboard.press('Escape');await view.click();const longView=view.locator('wa-option[value="backlog"]');await expect(longView).toBeVisible();const viewMenuGeometry=await view.evaluate(node=>{const listbox=node.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!,listboxBox=listbox.getBoundingClientRect(),option=node.querySelector<HTMLElement>('wa-option[value="backlog"]')!,label=option.shadowRoot!.querySelector<HTMLElement>('[part="label"]')!;return{triggerWidth:node.getBoundingClientRect().width,listboxWidth:listboxBox.width,listboxLeft:listboxBox.left,listboxRight:listboxBox.right,viewportWidth:innerWidth,labelClientWidth:label.clientWidth,labelScrollWidth:label.scrollWidth};});expect(viewMenuGeometry.listboxWidth).toBeGreaterThanOrEqual(viewMenuGeometry.triggerWidth);expect(viewMenuGeometry.listboxLeft).toBeGreaterThanOrEqual(0);expect(viewMenuGeometry.listboxRight).toBeLessThanOrEqual(viewMenuGeometry.viewportWidth);expect(viewMenuGeometry.labelScrollWidth-viewMenuGeometry.labelClientWidth).toBeLessThanOrEqual(1);await page.screenshot({path:'/private/tmp/hs2-7n6f67-terminal-ticket-rail-view-menu-wide.png',fullPage:true});await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await view.click();
+  const longView = view.locator('wa-option[value="backlog"]');
+  await expect(longView).toBeVisible();
+  const viewMenuGeometry = await view.evaluate((node) => {
+    const listbox = node.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!,
+      listboxBox = listbox.getBoundingClientRect(),
+      option = node.querySelector<HTMLElement>('wa-option[value="backlog"]')!,
+      label = option.shadowRoot!.querySelector<HTMLElement>('[part="label"]')!;
+    return {
+      triggerWidth: node.getBoundingClientRect().width,
+      listboxWidth: listboxBox.width,
+      listboxLeft: listboxBox.left,
+      listboxRight: listboxBox.right,
+      viewportWidth: innerWidth,
+      labelClientWidth: label.clientWidth,
+      labelScrollWidth: label.scrollWidth,
+    };
+  });
+  expect(viewMenuGeometry.listboxWidth).toBeGreaterThanOrEqual(viewMenuGeometry.triggerWidth);
+  expect(viewMenuGeometry.listboxLeft).toBeGreaterThanOrEqual(0);
+  expect(viewMenuGeometry.listboxRight).toBeLessThanOrEqual(viewMenuGeometry.viewportWidth);
+  expect(viewMenuGeometry.labelScrollWidth - viewMenuGeometry.labelClientWidth).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/private/tmp/hs2-7n6f67-terminal-ticket-rail-view-menu-wide.png', fullPage: true });
+  await page.keyboard.press('Escape');
   // HS2-HEYASQ: the rail clips overflow on several ancestors, so the select focus rings must be inset
   // (negative outline-offset) to stay fully visible rather than cropped at a container edge.
-  const focusRingOffsets=await rail.evaluate(node=>['terminal-rail-project','terminal-rail-view'].map(name=>{const combobox=node.querySelector<HTMLElement>(`wa-select[name="${name}"]`)!.shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!;return getComputedStyle(combobox).outlineOffset;}));for(const offset of focusRingOffsets){expect(Number.parseFloat(offset)).toBeLessThan(0);}await page.setViewportSize({width:760,height:640});await expect.poll(()=>rail.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await expect(launcher).toBeVisible();const narrowLauncher=await rail.evaluate(node=>{const rail=node.getBoundingClientRect(),button=node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!.getBoundingClientRect();return{railRight:rail.right,buttonRight:button.right}});expect(narrowLauncher.buttonRight).toBeLessThanOrEqual(narrowLauncher.railRight);await rail.screenshot({path:'/private/tmp/hs2-r292m4-terminal-ticket-rail-narrow.png'});
+  const focusRingOffsets = await rail.evaluate((node) =>
+    ['terminal-rail-project', 'terminal-rail-view'].map((name) => {
+      const combobox = node
+        .querySelector<HTMLElement>(`wa-select[name="${name}"]`)!
+        .shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!;
+      return getComputedStyle(combobox).outlineOffset;
+    }),
+  );
+  for (const offset of focusRingOffsets) {
+    expect(Number.parseFloat(offset)).toBeLessThan(0);
+  }
+  await page.setViewportSize({ width: 760, height: 640 });
+  await expect.poll(() => rail.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(launcher).toBeVisible();
+  const narrowLauncher = await rail.evaluate((node) => {
+    const rail = node.getBoundingClientRect(),
+      button = node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!.getBoundingClientRect();
+    return { railRight: rail.right, buttonRight: button.right };
+  });
+  expect(narrowLauncher.buttonRight).toBeLessThanOrEqual(narrowLauncher.railRight);
+  await rail.screenshot({ path: '/private/tmp/hs2-r292m4-terminal-ticket-rail-narrow.png' });
 });
 
-test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship',async({page})=>{
-  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=fixed-aspect-terminal-card');const stage=page.getByRole('region',{name:'Fixed aspect terminal card variants'}),preview=stage.locator('[data-fixed-aspect-terminal-card="preview"]'),magnified=stage.locator('[data-fixed-aspect-terminal-card="magnified"]'),previewViewport=preview.locator('[data-display-mode="scaled-preview"]'),magnifiedViewport=magnified.locator('[data-display-mode="interactive"]');await expect(preview).toBeVisible();await expect(magnified).toBeVisible();for(const viewport of [previewViewport,magnifiedViewport]){await expect(viewport).toHaveAttribute('data-connection','connected');await expect(viewport).toHaveAttribute('data-grid-size','80x24');await expect(viewport).toHaveAttribute('data-renderer','dom');const rows=viewport.locator('.xterm-rows > div');await expect(rows).toHaveCount(24);await expect(rows.first()).toContainText('GNU nano 8.4');await expect(rows.nth(1)).toContainText('File: src/main.tsx');await expect(rows.nth(20)).toContainText('export { app };');await expect(rows.last()).toContainText('^X Exit');for(const bar of [rows.first(),rows.nth(1),rows.nth(21),rows.nth(22),rows.last()])expect(await bar.evaluate(node=>node.textContent.length)).toBe(80)}await expect(preview).toHaveCSS('border-width','0px');await expect(magnified).toHaveCSS('border-width','0px');const sizing=await stage.evaluate(element=>{const preview=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!.getBoundingClientRect(),magnified=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]')!.getBoundingClientRect(),row=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"] .xterm-rows > div')!;return{previewWidth:preview.width,magnifiedWidth:magnified.width,font:getComputedStyle(row).fontFamily}});expect(sizing.previewWidth).toBeLessThanOrEqual(352);expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);expect(sizing.font).toContain('ui-monospace');const relationships=page.locator('.kui-catalog__related-menu');await relationships.getByRole('button',{name:/Component/}).click();await expect(relationships.getByText('Used by',{exact:true})).toBeVisible();await expect(relationships.getByText('TerminalDashboard',{exact:true})).toBeVisible();await expect(relationships).toHaveJSProperty('open',true);await page.waitForTimeout(1_200);await expect(relationships).toHaveJSProperty('open',true);await page.screenshot({path:'/private/tmp/hs2-s59crp-related-popup-open.png',fullPage:true});await page.keyboard.press('Escape');await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(preview).toBeVisible();await expect(magnified).toBeVisible();await expect.poll(()=>stage.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal-narrow.png',fullPage:true});
+test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship', async ({ page }) => {
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
+  const stage = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
+    preview = stage.locator('[data-fixed-aspect-terminal-card="preview"]'),
+    magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]'),
+    previewViewport = preview.locator('[data-display-mode="scaled-preview"]'),
+    magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(preview).toBeVisible();
+  await expect(magnified).toBeVisible();
+  for (const viewport of [previewViewport, magnifiedViewport]) {
+    await expect(viewport).toHaveAttribute('data-connection', 'connected');
+    await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+    await expect(viewport).toHaveAttribute('data-renderer', 'dom');
+    const rows = viewport.locator('.xterm-rows > div');
+    await expect(rows).toHaveCount(24);
+    await expect(rows.first()).toContainText('GNU nano 8.4');
+    await expect(rows.nth(1)).toContainText('File: src/main.tsx');
+    await expect(rows.nth(20)).toContainText('export { app };');
+    await expect(rows.last()).toContainText('^X Exit');
+    for (const bar of [rows.first(), rows.nth(1), rows.nth(21), rows.nth(22), rows.last()])
+      expect(await bar.evaluate((node) => node.textContent.length)).toBe(80);
+  }
+  await expect(preview).toHaveCSS('border-width', '0px');
+  await expect(magnified).toHaveCSS('border-width', '0px');
+  const sizing = await stage.evaluate((element) => {
+    const preview = element
+        .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!
+        .getBoundingClientRect(),
+      magnified = element
+        .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]')!
+        .getBoundingClientRect(),
+      row = element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"] .xterm-rows > div')!;
+    return { previewWidth: preview.width, magnifiedWidth: magnified.width, font: getComputedStyle(row).fontFamily };
+  });
+  expect(sizing.previewWidth).toBeLessThanOrEqual(352);
+  expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);
+  expect(sizing.font).toContain('ui-monospace');
+  const relationships = page.locator('.kui-catalog__related-menu');
+  await relationships.getByRole('button', { name: /Component/ }).click();
+  await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();
+  await expect(relationships.getByText('TerminalDashboard', { exact: true })).toBeVisible();
+  await expect(relationships).toHaveJSProperty('open', true);
+  await page.waitForTimeout(1_200);
+  await expect(relationships).toHaveJSProperty('open', true);
+  await page.screenshot({ path: '/private/tmp/hs2-s59crp-related-popup-open.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: '/private/tmp/hs2-g4g95r-nano-fills-terminal.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(preview).toBeVisible();
+  await expect(magnified).toBeVisible();
+  await expect.poll(() => stage.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-g4g95r-nano-fills-terminal-narrow.png', fullPage: true });
 });
 
-test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const show=page.getByRole('button',{name:'Manage Workspace Visibility'}),dialog=page.locator('[data-terminal-visibility-dialog]');await expect(show).toBeVisible();await expect(dialog).toHaveJSProperty('open',false);await show.click();await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const nameDialog=page.locator('[data-terminal-visibility-name-dialog]'),name=nameDialog.getByRole('textbox',{name:'Group name'});await expect(nameDialog).toHaveJSProperty('open',true);await expect(name).toBeFocused();await name.fill('Review');await nameDialog.getByRole('button',{name:'Add',exact:true}).click();await expect(nameDialog).toHaveJSProperty('open',false);const review=dialog.getByRole('tab',{name:'Review'});await expect(review).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-z0m2vv-visibility-demo-open-wide.png',fullPage:true});await page.keyboard.press('Escape');await expect(dialog).toHaveJSProperty('open',false);await expect(show).toBeVisible();await show.click();await expect(dialog).toHaveJSProperty('open',true);await page.setViewportSize({width:390,height:844});await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-z0m2vv-visibility-demo-open-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:900});await review.click({button:'right'});const menu=dialog.getByRole('menu',{name:'Visibility group actions'});await expect(menu.getByText('Rename…')).toBeVisible();await expect(menu.getByText('Delete')).toBeVisible();
+test('represents interactive terminal visibility groups in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-visibility-dialog');
+  const show = page.getByRole('button', { name: 'Manage Workspace Visibility' }),
+    dialog = page.locator('[data-terminal-visibility-dialog]');
+  await expect(show).toBeVisible();
+  await expect(dialog).toHaveJSProperty('open', false);
+  await show.click();
+  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
+  await expect(dialog.getByRole('tab', { name: 'Focus' })).toHaveAttribute('aria-selected', 'true');
+  await dialog.getByRole('button', { name: 'Add visibility group' }).click();
+  const nameDialog = page.locator('[data-terminal-visibility-name-dialog]'),
+    name = nameDialog.getByRole('textbox', { name: 'Group name' });
+  await expect(nameDialog).toHaveJSProperty('open', true);
+  await expect(name).toBeFocused();
+  await name.fill('Review');
+  await nameDialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(nameDialog).toHaveJSProperty('open', false);
+  const review = dialog.getByRole('tab', { name: 'Review' });
+  await expect(review).toHaveAttribute('aria-selected', 'true');
+  await dialog.getByRole('button', { name: /Hide Development/ }).click();
+  await expect(dialog.getByRole('button', { name: /Show Development/ })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-z0m2vv-visibility-demo-open-wide.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(show).toBeVisible();
+  await show.click();
+  await expect(dialog).toHaveJSProperty('open', true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-z0m2vv-visibility-demo-open-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await review.click({ button: 'right' });
+  const menu = dialog.getByRole('menu', { name: 'Visibility group actions' });
+  await expect(menu.getByText('Rename…')).toBeVisible();
+  await expect(menu.getByText('Delete')).toBeVisible();
 });
 
 test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
   let submitted: Record<string, unknown> | undefined;
-  await page.route('**/__hotsheet/dev-review/tickets', async route => {
+  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
     submitted = route.request().postDataJSON();
     await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-REVIEW' }) });
   });
@@ -301,9 +876,13 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');
   const captureTarget = page.locator('.kui-catalog__sidebar [data-item-id="ticket-row"]');
   await captureTarget.scrollIntoViewIfNeeded();
-  await captureTarget.evaluate(node => { (node as HTMLElement).style.color = 'oklab(55% 0.1 0.1)'; });
-  await page.locator('.kui-catalog__header').evaluate(node => { (node as HTMLElement).style.boxShadow = '0 0 2px oklab(55% 0.1 0.1)'; });
-  expect(await captureTarget.evaluate(node => getComputedStyle(node).color)).toMatch(/^(?:oklab|rgb)/);
+  await captureTarget.evaluate((node) => {
+    (node as HTMLElement).style.color = 'oklab(55% 0.1 0.1)';
+  });
+  await page.locator('.kui-catalog__header').evaluate((node) => {
+    (node as HTMLElement).style.boxShadow = '0 0 2px oklab(55% 0.1 0.1)';
+  });
+  expect(await captureTarget.evaluate((node) => getComputedStyle(node).color)).toMatch(/^(?:oklab|rgb)/);
   const markerBox = (await captureTarget.boundingBox())!;
   const tool = page.locator('.hs-dev-review');
   await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
@@ -316,7 +895,10 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.keyboard.down('Alt');
   await expect(page.locator('html')).toHaveClass(/hs-dev-review--crosshair/);
   await expect(page.locator('body')).toHaveCSS('cursor', 'crosshair');
-  await page.mouse.move(markerBox.x, markerBox.y); await page.mouse.down(); await page.mouse.move(markerBox.x + markerBox.width, markerBox.y + markerBox.height); await page.mouse.up();
+  await page.mouse.move(markerBox.x, markerBox.y);
+  await page.mouse.down();
+  await page.mouse.move(markerBox.x + markerBox.width, markerBox.y + markerBox.height);
+  await page.mouse.up();
   await page.keyboard.up('Alt');
   await expect(page.locator('html')).not.toHaveClass(/hs-dev-review--crosshair/);
   const selection = tool.locator('.hs-dev-review__rect');
@@ -324,60 +906,110 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(selection.locator('.hs-dev-review__handle')).toHaveCount(8);
   const beforeScroll = await selection.boundingBox();
   const scroller = page.locator('.kui-catalog__sidebar nav');
-  const initialScroll = await scroller.evaluate(node => node.scrollTop);
-  await scroller.evaluate(node => { node.scrollBy(0, -80); });
-  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeLessThan(initialScroll);
+  const initialScroll = await scroller.evaluate((node) => node.scrollTop);
+  await scroller.evaluate((node) => {
+    node.scrollBy(0, -80);
+  });
+  await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBeLessThan(initialScroll);
   const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
   await expect.poll(async () => (await selection.boundingBox())!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
   const stableSelectionNode = await selection.elementHandle();
   const before = await selection.boundingBox();
   const resize = selection.getByRole('button', { name: /Resize capture 1 from se/ });
   const handle = await resize.boundingBox();
-  await page.mouse.move(handle!.x + 4, handle!.y + 4); await page.mouse.down(); await page.mouse.move(handle!.x + 54, handle!.y + 34); await page.mouse.up();
+  await page.mouse.move(handle!.x + 4, handle!.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + 54, handle!.y + 34);
+  await page.mouse.up();
   const after = await selection.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
   expect(after!.height).toBeGreaterThan(before!.height);
-  expect(await stableSelectionNode.evaluate(node => node.isConnected)).toBe(true);
+  expect(await stableSelectionNode.evaluate((node) => node.isConnected)).toBe(true);
   const corner = await resize.boundingBox();
   expect(Math.abs(corner!.width - corner!.height)).toBeLessThanOrEqual(1);
   const eastResize = selection.getByRole('button', { name: /Resize capture 1 from e$/ });
   await expect(eastResize).toHaveCSS('cursor', 'ew-resize');
   const eastHandle = await eastResize.boundingBox();
   const beforeEast = await selection.boundingBox();
-  await page.mouse.move(eastHandle!.x + 4, eastHandle!.y + 10); await page.mouse.down(); await page.mouse.move(eastHandle!.x + 34, eastHandle!.y + 10); await page.mouse.up();
+  await page.mouse.move(eastHandle!.x + 4, eastHandle!.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(eastHandle!.x + 34, eastHandle!.y + 10);
+  await page.mouse.up();
   const afterEast = await selection.boundingBox();
   expect(afterEast!.width).toBeGreaterThan(beforeEast!.width);
   expect(Math.abs(afterEast!.height - beforeEast!.height)).toBeLessThanOrEqual(1);
   await page.keyboard.down('Alt');
-  await page.mouse.move(720, 300); await page.mouse.down(); await page.mouse.move(920, 500); await page.mouse.up();
+  await page.mouse.move(720, 300);
+  await page.mouse.down();
+  await page.mouse.move(920, 500);
+  await page.mouse.up();
   await page.keyboard.up('Alt');
   await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(2);
   const removable = tool.locator('.hs-dev-review__rect').last();
   const removableBox = await removable.boundingBox();
-  await page.keyboard.down('Alt'); await page.keyboard.down('Shift');
+  await page.keyboard.down('Alt');
+  await page.keyboard.down('Shift');
   await page.mouse.move(removableBox!.x + 30, removableBox!.y + 30);
   await expect(removable).toHaveCSS('cursor', 'not-allowed');
   await page.mouse.click(removableBox!.x + 30, removableBox!.y + 30);
-  await page.keyboard.up('Shift'); await page.keyboard.up('Alt');
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('Alt');
   await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(1);
   await page.keyboard.down('Alt');
-  await page.mouse.move(720, 300); await page.mouse.down(); await page.mouse.move(920, 500); await page.mouse.up();
+  await page.mouse.move(720, 300);
+  await page.mouse.down();
+  await page.mouse.move(920, 500);
+  await page.mouse.up();
   await page.keyboard.up('Alt');
   await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(2);
   await page.waitForTimeout(400);
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
   await expect(dialog).toBeVisible();
-  expect(await dialog.evaluate(node=>{const style=(selector:string)=>getComputedStyle(node.querySelector(selector)!);return{body:[style('.hs-dev-review__dialog-body').padding,style('.hs-dev-review__dialog-body').gap],footer:[style('footer').padding,style('footer').gap],evidence:style('.hs-dev-review__evidence').gap,dropzone:style('.hs-dev-review__dropzone').padding,label:style('.hs-dev-review__notes').gap,textarea:style('textarea').padding,button:style('footer button').padding}})).toEqual({body:['24px','24px'],footer:['12px 24px','8px'],evidence:'16px',dropzone:'16px',label:'4px',textarea:'16px',button:'0px 16px'});
+  expect(
+    await dialog.evaluate((node) => {
+      const style = (selector: string) => getComputedStyle(node.querySelector(selector)!);
+      return {
+        body: [style('.hs-dev-review__dialog-body').padding, style('.hs-dev-review__dialog-body').gap],
+        footer: [style('footer').padding, style('footer').gap],
+        evidence: style('.hs-dev-review__evidence').gap,
+        dropzone: style('.hs-dev-review__dropzone').padding,
+        label: style('.hs-dev-review__notes').gap,
+        textarea: style('textarea').padding,
+        button: style('footer button').padding,
+      };
+    }),
+  ).toEqual({
+    body: ['24px', '24px'],
+    footer: ['12px 24px', '8px'],
+    evidence: '16px',
+    dropzone: '16px',
+    label: '4px',
+    textarea: '16px',
+    button: '0px 16px',
+  });
   await expect(dialog.locator('.kui-panel-header')).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
-  expect(await dialog.evaluate(node => {
-    const probe=document.createElement('span');probe.style.background='var(--hs-shell-divider)';document.body.append(probe);
-    const result={border:getComputedStyle(node).borderColor,dividerMatches:getComputedStyle(node).borderColor===getComputedStyle(probe).backgroundColor,surface:getComputedStyle(node).backgroundColor};probe.remove();return result;
-  })).toEqual({ border: 'rgb(209, 209, 214)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
+  expect(
+    await dialog.evaluate((node) => {
+      const probe = document.createElement('span');
+      probe.style.background = 'var(--hs-shell-divider)';
+      document.body.append(probe);
+      const result = {
+        border: getComputedStyle(node).borderColor,
+        dividerMatches: getComputedStyle(node).borderColor === getComputedStyle(probe).backgroundColor,
+        surface: getComputedStyle(node).backgroundColor,
+      };
+      probe.remove();
+      return result;
+    }),
+  ).toEqual({ border: 'rgb(209, 209, 214)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
-  await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute(
+    'src',
+    /^data:image\/png;base64,/,
+  );
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-wide.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-dev-review-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
@@ -385,21 +1017,45 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-narrow.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-dev-review-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
-  const capturedPixels = await dialog.getByRole('img', { name: 'Captured region 1 preview' }).evaluate(async image => {
-    if (!(image as HTMLImageElement).complete) await new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); });
-    const canvas = document.createElement('canvas'); canvas.width = (image as HTMLImageElement).naturalWidth; canvas.height = (image as HTMLImageElement).naturalHeight; const context = canvas.getContext('2d')!; context.drawImage(image as HTMLImageElement, 0, 0); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let green = 0; for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1; return { center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data], green, width: canvas.width, height: canvas.height };
-  });
+  const capturedPixels = await dialog
+    .getByRole('img', { name: 'Captured region 1 preview' })
+    .evaluate(async (image) => {
+      if (!(image as HTMLImageElement).complete)
+        await new Promise((resolve) => {
+          image.addEventListener('load', resolve, { once: true });
+        });
+      const canvas = document.createElement('canvas');
+      canvas.width = (image as HTMLImageElement).naturalWidth;
+      canvas.height = (image as HTMLImageElement).naturalHeight;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(image as HTMLImageElement, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let green = 0;
+      for (let index = 0; index < pixels.length; index += 4)
+        if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1;
+      return {
+        center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data],
+        green,
+        width: canvas.width,
+        height: canvas.height,
+      };
+    });
   expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([214, 236, 255]);
   await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
   await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
   const attachmentInput = dialog.getByLabel('Add attachments');
-  await attachmentInput.setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('review notes') });
+  await attachmentInput.setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('review notes'),
+  });
   await expect(dialog.getByText('notes.txt')).toBeVisible();
   await dialog.getByRole('button', { name: 'Remove attachment notes.txt' }).click();
   await expect(dialog.getByText('notes.txt')).toHaveCount(0);
   const dropzone = dialog.locator('.hs-dev-review__dropzone');
-  await dropzone.evaluate(node => {
-    const transfer = new DataTransfer(); transfer.items.add(new File(['log'], 'debug.log', { type: 'text/plain' }));
+  await dropzone.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['log'], 'debug.log', { type: 'text/plain' }));
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
   });
   await expect(dialog.getByText('debug.log')).toBeVisible();
@@ -410,32 +1066,41 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toBeVisible();
-  page.once('dialog', dialog => void dialog.dismiss());
+  page.once('dialog', (dialog) => void dialog.dismiss());
   await tool.getByRole('button', { name: 'Feedback' }).click();
   await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(1);
-  page.once('dialog', dialog => void dialog.accept());
+  page.once('dialog', (dialog) => void dialog.accept());
   await tool.getByRole('button', { name: 'Feedback' }).click();
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
   await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(0);
   await tool.getByRole('button', { name: 'Feedback' }).click();
   await page.keyboard.down('Alt');
-  await page.mouse.move(500, 240); await page.mouse.down(); await page.mouse.move(900, 480); await page.mouse.up();
+  await page.mouse.move(500, 240);
+  await page.mouse.down();
+  await page.mouse.move(900, 480);
+  await page.mouse.up();
   await page.keyboard.up('Alt');
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const reopened = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
-  await reopened.getByLabel('Add attachments').setInputFiles({ name: 'context.txt', mimeType: 'text/plain', buffer: Buffer.from('context') });
+  await reopened
+    .getByLabel('Add attachments')
+    .setInputFiles({ name: 'context.txt', mimeType: 'text/plain', buffer: Buffer.from('context') });
   await reopened.getByRole('textbox', { name: 'Feedback notes' }).fill('The selected row spacing is inconsistent.');
   await reopened.getByRole('button', { name: 'Create Ticket' }).click();
   await expect(reopened.getByRole('status')).toContainText('HS2-REVIEW created');
   await expect.poll(() => submitted).toBeTruthy();
-  expect(submitted).toMatchObject({ notes: 'The selected row spacing is inconsistent.', captures: [{ filename: expect.stringMatching(/^ux-feedback-\d+\.png$/) }], attachments: [{ filename: 'context.txt', mimeType: 'text/plain' }] });
+  expect(submitted).toMatchObject({
+    notes: 'The selected row spacing is inconsistent.',
+    captures: [{ filename: expect.stringMatching(/^ux-feedback-\d+\.png$/) }],
+    attachments: [{ filename: 'context.txt', mimeType: 'text/plain' }],
+  });
   expect((submitted!.captures as Array<{ dataUrl: string }>)[0].dataUrl).toMatch(/^data:image\/png;base64,/);
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
 });
 
 test('captures before and after CSSOM snapshots through CSS Live Edit', async ({ page }) => {
   let submitted: Record<string, unknown> | undefined;
-  await page.route('**/__hotsheet/dev-review/tickets', async route => {
+  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
     submitted = route.request().postDataJSON();
     await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-CSS' }) });
   });
@@ -470,12 +1135,16 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
   // Reassert the DevTools-authored inline declaration after screenshot/layout work so the
   // captured "after" CSSOM cannot race a responsive catalog rerender under full-suite load.
-  await page.locator('.kui-catalog__header').evaluate(node=>{(node as HTMLElement).style.paddingTop='31px'});
-  await expect(page.locator('.kui-catalog__header')).toHaveCSS('padding-top','31px');
+  await page.locator('.kui-catalog__header').evaluate((node) => {
+    (node as HTMLElement).style.paddingTop = '31px';
+  });
+  await expect(page.locator('.kui-catalog__header')).toHaveCSS('padding-top', '31px');
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   await expect.poll(() => submitted).toBeTruthy();
   expect(submitted).toMatchObject({
-    notes: expect.stringContaining('Compare the attached css-live-edit-before.css and css-live-edit-after.css snapshots'),
+    notes: expect.stringContaining(
+      'Compare the attached css-live-edit-before.css and css-live-edit-after.css snapshots',
+    ),
     captures: [],
     attachments: [
       { filename: 'css-live-edit-before.css', mimeType: 'text/css' },
@@ -484,7 +1153,8 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   });
   const attachments = submitted!.attachments as Array<{ dataUrl: string }>;
   const decode = (value: string) => Buffer.from(value.slice(value.indexOf(',') + 1), 'base64').toString('utf8');
-  const before = decode(attachments[0].dataUrl), after = decode(attachments[1].dataUrl);
+  const before = decode(attachments[0].dataUrl),
+    after = decode(attachments[1].dataUrl);
   expect(before).not.toContain('playwright-css-live-edit');
   expect(after).toContain('stylesheet');
   expect(after).toContain('.kui-catalog__detail { outline: rgb(12, 200, 34) solid 6px; }');
@@ -498,7 +1168,10 @@ test('keeps feedback rectangle input within its frame budget in the UX demo', as
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');
   const measurement = await measureFeedbackRectangle(page, { x: 460, y: 260 }, { x: 780, y: 460 });
-  await testInfo.attach('feedback-performance.json', { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' });
+  await testInfo.attach('feedback-performance.json', {
+    body: JSON.stringify(measurement, null, 2),
+    contentType: 'application/json',
+  });
   expectResponsiveFeedbackRectangle(measurement);
   await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-ux-demo-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -516,10 +1189,16 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   const appearance = inspector.locator('wa-select[name="appearance"]');
   const icon = inspector.locator('wa-checkbox[name="show-icon"]');
   const compact = inspector.locator('wa-checkbox[name="compact"]');
-  await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'verified'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await status.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'verified';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(badge).toContainText('Verified');
   await expect(badge.locator('[data-lucide="badge-check"]')).toHaveCount(1);
-  await appearance.evaluate((node: HTMLElement & { value: string }) => { node.value = 'plain'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await appearance.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'plain';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(badge).toHaveAttribute('data-appearance', 'plain');
   await expect(badge).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await compact.click();
@@ -536,17 +1215,32 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(badge).not.toHaveClass(/status-badge--compact/);
   await expect(badge.locator('[data-lucide="clock"]')).toHaveCount(1);
   await expect(badge.locator('.status-badge__icon')).toHaveCount(1);
-  await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'completed'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await status.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'completed';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(badge).toContainText('Completed');
   await expect(badge.locator('[data-lucide="circle-check"]')).toHaveCount(1);
 });
 
-test('demonstrates the production Not Working dialog and pending evidence picker',async({page})=>{
-  await page.goto('/ux-demo?component=not-working-dialog');await page.getByRole('button',{name:'Open Not Working dialog'}).click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DEMO'});
+test('demonstrates the production Not Working dialog and pending evidence picker', async ({ page }) => {
+  await page.goto('/ux-demo?component=not-working-dialog');
+  await page.getByRole('button', { name: 'Open Not Working dialog' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Not Working — HS2-DEMO' });
   // wa-dialog projects its content into a shadow-DOM native <dialog> in the top layer, so the
   // host element itself has zero height — asserting toBeVisible() on the host is wrong (the real
   // app's tests assert content/focus instead). Assert the dialog opened, then that its content shows.
-  await expect(dialog).toHaveAttribute('open', '');await expect(dialog.getByText('diagnostic screenshot with a deliberately long filename.png')).toBeVisible();await dialog.getByRole('textbox',{name:'What’s wrong?'}).fill('The verification failed.');await dialog.getByLabel('Browse evidence attachments').setInputFiles({name:'new-proof.txt',mimeType:'text/plain',buffer:Buffer.from('proof')});await expect(dialog.getByText('new-proof.txt')).toBeVisible();await dialog.getByRole('button',{name:'Remove new-proof.txt'}).click();await expect(dialog.getByText('new-proof.txt')).toHaveCount(0);await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(page.getByText('Ticket returned to Not Started and added to Up Next.')).toBeVisible();
+  await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog.getByText('diagnostic screenshot with a deliberately long filename.png')).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'What’s wrong?' }).fill('The verification failed.');
+  await dialog
+    .getByLabel('Browse evidence attachments')
+    .setInputFiles({ name: 'new-proof.txt', mimeType: 'text/plain', buffer: Buffer.from('proof') });
+  await expect(dialog.getByText('new-proof.txt')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Remove new-proof.txt' }).click();
+  await expect(dialog.getByText('new-proof.txt')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Report Not Working' }).click();
+  await expect(page.getByText('Ticket returned to Not Started and added to Up Next.')).toBeVisible();
 });
 
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
@@ -574,10 +1268,22 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await tags.fill('client, regression');
   await agent.fill('Codex');
   await updated.fill('Now');
-  await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'verified'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'urgent'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await categoryIcon.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#ef4444'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await status.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'verified';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await priority.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'urgent';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await categoryIcon.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'bug';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await categoryColor.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = '#ef4444';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await upNext.click();
   await blocked.click();
   await needsReview.click();
@@ -598,12 +1304,21 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
+  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS(
+    'background-color',
+    'color(srgb 0.84 0.925333 1)',
+  );
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
-  await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await categoryColor.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = '#e5e7eb';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(156, 163, 175)');
-  await categoryIcon.evaluate((node: HTMLElement & { value: string }) => { node.value = ''; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await categoryIcon.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = '';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(row.locator('.ticket-list-row__category--label')).toHaveText('BUG');
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('width', '32px');
@@ -640,7 +1355,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('width', '32px');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
-  const upNextRailColor = await row.locator('.ticket-list-row__indicator').evaluate(element => getComputedStyle(element).backgroundColor);
+  const upNextRailColor = await row
+    .locator('.ticket-list-row__indicator')
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('color', upNextRailColor);
   await expect(row).toContainText('Claude');
   await expect(row).toContainText('1h ago');
@@ -670,26 +1387,40 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const menuItems = menu.locator('wa-dropdown-item');
   await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(11);
   await expect(menuItems).toHaveCount(27);
-  expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
+  expect(
+    await menuItems.evaluateAll((items) => items.every((item) => item.querySelector('[data-lucide]') !== null)),
+  ).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
   await expect(star).not.toHaveClass(/active/);
   await expect(upNext).toHaveJSProperty('checked', false);
   await expect(page.getByText('Toggle Up Next selected')).toBeVisible();
 
-  await title.fill('A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible');
-  await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'default'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await title.fill(
+    'A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible',
+  );
+  await priority.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'default';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(row.locator('[data-lucide="minus"]')).toHaveCount(1);
   await tags.fill('client, regression, server, ux');
-  await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
+  await row.evaluate((node: HTMLElement) => {
+    node.style.width = '320px';
+  });
   const [rowBox, timeBox, slugBox, identityBox, titleLineBoxes] = await Promise.all([
     row.boundingBox(),
     row.locator('.ticket-list-row__updated').boundingBox(),
     row.locator('.ticket-list-row__slug').boundingBox(),
     row.locator('.ticket-list-row__identity').boundingBox(),
-    row.locator('.ticket-list-row__identity strong').evaluate(node => [...node.getClientRects()].map(rect => ({ x: rect.x, width: rect.width }))),
+    row
+      .locator('.ticket-list-row__identity strong')
+      .evaluate((node) => [...node.getClientRects()].map((rect) => ({ x: rect.x, width: rect.width }))),
   ]);
-  expect(rowBox).not.toBeNull(); expect(timeBox).not.toBeNull(); expect(slugBox).not.toBeNull(); expect(identityBox).not.toBeNull();
+  expect(rowBox).not.toBeNull();
+  expect(timeBox).not.toBeNull();
+  expect(slugBox).not.toBeNull();
+  expect(identityBox).not.toBeNull();
   expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(3);
   expect(identityBox!.height).toBeLessThanOrEqual(43);
@@ -697,9 +1428,11 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('.ticket-list-row__updated')).toHaveCSS('float', 'right');
   await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
-  expect(await row.locator('.ticket-list-row__identity > *').evaluateAll(elements => elements.map(element => element.className || element.tagName.toLowerCase()))).toEqual([
-    'ticket-list-row__updated', 'ticket-list-row__slug', 'ticket-list-row__priority', 'strong',
-  ]);
+  expect(
+    await row
+      .locator('.ticket-list-row__identity > *')
+      .evaluateAll((elements) => elements.map((element) => element.className || element.tagName.toLowerCase())),
+  ).toEqual(['ticket-list-row__updated', 'ticket-list-row__slug', 'ticket-list-row__priority', 'strong']);
   expect(titleLineBoxes.length).toBeGreaterThan(1);
   expect(titleLineBoxes.at(-1)!.x + titleLineBoxes.at(-1)!.width).toBeGreaterThan(timeBox!.x);
   await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
@@ -707,20 +1440,54 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
 });
 
 test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {
-  await page.setViewportSize({width:1280,height:800});
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
   await expect(notes).toHaveCount(5);
-  for (const [kind, icon] of [['regular', 'message-square-text'], ['status', 'refresh-cw'], ['feedback_needed', 'circle-alert'], ['feedback_draft', 'file-pen-line'], ['activity', 'activity']] as const) {
+  for (const [kind, icon] of [
+    ['regular', 'message-square-text'],
+    ['status', 'refresh-cw'],
+    ['feedback_needed', 'circle-alert'],
+    ['feedback_draft', 'file-pen-line'],
+    ['activity', 'activity'],
+  ] as const) {
     const note = notes.filter({ has: page.locator(`[data-lucide="${icon}"]`) });
     await expect(note).toHaveAttribute('data-kind', kind);
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   }
   const standaloneNote = notes.filter({ has: page.locator('[data-lucide="message-square-text"]') });
-  const feedbackNote=notes.filter({has:page.locator('[data-lucide="circle-alert"]')}),activityNote=notes.filter({has:page.locator('[data-lucide="activity"]')});
-  expect(await standaloneNote.evaluate(node=>{const card=getComputedStyle(node),header=getComputedStyle(node.querySelector('.note-card__header')!),kind=getComputedStyle(node.querySelector('.note-card__kind')!),headerEnd=getComputedStyle(node.querySelector('.note-card__header-end')!);return{padding:card.padding,gap:card.rowGap,headerGap:header.gap,kindGap:kind.gap,headerEndGap:headerEnd.gap}})).toEqual({padding:'16px',gap:'8px',headerGap:'16px',kindGap:'4px',headerEndGap:'4px'});
-  expect(await activityNote.evaluate(node=>{const style=getComputedStyle(node);return{padding:style.padding,gap:style.rowGap}})).toEqual({padding:'8px 16px',gap:'4px'});
-  await feedbackNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-feedback-wide.png'});await activityNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-activity-wide.png'});await page.setViewportSize({width:430,height:760});expect(await notes.evaluateAll(items=>items.every(item=>item.scrollWidth<=item.clientWidth+1))).toBe(true);await feedbackNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-feedback-narrow.png'});await activityNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-activity-narrow.png'});await page.setViewportSize({width:1280,height:800});
+  const feedbackNote = notes.filter({ has: page.locator('[data-lucide="circle-alert"]') }),
+    activityNote = notes.filter({ has: page.locator('[data-lucide="activity"]') });
+  expect(
+    await standaloneNote.evaluate((node) => {
+      const card = getComputedStyle(node),
+        header = getComputedStyle(node.querySelector('.note-card__header')!),
+        kind = getComputedStyle(node.querySelector('.note-card__kind')!),
+        headerEnd = getComputedStyle(node.querySelector('.note-card__header-end')!);
+      return {
+        padding: card.padding,
+        gap: card.rowGap,
+        headerGap: header.gap,
+        kindGap: kind.gap,
+        headerEndGap: headerEnd.gap,
+      };
+    }),
+  ).toEqual({ padding: '16px', gap: '8px', headerGap: '16px', kindGap: '4px', headerEndGap: '4px' });
+  expect(
+    await activityNote.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { padding: style.padding, gap: style.rowGap };
+    }),
+  ).toEqual({ padding: '8px 16px', gap: '4px' });
+  await feedbackNote.screenshot({ path: '/private/tmp/hs2-4y6sm9-note-card-feedback-wide.png' });
+  await activityNote.screenshot({ path: '/private/tmp/hs2-4y6sm9-note-card-activity-wide.png' });
+  await page.setViewportSize({ width: 430, height: 760 });
+  expect(await notes.evaluateAll((items) => items.every((item) => item.scrollWidth <= item.clientWidth + 1))).toBe(
+    true,
+  );
+  await feedbackNote.screenshot({ path: '/private/tmp/hs2-4y6sm9-note-card-feedback-narrow.png' });
+  await activityNote.screenshot({ path: '/private/tmp/hs2-4y6sm9-note-card-activity-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await standaloneNote.dblclick();
   const standaloneEditor = standaloneNote.getByRole('textbox', { name: 'Note body' });
   await standaloneEditor.fill('Persisted standalone note');
@@ -734,7 +1501,9 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
   await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
-  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Implementation notes');
+  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText(
+    'Implementation notes',
+  );
   const readerGuide = reader.getByRole('link', { name: 'Open the component guide' });
   await expect(readerGuide).toHaveAttribute('target', '_blank');
   await expect(readerGuide).toHaveAttribute('rel', 'noopener noreferrer');
@@ -756,7 +1525,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
-  expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * .9);
+  expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * 0.9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
   await expect(editableNote.locator('.note-card__body')).toHaveAttribute('aria-label', 'Edit note');
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
@@ -776,21 +1545,35 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(editableNote).toContainText('Autosaved note body');
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('reader-wireframe.png');
-  await reader.getByLabel('Browse and add attachments').setInputFiles({ name: 'browser-added.txt', mimeType: 'text/plain', buffer: Buffer.from('added') });
+  await reader
+    .getByLabel('Browse and add attachments')
+    .setInputFiles({ name: 'browser-added.txt', mimeType: 'text/plain', buffer: Buffer.from('added') });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('browser-added.txt');
-  await reader.locator('[data-component="ticket-inspector"]').evaluate(node => { const transfer = new DataTransfer(); transfer.items.add(new File(['drop'], 'dropped.txt', { type: 'text/plain' })); node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })); });
+  await reader.locator('[data-component="ticket-inspector"]').evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['drop'], 'dropped.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
   await reader.getByRole('tab', { name: 'Info' }).click();
   await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS(
+    'background-color',
+    'rgb(255, 255, 255)',
+  );
+  await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
   await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toBeVisible();
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toHaveValue(/keep the response/i);
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
   await readerSource.blur();
-  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Reader draft');
+  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText(
+    'Reader draft',
+  );
 
   await page.goto('/ux-demo?component=markdown-editor');
 
@@ -833,20 +1616,38 @@ test('keeps feedback Markdown list spacing compact', async ({ page }) => {
   const feedbackNote = page.locator('[data-component="note-card"][data-kind="feedback_needed"]');
   const feedbackItems = feedbackNote.locator('li');
   await expect(feedbackItems).toHaveCount(3);
-  const itemGaps = await feedbackItems.evaluateAll(items => items.slice(1).map((item, index) => item.getBoundingClientRect().top - items[index].getBoundingClientRect().bottom));
+  const itemGaps = await feedbackItems.evaluateAll((items) =>
+    items.slice(1).map((item, index) => item.getBoundingClientRect().top - items[index].getBoundingClientRect().bottom),
+  );
   expect(Math.max(...itemGaps)).toBeLessThanOrEqual(8);
   await feedbackNote.screenshot({ path: '/private/tmp/hs2-8dd2dg-feedback-list-spacing.png' });
 });
 
 test('spaces paragraphs and de-emphasizes email-style quoted Markdown at wide and narrow sizes', async ({ page }) => {
   await page.goto('/ux-demo?component=markdown-editor');
-  const preview=page.locator('[data-component="markdown-preview"]'),quote=preview.locator('blockquote'),body=preview.locator(':scope > p').first();
+  const preview = page.locator('[data-component="markdown-preview"]'),
+    quote = preview.locator('blockquote'),
+    body = preview.locator(':scope > p').first();
   await expect(quote).toBeVisible();
-  const typography=await Promise.all([quote,body].map(locator=>locator.evaluate(node=>({fontSize:parseFloat(getComputedStyle(node).fontSize),lineHeight:parseFloat(getComputedStyle(node).lineHeight),marginLeft:getComputedStyle(node).marginLeft}))));
-  expect(typography[0].fontSize).toBeLessThan(typography[1].fontSize);expect(typography[0].lineHeight).toBeLessThan(typography[1].lineHeight);expect(typography[0].marginLeft).toBe('0px');
-  await expect(body).toHaveCSS('margin-top','16px');await expect(body).toHaveCSS('margin-bottom','16px');
+  const typography = await Promise.all(
+    [quote, body].map((locator) =>
+      locator.evaluate((node) => ({
+        fontSize: parseFloat(getComputedStyle(node).fontSize),
+        lineHeight: parseFloat(getComputedStyle(node).lineHeight),
+        marginLeft: getComputedStyle(node).marginLeft,
+      })),
+    ),
+  );
+  expect(typography[0].fontSize).toBeLessThan(typography[1].fontSize);
+  expect(typography[0].lineHeight).toBeLessThan(typography[1].lineHeight);
+  expect(typography[0].marginLeft).toBe('0px');
+  await expect(body).toHaveCSS('margin-top', '16px');
+  await expect(body).toHaveCSS('margin-bottom', '16px');
   await expect(quote).toHaveCSS('padding', '4px 0px 4px 8px');
-  await preview.screenshot({path:'/private/tmp/hs2-9acety-quoted-content-wide.png'});await page.setViewportSize({width:390,height:844});await quote.scrollIntoViewIfNeeded();await preview.screenshot({path:'/private/tmp/hs2-9acety-quoted-content-narrow.png'});
+  await preview.screenshot({ path: '/private/tmp/hs2-9acety-quoted-content-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await quote.scrollIntoViewIfNeeded();
+  await preview.screenshot({ path: '/private/tmp/hs2-9acety-quoted-content-narrow.png' });
 });
 
 test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
@@ -855,30 +1656,38 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   const listRows = list.locator('[data-component="ticket-list-row"]');
   await expect(listRows).toHaveCount(20);
-  const emptyExamples=page.getByLabel('TicketList empty states');await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();await expect(emptyExamples.getByText('No tickets in Backlog')).toBeVisible();await expect(emptyExamples.getByText('No tickets match “parser”')).toBeVisible();
+  const emptyExamples = page.getByLabel('TicketList empty states');
+  await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();
+  await expect(emptyExamples.getByText('No tickets in Backlog')).toBeVisible();
+  await expect(emptyExamples.getByText('No tickets match “parser”')).toBeVisible();
   await expect(list.locator('..')).toHaveCSS('border-radius', '10.4px');
   const listRow = listRows.first();
   await expect(listRow).toHaveAttribute('data-presentation', 'list');
   const listIdentity = listRow.locator('.ticket-list-row__identity');
-  const listTitleMetrics = await listIdentity.evaluate(node => {
+  const listTitleMetrics = await listIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
     return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
   });
   expect(listTitleMetrics.maxHeight / listTitleMetrics.lineHeight).toBeCloseTo(2, 1);
-  const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
+  const listWidth = await listRow.evaluate((node) => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
   const [listBox, listHostBox] = await Promise.all([list.boundingBox(), list.locator('xpath=..').boundingBox()]);
-  expect(listBox).not.toBeNull(); expect(listHostBox).not.toBeNull();
+  expect(listBox).not.toBeNull();
+  expect(listHostBox).not.toBeNull();
   expect(listBox!.width).toBeCloseTo(listHostBox!.width, 0);
   await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
   await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
   await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');
-  await list.evaluate(node => { (node.parentElement as HTMLElement).style.width = '320px'; });
+  await list.evaluate((node) => {
+    (node.parentElement as HTMLElement).style.width = '320px';
+  });
   await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
   await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
   await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');
   await list.screenshot({ path: '/private/tmp/hs2-y4de25-narrow-list-edge-rounding.png' });
-  await list.evaluate(node => { (node.parentElement as HTMLElement).style.width = ''; });
+  await list.evaluate((node) => {
+    (node.parentElement as HTMLElement).style.width = '';
+  });
   await expect(listRow).toHaveCSS('box-shadow', 'none');
   await listRow.click();
   await expect(listRow).toHaveAttribute('data-selected', 'true');
@@ -901,8 +1710,14 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
-  const emptyBoard=page.getByRole('listbox',{name:'Empty search board'});await expect(emptyBoard.locator('[data-component="empty-state"]')).toHaveCount(1);await expect(emptyBoard.getByText('No tickets match “parser”')).toBeVisible();
-  expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
+  const emptyBoard = page.getByRole('listbox', { name: 'Empty search board' });
+  await expect(emptyBoard.locator('[data-component="empty-state"]')).toHaveCount(1);
+  await expect(emptyBoard.getByText('No tickets match “parser”')).toBeVisible();
+  expect(
+    await board
+      .locator('.ticket-board-column__header')
+      .evaluateAll((headers) => headers.map((header) => header.getBoundingClientRect().height)),
+  ).toEqual([32, 32, 32]);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
   await expect(board.locator('.ticket-board-column__tickets').first()).toHaveCSS('padding', '0px 8px 16px');
@@ -916,27 +1731,55 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(boardRows).toHaveCount(20);
   const scrollRegions = board.locator('.ticket-board-column__tickets');
   await expect(scrollRegions).toHaveCount(3);
-  const initialScroll = await scrollRegions.evaluateAll(regions => regions.map(region => ({ clientHeight: region.clientHeight, scrollHeight: region.scrollHeight, scrollTop: region.scrollTop })));
-  expect(initialScroll.every(region => region.scrollHeight > region.clientHeight)).toBe(true);
-  const firstHeaderTop = await board.locator('.ticket-board-column__header').first().evaluate(node => node.getBoundingClientRect().top);
-  await scrollRegions.first().evaluate(node => { node.scrollTop = 180; node.dispatchEvent(new Event('scroll')); });
-  await expect.poll(() => scrollRegions.first().evaluate(node => node.scrollTop)).toBeGreaterThan(0);
-  expect(await scrollRegions.nth(1).evaluate(node => node.scrollTop)).toBe(0);
-  expect(await board.locator('.ticket-board-column__header').first().evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(firstHeaderTop, 0);
+  const initialScroll = await scrollRegions.evaluateAll((regions) =>
+    regions.map((region) => ({
+      clientHeight: region.clientHeight,
+      scrollHeight: region.scrollHeight,
+      scrollTop: region.scrollTop,
+    })),
+  );
+  expect(initialScroll.every((region) => region.scrollHeight > region.clientHeight)).toBe(true);
+  const firstHeaderTop = await board
+    .locator('.ticket-board-column__header')
+    .first()
+    .evaluate((node) => node.getBoundingClientRect().top);
+  await scrollRegions.first().evaluate((node) => {
+    node.scrollTop = 180;
+    node.dispatchEvent(new Event('scroll'));
+  });
+  await expect.poll(() => scrollRegions.first().evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  expect(await scrollRegions.nth(1).evaluate((node) => node.scrollTop)).toBe(0);
+  expect(
+    await board
+      .locator('.ticket-board-column__header')
+      .first()
+      .evaluate((node) => node.getBoundingClientRect().top),
+  ).toBeCloseTo(firstHeaderTop, 0);
   const narrowRow = boardRows.first();
   await expect(narrowRow).toHaveAttribute('data-presentation', 'column');
   const inlineCategory = narrowRow.locator('.ticket-list-row__category');
-  const inlineCategorySize = await inlineCategory.evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));
+  const inlineCategorySize = await inlineCategory.evaluate((node) => ({
+    width: node.getBoundingClientRect().width,
+    height: node.getBoundingClientRect().height,
+  }));
   expect(inlineCategorySize.width).toBeCloseTo(17.6, 1);
   expect(inlineCategorySize.height).toBeCloseTo(17.6, 1);
-  const inlineOrder = await narrowRow.locator('.ticket-list-row__identity').evaluate(node => [...node.children].map(child => child.className));
+  const inlineOrder = await narrowRow
+    .locator('.ticket-list-row__identity')
+    .evaluate((node) => [...node.children].map((child) => child.className));
   expect(inlineOrder[1]).toContain('ticket-list-row__category');
   expect(inlineOrder[2]).toContain('ticket-list-row__slug');
-  const [categoryBox, slugBox] = await Promise.all([inlineCategory.boundingBox(), narrowRow.locator('.ticket-list-row__slug').boundingBox()]);
-  expect(categoryBox).not.toBeNull(); expect(slugBox).not.toBeNull();
-  expect(Math.abs(categoryBox!.y + categoryBox!.height / 2 - (slugBox!.y + slugBox!.height / 2))).toBeLessThanOrEqual(1.5);
+  const [categoryBox, slugBox] = await Promise.all([
+    inlineCategory.boundingBox(),
+    narrowRow.locator('.ticket-list-row__slug').boundingBox(),
+  ]);
+  expect(categoryBox).not.toBeNull();
+  expect(slugBox).not.toBeNull();
+  expect(Math.abs(categoryBox!.y + categoryBox!.height / 2 - (slugBox!.y + slugBox!.height / 2))).toBeLessThanOrEqual(
+    1.5,
+  );
   const columnIdentity = narrowRow.locator('.ticket-list-row__identity');
-  const columnTitleMetrics = await columnIdentity.evaluate(node => {
+  const columnTitleMetrics = await columnIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
     return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
   });
@@ -944,9 +1787,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const longColumnRow = board.locator('[data-ticket-slug="HS2-SG1BKJ"]');
   const longColumnTitle = longColumnRow.locator('.ticket-list-row__identity strong');
   await longColumnRow.scrollIntoViewIfNeeded();
-  expect(await longColumnTitle.evaluate(node => node.getClientRects().length)).toBe(4);
+  expect(await longColumnTitle.evaluate((node) => node.getClientRects().length)).toBe(4);
   await longColumnRow.screenshot({ path: '/private/tmp/hs2-0tfhhs-four-line-column-title-wide.png' });
-  const boardWidth = await narrowRow.evaluate(node => node.getBoundingClientRect().width);
+  const boardWidth = await narrowRow.evaluate((node) => node.getBoundingClientRect().width);
   expect(boardWidth).toBeLessThan(384);
   await expect(narrowRow).toHaveCSS('border-radius', '10.4px');
   await expect(narrowRow).toHaveCSS('box-shadow', 'none');
@@ -957,7 +1800,11 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await page.screenshot({ path: '/private/tmp/hs2-xrnsv0-column-header-wide.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
-  expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
+  expect(
+    await board
+      .locator('.ticket-board-column__header')
+      .evaluateAll((headers) => headers.map((header) => header.getBoundingClientRect().height)),
+  ).toEqual([32, 32, 32]);
   await page.screenshot({ path: '/private/tmp/hs2-xrnsv0-column-header-narrow.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1000,23 +1847,49 @@ test('omits status sorting from column view and restores it in list view', async
   await page.screenshot({ path: '/private/tmp/hs2-nydfqf-column-sort-options.png', fullPage: true });
 });
 
-test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});
+test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header&dev-review=false');
-  const header=page.locator('[data-component="workspace-header"]');
-  const sort=header.locator('wa-select[name="workspace-sort"]');
-  const group=header.locator('.workspace-header__sort-group');
-  await header.getByRole('button',{name:'Settings view'}).focus();
+  const header = page.locator('[data-component="workspace-header"]');
+  const sort = header.locator('wa-select[name="workspace-sort"]');
+  const group = header.locator('.workspace-header__sort-group');
+  await header.getByRole('button', { name: 'Settings view' }).focus();
   await page.keyboard.press('Tab');
-  await expect.poll(()=>sort.evaluate(node=>node.matches(':focus-within'))).toBe(true);
+  await expect.poll(() => sort.evaluate((node) => node.matches(':focus-within'))).toBe(true);
   await page.keyboard.press('Enter');
-  await expect(sort).toHaveJSProperty('open',true);
-  const geometry=await group.evaluate(node=>{const style=getComputedStyle(node),box=node.getBoundingClientRect(),combobox=node.querySelector<HTMLElement>('wa-select')!.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!,comboboxStyle=getComputedStyle(combobox);return{width:box.width,height:box.height,radius:style.borderRadius,outlineStyle:style.outlineStyle,outlineWidth:style.outlineWidth,outlineOffset:style.outlineOffset,comboboxOutlineStyle:comboboxStyle.outlineStyle}});
+  await expect(sort).toHaveJSProperty('open', true);
+  const geometry = await group.evaluate((node) => {
+    const style = getComputedStyle(node),
+      box = node.getBoundingClientRect(),
+      combobox = node
+        .querySelector<HTMLElement>('wa-select')!
+        .shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!,
+      comboboxStyle = getComputedStyle(combobox);
+    return {
+      width: box.width,
+      height: box.height,
+      radius: style.borderRadius,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      outlineOffset: style.outlineOffset,
+      comboboxOutlineStyle: comboboxStyle.outlineStyle,
+    };
+  });
   expect(geometry.width).toBeGreaterThan(geometry.height);
   expect(Number.parseFloat(geometry.radius)).toBeGreaterThan(geometry.height);
-  expect(geometry).toMatchObject({outlineStyle:'solid',outlineWidth:'3px',outlineOffset:'1px',comboboxOutlineStyle:'none'});
-  const box=(await group.boundingBox())!,x=Math.max(0,box.x-12),y=Math.max(0,box.y-12);
-  await page.screenshot({path:'/private/tmp/hs2-m1df1d-pill-focus-ring-wide.png',clip:{x,y,width:Math.min(360,1280-x),height:Math.min(360,800-y)}});
+  expect(geometry).toMatchObject({
+    outlineStyle: 'solid',
+    outlineWidth: '3px',
+    outlineOffset: '1px',
+    comboboxOutlineStyle: 'none',
+  });
+  const box = (await group.boundingBox())!,
+    x = Math.max(0, box.x - 12),
+    y = Math.max(0, box.y - 12);
+  await page.screenshot({
+    path: '/private/tmp/hs2-m1df1d-pill-focus-ring-wide.png',
+    clip: { x, y, width: Math.min(360, 1280 - x), height: Math.min(360, 800 - y) },
+  });
 });
 
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
@@ -1024,8 +1897,10 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('[data-component="workspace-header"]');
   await expect(header).toContainText('Hot Sheet 2');
-  const sortIcon=header.locator('.workspace-header__sort .kui-select__custom-selected'),idleViewIcon=header.getByRole('button',{name:'Columns view'}),quietIconColor=await idleViewIcon.evaluate(node=>getComputedStyle(node).color);
-  expect(await sortIcon.evaluate(node=>getComputedStyle(node).color)).toBe(quietIconColor);
+  const sortIcon = header.locator('.workspace-header__sort .kui-select__custom-selected'),
+    idleViewIcon = header.getByRole('button', { name: 'Columns view' }),
+    quietIconColor = await idleViewIcon.evaluate((node) => getComputedStyle(node).color);
+  expect(await sortIcon.evaluate((node) => getComputedStyle(node).color)).toBe(quietIconColor);
   const notificationBadge = header.locator('.view-mode-switcher__badge');
   await expect(notificationBadge).toHaveText('7');
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
@@ -1034,14 +1909,16 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await notificationBadge.screenshot({ path: '/private/tmp/hs2-x9embf-notification-badge.png' });
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
+  await expect(
+    page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]'),
+  ).toHaveCount(20);
   await header.getByRole('button', { name: 'Columns view' }).click();
   await expect(header.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('listbox', { name: 'Workspace board' })).toBeVisible();
-  const closedHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
+  const closedHeaderHeight = await header.evaluate((node) => node.getBoundingClientRect().height);
   const searchGroup = header.locator('.workspace-header__search-group');
-  const collapsedWidth = await searchGroup.evaluate(node => node.getBoundingClientRect().width);
-  const collapsedHeight = await searchGroup.evaluate(node => node.getBoundingClientRect().height);
+  const collapsedWidth = await searchGroup.evaluate((node) => node.getBoundingClientRect().width);
+  const collapsedHeight = await searchGroup.evaluate((node) => node.getBoundingClientRect().height);
   expect(collapsedWidth).toBeCloseTo(collapsedHeight, 0);
   const findButton = header.getByRole('button', { name: 'Search tickets' });
   await findButton.click();
@@ -1051,17 +1928,23 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
   await expect(searchGroup).not.toHaveCSS('box-shadow', 'none');
-  await expect.poll(() => searchGroup.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(collapsedWidth * 3);
-  const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
+  await expect
+    .poll(() => searchGroup.evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(collapsedWidth * 3);
+  const openHeaderHeight = await header.evaluate((node) => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
   await search.fill('long-tag-example');
-  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await expect(
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+  ).toHaveCount(1);
   // The X clear button empties the search and restores every row (HS2-Z7KP1Q).
   const clearSearch = header.locator('[data-action="clear-workspace-search"]');
   await expect(clearSearch).toBeVisible();
   await clearSearch.click();
   await expect(search).toHaveText('');
-  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
+  await expect(
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+  ).toHaveCount(20);
   await expect(clearSearch).toHaveCount(0);
   await search.fill('long-tag-example');
   await header.getByRole('button', { name: 'Columns view' }).focus();
@@ -1070,13 +1953,27 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(header.getByRole('button', { name: 'Search tickets' })).toBeVisible();
-  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
+  await expect(
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+  ).toHaveCount(20);
   await header.getByRole('button', { name: 'List view' }).click();
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
   await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
-  await expect(sortSelect.locator('.kui-select__custom-selected')).toHaveCSS('color',quietIconColor);
-  const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.kui-select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
+  await expect(sortSelect.locator('.kui-select__custom-selected')).toHaveCSS('color', quietIconColor);
+  const triggerGeometry = await sortSelect.evaluate((node) => {
+    const root = node.shadowRoot!,
+      combobox = root.querySelector<HTMLElement>('[part~="combobox"]')!,
+      expand = root.querySelector<HTMLElement>('[part~="expand-icon"]')!,
+      selected = node.querySelector<HTMLElement>('.kui-select__custom-selected')!,
+      outer = combobox.getBoundingClientRect(),
+      icon = selected.getBoundingClientRect(),
+      arrow = expand.getBoundingClientRect();
+    return { width: outer.width, gap: arrow.left - icon.right, arrowOverflow: arrow.right - outer.right };
+  });
+  expect(triggerGeometry.width).toBeLessThanOrEqual(46);
+  expect(triggerGeometry.gap).toBeLessThanOrEqual(8);
+  expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="clock-arrow-down"]')).toBeVisible();
   await expect(sortSelect.locator('wa-option[value="priority"] .kui-select__icon')).toBeVisible();
@@ -1086,31 +1983,73 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByText('Sorted by priority, ascending')).toBeVisible();
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
   await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="arrow-up-narrow-wide"]')).toBeVisible();
-  const ascendingPriorities = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__priority').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')?.split(' ')[0]));
-  expect(ascendingPriorities.map(value => ['low','default','high','urgent'].indexOf(value ?? ''))).toEqual([...ascendingPriorities].map(value => ['low','default','high','urgent'].indexOf(value ?? '')).sort((a,b)=>a-b));
-  await page.screenshot({path:'/private/tmp/hs2-5avfng-priority-ascending.png',fullPage:true});
+  const ascendingPriorities = await page
+    .getByRole('listbox', { name: 'Workspace tickets' })
+    .locator('.ticket-list-row__priority')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')?.split(' ')[0]));
+  expect(ascendingPriorities.map((value) => ['low', 'default', 'high', 'urgent'].indexOf(value ?? ''))).toEqual(
+    [...ascendingPriorities]
+      .map((value) => ['low', 'default', 'high', 'urgent'].indexOf(value ?? ''))
+      .sort((a, b) => a - b),
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-5avfng-priority-ascending.png', fullPage: true });
   await sortSelect.click();
   await prioritySort.click();
   await expect(page.getByText('Sorted by priority, descending')).toBeVisible();
   await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="arrow-down-wide-narrow"]')).toBeVisible();
-  const descendingPriorities = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__priority').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')?.split(' ')[0]));
-  expect(descendingPriorities.map(value => ['low','default','high','urgent'].indexOf(value ?? ''))).toEqual([...descendingPriorities].map(value => ['low','default','high','urgent'].indexOf(value ?? '')).sort((a,b)=>b-a));
-  const statusOption=sortSelect.locator('wa-option[value="status"]');
+  const descendingPriorities = await page
+    .getByRole('listbox', { name: 'Workspace tickets' })
+    .locator('.ticket-list-row__priority')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')?.split(' ')[0]));
+  expect(descendingPriorities.map((value) => ['low', 'default', 'high', 'urgent'].indexOf(value ?? ''))).toEqual(
+    [...descendingPriorities]
+      .map((value) => ['low', 'default', 'high', 'urgent'].indexOf(value ?? ''))
+      .sort((a, b) => b - a),
+  );
+  const statusOption = sortSelect.locator('wa-option[value="status"]');
   await expect(prioritySort).not.toBeVisible();
   await sortSelect.click();
   await expect(statusOption).toBeVisible();
   await statusOption.click();
-  const ascendingStatuses=await page.getByRole('listbox',{name:'Workspace tickets'}).locator('[data-component="ticket-list-row"]').evaluateAll(nodes=>nodes.map(node=>(node as HTMLElement).dataset.status));
-  expect(ascendingStatuses.map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??''))).toEqual([...ascendingStatuses].map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??'')).sort((a,b)=>a-b));
-  await page.screenshot({path:'/private/tmp/hs2-4penqq-status-ascending.png',fullPage:true});
-  for (const [value,firstIcon,secondIcon] of [['title','arrow-down-a-z','arrow-up-a-z'],['updated','clock-arrow-down','clock-arrow-up']] as const) {
-    const option=sortSelect.locator(`wa-option[value="${value}"]`);await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
+  const ascendingStatuses = await page
+    .getByRole('listbox', { name: 'Workspace tickets' })
+    .locator('[data-component="ticket-list-row"]')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset.status));
+  expect(
+    ascendingStatuses.map((value) =>
+      ['backlog', 'not_started', 'started', 'completed', 'verified', 'archive'].indexOf(value ?? ''),
+    ),
+  ).toEqual(
+    [...ascendingStatuses]
+      .map((value) => ['backlog', 'not_started', 'started', 'completed', 'verified', 'archive'].indexOf(value ?? ''))
+      .sort((a, b) => a - b),
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-4penqq-status-ascending.png', fullPage: true });
+  for (const [value, firstIcon, secondIcon] of [
+    ['title', 'arrow-down-a-z', 'arrow-up-a-z'],
+    ['updated', 'clock-arrow-down', 'clock-arrow-up'],
+  ] as const) {
+    const option = sortSelect.locator(`wa-option[value="${value}"]`);
+    await sortSelect.click();
+    await expect(option).toBeVisible();
+    await option.click();
+    await expect(option).not.toBeVisible();
+    await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();
+    await sortSelect.click();
+    await expect(option).toBeVisible();
+    await option.click();
+    await expect(option).not.toBeVisible();
+    await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
   }
-  await page.setViewportSize({width:1024,height:600});await sortSelect.click();await page.screenshot({path:'/private/tmp/hs2-0dcczk-sort-select-floor.png',fullPage:true});await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1024, height: 600 });
+  await sortSelect.click();
+  await page.screenshot({ path: '/private/tmp/hs2-0dcczk-sort-select-floor.png', fullPage: true });
+  await page.keyboard.press('Escape');
   await header.getByRole('button', { name: 'Settings view' }).click();
   await expect(header.getByRole('button', { name: 'Settings view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(sortSelect).toHaveAttribute('disabled', '');
-  for (const name of ['Toggle Up Next for selected tickets', 'More actions for selected tickets', 'Search tickets']) await expect(header.getByRole('button', { name })).toHaveAttribute('disabled', '');
+  for (const name of ['Toggle Up Next for selected tickets', 'More actions for selected tickets', 'Search tickets'])
+    await expect(header.getByRole('button', { name })).toHaveAttribute('disabled', '');
   await expect(page.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
   await header.getByRole('button', { name: 'List view' }).click();
@@ -1120,51 +2059,106 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-narrow.png', fullPage: true });
 });
 
-test('organizes search syntax help in the WorkspaceHeader demo',async({page})=>{
-  await page.setViewportSize({width:1440,height:900});
+test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header=page.locator('[data-component="workspace-header"]');
-  await header.getByRole('button',{name:'Search tickets'}).click();
-  await header.getByRole('searchbox',{name:'Search tickets'}).fill('client');
-  await header.getByRole('button',{name:'Search syntax help'}).click();
-  const help=header.getByRole('dialog',{name:'Search syntax'});
-  await expect(help.locator('dt')).toHaveText(['Tags','Content','Workflow','Dates']);
+  const header = page.locator('[data-component="workspace-header"]');
+  await header.getByRole('button', { name: 'Search tickets' }).click();
+  await header.getByRole('searchbox', { name: 'Search tickets' }).fill('client');
+  await header.getByRole('button', { name: 'Search syntax help' }).click();
+  const help = header.getByRole('dialog', { name: 'Search syntax' });
+  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('Combine filters');
-  await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-demo-wide.png',fullPage:true});
-  await page.setViewportSize({width:760,height:640});
+  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-demo-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 760, height: 640 });
   await help.scrollIntoViewIfNeeded();
-  await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-demo-narrow.png',fullPage:true});
-  await expect.poll(()=>help.evaluate(node=>{const box=node.getBoundingClientRect();return box.left>=0&&box.top>=0&&box.right<=innerWidth&&box.bottom<=innerHeight})).toBe(true);
-  await header.getByRole('button',{name:'Search syntax help'}).click();
+  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-demo-narrow.png', fullPage: true });
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
+      }),
+    )
+    .toBe(true);
+  await header.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(help).toHaveCount(0);
 });
 
-test('centers search controls on the first line while the query wraps',async({page})=>{
-  await page.setViewportSize({width:1000,height:600});
+test('centers search controls on the first line while the query wraps', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 600 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header=page.locator('[data-component="workspace-header"]');
-  await header.getByRole('button',{name:'Search tickets'}).click();
-  const search=header.getByRole('searchbox',{name:'Search tickets'}),group=header.locator('.workspace-header__search-group');
-  await expect.poll(()=>group.evaluate(node=>node.getBoundingClientRect().width)).toBeGreaterThan(300);
-  const geometry=async()=>group.evaluate(node=>{
-    const box=(selector:string)=>{const element=node.querySelector<HTMLElement>(selector)!,rect=element.getBoundingClientRect(),style=getComputedStyle(element);return{top:rect.top,bottom:rect.bottom,height:rect.height,center:(rect.top+rect.bottom)/2,paddingTop:Number.parseFloat(style.paddingTop),lineHeight:Number.parseFloat(style.lineHeight)}};
-    const group=node.getBoundingClientRect();
-    return{group:{top:group.top,bottom:group.bottom,height:group.height,center:(group.top+group.bottom)/2},search:box('.kui-token-search__editor'),icon:box('.kui-token-search__leading'),clear:node.querySelector('.kui-token-search__clear')?box('.kui-token-search__clear'):undefined,help:box('.workspace-header__search-help-button')};
-  });
-  const centered=async(expectedGroupCenter:boolean)=>{const measured=await geometry(),firstLineCenter=measured.search.top+measured.search.paddingTop+measured.search.lineHeight/2;expect(measured.icon.center).toBeCloseTo(firstLineCenter,1);expect(measured.help.center).toBeCloseTo(firstLineCenter,1);if(measured.clear)expect(measured.clear.center).toBeCloseTo(firstLineCenter,1);if(expectedGroupCenter)expect(firstLineCenter).toBeCloseTo(measured.group.center,1);return measured};
+  const header = page.locator('[data-component="workspace-header"]');
+  await header.getByRole('button', { name: 'Search tickets' }).click();
+  const search = header.getByRole('searchbox', { name: 'Search tickets' }),
+    group = header.locator('.workspace-header__search-group');
+  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(300);
+  const geometry = async () =>
+    group.evaluate((node) => {
+      const box = (selector: string) => {
+        const element = node.querySelector<HTMLElement>(selector)!,
+          rect = element.getBoundingClientRect(),
+          style = getComputedStyle(element);
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          height: rect.height,
+          center: (rect.top + rect.bottom) / 2,
+          paddingTop: Number.parseFloat(style.paddingTop),
+          lineHeight: Number.parseFloat(style.lineHeight),
+        };
+      };
+      const group = node.getBoundingClientRect();
+      return {
+        group: { top: group.top, bottom: group.bottom, height: group.height, center: (group.top + group.bottom) / 2 },
+        search: box('.kui-token-search__editor'),
+        icon: box('.kui-token-search__leading'),
+        clear: node.querySelector('.kui-token-search__clear') ? box('.kui-token-search__clear') : undefined,
+        help: box('.workspace-header__search-help-button'),
+      };
+    });
+  const centered = async (expectedGroupCenter: boolean) => {
+    const measured = await geometry(),
+      firstLineCenter = measured.search.top + measured.search.paddingTop + measured.search.lineHeight / 2;
+    expect(measured.icon.center).toBeCloseTo(firstLineCenter, 1);
+    expect(measured.help.center).toBeCloseTo(firstLineCenter, 1);
+    if (measured.clear) expect(measured.clear.center).toBeCloseTo(firstLineCenter, 1);
+    if (expectedGroupCenter) expect(firstLineCenter).toBeCloseTo(measured.group.center, 1);
+    return measured;
+  };
   await search.fill('client');
-  await header.getByRole('button',{name:'Clear search'}).click();
+  await header.getByRole('button', { name: 'Clear search' }).click();
   await expect(search).toHaveText('');
-  await expect(header.getByRole('button',{name:'Clear search'})).toHaveCount(0);
-  const blank=await centered(true),blankBox=await group.boundingBox();
-  await page.screenshot({path:'/private/tmp/hs2-dyzbf4-search-single-line-after.png',clip:{x:Math.max(0,blankBox!.x-8),y:Math.max(0,blankBox!.y-8),width:Math.min(1000,blankBox!.width+16),height:blankBox!.height+16}});
+  await expect(header.getByRole('button', { name: 'Clear search' })).toHaveCount(0);
+  const blank = await centered(true),
+    blankBox = await group.boundingBox();
+  await page.screenshot({
+    path: '/private/tmp/hs2-dyzbf4-search-single-line-after.png',
+    clip: {
+      x: Math.max(0, blankBox!.x - 8),
+      y: Math.max(0, blankBox!.y - 8),
+      width: Math.min(1000, blankBox!.width + 16),
+      height: blankBox!.height + 16,
+    },
+  });
   await search.fill('client');
-  await expect(header.getByRole('button',{name:'Clear search'})).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Clear search' })).toBeVisible();
   await centered(true);
-  await search.fill('This intentionally long ordinary search query wraps across multiple lines while its peer controls stay aligned with the first line of editable text, even inside the narrower catalog detail pane used by the shared UX demo shell');
-  const wrapped=await centered(false),wrappedBox=await group.boundingBox();
-  expect(wrapped.group.height).toBeGreaterThan(blank.group.height+wrapped.search.lineHeight);
-  await page.screenshot({path:'/private/tmp/hs2-dyzbf4-search-wrapped-after.png',clip:{x:Math.max(0,wrappedBox!.x-8),y:Math.max(0,wrappedBox!.y-8),width:Math.min(1000,wrappedBox!.width+16),height:wrappedBox!.height+16}});
+  await search.fill(
+    'This intentionally long ordinary search query wraps across multiple lines while its peer controls stay aligned with the first line of editable text, even inside the narrower catalog detail pane used by the shared UX demo shell',
+  );
+  const wrapped = await centered(false),
+    wrappedBox = await group.boundingBox();
+  expect(wrapped.group.height).toBeGreaterThan(blank.group.height + wrapped.search.lineHeight);
+  await page.screenshot({
+    path: '/private/tmp/hs2-dyzbf4-search-wrapped-after.png',
+    clip: {
+      x: Math.max(0, wrappedBox!.x - 8),
+      y: Math.max(0, wrappedBox!.y - 8),
+      width: Math.min(1000, wrappedBox!.width + 16),
+      height: wrappedBox!.height + 16,
+    },
+  });
 });
 
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
@@ -1172,39 +2166,48 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.kui-toolbar-control-group');
   await expect(groups).toHaveCount(8);
-  for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin', 'panel-left-open']) await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
-  const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+  for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin', 'panel-left-open'])
+    await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
+  const heights = await groups.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));
   expect(new Set(heights).size).toBe(1);
   const popup = demo.locator('wa-button[with-caret]');
-  const caretSpacing = await popup.evaluate(node => {
+  const caretSpacing = await popup.evaluate((node) => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="button"]');
     const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="caret"]');
-    return button && caret ? { gap: getComputedStyle(button).gap, margin: getComputedStyle(caret).marginInlineStart, width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height } : null;
+    return button && caret
+      ? {
+          gap: getComputedStyle(button).gap,
+          margin: getComputedStyle(caret).marginInlineStart,
+          width: button.getBoundingClientRect().width,
+          height: button.getBoundingClientRect().height,
+        }
+      : null;
   });
   expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 48, height: 40 });
-  const popupGroupWidth = await groups.nth(1).evaluate(node => node.getBoundingClientRect().width);
+  const popupGroupWidth = await groups.nth(1).evaluate((node) => node.getBoundingClientRect().width);
   expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(4, 0);
   await popup.hover();
   await expect(groups.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  const popupBackground = await popup.evaluate(node => {
+  const popupBackground = await popup.evaluate((node) => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
     return button ? getComputedStyle(button).backgroundColor : null;
   });
   expect(popupBackground).toBe('rgba(0, 0, 0, 0)');
   const groupedButton = demo.locator('wa-button[aria-label="Favorite view"]').first();
   await groupedButton.hover();
-  const groupedGeometry = await groupedButton.evaluate(node => {
+  const groupedGeometry = await groupedButton.evaluate((node) => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
     if (!button) return null;
     return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
   });
   expect(groupedGeometry).toEqual({ height: 40, background: 'rgba(0, 0, 0, 0)' });
-  const iconAlignment = await groupedButton.evaluate(node => {
+  const iconAlignment = await groupedButton.evaluate((node) => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
     const icon = node.querySelector<HTMLElement>('[data-lucide]');
     if (!button || !icon) return null;
-    const buttonBox = button.getBoundingClientRect(); const iconBox = icon.getBoundingClientRect();
-    return Math.abs((buttonBox.top + buttonBox.height / 2) - (iconBox.top + iconBox.height / 2));
+    const buttonBox = button.getBoundingClientRect();
+    const iconBox = icon.getBoundingClientRect();
+    return Math.abs(buttonBox.top + buttonBox.height / 2 - (iconBox.top + iconBox.height / 2));
   });
   expect(iconAlignment).toBeLessThan(1);
   const borderless = groups.nth(4);
@@ -1230,17 +2233,22 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 
-test('catalogs the Kerf FloatingToolbar used by terminal controls',async({page})=>{
+test('catalogs the Kerf FloatingToolbar used by terminal controls', async ({ page }) => {
   await page.goto('/ux-demo?component=floating-toolbar');
-  const toolbar=page.getByRole('toolbar',{name:'Preview zoom controls'}),stage=page.locator('.floating-toolbar-demo');
-  await expect(toolbar).toHaveAttribute('data-component','floating-toolbar');
-  await expect(toolbar).toHaveAttribute('data-position','bottom-end');
-  await expect(toolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone','dark');
-  await expect(toolbar.getByRole('button',{name:'Zoom out'})).toBeEnabled();
-  await expect(toolbar.getByRole('button',{name:'Zoom in'})).toBeEnabled();
-  const insets=await toolbar.evaluate(node=>{const toolbarBounds=node.getBoundingClientRect(),stageBounds=node.parentElement!.getBoundingClientRect();return{right:stageBounds.right-toolbarBounds.right,bottom:stageBounds.bottom-toolbarBounds.bottom}});
-  expect(insets.right).toBeCloseTo(16,0);
-  expect(insets.bottom).toBeCloseTo(16,0);
+  const toolbar = page.getByRole('toolbar', { name: 'Preview zoom controls' }),
+    stage = page.locator('.floating-toolbar-demo');
+  await expect(toolbar).toHaveAttribute('data-component', 'floating-toolbar');
+  await expect(toolbar).toHaveAttribute('data-position', 'bottom-end');
+  await expect(toolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  await expect(toolbar.getByRole('button', { name: 'Zoom out' })).toBeEnabled();
+  await expect(toolbar.getByRole('button', { name: 'Zoom in' })).toBeEnabled();
+  const insets = await toolbar.evaluate((node) => {
+    const toolbarBounds = node.getBoundingClientRect(),
+      stageBounds = node.parentElement!.getBoundingClientRect();
+    return { right: stageBounds.right - toolbarBounds.right, bottom: stageBounds.bottom - toolbarBounds.bottom };
+  });
+  expect(insets.right).toBeCloseTo(16, 0);
+  expect(insets.bottom).toBeCloseTo(16, 0);
   await expect(stage).toBeVisible();
 });
 
@@ -1249,7 +2257,7 @@ test('shows the reader text push state at exactly one and a half times normal si
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
   const paragraph = reader.locator('.ticket-inspector__details-surface .markdown-preview p').first();
-  const ordinarySize = parseFloat(await paragraph.evaluate(node => getComputedStyle(node).fontSize));
+  const ordinarySize = parseFloat(await paragraph.evaluate((node) => getComputedStyle(node).fontSize));
   const toggle = reader.locator('[data-action="toggle-reader-text-size"]');
   await expect(toggle).toHaveAccessibleName('Use large reader text size');
   const pushGroup = toggle.locator('..');
@@ -1258,12 +2266,16 @@ test('shows the reader text push state at exactly one and a half times normal si
   await expect(reader).toHaveAttribute('data-large-text', 'true');
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(toggle).toHaveAccessibleName('Use standard reader text size');
-  await expect.poll(async () => parseFloat(await paragraph.evaluate(node => getComputedStyle(node).fontSize))).toBeCloseTo(ordinarySize * 1.5, 1);
+  await expect
+    .poll(async () => parseFloat(await paragraph.evaluate((node) => getComputedStyle(node).fontSize)))
+    .toBeCloseTo(ordinarySize * 1.5, 1);
   await expect(pushGroup).toHaveCSS('background-color', 'rgb(72, 72, 74)');
   await expect(pushGroup).toHaveCSS('border-color', 'rgb(174, 174, 178)');
   await expect(toggle).toHaveCSS('color', 'rgb(255, 255, 255)');
   await page.screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-wide.png', fullPage: true });
-  await reader.locator('.ticket-inspector__header').screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-header.png' });
+  await reader
+    .locator('.ticket-inspector__header')
+    .screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-header.png' });
   await page.setViewportSize({ width: 1024, height: 700 });
   await reader.locator('[data-component="ticket-notes"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-narrow.png', fullPage: true });
@@ -1285,8 +2297,13 @@ test('shows repository comparison as a shared pressed toolbar control', async ({
   await expect(group).toHaveCSS('border-color', 'rgb(174, 174, 178)');
   await expect(compare).toHaveCSS('color', 'rgb(255, 255, 255)');
   await dialog.screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-wide.png' });
-  await dialog.locator('[data-component="panel-header"]').screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-header.png' });
-  await page.addStyleTag({ content: 'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}' });
+  await dialog
+    .locator('[data-component="panel-header"]')
+    .screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-header.png' });
+  await page.addStyleTag({
+    content:
+      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+  });
   await page.setViewportSize({ width: 760, height: 640 });
   await page.mouse.move(740, 620);
   await page.waitForTimeout(150);
@@ -1305,7 +2322,10 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   expect(await title.evaluate((node: HTMLInputElement) => node.checkValidity())).toBe(false);
   await expect(form).toBeVisible();
   await title.fill('Created from the UX demo');
-  const details=form.getByRole('textbox',{name:'Details'});await details.fill('One-line details that can grow.');expect(await details.getAttribute('rows')).toBe('1');expect(await details.evaluate(node=>getComputedStyle(node).resize)).toBe('vertical');
+  const details = form.getByRole('textbox', { name: 'Details' });
+  await details.fill('One-line details that can grow.');
+  expect(await details.getAttribute('rows')).toBe('1');
+  expect(await details.evaluate((node) => getComputedStyle(node).resize)).toBe('vertical');
   const category = form.locator('wa-select[name="new-ticket-category"]');
   await expect(category.locator('.kui-select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
@@ -1316,18 +2336,71 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(selectedOption.locator('.kui-select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
-  await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await category.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'bug';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(form.locator('.kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await form.getByRole('button',{name:'Add new ticket to Up Next'}).click();
-  await expect(form.getByRole('button',{name:'Remove new ticket from Up Next'})).toHaveAttribute('aria-pressed','true');
-  expect(await form.evaluate(node=>{const style=getComputedStyle(node),metadata=getComputedStyle(node.querySelector('.quick-ticket-composer__metadata')!),details=getComputedStyle(node.querySelector('.quick-ticket-composer__details')!),textarea=getComputedStyle(node.querySelector('textarea')!),attachments=getComputedStyle(node.querySelector('.quick-ticket-composer__attachments')!),headerLabel=getComputedStyle(node.querySelector('.quick-ticket-composer__attachments header label')!),drop=getComputedStyle(node.querySelector('.quick-ticket-composer__drop')!),footer=getComputedStyle(node.querySelector('.quick-ticket-composer__footer')!),actions=getComputedStyle(node.querySelector('.quick-ticket-composer__footer > div')!);return{padding:style.paddingTop,regionGap:style.gap,metadataGap:metadata.gap,detailsGap:details.gap,textareaPadding:[textarea.paddingTop,textarea.paddingLeft],attachmentsGap:attachments.gap,headerLabelGap:headerLabel.gap,dropPadding:[drop.paddingTop,drop.paddingLeft],dropGap:drop.gap,footerGap:footer.gap,actionGap:actions.gap}})).toEqual({padding:'16px',regionGap:'16px',metadataGap:'8px',detailsGap:'4px',textareaPadding:['8px','16px'],attachmentsGap:'8px',headerLabelGap:'4px',dropPadding:['8px','16px'],dropGap:'8px',footerGap:'16px',actionGap:'8px'});
-  await form.screenshot({path:'/private/tmp/hs2-4y6sm9-quick-ticket-composer-wide.png'});
-  await page.setViewportSize({width:560,height:760});await expect(form).toBeVisible();await form.screenshot({path:'/private/tmp/hs2-4y6sm9-quick-ticket-composer-narrow.png'});await page.setViewportSize({width:1280,height:800});
+  await form.getByRole('button', { name: 'Add new ticket to Up Next' }).click();
+  await expect(form.getByRole('button', { name: 'Remove new ticket from Up Next' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(
+    await form.evaluate((node) => {
+      const style = getComputedStyle(node),
+        metadata = getComputedStyle(node.querySelector('.quick-ticket-composer__metadata')!),
+        details = getComputedStyle(node.querySelector('.quick-ticket-composer__details')!),
+        textarea = getComputedStyle(node.querySelector('textarea')!),
+        attachments = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments')!),
+        headerLabel = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments header label')!),
+        drop = getComputedStyle(node.querySelector('.quick-ticket-composer__drop')!),
+        footer = getComputedStyle(node.querySelector('.quick-ticket-composer__footer')!),
+        actions = getComputedStyle(node.querySelector('.quick-ticket-composer__footer > div')!);
+      return {
+        padding: style.paddingTop,
+        regionGap: style.gap,
+        metadataGap: metadata.gap,
+        detailsGap: details.gap,
+        textareaPadding: [textarea.paddingTop, textarea.paddingLeft],
+        attachmentsGap: attachments.gap,
+        headerLabelGap: headerLabel.gap,
+        dropPadding: [drop.paddingTop, drop.paddingLeft],
+        dropGap: drop.gap,
+        footerGap: footer.gap,
+        actionGap: actions.gap,
+      };
+    }),
+  ).toEqual({
+    padding: '16px',
+    regionGap: '16px',
+    metadataGap: '8px',
+    detailsGap: '4px',
+    textareaPadding: ['8px', '16px'],
+    attachmentsGap: '8px',
+    headerLabelGap: '4px',
+    dropPadding: ['8px', '16px'],
+    dropGap: '8px',
+    footerGap: '16px',
+    actionGap: '8px',
+  });
+  await form.screenshot({ path: '/private/tmp/hs2-4y6sm9-quick-ticket-composer-wide.png' });
+  await page.setViewportSize({ width: 560, height: 760 });
+  await expect(form).toBeVisible();
+  await form.screenshot({ path: '/private/tmp/hs2-4y6sm9-quick-ticket-composer-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await form.getByRole('button', { name: 'Create ticket' }).click();
   const createdList = page.getByRole('listbox', { name: 'Recently updated tickets' });
   await expect(createdList).toContainText('Created from the UX demo');
-  await expect(createdList.locator('[data-component="ticket-list-row"]').first().locator('[data-lucide="bug"]')).toBeVisible();
-  await expect(createdList.locator('[data-component="ticket-list-row"]').first().getByRole('button',{name:'Remove from Up Next'})).toBeVisible();
+  await expect(
+    createdList.locator('[data-component="ticket-list-row"]').first().locator('[data-lucide="bug"]'),
+  ).toBeVisible();
+  await expect(
+    createdList
+      .locator('[data-component="ticket-list-row"]')
+      .first()
+      .getByRole('button', { name: 'Remove from Up Next' }),
+  ).toBeVisible();
   await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
@@ -1340,8 +2413,11 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(launcher).toHaveCSS('cursor', 'pointer');
   await launcher.click();
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
-  await expect(page.getByRole('textbox',{name:'Details'})).toHaveValue('');
-  await expect(page.getByRole('button',{name:'Add new ticket to Up Next'})).toHaveAttribute('aria-pressed','false');
+  await expect(page.getByRole('textbox', { name: 'Details' })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Add new ticket to Up Next' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
 });
 
 test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecycle order', async ({ page }) => {
@@ -1352,10 +2428,14 @@ test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecyc
   await launcher.click();
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
-  expect(await dialog.evaluate(node => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
+  expect(await dialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
 
-  await page.evaluate(() => { const target = document.querySelector<HTMLElement>('.kui-catalog__sidebar')!; target.tabIndex = -1; target.focus(); });
-  expect(await dialog.evaluate(host => host.contains(document.activeElement))).toBe(true);
+  await page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>('.kui-catalog__sidebar')!;
+    target.tabIndex = -1;
+    target.focus();
+  });
+  expect(await dialog.evaluate((host) => host.contains(document.activeElement))).toBe(true);
   await page.mouse.click(8, 8);
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(launcher).not.toBeFocused();
@@ -1384,19 +2464,39 @@ test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecyc
   await expect(dialog).toBeHidden();
   await expect(launcher).toBeFocused();
 
-  await page.addStyleTag({ content: 'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}' });
+  await page.addStyleTag({
+    content:
+      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+  });
   await launcher.click();
-  await expect.poll(() => dialog.evaluate(node => ({ nativeOpen: node.shadowRoot?.querySelector('dialog')?.open, runningAnimations: node.shadowRoot?.querySelector('dialog')?.getAnimations().filter(animation => animation.playState === 'running').length }))).toEqual({ nativeOpen: true, runningAnimations: 0 });
+  await expect
+    .poll(() =>
+      dialog.evaluate((node) => ({
+        nativeOpen: node.shadowRoot?.querySelector('dialog')?.open,
+        runningAnimations: node.shadowRoot
+          ?.querySelector('dialog')
+          ?.getAnimations()
+          .filter((animation) => animation.playState === 'running').length,
+      })),
+    )
+    .toEqual({ nativeOpen: true, runningAnimations: 0 });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog.getByRole('button', { name: 'Create ticket' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-sq71gk-composer-modal-390x844.png' });
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 195, height: 422, deviceScaleFactor: 2, mobile: false });
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 195,
+    height: 422,
+    deviceScaleFactor: 2,
+    mobile: false,
+  });
   await expect(dialog.getByRole('button', { name: 'Create ticket' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-sq71gk-composer-modal-200-percent.png' });
 
   await page.goto('/ux-demo?component=ticket-row');
-  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('wa-scroll-lock'))).toBe(false);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.classList.contains('wa-scroll-lock')))
+    .toBe(false);
 });
 
 test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {
@@ -1412,38 +2512,127 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await titleEditor.blur();
   await expect(inspector.getByRole('heading', { name: 'Autosaved inspector title' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Add tag' }).click();
-  const tagDialog=page.getByRole('dialog',{name:'Add tag'}),tagEditor = tagDialog.getByRole('combobox', { name: 'Tag name' });
+  const tagDialog = page.getByRole('dialog', { name: 'Add tag' }),
+    tagEditor = tagDialog.getByRole('combobox', { name: 'Tag name' });
   await expect(tagEditor).toBeFocused();
-  expect(await tagDialog.evaluate(node=>{const editor=getComputedStyle(node.parentElement!),popover=getComputedStyle(node),heading=getComputedStyle(node.querySelector('strong')!),label=getComputedStyle(node.querySelector('label')!),input=getComputedStyle(node.querySelector('input')!),help=getComputedStyle(node.querySelector('small')!);return{editorGap:editor.gap,popoverMargin:popover.marginTop,popoverPadding:popover.paddingTop,headingMargin:heading.marginBottom,labelGap:label.gap,inputPadding:input.paddingLeft,helpMargin:help.marginTop}})).toEqual({editorGap:'8px',popoverMargin:'4px',popoverPadding:'16px',headingMargin:'16px',labelGap:'4px',inputPadding:'16px',helpMargin:'8px'});
-  await tagDialog.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-tag-editor-wide.png'});const addTagButton=inspector.getByRole('button',{name:'Add tag'});await page.keyboard.press('Escape');await page.setViewportSize({width:390,height:844});await addTagButton.scrollIntoViewIfNeeded();await addTagButton.click();await expect(tagEditor).toBeFocused();await tagDialog.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-tag-editor-narrow.png'});await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:720});await addTagButton.scrollIntoViewIfNeeded();await addTagButton.click();await expect(tagEditor).toBeFocused();
+  expect(
+    await tagDialog.evaluate((node) => {
+      const editor = getComputedStyle(node.parentElement!),
+        popover = getComputedStyle(node),
+        heading = getComputedStyle(node.querySelector('strong')!),
+        label = getComputedStyle(node.querySelector('label')!),
+        input = getComputedStyle(node.querySelector('input')!),
+        help = getComputedStyle(node.querySelector('small')!);
+      return {
+        editorGap: editor.gap,
+        popoverMargin: popover.marginTop,
+        popoverPadding: popover.paddingTop,
+        headingMargin: heading.marginBottom,
+        labelGap: label.gap,
+        inputPadding: input.paddingLeft,
+        helpMargin: help.marginTop,
+      };
+    }),
+  ).toEqual({
+    editorGap: '8px',
+    popoverMargin: '4px',
+    popoverPadding: '16px',
+    headingMargin: '16px',
+    labelGap: '4px',
+    inputPadding: '16px',
+    helpMargin: '8px',
+  });
+  await tagDialog.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-tag-editor-wide.png' });
+  const addTagButton = inspector.getByRole('button', { name: 'Add tag' });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await addTagButton.scrollIntoViewIfNeeded();
+  await addTagButton.click();
+  await expect(tagEditor).toBeFocused();
+  await tagDialog.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-tag-editor-narrow.png' });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await addTagButton.scrollIntoViewIfNeeded();
+  await addTagButton.click();
+  await expect(tagEditor).toBeFocused();
   await tagEditor.fill('regression');
   await tagEditor.press('Enter');
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
-  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"]').evaluate(node => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
+  await inspector
+    .locator('[data-component="tag-chip"][data-tag-id="client"]')
+    .evaluate((node) => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
   await expect(inspector.getByRole('tab', { name: 'Info' })).toHaveAttribute('aria-selected', 'true');
-  expect(await inspector.evaluate(node=>{const header=getComputedStyle(node.querySelector('.ticket-inspector__header')!),title=getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),tabs=getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),tabRail=getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),tabSelect=getComputedStyle(node.querySelector('.ticket-inspector__tab .kui-app-tab__select')!);return{headerBottom:header.paddingBottom,titleMargin:[title.marginTop,title.marginLeft],tabsMargin:[tabs.marginRight,tabs.marginBottom],tabsPadding:tabs.paddingTop,tabRailPadding:tabRail.paddingTop,tabGap:tabSelect.gap}})).toEqual({headerBottom:'16px',titleMargin:['4px','16px'],tabsMargin:['8px','8px'],tabsPadding:'0px',tabRailPadding:'4px',tabGap:'4px'});
-  await page.keyboard.press('Escape');const captureInspectorShell=async(path:string)=>{await inspector.evaluate(node=>{node.style.height='560px';node.style.minHeight='0';node.style.flex='none'});await inspector.screenshot({path});await inspector.evaluate(node=>{node.style.height='';node.style.minHeight='';node.style.flex=''})};await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-wide.png');await page.setViewportSize({width:390,height:844});await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-narrow.png');await page.setViewportSize({width:1280,height:720});
+  expect(
+    await inspector.evaluate((node) => {
+      const header = getComputedStyle(node.querySelector('.ticket-inspector__header')!),
+        title = getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),
+        tabs = getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),
+        tabRail = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),
+        tabSelect = getComputedStyle(node.querySelector('.ticket-inspector__tab .kui-app-tab__select')!);
+      return {
+        headerBottom: header.paddingBottom,
+        titleMargin: [title.marginTop, title.marginLeft],
+        tabsMargin: [tabs.marginRight, tabs.marginBottom],
+        tabsPadding: tabs.paddingTop,
+        tabRailPadding: tabRail.paddingTop,
+        tabGap: tabSelect.gap,
+      };
+    }),
+  ).toEqual({
+    headerBottom: '16px',
+    titleMargin: ['4px', '16px'],
+    tabsMargin: ['8px', '8px'],
+    tabsPadding: '0px',
+    tabRailPadding: '4px',
+    tabGap: '4px',
+  });
+  await page.keyboard.press('Escape');
+  const captureInspectorShell = async (path: string) => {
+    await inspector.evaluate((node) => {
+      node.style.height = '560px';
+      node.style.minHeight = '0';
+      node.style.flex = 'none';
+    });
+    await inspector.screenshot({ path });
+    await inspector.evaluate((node) => {
+      node.style.height = '';
+      node.style.minHeight = '';
+      node.style.flex = '';
+    });
+  };
+  await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-wide.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await captureInspectorShell('/private/tmp/hs2-4y6sm9-ticket-inspector-narrow.png');
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
   await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
-  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
-  const selectedSpacing = await inspector.locator('wa-select[name="inspector-category"]').evaluate(node => {
+  await expect(
+    inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]'),
+  ).toBeVisible();
+  await expect(
+    inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]'),
+  ).toBeVisible();
+  const selectedSpacing = await inspector.locator('wa-select[name="inspector-category"]').evaluate((node) => {
     const icon = node.querySelector<HTMLElement>('.kui-select__icon--selected')!.getBoundingClientRect();
     const input = node.shadowRoot!.querySelector<HTMLElement>('[part~="display-input"]')!.getBoundingClientRect();
-    return { actual: input.left - icon.right, expected: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * .5 };
+    return {
+      actual: input.left - icon.right,
+      expected: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.5,
+    };
   });
   expect(selectedSpacing.actual).toBeCloseTo(selectedSpacing.expected, 1);
   const category = inspector.locator('wa-select[name="inspector-category"]');
-  const fieldLabelGeometry = await category.evaluate(node => {
+  const fieldLabelGeometry = await category.evaluate((node) => {
     const label = node.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!;
     const combobox = node.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!;
     const labelStyle = getComputedStyle(label);
     const comboboxStyle = getComputedStyle(combobox);
     return {
       labelInset: Number.parseFloat(labelStyle.paddingInlineStart),
-      valueInset: Number.parseFloat(comboboxStyle.borderInlineStartWidth) + Number.parseFloat(comboboxStyle.paddingInlineStart),
+      valueInset:
+        Number.parseFloat(comboboxStyle.borderInlineStartWidth) + Number.parseFloat(comboboxStyle.paddingInlineStart),
       textTransform: labelStyle.textTransform,
       fontWeight: labelStyle.fontWeight,
     };
@@ -1452,64 +2641,101 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   expect(fieldLabelGeometry.labelInset).toBeCloseTo(9, 1);
   expect(fieldLabelGeometry.textTransform).toBe('uppercase');
   expect(fieldLabelGeometry.fontWeight).toBe('650');
-  const selectCaret = await category.evaluate(node => {
+  const selectCaret = await category.evaluate((node) => {
     const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="expand-icon"]');
     return caret ? { transform: getComputedStyle(caret).transform, width: caret.getBoundingClientRect().width } : null;
   });
   expect(selectCaret?.transform).toContain('0.5');
   await category.click();
   const longOption = category.locator('wa-option[value="requirement_change"]');
-  const optionLayout = await longOption.evaluate(node => {
+  const optionLayout = await longOption.evaluate((node) => {
     const label = node.shadowRoot?.querySelector<HTMLElement>('[part~="label"]');
-    return label ? { whiteSpace: getComputedStyle(label).whiteSpace, optionHeight: node.getBoundingClientRect().height } : null;
+    return label
+      ? { whiteSpace: getComputedStyle(label).whiteSpace, optionHeight: node.getBoundingClientRect().height }
+      : null;
   });
   expect(optionLayout?.whiteSpace).toBe('normal');
   expect(optionLayout!.optionHeight).toBeGreaterThan(40);
   for (const value of ['task', 'requirement_change']) {
-    const centerDelta = await category.locator(`wa-option[value="${value}"]`).evaluate(node => {
+    const centerDelta = await category.locator(`wa-option[value="${value}"]`).evaluate((node) => {
       const label = node.shadowRoot!.querySelector<HTMLElement>('[part~="label"]')!.getBoundingClientRect();
       const start = node.shadowRoot!.querySelector<HTMLElement>('[part~="start"]')!.getBoundingClientRect();
-      return Math.abs((label.top + label.height / 2) - (start.top + start.height / 2));
+      return Math.abs(label.top + label.height / 2 - (start.top + start.height / 2));
     });
     expect(centerDelta).toBeLessThan(1);
   }
   await page.keyboard.press('Escape');
-  await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
+  await category.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'bug';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(
+    inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]'),
+  ).toBeVisible();
+  await expect(
+    inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]'),
+  ).toHaveCount(0);
   const priority = inspector.locator('wa-select[name="inspector-priority"]');
-  await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
-  await inspector.locator('.ticket-inspector__metadata').screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-wide.png' });
+  await priority.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'low';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(
+    inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]'),
+  ).toBeVisible();
+  await expect(
+    inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]'),
+  ).toHaveCount(0);
+  await inspector
+    .locator('.ticket-inspector__metadata')
+    .screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(inspector.locator('wa-select[name="inspector-category"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-priority"]')).toBeVisible();
-  await inspector.locator('.ticket-inspector__metadata').screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-narrow.png' });
+  await inspector
+    .locator('.ticket-inspector__metadata')
+    .screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
   const statusTrigger = inspector.locator('wa-select[name="inspector-status"]');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Started');
-  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
+  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute(
+    'data-status',
+    'started',
+  );
   await statusTrigger.click();
   await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
   await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);
-  expect(await statusTrigger.locator('wa-option').evaluateAll(options => options.map(option => option.getAttribute('value')))).toEqual(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive']);
-  const popupFontWeight = await statusTrigger.locator('wa-option[value="completed"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="label"]')!).fontWeight);
+  expect(
+    await statusTrigger
+      .locator('wa-option')
+      .evaluateAll((options) => options.map((option) => option.getAttribute('value'))),
+  ).toEqual(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive']);
+  const popupFontWeight = await statusTrigger
+    .locator('wa-option[value="completed"]')
+    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="label"]')!).fontWeight);
   expect(Number(popupFontWeight)).toBeLessThanOrEqual(500);
   await statusTrigger.locator('wa-option[value="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Completed');
-  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
+  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute(
+    'data-status',
+    'completed',
+  );
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
-  const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
-    [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
+  const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate((node) =>
+    [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map((section) => ({
+      gap: getComputedStyle(section).rowGap,
+      headerHeight: section.querySelector('header')?.getBoundingClientRect().height,
+    })),
   );
   expect(sectionRhythm).toHaveLength(3);
-  expect(sectionRhythm.map(section => section.gap)).toEqual(['8px', '8px', '8px']);
-  expect(sectionRhythm[0].headerHeight).toBeUndefined();expect(sectionRhythm[1].headerHeight).toBeCloseTo(44,1);expect(sectionRhythm[2].headerHeight).toBeCloseTo(44,1);
+  expect(sectionRhythm.map((section) => section.gap)).toEqual(['8px', '8px', '8px']);
+  expect(sectionRhythm[0].headerHeight).toBeUndefined();
+  expect(sectionRhythm[1].headerHeight).toBeCloseTo(44, 1);
+  expect(sectionRhythm[2].headerHeight).toBeCloseTo(44, 1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
@@ -1523,7 +2749,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
   await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(5);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
-  const firstNoteBody=firstNote.locator('.note-card__body');await expect(firstNoteBody).toHaveAttribute('aria-label', 'Edit note');
+  const firstNoteBody = firstNote.locator('.note-card__body');
+  await expect(firstNoteBody).toHaveAttribute('aria-label', 'Edit note');
   await expect(firstNote.locator('[data-action="open-ticket-reader"]')).toHaveCount(0);
   await firstNoteBody.press('Enter');
   await expect(firstNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
@@ -1560,8 +2787,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const reopened = page.locator('[data-component="ticket-inspector"]');
   await expect(reopened).toBeVisible();
   await reopened.getByRole('tab', { name: 'Info' }).click();
-  await expect(reopened.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(reopened.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(
+    reopened.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]'),
+  ).toBeVisible();
+  await expect(
+    reopened.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]'),
+  ).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(reopened.getByRole('button', { name: 'Open ticket reader', exact: true })).toBeVisible();
   await reopened.getByRole('button', { name: 'Open ticket reader', exact: true }).click();
@@ -1569,88 +2800,453 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(page.locator('[data-component="ticket-reader"]')).toBeVisible();
 });
 
-test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');const review=page.locator('[data-component="ticket-code-review"]').first();await expect(review).toBeVisible();const spacing=await review.evaluate(node=>{const heading=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__heading')!),evidence=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence')!),evidenceItem=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence-grid span')!),range=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range')!),rangeItem=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range-item')!),commit=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit')!),summary=getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit-summary')!);return{headingGap:heading.gap,evidenceMargin:evidence.marginBottom,evidencePadding:evidence.padding,evidenceItemGap:evidenceItem.gap,rangePadding:range.padding,rangeGap:range.gap,rangeItemMargin:rangeItem.margin,commitPadding:commit.padding,commitGap:commit.gap,summaryGap:summary.gap}});expect(spacing).toEqual({headingGap:'4px',evidenceMargin:'16px',evidencePadding:'8px',evidenceItemGap:'4px',rangePadding:'8px',rangeGap:'8px',rangeItemMargin:'8px 0px 4px',commitPadding:'8px 0px',commitGap:'8px',summaryGap:'4px'});await review.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-code-review-wide.png'});
-  await page.setViewportSize({width:390,height:844});await expect.poll(()=>review.evaluate(node=>{const box=node.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth})).toBe(true);await review.screenshot({path:'/private/tmp/hs2-4y6sm9-ticket-code-review-narrow.png'});
+test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');
+  const review = page.locator('[data-component="ticket-code-review"]').first();
+  await expect(review).toBeVisible();
+  const spacing = await review.evaluate((node) => {
+    const heading = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__heading')!),
+      evidence = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence')!),
+      evidenceItem = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence-grid span')!),
+      range = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range')!),
+      rangeItem = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range-item')!),
+      commit = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit')!),
+      summary = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit-summary')!);
+    return {
+      headingGap: heading.gap,
+      evidenceMargin: evidence.marginBottom,
+      evidencePadding: evidence.padding,
+      evidenceItemGap: evidenceItem.gap,
+      rangePadding: range.padding,
+      rangeGap: range.gap,
+      rangeItemMargin: rangeItem.margin,
+      commitPadding: commit.padding,
+      commitGap: commit.gap,
+      summaryGap: summary.gap,
+    };
+  });
+  expect(spacing).toEqual({
+    headingGap: '4px',
+    evidenceMargin: '16px',
+    evidencePadding: '8px',
+    evidenceItemGap: '4px',
+    rangePadding: '8px',
+    rangeGap: '8px',
+    rangeItemMargin: '8px 0px 4px',
+    commitPadding: '8px 0px',
+    commitGap: '8px',
+    summaryGap: '4px',
+  });
+  await review.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-code-review-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      review.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth;
+      }),
+    )
+    .toBe(true);
+  await review.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-code-review-narrow.png' });
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
-  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-code-review', 'ticket-code-review'],['attachment-gallery','attachment-gallery'], ['ticket-attachments', 'ticket-attachments']] as const) {
+  for (const [id, component] of [
+    ['ticket-category-select', 'ticket-category-select'],
+    ['ticket-priority-select', 'ticket-priority-select'],
+    ['ticket-status-menu', 'ticket-status-menu'],
+    ['ticket-info-panel', 'ticket-info-panel'],
+    ['ticket-timeline', 'ticket-timeline'],
+    ['ticket-code-review', 'ticket-code-review'],
+    ['attachment-gallery', 'attachment-gallery'],
+    ['ticket-attachments', 'ticket-attachments'],
+  ] as const) {
     await page.goto(`/ux-demo?component=${id}`);
-    await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`)).first()).toBeVisible();
+    await expect(
+      page
+        .locator(`[data-component="${component}"]`)
+        .or(page.locator(`.${component}`))
+        .first(),
+    ).toBeVisible();
   }
-  await expect(page.getByRole('button',{name:'Edit batch label Brian · Round 1 · Problem evidence'})).toBeVisible();await expect(page.getByRole('button',{name:'Edit batch label Corrected implementation'})).toBeVisible();await expect(page.getByRole('button',{name:'Edit batch label System · Batch 1 · Problem evidence'})).toBeVisible();await expect(page.getByRole('button',{name:'Edit batch label Legacy / Uncategorized'})).toBeVisible();
-  const annotatedCard=page.getByRole('button',{name:'Open wide-layout.svg in media gallery, 2 annotations'});await expect(annotatedCard.locator('.ticket-attachments__annotation-marker [data-lucide="pencil"]')).toBeVisible();
-  await page.locator('.kui-catalog__detail').screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-wide.png' });
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }))));
-  const surface=page.locator('[data-component="ticket-attachments"]'),dragged=surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));const newGroup=page.locator('[data-attachment-new-group-drop-target]');await expect(newGroup).toBeVisible();await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-drag-new-group.png'});await newGroup.evaluate(node=>node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()})));await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(5);await expect(page.getByRole('button',{name:'Edit batch label New group'})).toBeVisible();await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-regrouped-final.png'});
-  const item=page.locator('[data-attachment-id="demo-video"]'),trigger=item.getByRole('button',{name:'More actions for choppy.mov'});await expect(item.getByRole('button')).toHaveCount(1);await expect(trigger).toHaveAttribute('title','More actions for choppy.mov');await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();await trigger.click();let menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.getByRole('menuitem')).toHaveCount(6);await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Open','Download','Copy reference','Rename','Show in file manager','Remove']);
-  const gridVideo=page.locator('.ticket-attachments__image-grid video').first();await expect(gridVideo).toBeVisible();await expect(gridVideo).toHaveAttribute('poster','/ux-gallery-preview.svg?variant=video');expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).autoplay)).toBe(false);
-  await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toHaveCount(0);await page.locator('[data-component="ticket-attachments"]').screenshot({path:'/private/tmp/hs2-j978e9-annotation-grid-marker.png'});
+  await expect(page.getByRole('button', { name: 'Edit batch label Brian · Round 1 · Problem evidence' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit batch label Corrected implementation' })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Edit batch label System · Batch 1 · Problem evidence' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' })).toBeVisible();
+  const annotatedCard = page.getByRole('button', { name: 'Open wide-layout.svg in media gallery, 2 annotations' });
+  await expect(annotatedCard.locator('.ticket-attachments__annotation-marker [data-lucide="pencil"]')).toBeVisible();
+  await page
+    .locator('.kui-catalog__detail')
+    .screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-wide.png' });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            resolve();
+          }),
+        ),
+      ),
+  );
+  const surface = page.locator('[data-component="ticket-attachments"]'),
+    dragged = surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');
+  await dragged.evaluate((node) =>
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })),
+  );
+  const newGroup = page.locator('[data-attachment-new-group-drop-target]');
+  await expect(newGroup).toBeVisible();
+  await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);
+  await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-drag-new-group.png' });
+  await newGroup.evaluate((node) =>
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() })),
+  );
+  await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Edit batch label New group' })).toBeVisible();
+  await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-regrouped-final.png' });
+  const item = page.locator('[data-attachment-id="demo-video"]'),
+    trigger = item.getByRole('button', { name: 'More actions for choppy.mov' });
+  await expect(item.getByRole('button')).toHaveCount(1);
+  await expect(trigger).toHaveAttribute('title', 'More actions for choppy.mov');
+  await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();
+  await trigger.click();
+  let menu = page.getByRole('menu', { name: 'Attachment actions' });
+  await expect(menu.getByRole('menuitem')).toHaveCount(6);
+  await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual([
+    'Open',
+    'Download',
+    'Copy reference',
+    'Rename',
+    'Show in file manager',
+    'Remove',
+  ]);
+  const gridVideo = page.locator('.ticket-attachments__image-grid video').first();
+  await expect(gridVideo).toBeVisible();
+  await expect(gridVideo).toHaveAttribute('poster', '/ux-gallery-preview.svg?variant=video');
+  expect(await gridVideo.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(true);
+  expect(await gridVideo.evaluate((node) => (node as HTMLVideoElement).autoplay)).toBe(false);
+  await menu.getByRole('menuitem', { name: 'Copy reference' }).click();
+  await expect(menu).toHaveCount(0);
+  await page
+    .locator('[data-component="ticket-attachments"]')
+    .screenshot({ path: '/private/tmp/hs2-j978e9-annotation-grid-marker.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');await expect.poll(async()=>((await batchPurpose.boundingBox())?.y??0)-((await batchTitle.boundingBox())?.y??0)).toBeGreaterThan(0);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.getByRole('menuitem')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
+  const batchHeader = page.locator('.ticket-attachments__batch > header').first(),
+    batchTitle = batchHeader.locator('.ticket-attachments__batch-title'),
+    batchPurpose = batchHeader.locator('select');
+  await expect
+    .poll(async () => ((await batchPurpose.boundingBox())?.y ?? 0) - ((await batchTitle.boundingBox())?.y ?? 0))
+    .toBeGreaterThan(0);
+  await item.scrollIntoViewIfNeeded();
+  await item.click({ button: 'right' });
+  menu = page.getByRole('menu', { name: 'Attachment actions' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem')).toHaveCount(6);
+  await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png', fullPage: true });
 });
 
-test('styles and edits attachment group labels while preserving drag regrouping', async ({page}) => {
-  await page.setViewportSize({width:1280,height:900});
+test('styles and edits attachment group labels while preserving drag regrouping', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
-  const surface=page.locator('[data-component="ticket-attachments"]'),groups=surface.locator('[data-attachment-group-drop-target]'),first=groups.first();
-  await expect(first).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  const surface = page.locator('[data-component="ticket-attachments"]'),
+    groups = surface.locator('[data-attachment-group-drop-target]'),
+    first = groups.first();
+  await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(surface.locator('[data-lucide="grip-vertical"]')).toHaveCount(0);
-  const title=first.getByRole('button',{name:/Edit batch label/}),purpose=first.locator('select');
-  await expect(title).toHaveCSS('font-size','16px');
+  const title = first.getByRole('button', { name: /Edit batch label/ }),
+    purpose = first.locator('select');
+  await expect(title).toHaveCSS('font-size', '16px');
   expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
   await title.dblclick();
-  const editor=first.getByRole('textbox',{name:/Batch label/});
+  const editor = first.getByRole('textbox', { name: /Batch label/ });
   await expect(editor).toBeFocused();
   await editor.fill('Discarded label');
   await editor.press('Escape');
-  await expect(first.getByRole('button',{name:/Brian · Round 1 · Problem evidence/})).toBeVisible();
-  await expect(first.getByRole('button',{name:/Brian · Round 1 · Problem evidence/})).toBeFocused();
-  await first.getByRole('button',{name:/Edit batch label/}).dblclick();
+  await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeVisible();
+  await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeFocused();
+  await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
   await editor.fill('Human review evidence');
   await editor.press('Enter');
-  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeVisible();
-  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeFocused();
+  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeVisible();
+  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeFocused();
   await page.locator('h2').first().click();
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }))));
-  const dragged=surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id]').first();
-  await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));
-  const activeTarget=groups.nth(1);
-  await activeTarget.evaluate(node=>node.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()})));
-  await expect(activeTarget).toHaveAttribute('data-drag-over','true');
-  await expect(activeTarget).not.toHaveCSS('outline-style','none');
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            resolve();
+          }),
+        ),
+      ),
+  );
+  const dragged = surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id]').first();
+  await dragged.evaluate((node) =>
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })),
+  );
+  const activeTarget = groups.nth(1);
+  await activeTarget.evaluate((node) =>
+    node.dispatchEvent(
+      new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+    ),
+  );
+  await expect(activeTarget).toHaveAttribute('data-drag-over', 'true');
+  await expect(activeTarget).not.toHaveCSS('outline-style', 'none');
   await expect(surface.locator('[data-attachment-new-group-drop-target]')).toBeVisible();
-  await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-feedback-wide.png'});
-  await page.setViewportSize({width:390,height:844});
+  await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-feedback-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.mouse.move(2,2);
-  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeVisible();
+  await page.mouse.move(2, 2);
+  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeVisible();
   expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
-  await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-feedback-narrow.png'});
+  await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-feedback-narrow.png' });
 });
 
-test('navigates and zooms the standalone attachment gallery demo',async({page})=>{
-  await page.route('**/ux-gallery-preview.svg',async route=>{if(new URL(route.request().url()).search){await route.fallback();return}await route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700"><rect width="1200" height="700" fill="#ffe0a8"/><path d="M0 180V0h180M1020 0h180v180M1200 520v180h-180M180 700H0V520" fill="#c64b2c"/><text x="600" y="375" text-anchor="middle" font-family="sans-serif" font-size="58" fill="#33200f">Source corners preserved</text></svg>'})});await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');let gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toHaveAttribute('aria-label',/Image 1 of 3/);await expect(gallery.getByRole('button',{name:'Annotate media, 1 annotation'}).locator('.attachment-gallery__annotation-count')).toHaveText('1');const mediaWrap=gallery.locator('.attachment-gallery__media-wrap'),image=gallery.locator('[data-gallery-image="true"]');await expect(mediaWrap).toHaveCSS('border-radius','0px');await expect(image).toHaveCSS('border-radius','0px');await gallery.screenshot({path:'/private/tmp/hs2-2fm7ed-square-media-wide.png'});await expect(gallery.locator('[data-component="toolbar"]')).toBeVisible();const darkGroups=gallery.locator('[data-component="toolbar-control-group"]');await expect(darkGroups).toHaveCount(4);for(const group of await darkGroups.all()){await expect(group).toHaveAttribute('data-tone','dark');await expect(group).toHaveCSS('color','rgb(255, 255, 255)');await expect(group).not.toHaveCSS('border-color','rgb(209, 209, 214)')}await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color','rgb(255, 255, 255)');const fitWidth=await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width);await gallery.getByRole('button',{name:'Zoom in'}).click();expect(await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width)).toBeGreaterThan(fitWidth);await page.setViewportSize({width:760,height:640});await expect(mediaWrap).toHaveCSS('border-radius','0px');await expect(image).toHaveCSS('border-radius','0px');await gallery.screenshot({path:'/private/tmp/hs2-2fm7ed-square-media-narrow.png'});await page.setViewportSize({width:1280,height:900});await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAttribute('aria-label',/Image 2 of 3/);await gallery.screenshot({path:'/private/tmp/hs2-ddpkts-gallery-dark-wide.png'});await gallery.locator('[data-component="toolbar"]').screenshot({path:'/private/tmp/hs2-ddpkts-gallery-dark-toolbar.png'});await page.setViewportSize({width:760,height:640});await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAttribute('aria-label',/Video 3 of 3: walkthrough.mp4/);const video=gallery.locator('video');await expect(video).not.toHaveAttribute('controls',/.+/);await expect(gallery.getByRole('button',{name:'Play'})).toBeVisible();await expect(gallery.getByRole('button',{name:'Volume controls'})).toBeVisible();await expect(video).toHaveCSS('border-radius','0px');expect(await video.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);await video.evaluate(async node=>{if(!(node instanceof HTMLVideoElement))throw new Error('Expected gallery video');const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const context=canvas.getContext('2d')!;context.fillStyle='#7857a4';context.fillRect(0,0,640,360);context.fillStyle='white';context.font='32px sans-serif';context.fillText('Hot Sheet video evidence',132,190);const recorder=new MediaRecorder(canvas.captureStream(5),{mimeType:'video/webm'}),chunks:Blob[]=[];recorder.ondataavailable=event=>chunks.push(event.data);recorder.start();await new Promise(resolve=>setTimeout(resolve,250));const stopped=new Promise(resolve=>{recorder.onstop=resolve});recorder.stop();await stopped;node.src=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}));await new Promise((resolve,reject)=>{node.onloadedmetadata=resolve;node.onerror=reject})});await expect(video).toHaveJSProperty('videoWidth',640);const stageBox=(await gallery.locator('.attachment-gallery__stage').boundingBox())!,footerBox=(await gallery.locator('.attachment-gallery__footer').boundingBox())!;expect(stageBox.y+stageBox.height).toBeLessThanOrEqual(footerBox.y+.5);await video.hover();await gallery.screenshot({path:'/private/tmp/hs2-hz0trg-video-gallery-narrow.png'});await gallery.getByRole('button',{name:'Close video gallery'}).click();await expect(gallery).toHaveCount(0);await page.getByRole('button',{name:'Open gallery'}).click();gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toBeVisible();
+test('navigates and zooms the standalone attachment gallery demo', async ({ page }) => {
+  await page.route('**/ux-gallery-preview.svg', async (route) => {
+    if (new URL(route.request().url()).search) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700"><rect width="1200" height="700" fill="#ffe0a8"/><path d="M0 180V0h180M1020 0h180v180M1200 520v180h-180M180 700H0V520" fill="#c64b2c"/><text x="600" y="375" text-anchor="middle" font-family="sans-serif" font-size="58" fill="#33200f">Source corners preserved</text></svg>',
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  let gallery = page.locator('[data-component="attachment-gallery"]');
+  await expect(gallery).toHaveAttribute('aria-label', /Image 1 of 3/);
+  await expect(
+    gallery
+      .getByRole('button', { name: 'Annotate media, 1 annotation' })
+      .locator('.attachment-gallery__annotation-count'),
+  ).toHaveText('1');
+  const mediaWrap = gallery.locator('.attachment-gallery__media-wrap'),
+    image = gallery.locator('[data-gallery-image="true"]');
+  await expect(mediaWrap).toHaveCSS('border-radius', '0px');
+  await expect(image).toHaveCSS('border-radius', '0px');
+  await gallery.screenshot({ path: '/private/tmp/hs2-2fm7ed-square-media-wide.png' });
+  await expect(gallery.locator('[data-component="toolbar"]')).toBeVisible();
+  const darkGroups = gallery.locator('[data-component="toolbar-control-group"]');
+  await expect(darkGroups).toHaveCount(4);
+  for (const group of await darkGroups.all()) {
+    await expect(group).toHaveAttribute('data-tone', 'dark');
+    await expect(group).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(group).not.toHaveCSS('border-color', 'rgb(209, 209, 214)');
+  }
+  await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
+  const fitWidth = await image.evaluate((node) => (node as HTMLElement).getBoundingClientRect().width);
+  await gallery.getByRole('button', { name: 'Zoom in' }).click();
+  expect(await image.evaluate((node) => (node as HTMLElement).getBoundingClientRect().width)).toBeGreaterThan(fitWidth);
+  await page.setViewportSize({ width: 760, height: 640 });
+  await expect(mediaWrap).toHaveCSS('border-radius', '0px');
+  await expect(image).toHaveCSS('border-radius', '0px');
+  await gallery.screenshot({ path: '/private/tmp/hs2-2fm7ed-square-media-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await expect(gallery).toHaveAttribute('aria-label', /Image 2 of 3/);
+  await gallery.screenshot({ path: '/private/tmp/hs2-ddpkts-gallery-dark-wide.png' });
+  await gallery
+    .locator('[data-component="toolbar"]')
+    .screenshot({ path: '/private/tmp/hs2-ddpkts-gallery-dark-toolbar.png' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await expect(gallery).toHaveAttribute('aria-label', /Video 3 of 3: walkthrough.mp4/);
+  const video = gallery.locator('video');
+  await expect(video).not.toHaveAttribute('controls', /.+/);
+  await expect(gallery.getByRole('button', { name: 'Play' })).toBeVisible();
+  await expect(gallery.getByRole('button', { name: 'Volume controls' })).toBeVisible();
+  await expect(video).toHaveCSS('border-radius', '0px');
+  expect(await video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(true);
+  await video.evaluate(async (node) => {
+    if (!(node instanceof HTMLVideoElement)) throw new Error('Expected gallery video');
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 360;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#7857a4';
+    context.fillRect(0, 0, 640, 360);
+    context.fillStyle = 'white';
+    context.font = '32px sans-serif';
+    context.fillText('Hot Sheet video evidence', 132, 190);
+    const recorder = new MediaRecorder(canvas.captureStream(5), { mimeType: 'video/webm' }),
+      chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => chunks.push(event.data);
+    recorder.start();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const stopped = new Promise((resolve) => {
+      recorder.onstop = resolve;
+    });
+    recorder.stop();
+    await stopped;
+    node.src = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+    await new Promise((resolve, reject) => {
+      node.onloadedmetadata = resolve;
+      node.onerror = reject;
+    });
+  });
+  await expect(video).toHaveJSProperty('videoWidth', 640);
+  const stageBox = (await gallery.locator('.attachment-gallery__stage').boundingBox())!,
+    footerBox = (await gallery.locator('.attachment-gallery__footer').boundingBox())!;
+  expect(stageBox.y + stageBox.height).toBeLessThanOrEqual(footerBox.y + 0.5);
+  await video.hover();
+  await gallery.screenshot({ path: '/private/tmp/hs2-hz0trg-video-gallery-narrow.png' });
+  await gallery.getByRole('button', { name: 'Close video gallery' }).click();
+  await expect(gallery).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open gallery' }).click();
+  gallery = page.locator('[data-component="attachment-gallery"]');
+  await expect(gallery).toBeVisible();
 });
 
-test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM9)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');const gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toBeVisible();
-  const imageSpacing=await gallery.evaluate(node=>{const toolbar=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__toolbar')!),trailing=getComputedStyle(node.querySelector<HTMLElement>('.kui-toolbar__trailing')!),canvas=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__canvas')!),footer=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__footer')!);return{toolbarPadding:toolbar.padding,trailingGap:trailing.gap,canvasPadding:canvas.padding,footerPadding:footer.padding,footerGap:footer.gap}});expect(imageSpacing).toEqual({toolbarPadding:'8px',trailingGap:'16px',canvasPadding:'24px',footerPadding:'8px 16px 16px',footerGap:'8px'});
-  await gallery.getByRole('button',{name:'Next image'}).click();await gallery.getByRole('button',{name:'Next image'}).click();const volumeButton=gallery.getByRole('button',{name:'Volume controls'});await volumeButton.click();await expect(volumeButton).toHaveAttribute('aria-expanded','true');const videoSpacing=await gallery.evaluate(node=>{const timeline=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__timeline')!),popup=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup')!),action=getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup > button')!);return{timelineGap:timeline.gap,popupPadding:popup.padding,popupGap:popup.gap,actionPadding:action.padding,actionGap:action.gap}});expect(videoSpacing).toEqual({timelineGap:'8px',popupPadding:'16px',popupGap:'8px',actionPadding:'8px',actionGap:'8px'});await gallery.screenshot({path:'/private/tmp/hs2-4y6sm9-attachment-gallery-wide.png'});
-  await page.setViewportSize({width:390,height:844});await expect.poll(()=>gallery.evaluate(node=>{const bounds=[node.getBoundingClientRect(),...Array.from(node.querySelectorAll<HTMLElement>('[data-component="toolbar-control-group"]')).filter(element=>getComputedStyle(element).display!=='none').map(element=>element.getBoundingClientRect())];return bounds.every(box=>box.left>=0&&box.top>=0&&box.right<=innerWidth&&box.bottom<=innerHeight)})).toBe(true);await expect(gallery.locator('.attachment-gallery__footer')).toHaveCSS('padding-left','8px');await gallery.screenshot({path:'/private/tmp/hs2-4y6sm9-attachment-gallery-narrow.png'});
+test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM9)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await expect(gallery).toBeVisible();
+  const imageSpacing = await gallery.evaluate((node) => {
+    const toolbar = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__toolbar')!),
+      trailing = getComputedStyle(node.querySelector<HTMLElement>('.kui-toolbar__trailing')!),
+      canvas = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__canvas')!),
+      footer = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__footer')!);
+    return {
+      toolbarPadding: toolbar.padding,
+      trailingGap: trailing.gap,
+      canvasPadding: canvas.padding,
+      footerPadding: footer.padding,
+      footerGap: footer.gap,
+    };
+  });
+  expect(imageSpacing).toEqual({
+    toolbarPadding: '8px',
+    trailingGap: '16px',
+    canvasPadding: '24px',
+    footerPadding: '8px 16px 16px',
+    footerGap: '8px',
+  });
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  const volumeButton = gallery.getByRole('button', { name: 'Volume controls' });
+  await volumeButton.click();
+  await expect(volumeButton).toHaveAttribute('aria-expanded', 'true');
+  const videoSpacing = await gallery.evaluate((node) => {
+    const timeline = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__timeline')!),
+      popup = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup')!),
+      action = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup > button')!);
+    return {
+      timelineGap: timeline.gap,
+      popupPadding: popup.padding,
+      popupGap: popup.gap,
+      actionPadding: action.padding,
+      actionGap: action.gap,
+    };
+  });
+  expect(videoSpacing).toEqual({
+    timelineGap: '8px',
+    popupPadding: '16px',
+    popupGap: '8px',
+    actionPadding: '8px',
+    actionGap: '8px',
+  });
+  await gallery.screenshot({ path: '/private/tmp/hs2-4y6sm9-attachment-gallery-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      gallery.evaluate((node) => {
+        const bounds = [
+          node.getBoundingClientRect(),
+          ...Array.from(node.querySelectorAll<HTMLElement>('[data-component="toolbar-control-group"]'))
+            .filter((element) => getComputedStyle(element).display !== 'none')
+            .map((element) => element.getBoundingClientRect()),
+        ];
+        return bounds.every(
+          (box) => box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight,
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(gallery.locator('.attachment-gallery__footer')).toHaveCSS('padding-left', '8px');
+  await gallery.screenshot({ path: '/private/tmp/hs2-4y6sm9-attachment-gallery-narrow.png' });
 });
 
-test('deselects an image annotation when the media canvas is clicked away',async({page})=>{
-  await page.goto('/ux-demo?component=attachment-gallery');const gallery=page.locator('[data-component="attachment-gallery"]');await gallery.getByRole('button',{name:'Annotate media, 1 annotation'}).click();const annotation=gallery.getByRole('button',{name:/Review this alignment/});await expect(annotation).toHaveAttribute('data-selected','true');await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(8);const surface=gallery.locator('[data-gallery-annotation-surface="true"]'),box=(await surface.boundingBox())!;await surface.click({position:{x:box.width*.9,y:box.height*.9}});await expect(annotation).toHaveAttribute('data-selected','false');await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(0);
+test('deselects an image annotation when the media canvas is clicked away', async ({ page }) => {
+  await page.goto('/ux-demo?component=attachment-gallery');
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await gallery.getByRole('button', { name: 'Annotate media, 1 annotation' }).click();
+  const annotation = gallery.getByRole('button', { name: /Review this alignment/ });
+  await expect(annotation).toHaveAttribute('data-selected', 'true');
+  await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(8);
+  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+    box = (await surface.boundingBox())!;
+  await surface.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
+  await expect(annotation).toHaveAttribute('data-selected', 'false');
+  await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(0);
 });
 
-test('previews and manipulates custom video and annotation timeline controls',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');const gallery=page.locator('[data-component="attachment-gallery"]');await gallery.getByRole('button',{name:'Next image'}).click();await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAccessibleName(/Video 3 of 3/);await expect(gallery.locator('video')).not.toHaveAttribute('controls',/.+/);const volumeButton=gallery.getByRole('button',{name:'Volume controls'});await volumeButton.click();await expect(volumeButton).toHaveAttribute('aria-expanded','true');await gallery.getByRole('button',{name:'Mute video'}).click();await expect(gallery.getByRole('button',{name:'Unmute video'})).toBeVisible();const volume=gallery.getByRole('slider',{name:'Video volume'});await volume.fill('0.4');await expect(volume).toHaveValue('0.4');await gallery.screenshot({path:'/private/tmp/hs2-35n9rs-volume-popup-wide.png'});await gallery.locator('.attachment-gallery__filename').click();await expect(volumeButton).toHaveAttribute('aria-expanded','false');await volumeButton.click();await expect(volume).toBeVisible();await gallery.getByRole('button',{name:'Annotate media'}).click();await expect(gallery.getByRole('slider',{name:'Video position'})).toBeVisible();const start=gallery.getByRole('button',{name:/Annotation range start/}),end=gallery.getByRole('button',{name:/Annotation range end/});await expect(start).toBeVisible();await expect(end).toBeVisible();await start.focus();await page.keyboard.press('ArrowRight');await expect(gallery.getByRole('button',{name:'Annotation range start at 0:01'})).toBeVisible();const track=(await gallery.locator('.attachment-gallery__timeline-track').boundingBox())!;await end.hover();await page.mouse.down();await page.mouse.move(track.x+track.width*.75,track.y+track.height/2);await page.mouse.up();await expect(gallery.getByRole('button',{name:'Annotation range end at 0:04'})).toBeVisible();await expect(gallery.getByText('Transition is abrupt')).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-hz0trg-video-annotations-wide.png'});await page.setViewportSize({width:760,height:640});await volumeButton.click();await gallery.screenshot({path:'/private/tmp/hs2-35n9rs-volume-popup-narrow.png'});await gallery.getByRole('button',{name:'Close video gallery'}).click();await expect(gallery).toHaveCount(0);await page.getByRole('button',{name:'Open gallery'}).click();await expect(page.locator('[data-component="attachment-gallery"]')).toBeVisible();
+test('previews and manipulates custom video and annotation timeline controls', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await expect(gallery).toHaveAccessibleName(/Video 3 of 3/);
+  await expect(gallery.locator('video')).not.toHaveAttribute('controls', /.+/);
+  const volumeButton = gallery.getByRole('button', { name: 'Volume controls' });
+  await volumeButton.click();
+  await expect(volumeButton).toHaveAttribute('aria-expanded', 'true');
+  await gallery.getByRole('button', { name: 'Mute video' }).click();
+  await expect(gallery.getByRole('button', { name: 'Unmute video' })).toBeVisible();
+  const volume = gallery.getByRole('slider', { name: 'Video volume' });
+  await volume.fill('0.4');
+  await expect(volume).toHaveValue('0.4');
+  await gallery.screenshot({ path: '/private/tmp/hs2-35n9rs-volume-popup-wide.png' });
+  await gallery.locator('.attachment-gallery__filename').click();
+  await expect(volumeButton).toHaveAttribute('aria-expanded', 'false');
+  await volumeButton.click();
+  await expect(volume).toBeVisible();
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await expect(gallery.getByRole('slider', { name: 'Video position' })).toBeVisible();
+  const start = gallery.getByRole('button', { name: /Annotation range start/ }),
+    end = gallery.getByRole('button', { name: /Annotation range end/ });
+  await expect(start).toBeVisible();
+  await expect(end).toBeVisible();
+  await start.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(gallery.getByRole('button', { name: 'Annotation range start at 0:01' })).toBeVisible();
+  const track = (await gallery.locator('.attachment-gallery__timeline-track').boundingBox())!;
+  await end.hover();
+  await page.mouse.down();
+  await page.mouse.move(track.x + track.width * 0.75, track.y + track.height / 2);
+  await page.mouse.up();
+  await expect(gallery.getByRole('button', { name: 'Annotation range end at 0:04' })).toBeVisible();
+  await expect(gallery.getByText('Transition is abrupt')).toBeVisible();
+  await gallery.screenshot({ path: '/private/tmp/hs2-hz0trg-video-annotations-wide.png' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await volumeButton.click();
+  await gallery.screenshot({ path: '/private/tmp/hs2-35n9rs-volume-popup-narrow.png' });
+  await gallery.getByRole('button', { name: 'Close video gallery' }).click();
+  await expect(gallery).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open gallery' }).click();
+  await expect(page.locator('[data-component="attachment-gallery"]')).toBeVisible();
 });
 
-test('represents animated SVG evidence with the shared timed annotation controls',async({page})=>{
-  await page.route('**/ux-gallery-preview.svg?variant=narrow',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360"><animate attributeName="fill" values="#333;#777;#333" dur="4s" repeatCount="indefinite"/></rect></svg>'}));await page.goto('/ux-demo?component=attachment-gallery');const gallery=page.locator('[data-component="attachment-gallery"]');await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAccessibleName(/Image 2 of 3/);await expect(gallery.getByRole('slider',{name:'Video position'})).toBeVisible();await gallery.getByRole('button',{name:'Annotate media'}).click();await expect(gallery.getByRole('button',{name:/Annotation range start/})).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-jw17a4-animated-svg-annotations.png'});
+test('represents animated SVG evidence with the shared timed annotation controls', async ({ page }) => {
+  await page.route('**/ux-gallery-preview.svg?variant=narrow', (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360"><animate attributeName="fill" values="#333;#777;#333" dur="4s" repeatCount="indefinite"/></rect></svg>',
+    }),
+  );
+  await page.goto('/ux-demo?component=attachment-gallery');
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await expect(gallery).toHaveAccessibleName(/Image 2 of 3/);
+  await expect(gallery.getByRole('slider', { name: 'Video position' })).toBeVisible();
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await expect(gallery.getByRole('button', { name: /Annotation range start/ })).toBeVisible();
+  await gallery.screenshot({ path: '/private/tmp/hs2-jw17a4-animated-svg-annotations.png' });
 });
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {
@@ -1664,7 +3260,7 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await page.goto('/ux-demo?component=tag-chip');
   const chip = page.locator('[data-component="tag-chip"]');
   await expect(chip).toContainText('needs-design');
-  const padding = await chip.evaluate(node => {
+  const padding = await chip.evaluate((node) => {
     const style = getComputedStyle(node);
     return { horizontal: Number.parseFloat(style.paddingLeft), vertical: Number.parseFloat(style.paddingTop) };
   });
@@ -1693,7 +3289,8 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(chip).toContainText('server');
   await expect(inspector).toBeVisible();
   await page.locator('wa-select[name="variant"]').evaluate((node: HTMLElement & { value: string }) => {
-    node.value = 'success'; node.dispatchEvent(new Event('change', { bubbles: true }));
+    node.value = 'success';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect(chip).toHaveAttribute('variant', 'success');
   await expect(inspector).toBeVisible();
@@ -1727,20 +3324,33 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   await page.locator('[data-action="toggle-settings"]').click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow settings' });
   await expect(inspector.getByRole('textbox', { name: 'Title' })).toHaveCSS('cursor', 'text');
-  const selectCursor = await inspector.locator('wa-select[name="status"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor);
+  const selectCursor = await inspector
+    .locator('wa-select[name="status"]')
+    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor);
   expect(selectCursor).toBe('pointer');
-  const checkboxCursor = await inspector.locator('wa-checkbox[name="up-next"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
+  const checkboxCursor = await inspector
+    .locator('wa-checkbox[name="up-next"]')
+    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
   expect(checkboxCursor).toBe('pointer');
-  const buttonCursor = await inspector.locator('wa-button[data-action="reset-settings"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
+  const buttonCursor = await inspector
+    .locator('wa-button[data-action="reset-settings"]')
+    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
   expect(buttonCursor).toBe('pointer');
   await page.locator('[data-action="toggle-settings"]').click();
   await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Ticket actions' }).locator('wa-dropdown-item').first()).toHaveCSS('cursor', 'pointer');
+  await expect(page.getByRole('menu', { name: 'Ticket actions' }).locator('wa-dropdown-item').first()).toHaveCSS(
+    'cursor',
+    'pointer',
+  );
   await page.goto('/ux-demo?component=quick-ticket-composer');
   await page.getByRole('button', { name: /New ticket/ }).click();
   const create = page.locator('wa-button[type="submit"]');
-  await create.evaluate(node => { node.setAttribute('disabled', ''); });
-  await expect.poll(() => create.evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor)).toBe('not-allowed');
+  await create.evaluate((node) => {
+    node.setAttribute('disabled', '');
+  });
+  await expect
+    .poll(() => create.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor))
+    .toBe('not-allowed');
 });
 
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
@@ -1749,7 +3359,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summaries).toHaveCount(2);
   const summary = page.locator('[data-component="project-summary"][data-chart-tone="brand"]');
   const aggregateSummary = page.locator('[data-component="project-summary"][data-chart-tone="success"]');
-  await expect(aggregateSummary.locator('[data-bar="0"]')).toHaveCSS('background-color','rgb(52, 199, 89)');
+  await expect(aggregateSummary.locator('[data-bar="0"]')).toHaveCSS('background-color', 'rgb(52, 199, 89)');
   await expect(summary).toContainText('6 completed today');
   await expect(summary).toContainText('3 in progress');
   await expect(summary).not.toContainText('%');
@@ -1757,10 +3367,21 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 174, 178)');
-  await expect(summary).toHaveCSS('cursor','pointer');
-  const summaryGeometry=await summary.evaluate(node=>{const button=node.getBoundingClientRect(),chart=node.querySelector('.project-summary__chart')!.getBoundingClientRect(),counts=node.querySelector('.project-summary__counts')!.getBoundingClientRect();return{button:{top:button.top,bottom:button.bottom},contentTop:Math.min(chart.top,counts.top),contentBottom:Math.max(chart.bottom,counts.bottom)}});
-  expect(summaryGeometry.button.top).toBeLessThanOrEqual(summaryGeometry.contentTop);expect(summaryGeometry.button.bottom).toBeGreaterThanOrEqual(summaryGeometry.contentBottom);
-  await summary.hover();await page.screenshot({path:'/private/tmp/hs2-j5c5xg-project-summary-hit-area.png',fullPage:true});
+  await expect(summary).toHaveCSS('cursor', 'pointer');
+  const summaryGeometry = await summary.evaluate((node) => {
+    const button = node.getBoundingClientRect(),
+      chart = node.querySelector('.project-summary__chart')!.getBoundingClientRect(),
+      counts = node.querySelector('.project-summary__counts')!.getBoundingClientRect();
+    return {
+      button: { top: button.top, bottom: button.bottom },
+      contentTop: Math.min(chart.top, counts.top),
+      contentBottom: Math.max(chart.bottom, counts.bottom),
+    };
+  });
+  expect(summaryGeometry.button.top).toBeLessThanOrEqual(summaryGeometry.contentTop);
+  expect(summaryGeometry.button.bottom).toBeGreaterThanOrEqual(summaryGeometry.contentBottom);
+  await summary.hover();
+  await page.screenshot({ path: '/private/tmp/hs2-j5c5xg-project-summary-hit-area.png', fullPage: true });
   await summary.click();
   await expect(page.getByText('Hot Sheet 2 project statistics requested.')).toBeVisible();
 
@@ -1776,11 +3397,17 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   const views = page.locator('[data-component="view-navigation"]');
   await expect(views).toHaveCSS('gap', '4px');
   await expect(views.locator('ul')).toHaveCSS('gap', '0px');
-  const navigationGeometry = await views.evaluate(node => {
+  const navigationGeometry = await views.evaluate((node) => {
     const header = node.querySelector('header')!.getBoundingClientRect();
     const button = node.querySelector('li button')!.getBoundingClientRect();
     const icon = node.querySelector('li button svg')!.getBoundingClientRect();
-    return { headerLeft: header.left, buttonLeft: button.left, iconLeft: icon.left, headerRight: header.right, buttonRight: button.right };
+    return {
+      headerLeft: header.left,
+      buttonLeft: button.left,
+      iconLeft: icon.left,
+      headerRight: header.right,
+      buttonRight: button.right,
+    };
   });
   expect(navigationGeometry.headerLeft).toBeCloseTo(navigationGeometry.buttonLeft, 0);
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeGreaterThan(8);
@@ -1800,27 +3427,55 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   const commands = page.locator('[data-component="command-navigation"]');
   const heading = commands.getByRole('button', { name: /Project commands/ });
   await expect(heading).toHaveAttribute('aria-expanded', 'true');
-  const qualityGroup=commands.getByRole('button',{name:'Quality'}),releaseGroup=commands.getByRole('button',{name:'Release'});
-  await expect(qualityGroup).toHaveAttribute('aria-expanded','true');await expect(releaseGroup).toHaveAttribute('aria-expanded','true');
-  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('background-color', 'rgb(20, 184, 166)');
-  await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS('background-color', 'rgb(249, 115, 22)');
-  await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS('background-color', 'rgb(139, 92, 246)');
-  await expect(commands.getByRole('button',{name:'Build clients'}).getByLabel('Shell command')).toHaveCSS('opacity','0.5');
-  await expect(commands.getByRole('button',{name:'Build clients'}).locator('[data-lucide="square-terminal"]')).toBeVisible();
-  await expect(commands.getByRole('button',{name:'Publish preview'}).getByLabel('AI command')).toHaveCSS('opacity','0.5');
-  await expect(commands.getByRole('button',{name:'Publish preview'}).locator('[data-lucide="bot"]')).toBeVisible();
-  await commands.screenshot({path:'/private/tmp/hs2-a66p03-command-type-icons.png'});
+  const qualityGroup = commands.getByRole('button', { name: 'Quality' }),
+    releaseGroup = commands.getByRole('button', { name: 'Release' });
+  await expect(qualityGroup).toHaveAttribute('aria-expanded', 'true');
+  await expect(releaseGroup).toHaveAttribute('aria-expanded', 'true');
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS(
+    'background-color',
+    'rgb(20, 184, 166)',
+  );
+  await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS(
+    'background-color',
+    'rgb(249, 115, 22)',
+  );
+  await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS(
+    'background-color',
+    'rgb(139, 92, 246)',
+  );
+  await expect(commands.getByRole('button', { name: 'Build clients' }).getByLabel('Shell command')).toHaveCSS(
+    'opacity',
+    '0.5',
+  );
+  await expect(
+    commands.getByRole('button', { name: 'Build clients' }).locator('[data-lucide="square-terminal"]'),
+  ).toBeVisible();
+  await expect(commands.getByRole('button', { name: 'Publish preview' }).getByLabel('AI command')).toHaveCSS(
+    'opacity',
+    '0.5',
+  );
+  await expect(commands.getByRole('button', { name: 'Publish preview' }).locator('[data-lucide="bot"]')).toBeVisible();
+  await commands.screenshot({ path: '/private/tmp/hs2-a66p03-command-type-icons.png' });
   await commands.getByRole('button', { name: 'Verify project' }).click();
-  await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await commands.getByRole('button', { name: /Running Verify project/ }).click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveAttribute('aria-pressed', 'false');
-  await qualityGroup.click();await expect(qualityGroup).toHaveAttribute('aria-expanded','false');await expect(commands.getByRole('button',{name:'Verify project'})).toHaveCount(0);await expect(commands.getByRole('button',{name:'Publish preview'})).toBeVisible();await qualityGroup.click();await expect(commands.getByRole('button',{name:'Verify project'})).toBeVisible();
+  await qualityGroup.click();
+  await expect(qualityGroup).toHaveAttribute('aria-expanded', 'false');
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCount(0);
+  await expect(commands.getByRole('button', { name: 'Publish preview' })).toBeVisible();
+  await qualityGroup.click();
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toBeVisible();
   await heading.click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCount(0);
   await expect(heading).toHaveAttribute('aria-expanded', 'false');
 
   await page.goto('/ux-demo?component=drive-control');
-  const drive = page.locator('[data-component="drive-control"]'),driveAction=drive.locator('[data-action="toggle-drive"]');
+  const drive = page.locator('[data-component="drive-control"]'),
+    driveAction = drive.locator('[data-action="toggle-drive"]');
   await expect(driveAction).toHaveAccessibleName('Drive with Codex');
   await drive.click();
   await expect(driveAction).toHaveAccessibleName('Codex workflow is running');
@@ -1828,17 +3483,88 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(driveAction).toHaveAccessibleName('Drive with Codex');
 });
 
-test('holds the AppShell at its 1024 by 600 supported floor',async({page})=>{
-  await page.setViewportSize({width:800,height:500});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(1024);expect(bounds?.height).toBeGreaterThanOrEqual(600);await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
+test('holds the AppShell at its 1024 by 600 supported floor', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 500 });
+  await page.goto('/ux-demo?component=app-shell');
+  const shell = page.locator('[data-component="app-shell"]');
+  const bounds = await shell.boundingBox();
+  expect(bounds?.width).toBeGreaterThanOrEqual(1024);
+  expect(bounds?.height).toBeGreaterThanOrEqual(600);
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-501eph-shell-floor.png', fullPage: true });
 });
 
-test('keeps workspace spacing and the new-ticket action in the page header',async({page})=>{
-  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]'),workArea=shell.locator('.app-shell__work-area'),workspace=shell.locator('.app-shell__workspace'),header=shell.locator('[data-component="panel-header"]');await expect(workArea).toHaveAttribute('data-has-composer','false');
-  expect(await shell.evaluate(node=>{const workspace=node.querySelector<HTMLElement>('.app-shell__workspace')!,header=node.querySelector<HTMLElement>('[data-component="panel-header"]')!,title=header.querySelector('.kui-panel-header__title')!,launcher=header.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,tabs=node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,content=node.querySelector<HTMLElement>('.ticket-inspector__content')!;return{workspacePaddingTop:getComputedStyle(workspace).paddingTop,titleCenter:title.getBoundingClientRect().y+title.getBoundingClientRect().height/2,launcherCenter:launcher.getBoundingClientRect().y+launcher.getBoundingClientRect().height/2,tabsMarginBottom:getComputedStyle(tabs).marginBottom,contentPaddingTop:getComputedStyle(content).paddingTop,tabsToContent:content.getBoundingClientRect().top-tabs.getBoundingClientRect().bottom}})).toEqual({workspacePaddingTop:'16px',titleCenter:expect.any(Number),launcherCenter:expect.any(Number),tabsMarginBottom:'8px',contentPaddingTop:'0px',tabsToContent:8});
-  const centers=await header.evaluate(node=>{const title=node.querySelector('.kui-panel-header__title')!.getBoundingClientRect(),button=node.querySelector('button')!.getBoundingClientRect();return Math.abs(title.y+title.height/2-(button.y+button.height/2))});expect(centers).toBeLessThan(1);
-  await shell.getByRole('button',{name:'Columns view'}).click();await expect(workspace).toHaveAttribute('data-presentation','edge-to-edge');expect(await workspace.evaluate(node=>({paddingTop:getComputedStyle(node).paddingTop,boardTop:node.querySelector('.ticket-board')!.getBoundingClientRect().top-node.getBoundingClientRect().top}))).toEqual({paddingTop:'16px',boardTop:16});await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-wide.png',fullPage:true});
-  await shell.getByRole('button',{name:'Settings view'}).click();await expect(header.getByRole('button',{name:/New ticket/})).toHaveCount(0);await expect(workspace).toHaveCSS('padding-top','16px');await shell.getByRole('button',{name:'List view'}).click();await expect(header.getByRole('button',{name:/New ticket/})).toHaveCount(1);
-  await page.setViewportSize({width:1024,height:600});await page.locator('.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.display='none'})});await page.locator('.demo-shell').evaluate(node=>{(node as HTMLElement).style.gridTemplateColumns='1fr'});await page.locator('.kui-catalog__detail,.component-stage').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.padding='0';(node as HTMLElement).style.border='0'})});await expect(workspace).toHaveCSS('padding-top','16px');await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-narrow.png',fullPage:true});
+test('keeps workspace spacing and the new-ticket action in the page header', async ({ page }) => {
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await page.goto('/ux-demo?component=app-shell');
+  const shell = page.locator('[data-component="app-shell"]'),
+    workArea = shell.locator('.app-shell__work-area'),
+    workspace = shell.locator('.app-shell__workspace'),
+    header = shell.locator('[data-component="panel-header"]');
+  await expect(workArea).toHaveAttribute('data-has-composer', 'false');
+  expect(
+    await shell.evaluate((node) => {
+      const workspace = node.querySelector<HTMLElement>('.app-shell__workspace')!,
+        header = node.querySelector<HTMLElement>('[data-component="panel-header"]')!,
+        title = header.querySelector('.kui-panel-header__title')!,
+        launcher = header.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,
+        tabs = node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,
+        content = node.querySelector<HTMLElement>('.ticket-inspector__content')!;
+      return {
+        workspacePaddingTop: getComputedStyle(workspace).paddingTop,
+        titleCenter: title.getBoundingClientRect().y + title.getBoundingClientRect().height / 2,
+        launcherCenter: launcher.getBoundingClientRect().y + launcher.getBoundingClientRect().height / 2,
+        tabsMarginBottom: getComputedStyle(tabs).marginBottom,
+        contentPaddingTop: getComputedStyle(content).paddingTop,
+        tabsToContent: content.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom,
+      };
+    }),
+  ).toEqual({
+    workspacePaddingTop: '16px',
+    titleCenter: expect.any(Number),
+    launcherCenter: expect.any(Number),
+    tabsMarginBottom: '8px',
+    contentPaddingTop: '0px',
+    tabsToContent: 8,
+  });
+  const centers = await header.evaluate((node) => {
+    const title = node.querySelector('.kui-panel-header__title')!.getBoundingClientRect(),
+      button = node.querySelector('button')!.getBoundingClientRect();
+    return Math.abs(title.y + title.height / 2 - (button.y + button.height / 2));
+  });
+  expect(centers).toBeLessThan(1);
+  await shell.getByRole('button', { name: 'Columns view' }).click();
+  await expect(workspace).toHaveAttribute('data-presentation', 'edge-to-edge');
+  expect(
+    await workspace.evaluate((node) => ({
+      paddingTop: getComputedStyle(node).paddingTop,
+      boardTop: node.querySelector('.ticket-board')!.getBoundingClientRect().top - node.getBoundingClientRect().top,
+    })),
+  ).toEqual({ paddingTop: '16px', boardTop: 16 });
+  await page.screenshot({ path: '/private/tmp/hs2-f943hj-owned-spacing-wide.png', fullPage: true });
+  await shell.getByRole('button', { name: 'Settings view' }).click();
+  await expect(header.getByRole('button', { name: /New ticket/ })).toHaveCount(0);
+  await expect(workspace).toHaveCSS('padding-top', '16px');
+  await shell.getByRole('button', { name: 'List view' }).click();
+  await expect(header.getByRole('button', { name: /New ticket/ })).toHaveCount(1);
+  await page.setViewportSize({ width: 1024, height: 600 });
+  await page.locator('.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer').evaluateAll((nodes) => {
+    nodes.forEach((node) => {
+      (node as HTMLElement).style.display = 'none';
+    });
+  });
+  await page.locator('.demo-shell').evaluate((node) => {
+    (node as HTMLElement).style.gridTemplateColumns = '1fr';
+  });
+  await page.locator('.kui-catalog__detail,.component-stage').evaluateAll((nodes) => {
+    nodes.forEach((node) => {
+      (node as HTMLElement).style.padding = '0';
+      (node as HTMLElement).style.border = '0';
+    });
+  });
+  await expect(workspace).toHaveCSS('padding-top', '16px');
+  await page.screenshot({ path: '/private/tmp/hs2-f943hj-owned-spacing-narrow.png', fullPage: true });
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
@@ -1846,22 +3572,39 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const sidebar = page.locator('[data-component="project-sidebar"]');
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 active');
-  for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
-  const menuHeaderLefts = await sidebar.locator('[data-component="list-header"]').evaluateAll(headers => headers.map(header => header.querySelector('.kui-list-header__label')!.getBoundingClientRect().left));
+  for (const component of [
+    'project-summary',
+    'repository-summary',
+    'view-navigation',
+    'command-navigation',
+    'drive-control',
+  ])
+    await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  const menuHeaderLefts = await sidebar
+    .locator('[data-component="list-header"]')
+    .evaluateAll((headers) =>
+      headers.map((header) => header.querySelector('.kui-list-header__label')!.getBoundingClientRect().left),
+    );
   expect(menuHeaderLefts).toHaveLength(4);
-  for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left-menuHeaderLefts[0])).toBeLessThan(1);
-  const viewActionAlignment = await sidebar.evaluate(node => {
-    const action = node.querySelector<HTMLElement>('.view-navigation [data-component="list-header"] button')!.getBoundingClientRect();
+  for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left - menuHeaderLefts[0])).toBeLessThan(1);
+  const viewActionAlignment = await sidebar.evaluate((node) => {
+    const action = node
+      .querySelector<HTMLElement>('.view-navigation [data-component="list-header"] button')!
+      .getBoundingClientRect();
     const item = node.querySelector<HTMLElement>('.view-navigation .kui-list-item')!.getBoundingClientRect();
     return { actionRight: action.right, itemRight: item.right };
   });
-  expect(Math.abs(viewActionAlignment.actionRight-viewActionAlignment.itemRight)).toBeLessThan(1);
-  const alignedRows = await sidebar.evaluate(node => ['.repository-summary .kui-list-item', '.view-navigation .kui-list-item', '.command-navigation .kui-list-item'].map(selector => node.querySelector(selector)!).map(item => {
-    const bounds = item.getBoundingClientRect();
-    const icon = item.querySelector('.kui-list-item__icon')!.getBoundingClientRect();
-    const label = item.querySelector('.kui-list-item__label')!.getBoundingClientRect();
-    return { left: bounds.left, right: bounds.right, icon: icon.left, label: label.left };
-  }));
+  expect(Math.abs(viewActionAlignment.actionRight - viewActionAlignment.itemRight)).toBeLessThan(1);
+  const alignedRows = await sidebar.evaluate((node) =>
+    ['.repository-summary .kui-list-item', '.view-navigation .kui-list-item', '.command-navigation .kui-list-item']
+      .map((selector) => node.querySelector(selector)!)
+      .map((item) => {
+        const bounds = item.getBoundingClientRect();
+        const icon = item.querySelector('.kui-list-item__icon')!.getBoundingClientRect();
+        const label = item.querySelector('.kui-list-item__label')!.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, icon: icon.left, label: label.left };
+      }),
+  );
   expect(alignedRows).toHaveLength(3);
   for (const row of alignedRows.slice(1)) {
     expect(row.left).toBeCloseTo(alignedRows[0].left, 0);
@@ -1869,7 +3612,10 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     expect(row.label).toBeCloseTo(alignedRows[0].label, 0);
   }
   const command = sidebar.getByRole('button', { name: 'Verify project' });
-  const commandColors = await command.evaluate(node => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor }));
+  const commandColors = await command.evaluate((node) => ({
+    color: getComputedStyle(node).color,
+    background: getComputedStyle(node).backgroundColor,
+  }));
   await command.hover();
   await expect(command).toHaveCSS('color', commandColors.color);
   await expect(command).toHaveCSS('background-color', commandColors.background);
@@ -1882,7 +3628,10 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const handle = page.getByRole('separator', { name: 'Resize project sidebar' });
   await expect(handle).toHaveAttribute('aria-valuenow', '640');
   const assertDrivePinned = async () => {
-    const geometry = await sidebar.evaluate(node => ({ sidebarBottom: node.getBoundingClientRect().bottom, driveBottom: node.querySelector('.drive-control')!.getBoundingClientRect().bottom }));
+    const geometry = await sidebar.evaluate((node) => ({
+      sidebarBottom: node.getBoundingClientRect().bottom,
+      driveBottom: node.querySelector('.drive-control')!.getBoundingClientRect().bottom,
+    }));
     expect(geometry.sidebarBottom - geometry.driveBottom).toBeLessThan(16);
   };
   await assertDrivePinned();
@@ -1893,10 +3642,15 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y - 230, { steps: 5 });
   await page.mouse.up();
   await expect(handle).toHaveAttribute('aria-valuenow', '400');
-  const scrollState = await sidebar.evaluate(node => {
+  const scrollState = await sidebar.evaluate((node) => {
     const content = node.querySelector('.project-sidebar__content')!;
     const drive = node.querySelector('.drive-control')!;
-    return { contentClientHeight: content.clientHeight, contentScrollHeight: content.scrollHeight, sidebarBottom: node.getBoundingClientRect().bottom, driveBottom: drive.getBoundingClientRect().bottom };
+    return {
+      contentClientHeight: content.clientHeight,
+      contentScrollHeight: content.scrollHeight,
+      sidebarBottom: node.getBoundingClientRect().bottom,
+      driveBottom: drive.getBoundingClientRect().bottom,
+    };
   });
   expect(scrollState.contentScrollHeight).toBeGreaterThan(scrollState.contentClientHeight);
   expect(scrollState.sidebarBottom - scrollState.driveBottom).toBeLessThan(16);
@@ -1916,22 +3670,71 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabStates).toHaveCount(11);
   const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
   await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
-  const standaloneLabelCenterOffset=async()=>selectedLocal.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(standaloneLabelCenterOffset).toBeLessThanOrEqual(4);
+  const standaloneLabelCenterOffset = async () =>
+    selectedLocal.evaluate((node) => {
+      const tab = node.getBoundingClientRect(),
+        label = node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();
+      return Math.abs(tab.x + tab.width / 2 - label.x - label.width / 2);
+    });
+  await expect.poll(standaloneLabelCenterOffset).toBeLessThanOrEqual(4);
   await expect(selectedLocal.locator('[data-lucide="folder-git-2"]')).toHaveCount(0);
   await expect(tabStates.filter({ hasText: 'Remote project' }).locator('[data-lucide="cloud"]')).toHaveCount(1);
-  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner')).toHaveCount(1);
-  const activeQueue=tabStates.filter({hasText:'Active queue'});await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 2 active tickets');await expect(activeQueue.locator('.project-tab__activity-ring')).toBeVisible();await expect(activeQueue.locator('.project-tab__work-count')).toHaveText('3');
-  const activeQueueCenters=await activeQueue.locator('.project-tab__work').evaluate(node=>{const outer=node.getBoundingClientRect(),count=node.querySelector('.project-tab__work-count')!.getBoundingClientRect(),ring=node.querySelector('svg')!.getBoundingClientRect();return{countX:Math.abs(outer.x+outer.width/2-count.x-count.width/2),countY:Math.abs(outer.y+outer.height/2-count.y-count.height/2),ringX:Math.abs(outer.x+outer.width/2-ring.x-ring.width/2),ringY:Math.abs(outer.y+outer.height/2-ring.y-ring.height/2)}});expect(Math.max(...Object.values(activeQueueCenters))).toBeLessThan(1);
-  const activeWork=tabStates.filter({hasText:'Active work'});await expect(activeWork.locator('.project-tab__work')).toHaveAttribute('aria-label','1 active ticket');await expect(activeWork.locator('.project-tab__work-count')).toHaveText('0');
-  for(const [label,segments,dash] of [['Active work','1','42.4115 14.1372'],['Active queue','2','21.2058 7.0686'],['Three active','3','14.1372 4.7124'],['Four active','4','10.6029 3.5343'],['Capped active','8','5.3014 1.7671']] as const){const ring=tabStates.filter({hasText:label}).locator('.project-tab__activity-ring');await expect(ring).toHaveAttribute('data-segments',segments);await expect(ring.locator('.project-tab__activity-segments')).toHaveAttribute('stroke-dasharray',dash)}
-  const cappedActive=tabStates.filter({hasText:'Capped active'});await expect(cappedActive.locator('.project-tab__work')).toHaveAttribute('aria-label','7 Up Next tickets, 12 active tickets');await expect(cappedActive.locator('.project-tab__work-count')).toHaveText('7');
-  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-name','project-tab-activity-rotate');
-  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-duration','1.7s');
+  await expect(
+    tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner'),
+  ).toHaveCount(1);
+  const activeQueue = tabStates.filter({ hasText: 'Active queue' });
+  await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute(
+    'aria-label',
+    '3 Up Next tickets, 2 active tickets',
+  );
+  await expect(activeQueue.locator('.project-tab__activity-ring')).toBeVisible();
+  await expect(activeQueue.locator('.project-tab__work-count')).toHaveText('3');
+  const activeQueueCenters = await activeQueue.locator('.project-tab__work').evaluate((node) => {
+    const outer = node.getBoundingClientRect(),
+      count = node.querySelector('.project-tab__work-count')!.getBoundingClientRect(),
+      ring = node.querySelector('svg')!.getBoundingClientRect();
+    return {
+      countX: Math.abs(outer.x + outer.width / 2 - count.x - count.width / 2),
+      countY: Math.abs(outer.y + outer.height / 2 - count.y - count.height / 2),
+      ringX: Math.abs(outer.x + outer.width / 2 - ring.x - ring.width / 2),
+      ringY: Math.abs(outer.y + outer.height / 2 - ring.y - ring.height / 2),
+    };
+  });
+  expect(Math.max(...Object.values(activeQueueCenters))).toBeLessThan(1);
+  const activeWork = tabStates.filter({ hasText: 'Active work' });
+  await expect(activeWork.locator('.project-tab__work')).toHaveAttribute('aria-label', '1 active ticket');
+  await expect(activeWork.locator('.project-tab__work-count')).toHaveText('0');
+  for (const [label, segments, dash] of [
+    ['Active work', '1', '42.4115 14.1372'],
+    ['Active queue', '2', '21.2058 7.0686'],
+    ['Three active', '3', '14.1372 4.7124'],
+    ['Four active', '4', '10.6029 3.5343'],
+    ['Capped active', '8', '5.3014 1.7671'],
+  ] as const) {
+    const ring = tabStates.filter({ hasText: label }).locator('.project-tab__activity-ring');
+    await expect(ring).toHaveAttribute('data-segments', segments);
+    await expect(ring.locator('.project-tab__activity-segments')).toHaveAttribute('stroke-dasharray', dash);
+  }
+  const cappedActive = tabStates.filter({ hasText: 'Capped active' });
+  await expect(cappedActive.locator('.project-tab__work')).toHaveAttribute(
+    'aria-label',
+    '7 Up Next tickets, 12 active tickets',
+  );
+  await expect(cappedActive.locator('.project-tab__work-count')).toHaveText('7');
+  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS(
+    'animation-name',
+    'project-tab-activity-rotate',
+  );
+  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-duration', '1.7s');
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
-  await expect(tabStates.filter({hasText:'Not closable'}).locator('.project-tab__work-count')).toHaveText('99+');
-  for (const [label, selector] of [['Busy project', '.project-tab__busy'], ['Needs attention', '.project-tab__state--attention'], ['Disconnected', '.project-tab__state']] as const) {
+  await expect(tabStates.filter({ hasText: 'Not closable' }).locator('.project-tab__work-count')).toHaveText('99+');
+  for (const [label, selector] of [
+    ['Busy project', '.project-tab__busy'],
+    ['Needs attention', '.project-tab__state--attention'],
+    ['Disconnected', '.project-tab__state'],
+  ] as const) {
     const tab = tabStates.filter({ hasText: label });
     const geometry = await tab.evaluate((node, stateSelector) => {
       const tab = node.getBoundingClientRect();
@@ -1942,12 +3745,48 @@ test('exercises the application-shell component slice and responsive composition
     expect(geometry.rightInset).toBeGreaterThan(7);
     expect(geometry.labelGap).toBeGreaterThan(0);
   }
-  await page.setViewportSize({width:1280,height:720});await page.locator('.project-tab-demo__surface').screenshot({path:'/private/tmp/hs2-9b7z7j-project-tab-segments-wide.png'});await page.setViewportSize({width:560,height:844});await expect.poll(()=>page.locator('.project-tab-demo__surface').evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.locator('.project-tab-demo__surface').screenshot({path:'/private/tmp/hs2-9b7z7j-project-tab-segments-narrow.png'});
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page
+    .locator('.project-tab-demo__surface')
+    .screenshot({ path: '/private/tmp/hs2-9b7z7j-project-tab-segments-wide.png' });
+  await page.setViewportSize({ width: 560, height: 844 });
+  await expect
+    .poll(() => page.locator('.project-tab-demo__surface').evaluate((node) => node.scrollWidth <= node.clientWidth))
+    .toBe(true);
+  await page
+    .locator('.project-tab-demo__surface')
+    .screenshot({ path: '/private/tmp/hs2-9b7z7j-project-tab-segments-narrow.png' });
 
   await page.goto('/ux-demo?component=app-tab');
-  const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
+  const sharedTabs = page.locator('[data-component$="-tab"]');
+  await expect(sharedTabs).toHaveCount(2);
+  await expect(page.getByRole('tab', { name: /Project tab/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: 'Close Terminal tab' })).toBeAttached();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridRoot=terminalDrawer.locator('.terminal-drawer__grid-tab'),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);await expect(gridRoot).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.kui-tab-bar__tabs')!,source=tabs.querySelector('[data-tab-kind="terminal"]')!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png'});
+  const terminalDrawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(terminalDrawer).toBeVisible();
+  await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
+  await expect(terminalDrawer.getByRole('button', { name: 'Close Development' })).toBeAttached();
+  const gridTab = terminalDrawer.getByRole('tab', { name: 'Project grid' }),
+    gridRoot = terminalDrawer.locator('.terminal-drawer__grid-tab'),
+    gridWidth = (await gridTab.boundingBox())!.width;
+  await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();
+  await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);
+  await expect(gridRoot).toHaveCSS('flex-shrink', '0');
+  await terminalDrawer.evaluate((node) => {
+    node.style.width = '520px';
+    const tabs = node.querySelector('.kui-tab-bar__tabs')!,
+      source = tabs.querySelector('[data-tab-kind="terminal"]')!;
+    for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));
+  });
+  await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);
+  expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
+  expect(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate((node) => node.scrollWidth)).toBeGreaterThan(
+    await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate((node) => node.clientWidth),
+  );
+  await terminalDrawer
+    .locator('.terminal-drawer__rail')
+    .screenshot({ path: '/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png' });
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1957,78 +3796,148 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   // The tabs strip does not stretch, so the trailing Add-project (+) button follows the tabs instead of
   // being pushed to the far right (HS2-HV52WR).
-  expect(await tabBar.locator('.kui-tab-bar__tabs').evaluate(n => getComputedStyle(n).flexGrow)).toBe('0');
-  expect(await page.evaluate(() => {
-    const t = document.querySelector('.project-tab-bar .kui-tab-bar__tabs'), p = document.querySelector('.project-tab-bar__actions [data-action="choose-project"]');
-    return t && p ? p.getBoundingClientRect().left - t.getBoundingClientRect().right : -1;
-  })).toBeLessThan(24);
-  await expect(tabBar.getByRole('tab',{name:/Hot Sheet 2/}).locator('.project-tab__work')).toHaveCount(0);
-  await expect(tabBar.getByRole('tab',{name:/Small Tale Website/}).locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 1 active ticket');
-  await expect(tabBar.getByRole('tab',{name:/Internal API/}).locator('.project-tab__work-count')).toHaveText('99+');
+  expect(await tabBar.locator('.kui-tab-bar__tabs').evaluate((n) => getComputedStyle(n).flexGrow)).toBe('0');
+  expect(
+    await page.evaluate(() => {
+      const t = document.querySelector('.project-tab-bar .kui-tab-bar__tabs'),
+        p = document.querySelector('.project-tab-bar__actions [data-action="choose-project"]');
+      return t && p ? p.getBoundingClientRect().left - t.getBoundingClientRect().right : -1;
+    }),
+  ).toBeLessThan(24);
+  await expect(tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).locator('.project-tab__work')).toHaveCount(0);
+  await expect(tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__work')).toHaveAttribute(
+    'aria-label',
+    '3 Up Next tickets, 1 active ticket',
+  );
+  await expect(tabBar.getByRole('tab', { name: /Internal API/ }).locator('.project-tab__work-count')).toHaveText('99+');
   await expect(tabBar.locator('[data-tab-kind="project"]').first()).toHaveCSS('border-radius', '22px');
   const firstClose = tabBar.getByRole('button', { name: 'Close Hot Sheet 2' });
   await expect(firstClose).toHaveCSS('opacity', '0');
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).hover();
   await expect(firstClose).toHaveCSS('opacity', '1');
-  const closeGeometry = await tabBar.locator('[data-tab-kind="project"]').first().evaluate(node => {
-    const close = node.querySelector<HTMLElement>('.kui-app-tab__close')!.getBoundingClientRect();
-    const select = node.querySelector<HTMLElement>('.kui-app-tab__select')!.getBoundingClientRect();
-    const name = node.querySelector<HTMLElement>('.kui-app-tab__name')!.getBoundingClientRect();
-    return { closeWidth: close.width, closeLeft: close.left, selectLeft: select.left, nameLeft: name.left, closeBackground: getComputedStyle(node.querySelector('.kui-app-tab__close')!).backgroundColor, selectPaddingRight: getComputedStyle(node.querySelector('.kui-app-tab__select')!).paddingRight };
-  });
+  const closeGeometry = await tabBar
+    .locator('[data-tab-kind="project"]')
+    .first()
+    .evaluate((node) => {
+      const close = node.querySelector<HTMLElement>('.kui-app-tab__close')!.getBoundingClientRect();
+      const select = node.querySelector<HTMLElement>('.kui-app-tab__select')!.getBoundingClientRect();
+      const name = node.querySelector<HTMLElement>('.kui-app-tab__name')!.getBoundingClientRect();
+      return {
+        closeWidth: close.width,
+        closeLeft: close.left,
+        selectLeft: select.left,
+        nameLeft: name.left,
+        closeBackground: getComputedStyle(node.querySelector('.kui-app-tab__close')!).backgroundColor,
+        selectPaddingRight: getComputedStyle(node.querySelector('.kui-app-tab__select')!).paddingRight,
+      };
+    });
   expect(closeGeometry.closeWidth).toBeCloseTo(20.4, 0);
   expect(closeGeometry.closeLeft).toBeLessThan(closeGeometry.selectLeft);
   expect(closeGeometry.nameLeft).toBeGreaterThan(closeGeometry.selectLeft);
   expect(closeGeometry.closeBackground).toBe('rgba(0, 0, 0, 0)');
   expect(closeGeometry.selectPaddingRight).toBe('8px');
-  const firstTab=tabBar.locator('[data-tab-kind="project"]').first(),firstSelect=firstTab.getByRole('tab');
-  const naturalLabelCenterOffset=async()=>firstTab.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
-  await firstSelect.focus();await expect(firstSelect).toBeFocused();
-  const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.kui-app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
-  expect(focusPresentation).toMatchObject({rootOutlineStyle:'solid',rootOutlineWidth:'3px',rootOutlineOffset:'-2px',selectOutlineStyle:'none'});
-  await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-wide.png'});
-  await tabBar.screenshot({path:'/private/tmp/hs2-4y6sm9-project-tab-bar.png'});
-  await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-wide.png',fullPage:true});
-  const tabActionCenters = await tabBar.evaluate(node => {
+  const firstTab = tabBar.locator('[data-tab-kind="project"]').first(),
+    firstSelect = firstTab.getByRole('tab');
+  const naturalLabelCenterOffset = async () =>
+    firstTab.evaluate((node) => {
+      const tab = node.getBoundingClientRect(),
+        label = node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();
+      return Math.abs(tab.x + tab.width / 2 - label.x - label.width / 2);
+    });
+  await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
+  await firstSelect.focus();
+  await expect(firstSelect).toBeFocused();
+  const focusPresentation = await firstTab.evaluate((node) => {
+    const root = getComputedStyle(node),
+      select = getComputedStyle(node.querySelector('.kui-app-tab__select')!);
+    return {
+      rootOutlineStyle: root.outlineStyle,
+      rootOutlineWidth: root.outlineWidth,
+      rootOutlineOffset: root.outlineOffset,
+      selectOutlineStyle: select.outlineStyle,
+    };
+  });
+  expect(focusPresentation).toMatchObject({
+    rootOutlineStyle: 'solid',
+    rootOutlineWidth: '3px',
+    rootOutlineOffset: '-2px',
+    selectOutlineStyle: 'none',
+  });
+  await firstTab.screenshot({ path: '/private/tmp/hs2-3n470h-project-tab-centered-wide.png' });
+  await tabBar.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-tab-bar.png' });
+  await page.screenshot({ path: '/private/tmp/hs2-mrz10b-project-tab-focus-wide.png', fullPage: true });
+  const tabActionCenters = await tabBar.evaluate((node) => {
     const tab = node.querySelector('[data-tab-kind="project"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="choose-project"] svg')!.getBoundingClientRect();
     return { tab: tab.y + tab.height / 2, add: add.y + add.height / 2 };
   });
   expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
-  const order = await tabBar.locator(':scope > *').evaluateAll(nodes => nodes.map(node => node.className));
+  const order = await tabBar.locator(':scope > *').evaluateAll((nodes) => nodes.map((node) => node.className));
   expect(order).toEqual(['kui-tab-bar__leading', 'kui-tab-bar__tabs', 'kui-tab-bar__trailing']);
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__work');
-  const spinnerAlignment = await busySpinner.evaluate(node => {
-    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-tab-kind="project"]')!.getBoundingClientRect();
-    return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)), tabY: Math.abs((outer.top + outer.height / 2) - (tab.top + tab.height / 2)) };
+  const spinnerAlignment = await busySpinner.evaluate((node) => {
+    const outer = node.getBoundingClientRect();
+    const icon = node.querySelector('svg')!.getBoundingClientRect();
+    const tab = node.closest('[data-tab-kind="project"]')!.getBoundingClientRect();
+    return {
+      x: Math.abs(outer.left + outer.width / 2 - (icon.left + icon.width / 2)),
+      y: Math.abs(outer.top + outer.height / 2 - (icon.top + icon.height / 2)),
+      tabY: Math.abs(outer.top + outer.height / 2 - (tab.top + tab.height / 2)),
+    };
   });
   expect(spinnerAlignment.x).toBeLessThan(1);
   expect(spinnerAlignment.y).toBeLessThan(1);
   expect(spinnerAlignment.tabY).toBeLessThan(1);
-  const animatedCenters = await busySpinner.evaluate(async node => {
+  const animatedCenters = await busySpinner.evaluate(async (node) => {
     const centers: Array<[number, number]> = [];
-    for (let frame = 0; frame < 12; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => { const box = node.querySelector('svg')!.getBoundingClientRect(); centers.push([box.x + box.width / 2, box.y + box.height / 2]); resolve(); }));
+    for (let frame = 0; frame < 12; frame++)
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => {
+          const box = node.querySelector('svg')!.getBoundingClientRect();
+          centers.push([box.x + box.width / 2, box.y + box.height / 2]);
+          resolve();
+        }),
+      );
     return centers;
   });
-  expect(Math.max(...animatedCenters.map(([x]) => x)) - Math.min(...animatedCenters.map(([x]) => x))).toBeLessThan(.1);
-  expect(Math.max(...animatedCenters.map(([, y]) => y)) - Math.min(...animatedCenters.map(([, y]) => y))).toBeLessThan(.1);
+  expect(Math.max(...animatedCenters.map(([x]) => x)) - Math.min(...animatedCenters.map(([x]) => x))).toBeLessThan(0.1);
+  expect(Math.max(...animatedCenters.map(([, y]) => y)) - Math.min(...animatedCenters.map(([, y]) => y))).toBeLessThan(
+    0.1,
+  );
   for (const name of await tabBar.locator('.kui-app-tab__name').all()) {
     await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
   }
   await page.setViewportSize({ width: 760, height: 900 });
-  const overflowState = await tabBar.evaluate(node => {
+  const overflowState = await tabBar.evaluate((node) => {
     const strip = node.querySelector<HTMLElement>('.kui-tab-bar__tabs')!;
     const selected = node.querySelector<HTMLElement>('.project-tab[data-selected="true"]')!.getBoundingClientRect();
     const viewport = strip.getBoundingClientRect();
     strip.scrollLeft = 100;
-    return { clientWidth: strip.clientWidth, scrollWidth: strip.scrollWidth, scrollLeft: strip.scrollLeft, overflowX: getComputedStyle(strip).overflowX, shadowClearance: viewport.bottom - selected.bottom };
+    return {
+      clientWidth: strip.clientWidth,
+      scrollWidth: strip.scrollWidth,
+      scrollLeft: strip.scrollLeft,
+      overflowX: getComputedStyle(strip).overflowX,
+      shadowClearance: viewport.bottom - selected.bottom,
+    };
   });
   expect(overflowState.scrollWidth).toBeGreaterThan(overflowState.clientWidth);
   expect(overflowState.scrollLeft).toBeGreaterThan(0);
   expect(overflowState.overflowX).toBe('auto');
   expect(overflowState.shadowClearance).toBeGreaterThanOrEqual(3);
-  await tabBar.locator('.kui-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});await firstSelect.blur();await page.mouse.move(750,899);await expect(firstClose).toHaveCSS('opacity','0');await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-narrow.png'});
+  await tabBar.locator('.kui-tab-bar__tabs').evaluate((node) => {
+    node.scrollLeft = 0;
+  });
+  await firstSelect.focus();
+  await expect(firstSelect).toBeFocused();
+  await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
+  await page.screenshot({ path: '/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png', fullPage: true });
+  await firstSelect.blur();
+  await page.mouse.move(750, 899);
+  await expect(firstClose).toHaveCSS('opacity', '0');
+  await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
+  await firstTab.screenshot({ path: '/private/tmp/hs2-3n470h-project-tab-centered-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
@@ -2054,9 +3963,11 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('tab', { name: /New Project 1/ })).toHaveAttribute('aria-selected', 'true');
   await tabBar.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(tabBar.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(tabBar.getByRole('button', { name: 'Workspace grid' }).locator('[data-lucide="grid-3x3"]')).toBeVisible();
+  await expect(
+    tabBar.getByRole('button', { name: 'Workspace grid' }).locator('[data-lucide="grid-3x3"]'),
+  ).toBeVisible();
   await expect(tabBar.getByRole('tab', { selected: true })).toHaveCount(0);
-  await tabBar.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-launcher.png'});
+  await tabBar.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-launcher.png' });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(tabBar.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
 
@@ -2098,9 +4009,18 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of [
+    'project-sidebar',
+    'state-banner',
+    'workspace-identity',
+    'workspace-controls',
+    'quick-ticket-composer-launcher',
+    'ticket-list',
+    'ticket-inspector',
+  ])
+    await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
-  const shellHierarchy = await shell.evaluate(node => {
+  const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
     const toolbar = toolbarNode.getBoundingClientRect();
@@ -2111,29 +4031,54 @@ test('exercises the application-shell component slice and responsive composition
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
     const pageHeader = node.querySelector('.kui-panel-header')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
-    return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, toolbarRight: toolbar.right, toolbarGap: getComputedStyle(toolbarNode).columnGap, leadingLeft: leading.left, identityLeft: identity.left, trailingRight: trailing.right, controlsRight: controls.right, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
+    return {
+      shellTop: shellRect.top,
+      toolbarTop: toolbar.top,
+      toolbarBottom: toolbar.bottom,
+      toolbarRight: toolbar.right,
+      toolbarGap: getComputedStyle(toolbarNode).columnGap,
+      leadingLeft: leading.left,
+      identityLeft: identity.left,
+      trailingRight: trailing.right,
+      controlsRight: controls.right,
+      tabsTop: tabs.top,
+      tabsBottom: tabs.bottom,
+      pageHeaderTop: pageHeader.top,
+      inspectorTop: inspector.top,
+    };
   });
   expect(shellHierarchy.toolbarTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   expect(shellHierarchy.identityLeft).toBeGreaterThanOrEqual(shellHierarchy.leadingLeft);
   expect(shellHierarchy.controlsRight).toBeCloseTo(shellHierarchy.trailingRight, 0);
   expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(8, 0);
   expect(shellHierarchy.toolbarGap).toBe('8px');
-  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute('data-has-center', 'false');
+  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute(
+    'data-has-center',
+    'false',
+  );
   await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS('box-shadow', 'none');
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-wide.png', fullPage: true });
-  await expect(shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]')).toHaveCount(1);
+  await expect(
+    shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]'),
+  ).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await shell.getByRole('button', { name: /New ticket/ }).click();
-  const shellComposer=page.getByRole('dialog',{name:'Create ticket'});
+  const shellComposer = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
-  const composerControlHeights = await shellComposer.evaluate(node => {
-    const input = node.querySelector('wa-input')!.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect();
-    const select = node.querySelector('wa-select')!.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!.getBoundingClientRect();
+  const composerControlHeights = await shellComposer.evaluate((node) => {
+    const input = node
+      .querySelector('wa-input')!
+      .shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!
+      .getBoundingClientRect();
+    const select = node
+      .querySelector('wa-select')!
+      .shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!
+      .getBoundingClientRect();
     return { input: input.height, select: select.height };
   });
   expect(composerControlHeights.input).toBeCloseTo(composerControlHeights.select, 0);
@@ -2143,15 +4088,22 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
   await expect(shellComposer).toBeHidden();
-  const inspectorToolbarAlignment = await shell.locator('.ticket-inspector__header > [data-component="toolbar"]').evaluate(node => {
-    const slug = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
-    const controls = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
-    return Math.abs((slug.top + slug.height / 2) - (controls.top + controls.height / 2));
-  });
+  const inspectorToolbarAlignment = await shell
+    .locator('.ticket-inspector__header > [data-component="toolbar"]')
+    .evaluate((node) => {
+      const slug = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
+      const controls = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
+      return Math.abs(slug.top + slug.height / 2 - (controls.top + controls.height / 2));
+    });
   expect(inspectorToolbarAlignment).toBeLessThan(1);
   const compactInspectorTab = shell.getByRole('tab', { name: 'Timeline' });
   await expect(compactInspectorTab.locator('svg')).toHaveCSS('flex-shrink', '0');
-  expect(await compactInspectorTab.locator('.kui-app-tab__name').evaluate(label=>{const style=getComputedStyle(label);return{position:style.position,width:style.width,clipPath:style.clipPath}})).toEqual({position:'absolute',width:'1px',clipPath:'inset(50%)'});
+  expect(
+    await compactInspectorTab.locator('.kui-app-tab__name').evaluate((label) => {
+      const style = getComputedStyle(label);
+      return { position: style.position, width: style.width, clipPath: style.clipPath };
+    }),
+  ).toEqual({ position: 'absolute', width: '1px', clipPath: 'inset(50%)' });
   const sidebarHandle = shell.getByRole('separator', { name: 'Resize Project sidebar' });
   await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
@@ -2169,7 +4121,12 @@ test('exercises the application-shell component slice and responsive composition
   await expect(inspectorHandle).toHaveAttribute('aria-valuenow', '352');
   const inspectorHandleBox = await inspectorHandle.boundingBox();
   expect(inspectorHandleBox).not.toBeNull();
-  await shell.locator('[data-component="ticket-list-row"]').first().evaluate(node => { (node as HTMLElement).dataset.resizeStability = 'same-node'; });
+  await shell
+    .locator('[data-component="ticket-list-row"]')
+    .first()
+    .evaluate((node) => {
+      (node as HTMLElement).dataset.resizeStability = 'same-node';
+    });
   await page.mouse.move(inspectorHandleBox!.x + inspectorHandleBox!.width / 2, inspectorHandleBox!.y + 80);
   const inspectorRegion = shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]');
   // HS2-4KZBTT: the region width must never animate — animating it reflows the whole ticket list
@@ -2196,10 +4153,15 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Hide inspector' }).click();
   const showInspector = shell.getByRole('button', { name: 'Show ticket inspector' });
   await expect(showInspector).toBeVisible();
-  const collapsedInspector = shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]');
+  const collapsedInspector = shell.locator(
+    ':scope > [data-component="resizable-region"][data-region-id="app-inspector"]',
+  );
   await expect(collapsedInspector).toHaveAttribute('data-collapsed', 'true');
   await expect(collapsedInspector).toHaveCSS('width', '0px');
-  await expect(collapsedInspector.locator('.kui-resizable-region__content')).toHaveCSS('width', `${inspectorExpandedWidth}px`);
+  await expect(collapsedInspector.locator('.kui-resizable-region__content')).toHaveCSS(
+    'width',
+    `${inspectorExpandedWidth}px`,
+  );
   await expect(collapsedInspector.locator('.kui-resizable-region__content')).not.toHaveCSS('transform', 'none');
   await expect(showInspector.locator('[data-lucide="panel-right-open"]')).toHaveCount(1);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
@@ -2207,7 +4169,7 @@ test('exercises the application-shell component slice and responsive composition
   await showInspector.click();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
-  const crampedToolbar = await shell.locator('.app-shell__main > [data-component="toolbar"]').evaluate(toolbar => {
+  const crampedToolbar = await shell.locator('.app-shell__main > [data-component="toolbar"]').evaluate((toolbar) => {
     const toolbarRect = toolbar.getBoundingClientRect();
     const actionsRect = toolbar.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
     return {
@@ -2219,7 +4181,7 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(crampedToolbar.actionsLeft).toBeGreaterThanOrEqual(crampedToolbar.toolbarLeft);
   expect(crampedToolbar.actionsRight).toBeLessThanOrEqual(crampedToolbar.toolbarRight);
-  const sidebarCollapseHit = await hideSidebar.evaluate(button => {
+  const sidebarCollapseHit = await hideSidebar.evaluate((button) => {
     const rect = button.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     return {
@@ -2230,9 +4192,17 @@ test('exercises the application-shell component slice and responsive composition
   expect(sidebarCollapseHit).toEqual({ ownsHit: true, hitLabel: 'Hide project sidebar' });
   await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-narrow.png', fullPage: true });
   await hideSidebar.click();
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
-  const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .kui-resizable-region__content');
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
+    'data-collapsed',
+    'true',
+  );
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
+    'width',
+    '0px',
+  );
+  const collapsedSidebarContent = shell.locator(
+    '[data-component="resizable-region"][data-region-id="app-sidebar"] .kui-resizable-region__content',
+  );
   await expect(collapsedSidebarContent).toHaveCSS('width', '288px');
   await expect(collapsedSidebarContent).not.toHaveCSS('transform', 'none');
   const showSidebar = shell.getByRole('button', { name: 'Show project sidebar' });
@@ -2240,18 +4210,38 @@ test('exercises the application-shell component slice and responsive composition
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showSidebar.click();
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'false');
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('border-right-width', '1px');
-  const sidebarSeparator = await shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]').evaluate(node => ({ width: getComputedStyle(node, '::after').width, background: getComputedStyle(node, '::after').backgroundColor }));
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
+    'data-collapsed',
+    'false',
+  );
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
+    'border-right-width',
+    '1px',
+  );
+  const sidebarSeparator = await shell
+    .locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')
+    .evaluate((node) => ({
+      width: getComputedStyle(node, '::after').width,
+      background: getComputedStyle(node, '::after').backgroundColor,
+    }));
   expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(209, 209, 214)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
   await expect(shellWorkspace).toHaveAttribute('data-presentation', 'edge-to-edge');
-  const boardGeometry = await shellWorkspace.evaluate(node => {
+  const boardGeometry = await shellWorkspace.evaluate((node) => {
     const board = node.querySelector('.ticket-board')!;
     const workspaceRect = node.getBoundingClientRect();
     const boardRect = board.getBoundingClientRect();
-    return { workspaceLeft: workspaceRect.left, workspaceRight: workspaceRect.right, workspaceBottom: workspaceRect.bottom, boardLeft: boardRect.left, boardRight: boardRect.right, boardBottom: boardRect.bottom, boardClientWidth: board.clientWidth, boardScrollWidth: board.scrollWidth };
+    return {
+      workspaceLeft: workspaceRect.left,
+      workspaceRight: workspaceRect.right,
+      workspaceBottom: workspaceRect.bottom,
+      boardLeft: boardRect.left,
+      boardRight: boardRect.right,
+      boardBottom: boardRect.bottom,
+      boardClientWidth: board.clientWidth,
+      boardScrollWidth: board.scrollWidth,
+    };
   });
   expect(boardGeometry.boardLeft - boardGeometry.workspaceLeft).toBeCloseTo(0, 0);
   expect(boardGeometry.workspaceRight - boardGeometry.boardRight).toBeCloseTo(0, 0);
@@ -2259,14 +4249,17 @@ test('exercises the application-shell component slice and responsive composition
   expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
   await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
-  await expect(shell.locator('.project-tab[data-project-id="website"] [role="tab"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(shell.locator('.project-tab[data-project-id="website"] [role="tab"]')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await shell.getByRole('button', { name: 'Settings view' }).click();
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
   for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) {
-    const control=shell.getByRole('button', { name });
+    const control = shell.getByRole('button', { name });
     if (await control.count()) await expect(control).toHaveAttribute('disabled', '');
   }
   await shell.getByRole('button', { name: 'List view' }).click();
@@ -2290,7 +4283,9 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(shell.locator('[data-component="workspace-identity"]').getByText('Workspace grid', { exact: true })).toBeVisible();
+  await expect(
+    shell.locator('[data-component="workspace-identity"]').getByText('Workspace grid', { exact: true }),
+  ).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Workspace grid workspace' })).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toHaveCount(0);
   await shell.getByRole('button', { name: 'Cross-project stats' }).click();
@@ -2303,13 +4298,17 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toBeVisible();
   await shell.locator('[data-component="project-summary"]').click();
-  await expect(shell).toHaveAttribute('data-mode','stats');
-  await expect(shell.getByRole('region',{name:'Hot Sheet 2 project statistics'})).toBeVisible();
-  await shell.getByRole('tab',{name:/Hot Sheet 2/}).click();
-  await expect(shell).toHaveAttribute('data-mode','project');
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(shell.getByRole('region', { name: 'Hot Sheet 2 project statistics' })).toBeVisible();
+  await shell.getByRole('tab', { name: /Hot Sheet 2/ }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'project');
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();
+  await expect(
+    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]'),
+  ).toBeVisible();
+  await expect(
+    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]'),
+  ).toBeVisible();
   // Keep all three user-controlled regions mounted at the supported floor. The
   // center can be clipped until the user explicitly collapses a side region.
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(1);
@@ -2317,29 +4316,43 @@ test('exercises the application-shell component slice and responsive composition
 
 test('projects the feedback-needed indicator through list and board compositions', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-list');
-  const listFeedback = page.getByRole('listbox', { name: 'Example ticket list' })
+  const listFeedback = page
+    .getByRole('listbox', { name: 'Example ticket list' })
     .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback');
   await expect(listFeedback).toContainText('Needs review');
   await expect(listFeedback.locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   const listRow = page.getByRole('listbox', { name: 'Example ticket list' }).locator('[data-ticket-slug="HS2-R76MMW"]');
-  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(203, 48, 224)');
+  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
+    'background-color',
+    'rgb(203, 48, 224)',
+  );
   // A ticket without a feedback_needed note shows no indicator.
-  await expect(page.getByRole('listbox', { name: 'Example ticket list' })
-    .locator('[data-ticket-slug="HS2-RPVFA4"] .ticket-list-row__feedback')).toHaveCount(0);
+  await expect(
+    page
+      .getByRole('listbox', { name: 'Example ticket list' })
+      .locator('[data-ticket-slug="HS2-RPVFA4"] .ticket-list-row__feedback'),
+  ).toHaveCount(0);
 
   await page.goto('/ux-demo?component=ticket-board');
-  const columnRow = page.getByRole('listbox', { name: 'Example status board' }).locator('[data-ticket-slug="HS2-R76MMW"]');
+  const columnRow = page
+    .getByRole('listbox', { name: 'Example status board' })
+    .locator('[data-ticket-slug="HS2-R76MMW"]');
   await expect(columnRow.locator('.ticket-list-row__feedback')).toContainText('Needs review');
-  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(203, 48, 224)');
+  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
+    'background-color',
+    'rgb(203, 48, 224)',
+  );
 
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-needs-review', 'true');
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
-  expect(await inspector.evaluate(node => {
-    const rail = getComputedStyle(node, '::before');
-    return { background: rail.backgroundColor, width: rail.width };
-  })).toEqual({ background: 'rgba(0, 0, 0, 0)', width: 'auto' });
+  expect(
+    await inspector.evaluate((node) => {
+      const rail = getComputedStyle(node, '::before');
+      return { background: rail.backgroundColor, width: rail.width };
+    }),
+  ).toEqual({ background: 'rgba(0, 0, 0, 0)', width: 'auto' });
 });
 
 test('dims finished tickets in the list and uses the shared Tags menu header', async ({ page }) => {
@@ -2352,7 +4365,9 @@ test('dims finished tickets in the list and uses the shared Tags menu header', a
 
   // Tags uses the same section-header primitive and trailing action as Views.
   await page.goto('/ux-demo?component=ticket-info-panel');
-  const tagsHeader = page.locator('[data-component="ticket-info-panel"] [data-component="list-header"]').filter({ hasText: 'Tags' });
+  const tagsHeader = page
+    .locator('[data-component="ticket-info-panel"] [data-component="list-header"]')
+    .filter({ hasText: 'Tags' });
   await expect(tagsHeader).toHaveCount(1);
   await expect(tagsHeader.getByRole('button', { name: 'Add tag' }).locator('[data-lucide="plus"]')).toBeVisible();
   await expect(page.locator('.ticket-tag-editor__add')).toHaveCount(0);
@@ -2366,26 +4381,31 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await expect(row).toBeVisible();
   await expect(feedback).toBeVisible();
 
-  expect(await row.evaluate(node => {
-    const root = getComputedStyle(document.documentElement);
-    const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--wa-color-surface-default)';
-    document.body.append(probe);
-    const surface = getComputedStyle(probe).backgroundColor;
-    probe.style.backgroundColor = 'var(--wa-color-warning-fill-quiet)';
-    const warning = getComputedStyle(probe).backgroundColor;
-    probe.style.backgroundColor = 'var(--hs-ticket-state-needs-review)';
-    const review = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    const feedbackNode = node.querySelector('.ticket-list-row__feedback');
-    const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
-    return {
-      aliases: [root.getPropertyValue('--hs-ticket-state-needs-review').trim(),root.getPropertyValue('--hs-ticket-state-up-next').trim()],
-      reviewMatches: railNode !== null && getComputedStyle(railNode).backgroundColor === review,
-      surfaceMatches: getComputedStyle(node).backgroundColor === surface,
-      warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
-    };
-  })).toEqual({
+  expect(
+    await row.evaluate((node) => {
+      const root = getComputedStyle(document.documentElement);
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--wa-color-surface-default)';
+      document.body.append(probe);
+      const surface = getComputedStyle(probe).backgroundColor;
+      probe.style.backgroundColor = 'var(--wa-color-warning-fill-quiet)';
+      const warning = getComputedStyle(probe).backgroundColor;
+      probe.style.backgroundColor = 'var(--hs-ticket-state-needs-review)';
+      const review = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const feedbackNode = node.querySelector('.ticket-list-row__feedback');
+      const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
+      return {
+        aliases: [
+          root.getPropertyValue('--hs-ticket-state-needs-review').trim(),
+          root.getPropertyValue('--hs-ticket-state-up-next').trim(),
+        ],
+        reviewMatches: railNode !== null && getComputedStyle(railNode).backgroundColor === review,
+        surfaceMatches: getComputedStyle(node).backgroundColor === surface,
+        warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
+      };
+    }),
+  ).toEqual({
     aliases: ['#cb30e0', '#ffcc00'],
     reviewMatches: true,
     surfaceMatches: true,
@@ -2395,19 +4415,30 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await page.goto('/ux-demo?component=app-shell');
   const workArea = page.locator('.app-shell__work-area');
   await expect(workArea).toBeVisible();
-  expect(await workArea.evaluate(node => {
-    const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
-    document.body.append(probe);
-    const matches = getComputedStyle(node).backgroundColor === getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return matches;
-  })).toBe(true);
+  expect(
+    await workArea.evaluate((node) => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
+      document.body.append(probe);
+      const matches = getComputedStyle(node).backgroundColor === getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return matches;
+    }),
+  ).toBe(true);
   const sidebarRegion = page.locator('.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]');
-  expect(await sidebarRegion.evaluate(node => {
-    const probe=document.createElement('span');probe.style.background='var(--hs-shell-divider)';document.body.append(probe);
-    const result={divider:getComputedStyle(node,'::after').backgroundColor,dividerMatches:getComputedStyle(node,'::after').backgroundColor===getComputedStyle(probe).backgroundColor};probe.remove();return result;
-  })).toEqual({ divider: 'rgb(209, 209, 214)', dividerMatches: true });
+  expect(
+    await sidebarRegion.evaluate((node) => {
+      const probe = document.createElement('span');
+      probe.style.background = 'var(--hs-shell-divider)';
+      document.body.append(probe);
+      const result = {
+        divider: getComputedStyle(node, '::after').backgroundColor,
+        dividerMatches: getComputedStyle(node, '::after').backgroundColor === getComputedStyle(probe).backgroundColor,
+      };
+      probe.remove();
+      return result;
+    }),
+  ).toEqual({ divider: 'rgb(209, 209, 214)', dividerMatches: true });
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-wide.png', fullPage: true });
   await page.setViewportSize({ width: 940, height: 844 });
   await expect(sidebarRegion).toBeVisible();
@@ -2417,9 +4448,17 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await page.goto('/ux-demo?component=permission-request');
   const details = page.locator('.permission-request-card__details');
   await expect(details).toBeVisible();
-  await expect(details).toHaveCSS('background-color', await page.evaluate(() => {
-    const probe = document.createElement('span');probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';document.body.append(probe);const color = getComputedStyle(probe).backgroundColor;probe.remove();return color;
-  }));
+  await expect(details).toHaveCSS(
+    'background-color',
+    await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    }),
+  );
   await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 760, height: 900 });
@@ -2429,8 +4468,10 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
 
 test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
   let releaseDemoModified!: () => void;
-  const demoModifiedReady = new Promise<void>(resolve => { releaseDemoModified = resolve; });
-  await page.route('**/__hotsheet/demo-modified', async route => {
+  const demoModifiedReady = new Promise<void>((resolve) => {
+    releaseDemoModified = resolve;
+  });
+  await page.route('**/__hotsheet/demo-modified', async (route) => {
     await demoModifiedReady;
     await route.fulfill({ json: { 'permission-request': new Date().toISOString() } });
   });
@@ -2445,30 +4486,39 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   const automation = settings.locator('[name="automation"]');
   const alwaysSupported = settings.locator('wa-checkbox[name="always-supported"]');
   const explanation = settings.locator('wa-checkbox[name="explanation"]');
-  const choose = async (control: typeof variant, value: string) => control.evaluate((node: HTMLElement & { value: string }, selected) => {
-    node.value = selected;
-    node.dispatchEvent(new Event('change', { bubbles: true }));
-  }, value);
+  const choose = async (control: typeof variant, value: string) =>
+    control.evaluate((node: HTMLElement & { value: string }, selected) => {
+      node.value = selected;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
 
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   await expect(card).toHaveAttribute('data-state', 'pending');
   await expect(card).toContainText('Wants permission to edit');
   await expect(card).toContainText('Auto-allow in');
-  await presentation.evaluate(async node => {
+  await presentation.evaluate(async (node) => {
     await customElements.whenDefined('wa-select');
     await (node as HTMLElement & { updateComplete?: Promise<unknown> }).updateComplete;
   });
-  await presentation.evaluate(node => { (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation = node; });
+  await presentation.evaluate((node) => {
+    (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation = node;
+  });
   await presentation.click();
   await expect(presentation).toHaveJSProperty('open', true);
   releaseDemoModified();
   const initialCountdown = await card.locator('.permission-request-card__timer').textContent();
   await expect.poll(() => card.locator('.permission-request-card__timer').textContent()).not.toBe(initialCountdown);
   await expect(presentation).toHaveJSProperty('open', true);
-  expect(await presentation.evaluate(node => (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation === node)).toBe(true);
+  expect(
+    await presentation.evaluate(
+      (node) => (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation === node,
+    ),
+  ).toBe(true);
   await page.keyboard.press('Escape');
   await expect(presentation).toHaveJSProperty('open', false);
-  await expect(page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-catalog__tag')).toContainText(['Feature floor','Now']);
+  await expect(
+    page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-catalog__tag'),
+  ).toContainText(['Feature floor', 'Now']);
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
   await choose(presentation, 'popup');
@@ -2478,8 +4528,11 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(stopAutomation.locator('[data-lucide="pause"]')).toBeVisible();
   expect((await stopAutomation.textContent())?.trim()).toBe('');
   await expect(card.locator('.permission-request-card__countdown')).toHaveCSS('border-top-style', 'none');
-  const [timerBox, denyBox] = await Promise.all([card.locator('.permission-request-card__timer').boundingBox(), card.getByRole('button', { name: 'Deny' }).boundingBox()]);
-  expect(Math.abs((timerBox!.y + timerBox!.height / 2) - (denyBox!.y + denyBox!.height / 2))).toBeLessThanOrEqual(1);
+  const [timerBox, denyBox] = await Promise.all([
+    card.locator('.permission-request-card__timer').boundingBox(),
+    card.getByRole('button', { name: 'Deny' }).boundingBox(),
+  ]);
+  expect(Math.abs(timerBox!.y + timerBox!.height / 2 - (denyBox!.y + denyBox!.height / 2))).toBeLessThanOrEqual(1);
   await page.screenshot({ path: '/private/tmp/hs2-xrva64-permission-countdown-wide.png', fullPage: true });
   await stopAutomation.click();
   await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);
@@ -2552,47 +4605,153 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await page.screenshot({ path: '/private/tmp/hotsheet-permission-settings-narrow.png', fullPage: true });
 });
 
-test('previews AIConversation public states at wide and narrow sizes',async({page})=>{
-  await page.setViewportSize({width:1280,height:800});await page.goto('/ux-demo?component=ai-conversation');const conversationHost=page.locator('[data-component="ai-conversation"]'),dialog=conversationHost.getByRole('dialog'),transcript=conversationHost.locator('.ai-conversation__transcript');await expect(dialog).toBeVisible();await expect(conversationHost).toContainText('Running the focused browser test');await expect(conversationHost.getByRole('button',{name:'Stop Codex'})).toBeVisible();await expect(conversationHost.locator('.ai-conversation__message--user .markdown-preview').first()).toHaveCSS('color','rgb(255, 255, 255)');await dialog.screenshot({path:'/private/tmp/hs2-s3j29e-ai-conversation-demo-wide.png'});
-  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await page.locator('[data-action="toggle-settings"]').click();const scenario=page.locator('[data-settings="ai-conversation"] [name="scenario"]');for(const value of ['empty','permission','completed','usage-unpriced','failed','interrupted'] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toBeVisible();if(value==='empty')await expect(conversationHost).toContainText('Start a conversation');if(value==='permission')await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();if(value==='completed'){await expect(conversationHost).toContainText('≈$0.04');await expect(conversationHost).toContainText('AI-generated · may contain errors')}if(value==='usage-unpriced')await expect(conversationHost).toContainText('Cost unavailable');if(value==='failed'){await expect(conversationHost).toContainText('Conversation unavailable');await expect(conversationHost).toContainText('The tool turn failed.');await transcript.evaluate(node=>{node.scrollTop=node.scrollHeight});await expect(conversationHost.getByRole('alert')).toBeInViewport();await dialog.screenshot({path:'/private/tmp/hs2-1kqjbk-ai-conversation-failed-wide.png'})}if(value==='interrupted')await expect(conversationHost).toContainText('Stopped before the suite completed.');await page.keyboard.press('Escape');await expect(dialog).toBeHidden()}
-  await scenario.evaluate((node:HTMLElement&{value:string})=>{node.value='completed';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(dialog).toBeVisible();let activityCard=conversationHost.locator('.ai-conversation__activity');const label=activityCard.locator('[data-component="ai-content-label"]'),feedback=activityCard.locator('.ai-content-label__feedback').first();await expect(label).toHaveCount(1);await expect(feedback).toBeVisible();expect(await label.evaluate(node=>{const style=getComputedStyle(node),attribution=getComputedStyle(node.querySelector('.ai-content-label__attribution')!),glyph=getComputedStyle(node.querySelector('svg')!);return{gap:style.gap,attributionGap:attribution.gap,glyph:[glyph.width,glyph.height]}})).toEqual({gap:'8px',attributionGap:'4px',glyph:['12px','12px']});expect(await feedback.evaluate(node=>{const style=getComputedStyle(node),button=getComputedStyle(node.querySelector('button')!),glyph=getComputedStyle(node.querySelector('button svg')!);return{gap:style.gap,button:[button.width,button.height],glyph:[glyph.width,glyph.height]}})).toEqual({gap:'4px',button:['32px','32px'],glyph:['12px','12px']});await activityCard.screenshot({path:'/private/tmp/hs2-4y6sm9-ai-content-label-wide.png'});await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
-  await page.setViewportSize({width:430,height:760});await scenario.evaluate((node:HTMLElement&{value:string})=>{node.value='completed';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(dialog).toBeVisible();activityCard=conversationHost.locator('.ai-conversation__activity');await expect(activityCard.locator('[data-component="ai-content-label"]')).toHaveCount(1);await expect(activityCard).toContainText('AI-generated · may contain errors');const command=activityCard.locator('code');await expect(command).toContainText('npm run test');expect((await command.evaluate(node=>getComputedStyle(node).fontFamily)).toLowerCase()).toContain('mono');const activitySize=await activityCard.evaluate(node=>({clientWidth:node.clientWidth,scrollWidth:node.scrollWidth}));expect(activitySize.scrollWidth).toBeLessThanOrEqual(activitySize.clientWidth+1);await activityCard.screenshot({path:'/private/tmp/hs2-4y6sm9-ai-content-label-narrow.png'});await dialog.screenshot({path:'/private/tmp/hs2-ai-activity-contained-narrow.png'});await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
-  await page.setViewportSize({width:760,height:640});await scenario.evaluate((node:HTMLElement&{value:string})=>{node.value='failed';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(dialog).toBeVisible();await transcript.evaluate(node=>{node.scrollTop=node.scrollHeight});await expect(conversationHost.getByRole('alert')).toBeInViewport();await dialog.screenshot({path:'/private/tmp/hs2-1kqjbk-ai-conversation-failed-narrow.png'});
+test('previews AIConversation public states at wide and narrow sizes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=ai-conversation');
+  const conversationHost = page.locator('[data-component="ai-conversation"]'),
+    dialog = conversationHost.getByRole('dialog'),
+    transcript = conversationHost.locator('.ai-conversation__transcript');
+  await expect(dialog).toBeVisible();
+  await expect(conversationHost).toContainText('Running the focused browser test');
+  await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
+  await expect(conversationHost.locator('.ai-conversation__message--user .markdown-preview').first()).toHaveCSS(
+    'color',
+    'rgb(255, 255, 255)',
+  );
+  await dialog.screenshot({ path: '/private/tmp/hs2-s3j29e-ai-conversation-demo-wide.png' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await page.locator('[data-action="toggle-settings"]').click();
+  const scenario = page.locator('[data-settings="ai-conversation"] [name="scenario"]');
+  for (const value of ['empty', 'permission', 'completed', 'usage-unpriced', 'failed', 'interrupted'] as const) {
+    await scenario.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await expect(dialog).toBeVisible();
+    if (value === 'empty') await expect(conversationHost).toContainText('Start a conversation');
+    if (value === 'permission')
+      await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();
+    if (value === 'completed') {
+      await expect(conversationHost).toContainText('≈$0.04');
+      await expect(conversationHost).toContainText('AI-generated · may contain errors');
+    }
+    if (value === 'usage-unpriced') await expect(conversationHost).toContainText('Cost unavailable');
+    if (value === 'failed') {
+      await expect(conversationHost).toContainText('Conversation unavailable');
+      await expect(conversationHost).toContainText('The tool turn failed.');
+      await transcript.evaluate((node) => {
+        node.scrollTop = node.scrollHeight;
+      });
+      await expect(conversationHost.getByRole('alert')).toBeInViewport();
+      await dialog.screenshot({ path: '/private/tmp/hs2-1kqjbk-ai-conversation-failed-wide.png' });
+    }
+    if (value === 'interrupted') await expect(conversationHost).toContainText('Stopped before the suite completed.');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  }
+  await scenario.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'completed';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(dialog).toBeVisible();
+  let activityCard = conversationHost.locator('.ai-conversation__activity');
+  const label = activityCard.locator('[data-component="ai-content-label"]'),
+    feedback = activityCard.locator('.ai-content-label__feedback').first();
+  await expect(label).toHaveCount(1);
+  await expect(feedback).toBeVisible();
+  expect(
+    await label.evaluate((node) => {
+      const style = getComputedStyle(node),
+        attribution = getComputedStyle(node.querySelector('.ai-content-label__attribution')!),
+        glyph = getComputedStyle(node.querySelector('svg')!);
+      return { gap: style.gap, attributionGap: attribution.gap, glyph: [glyph.width, glyph.height] };
+    }),
+  ).toEqual({ gap: '8px', attributionGap: '4px', glyph: ['12px', '12px'] });
+  expect(
+    await feedback.evaluate((node) => {
+      const style = getComputedStyle(node),
+        button = getComputedStyle(node.querySelector('button')!),
+        glyph = getComputedStyle(node.querySelector('button svg')!);
+      return { gap: style.gap, button: [button.width, button.height], glyph: [glyph.width, glyph.height] };
+    }),
+  ).toEqual({ gap: '4px', button: ['32px', '32px'], glyph: ['12px', '12px'] });
+  await activityCard.screenshot({ path: '/private/tmp/hs2-4y6sm9-ai-content-label-wide.png' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await page.setViewportSize({ width: 430, height: 760 });
+  await scenario.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'completed';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(dialog).toBeVisible();
+  activityCard = conversationHost.locator('.ai-conversation__activity');
+  await expect(activityCard.locator('[data-component="ai-content-label"]')).toHaveCount(1);
+  await expect(activityCard).toContainText('AI-generated · may contain errors');
+  const command = activityCard.locator('code');
+  await expect(command).toContainText('npm run test');
+  expect((await command.evaluate((node) => getComputedStyle(node).fontFamily)).toLowerCase()).toContain('mono');
+  const activitySize = await activityCard.evaluate((node) => ({
+    clientWidth: node.clientWidth,
+    scrollWidth: node.scrollWidth,
+  }));
+  expect(activitySize.scrollWidth).toBeLessThanOrEqual(activitySize.clientWidth + 1);
+  await activityCard.screenshot({ path: '/private/tmp/hs2-4y6sm9-ai-content-label-narrow.png' });
+  await dialog.screenshot({ path: '/private/tmp/hs2-ai-activity-contained-narrow.png' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await page.setViewportSize({ width: 760, height: 640 });
+  await scenario.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'failed';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(dialog).toBeVisible();
+  await transcript.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect(conversationHost.getByRole('alert')).toBeInViewport();
+  await dialog.screenshot({ path: '/private/tmp/hs2-1kqjbk-ai-conversation-failed-narrow.png' });
 });
 
-test('renders the real inspector chrome as a value-free loading placeholder',async({page})=>{
-  await page.setViewportSize({width:900,height:800});await page.goto('/ux-demo?component=ticket-inspector-skeleton');
-  const skeleton=page.locator('[data-component="ticket-inspector-skeleton"]');
+test('renders the real inspector chrome as a value-free loading placeholder', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto('/ux-demo?component=ticket-inspector-skeleton');
+  const skeleton = page.locator('[data-component="ticket-inspector-skeleton"]');
   await expect(skeleton).toBeVisible();
-  await expect(skeleton).toHaveAttribute('aria-busy','true');
+  await expect(skeleton).toHaveAttribute('aria-busy', 'true');
   // It IS the inspector: same aside chrome, working collapse control, real segmented tab bar.
   await expect(skeleton).toHaveClass(/\bticket-inspector--placeholder\b/);
-  await expect(skeleton.getByRole('button',{name:'Hide inspector'})).toBeVisible();
+  await expect(skeleton.getByRole('button', { name: 'Hide inspector' })).toBeVisible();
   await expect(skeleton.locator('.ticket-inspector__tabs [data-component="app-tab"]')).toHaveCount(4);
   // Real controls/section headers are drawn; only the per-ticket values are placeholders.
-  for(const label of ['Category','Priority','Status','Block ticket','Details','Tags','Notes','Activity']){await expect(skeleton.getByText(label,{exact:true}).first()).toBeVisible();}
+  for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes', 'Activity']) {
+    await expect(skeleton.getByText(label, { exact: true }).first()).toBeVisible();
+  }
   // Metadata controls use the native Select placeholder mode (side by side) and value slots use Skeleton.
   await expect(skeleton.locator('.kui-select--placeholder')).toHaveCount(3);
   await expect(skeleton.locator('.kui-skeleton')).not.toHaveCount(0);
-  const [category,priority]=await skeleton.locator('.ticket-inspector__metadata > .kui-select').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().y)));
+  const [category, priority] = await skeleton
+    .locator('.ticket-inspector__metadata > .kui-select')
+    .evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().y)));
   expect(category).toBe(priority); // Category and Priority render side by side, not stacked (HS2-KWWSWY).
   // No stale prior-ticket values; the known slug of the loading ticket is shown as chrome.
   await expect(skeleton.locator('.ticket-inspector__details-surface')).not.toContainText(/\w/);
   await expect(skeleton).toContainText('HS2-4J50K3');
-  await skeleton.screenshot({path:'/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png'});
+  await skeleton.screenshot({ path: '/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png' });
 });
 
-test('shows the chat model/effort as a label with a popup to change them',async({page})=>{
-  await page.setViewportSize({width:1000,height:800});await page.goto('/ux-demo?component=ai-conversation');
-  const control=page.locator('[data-component="conversation-model-control"]').first();
+test('shows the chat model/effort as a label with a popup to change them', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/ux-demo?component=ai-conversation');
+  const control = page.locator('[data-component="conversation-model-control"]').first();
   await expect(control).toBeVisible();
   await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
   await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
   await control.locator('.ai-conversation__model-trigger').click();
-  await expect(page.getByRole('menuitem',{name:/Provider/})).toBeVisible();
-  await expect(page.getByRole('menuitem',{name:/Model/})).toBeVisible();
-  await expect(page.getByRole('menuitem',{name:/Effort/})).toBeVisible();
-  await page.screenshot({path:'/private/tmp/hs2-r5f7a5-chat-model-popup.png'});
+  await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-r5f7a5-chat-model-popup.png' });
   // Selecting a different provider from the submenu switches the chat (HS2-PRBGRB). The nested
   // Web Awesome submenu reveal is the library's; our contract is the data-action item + handler, so
   // fire a real bubbling click on it rather than depending on hover-to-expand timing.
@@ -2600,91 +4759,164 @@ test('shows the chat model/effort as a label with a popup to change them',async(
   await expect(page.locator('[data-component="ai-conversation"]')).toContainText('Claude conversation');
 });
 
-test('exposes a General app-settings entry in the settings navigator',async({page})=>{
-  await page.setViewportSize({width:900,height:800});await page.goto('/ux-demo?component=settings-navigation');
-  const general=page.locator('[data-item-id="general"]');
+test('exposes a General app-settings entry in the settings navigator', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto('/ux-demo?component=settings-navigation');
+  const general = page.locator('[data-item-id="general"]');
   await expect(general).toBeVisible();
   await expect(general).toContainText('General');
-  await expect(page.getByText('App Settings',{exact:true})).toBeVisible();
+  await expect(page.getByText('App Settings', { exact: true })).toBeVisible();
 });
 
-test('edits custom command color and icon in the command settings editor',async({page})=>{
-  await page.setViewportSize({width:1000,height:900});await page.goto('/ux-demo?component=command-settings-editor');
-  const editor=page.locator('[data-component="command-settings-editor"]');
+test('edits custom command color and icon in the command settings editor', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto('/ux-demo?component=command-settings-editor');
+  const editor = page.locator('[data-component="command-settings-editor"]');
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
   // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
   await expect(editor.locator('.command-settings-editor__row')).toHaveCount(3);
   await expect(editor.locator('.command-settings-editor__row[draggable="true"]')).toHaveCount(3);
-  await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality','Release']);
-  await page.screenshot({path:'/private/tmp/hs2-656xj2-command-list.png'});
+  await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality', 'Release']);
+  await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-list.png' });
   // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
-  const verifyRow=editor.locator('.command-settings-editor__row',{hasText:'Verify project'});await verifyRow.locator('.command-settings-editor__row-menu-trigger').click();await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-  const dialog=page.locator('#command-editor-dialog');
+  const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
+  await verifyRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+  const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
-  await dialog.getByTitle('Blue',{exact:true}).click();
+  await dialog.getByTitle('Blue', { exact: true }).click();
   await dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]').click();
   await expect(dialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#3b82f6');
-  await expect(dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]')).toHaveAttribute('aria-pressed','true');
-  await page.screenshot({path:'/private/tmp/hs2-656xj2-command-editor-color-icon.png'});
-  await dialog.getByRole('button',{name:'Done'}).click();
-  await expect.poll(()=>dialog.evaluate(node=>node.matches(':popover-open'))).toBe(false);
+  await expect(dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-color-icon.png' });
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect.poll(() => dialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await expect(dialog).toBeEmpty();
 });
 
-test('keeps the Markdown preview focus ring inset so an overflow-hidden editor cannot clip it (HS2-0WD3YK)',async({page})=>{
-  await page.setViewportSize({width:1000,height:800});await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
-  const preview=page.locator('.markdown-editor__preview');await expect(preview).toBeVisible();
+test('keeps the Markdown preview focus ring inset so an overflow-hidden editor cannot clip it (HS2-0WD3YK)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
+  const preview = page.locator('.markdown-editor__preview');
+  await expect(preview).toBeVisible();
   // Keyboard focus so :focus-visible applies, then verify the ring is inset and within the editor's clip box.
-  await preview.evaluate(node=>{node.focus()});
-  const geometry=await preview.evaluate(node=>{const cs=getComputedStyle(node),editor=node.closest('.markdown-editor')!,er=editor.getBoundingClientRect(),r=node.getBoundingClientRect(),width=parseFloat(cs.outlineWidth)||0,offset=parseFloat(cs.outlineOffset);return{focusVisible:node.matches(':focus-visible'),offset,width,within:r.left-(offset+width)>=er.left-0.5&&r.top-(offset+width)>=er.top-0.5&&r.right+(offset+width)<=er.right+0.5&&r.bottom+(offset+width)<=er.bottom+0.5};});
+  await preview.evaluate((node) => {
+    node.focus();
+  });
+  const geometry = await preview.evaluate((node) => {
+    const cs = getComputedStyle(node),
+      editor = node.closest('.markdown-editor')!,
+      er = editor.getBoundingClientRect(),
+      r = node.getBoundingClientRect(),
+      width = parseFloat(cs.outlineWidth) || 0,
+      offset = parseFloat(cs.outlineOffset);
+    return {
+      focusVisible: node.matches(':focus-visible'),
+      offset,
+      width,
+      within:
+        r.left - (offset + width) >= er.left - 0.5 &&
+        r.top - (offset + width) >= er.top - 0.5 &&
+        r.right + (offset + width) <= er.right + 0.5 &&
+        r.bottom + (offset + width) <= er.bottom + 0.5,
+    };
+  });
   expect(geometry.focusVisible).toBe(true);
   expect(geometry.offset).toBeLessThan(0);
   expect(geometry.within).toBe(true);
-  await page.locator('.markdown-editor').screenshot({path:'/private/tmp/claude-501/-Users-westphal-Documents-hotsheet2/88cd2d15-f2a9-4f29-8bb4-c672b5069c22/scratchpad/0WD3YK-markdown-preview-focus-inset.png'});
+  await page.locator('.markdown-editor').screenshot({
+    path: '/private/tmp/claude-501/-Users-westphal-Documents-hotsheet2/88cd2d15-f2a9-4f29-8bb4-c672b5069c22/scratchpad/0WD3YK-markdown-preview-focus-inset.png',
+  });
 });
 
-test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});
+test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
-  const projectClose=page.locator('[data-component="project-close-dialog"]');
-  await expect(projectClose).toHaveJSProperty('open',true);
-  await expect(projectClose).toHaveAttribute('data-has-resources','true');
+  const projectClose = page.locator('[data-component="project-close-dialog"]');
+  await expect(projectClose).toHaveJSProperty('open', true);
+  await expect(projectClose).toHaveAttribute('data-has-resources', 'true');
   // The selected AI-chat resource renders its embedded conversation preview.
   await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
   await expect(projectClose).toContainText('Kerf');
-  await projectClose.evaluate(node=>Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished)));
-  const closeSpacing=await projectClose.evaluate(node=>{const intro=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__intro')!),aside=getComputedStyle(node.querySelector<HTMLElement>('aside')!),nav=getComputedStyle(node.querySelector<HTMLElement>('nav')!),consequences=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__consequences')!),actions=getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__actions')!);return{introPadding:intro.padding,introGap:intro.gap,asidePadding:aside.padding,navGap:nav.gap,consequencesPadding:consequences.padding,actionGap:actions.gap}});expect(closeSpacing).toEqual({introPadding:'16px 24px',introGap:'16px',asidePadding:'8px',navGap:'0px',consequencesPadding:'16px 24px 0px',actionGap:'8px'});
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-close-wide.png',fullPage:true});
-  await page.screenshot({path:'/private/tmp/hs2-qkks05-project-close-dialog.png',fullPage:true});
-  await page.setViewportSize({width:390,height:844});await expect.poll(()=>projectClose.evaluate(node=>{const surface=node.shadowRoot?.querySelector('dialog')?.getBoundingClientRect();return surface!=null&&surface.left>=0&&surface.top>=0&&surface.right<=innerWidth&&surface.bottom<=innerHeight})).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-4y6sm9-project-close-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:900});
+  await projectClose.evaluate((node) =>
+    Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
+  const closeSpacing = await projectClose.evaluate((node) => {
+    const intro = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__intro')!),
+      aside = getComputedStyle(node.querySelector<HTMLElement>('aside')!),
+      nav = getComputedStyle(node.querySelector<HTMLElement>('nav')!),
+      consequences = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__consequences')!),
+      actions = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__actions')!);
+    return {
+      introPadding: intro.padding,
+      introGap: intro.gap,
+      asidePadding: aside.padding,
+      navGap: nav.gap,
+      consequencesPadding: consequences.padding,
+      actionGap: actions.gap,
+    };
+  });
+  expect(closeSpacing).toEqual({
+    introPadding: '16px 24px',
+    introGap: '16px',
+    asidePadding: '8px',
+    navGap: '0px',
+    consequencesPadding: '16px 24px 0px',
+    actionGap: '8px',
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-close-wide.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-qkks05-project-close-dialog.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      projectClose.evaluate((node) => {
+        const surface = node.shadowRoot?.querySelector('dialog')?.getBoundingClientRect();
+        return (
+          surface != null &&
+          surface.left >= 0 &&
+          surface.top >= 0 &&
+          surface.right <= innerWidth &&
+          surface.bottom <= innerHeight
+        );
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-close-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.goto('/ux-demo?component=conversation-export-dialog');
-  const exportDialog=page.locator('[data-component="conversation-export-dialog"]');
-  await expect(exportDialog).toHaveJSProperty('open',true);
+  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
+  await expect(exportDialog).toHaveJSProperty('open', true);
   // Fixture opens on step 2 (destination + format + bundle options).
-  await expect(exportDialog).toHaveAttribute('data-step','2');
+  await expect(exportDialog).toHaveAttribute('data-step', '2');
   await expect(exportDialog).toContainText('Bundle contents');
-  await exportDialog.evaluate(node=>Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished)));
-  await page.screenshot({path:'/private/tmp/hs2-qkks05-conversation-export-dialog.png',fullPage:true});
+  await exportDialog.evaluate((node) =>
+    Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-qkks05-conversation-export-dialog.png', fullPage: true });
 });
 
-test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});
+test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-run-dialog');
-  const dialog=page.locator('[data-component="command-run-dialog"]');
+  const dialog = page.locator('[data-component="command-run-dialog"]');
   // Native <dialog> opened via showModal wiring (not an inline wa-dialog).
-  await expect(dialog).toHaveJSProperty('open',true);
+  await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('Run checks');
   await expect(dialog).toContainText('completed');
   await expect(dialog).toContainText('Exit 0');
   await expect(dialog.locator('[aria-label="Command output"]')).toContainText('All checks passed in 4.2s');
   // stderr lines carry the 'error: ' prefix in the output presentation.
   await expect(dialog.locator('[aria-label="Command output"]')).toContainText('error: note: 2 files skipped');
-  await expect(dialog.getByRole('button',{name:'Close'})).toBeVisible();
-  await page.screenshot({path:'/private/tmp/claude/hs2-z0cthn-command-run-dialog.png',fullPage:true});
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/claude/hs2-z0cthn-command-run-dialog.png', fullPage: true });
 });

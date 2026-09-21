@@ -1,8 +1,8 @@
-import {signal} from 'kerfjs';
+import { signal } from 'kerfjs';
 
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
-import { AttachmentGallery,attachmentGalleryZoomModel } from '../components/attachment-gallery';
-import { type TicketAttachmentItem,TicketAttachments } from '../components/ticket-attachments';
+import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
+import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
 import { TicketCategorySelect } from '../components/ticket-category-select';
 import { TicketCodeReview } from '../components/ticket-code-review';
 import { TicketInfoPanel } from '../components/ticket-info-panel';
@@ -10,28 +10,324 @@ import { TicketPrioritySelect } from '../components/ticket-priority-select';
 import { TicketStatusMenu } from '../components/ticket-status-menu';
 import { TicketTimeline } from '../components/ticket-timeline';
 
-export function TicketCategorySelectDemo() { return <section class="metadata-control-demo" aria-label="TicketCategorySelect demo"><TicketCategorySelect name="demo-category" value="feature" /></section>; }
-export function TicketPrioritySelectDemo() { return <section class="metadata-control-demo" aria-label="TicketPrioritySelect demo"><TicketPrioritySelect name="demo-priority" value="urgent" /></section>; }
-export function TicketStatusMenuDemo() { return <section class="metadata-control-demo" aria-label="TicketStatusMenu demo"><div><span>Status</span><TicketStatusMenu value="started" /></div></section>; }
-export function TicketInfoPanelDemo() { return <section class="inspector-panel-demo" aria-label="TicketInfoPanel demo"><TicketInfoPanel status="started" priority="high" category="feature" tags={['client', 'ux']} details={'## Implementation notes\n\nBuild the reusable metadata and details presentation independently from the inspector shell.'} blockedReason="Waiting for final design review." notes={[{ id: 'review', kind: 'regular', author: 'Claude', time: '10 minutes ago', body: 'The metadata and notes now share the inspector’s controlled state.' }]} providerName="Hot Sheet git" updatedLabel="Updated 2 minutes ago" /></section>; }
-export function TicketTimelineDemo() { return <section class="inspector-panel-demo" aria-label="TicketTimeline demo"><TicketTimeline /></section>; }
-const demoImages=[{id:'wide',name:'wide-layout.svg',url:'/ux-gallery-preview.svg',annotationCount:2,round:1,batch_id:'problem',actor:{display_name:'Brian',role:'human' as const},purpose:'problem_evidence' as const},{id:'narrow',name:'narrow-layout.svg',url:'/ux-gallery-preview.svg?variant=narrow',round:1,batch_id:'problem',actor:{display_name:'Brian',role:'human' as const},purpose:'problem_evidence' as const},{id:'video',name:'walkthrough.mp4',url:'/ux-gallery-video.mp4',thumbnailUrl:'/ux-gallery-preview.svg?variant=video',annotationCount:1,batch_id:'fix',batch_label:'Corrected implementation',actor:{identity:'codex',role:'ai' as const},purpose:'correctness_evidence' as const}];
-export const galleryDemoUrl=signal<string|undefined>(demoImages[0].url);
-export const galleryDemoScale=signal<number|undefined>(undefined);
-export const galleryDemoMarkup=signal(false),galleryDemoDrawMode=signal(false),galleryDemoSelectedAnnotation=signal<string|undefined>('demo-annotation'),galleryDemoPlayhead=signal(1500),galleryDemoPlaying=signal(false),galleryDemoVolume=signal(1),galleryDemoMuted=signal(false),galleryDemoVolumeOpen=signal(false);
-const imageAnnotations=[{id:'demo-annotation',x:900,y:1100,width:3000,height:2400,text:'Review this alignment'}];
-export const galleryDemoVideoAnnotations=signal([{id:'demo-annotation',x:1200,y:1800,width:2800,height:2600,start_ms:1000,end_ms:3000,text:'Transition is abrupt'}]);
-function galleryDemoGeometry(){const width=typeof window==='undefined'?1140:window.innerWidth,height=typeof window==='undefined'?820:window.innerHeight;return{naturalWidth:1600,naturalHeight:1000,availableWidth:Math.max(320,width-40),availableHeight:Math.max(240,height-220)}}
-export function setGalleryDemo(open:boolean){galleryDemoUrl.value=open?demoImages[0].url:undefined;galleryDemoScale.value=undefined;galleryDemoMarkup.value=false;galleryDemoDrawMode.value=false;galleryDemoSelectedAnnotation.value='demo-annotation';galleryDemoPlayhead.value=1500;galleryDemoPlaying.value=false;galleryDemoVolume.value=1;galleryDemoMuted.value=false;galleryDemoVolumeOpen.value=false}
-export function shiftGalleryDemo(delta:number){const index=demoImages.findIndex(image=>image.url===galleryDemoUrl.value);galleryDemoUrl.value=demoImages[(Math.max(0,index)+delta+demoImages.length)%demoImages.length].url;galleryDemoScale.value=undefined;galleryDemoPlayhead.value=1500}
-export function zoomGalleryDemo(direction:'in'|'out'){const model=attachmentGalleryZoomModel(galleryDemoGeometry(),galleryDemoScale.value);galleryDemoScale.value=model.stops[model.index+(direction==='in'?1:-1)]}
-export function setGalleryDemoAnnotationEndpoint(endpoint:'start'|'end',milliseconds:number){galleryDemoVideoAnnotations.value=galleryDemoVideoAnnotations.value.map(annotation=>{const next=Math.max(0,Math.min(6000,Math.round(milliseconds)));return endpoint==='start'?{...annotation,start_ms:Math.min(next,annotation.end_ms)}:{...annotation,end_ms:Math.max(annotation.start_ms,next)}})}
-export const attachmentDemoMenu=signal<{x:number;y:number}|undefined>(undefined);
-const attachmentDemoItems=signal<TicketAttachmentItem[]>([...demoImages,{id:'diagnostics',name:'hotsheet-ui-diagnostics.json',batch_id:'automatic-diagnostics',actor:{identity:'ui-stability-diagnostics',role:'system' as const},purpose:'problem_evidence' as const},{ id: 'demo-video', name: 'choppy.mov',url:'/ux-gallery-video.mov',thumbnailUrl:'/ux-gallery-preview.svg?variant=video' }]);
-export function showAttachmentDemoMenu(x:number,y:number){attachmentDemoMenu.value={x,y}}
-export function closeAttachmentDemoMenu(){attachmentDemoMenu.value=undefined}
-export function regroupAttachmentDemo(id:string,destinationBatch?:string){const destination=destinationBatch?attachmentDemoItems.value.find(item=>item.batch_id===destinationBatch):undefined;attachmentDemoItems.value=attachmentDemoItems.value.map(item=>item.id===id?{...item,batch_id:destinationBatch??crypto.randomUUID(),batch_label:destination?destination.batch_label:'New group',actor:destination?.actor??item.actor,purpose:destination?.purpose}:item)}
-export function renameAttachmentDemoBatch(batchId:string,label:string){const nextBatchId=batchId||crypto.randomUUID();attachmentDemoItems.value=attachmentDemoItems.value.map(item=>(item.batch_id??'')===batchId?{...item,batch_id:nextBatchId,batch_label:label.trim()||undefined}:item)}
-export function TicketAttachmentsDemo() { const menu=attachmentDemoMenu.value;return <section class="inspector-panel-demo" aria-label="TicketAttachments demo"><TicketAttachments attachments={attachmentDemoItems.value} />{menu&&<AttachmentContextMenu x={menu.x} y={menu.y}/>}</section>; }
-export function AttachmentGalleryDemo(){const video=galleryDemoUrl.value===demoImages[2].url,animatedSvg=galleryDemoUrl.value===demoImages[1].url,timed=video||animatedSvg;return galleryDemoUrl.value?<AttachmentGallery images={demoImages} activeUrl={galleryDemoUrl.value} geometry={galleryDemoGeometry()} selectedScale={galleryDemoScale.value} annotations={timed?galleryDemoVideoAnnotations.value:imageAnnotations} markup={galleryDemoMarkup.value} drawMode={galleryDemoDrawMode.value} selectedAnnotation={galleryDemoSelectedAnnotation.value} playheadMs={timed?galleryDemoPlayhead.value:0} durationMs={video?6000:animatedSvg?4000:0} playing={galleryDemoPlaying.value} volume={galleryDemoVolume.value} muted={galleryDemoMuted.value} volumeOpen={galleryDemoVolumeOpen.value}/>:<button type="button" data-action="open-gallery-demo">Open gallery</button>}
-export function TicketCodeReviewDemo() { return <section class="code-review-demo" aria-label="TicketCodeReview demo"><article><h3>Configured — disjoint bundles</h3><div class="inspector-panel-demo"><TicketCodeReview review={{difftool:'Glassbox',truncated:false,summary:{files:{total:9,docs:2,tests:3,source:3,other:1},tests_added:2,tests_modified:1},ranges:[{from:'aaa1111',to:'bbb2222',count:2},{from:'ccc3333',to:'ddd4444',count:2}],commits:[{sha:'ddd4444',short_sha:'ddd4444',subject:'HS2-DEMO: complete the later review bundle',committed_at:'2026-09-02T10:00:00Z'},{sha:'ccc3333',short_sha:'ccc3333',subject:'HS2-DEMO: begin the later review bundle',committed_at:'2026-09-02T09:00:00Z'},{sha:'bbb2222',short_sha:'bbb2222',subject:'HS2-DEMO: complete the initial review bundle',committed_at:'2026-09-02T08:00:00Z'},{sha:'aaa1111',short_sha:'aaa1111',subject:'HS2-DEMO: begin the initial review bundle',committed_at:'2026-09-02T07:00:00Z'}]}}/></div></article><article><h3>Not configured</h3><div class="inspector-panel-demo"><TicketCodeReview review={{truncated:false,ranges:[],commits:[{sha:'aaa',short_sha:'aaaaaaa',subject:'HS2-DEMO: readable without a tool',committed_at:'2026-09-02T07:00:00Z'}]}}/></div></article><article><h3>Empty</h3><div class="inspector-panel-demo"><TicketCodeReview review={{difftool:'Meld',truncated:false,ranges:[],commits:[]}}/></div></article><article><h3>Loading / error</h3><div class="inspector-panel-demo"><TicketCodeReview loading message="The repository is temporarily unavailable."/></div></article></section>; }
+export function TicketCategorySelectDemo() {
+  return (
+    <section class="metadata-control-demo" aria-label="TicketCategorySelect demo">
+      <TicketCategorySelect name="demo-category" value="feature" />
+    </section>
+  );
+}
+export function TicketPrioritySelectDemo() {
+  return (
+    <section class="metadata-control-demo" aria-label="TicketPrioritySelect demo">
+      <TicketPrioritySelect name="demo-priority" value="urgent" />
+    </section>
+  );
+}
+export function TicketStatusMenuDemo() {
+  return (
+    <section class="metadata-control-demo" aria-label="TicketStatusMenu demo">
+      <div>
+        <span>Status</span>
+        <TicketStatusMenu value="started" />
+      </div>
+    </section>
+  );
+}
+export function TicketInfoPanelDemo() {
+  return (
+    <section class="inspector-panel-demo" aria-label="TicketInfoPanel demo">
+      <TicketInfoPanel
+        status="started"
+        priority="high"
+        category="feature"
+        tags={['client', 'ux']}
+        details={
+          '## Implementation notes\n\nBuild the reusable metadata and details presentation independently from the inspector shell.'
+        }
+        blockedReason="Waiting for final design review."
+        notes={[
+          {
+            id: 'review',
+            kind: 'regular',
+            author: 'Claude',
+            time: '10 minutes ago',
+            body: 'The metadata and notes now share the inspector’s controlled state.',
+          },
+        ]}
+        providerName="Hot Sheet git"
+        updatedLabel="Updated 2 minutes ago"
+      />
+    </section>
+  );
+}
+export function TicketTimelineDemo() {
+  return (
+    <section class="inspector-panel-demo" aria-label="TicketTimeline demo">
+      <TicketTimeline />
+    </section>
+  );
+}
+const demoImages = [
+  {
+    id: 'wide',
+    name: 'wide-layout.svg',
+    url: '/ux-gallery-preview.svg',
+    annotationCount: 2,
+    round: 1,
+    batch_id: 'problem',
+    actor: { display_name: 'Brian', role: 'human' as const },
+    purpose: 'problem_evidence' as const,
+  },
+  {
+    id: 'narrow',
+    name: 'narrow-layout.svg',
+    url: '/ux-gallery-preview.svg?variant=narrow',
+    round: 1,
+    batch_id: 'problem',
+    actor: { display_name: 'Brian', role: 'human' as const },
+    purpose: 'problem_evidence' as const,
+  },
+  {
+    id: 'video',
+    name: 'walkthrough.mp4',
+    url: '/ux-gallery-video.mp4',
+    thumbnailUrl: '/ux-gallery-preview.svg?variant=video',
+    annotationCount: 1,
+    batch_id: 'fix',
+    batch_label: 'Corrected implementation',
+    actor: { identity: 'codex', role: 'ai' as const },
+    purpose: 'correctness_evidence' as const,
+  },
+];
+export const galleryDemoUrl = signal<string | undefined>(demoImages[0].url);
+export const galleryDemoScale = signal<number | undefined>(undefined);
+export const galleryDemoMarkup = signal(false),
+  galleryDemoDrawMode = signal(false),
+  galleryDemoSelectedAnnotation = signal<string | undefined>('demo-annotation'),
+  galleryDemoPlayhead = signal(1500),
+  galleryDemoPlaying = signal(false),
+  galleryDemoVolume = signal(1),
+  galleryDemoMuted = signal(false),
+  galleryDemoVolumeOpen = signal(false);
+const imageAnnotations = [
+  { id: 'demo-annotation', x: 900, y: 1100, width: 3000, height: 2400, text: 'Review this alignment' },
+];
+export const galleryDemoVideoAnnotations = signal([
+  {
+    id: 'demo-annotation',
+    x: 1200,
+    y: 1800,
+    width: 2800,
+    height: 2600,
+    start_ms: 1000,
+    end_ms: 3000,
+    text: 'Transition is abrupt',
+  },
+]);
+function galleryDemoGeometry() {
+  const width = typeof window === 'undefined' ? 1140 : window.innerWidth,
+    height = typeof window === 'undefined' ? 820 : window.innerHeight;
+  return {
+    naturalWidth: 1600,
+    naturalHeight: 1000,
+    availableWidth: Math.max(320, width - 40),
+    availableHeight: Math.max(240, height - 220),
+  };
+}
+export function setGalleryDemo(open: boolean) {
+  galleryDemoUrl.value = open ? demoImages[0].url : undefined;
+  galleryDemoScale.value = undefined;
+  galleryDemoMarkup.value = false;
+  galleryDemoDrawMode.value = false;
+  galleryDemoSelectedAnnotation.value = 'demo-annotation';
+  galleryDemoPlayhead.value = 1500;
+  galleryDemoPlaying.value = false;
+  galleryDemoVolume.value = 1;
+  galleryDemoMuted.value = false;
+  galleryDemoVolumeOpen.value = false;
+}
+export function shiftGalleryDemo(delta: number) {
+  const index = demoImages.findIndex((image) => image.url === galleryDemoUrl.value);
+  galleryDemoUrl.value = demoImages[(Math.max(0, index) + delta + demoImages.length) % demoImages.length].url;
+  galleryDemoScale.value = undefined;
+  galleryDemoPlayhead.value = 1500;
+}
+export function zoomGalleryDemo(direction: 'in' | 'out') {
+  const model = attachmentGalleryZoomModel(galleryDemoGeometry(), galleryDemoScale.value);
+  galleryDemoScale.value = model.stops[model.index + (direction === 'in' ? 1 : -1)];
+}
+export function setGalleryDemoAnnotationEndpoint(endpoint: 'start' | 'end', milliseconds: number) {
+  galleryDemoVideoAnnotations.value = galleryDemoVideoAnnotations.value.map((annotation) => {
+    const next = Math.max(0, Math.min(6000, Math.round(milliseconds)));
+    return endpoint === 'start'
+      ? { ...annotation, start_ms: Math.min(next, annotation.end_ms) }
+      : { ...annotation, end_ms: Math.max(annotation.start_ms, next) };
+  });
+}
+export const attachmentDemoMenu = signal<{ x: number; y: number } | undefined>(undefined);
+const attachmentDemoItems = signal<TicketAttachmentItem[]>([
+  ...demoImages,
+  {
+    id: 'diagnostics',
+    name: 'hotsheet-ui-diagnostics.json',
+    batch_id: 'automatic-diagnostics',
+    actor: { identity: 'ui-stability-diagnostics', role: 'system' as const },
+    purpose: 'problem_evidence' as const,
+  },
+  {
+    id: 'demo-video',
+    name: 'choppy.mov',
+    url: '/ux-gallery-video.mov',
+    thumbnailUrl: '/ux-gallery-preview.svg?variant=video',
+  },
+]);
+export function showAttachmentDemoMenu(x: number, y: number) {
+  attachmentDemoMenu.value = { x, y };
+}
+export function closeAttachmentDemoMenu() {
+  attachmentDemoMenu.value = undefined;
+}
+export function regroupAttachmentDemo(id: string, destinationBatch?: string) {
+  const destination = destinationBatch
+    ? attachmentDemoItems.value.find((item) => item.batch_id === destinationBatch)
+    : undefined;
+  attachmentDemoItems.value = attachmentDemoItems.value.map((item) =>
+    item.id === id
+      ? {
+          ...item,
+          batch_id: destinationBatch ?? crypto.randomUUID(),
+          batch_label: destination ? destination.batch_label : 'New group',
+          actor: destination?.actor ?? item.actor,
+          purpose: destination?.purpose,
+        }
+      : item,
+  );
+}
+export function renameAttachmentDemoBatch(batchId: string, label: string) {
+  const nextBatchId = batchId || crypto.randomUUID();
+  attachmentDemoItems.value = attachmentDemoItems.value.map((item) =>
+    (item.batch_id ?? '') === batchId
+      ? { ...item, batch_id: nextBatchId, batch_label: label.trim() || undefined }
+      : item,
+  );
+}
+export function TicketAttachmentsDemo() {
+  const menu = attachmentDemoMenu.value;
+  return (
+    <section class="inspector-panel-demo" aria-label="TicketAttachments demo">
+      <TicketAttachments attachments={attachmentDemoItems.value} />
+      {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
+    </section>
+  );
+}
+export function AttachmentGalleryDemo() {
+  const video = galleryDemoUrl.value === demoImages[2].url,
+    animatedSvg = galleryDemoUrl.value === demoImages[1].url,
+    timed = video || animatedSvg;
+  return galleryDemoUrl.value ? (
+    <AttachmentGallery
+      images={demoImages}
+      activeUrl={galleryDemoUrl.value}
+      geometry={galleryDemoGeometry()}
+      selectedScale={galleryDemoScale.value}
+      annotations={timed ? galleryDemoVideoAnnotations.value : imageAnnotations}
+      markup={galleryDemoMarkup.value}
+      drawMode={galleryDemoDrawMode.value}
+      selectedAnnotation={galleryDemoSelectedAnnotation.value}
+      playheadMs={timed ? galleryDemoPlayhead.value : 0}
+      durationMs={video ? 6000 : animatedSvg ? 4000 : 0}
+      playing={galleryDemoPlaying.value}
+      volume={galleryDemoVolume.value}
+      muted={galleryDemoMuted.value}
+      volumeOpen={galleryDemoVolumeOpen.value}
+    />
+  ) : (
+    <button type="button" data-action="open-gallery-demo">
+      Open gallery
+    </button>
+  );
+}
+export function TicketCodeReviewDemo() {
+  return (
+    <section class="code-review-demo" aria-label="TicketCodeReview demo">
+      <article>
+        <h3>Configured — disjoint bundles</h3>
+        <div class="inspector-panel-demo">
+          <TicketCodeReview
+            review={{
+              difftool: 'Glassbox',
+              truncated: false,
+              summary: {
+                files: { total: 9, docs: 2, tests: 3, source: 3, other: 1 },
+                tests_added: 2,
+                tests_modified: 1,
+              },
+              ranges: [
+                { from: 'aaa1111', to: 'bbb2222', count: 2 },
+                { from: 'ccc3333', to: 'ddd4444', count: 2 },
+              ],
+              commits: [
+                {
+                  sha: 'ddd4444',
+                  short_sha: 'ddd4444',
+                  subject: 'HS2-DEMO: complete the later review bundle',
+                  committed_at: '2026-09-02T10:00:00Z',
+                },
+                {
+                  sha: 'ccc3333',
+                  short_sha: 'ccc3333',
+                  subject: 'HS2-DEMO: begin the later review bundle',
+                  committed_at: '2026-09-02T09:00:00Z',
+                },
+                {
+                  sha: 'bbb2222',
+                  short_sha: 'bbb2222',
+                  subject: 'HS2-DEMO: complete the initial review bundle',
+                  committed_at: '2026-09-02T08:00:00Z',
+                },
+                {
+                  sha: 'aaa1111',
+                  short_sha: 'aaa1111',
+                  subject: 'HS2-DEMO: begin the initial review bundle',
+                  committed_at: '2026-09-02T07:00:00Z',
+                },
+              ],
+            }}
+          />
+        </div>
+      </article>
+      <article>
+        <h3>Not configured</h3>
+        <div class="inspector-panel-demo">
+          <TicketCodeReview
+            review={{
+              truncated: false,
+              ranges: [],
+              commits: [
+                {
+                  sha: 'aaa',
+                  short_sha: 'aaaaaaa',
+                  subject: 'HS2-DEMO: readable without a tool',
+                  committed_at: '2026-09-02T07:00:00Z',
+                },
+              ],
+            }}
+          />
+        </div>
+      </article>
+      <article>
+        <h3>Empty</h3>
+        <div class="inspector-panel-demo">
+          <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
+        </div>
+      </article>
+      <article>
+        <h3>Loading / error</h3>
+        <div class="inspector-panel-demo">
+          <TicketCodeReview loading message="The repository is temporarily unavailable." />
+        </div>
+      </article>
+    </section>
+  );
+}

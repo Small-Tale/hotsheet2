@@ -6,7 +6,7 @@
 > the "generalize a concern across every tool via a capability" theme (with `drive`
 > [13](13-drive-transport-interface.md) and `metrics`
 > [14](14-metrics-interface.md)). This is the event spec + mapping + build plan. The
-> Announcer *build* is a later feature (post-floor); this is the interface it needs.
+> Announcer _build_ is a later feature (post-floor); this is the interface it needs.
 
 ## 15.1 The idea
 
@@ -20,15 +20,15 @@ consumer (Announcer, a live timeline, a "what happened" digest) reads that one s
 
 ```jsonc
 {
-  "id": "01J9ZK…",              // ULID (ordering + de-dup)
+  "id": "01J9ZK…", // ULID (ordering + de-dup)
   "ts": "2026-08-19T14:03:11Z",
   "tool": "codex",
   "project": "01J9Z…",
-  "ticket": "01J9ZK…",          // ULID when attributable, else null
-  "kind": "edit",               // see the small vocabulary below
+  "ticket": "01J9ZK…", // ULID when attributable, else null
+  "kind": "edit", // see the small vocabulary below
   "summary": "Edited resolveCommand.ts — added the {{aiCommand}} token",
-  "detail": { "path": "src/…", "…": "…" },   // kind-specific, optional
-  "importance": "normal"        // low | normal | high  (narration emphasis)
+  "detail": { "path": "src/…", "…": "…" }, // kind-specific, optional
+  "importance": "normal", // low | normal | high  (narration emphasis)
 }
 ```
 
@@ -69,13 +69,13 @@ The `activity` capability turns native signals → events; the host owns the str
 - **Storage:** activity events are **derived/ephemeral-ish** — persist a bounded
   recent window (the event day plus the preceding 13 calendar days, like metrics raw JSONL
   [14](14-metrics-interface.md) §14.3) so a digest can look back; recording a new day
-  automatically ages out older files. The *durable* record of "what
+  automatically ages out older files. The _durable_ record of "what
   happened" is the ticket's **notes + git history**, not this stream.
 
 ## 15.5 How it composes with the other seams
 
 - **Drive ([13](13-drive-transport-interface.md)):** `TurnEvent` (Busy/Idle/Done) is
-  the *coarse* signal; `activity` is the *rich* one. A tool with a drive but no
+  the _coarse_ signal; `activity` is the _rich_ one. A tool with a drive but no
   activity capability still narrates at the coarse level ("Codex is working / finished
   ticket X"). Activity enriches when available.
 - **Metrics ([14](14-metrics-interface.md)):** a `turn_end` activity pairs naturally
@@ -84,6 +84,7 @@ The `activity` capability turns native signals → events; the host owns the str
   connection, so a multi-connection / worker setup narrates per source.
 
 ## 15.6 Consumers (built later)
+
 - **Announcer** — PIP, live mode, multi-provider TTS, code-diff visuals (post-floor,
   HS2-17) — subscribes live + requests digests.
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
@@ -156,6 +157,7 @@ client adapter, never a server dependency; other clients can inject another
   independently persisted, semantically mapped activity sequence above.
 
 ## 15.8 Build plan (follow-ups)
+
 - HS2-70 (this) = the spec.
 - **Shipped (HS2-KP31ZE) — the interface + storage + first consumer:**
   - The **event model** — `ticketing::activity::{ActivityEvent, ActivityKind, Importance}`
@@ -199,6 +201,7 @@ client adapter, never a server dependency; other clients can inject another
 - **Deferred:** the full Announcer UI/TTS remains the post-floor HS2-17 consumer.
 
 ## 15.9 Cross-references
+
 - The `activity` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3
 - Coarse busy/done it enriches: [13-drive-transport-interface.md](13-drive-transport-interface.md) §13.4
 - Pairs with usage events: [14-metrics-interface.md](14-metrics-interface.md)

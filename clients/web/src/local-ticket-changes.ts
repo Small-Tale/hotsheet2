@@ -8,7 +8,8 @@ interface AcknowledgedChange {
 const MAX_ACKNOWLEDGEMENTS = 2_048;
 const ACKNOWLEDGEMENT_TTL_MS = 30_000;
 
-const changeKey = (projectId: string, change: Pick<ChangeEvent, 'store' | 'id' | 'kind'>): string => `${projectId}\0${change.store}\0${change.kind}\0${change.id}`;
+const changeKey = (projectId: string, change: Pick<ChangeEvent, 'store' | 'id' | 'kind'>): string =>
+  `${projectId}\0${change.store}\0${change.kind}\0${change.id}`;
 
 /**
  * Matches server change-stream events to mutations whose returned ticket has already
@@ -28,8 +29,8 @@ export class LocalTicketChangeAcknowledgements {
 
   unacknowledged(projectId: string, events: readonly ChangeEvent[], now = Date.now()): ChangeEvent[] {
     this.prune(now);
-    return events.filter(event => {
-      const index = this.acknowledged.findIndex(change => change.key === changeKey(projectId, event));
+    return events.filter((event) => {
+      const index = this.acknowledged.findIndex((change) => change.key === changeKey(projectId, event));
       if (index < 0) return true;
       this.acknowledged.splice(index, 1);
       return false;
@@ -37,6 +38,6 @@ export class LocalTicketChangeAcknowledgements {
   }
 
   private prune(now: number): void {
-    this.acknowledged = this.acknowledged.filter(change => now - change.acknowledgedAt <= ACKNOWLEDGEMENT_TTL_MS);
+    this.acknowledged = this.acknowledged.filter((change) => now - change.acknowledgedAt <= ACKNOWLEDGEMENT_TTL_MS);
   }
 }

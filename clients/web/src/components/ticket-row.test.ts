@@ -7,18 +7,46 @@ import { getPriorityPresentation, normalizeTicketRowProps, TicketRow, ticketRowI
 
 describe('TicketRow', () => {
   it('normalizes fallbacks, tags, and boolean defaults', () => {
-    expect(normalizeTicketRowProps({
-      slug: ' ', title: ' ', status: 'not_started', priority: 'default', category: ' ', tags: [' client ', '', ' ux '],
-    })).toEqual({
-      slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
-      category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, upNextEligible: true, selected: false, busy: false,
-      blocked: false, needsReview: false, feedbackNeeded: false, agentName: 'AI', updatedLabel: 'Recently',
+    expect(
+      normalizeTicketRowProps({
+        slug: ' ',
+        title: ' ',
+        status: 'not_started',
+        priority: 'default',
+        category: ' ',
+        tags: [' client ', '', ' ux '],
+      }),
+    ).toEqual({
+      slug: 'HS2-UNKNOWN',
+      title: 'Untitled ticket',
+      status: 'not_started',
+      priority: 'default',
+      category: 'issue',
+      categoryIcon: 'circle-alert',
+      categoryColor: '#6b7280',
+      tags: ['client', 'ux'],
+      upNext: false,
+      upNextEligible: true,
+      selected: false,
+      busy: false,
+      blocked: false,
+      needsReview: false,
+      feedbackNeeded: false,
+      agentName: 'AI',
+      updatedLabel: 'Recently',
       presentation: 'list',
     });
   });
 
   it('renders feedback-needed and explicit review signals as the same needs-review state', () => {
-    const base = { slug: 'HS2-FB', title: 'Needs a decision', status: 'started' as const, priority: 'default' as const, category: 'task', tags: [] };
+    const base = {
+      slug: 'HS2-FB',
+      title: 'Needs a decision',
+      status: 'started' as const,
+      priority: 'default' as const,
+      category: 'task',
+      tags: [],
+    };
     const without = String(TicketRow({ ...base }));
     expect(without).not.toContain('ticket-list-row__feedback');
     expect(without).not.toContain('Feedback needed');
@@ -32,10 +60,29 @@ describe('TicketRow', () => {
   });
 
   it('uses the picker defaults for API rows while preserving explicit no-icon categories', () => {
-    const feature = String(TicketRow({ slug: 'HS2-FEA', title: 'Feature row', status: 'started', priority: 'default', category: 'feature', tags: [] }));
+    const feature = String(
+      TicketRow({
+        slug: 'HS2-FEA',
+        title: 'Feature row',
+        status: 'started',
+        priority: 'default',
+        category: 'feature',
+        tags: [],
+      }),
+    );
     expect(feature).toContain('data-lucide="sparkles"');
     expect(feature).not.toContain('>FEA<');
-    const textOnly = String(TicketRow({ slug: 'HS2-TEXT', title: 'Text row', status: 'started', priority: 'default', category: 'feature', categoryIcon: '', tags: [] }));
+    const textOnly = String(
+      TicketRow({
+        slug: 'HS2-TEXT',
+        title: 'Text row',
+        status: 'started',
+        priority: 'default',
+        category: 'feature',
+        categoryIcon: '',
+        tags: [],
+      }),
+    );
     expect(textOnly).toContain('>FEA<');
   });
 
@@ -44,7 +91,9 @@ describe('TicketRow', () => {
     expect(ticketRowIndicator({ upNext: true })).toBe('up-next');
     expect(ticketRowIndicator({ upNext: true, blocked: true })).toBe('blocked');
     expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true })).toBe('needs-review');
-    expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true, feedbackNeeded: true })).toBe('needs-review');
+    expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true, feedbackNeeded: true })).toBe(
+      'needs-review',
+    );
   });
 
   it('uses one semantic color token for every Up Next presentation', () => {
@@ -58,24 +107,60 @@ describe('TicketRow', () => {
   });
 
   it('maps HS2 priorities onto the HS1 icon and color semantics', () => {
-    expect(Object.fromEntries((['urgent', 'high', 'default', 'low'] as const).map(priority => {
-      const presentation = getPriorityPresentation(priority);
-      return [priority, [presentation.name, presentation.color]];
-    }))).toEqual({
-      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'], high: ['chevron-up', 'var(--hs-priority-high)'],
-      default: ['minus', 'var(--hs-priority-default)'], low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
+    expect(
+      Object.fromEntries(
+        (['urgent', 'high', 'default', 'low'] as const).map((priority) => {
+          const presentation = getPriorityPresentation(priority);
+          return [priority, [presentation.name, presentation.color]];
+        }),
+      ),
+    ).toEqual({
+      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'],
+      high: ['chevron-up', 'var(--hs-priority-high)'],
+      default: ['minus', 'var(--hs-priority-default)'],
+      low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
     });
   });
 
   it('establishes an outer width container so its descendant can enter narrow presentation', () => {
-    const markup = String(TicketRow({ slug: 'HS2-WIDTH', title: 'Responsive row', status: 'started', priority: 'default', category: 'task', tags: [] }));
+    const markup = String(
+      TicketRow({
+        slug: 'HS2-WIDTH',
+        title: 'Responsive row',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+      }),
+    );
     expect(markup).toContain('data-component="ticket-list-row-container"');
-    expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="ticket-list-row"'));
+    expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(
+      markup.indexOf('data-component="ticket-list-row"'),
+    );
   });
 
   it('uses an explicit presentation variant for the title line limit', () => {
-    const list = String(TicketRow({ slug: 'HS2-LIST', title: 'List row', status: 'started', priority: 'default', category: 'task', tags: [] }));
-    const column = String(TicketRow({ slug: 'HS2-COLUMN', title: 'Column row', status: 'started', priority: 'default', category: 'task', tags: [], presentation: 'column' }));
+    const list = String(
+      TicketRow({
+        slug: 'HS2-LIST',
+        title: 'List row',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+      }),
+    );
+    const column = String(
+      TicketRow({
+        slug: 'HS2-COLUMN',
+        title: 'Column row',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        presentation: 'column',
+      }),
+    );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(list).toContain('ticket-list-row--list');
     expect(list).toContain('data-presentation="list"');
@@ -91,8 +176,10 @@ describe('TicketRow', () => {
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 5\.2em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__body[^}]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: remify\(10\.4px\)/);
-    expect(css).toMatch(/\.ticket-list-row:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
+    expect(css).toMatch(
+      /\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: remify\(10\.4px\)/,
+    );
+    expect(css).toMatchSource(/\.ticket-list-row:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
     expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*box-shadow:/);
     expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*background:/);
     // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
@@ -100,7 +187,17 @@ describe('TicketRow', () => {
   });
 
   it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {
-    const markup = String(TicketRow({ slug: 'HS2-FLOW', title: 'A long title that flows beneath its timestamp', updatedLabel: 'Now', status: 'started', priority: 'default', category: 'task', tags: [] }));
+    const markup = String(
+      TicketRow({
+        slug: 'HS2-FLOW',
+        title: 'A long title that flows beneath its timestamp',
+        updatedLabel: 'Now',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+      }),
+    );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const identityStart = markup.indexOf('class="ticket-list-row__identity"');
     const updated = markup.indexOf('class="ticket-list-row__updated"');
@@ -112,15 +209,49 @@ describe('TicketRow', () => {
   });
 
   it('shows a blocked pill immediately after status metadata', () => {
-    const markup = String(TicketRow({ slug: 'HS2-BLOCK', title: 'Blocked row', status: 'started', priority: 'high', category: 'bug', tags: [], blocked: true }));
+    const markup = String(
+      TicketRow({
+        slug: 'HS2-BLOCK',
+        title: 'Blocked row',
+        status: 'started',
+        priority: 'high',
+        category: 'bug',
+        tags: [],
+        blocked: true,
+      }),
+    );
     expect(markup).toContain('data-component="blocked-badge"');
-    expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
+    expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(
+      markup.indexOf('data-component="blocked-badge"'),
+    );
   });
 
   it('shows an animated yellow activity indicator only for a live claim lease', () => {
-    const inactive = String(TicketRow({ slug: 'HS2-STARTED', title: 'Started but idle', status: 'started', priority: 'default', category: 'task', tags: [], busy: false, agentName: 'Codex' }));
+    const inactive = String(
+      TicketRow({
+        slug: 'HS2-STARTED',
+        title: 'Started but idle',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        busy: false,
+        agentName: 'Codex',
+      }),
+    );
     expect(inactive).not.toContain('ticket-list-row__claim');
-    const active = String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Being edited', status: 'not_started', priority: 'default', category: 'task', tags: [], busy: true, agentName: 'Codex' }));
+    const active = String(
+      TicketRow({
+        slug: 'HS2-ACTIVE',
+        title: 'Being edited',
+        status: 'not_started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        busy: true,
+        agentName: 'Codex',
+      }),
+    );
     expect(active).toContain('aria-label="Codex is actively working on this ticket"');
     expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__claim'));
     expect(active.indexOf('ticket-list-row__claim')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
@@ -134,14 +265,57 @@ describe('TicketRow', () => {
 
   it('marks completed and verified rows for readable title-only completion styling', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    for (const status of ['completed', 'verified'] as const) expect(String(TicketRow({ slug: 'HS2-DONE', title: 'Finished row', status, priority: 'default', category: 'task', tags: [] }))).toContain(`data-status="${status}"`);
-    expect(css).toContain('[data-status="completed"], [data-status="verified"]');
-    expect(css).toContain('.ticket-list-row__identity strong { color: var(--wa-color-neutral-on-quiet); text-decoration: line-through; }');
+    for (const status of ['completed', 'verified'] as const)
+      expect(
+        String(
+          TicketRow({
+            slug: 'HS2-DONE',
+            title: 'Finished row',
+            status,
+            priority: 'default',
+            category: 'task',
+            tags: [],
+          }),
+        ),
+      ).toContain(`data-status="${status}"`);
+    expect(css).toContainSource('[data-status="completed"], [data-status="verified"]');
+    expect(css).toContainSource(
+      '.ticket-list-row__identity strong { color: var(--wa-color-neutral-on-quiet); text-decoration: line-through; }',
+    );
   });
 
   it('offers Up Next only for not-started and started lifecycle states', () => {
-    for (const status of ['not_started', 'started'] as const) expect(String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Active', status, priority: 'default', category: 'task', tags: [] }))).toContain('data-action="toggle-row-up-next"');
-    for (const status of ['completed', 'verified', 'backlog'] as const) expect(String(TicketRow({ slug: 'HS2-INACTIVE', title: 'Inactive', status, priority: 'default', category: 'task', tags: [] }))).not.toContain('data-action="toggle-row-up-next"');
-    expect(String(TicketRow({ slug: 'HS2-ARCHIVE', title: 'Archive projection', status: 'not_started', upNextEligible: false, priority: 'default', category: 'task', tags: [] }))).not.toContain('data-action="toggle-row-up-next"');
+    for (const status of ['not_started', 'started'] as const)
+      expect(
+        String(
+          TicketRow({ slug: 'HS2-ACTIVE', title: 'Active', status, priority: 'default', category: 'task', tags: [] }),
+        ),
+      ).toContain('data-action="toggle-row-up-next"');
+    for (const status of ['completed', 'verified', 'backlog'] as const)
+      expect(
+        String(
+          TicketRow({
+            slug: 'HS2-INACTIVE',
+            title: 'Inactive',
+            status,
+            priority: 'default',
+            category: 'task',
+            tags: [],
+          }),
+        ),
+      ).not.toContain('data-action="toggle-row-up-next"');
+    expect(
+      String(
+        TicketRow({
+          slug: 'HS2-ARCHIVE',
+          title: 'Archive projection',
+          status: 'not_started',
+          upNextEligible: false,
+          priority: 'default',
+          category: 'task',
+          tags: [],
+        }),
+      ),
+    ).not.toContain('data-action="toggle-row-up-next"');
   });
 });

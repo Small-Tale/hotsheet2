@@ -1,8 +1,44 @@
-.ai-content-label,.ai-content-label__attribution,.ai-content-label__feedback { display: inline-flex; align-items: center; }
-.ai-content-label { min-width: 0; color: var(--wa-color-neutral-on-quiet); gap: var(--kui-space-xs); font-size: var(--wa-font-size-2xs); }
-.ai-content-label__attribution { gap: var(--kui-space-2xs); }
-.ai-content-label__attribution>svg { width: remify(12px); height: remify(12px); flex: none; }
-.ai-content-label__feedback { gap: var(--kui-space-2xs); }
-.ai-content-label__feedback button { display: inline-grid; width: remify(32px); height: remify(32px); padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: inherit; background: transparent; cursor: pointer; place-items: center; }
-.ai-content-label__feedback button:hover,.ai-content-label__feedback button:focus-visible { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
-.ai-content-label__feedback svg { width: remify(12px); height: remify(12px); }
+.ai-content-label,
+.ai-content-label__attribution,
+.ai-content-label__feedback {
+  display: inline-flex;
+  align-items: center;
+}
+.ai-content-label {
+  min-width: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  gap: var(--kui-space-xs);
+  font-size: var(--wa-font-size-2xs);
+}
+.ai-content-label__attribution {
+  gap: var(--kui-space-2xs);
+}
+.ai-content-label__attribution > svg {
+  width: remify(12px);
+  height: remify(12px);
+  flex: none;
+}
+.ai-content-label__feedback {
+  gap: var(--kui-space-2xs);
+}
+.ai-content-label__feedback button {
+  display: inline-grid;
+  width: remify(32px);
+  height: remify(32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.ai-content-label__feedback button:hover,
+.ai-content-label__feedback button:focus-visible {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.ai-content-label__feedback svg {
+  width: remify(12px);
+  height: remify(12px);
+}

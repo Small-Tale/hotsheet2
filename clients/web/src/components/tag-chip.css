@@ -1,3 +1,18 @@
-wa-tag[data-component="tag-chip"] { height: auto; min-height: 0; padding-block: remify(3.2px); line-height: 1; }
-wa-tag[data-component="tag-chip"]::part(remove-button__base) { width: remify(16px); min-width: remify(16px); height: remify(16px); min-height: remify(16px); padding: 0; font-size: var(--wa-font-size-2xs); }
-wa-tag[data-component="tag-chip"][data-disabled="true"] { opacity: .48; pointer-events: none; }
+wa-tag[data-component='tag-chip'] {
+  height: auto;
+  min-height: 0;
+  padding-block: remify(3.2px);
+  line-height: 1;
+}
+wa-tag[data-component='tag-chip']::part(remove-button__base) {
+  width: remify(16px);
+  min-width: remify(16px);
+  height: remify(16px);
+  min-height: remify(16px);
+  padding: 0;
+  font-size: var(--wa-font-size-2xs);
+}
+wa-tag[data-component='tag-chip'][data-disabled='true'] {
+  opacity: 0.48;
+  pointer-events: none;
+}

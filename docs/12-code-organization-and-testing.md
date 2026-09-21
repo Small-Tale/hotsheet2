@@ -64,7 +64,7 @@ hotsheet2/
   on the plugin crates or `terminals` — that keeps `hotsheet-cli` a tiny binary
   (maintainer's requirement: ticketing is separable from terminals/AI-hosting because
   the CLI needs none of the latter).
-- **One crate per plugin *type*** (maintainer, 2026-08-19), named `hotsheet-<type>`,
+- **One crate per plugin _type_** (maintainer, 2026-08-19), named `hotsheet-<type>`,
   each a registry of that type's plugins with its **own conformance suite** — they do
   not share a mega-crate, so each pulls only its own deps:
   - **`hotsheet-aitools`** (AI-tool plugins) depends on `ticketing` **+ `terminals`**
@@ -76,13 +76,13 @@ hotsheet2/
   - Future plugin types get their own `hotsheet-<type>` crate the same way.
   - The **pattern** is shared across all of them (declarative identity + behavioral
     half, injected adapters for testability §12.7, a conformance gate) even though the
-    *interfaces* differ; extract a shared `hotsheet-plugin-core` only if a third type
+    _interfaces_ differ; extract a shared `hotsheet-plugin-core` only if a third type
     reveals real common machinery — don't pre-abstract.
 - **`hotsheet-terminals`** is nearly standalone (project cwd/config, not the ticket
   index) — which is what keeps the future **process split** (a separate durable
   terminal server) cheap. See §12.5.
 
-> **§12.3–§12.5 are implementation-choice *decisions*.** They shape the crate APIs and
+> **§12.3–§12.5 are implementation-choice _decisions_.** They shape the crate APIs and
 > boundaries, so they're summarized here, but the **decision + rationale of record
 > lives in the ADR log** ([09-technology-decisions.md](09-technology-decisions.md)) —
 > the intuitive home for "what we chose and why."
@@ -106,7 +106,7 @@ rationale: [09](09-technology-decisions.md) §9.13.
 ## 12.5 Terminal process topology — separable crate, split deferred
 
 `hotsheet-terminals` is its **own crate**; v1 runs one ticket+terminal server + the
-detached PTY broker; a fully separate terminal *process* is a later, cheap change the
+detached PTY broker; a fully separate terminal _process_ is a later, cheap change the
 crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md) §9.14.
 
 ## 12.6 Conventions
@@ -120,6 +120,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   defensive checks that intentionally exceed a total static type use explained,
   single-next-line exceptions so new code remains subject to the full baseline
   (HS2-W3RDCB).
+- Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
+  HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
+  Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
+  runs the repository-wide format check first, so CI rejects drift in all supported
+  source and structured-content areas (HS2-F0BC6Q).
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
@@ -232,15 +237,15 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 ### 12.7.6 Fixtures & CI
 
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
-  + seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
-  port), and an in-memory adapter set for pure unit tests.
+  - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
+    port), and an in-memory adapter set for pure unit tests.
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
   `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin
   **conformance test** (HS2-64), the CLI
   build, and the **migrator vitest + coverage** (now `test:coverage`, gated on the
   per-language thresholds in `migrator/vitest.config.mjs`) + lint + the cross-language
   conformance. A separate **`coverage` job** collects Rust coverage once
-  (`cargo llvm-cov nextest --no-report`), uploads an lcov artifact (a *separate*
+  (`cargo llvm-cov nextest --no-report`), uploads an lcov artifact (a _separate_
   per-language summary, not one merged lcov), and **gates** on a conservative line
   floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**
   workflow (`live.yml`, nightly + manual dispatch) runs the `#[ignore]` live
@@ -261,8 +266,8 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 
 Adding an AI tool to HS1 (Codex, when it started Claude-only) was a heavy **manual**
 effort. The root cause: HS1 conflated two very different questions into one manual
-test — **"does *our host* handle the protocol correctly?"** (automatable) and **"does
-the *real tool* actually speak that protocol?"** (real-tool drift). Splitting them is
+test — **"does _our host_ handle the protocol correctly?"** (automatable) and **"does
+the _real tool_ actually speak that protocol?"** (real-tool drift). Splitting them is
 the whole strategy: ~95% becomes deterministic automation; the ~5% drift check is a
 small, explicit layer. Build: **HS2-64**.
 
@@ -273,7 +278,7 @@ process, file, or global directly. This is the non-negotiable that makes everyth
 below deterministic — see [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.10.
 
 **2 — `hs-fake-agent`: a scriptable test double.** A workspace test binary that speaks
-the *same protocols a real tool does*, but scripted and deterministic. It can be told
+the _same protocols a real tool does_, but scripted and deterministic. It can be told
 to: connect over **MCP** and call `hotsheet_*` tools in sequence; **request a
 permission** through a plugin's transport and await the decision; run in a **PTY** and
 emit scripted bytes — OSC 7/8/9/133, **spinner glyphs**, output, chosen exit code;
@@ -282,25 +287,26 @@ work?" is tested by pointing Hot Sheet at `hs-fake-agent` configured per the Cod
 plugin's declared protocol — **no real tool, no LLM, no keys.**
 
 **3 — Per-aspect automated E2E** (against the fake agent):
+
 - **MCP usage** — a fake MCP client hits the per-project shim: assert the tool list +
   schemas, each call's store effect, error handling; each plugin's `mcp` capability
   writes a valid config entry in that tool's format.
 - **Permission checks** — drive a request through the bridge: FIFO enqueue
-  (concurrent requests preserved), WS push, answer routed to the *originating*
+  (concurrent requests preserved), WS push, answer routed to the _originating_
   connection, allow-once/always → persisted rules; each `permissions` capability's
   install-then-remove leaves foreign hook entries intact (merge-safety).
 - **Terminal integration** — the terminal manager against the fake agent: scrollback,
   multi-viewer attach, sizing arbitration, OSC parsing, **survival across a broker
   restart**; the `command` capability is a pure resolve-the-launch-line test.
 - **Busy-state monitoring** — a **transition-matrix** test: feed scripted hook signals
-  *and* byte-stream spinner glyphs; walk busy→sustained→idle, stale-clear, the
+  _and_ byte-stream spinner glyphs; walk busy→sustained→idle, stale-clear, the
   spinner-liveness gate, dropped-Stop-hook recovery.
 
 **4 — A conformance suite over every plugin, as a hard CI gate.** One suite
 parameterized over the plugin registry, run against a temp fixture project — identity,
 instructions, skills, command (injected spawner), drive, permissions (merge-safety),
 MCP config. **A new tool inherits the entire suite by existing**, and can't merge
-until it passes conformance *and* the fake-agent E2E. This is the forcing function
+until it passes conformance _and_ the fake-agent E2E. This is the forcing function
 that makes adding a tool boring instead of painful.
 
 > **Built (HS2-64):** `crates/hotsheet-cli/tests/plugin_conformance.rs` — parameterized
@@ -317,10 +323,11 @@ that makes adding a tool boring instead of painful.
 > permission bridge (HS2-113) → **HS2-1GJY50**.
 
 **5 — The drift layer (thin + explicit), for real-tool protocol changes:**
+
 - **Recorded contracts** — capture each real tool's actual protocol messages once as
   fixtures (cassette-style) and replay them in fast CI; if a tool's real format
   diverges from its recording, a test fails and names exactly what changed.
-- **Opt-in live smoke** — a tiny per-tool suite that runs the *real* binary
+- **Opt-in live smoke** — a tiny per-tool suite that runs the _real_ binary
   (creds-gated, nightly / pre-release) for the end-to-end sanity a recording can't
   give.
 
@@ -338,6 +345,7 @@ that makes adding a tool boring instead of painful.
 everything else is inherited and automated.
 
 ## 12.8 Cross-references
+
 - Core / server / CLI split: [04-core-server-cli.md](04-core-server-cli.md)
 - Storage + merge driver (the property-test target): [02-ticket-storage.md](02-ticket-storage.md) §2.7
 - Index + reconcile (a transition-matrix target): [03-indexing-and-query.md](03-indexing-and-query.md)

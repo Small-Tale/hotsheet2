@@ -21,11 +21,11 @@
 > **0.4.x** (v0.18.0+) — all Postgres 17. The exporter bundles **one** engine, the
 > PGLite line Hot Sheet ships (`@electric-sql/pglite` 0.4.x), and tries it first: a
 > newer PGLite reads older datadirs, so 0.4.x opens **every** supported HS datadir
-> (0.3.x *and* 0.4.x). Only a datadir written by a PGLite *newer than the bundle* —
+> (0.3.x _and_ 0.4.x). Only a datadir written by a PGLite _newer than the bundle_ —
 > e.g. **PGLite 0.5.x = PG18** (a future Hot Sheet) — can't be opened; those fall back
 > to `pglite-migrate`, which fetches a matching engine on demand. (Bundling the
 > absolute-latest 0.5.x would be wrong — it can't read 0.3.x/0.4.x datadirs.) Verified
-> with real on-disk 0.3.x *and* 0.4.x clusters, and the 0.5.x/PG18 fetch validated
+> with real on-disk 0.3.x _and_ 0.4.x clusters, and the 0.5.x/PG18 fetch validated
 > end-to-end. See [`migrator/README.md`](../migrator/README.md).
 >
 > **Real-cluster lessons baked into the exporter** (from the HS1 source): the newest
@@ -79,10 +79,10 @@ project is opened. Run it once per old project.
   cluster read-only and writes the HS2 ticket files + attachments + initial commit
   in one pass. Simplest to ship and run; the risk is it **re-implements the file
   format** in Node, which could drift from the core's parser.
-- **(B) Two CLIs: Node *export* → portable JSON → *import* into the store.** The
+- **(B) Two CLIs: Node _export_ → portable JSON → _import_ into the store.** The
   Node exporter dumps `hotsheet-export.json` (below); a second importer writes the
   store. The importer can be the Rust `hotsheet import` (reusing the core's own
-  format writer, so **zero drift**) *or* also Node.
+  format writer, so **zero drift**) _or_ also Node.
 
 **Recommendation:** whichever shape, **the format is verified against the core's
 parser** — a conformance test that the real `hotsheet-core` cleanly reads (and
@@ -98,22 +98,30 @@ required.
 {
   "exportVersion": 1,
   "project": { "name": "…", "ticketPrefix": "HS", "sourceRoot": "/code/project" },
-  "settings": { /* shared settings + the effective HS1 custom-command tree */ },
+  "settings": {/* shared settings + the effective HS1 custom-command tree */},
   "tickets": [
     {
       "ticket_number": "HS-1234",
-      "title": "…", "details": "…",
-      "category": "bug", "priority": "high", "status": "started",
-      "up_next": true, "tags": ["ui"],
-      "notes": [ { "id": "n_…", "text": "…", "created_at": "…" } ],
+      "title": "…",
+      "details": "…",
+      "category": "bug",
+      "priority": "high",
+      "status": "started",
+      "up_next": true,
+      "tags": ["ui"],
+      "notes": [{ "id": "n_…", "text": "…", "created_at": "…" }],
       "blocked_by": ["HS-1200"],
-      "created_at": "…", "updated_at": "…", "completed_at": null,
-      "verified_at": null, "deleted_at": null,
-      "attachments": [ { "original_filename": "a.png", "stored_path": ".hotsheet/attachments/…" } ]
-    }
-  ]
+      "created_at": "…",
+      "updated_at": "…",
+      "completed_at": null,
+      "verified_at": null,
+      "deleted_at": null,
+      "attachments": [{ "original_filename": "a.png", "stored_path": ".hotsheet/attachments/…" }],
+    },
+  ],
 }
 ```
+
 Attachment files are copied to a staging dir alongside the JSON. This reads the full
 HS1 schema the exploration confirmed (`tickets`, `attachments`, `ticket_blocked_by`,
 notes-as-JSON, tags-as-JSON; the claim columns are runtime-only and **not**
@@ -137,6 +145,7 @@ locations.
 ### What the write step does (either shape)
 
 For each ticket:
+
 - **Derive a stable ULID** from the source project/ticket identity and creation time,
   then derive an all-caps slug ([02](02-ticket-storage.md) §2.4). The stable identity
   makes retries idempotent. The HS1 number is also retained in the `legacy_number`
@@ -181,10 +190,11 @@ leave the strict HS1 launch refusal in place.
 Per the ticket, migration is offered automatically with a confirmation — **per
 project**, when that project is opened (not a batch over all projects, which a user
 may not have open at once):
+
 1. On opening a directory that has a `.hotsheet/db/` cluster without a matching
    import receipt in its active HS2 store, Hot
-   Sheet detects a **migratable HS1 project** and prompts: *"This project has Hot
-   Sheet 1 data. Convert it to the new git-based format?"* The prompt names the exact
+   Sheet detects a **migratable HS1 project** and prompts: _"This project has Hot
+   Sheet 1 data. Convert it to the new git-based format?"_ The prompt names the exact
    source and database paths plus the detected PostgreSQL version. Choosing Not now
    suppresses later automatic modal presentation for that checkout/source identity;
    a project banner keeps an explicit Import action available.
@@ -248,6 +258,7 @@ the renamed backup cluster + the idempotent import — a user can re-run HS1 aga
 `db.hs1-backup/` if they abort. No live two-way sync between formats.
 
 ## 7.6 Cross-references
+
 - Target format the migrator writes (and is conformance-tested against):
   [02-ticket-storage.md](02-ticket-storage.md) §2.5, §2.6a
 - The migrator is a **standalone bundled tool**, not part of the long-lived core

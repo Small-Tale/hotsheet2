@@ -1,55 +1,404 @@
-.workspace-header { display: grid; width: 100%; gap: remify(16px); grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-.workspace-header[data-controls-visible="false"] { grid-template-columns: 1fr; }
-.workspace-header__actions { display: flex; min-width: 0; align-items: center; gap: remify(6.4px); }
-.workspace-header__actions { justify-content: flex-end; }
-.view-mode-switcher__button { position: relative; display: grid; width: remify(32px); height: remify(32px); padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
-.view-mode-switcher__badge { position: absolute; top: remify(-3.84px); right: remify(-4.8px); display: grid; min-width: remify(14.4px); padding: remify(1px) remify(5px); border: 1.5px solid var(--wa-color-neutral-fill-normal); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--hs-ticket-state-up-next); font-size: var(--wa-font-size-3xs); font-weight: 750; line-height: 1; place-items: center; }
-.view-mode-switcher__button svg, .workspace-header__actions wa-button svg { width: remify(16px); height: remify(16px); }
-.view-mode-switcher__button:hover { background: var(--wa-color-surface-default); }
-.view-mode-switcher__button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }
-.view-mode-switcher__button:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 25%, transparent); }
-.workspace-header__actions wa-button::part(base) { width: remify(32px); height: remify(32px); min-height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-pill); }
+.workspace-header {
+  display: grid;
+  width: 100%;
+  gap: remify(16px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.workspace-header[data-controls-visible='false'] {
+  grid-template-columns: 1fr;
+}
+.workspace-header__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: remify(6.4px);
+}
+.workspace-header__actions {
+  justify-content: flex-end;
+}
+.view-mode-switcher__button {
+  position: relative;
+  display: grid;
+  width: remify(32px);
+  height: remify(32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.view-mode-switcher__badge {
+  position: absolute;
+  top: remify(-3.84px);
+  right: remify(-4.8px);
+  display: grid;
+  min-width: remify(14.4px);
+  padding: remify(1px) remify(5px);
+  border: 1.5px solid var(--wa-color-neutral-fill-normal);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-warning-on-normal);
+  background: var(--hs-ticket-state-up-next);
+  font-size: var(--wa-font-size-3xs);
+  font-weight: 750;
+  line-height: 1;
+  place-items: center;
+}
+.view-mode-switcher__button svg,
+.workspace-header__actions wa-button svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.view-mode-switcher__button:hover {
+  background: var(--wa-color-surface-default);
+}
+.view-mode-switcher__button[aria-pressed='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-s);
+}
+.view-mode-switcher__button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 25%, transparent);
+}
+.workspace-header__actions wa-button::part(base) {
+  width: remify(32px);
+  height: remify(32px);
+  min-height: remify(32px);
+  padding: 0;
+  border-radius: var(--wa-border-radius-pill);
+}
 /* A selected wa-button must paint its 32px pill base, like hover does; kerf's aria-pressed rule
    targets the larger square host, which overflows the control group's pill border (HS2-0D1HYG). */
-.workspace-header__actions .kui-toolbar-control-group[data-single="false"] > wa-button[aria-pressed="true"] { border-color: transparent; background: transparent; box-shadow: none; }
-.workspace-header__actions wa-button[aria-pressed="true"]::part(base) { border-color: var(--kui-toolbar-control-selected-border); color: var(--kui-toolbar-control-selected-color); background: var(--kui-toolbar-control-selected-background); box-shadow: var(--kui-toolbar-control-selected-shadow); }
-.workspace-header__actions wa-button.workspace-header__text-action::part(base),wa-button.workspace-header__text-action::part(base) { width: auto; padding-inline: var(--wa-space-s); white-space: nowrap; }
-.workspace-header__text-action-label { display: inline-flex; align-items: center; gap: var(--wa-space-2xs); white-space: nowrap; }
-.workspace-header__sort-group { border-radius: var(--wa-border-radius-pill); }
-.workspace-header__sort { width: remify(44px); }
+.workspace-header__actions .kui-toolbar-control-group[data-single='false'] > wa-button[aria-pressed='true'] {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.workspace-header__actions wa-button[aria-pressed='true']::part(base) {
+  border-color: var(--kui-toolbar-control-selected-border);
+  color: var(--kui-toolbar-control-selected-color);
+  background: var(--kui-toolbar-control-selected-background);
+  box-shadow: var(--kui-toolbar-control-selected-shadow);
+}
+.workspace-header__actions wa-button.workspace-header__text-action::part(base),
+wa-button.workspace-header__text-action::part(base) {
+  width: auto;
+  padding-inline: var(--wa-space-s);
+  white-space: nowrap;
+}
+.workspace-header__text-action-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wa-space-2xs);
+  white-space: nowrap;
+}
+.workspace-header__sort-group {
+  border-radius: var(--wa-border-radius-pill);
+}
+.workspace-header__sort {
+  width: remify(44px);
+}
 /* The single sort group already paints the pill container/background; keep the Select's own
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
    out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
    control groups. */
-.workspace-header__sort::part(combobox) { position: relative; min-height: remify(32px); border: 0; border-radius: var(--wa-border-radius-pill); outline: none; background: transparent; box-shadow: none; }
+.workspace-header__sort::part(combobox) {
+  position: relative;
+  min-height: remify(32px);
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
 /* Show one focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
    combobox, whose shape does not match the pill (HS2-M1DF1D). :focus-within reflects the wa-select's
    shadow-internal focus onto the group; [open] retains that ring while the listbox owns focus. The
    explicit 999px pill radius stays pill-shaped after the outline expands beyond the 44px group
    instead of retaining a 22px rounded-rectangle radius. */
-.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has(.workspace-header__sort[open]) { outline: var(--wa-focus-ring); outline-offset: var(--wa-focus-ring-offset); }
-.workspace-header__sort::part(display-input) { position: absolute; width: 1px; overflow: hidden; clip-path: inset(50%); }
-.workspace-header__sort::part(expand-icon) { position: absolute; inset-inline-end: remify(3.2px); }
-.workspace-header__sort .kui-select__custom-selected { width: remify(16px); height: remify(16px); color: var(--kui-toolbar-control-color); flex: none; }
-.workspace-header__sort .kui-select__custom-selected svg { width: remify(16px); height: remify(16px); }
-.workspace-header__search-group { position:relative; width: remify(40.4px); overflow: hidden; transition: width .25s ease; }
-.workspace-header__search-group[data-expanded="true"] { max-width:100%; height:auto; overflow:visible; align-self:flex-start; }
+.workspace-header__sort-group:focus-within,
+.workspace-header__sort-group:has(.workspace-header__sort[open]) {
+  outline: var(--wa-focus-ring);
+  outline-offset: var(--wa-focus-ring-offset);
+}
+.workspace-header__sort::part(display-input) {
+  position: absolute;
+  width: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.workspace-header__sort::part(expand-icon) {
+  position: absolute;
+  inset-inline-end: remify(3.2px);
+}
+.workspace-header__sort .kui-select__custom-selected {
+  width: remify(16px);
+  height: remify(16px);
+  color: var(--kui-toolbar-control-color);
+  flex: none;
+}
+.workspace-header__sort .kui-select__custom-selected svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.workspace-header__search-group {
+  position: relative;
+  width: remify(40.4px);
+  overflow: hidden;
+  transition: width 0.25s ease;
+}
+.workspace-header__search-group[data-expanded='true'] {
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+  align-self: flex-start;
+}
 /* Kerf's TokenSearchField owns the field chrome (border, pill radius, focus ring, tokens, clear)
    ONLY once expanded, so strip the enclosing control group's chrome then to avoid a double
    border. While collapsed the group keeps its ordinary toolbar pill so the search button reads
    as a peer of the other control groups (HS2-88P90P, HS2-Y5A574). */
-.workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; padding:0; border:0; background:transparent; box-shadow:none; flex: 1 1 19rem; }
-.workspace-header__search-group .kui-token-search { --kui-token-search-background: var(--wa-color-surface-default); --kui-token-search-border: var(--wa-color-neutral-border-normal); --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet); }
-.workspace-header__search-help-button{display:grid;width:remify(17.6px);height:remify(17.6px);padding:0;border:0;border-radius:var(--wa-border-radius-pill);color:var(--wa-color-neutral-on-quiet);background:transparent;cursor:pointer;place-items:center}.workspace-header__search-help-button:hover{color:var(--wa-color-neutral-on-normal);background:var(--wa-color-neutral-border-quiet)}.workspace-header__search-help-button svg{width:remify(13.12px);height:remify(13.12px)}.workspace-header__search-suggestions,.workspace-header__search-date,.workspace-header__search-help{position:absolute;z-index:1300;top:calc(100% + var(--wa-space-2xs));right:0;width:min(remify(416px),calc(100vw - 2 * var(--wa-space-s)));padding:var(--wa-space-xs);border:1px solid var(--wa-color-neutral-border-normal);border-radius:var(--wa-border-radius-m);color:var(--wa-color-neutral-on-normal);background:var(--wa-color-surface-raised);box-shadow:var(--wa-shadow-m)}.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(remify(416px),100%);align-items:stretch;flex-direction:column;text-align:left}.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;padding:var(--wa-space-xs) var(--wa-space-s);border:0;border-radius:var(--wa-border-radius-s);color:var(--wa-color-neutral-on-normal);background:transparent;text-align:left;cursor:pointer}.workspace-header__search-suggestions button:hover,.workspace-header__search-suggestions button:focus-visible{color:var(--wa-color-brand-on-quiet);background:var(--wa-color-brand-fill-quiet)}.workspace-header__search-date{display:grid;grid-template-columns:1fr 1fr auto;gap:var(--wa-space-s);align-items:end}.workspace-header__search-date label{display:grid;gap:var(--wa-space-3xs);font-size:var(--wa-font-size-xs);font-weight:650}.workspace-header__search-date input,.workspace-header__search-date button{min-height:remify(32px);border:1px solid var(--wa-color-neutral-border-normal);border-radius:var(--wa-border-radius-s);color:var(--wa-color-neutral-on-normal);background:var(--wa-color-surface-default)}.workspace-header__search-date button{padding:0 var(--wa-space-s);cursor:pointer}.workspace-header__search-help{display:grid;box-sizing:border-box;width:min(remify(480px),calc(100vw - 2 * var(--wa-space-s)));max-height:min(remify(512px),calc(100vh - remify(224px)));overflow:auto;gap:var(--wa-space-xs)}.workspace-header__search-help header{display:grid;gap:var(--wa-space-3xs)}.workspace-header__search-help p{margin:0;color:var(--wa-color-neutral-on-quiet);font-size:var(--wa-font-size-xs);line-height:1.45}.workspace-header__search-help code{padding:var(--wa-space-3xs) var(--wa-space-xs);border-radius:var(--wa-border-radius-s);color:var(--wa-color-neutral-on-normal);background:var(--wa-color-neutral-fill-quiet);font-size:var(--wa-font-size-xs)}.workspace-header__search-help dl{display:grid;margin:0;gap:var(--wa-space-xs)}.workspace-header__search-help dl>div{display:grid;grid-template-columns:remify(72px) minmax(0,1fr);gap:var(--wa-space-xs);align-items:start}.workspace-header__search-help dt{padding-top:var(--wa-space-3xs);color:var(--wa-color-neutral-on-quiet);font-size:var(--wa-font-size-xs);font-weight:var(--wa-font-weight-semibold)}.workspace-header__search-help dd{display:flex;flex-wrap:wrap;margin:0;gap:var(--wa-space-3xs)}.workspace-header__search-help-notes{display:grid;padding-top:var(--wa-space-xs);border-top:1px solid var(--wa-color-neutral-border-quiet);gap:var(--wa-space-2xs)}.workspace-header__search-help-notes>code{justify-self:start}
-.workspace-header__overflow { display: none; flex: none; }
-.workspace-header__actions[data-search-open="true"] > .workspace-header__overflow { display: none; }
-.workspace-header__overflow::part(menu) { width: min(remify(272px), calc(100vw - 2 * var(--wa-space-s))); border: 1px solid var(--wa-color-neutral-border-normal); opacity: 1; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
-@media (max-height: remify(704px)) { .workspace-header__search-help { max-height: calc(100vh - remify(368px)); } }
-@media (max-width: remify(768px)) { .workspace-header { grid-template-columns: 1fr; } .workspace-header__actions { flex-wrap: wrap; } }
-@container kui-toolbar (max-width: remify(480px)) { .workspace-header:has(.workspace-header__search-group[data-expanded="true"]) { grid-template-columns: 1fr; } .workspace-header:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__actions { width: 100%; } .workspace-header__actions > .workspace-header__utility-group { display: none; } .workspace-header__actions > .workspace-header__overflow { display: inline-flex; } }
-@container kui-toolbar (max-width: remify(416px)) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }
+.workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded='true'] {
+  --kui-token-search-expanded-width: 48rem;
+  min-width: 19rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  flex: 1 1 19rem;
+}
+.workspace-header__search-group .kui-token-search {
+  --kui-token-search-background: var(--wa-color-surface-default);
+  --kui-token-search-border: var(--wa-color-neutral-border-normal);
+  --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
+  --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet);
+}
+.workspace-header__search-help-button {
+  display: grid;
+  width: remify(17.6px);
+  height: remify(17.6px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.workspace-header__search-help-button:hover {
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-neutral-border-quiet);
+}
+.workspace-header__search-help-button svg {
+  width: remify(13.12px);
+  height: remify(13.12px);
+}
+.workspace-header__search-suggestions,
+.workspace-header__search-date,
+.workspace-header__search-help {
+  position: absolute;
+  z-index: 1300;
+  top: calc(100% + var(--wa-space-2xs));
+  right: 0;
+  width: min(remify(416px), calc(100vw - 2 * var(--wa-space-s)));
+  padding: var(--wa-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-raised);
+  box-shadow: var(--wa-shadow-m);
+}
+.workspace-header__search-suggestions {
+  display: flex;
+  box-sizing: border-box;
+  width: min(remify(416px), 100%);
+  align-items: stretch;
+  flex-direction: column;
+  text-align: left;
+}
+.workspace-header__search-suggestions button {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--wa-space-xs) var(--wa-space-s);
+  border: 0;
+  border-radius: var(--wa-border-radius-s);
+  color: var(--wa-color-neutral-on-normal);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.workspace-header__search-suggestions button:hover,
+.workspace-header__search-suggestions button:focus-visible {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.workspace-header__search-date {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--wa-space-s);
+  align-items: end;
+}
+.workspace-header__search-date label {
+  display: grid;
+  gap: var(--wa-space-3xs);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 650;
+}
+.workspace-header__search-date input,
+.workspace-header__search-date button {
+  min-height: remify(32px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-s);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+}
+.workspace-header__search-date button {
+  padding: 0 var(--wa-space-s);
+  cursor: pointer;
+}
+.workspace-header__search-help {
+  display: grid;
+  box-sizing: border-box;
+  width: min(remify(480px), calc(100vw - 2 * var(--wa-space-s)));
+  max-height: min(remify(512px), calc(100vh - remify(224px)));
+  overflow: auto;
+  gap: var(--wa-space-xs);
+}
+.workspace-header__search-help header {
+  display: grid;
+  gap: var(--wa-space-3xs);
+}
+.workspace-header__search-help p {
+  margin: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  line-height: 1.45;
+}
+.workspace-header__search-help code {
+  padding: var(--wa-space-3xs) var(--wa-space-xs);
+  border-radius: var(--wa-border-radius-s);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-neutral-fill-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.workspace-header__search-help dl {
+  display: grid;
+  margin: 0;
+  gap: var(--wa-space-xs);
+}
+.workspace-header__search-help dl > div {
+  display: grid;
+  grid-template-columns: remify(72px) minmax(0, 1fr);
+  gap: var(--wa-space-xs);
+  align-items: start;
+}
+.workspace-header__search-help dt {
+  padding-top: var(--wa-space-3xs);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+.workspace-header__search-help dd {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  gap: var(--wa-space-3xs);
+}
+.workspace-header__search-help-notes {
+  display: grid;
+  padding-top: var(--wa-space-xs);
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+  gap: var(--wa-space-2xs);
+}
+.workspace-header__search-help-notes > code {
+  justify-self: start;
+}
+.workspace-header__overflow {
+  display: none;
+  flex: none;
+}
+.workspace-header__actions[data-search-open='true'] > .workspace-header__overflow {
+  display: none;
+}
+.workspace-header__overflow::part(menu) {
+  width: min(remify(272px), calc(100vw - 2 * var(--wa-space-s)));
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  opacity: 1;
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
+@media (max-height: remify(704px)) {
+  .workspace-header__search-help {
+    max-height: calc(100vh - remify(368px));
+  }
+}
+@media (max-width: remify(768px)) {
+  .workspace-header {
+    grid-template-columns: 1fr;
+  }
+  .workspace-header__actions {
+    flex-wrap: wrap;
+  }
+}
+@container kui-toolbar (max-width: remify(480px)) {
+  .workspace-header:has(.workspace-header__search-group[data-expanded='true']) {
+    grid-template-columns: 1fr;
+  }
+  .workspace-header:has(.workspace-header__search-group[data-expanded='true']) .workspace-header__actions {
+    width: 100%;
+  }
+  .workspace-header__actions > .workspace-header__utility-group {
+    display: none;
+  }
+  .workspace-header__actions > .workspace-header__overflow {
+    display: inline-flex;
+  }
+}
+@container kui-toolbar (max-width: remify(416px)) {
+  .workspace-header__actions > .workspace-header__sort-group {
+    display: none;
+  }
+}
 /* On a narrow (mobile) toolbar, hide the view-mode segmented control while search is open so the
    search field gets the full row (sort/utility are already hidden at these widths) — HS2-0SARDD. */
-@container kui-toolbar (max-width: remify(480px)) { .workspace-header__actions[data-search-open="true"] > .view-mode-switcher,.workspace-header__actions[data-search-open="true"] > .workspace-header__sort-group,.workspace-header__actions[data-search-open="true"] > .workspace-header__utility-group { display: none; } .workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { width: 100%; min-width: 0; } }
-@container kui-toolbar (max-width: remify(224px)) { .workspace-header__actions > .workspace-header__search-group:not([data-expanded="true"]) { display: none; } .workspace-header__actions[data-search-open="true"] > .workspace-header__overflow.workspace-header__overflow,.workspace-header__actions[data-search-open="true"] > .view-mode-switcher.view-mode-switcher,.workspace-header__actions[data-search-open="true"] > .workspace-header__sort-group.workspace-header__sort-group,.workspace-header__actions[data-search-open="true"] > .workspace-header__utility-group.workspace-header__utility-group { display: none; } .workspace-header__actions > .workspace-header__search-group[data-expanded="true"] { display: flex; width: 100%; min-width: 0; } .workspace-header__search-group[data-expanded="true"] .kui-token-search__editor { min-width: 0; } .workspace-header__identity { display: none; } }
-@container kui-toolbar (max-width: remify(176px)) { .workspace-header__actions > .view-mode-switcher { display: none; } }
+@container kui-toolbar (max-width: remify(480px)) {
+  .workspace-header__actions[data-search-open='true'] > .view-mode-switcher,
+  .workspace-header__actions[data-search-open='true'] > .workspace-header__sort-group,
+  .workspace-header__actions[data-search-open='true'] > .workspace-header__utility-group {
+    display: none;
+  }
+  .workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded='true'] {
+    width: 100%;
+    min-width: 0;
+  }
+}
+@container kui-toolbar (max-width: remify(224px)) {
+  .workspace-header__actions > .workspace-header__search-group:not([data-expanded='true']) {
+    display: none;
+  }
+  .workspace-header__actions[data-search-open='true'] > .workspace-header__overflow.workspace-header__overflow,
+  .workspace-header__actions[data-search-open='true'] > .view-mode-switcher.view-mode-switcher,
+  .workspace-header__actions[data-search-open='true'] > .workspace-header__sort-group.workspace-header__sort-group,
+  .workspace-header__actions[data-search-open='true']
+    > .workspace-header__utility-group.workspace-header__utility-group {
+    display: none;
+  }
+  .workspace-header__actions > .workspace-header__search-group[data-expanded='true'] {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+  }
+  .workspace-header__search-group[data-expanded='true'] .kui-token-search__editor {
+    min-width: 0;
+  }
+  .workspace-header__identity {
+    display: none;
+  }
+}
+@container kui-toolbar (max-width: remify(176px)) {
+  .workspace-header__actions > .view-mode-switcher {
+    display: none;
+  }
+}

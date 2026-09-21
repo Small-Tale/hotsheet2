@@ -18,10 +18,11 @@ export function customAiCommandSignalConnection(
   defaultTool: string,
 ): ToolConnection | undefined {
   const tool = commandTool?.trim() || defaultTool;
-  const available = connections.filter(connection =>
-    connection.tool.toLowerCase() === tool.toLowerCase()
-    && !connection.busy
-    && connection.actions?.includes('send_turn'),
+  const available = connections.filter(
+    (connection) =>
+      connection.tool.toLowerCase() === tool.toLowerCase() &&
+      !connection.busy &&
+      connection.actions?.includes('send_turn'),
   );
-  return available.find(connection => connection.role === 'main') ?? available[0];
+  return available.find((connection) => connection.role === 'main') ?? available[0];
 }

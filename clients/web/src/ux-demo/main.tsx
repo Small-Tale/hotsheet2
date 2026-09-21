@@ -13,23 +13,12 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { Catalog, CatalogExampleStack } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import {
-  clampRegionSize,
-  type ResizableRegionEdge,
-  resizeRegionFromPointer,
-} from '@kerfjs/ui/resizable-region';
+import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
-import {
-  Activity,
-  FolderGit2,
-  MessageSquareText,
-  Minus,
-  Plus,
-  Terminal,
-} from 'lucide';
+import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
 import type { CommandDefinition, CommandRun } from '../api';
 import type { CommandDropTarget } from '../command-order';
@@ -64,7 +53,15 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
-import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationProvider, aiConversationProviderLabel, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
+import {
+  AIConversationDemo,
+  aiConversationDemoOpen,
+  aiConversationDraft,
+  aiConversationProvider,
+  aiConversationProviderLabel,
+  aiConversationScenario,
+  AIConversationSettings,
+} from './ai-conversation-demo';
 import {
   addDemoProject,
   AppShellDemo,
@@ -87,15 +84,14 @@ import {
   shellSidebarVisible,
   shellStatsProjectName,
 } from './app-shell-demo';
-import {
-  demoCatalog,
-  type DemoDefinition,
-  findDemo,
-  kerfCatalogSections,
-  usesCatalogGeometryOverlay,
-} from './catalog';
+import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
-import { ConnectionDetailsDialogDemo, ConnectionDetailsDialogSettings, connectionDetailsScenario, resetConnectionDetailsDemo } from './connection-details-demo';
+import {
+  ConnectionDetailsDialogDemo,
+  ConnectionDetailsDialogSettings,
+  connectionDetailsScenario,
+  resetConnectionDetailsDemo,
+} from './connection-details-demo';
 import {
   editingNoteId,
   inspectorBlockedReason,
@@ -120,8 +116,21 @@ import {
   readerTab,
   TicketReaderDemo,
 } from './content-components-demo';
-import { ContentTransitionDemo, ContentTransitionSettings, transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
-import { closeHs1MigrationDialogDemo, DialogHeaderDemo, Hs1MigrationBannerDemo, Hs1MigrationDialogDemo, openHs1MigrationDialogDemo, ValueTableDemo } from './dialog-layout-demo';
+import {
+  ContentTransitionDemo,
+  ContentTransitionSettings,
+  transitionDirection,
+  transitionSide,
+  transitionStyle,
+} from './content-transition-demo';
+import {
+  closeHs1MigrationDialogDemo,
+  DialogHeaderDemo,
+  Hs1MigrationBannerDemo,
+  Hs1MigrationDialogDemo,
+  openHs1MigrationDialogDemo,
+  ValueTableDemo,
+} from './dialog-layout-demo';
 import { ListHeaderDemo } from './list-header-demo';
 import { ListItemDemo } from './list-item-demo';
 import {
@@ -179,22 +188,37 @@ import {
   updateCommandEditorField,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
-import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoFileMenu, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
+import {
+  changeEvidenceDemoView,
+  ChangeEvidenceDialogDemo,
+  repositoryDemoComparison,
+  repositoryDemoEvent,
+  repositoryDemoExpandedCommits,
+  repositoryDemoFileMenu,
+  repositoryDemoScenario,
+  repositoryDemoView,
+  RepositoryStatusPopoverDemo,
+  RepositoryStatusPopoverSettings,
+  resetRepositoryStatusDemo,
+} from './repository-status-demo';
 import { SelectDemo } from './select-demo';
-import {
-  resetStatusBadgeDemo,
-  StatusBadgeDemo,
-  StatusBadgeSettings,
-  statusBadgeSettings,
-} from './status-badge-demo';
-import {
-  resetTagChipDemo,
-  TagChipDemo,
-  TagChipSettings,
-  tagChipSettings,
-} from './tag-chip-demo';
+import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
+import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
 import { syncTerminalDemoViewports } from './terminal-demo';
-import { cancelTerminalVisibilityDemoName, closeTerminalVisibilityDemo, promptAddTerminalVisibilityDemoGroup, promptRenameTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, showTerminalVisibilityDemo, showTerminalVisibilityDemoContextMenu, submitTerminalVisibilityDemoName, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
+import {
+  cancelTerminalVisibilityDemoName,
+  closeTerminalVisibilityDemo,
+  promptAddTerminalVisibilityDemoGroup,
+  promptRenameTerminalVisibilityDemoGroup,
+  removeTerminalVisibilityDemoGroup,
+  selectTerminalVisibilityDemoGroup,
+  setAllTerminalVisibilityDemo,
+  showTerminalVisibilityDemo,
+  showTerminalVisibilityDemoContextMenu,
+  submitTerminalVisibilityDemoName,
+  TerminalVisibilityDialogDemo,
+  toggleTerminalVisibilityDemo,
+} from './terminal-visibility-demo';
 import {
   collectionTickets,
   recordCollectionEvent,
@@ -233,12 +257,7 @@ import {
   TicketTimelineDemo,
   zoomGalleryDemo,
 } from './ticket-metadata-demo';
-import {
-  resetTicketRowDemo,
-  TicketRowDemo,
-  TicketRowSettings,
-  ticketRowSettings,
-} from './ticket-row-demo';
+import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
@@ -275,30 +294,23 @@ import {
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
-const fromUrl = () =>
-  new URL(location.href).searchParams.get('component') ?? defaultDemo;
+const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
-const catalogTheme = signal<'light' | 'dark'>(localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light');
-const devReviewOn = signal(
-  devReviewRequested(location.href, import.meta.env.DEV),
+const catalogTheme = signal<'light' | 'dark'>(
+  localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light',
 );
+const devReviewOn = signal(devReviewRequested(location.href, import.meta.env.DEV));
 const demoModified = signal<Record<string, string>>({});
 function updateDemoModifiedWhenPopupsClose(value: Record<string, string>): void {
   applyAfterCatalogPopupsClose(document, () => {
     demoModified.value = value;
   });
 }
-const contextMenu = signal<
-  { x: number; y: number; ticketSlug?: string } | undefined
->(undefined);
-const tabContextMenu = signal<
-  { x: number; y: number; projectId: string } | undefined
->(undefined);
-const terminalDashboardContextMenu = signal<
-  { key: string; x: number; y: number } | undefined
->(undefined);
+const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
+const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
+const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
   markdownEvent.value = 'Markdown autosaved.';
@@ -308,17 +320,11 @@ const blockedReasonAutosave = createDebouncedAutosave((value: string) => {
   inspectorBlockedReason.value = value.trim();
   return Promise.resolve(true);
 });
-const noteAutosave = createDebouncedAutosave(
-  ({ id, value }: { id: string; value: string }) => {
-    readerNotes.value = readerNotes.value.map((note) =>
-      note.id === id ? { ...note, body: value } : note,
-    );
-    noteDemoNotes.value = noteDemoNotes.value.map((note) =>
-      note.id === id ? { ...note, body: value } : note,
-    );
-    return Promise.resolve(true);
-  },
-);
+const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => {
+  readerNotes.value = readerNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+  noteDemoNotes.value = noteDemoNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+  return Promise.resolve(true);
+});
 const titleAutosave = createDebouncedAutosave((value: string) => {
   inspectorTitle.value = value.trim();
   return Promise.resolve(true);
@@ -343,23 +349,29 @@ let regionResizeDrag:
   | undefined;
 let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () =>
-  [
-    'ticket-list',
-    'ticket-board',
-    'workspace-header',
-    'quick-ticket-composer',
-    'app-shell',
-  ].includes(selectedId.value);
+  ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
 
-
-const commandRunDialogDemoCommand: CommandDefinition = { id: 'run-checks', title: 'Run checks', kind: 'program', program: 'npm', args: ['run', 'check'], group: 'Quality' };
-const commandRunDialogDemoRun: CommandRun = { id: 'run-42', command_id: 'run-checks', state: 'completed', exit_code: 0, output: [
-  { seq: 1, stream: 'stdout', text: '$ npm run check' },
-  { seq: 2, stream: 'stdout', text: 'Typecheck: 0 errors' },
-  { seq: 3, stream: 'stdout', text: 'Lint: 0 warnings' },
-  { seq: 4, stream: 'stderr', text: 'note: 2 files skipped (no changes)' },
-  { seq: 5, stream: 'stdout', text: 'All checks passed in 4.2s' },
-] };
+const commandRunDialogDemoCommand: CommandDefinition = {
+  id: 'run-checks',
+  title: 'Run checks',
+  kind: 'program',
+  program: 'npm',
+  args: ['run', 'check'],
+  group: 'Quality',
+};
+const commandRunDialogDemoRun: CommandRun = {
+  id: 'run-42',
+  command_id: 'run-checks',
+  state: 'completed',
+  exit_code: 0,
+  output: [
+    { seq: 1, stream: 'stdout', text: '$ npm run check' },
+    { seq: 2, stream: 'stdout', text: 'Typecheck: 0 errors' },
+    { seq: 3, stream: 'stdout', text: 'Lint: 0 warnings' },
+    { seq: 4, stream: 'stderr', text: 'note: 2 files skipped (no changes)' },
+    { seq: 5, stream: 'stdout', text: 'All checks passed in 4.2s' },
+  ],
+};
 
 function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
@@ -376,7 +388,22 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;
-  if (item.id === 'floating-toolbar') return <section class="floating-toolbar-demo"><p>Floating controls remain available over scrolling content without joining the page toolbar.</p><FloatingToolbar label="Preview zoom controls" position="bottom-end"><ToolbarControlGroup tone="dark"><button type="button" aria-label="Zoom out"><LucideIcon icon={Minus} name="minus"/></button><button type="button" aria-label="Zoom in"><LucideIcon icon={Plus} name="plus"/></button></ToolbarControlGroup></FloatingToolbar></section>;
+  if (item.id === 'floating-toolbar')
+    return (
+      <section class="floating-toolbar-demo">
+        <p>Floating controls remain available over scrolling content without joining the page toolbar.</p>
+        <FloatingToolbar label="Preview zoom controls" position="bottom-end">
+          <ToolbarControlGroup tone="dark">
+            <button type="button" aria-label="Zoom out">
+              <LucideIcon icon={Minus} name="minus" />
+            </button>
+            <button type="button" aria-label="Zoom in">
+              <LucideIcon icon={Plus} name="plus" />
+            </button>
+          </ToolbarControlGroup>
+        </FloatingToolbar>
+      </section>
+    );
   if (item.id === 'dialog-header') return <DialogHeaderDemo />;
   if (item.id === 'value-table') return <ValueTableDemo />;
   if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
@@ -393,50 +420,236 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-code-review') return <TicketCodeReviewDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   if (item.id === 'attachment-gallery') return <AttachmentGalleryDemo />;
-  if (item.id === 'ticket-close-dialog') return <TicketCloseDialog state={{
-    source: { id: 'source', slug: 'HS2-29MDFH', title: 'Repeated UI stability diagnostics', projectId: 'kerf', projectName: 'Kerf', connectionId: 'kerf-git', nativeId: 'source', qualifiedId: 'kerf-git:source' },
-    reason: 'duplicate',
-    query: 'UI stability',
-    candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing', projectId: 'hotsheet2', projectName: 'Hot Sheet 2', connectionId: 'hs2-git', nativeId: 'target', qualifiedId: 'hs2-git:target' }],
-  }}/>;
-  if (item.id === 'project-close-dialog') return <ProjectCloseDialog state={{
-    projectId: 'kerf', projectName: 'Kerf',
-    resources: [
-      { kind: 'ai-chat', id: 'codex-main', name: 'Codex', tool: 'codex', model: 'gpt-5.6-sol-preview', effort: 'high', progress: 'Reviewing the resize arbiter…',
-        messages: [
-          { id: 'm1', role: 'user', content: 'Refactor the terminal resize arbiter to remove the hysteresis race.', sequence: 0 },
-          { id: 'm2', role: 'assistant', content: 'I split the focus-follow decision from the size claim and added a bounded settle window, so a late viewport claim can no longer shrink an already-committed grid.', status: 'completed', sequence: 1, usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
-        ],
-        activity: [{ id: 'a1', tool: 'codex', kind: 'read', summary: 'Read terminal-sizing.ts', importance: 'normal', sequence: 2 }],
-        totalUsage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
-      { kind: 'terminal', id: 'tests', name: 'Tests', cwd: '~/code/kerf', progress: 0.6 },
-    ],
-    selectedKey: 'ai-chat:codex-main',
-  }} />;
-  if (item.id === 'project-dialog') return <section class="dialog-demo-stack" aria-label="Project dialog variants"><ProjectDialog open root="/work/hotsheet2" error=""/><RemoteProjectDialog open checkouts={[{ id: 'demo', root: '/work/demo', alias: 'Demo', stores: ['/work/demo.hs2'] }]}/></section>;
-  if (item.id === 'conversation-export-dialog') return <ConversationExportDialog state={{
-    source: { conversationId: 'conv-1', tool: 'codex', sessionId: 'sess-42', projectId: 'kerf', model: 'gpt-5.6-sol-preview', effort: 'high', resumable: true },
-    messages: [
-      { id: 'm1', role: 'user', content: 'Refactor the terminal resize arbiter to remove the hysteresis race.', sequence: 0 },
-      { id: 'm2', role: 'assistant', content: 'I split the focus-follow decision from the size claim and added a bounded settle window.', status: 'completed', sequence: 1, usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' } },
-      { id: 'm3', role: 'user', content: 'Add a regression test for the late-claim case.', sequence: 2 },
-    ],
-    draft: { scope: { kind: 'all' }, writeMode: 'create', bundle: { includeAttachments: true, includeMedia: true, includeSummary: true }, destination: { selectionToken: 'sel-token', displayPath: '~/exports/kerf-resize-arbiter', kind: 'directory' } },
-    step: 2, summaryAvailable: true,
-  }} />;
-  if (item.id === 'command-run-dialog') return <CommandRunDialog command={commandRunDialogDemoCommand} run={commandRunDialogDemoRun} />;
-  if (item.id === 'bulk-ticket-dialog') return <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />;
-  if (item.id === 'saved-view-dialog') return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
-  if (item.id === 'ticket-link-choice-dialog') return <TicketLinkChoiceDialog choice={{ kind: 'choose', reference: { raw: 'HS2-DEMO01', slug: 'HS2-DEMO01' }, matches: [
-    { projectId: 'hotsheet2', projectName: 'Hot Sheet 2', ticketId: '01', qualifiedId: 'hs2-git:01', connectionId: 'hs2-git', slug: 'HS2-DEMO01', title: 'Use real project tickets', status: 'started' },
-    { projectId: 'kerf', projectName: 'Kerf', ticketId: 'k1', qualifiedId: 'kerf-git:k1', connectionId: 'kerf-git', slug: 'HS2-DEMO01', title: 'Mirror the ticket reference in Kerf', status: 'not_started' },
-  ] }} />;
-  if (item.id === 'manual-model-dialog') return <ManualModelDialog state={{ target: 'settings', providerName: 'Codex', value: 'gpt-5.6-sol-preview' }} />;
+  if (item.id === 'ticket-close-dialog')
+    return (
+      <TicketCloseDialog
+        state={{
+          source: {
+            id: 'source',
+            slug: 'HS2-29MDFH',
+            title: 'Repeated UI stability diagnostics',
+            projectId: 'kerf',
+            projectName: 'Kerf',
+            connectionId: 'kerf-git',
+            nativeId: 'source',
+            qualifiedId: 'kerf-git:source',
+          },
+          reason: 'duplicate',
+          query: 'UI stability',
+          candidates: [
+            {
+              id: 'target',
+              slug: 'HS2-8WG3W9',
+              title: 'UI stability diagnostics detected render thrashing',
+              projectId: 'hotsheet2',
+              projectName: 'Hot Sheet 2',
+              connectionId: 'hs2-git',
+              nativeId: 'target',
+              qualifiedId: 'hs2-git:target',
+            },
+          ],
+        }}
+      />
+    );
+  if (item.id === 'project-close-dialog')
+    return (
+      <ProjectCloseDialog
+        state={{
+          projectId: 'kerf',
+          projectName: 'Kerf',
+          resources: [
+            {
+              kind: 'ai-chat',
+              id: 'codex-main',
+              name: 'Codex',
+              tool: 'codex',
+              model: 'gpt-5.6-sol-preview',
+              effort: 'high',
+              progress: 'Reviewing the resize arbiter…',
+              messages: [
+                {
+                  id: 'm1',
+                  role: 'user',
+                  content: 'Refactor the terminal resize arbiter to remove the hysteresis race.',
+                  sequence: 0,
+                },
+                {
+                  id: 'm2',
+                  role: 'assistant',
+                  content:
+                    'I split the focus-follow decision from the size claim and added a bounded settle window, so a late viewport claim can no longer shrink an already-committed grid.',
+                  status: 'completed',
+                  sequence: 1,
+                  usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' },
+                },
+              ],
+              activity: [
+                {
+                  id: 'a1',
+                  tool: 'codex',
+                  kind: 'read',
+                  summary: 'Read terminal-sizing.ts',
+                  importance: 'normal',
+                  sequence: 2,
+                },
+              ],
+              totalUsage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' },
+            },
+            { kind: 'terminal', id: 'tests', name: 'Tests', cwd: '~/code/kerf', progress: 0.6 },
+          ],
+          selectedKey: 'ai-chat:codex-main',
+        }}
+      />
+    );
+  if (item.id === 'project-dialog')
+    return (
+      <section class="dialog-demo-stack" aria-label="Project dialog variants">
+        <ProjectDialog open root="/work/hotsheet2" error="" />
+        <RemoteProjectDialog
+          open
+          checkouts={[{ id: 'demo', root: '/work/demo', alias: 'Demo', stores: ['/work/demo.hs2'] }]}
+        />
+      </section>
+    );
+  if (item.id === 'conversation-export-dialog')
+    return (
+      <ConversationExportDialog
+        state={{
+          source: {
+            conversationId: 'conv-1',
+            tool: 'codex',
+            sessionId: 'sess-42',
+            projectId: 'kerf',
+            model: 'gpt-5.6-sol-preview',
+            effort: 'high',
+            resumable: true,
+          },
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              content: 'Refactor the terminal resize arbiter to remove the hysteresis race.',
+              sequence: 0,
+            },
+            {
+              id: 'm2',
+              role: 'assistant',
+              content: 'I split the focus-follow decision from the size claim and added a bounded settle window.',
+              status: 'completed',
+              sequence: 1,
+              usage: { tokensIn: 1840, tokensOut: 512, costUsd: 0.021, model: 'gpt-5.6-sol-preview' },
+            },
+            { id: 'm3', role: 'user', content: 'Add a regression test for the late-claim case.', sequence: 2 },
+          ],
+          draft: {
+            scope: { kind: 'all' },
+            writeMode: 'create',
+            bundle: { includeAttachments: true, includeMedia: true, includeSummary: true },
+            destination: {
+              selectionToken: 'sel-token',
+              displayPath: '~/exports/kerf-resize-arbiter',
+              kind: 'directory',
+            },
+          },
+          step: 2,
+          summaryAvailable: true,
+        }}
+      />
+    );
+  if (item.id === 'command-run-dialog')
+    return <CommandRunDialog command={commandRunDialogDemoCommand} run={commandRunDialogDemoRun} />;
+  if (item.id === 'bulk-ticket-dialog')
+    return (
+      <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />
+    );
+  if (item.id === 'saved-view-dialog')
+    return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
+  if (item.id === 'ticket-link-choice-dialog')
+    return (
+      <TicketLinkChoiceDialog
+        choice={{
+          kind: 'choose',
+          reference: { raw: 'HS2-DEMO01', slug: 'HS2-DEMO01' },
+          matches: [
+            {
+              projectId: 'hotsheet2',
+              projectName: 'Hot Sheet 2',
+              ticketId: '01',
+              qualifiedId: 'hs2-git:01',
+              connectionId: 'hs2-git',
+              slug: 'HS2-DEMO01',
+              title: 'Use real project tickets',
+              status: 'started',
+            },
+            {
+              projectId: 'kerf',
+              projectName: 'Kerf',
+              ticketId: 'k1',
+              qualifiedId: 'kerf-git:k1',
+              connectionId: 'kerf-git',
+              slug: 'HS2-DEMO01',
+              title: 'Mirror the ticket reference in Kerf',
+              status: 'not_started',
+            },
+          ],
+        }}
+      />
+    );
+  if (item.id === 'manual-model-dialog')
+    return <ManualModelDialog state={{ target: 'settings', providerName: 'Codex', value: 'gpt-5.6-sol-preview' }} />;
   if (item.id === 'keyboard-settings') return <KeyboardSettings overrides={{}} apple={true} />;
-  if (item.id === 'ticket-source-setup-dialog') return <TicketSourceSetupDialog project={{ root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }} providerConnections={[]} navigation="none"/>;
-  if (item.id === 'provider-setup-form') return <ProviderSetupForm kind="github" auth={{ session: 'demo', userCode: 'ABCD-EFGH', verificationUri: 'https://github.com/login/device', state: 'authorized', repositories: ['small-tale/hotsheet2'] }}/>;
-  if (item.id === 'ticket-sources-settings') return <TicketSourcesSettings stores={['/work/demo.hs2']} providerConnections={[{ id: 'github-main', provider: 'github', locator: 'small-tale/hotsheet2', name: 'Product issues', default: true, settings: {} }]}/>;
-  if (item.id === 'settings-workspace') return <SettingsWorkspace category="sources" sources={{ stores: ['/work/demo.hs2'], providerConnections: [] }} ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }} commands={{ commands: [] }} lifecycle={{ days: 30, message: '' }} terminals={{ inheritGlobalShellHistory: false, message: '' }} permissions={{ automation: { action: 'off', delayMs: 60_000 }, delays: [15_000, 60_000, 120_000] }} columns={{ hideVerified: false }} general={{ showLoadingActivity: true }} keyboard={{ overrides: {}, apple: true }}/>;
+  if (item.id === 'ticket-source-setup-dialog')
+    return (
+      <TicketSourceSetupDialog
+        project={{ root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
+        providerConnections={[]}
+        navigation="none"
+      />
+    );
+  if (item.id === 'provider-setup-form')
+    return (
+      <ProviderSetupForm
+        kind="github"
+        auth={{
+          session: 'demo',
+          userCode: 'ABCD-EFGH',
+          verificationUri: 'https://github.com/login/device',
+          state: 'authorized',
+          repositories: ['small-tale/hotsheet2'],
+        }}
+      />
+    );
+  if (item.id === 'ticket-sources-settings')
+    return (
+      <TicketSourcesSettings
+        stores={['/work/demo.hs2']}
+        providerConnections={[
+          {
+            id: 'github-main',
+            provider: 'github',
+            locator: 'small-tale/hotsheet2',
+            name: 'Product issues',
+            default: true,
+            settings: {},
+          },
+        ]}
+      />
+    );
+  if (item.id === 'settings-workspace')
+    return (
+      <SettingsWorkspace
+        category="sources"
+        sources={{ stores: ['/work/demo.hs2'], providerConnections: [] }}
+        ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
+        commands={{ commands: [] }}
+        lifecycle={{ days: 30, message: '' }}
+        terminals={{ inheritGlobalShellHistory: false, message: '' }}
+        permissions={{ automation: { action: 'off', delayMs: 60_000 }, delays: [15_000, 60_000, 120_000] }}
+        columns={{ hideVerified: false }}
+        general={{ showLoadingActivity: true }}
+        keyboard={{ overrides: {}, apple: true }}
+      />
+    );
   if (item.id === 'trash-settings') return <TrashSettings days={14} />;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
@@ -455,49 +668,166 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ai-conversation') return <AIConversationDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
-  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab id="project" name="Project tab" selected className="project-tab" rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }} leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab id="terminal" name="Terminal tab" className="terminal-tab" rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': 'terminal' }} leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
-  if (item.id === 'terminal-drawer') return <section class="terminal-drawer-demo"><TerminalDrawer projectId="demo" projectName="Demo project" sessions={[{ id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, scrollback: 'npm run dev\nready on http://127.0.0.1' }]} width={900} height={320} fitAcross={2} fitHigh={2} selectedId="shell"/></section>;
-  if (item.id === 'terminal-dashboard') return <section class="terminal-dashboard-demo"><TerminalDashboard groups={[{ projectId: 'demo', projectName: 'Demo project', sessions: [
-    { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
-    { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
-  ], chats: [{ id: 'chat:review', projectId: 'demo', projectName: 'Demo project', name: 'Review chat', tool: 'Codex', busy: true, summary: 'Reviewing the latest workspace changes and test results.' }] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={terminalDashboardContextMenu.value}/></section>;
-  if (item.id === 'terminal-operations-sidebar') return <TerminalOperationsSidebarDemo/>;
-  if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo/>;
+  if (item.id === 'app-tab')
+    return (
+      <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo">
+        <AppTab
+          id="project"
+          name="Project tab"
+          selected
+          className="project-tab"
+          rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }}
+          leading={<LucideIcon icon={FolderGit2} name="folder-git-2" />}
+        />
+        <AppTab
+          id="terminal"
+          name="Terminal tab"
+          className="terminal-tab"
+          rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': 'terminal' }}
+          leading={<LucideIcon icon={Terminal} name="terminal" />}
+          trailing={
+            <span aria-label="Busy">
+              <LucideIcon icon={Activity} name="activity" />
+            </span>
+          }
+        />
+      </section>
+    );
+  if (item.id === 'terminal-drawer')
+    return (
+      <section class="terminal-drawer-demo">
+        <TerminalDrawer
+          projectId="demo"
+          projectName="Demo project"
+          sessions={[
+            {
+              id: 'shell',
+              projectId: 'demo',
+              projectName: 'Demo project',
+              title: 'Development',
+              alive: true,
+              busy: true,
+              scrollback: 'npm run dev\nready on http://127.0.0.1',
+            },
+          ]}
+          width={900}
+          height={320}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="shell"
+        />
+      </section>
+    );
+  if (item.id === 'terminal-dashboard')
+    return (
+      <section class="terminal-dashboard-demo">
+        <TerminalDashboard
+          groups={[
+            {
+              projectId: 'demo',
+              projectName: 'Demo project',
+              sessions: [
+                {
+                  id: 'shell',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Development',
+                  alive: true,
+                  busy: true,
+                  cwd: '/work/demo',
+                  progress: 68,
+                  scrollback: 'npm run dev\nready on http://127.0.0.1',
+                },
+                {
+                  id: 'tests',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Tests',
+                  alive: true,
+                  busy: false,
+                  cwd: '/work/demo',
+                  scrollback: '42 tests passed\nwaiting for changes',
+                },
+              ],
+              chats: [
+                {
+                  id: 'chat:review',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  name: 'Review chat',
+                  tool: 'Codex',
+                  busy: true,
+                  summary: 'Reviewing the latest workspace changes and test results.',
+                },
+              ],
+            },
+          ]}
+          width={900}
+          height={560}
+          fitAcross={3}
+          fitHigh={3}
+          contextMenu={terminalDashboardContextMenu.value}
+        />
+      </section>
+    );
+  if (item.id === 'terminal-operations-sidebar') return <TerminalOperationsSidebarDemo />;
+  if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo />;
   if (item.id === 'fixed-aspect-terminal-card') {
     const session = {
-      id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development',
-      alive: true, busy: true, cwd: '/work/demo', progress: 68,
+      id: 'shell',
+      projectId: 'demo',
+      projectName: 'Demo project',
+      title: 'Development',
+      alive: true,
+      busy: true,
+      cwd: '/work/demo',
+      progress: 68,
       scrollback: 'GNU nano 8.4\n80 columns × 24 rows\n^X Exit',
     };
-    return <section class="fixed-aspect-terminal-card-demo terminal-dashboard" aria-label="Fixed aspect terminal card variants"><div><h2>Grid preview</h2><FixedAspectTerminalCard session={session}/></div><div class="fixed-aspect-terminal-card-demo__magnified"><h2>Magnified interactive</h2><FixedAspectTerminalCard session={session} mode="magnified"/></div></section>;
+    return (
+      <section
+        class="fixed-aspect-terminal-card-demo terminal-dashboard"
+        aria-label="Fixed aspect terminal card variants"
+      >
+        <div>
+          <h2>Grid preview</h2>
+          <FixedAspectTerminalCard session={session} />
+        </div>
+        <div class="fixed-aspect-terminal-card-demo__magnified">
+          <h2>Magnified interactive</h2>
+          <FixedAspectTerminalCard session={session} mode="magnified" />
+        </div>
+      </section>
+    );
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
-  if (item.id === 'terminal-rename-dialog') return <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development' }}/>;
+  if (item.id === 'terminal-rename-dialog')
+    return <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development' }} />;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
-  if (item.id === 'connection-state-banner')
-    return <ConnectionStateBannerDemo />;
+  if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
-  if (item.id === 'app-empty-state') return <section class="empty-state-demo-stack" aria-label="Application empty state variants"><AppEmptyState/><ProjectRestoreState/></section>;
+  if (item.id === 'app-empty-state')
+    return (
+      <section class="empty-state-demo-stack" aria-label="Application empty state variants">
+        <AppEmptyState />
+        <ProjectRestoreState />
+      </section>
+    );
   if (item.id === 'note-card') return <NoteCardDemo />;
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
   if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
   if (item.id === 'not-working-dialog') return <NotWorkingDialogDemo />;
-  if (item.id === 'pending-attachment-picker')
-    return <PendingAttachmentPickerDemo />;
+  if (item.id === 'pending-attachment-picker') return <PendingAttachmentPickerDemo />;
   if (item.id === 'permission-request') return <PermissionRequestDemo />;
   if (item.id === 'notification-center') return <NotificationCenterDemo />;
   return (
     <section class="planned-demo" aria-label={`${item.name} planned demo`}>
       <span>Planned component</span>
-      <p>
-        The catalog entry and navigation are ready. Its real component demo will
-        be added in a later slice.
-      </p>
+      <p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p>
     </section>
   );
 }
-
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
@@ -511,9 +841,7 @@ function DemoApp() {
           status: ticketRowSettings.status.value,
         }
       : contextMenu.value?.ticketSlug
-        ? collectionTickets.value.find(
-            (ticket) => ticket.slug === contextMenu.value?.ticketSlug,
-          )
+        ? collectionTickets.value.find((ticket) => ticket.slug === contextMenu.value?.ticketSlug)
         : undefined;
   const hasSettings =
     selected.id === 'tag-chip' ||
@@ -524,7 +852,8 @@ function DemoApp() {
     selected.id === 'content-transition' ||
     selected.id === 'permission-request' ||
     selected.id === 'ai-conversation';
-  const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '), modified = demoModified.value[selected.id];
+  const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
+    modified = demoModified.value[selected.id];
   return (
     <>
       <Catalog
@@ -535,28 +864,51 @@ function DemoApp() {
         collapsed={catalogCollapsed.value}
         theme={catalogTheme.value}
         geometryOverlay={usesCatalogGeometryOverlay(selected.id)}
-        content={<CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}>{demoContent(selected)}</CatalogExampleStack>}
-        status={<span><strong>{selected.phase.replace('-', ' ')}</strong>{selected.implemented ? ' · Implemented' : ' · Planned'}{modified ? ` · Updated ${new Date(modified).toLocaleString()}` : ''}</span>}
-        headerActions={<ToolbarControlGroup label="Demo tools">
-          {import.meta.env.DEV ? <button type="button" data-action="toggle-dev-review" aria-pressed={String(devReviewOn.value)} title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}><LucideIcon icon={MessageSquareText} name="message-square-text"/><span>Review</span></button> : <></>}
-          {hasSettings && !settingsOpen.value ? <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings"><span>Settings</span></button> : <></>}
-        </ToolbarControlGroup>}
+        content={
+          <CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}>
+            {demoContent(selected)}
+          </CatalogExampleStack>
+        }
+        status={
+          <span>
+            <strong>{selected.phase.replace('-', ' ')}</strong>
+            {selected.implemented ? ' · Implemented' : ' · Planned'}
+            {modified ? ` · Updated ${new Date(modified).toLocaleString()}` : ''}
+          </span>
+        }
+        headerActions={
+          <ToolbarControlGroup label="Demo tools">
+            {import.meta.env.DEV ? (
+              <button
+                type="button"
+                data-action="toggle-dev-review"
+                aria-pressed={String(devReviewOn.value)}
+                title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}
+              >
+                <LucideIcon icon={MessageSquareText} name="message-square-text" />
+                <span>Review</span>
+              </button>
+            ) : (
+              <></>
+            )}
+            {hasSettings && !settingsOpen.value ? (
+              <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings">
+                <span>Settings</span>
+              </button>
+            ) : (
+              <></>
+            )}
+          </ToolbarControlGroup>
+        }
       />
       {settingsOpen.value && (
-        <aside
-          class="settings-inspector"
-          aria-label={`${selected.name} settings`}
-        >
+        <aside class="settings-inspector" aria-label={`${selected.name} settings`}>
           <header>
             <div>
               <p class="eyebrow">Demo settings</p>
               <h2>{selected.name}</h2>
             </div>
-            <wa-button
-              class="settings-toggle"
-              data-action="toggle-settings"
-              aria-expanded="true"
-            >
+            <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded="true">
               Close settings
             </wa-button>
           </header>
@@ -588,22 +940,14 @@ function DemoApp() {
           category={menuTicket?.category}
           priority={menuTicket?.priority}
           status={menuTicket?.status}
-          upNextEligible={
-            menuTicket?.status === 'not_started' ||
-            menuTicket?.status === 'started'
-          }
+          upNextEligible={menuTicket?.status === 'not_started' || menuTicket?.status === 'started'}
           verifyAction={menuTicket?.status === 'completed'}
           notWorkingAction={menuTicket?.status === 'completed'}
           reopenAction={menuTicket?.status === 'verified' || menuTicket?.status === 'archive'}
-          selectionCount={
-            collectionTickets.value.filter((ticket) => ticket.selected)
-              .length || 1
-          }
+          selectionCount={collectionTickets.value.filter((ticket) => ticket.selected).length || 1}
         />
       )}
-      {tabContextMenu.value && (
-        <ProjectTabContextMenu {...tabContextMenu.value} />
-      )}
+      {tabContextMenu.value && <ProjectTabContextMenu {...tabContextMenu.value} />}
     </>
   );
 }
@@ -622,7 +966,9 @@ wireTokenSearchFields(root, {
   },
 });
 wireCatalog(root, {
-  onSelect: id => { selectDemo(id, false); },
+  onSelect: (id) => {
+    selectDemo(id, false);
+  },
   onToggleSidebar: () => {
     catalogCollapsed.value = !catalogCollapsed.value;
     localStorage.setItem('hotsheet.ux-demo.catalog-collapsed', String(catalogCollapsed.value));
@@ -669,27 +1015,25 @@ const setDevReview = async (active: boolean) => {
   else url.searchParams.set('dev-review', 'false');
   history.replaceState(null, '', url);
   if (active)
-    devReviewController = await import('../dev-review').then(
-      ({ installDevReview }) =>
-        installDevReview({
-          submit: async (submission) => {
-            const response = await fetch('/__hotsheet/dev-review/tickets', {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                'x-hotsheet-dev-review': '1',
-              },
-              body: JSON.stringify(submission),
-            });
-            const result = (await response.json()) as {
-              slug?: string;
-              error?: string;
-            };
-            if (!response.ok || !result.slug)
-              throw new Error(result.error ?? 'Ticket creation failed.');
-            return { slug: result.slug };
-          },
-        }),
+    devReviewController = await import('../dev-review').then(({ installDevReview }) =>
+      installDevReview({
+        submit: async (submission) => {
+          const response = await fetch('/__hotsheet/dev-review/tickets', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-hotsheet-dev-review': '1',
+            },
+            body: JSON.stringify(submission),
+          });
+          const result = (await response.json()) as {
+            slug?: string;
+            error?: string;
+          };
+          if (!response.ok || !result.slug) throw new Error(result.error ?? 'Ticket creation failed.');
+          return { slug: result.slug };
+        },
+      }),
     );
 };
 if (devReviewOn.value) void setDevReview(true);
@@ -720,12 +1064,18 @@ function commandEditorRowId(target: Element): string | undefined {
 }
 let draggedCommandEditorIds: string[] = [];
 function clearCommandEditorDropIndicators() {
-  root.querySelectorAll<HTMLElement>('[data-command-drop-position]').forEach(element => delete element.dataset.commandDropPosition);
-  root.querySelectorAll<HTMLElement>('[data-command-drop-active]').forEach(element => delete element.dataset.commandDropActive);
+  root
+    .querySelectorAll<HTMLElement>('[data-command-drop-position]')
+    .forEach((element) => delete element.dataset.commandDropPosition);
+  root
+    .querySelectorAll<HTMLElement>('[data-command-drop-active]')
+    .forEach((element) => delete element.dataset.commandDropActive);
 }
 function clearCommandEditorDrag() {
   draggedCommandEditorIds = [];
-  root.querySelectorAll<HTMLElement>('[data-command-dragging]').forEach(element => delete element.dataset.commandDragging);
+  root
+    .querySelectorAll<HTMLElement>('[data-command-dragging]')
+    .forEach((element) => delete element.dataset.commandDragging);
   clearCommandEditorDropIndicators();
 }
 delegate(root, 'click', '[data-action="edit-command-setting"]', (_event, target) => {
@@ -761,21 +1111,24 @@ delegate(root, 'contextmenu', '.command-settings-editor__row', (event, target) =
   menu.show?.();
 });
 delegate(root, 'click', '.command-settings-editor__row', (event, target) => {
-  if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip')) return;
+  if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))
+    return;
   const id = (target as HTMLElement).dataset.commandId;
   if (!id) return;
   const mouse = event as MouseEvent;
   selectCommandEditorRow(id, { toggle: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
 });
 delegate(root, 'dragstart', '.command-settings-editor__row', (event, target) => {
-  const element = target as HTMLElement, id = element.dataset.commandId;
+  const element = target as HTMLElement,
+    id = element.dataset.commandId;
   if (!id) return;
   const selection = commandEditorSelection.value;
-  draggedCommandEditorIds = selection.length > 1 && selection.includes(id)
-    ? commandEditorCommands.value.map(command => command.id).filter(commandId => selection.includes(commandId))
-    : [id];
+  draggedCommandEditorIds =
+    selection.length > 1 && selection.includes(id)
+      ? commandEditorCommands.value.map((command) => command.id).filter((commandId) => selection.includes(commandId))
+      : [id];
   if (draggedCommandEditorIds.length <= 1) selectCommandEditorRow(id, {});
-  root.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach(row => {
+  root.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach((row) => {
     if (draggedCommandEditorIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
   });
   const transfer = (event as DragEvent).dataTransfer;
@@ -786,7 +1139,9 @@ delegate(root, 'dragstart', '.command-settings-editor__row', (event, target) => 
 });
 delegate(root, 'dragover', '.command-settings-editor__list', (event) => {
   if (!draggedCommandEditorIds.length) return;
-  const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
+  const drag = event as DragEvent,
+    over = drag.target as Element,
+    row = over.closest<HTMLElement>('[data-command-id]');
   clearCommandEditorDropIndicators();
   if (row && row.dataset.commandId && !draggedCommandEditorIds.includes(row.dataset.commandId)) {
     drag.preventDefault();
@@ -806,12 +1161,18 @@ delegate(root, 'drop', '.command-settings-editor__list', (event) => {
     clearCommandEditorDrag();
     return;
   }
-  const drag = event as DragEvent, over = drag.target as Element, row = over.closest<HTMLElement>('[data-command-id]');
+  const drag = event as DragEvent,
+    over = drag.target as Element,
+    row = over.closest<HTMLElement>('[data-command-id]');
   drag.preventDefault();
   let dropTarget: CommandDropTarget | undefined;
   if (row && row.dataset.commandId && !sources.includes(row.dataset.commandId)) {
     const bounds = row.getBoundingClientRect();
-    dropTarget = { kind: 'row', id: row.dataset.commandId, position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' };
+    dropTarget = {
+      kind: 'row',
+      id: row.dataset.commandId,
+      position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
+    };
   } else {
     const container = over.closest<HTMLElement>('[data-command-group-drop]');
     if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
@@ -833,11 +1194,17 @@ delegate(root, 'click', '[data-action="select-command-icon"]', (_event, target) 
   const name = (target as HTMLElement).dataset.iconName;
   if (id && name) updateCommandEditorField(id, 'icon', name);
 });
-delegateCapture(root, 'toggle', `#${COMMAND_EDITOR_DIALOG_ID}`, (event) => {
-  if ((event as ToggleEvent).newState !== 'closed') return;
-  commandEditorEditingId.value = undefined;
-  commandEditorIconSearch.value = '';
-}, { match: 'direct' });
+delegateCapture(
+  root,
+  'toggle',
+  `#${COMMAND_EDITOR_DIALOG_ID}`,
+  (event) => {
+    if ((event as ToggleEvent).newState !== 'closed') return;
+    commandEditorEditingId.value = undefined;
+    commandEditorIconSearch.value = '';
+  },
+  { match: 'direct' },
+);
 delegate(root, 'click', '[data-action="open-hs1-migration-demo"]', openHs1MigrationDialogDemo);
 delegate(root, 'click', '[data-action="dismiss-hs1-migration"]', closeHs1MigrationDialogDemo);
 delegate(root, 'wa-hide', '[data-component="hs1-migration-dialog"]', closeHs1MigrationDialogDemo);
@@ -865,19 +1232,33 @@ delegate(root, 'click', '[data-action="select-terminal-visibility-tab"]', (_even
 });
 delegate(root, 'click', '[data-action="add-terminal-visibility-group"]', () => {
   promptAddTerminalVisibilityDemoGroup();
-  requestAnimationFrame(() => root.querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')?.focus());
+  requestAnimationFrame(() =>
+    root
+      .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+      ?.focus(),
+  );
 });
 delegate(root, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
   event.preventDefault();
-  showTerminalVisibilityDemoContextMenu((target as HTMLElement).dataset.visibilityGroupId ?? '', (event as MouseEvent).clientX, (event as MouseEvent).clientY);
+  showTerminalVisibilityDemoContextMenu(
+    (target as HTMLElement).dataset.visibilityGroupId ?? '',
+    (event as MouseEvent).clientX,
+    (event as MouseEvent).clientY,
+  );
 });
 delegate(root, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
   promptRenameTerminalVisibilityDemoGroup();
-  requestAnimationFrame(() => root.querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')?.focus());
+  requestAnimationFrame(() =>
+    root
+      .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+      ?.focus(),
+  );
 });
 delegate(root, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
   event.preventDefault();
-  submitTerminalVisibilityDemoName((target.querySelector('[name="terminal-visibility-group-name"]') as FormControl).value);
+  submitTerminalVisibilityDemoName(
+    (target.querySelector('[name="terminal-visibility-group-name"]') as FormControl).value,
+  );
 });
 delegate(root, 'click', '[data-action="cancel-terminal-visibility-name"]', cancelTerminalVisibilityDemoName);
 delegate(root, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
@@ -924,15 +1305,21 @@ delegate(root, 'click', '[data-action="toggle-repository-comparison"]', () => {
   repositoryDemoComparison.value = { active: true, side: 'a' };
 });
 delegate(root, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
-  repositoryDemoComparison.value = { ...repositoryDemoComparison.value, side: (target as HTMLElement).dataset.comparisonSide as 'a' | 'b' };
+  repositoryDemoComparison.value = {
+    ...repositoryDemoComparison.value,
+    side: (target as HTMLElement).dataset.comparisonSide as 'a' | 'b',
+  };
 });
 delegate(root, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
-  const sha = (target as HTMLElement).dataset.commitSha!, current = repositoryDemoComparison.value;
+  const sha = (target as HTMLElement).dataset.commitSha!,
+    current = repositoryDemoComparison.value;
   repositoryDemoComparison.value = current.side === 'a' ? { ...current, a: sha, side: 'b' } : { ...current, b: sha };
 });
 delegate(root, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
   const sha = (target as HTMLElement).dataset.commitSha!;
-  repositoryDemoExpandedCommits.value = repositoryDemoExpandedCommits.value.includes(sha) ? repositoryDemoExpandedCommits.value.filter(item => item !== sha) : [...repositoryDemoExpandedCommits.value, sha];
+  repositoryDemoExpandedCommits.value = repositoryDemoExpandedCommits.value.includes(sha)
+    ? repositoryDemoExpandedCommits.value.filter((item) => item !== sha)
+    : [...repositoryDemoExpandedCommits.value, sha];
 });
 delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
   repositoryDemoEvent.value = 'Repository status refreshed.';
@@ -940,18 +1327,32 @@ delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
 const repositoryDemoFileSelector = '[data-action="select-repository-file"]';
 const repositoryDemoFileMenuTrigger = '[data-action="open-repository-file-menu-trigger"]';
 function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
-  const element = target.closest<HTMLElement>(repositoryDemoFileSelector) ?? target as HTMLElement;
+  const element = target.closest<HTMLElement>(repositoryDemoFileSelector) ?? (target as HTMLElement);
   const path = element.dataset.itemId!;
-  const ticket = (target as HTMLElement).dataset.fileMenuSource === 'ticket' || Boolean(target.closest('[data-component="change-evidence-dialog"]'));
+  const ticket =
+    (target as HTMLElement).dataset.fileMenuSource === 'ticket' ||
+    Boolean(target.closest('[data-component="change-evidence-dialog"]'));
   const view = repositoryDemoView.value;
-  const diff = ticket ? 'ticket' : view === 'staged' || view === 'unstaged' ? view : view === 'conflicted' ? 'unstaged' : undefined;
+  const diff = ticket
+    ? 'ticket'
+    : view === 'staged' || view === 'unstaged'
+      ? view
+      : view === 'conflicted'
+        ? 'unstaged'
+        : undefined;
   const width = 232;
   const height = 226;
   const bounds = target.closest('.dialog-surface')?.getBoundingClientRect();
   const minimumX = bounds ? bounds.left + 8 : 8;
-  const maximumX = Math.min(window.innerWidth - width - 8, bounds ? bounds.right - width - 8 : Number.POSITIVE_INFINITY);
+  const maximumX = Math.min(
+    window.innerWidth - width - 8,
+    bounds ? bounds.right - width - 8 : Number.POSITIVE_INFINITY,
+  );
   const minimumY = bounds ? bounds.top + 8 : 8;
-  const maximumY = Math.min(window.innerHeight - height - 8, bounds ? bounds.bottom - height - 8 : Number.POSITIVE_INFINITY);
+  const maximumY = Math.min(
+    window.innerHeight - height - 8,
+    bounds ? bounds.bottom - height - 8 : Number.POSITIVE_INFINITY,
+  );
   repositoryDemoFileMenu.value = {
     path,
     absolutePath: `/work/hotsheet2/${path}`,
@@ -1006,14 +1407,14 @@ delegate(root, 'click', '[data-action="select-view"]', (_event, target) => {
 });
 delegate(root, 'click', '[data-action="toggle-command-group"]', () => {
   commandGroupExpanded.value = !commandGroupExpanded.value;
-  sidebarEvent.value = commandGroupExpanded.value
-    ? 'Command group expanded.'
-    : 'Command group collapsed.';
+  sidebarEvent.value = commandGroupExpanded.value ? 'Command group expanded.' : 'Command group collapsed.';
 });
 delegate(root, 'click', '[data-action="toggle-command-section"]', (_event, target) => {
   const group = target.closest<HTMLElement>('[data-command-group]')?.dataset.commandGroup;
   if (!group) return;
-  collapsedCommandGroups.value = collapsedCommandGroups.value.includes(group) ? collapsedCommandGroups.value.filter(item => item !== group) : [...collapsedCommandGroups.value, group];
+  collapsedCommandGroups.value = collapsedCommandGroups.value.includes(group)
+    ? collapsedCommandGroups.value.filter((item) => item !== group)
+    : [...collapsedCommandGroups.value, group];
   sidebarEvent.value = collapsedCommandGroups.value.includes(group) ? `${group} collapsed.` : `${group} expanded.`;
 });
 delegate(root, 'click', '[data-action="run-command"]', (_event, target) => {
@@ -1025,79 +1426,50 @@ delegate(root, 'click', '[data-action="run-command"]', (_event, target) => {
 });
 delegate(root, 'click', '[data-action="toggle-drive"]', () => {
   driveRunning.value = !driveRunning.value;
-  sidebarEvent.value = driveRunning.value
-    ? 'Codex drive started.'
-    : 'Codex drive stopped.';
+  sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.';
 });
-delegate(
-  root,
-  'click',
-  '[data-action="select-project-tab"]',
-  (_event, target) => {
-    selectProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
-  },
-);
-delegate(
-  root,
-  'click',
-  '[data-action="close-project-tab"]',
-  (event, target) => {
-    event.stopPropagation();
-    closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
-  },
-);
-delegate(
-  root,
-  'contextmenu',
-  '[data-tab-kind="project"]',
-  (event, target) => {
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    tabContextMenu.value = {
-      x: pointer.clientX,
-      y: pointer.clientY,
-      projectId: (target as HTMLElement).dataset.projectId!,
-    };
-  },
-);
-delegate(
-  root,
-  'click',
-  '[data-action="project-tab-context-action"]',
-  (_event, target) => {
-    const element = target as HTMLElement;
-    const id = element.dataset.projectId!;
-    if (element.dataset.tabAction === 'close') closeProjectTab(id);
-    if (element.dataset.tabAction === 'close-others') closeOtherProjectTabs(id);
-    if (element.dataset.tabAction === 'close-right')
-      closeProjectTabsToRight(id);
-    if (element.dataset.tabAction === 'close-all') closeAllProjectTabs();
-    tabContextMenu.value = undefined;
-  },
-);
+delegate(root, 'click', '[data-action="select-project-tab"]', (_event, target) => {
+  selectProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
+});
+delegate(root, 'click', '[data-action="close-project-tab"]', (event, target) => {
+  event.stopPropagation();
+  closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
+});
+delegate(root, 'contextmenu', '[data-tab-kind="project"]', (event, target) => {
+  event.preventDefault();
+  const pointer = event as MouseEvent;
+  tabContextMenu.value = {
+    x: pointer.clientX,
+    y: pointer.clientY,
+    projectId: (target as HTMLElement).dataset.projectId!,
+  };
+});
+delegate(root, 'click', '[data-action="project-tab-context-action"]', (_event, target) => {
+  const element = target as HTMLElement;
+  const id = element.dataset.projectId!;
+  if (element.dataset.tabAction === 'close') closeProjectTab(id);
+  if (element.dataset.tabAction === 'close-others') closeOtherProjectTabs(id);
+  if (element.dataset.tabAction === 'close-right') closeProjectTabsToRight(id);
+  if (element.dataset.tabAction === 'close-all') closeAllProjectTabs();
+  tabContextMenu.value = undefined;
+});
 delegate(root, 'click', '[data-action="add-project"], [data-action="choose-project"]', () => {
   addDemoProject();
 });
 delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => {
   shellSidebarVisible.value = !shellSidebarVisible.value;
-  shellEvent.value = shellSidebarVisible.value
-    ? 'Project sidebar shown.'
-    : 'Project sidebar hidden.';
+  shellEvent.value = shellSidebarVisible.value ? 'Project sidebar shown.' : 'Project sidebar hidden.';
 });
 delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   shellStatsProjectName.value = undefined;
-  shellMode.value = (target as HTMLElement).dataset
-    .shellMode as typeof shellMode.value;
+  shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;
   workspaceSearchOpen.value = false;
   workspaceSearchHelpOpen.value = false;
   workspaceSearchQuery.value = '';
-  shellEvent.value =
-    shellMode.value === 'terminals'
-      ? 'Workspace grid selected.'
-      : 'Cross-project stats selected.';
+  shellEvent.value = shellMode.value === 'terminals' ? 'Workspace grid selected.' : 'Cross-project stats selected.';
 });
 delegate(root, 'click', '[data-action="open-project-stats"]', () => {
-  const name = projectTabs.value.find(tab => tab.selected)?.name ?? 'Project';
+  const name = projectTabs.value.find((tab) => tab.selected)?.name ?? 'Project';
   shellStatsProjectName.value = name;
   shellMode.value = 'stats';
   workspaceSearchOpen.value = false;
@@ -1108,9 +1480,7 @@ delegate(root, 'click', '[data-action="open-project-stats"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-resizable-collapse"]', () => {
   resizeDemoCollapsed.value = !resizeDemoCollapsed.value;
-  shellEvent.value = resizeDemoCollapsed.value
-    ? 'Horizontal region collapsed.'
-    : 'Horizontal region restored.';
+  shellEvent.value = resizeDemoCollapsed.value ? 'Horizontal region collapsed.' : 'Horizontal region restored.';
 });
 delegate(root, 'click', '[data-action="retry-connection"]', () => {
   shellEvent.value = 'Connection retry requested.';
@@ -1121,40 +1491,28 @@ delegate(root, 'click', '[data-action="show-connection-details"]', () => {
 delegate(root, 'click', '[data-action="authenticate-connection"]', () => {
   shellEvent.value = 'Authentication requested.';
 });
-delegate(
-  root,
-  'pointerdown',
-  '[data-kui-resize-handle]',
-  (event, target) => {
-    event.preventDefault();
-    const handle = target as HTMLElement;
-    const region = handle.closest<HTMLElement>(
-      '[data-component="resizable-region"]',
-    )!;
-    const axis = region.dataset.axis as 'horizontal' | 'vertical';
-    const id = handle.dataset.regionId!;
-    const startSize = regionSize(id);
-    regionResizeDrag = {
-      id,
-      axis,
-      edge: region.dataset.edge as ResizableRegionEdge,
-      startPoint:
-        axis === 'horizontal'
-          ? (event as PointerEvent).clientX
-          : (event as PointerEvent).clientY,
-      startSize,
-      region,
-      handle,
-      pendingSize: startSize,
-    };
-    document.body.dataset.resizingRegion = axis;
-  },
-);
+delegate(root, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
+  event.preventDefault();
+  const handle = target as HTMLElement;
+  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
+  const axis = region.dataset.axis as 'horizontal' | 'vertical';
+  const id = handle.dataset.regionId!;
+  const startSize = regionSize(id);
+  regionResizeDrag = {
+    id,
+    axis,
+    edge: region.dataset.edge as ResizableRegionEdge,
+    startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY,
+    startSize,
+    region,
+    handle,
+    pendingSize: startSize,
+  };
+  document.body.dataset.resizingRegion = axis;
+});
 delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
   const handle = target as HTMLElement;
-  const region = handle.closest<HTMLElement>(
-    '[data-component="resizable-region"]',
-  )!;
+  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
   const axis = region.dataset.axis as 'horizontal' | 'vertical';
   const key = (event as KeyboardEvent).key;
   if (
@@ -1167,66 +1525,44 @@ delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
   const edge = region.dataset.edge as ResizableRegionEdge;
   setRegionSize(
     handle.dataset.regionId!,
-    resizeRegionFromPointer(
-      regionSize(handle.dataset.regionId!),
-      direction * 16,
-      edge,
-    ),
+    resizeRegionFromPointer(regionSize(handle.dataset.regionId!), direction * 16, edge),
   );
   shellEvent.value = `${region.getAttribute('aria-label')} resized.`;
 });
-delegate(
-  root,
-  'keydown',
-  '[data-action="select-project-tab"]',
-  (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
-    event.preventDefault();
-    const tabs = projectTabs.value;
-    const current = tabs.findIndex(
-      (tab) => tab.id === target.closest<HTMLElement>('[data-tab-kind="project"]')?.dataset.projectId,
-    );
-    const next =
-      key === 'Home'
-        ? 0
-        : key === 'End'
-          ? tabs.length - 1
-          : (current + (key === 'ArrowRight' ? 1 : -1) + tabs.length) %
-            tabs.length;
-    const id = tabs[next]?.id;
-    if (!id) return;
-    selectProjectTab(id);
-    queueMicrotask(() =>
-      root
-        .querySelector<HTMLElement>(`[data-tab-kind="project"][data-project-id="${id}"] [role="tab"]`)
-        ?.focus(),
-    );
-  },
-);
-delegate(
-  root,
-  'pointerdown',
-  '[data-action="resize-project-sidebar"]',
-  (event) => {
-    event.preventDefault();
-    sidebarResizeDrag = {
-      startY: (event as PointerEvent).clientY,
-      startHeight: projectSidebarHeight.value,
-    };
-    document.body.dataset.resizingProjectSidebar = 'true';
-  },
-);
+delegate(root, 'keydown', '[data-action="select-project-tab"]', (event, target) => {
+  const key = (event as KeyboardEvent).key;
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+  event.preventDefault();
+  const tabs = projectTabs.value;
+  const current = tabs.findIndex(
+    (tab) => tab.id === target.closest<HTMLElement>('[data-tab-kind="project"]')?.dataset.projectId,
+  );
+  const next =
+    key === 'Home'
+      ? 0
+      : key === 'End'
+        ? tabs.length - 1
+        : (current + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  const id = tabs[next]?.id;
+  if (!id) return;
+  selectProjectTab(id);
+  queueMicrotask(() =>
+    root.querySelector<HTMLElement>(`[data-tab-kind="project"][data-project-id="${id}"] [role="tab"]`)?.focus(),
+  );
+});
+delegate(root, 'pointerdown', '[data-action="resize-project-sidebar"]', (event) => {
+  event.preventDefault();
+  sidebarResizeDrag = {
+    startY: (event as PointerEvent).clientY,
+    startHeight: projectSidebarHeight.value,
+  };
+  document.body.dataset.resizingProjectSidebar = 'true';
+});
 delegate(root, 'keydown', '[data-action="resize-project-sidebar"]', (event) => {
-  if (
-    (event as KeyboardEvent).key !== 'ArrowUp' &&
-    (event as KeyboardEvent).key !== 'ArrowDown'
-  )
-    return;
+  if ((event as KeyboardEvent).key !== 'ArrowUp' && (event as KeyboardEvent).key !== 'ArrowDown') return;
   event.preventDefault();
   projectSidebarHeight.value = clampProjectSidebarHeight(
-    projectSidebarHeight.value +
-      ((event as KeyboardEvent).key === 'ArrowDown' ? 24 : -24),
+    projectSidebarHeight.value + ((event as KeyboardEvent).key === 'ArrowDown' ? 24 : -24),
   );
   sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
 });
@@ -1249,14 +1585,8 @@ window.addEventListener('pointermove', (event) => {
   if (drag.frame !== undefined) return;
   drag.frame = requestAnimationFrame(() => {
     drag.frame = undefined;
-    drag.region.style.setProperty(
-      '--kui-resizable-region-size',
-      `${drag.pendingSize}px`,
-    );
-    drag.region.style.setProperty(
-      '--kui-resizable-region-expanded-size',
-      `${drag.pendingSize}px`,
-    );
+    drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
+    drag.region.style.setProperty('--kui-resizable-region-expanded-size', `${drag.pendingSize}px`);
     drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
   });
 });
@@ -1289,7 +1619,7 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
 const openAIConversationDemo = () => {
   aiConversationDemoOpen.value = true;
   queueMicrotask(() => {
-    root.querySelector<HTMLElement & { show?():void }>('[data-component="ai-conversation"]')?.show?.();
+    root.querySelector<HTMLElement & { show?(): void }>('[data-component="ai-conversation"]')?.show?.();
   });
 };
 delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
@@ -1300,7 +1630,7 @@ delegate(root, 'click', '[data-action="open-ai-conversation-demo"]', () => {
   openAIConversationDemo();
 });
 delegate(root, 'click', '[data-action="close-conversation"]', () => {
-  root.querySelector<HTMLElement & { hide?():void }>('[data-component="ai-conversation"]')?.hide?.();
+  root.querySelector<HTMLElement & { hide?(): void }>('[data-component="ai-conversation"]')?.hide?.();
   aiConversationDemoOpen.value = false;
 });
 delegateCapture(root, 'wa-hide', '[data-component="ai-conversation"]', () => {
@@ -1329,108 +1659,81 @@ delegate(root, 'change', '[data-settings="repository-status-popover"] [name="sce
 delegate(root, 'change', '[data-settings="connection-details-dialog"] [name="scenario"]', (_event, target) => {
   connectionDetailsScenario.value = (target as FormControl).value as typeof connectionDetailsScenario.value;
 });
-delegate(
-  root,
-  'change',
-  '[data-settings="permission-request"] [name]',
-  (_event, target) => {
-    const control = target as FormControl;
-    switch (control.getAttribute('name')) {
-      case 'presentation':
-        permissionRequestSettings.presentation.value = control.value as typeof permissionRequestSettings.presentation.value;
-        break;
-      case 'variant':
-        permissionRequestSettings.variant.value = control.value as typeof permissionRequestSettings.variant.value;
-        break;
-      case 'request':
-        permissionRequestSettings.request.value = control.value as typeof permissionRequestSettings.request.value;
-        break;
-      case 'automation':
-        resetPermissionRequestDemoCountdown();
-        permissionRequestSettings.automation.value = control.value as typeof permissionRequestSettings.automation.value;
-        break;
-      case 'always-supported':
-        permissionRequestSettings.alwaysSupported.value = control.checked;
-        break;
-      case 'explanation':
-        permissionRequestSettings.explanation.value = control.checked;
-        break;
-      case null:
-        break;
-    }
-  },
-);
+delegate(root, 'change', '[data-settings="permission-request"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  switch (control.getAttribute('name')) {
+    case 'presentation':
+      permissionRequestSettings.presentation.value =
+        control.value as typeof permissionRequestSettings.presentation.value;
+      break;
+    case 'variant':
+      permissionRequestSettings.variant.value = control.value as typeof permissionRequestSettings.variant.value;
+      break;
+    case 'request':
+      permissionRequestSettings.request.value = control.value as typeof permissionRequestSettings.request.value;
+      break;
+    case 'automation':
+      resetPermissionRequestDemoCountdown();
+      permissionRequestSettings.automation.value = control.value as typeof permissionRequestSettings.automation.value;
+      break;
+    case 'always-supported':
+      permissionRequestSettings.alwaysSupported.value = control.checked;
+      break;
+    case 'explanation':
+      permissionRequestSettings.explanation.value = control.checked;
+      break;
+    case null:
+      break;
+  }
+});
 delegate(root, 'click', '[data-action="cancel-permission-automation"]', (event) => {
   event.stopImmediatePropagation();
   stopPermissionRequestDemoAutomation(root);
 });
-delegate(
-  root,
-  'input',
-  '[data-settings="tag-chip"] [name="label"]',
-  (_event, target) => {
-    tagChipSettings.label.value = (target as FormControl).value;
-  },
-);
-delegate(
-  root,
-  'change',
-  '[data-settings="tag-chip"] [name]',
-  (_event, target) => {
-    const control = target as FormControl;
-    switch (control.getAttribute('name')) {
-      case 'variant':
-        tagChipSettings.variant.value =
-          control.value as typeof tagChipSettings.variant.value;
-        break;
-      case 'appearance':
-        tagChipSettings.appearance.value =
-          control.value as typeof tagChipSettings.appearance.value;
-        break;
-      case 'size':
-        tagChipSettings.size.value =
-          control.value as typeof tagChipSettings.size.value;
-        break;
-      case 'removable':
-        tagChipSettings.removable.value = control.checked;
-        break;
-      case 'pill':
-        tagChipSettings.pill.value = control.checked;
-        break;
-      case 'disabled':
-        tagChipSettings.disabled.value = control.checked;
-        break;
-      case null:
-        break;
-    }
-  },
-);
+delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => {
+  tagChipSettings.label.value = (target as FormControl).value;
+});
+delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  switch (control.getAttribute('name')) {
+    case 'variant':
+      tagChipSettings.variant.value = control.value as typeof tagChipSettings.variant.value;
+      break;
+    case 'appearance':
+      tagChipSettings.appearance.value = control.value as typeof tagChipSettings.appearance.value;
+      break;
+    case 'size':
+      tagChipSettings.size.value = control.value as typeof tagChipSettings.size.value;
+      break;
+    case 'removable':
+      tagChipSettings.removable.value = control.checked;
+      break;
+    case 'pill':
+      tagChipSettings.pill.value = control.checked;
+      break;
+    case 'disabled':
+      tagChipSettings.disabled.value = control.checked;
+      break;
+    case null:
+      break;
+  }
+});
 delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
   if ((target as HTMLElement).dataset.disabled !== 'true')
     tagChipSettings.event.value = `Remove requested for ${(target as HTMLElement).dataset.tagId}`;
 });
-delegate(
-  root,
-  'change',
-  '[data-settings="status-badge"] [name]',
-  (_event, target) => {
-    const control = target as FormControl;
-    if (control.getAttribute('name') === 'status')
-      statusBadgeSettings.status.value =
-        control.value as typeof statusBadgeSettings.status.value;
-    if (control.getAttribute('name') === 'appearance')
-      statusBadgeSettings.appearance.value =
-        control.value as typeof statusBadgeSettings.appearance.value;
-    if (control.getAttribute('name') === 'show-icon')
-      statusBadgeSettings.showIcon.value = control.checked;
-    if (control.getAttribute('name') === 'compact')
-      statusBadgeSettings.compact.value = control.checked;
-  },
-);
+delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'status')
+    statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
+  if (control.getAttribute('name') === 'appearance')
+    statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
+  if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
+  if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
+});
 wireWorkspaceOverflowKeyboard(root);
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
-  workspaceMode.value = (target as HTMLElement).dataset
-    .viewMode as typeof workspaceMode.value;
+  workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
   if (workspaceMode.value === 'settings') {
     workspaceSearchOpen.value = false;
     workspaceSearchHelpOpen.value = false;
@@ -1443,14 +1746,9 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
 delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
   workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
 });
-delegate(
-  root,
-  'mousedown',
-  '[data-action="clear-workspace-search"]',
-  (event) => {
-    event.preventDefault();
-  },
-);
+delegate(root, 'mousedown', '[data-action="clear-workspace-search"]', (event) => {
+  event.preventDefault();
+});
 delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
   workspaceSearchQuery.value = '';
   workspaceSearchHelpOpen.value = false;
@@ -1468,9 +1766,7 @@ delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, t
   );
   workspaceSort.value = next.sort;
   workspaceSortDirection.value = next.direction;
-  recordCollectionEvent(
-    `Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`,
-  );
+  recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
 });
 delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
   const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
@@ -1487,7 +1783,9 @@ delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
       workspaceSearchHelpOpen.value = false;
       workspaceSearchQuery.value = '';
     }
-    recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`);
+    recordCollectionEvent(
+      `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`,
+    );
     return;
   }
   if (action !== 'set-workspace-sort') return;
@@ -1533,23 +1831,20 @@ delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => {
   event.preventDefault();
   if (!createDemoTicket()) recordCollectionEvent('Enter a ticket title');
 });
-delegate(
-  root,
-  'click',
-  '[data-action="set-inspector-tab"]',
-  (_event, target) => {
-    const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
-    if (selectedId.value === 'ticket-reader') readerTab.value = tab;
-    else inspectorTab.value = tab;
-  },
-);
+delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => {
+  const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
+  if (selectedId.value === 'ticket-reader') readerTab.value = tab;
+  else inspectorTab.value = tab;
+});
 delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => {
   inspectorOpen.value = false;
   recordCollectionEvent('Inspector closed');
 });
 delegate(root, 'click', '[data-action="open-code-review"]', (_event, target) => {
   const item = target as HTMLElement;
-  recordCollectionEvent(item.dataset.reviewMode === 'range' ? 'Commit range opened in Glassbox' : 'Commit opened in Glassbox');
+  recordCollectionEvent(
+    item.dataset.reviewMode === 'range' ? 'Commit range opened in Glassbox' : 'Commit opened in Glassbox',
+  );
 });
 delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => {
   inspectorOpen.value = true;
@@ -1559,19 +1854,15 @@ delegate(root, 'change', '[name="inspector-category"]', (_event, target) => {
   inspectorCategory.value = (target as FormControl).value;
 });
 delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => {
-  inspectorPriority.value = (target as FormControl)
-    .value as typeof inspectorPriority.value;
+  inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value;
 });
 delegate(root, 'change', '[name="inspector-status"]', (_event, target) => {
-  inspectorStatus.value = (target as FormControl)
-    .value as typeof inspectorStatus.value;
+  inspectorStatus.value = (target as FormControl).value as typeof inspectorStatus.value;
 });
 const beginTitleEdit = () => {
   inspectorTitleDraft.value = inspectorTitle.value;
   inspectorTitleEditing.value = true;
-  queueMicrotask(() =>
-    root.querySelector<HTMLElement>('[name="ticket-title"]')?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
 };
 delegate(root, 'dblclick', '[data-action="edit-ticket-title"]', () => {
   beginTitleEdit();
@@ -1583,8 +1874,7 @@ delegate(root, 'keydown', '[data-action="edit-ticket-title"]', (event) => {
 });
 delegate(root, 'input', '[name="ticket-title"]', (_event, target) => {
   inspectorTitleDraft.value = (target as FormControl).value;
-  if (inspectorTitleDraft.value.trim())
-    titleAutosave.schedule(inspectorTitleDraft.value);
+  if (inspectorTitleDraft.value.trim()) titleAutosave.schedule(inspectorTitleDraft.value);
 });
 delegate(root, 'focusout', '[name="ticket-title"]', () => {
   if (!inspectorTitleDraft.value.trim()) return;
@@ -1603,8 +1893,7 @@ delegate(root, 'keydown', '[name="ticket-tag-input"]', (event, target) => {
   addInspectorTag(target as HTMLInputElement);
 });
 delegate(root, 'focusout', '[name="ticket-tag-input"]', (_event, target) => {
-  if ((target as HTMLInputElement).value.trim())
-    addInspectorTag(target as HTMLInputElement);
+  if ((target as HTMLInputElement).value.trim()) addInspectorTag(target as HTMLInputElement);
   void tagsAutosave.flush();
 });
 delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
@@ -1616,9 +1905,7 @@ delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
 const beginBlockedReasonEdit = () => {
   inspectorBlockedReasonDraft.value = inspectorBlockedReason.value;
   inspectorBlockedReasonEditing.value = true;
-  queueMicrotask(() =>
-    root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
 };
 delegate(root, 'click', '[data-action="edit-blocked-reason"]', beginBlockedReasonEdit);
 delegate(root, 'dblclick', '[data-edit-blocked-reason="true"]', beginBlockedReasonEdit);
@@ -1638,9 +1925,7 @@ delegate(root, 'focusout', '[name="blocked-reason"]', () => {
   });
 });
 delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
-  const ticket =
-    collectionTickets.value.find((item) => item.selected) ??
-    collectionTickets.value[0];
+  const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
   toggleCollectionTicketUpNext(ticket.slug);
 });
 delegate(root, 'click', '[data-action="add-ticket-note"]', () => {
@@ -1655,8 +1940,7 @@ delegate(root, 'click', '[data-action="cancel-new-note"]', () => {
 });
 delegate(root, 'submit', '[data-action="create-note-form"]', (event) => {
   event.preventDefault();
-  if (noteComposerValue.value.trim())
-    recordCollectionEvent('New note submitted');
+  if (noteComposerValue.value.trim()) recordCollectionEvent('New note submitted');
 });
 const beginNoteEdit = (id: string) => {
   editingNoteId.value = id;
@@ -1664,20 +1948,11 @@ const beginNoteEdit = (id: string) => {
     readerNotes.value.find((note) => note.id === id)?.body ??
     noteDemoNotes.value.find((note) => note.id === id)?.body ??
     '';
-  queueMicrotask(() =>
-    root
-      .querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)
-      ?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus());
 };
-delegate(
-  root,
-  'dblclick',
-  '[data-edit-on-double-click="true"]',
-  (_event, target) => {
-    beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
-  },
-);
+delegate(root, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => {
+  beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
+});
 delegate(root, 'keydown', '[data-edit-on-double-click="true"]', (event, target) => {
   if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
   event.preventDefault();
@@ -1686,10 +1961,7 @@ delegate(root, 'keydown', '[data-edit-on-double-click="true"]', (event, target) 
 delegate(root, 'input', '[name="note-body"]', (_event, target) => {
   editingNoteId.value = (target as HTMLElement).dataset.noteId;
   noteDraft.value = (target as FormControl).value;
-  if (
-    (target as HTMLElement).dataset.noteResponse !== 'true' &&
-    editingNoteId.value
-  )
+  if ((target as HTMLElement).dataset.noteResponse !== 'true' && editingNoteId.value)
     noteAutosave.schedule({ id: editingNoteId.value, value: noteDraft.value });
 });
 delegate(root, 'focusout', '[name="note-body"]', (_event, target) => {
@@ -1703,10 +1975,19 @@ delegate(root, 'focusout', '[name="note-body"]', (_event, target) => {
 let demoFeedbackChoiceAnchor: string | undefined = 'choice-1';
 delegate(root, 'click', '[data-action="toggle-feedback-choice"]', (event, target) => {
   if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
-  const noteId = (target as HTMLElement).dataset.noteId!, choiceId = (target as HTMLElement).dataset.choiceId!;
-  const note = readerNotes.value.find(item => item.id === noteId), group = note && parseFeedbackChoices(note.body);
+  const noteId = (target as HTMLElement).dataset.noteId!,
+    choiceId = (target as HTMLElement).dataset.choiceId!;
+  const note = readerNotes.value.find((item) => item.id === noteId),
+    group = note && parseFeedbackChoices(note.body);
   if (!group) return;
-  const pointer = event as MouseEvent, next = updateFeedbackChoiceSelection(group.choices.map(choice => choice.id), readerFeedbackChoiceSelections.value[noteId] ?? [], choiceId, demoFeedbackChoiceAnchor, { additive: pointer.metaKey || pointer.ctrlKey, range: pointer.shiftKey });
+  const pointer = event as MouseEvent,
+    next = updateFeedbackChoiceSelection(
+      group.choices.map((choice) => choice.id),
+      readerFeedbackChoiceSelections.value[noteId] ?? [],
+      choiceId,
+      demoFeedbackChoiceAnchor,
+      { additive: pointer.metaKey || pointer.ctrlKey, range: pointer.shiftKey },
+    );
   readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
   demoFeedbackChoiceAnchor = next.anchor;
   recordCollectionEvent(`${next.selected.length} feedback choice${next.selected.length === 1 ? '' : 's'} selected`);
@@ -1731,10 +2012,7 @@ delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => {
         note.id === id
           ? {
               ...note,
-              kind:
-                original?.kind === 'feedback_draft'
-                  ? ('regular' as const)
-                  : note.kind,
+              kind: original?.kind === 'feedback_draft' ? ('regular' as const) : note.kind,
               body: noteDraft.value,
             }
           : note,
@@ -1766,45 +2044,32 @@ delegate(root, 'input', '[name="markdown-source"]', (_event, target) => {
 });
 delegate(root, 'focusout', '[name="markdown-source"]', (event, target) => {
   const next = (event as FocusEvent).relatedTarget;
-  if (
-    next instanceof Node &&
-    target.closest('[data-component="markdown-editor"]')?.contains(next)
-  )
-    return;
-  setTimeout(() => void markdownAutosave.flush().then(() => {
-    markdownMode.value = 'preview';
-  }), 0);
+  if (next instanceof Node && target.closest('[data-component="markdown-editor"]')?.contains(next)) return;
+  setTimeout(
+    () =>
+      void markdownAutosave.flush().then(() => {
+        markdownMode.value = 'preview';
+      }),
+    0,
+  );
 });
 delegate(root, 'dblclick', '[data-action="edit-markdown"]', () => {
   markdownMode.value = 'write';
-  queueMicrotask(() =>
-    root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
 });
-delegate(
-  root,
-  'click',
-  '[data-action="edit-markdown"][data-empty="true"]',
-  () => {
-    markdownMode.value = 'write';
-    queueMicrotask(() =>
-      root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus(),
-    );
-  },
-);
+delegate(root, 'click', '[data-action="edit-markdown"][data-empty="true"]', () => {
+  markdownMode.value = 'write';
+  queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
+});
 delegate(root, 'keydown', '[data-action="edit-markdown"]', (event) => {
   if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
   event.preventDefault();
   markdownMode.value = 'write';
-  queueMicrotask(() =>
-    root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
 });
 delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => {
   markdownExpanded.value = !markdownExpanded.value;
-  markdownEvent.value = markdownExpanded.value
-    ? 'Expanded editor opened.'
-    : 'Inline editor restored.';
+  markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.';
 });
 delegateCapture(root, 'wa-after-hide', '[data-component="ticket-reader"]', () => {
   readerDialogOpen.value = false;
@@ -1818,318 +2083,199 @@ const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
     id: `added-${Date.now()}-${index}`,
     name: file.name,
   }));
-  if (
-    selectedId.value === 'ticket-reader' ||
-    target.closest('[data-component="ticket-attachments"]')
-  )
+  if (selectedId.value === 'ticket-reader' || target.closest('[data-component="ticket-attachments"]'))
     readerAttachments.value = [...readerAttachments.value, ...added];
   recordCollectionEvent(
     `${added.length} attachment${added.length === 1 ? '' : 's'} added to ${target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? 'ticket'}`,
   );
 };
-delegate(
-  root,
-  'change',
-  'input[name="ticket-attachments"]',
-  (_event, target) => {
-    const input = target as HTMLInputElement;
-    if (input.files?.length) addMockAttachments(input.files, input);
-    input.value = '';
-  },
-);
-delegate(
-  root,
-  'dragover',
-  '[data-attachment-drop-target="true"]',
-  (event, target) => {
-    event.preventDefault();
-    (target as HTMLElement).dataset.draggingAttachment = 'true';
-  },
-);
-delegate(
-  root,
-  'dragleave',
-  '[data-attachment-drop-target="true"]',
-  (_event, target) => {
-    delete (target as HTMLElement).dataset.draggingAttachment;
-  },
-);
-delegate(
-  root,
-  'drop',
-  '[data-attachment-drop-target="true"]',
-  (event, target) => {
-    event.preventDefault();
-    const element = target as HTMLElement;
-    delete element.dataset.draggingAttachment;
-    const files = (event as DragEvent).dataTransfer?.files;
-    if (files?.length) addMockAttachments(files, element);
-  },
-);
-delegate(
-  root,
-  'input',
-  '[data-settings="ticket-list-row"] wa-input',
-  (_event, target) => {
-    const control = target as FormControl;
-    if (control.getAttribute('name') === 'title')
-      ticketRowSettings.title.value = control.value;
-    if (control.getAttribute('name') === 'category')
-      ticketRowSettings.category.value = control.value;
-    if (control.getAttribute('name') === 'tags')
-      ticketRowSettings.tags.value = control.value;
-    if (control.getAttribute('name') === 'agent')
-      ticketRowSettings.agentName.value = control.value;
-    if (control.getAttribute('name') === 'updated')
-      ticketRowSettings.updatedLabel.value = control.value;
-  },
-);
-delegate(
-  root,
-  'change',
-  '[data-settings="ticket-list-row"] [name]',
-  (_event, target) => {
-    const control = target as FormControl;
-    switch (control.getAttribute('name')) {
-      case 'status':
-        ticketRowSettings.status.value =
-          control.value as typeof ticketRowSettings.status.value;
-        break;
-      case 'priority':
-        ticketRowSettings.priority.value =
-          control.value as typeof ticketRowSettings.priority.value;
-        break;
-      case 'category-icon':
-        ticketRowSettings.categoryIcon.value = control.value;
-        break;
-      case 'category-color':
-        ticketRowSettings.categoryColor.value = control.value;
-        break;
-      case 'up-next':
-        ticketRowSettings.upNext.value = control.checked;
-        break;
-      case 'blocked':
-        ticketRowSettings.blocked.value = control.checked;
-        break;
-      case 'needs-review':
-        ticketRowSettings.needsReview.value = control.checked;
-        break;
-      case 'feedback-needed':
-        ticketRowSettings.feedbackNeeded.value = control.checked;
-        break;
-      case 'selected':
-        ticketRowSettings.selected.value = control.checked;
-        break;
-      case 'busy':
-        ticketRowSettings.busy.value = control.checked;
-        break;
-      case null:
-        break;
-    }
-  },
-);
-delegate(
-  root,
-  'click',
-  '[data-action="select-ticket-row"]',
-  (event, target) => {
-    if ((event.target as Element).closest('[data-action="toggle-row-up-next"]'))
-      return;
-    const row = target as HTMLElement;
-    if (usesCollectionState()) {
-      const pointer = event as MouseEvent;
-      selectCollectionTicket(row.dataset.ticketSlug!, {
-        range: pointer.shiftKey,
-        toggle: pointer.metaKey || pointer.ctrlKey,
-      });
-      return;
-    }
-    ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
-    ticketRowSettings.event.value = ticketRowSettings.selected.value
-      ? 'Ticket selected'
-      : 'Ticket deselected';
-    const selected = root.querySelector<FormControl>(
-      '[data-settings="ticket-list-row"] [name="selected"]',
-    );
-    if (selected) selected.checked = ticketRowSettings.selected.value;
-  },
-);
+delegate(root, 'change', 'input[name="ticket-attachments"]', (_event, target) => {
+  const input = target as HTMLInputElement;
+  if (input.files?.length) addMockAttachments(input.files, input);
+  input.value = '';
+});
+delegate(root, 'dragover', '[data-attachment-drop-target="true"]', (event, target) => {
+  event.preventDefault();
+  (target as HTMLElement).dataset.draggingAttachment = 'true';
+});
+delegate(root, 'dragleave', '[data-attachment-drop-target="true"]', (_event, target) => {
+  delete (target as HTMLElement).dataset.draggingAttachment;
+});
+delegate(root, 'drop', '[data-attachment-drop-target="true"]', (event, target) => {
+  event.preventDefault();
+  const element = target as HTMLElement;
+  delete element.dataset.draggingAttachment;
+  const files = (event as DragEvent).dataTransfer?.files;
+  if (files?.length) addMockAttachments(files, element);
+});
+delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
+  if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
+  if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
+  if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
+  if (control.getAttribute('name') === 'updated') ticketRowSettings.updatedLabel.value = control.value;
+});
+delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  switch (control.getAttribute('name')) {
+    case 'status':
+      ticketRowSettings.status.value = control.value as typeof ticketRowSettings.status.value;
+      break;
+    case 'priority':
+      ticketRowSettings.priority.value = control.value as typeof ticketRowSettings.priority.value;
+      break;
+    case 'category-icon':
+      ticketRowSettings.categoryIcon.value = control.value;
+      break;
+    case 'category-color':
+      ticketRowSettings.categoryColor.value = control.value;
+      break;
+    case 'up-next':
+      ticketRowSettings.upNext.value = control.checked;
+      break;
+    case 'blocked':
+      ticketRowSettings.blocked.value = control.checked;
+      break;
+    case 'needs-review':
+      ticketRowSettings.needsReview.value = control.checked;
+      break;
+    case 'feedback-needed':
+      ticketRowSettings.feedbackNeeded.value = control.checked;
+      break;
+    case 'selected':
+      ticketRowSettings.selected.value = control.checked;
+      break;
+    case 'busy':
+      ticketRowSettings.busy.value = control.checked;
+      break;
+    case null:
+      break;
+  }
+});
+delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => {
+  if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
+  const row = target as HTMLElement;
+  if (usesCollectionState()) {
+    const pointer = event as MouseEvent;
+    selectCollectionTicket(row.dataset.ticketSlug!, {
+      range: pointer.shiftKey,
+      toggle: pointer.metaKey || pointer.ctrlKey,
+    });
+    return;
+  }
+  ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
+  ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
+  const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
+  if (selected) selected.checked = ticketRowSettings.selected.value;
+});
 delegate(root, 'click', '[data-action="select-ticket-column"]', (event, target) => {
   event.stopImmediatePropagation();
   const column = (target as HTMLElement).closest<HTMLElement>('[data-component="ticket-board-column"]');
   if (!column || !usesCollectionState()) return;
-  const slugs = new Set([...column.querySelectorAll<HTMLElement>('[data-ticket-slug]')].map(row => row.dataset.ticketSlug));
-  collectionTickets.value = collectionTickets.value.map(ticket => ({ ...ticket, selected: slugs.has(ticket.slug) }));
+  const slugs = new Set(
+    [...column.querySelectorAll<HTMLElement>('[data-ticket-slug]')].map((row) => row.dataset.ticketSlug),
+  );
+  collectionTickets.value = collectionTickets.value.map((ticket) => ({ ...ticket, selected: slugs.has(ticket.slug) }));
   recordCollectionEvent(`${slugs.size} tickets selected`);
 });
 function toggleRowUpNext(target?: Element): void {
   if (usesCollectionState()) {
-    const row = target?.closest(
-      '[data-component="ticket-list-row"]',
-    ) as HTMLElement | null;
+    const row = target?.closest('[data-component="ticket-list-row"]') as HTMLElement | null;
     if (row) toggleCollectionTicketUpNext(row.dataset.ticketSlug!);
     return;
   }
   ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
-  ticketRowSettings.event.value = ticketRowSettings.upNext.value
-    ? 'Added to Up Next'
-    : 'Removed from Up Next';
-  const control = root.querySelector<FormControl>(
-    '[data-settings="ticket-list-row"] [name="up-next"]',
-  );
+  ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
+  const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
   if (control) control.checked = ticketRowSettings.upNext.value;
 }
-delegateCapture(
-  root,
-  'click',
-  '[data-action="toggle-row-up-next"]',
-  (event) => {
-    event.stopPropagation();
-    toggleRowUpNext(event.target as Element);
-  },
-);
-delegateCapture(
-  root,
-  'keydown',
-  '[data-action="toggle-row-up-next"]',
-  (event) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
+delegateCapture(root, 'click', '[data-action="toggle-row-up-next"]', (event) => {
+  event.stopPropagation();
+  toggleRowUpNext(event.target as Element);
+});
+delegateCapture(root, 'keydown', '[data-action="toggle-row-up-next"]', (event) => {
+  const key = (event as KeyboardEvent).key;
+  if (key !== 'Enter' && key !== ' ') return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleRowUpNext(event.target as Element);
+});
+delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
+  const keyboard = event as KeyboardEvent;
+  const key = keyboard.key;
+  const row = target as HTMLElement;
+  if (usesCollectionState() && (keyboard.metaKey || keyboard.ctrlKey) && key.toLowerCase() === 'a') {
     event.preventDefault();
-    event.stopPropagation();
-    toggleRowUpNext(event.target as Element);
-  },
-);
-delegate(
-  root,
-  'keydown',
-  '[data-action="select-ticket-row"]',
-  (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    const key = keyboard.key;
-    const row = target as HTMLElement;
-    if (
-      usesCollectionState() &&
-      (keyboard.metaKey || keyboard.ctrlKey) &&
-      key.toLowerCase() === 'a'
-    ) {
-      event.preventDefault();
-      selectAllCollectionTickets();
-      return;
-    }
-    if (usesCollectionState() && (key === 'ArrowUp' || key === 'ArrowDown')) {
-      event.preventDefault();
-      const scope = row.closest<HTMLElement>('[data-ticket-selection-root]')!;
-      const rows = [
-        ...scope.querySelectorAll<HTMLElement>(
-          '[data-action="select-ticket-row"]',
-        ),
-      ];
-      const index = rows.indexOf(row);
-      const next =
-        rows[
-          Math.max(
-            0,
-            Math.min(rows.length - 1, index + (key === 'ArrowDown' ? 1 : -1)),
-          )
-        ];
-      next.focus();
-      selectCollectionTicket(next.dataset.ticketSlug!, {
-        range: keyboard.shiftKey,
-      });
-      return;
-    }
-    if (key !== 'Enter' && key !== ' ') return;
+    selectAllCollectionTickets();
+    return;
+  }
+  if (usesCollectionState() && (key === 'ArrowUp' || key === 'ArrowDown')) {
     event.preventDefault();
-    if (usesCollectionState())
-      selectCollectionTicket(row.dataset.ticketSlug!, {
-        range: keyboard.shiftKey,
-        toggle: keyboard.metaKey || keyboard.ctrlKey,
-      });
-    else row.click();
-  },
-);
-delegate(
-  root,
-  'contextmenu',
-  '[data-action="select-ticket-row"]',
-  (event, target) => {
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    const row = target as HTMLElement;
-    if (usesCollectionState()) {
-      if (
-        !collectionTickets.value.find(
-          (ticket) => ticket.slug === row.dataset.ticketSlug,
-        )?.selected
-      )
-        selectCollectionTicket(row.dataset.ticketSlug!);
-      recordCollectionEvent(
-        `Context menu opened for ${row.dataset.ticketSlug}`,
-      );
-      contextMenu.value = {
-        x: pointer.clientX,
-        y: pointer.clientY,
-        ticketSlug: row.dataset.ticketSlug,
-      };
-      return;
-    }
-    ticketRowSettings.selected.value = true;
-    ticketRowSettings.event.value = 'Context menu opened';
-    const selected = root.querySelector<FormControl>(
-      '[data-settings="ticket-list-row"] [name="selected"]',
-    );
-    if (selected) selected.checked = true;
+    const scope = row.closest<HTMLElement>('[data-ticket-selection-root]')!;
+    const rows = [...scope.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')];
+    const index = rows.indexOf(row);
+    const next = rows[Math.max(0, Math.min(rows.length - 1, index + (key === 'ArrowDown' ? 1 : -1)))];
+    next.focus();
+    selectCollectionTicket(next.dataset.ticketSlug!, {
+      range: keyboard.shiftKey,
+    });
+    return;
+  }
+  if (key !== 'Enter' && key !== ' ') return;
+  event.preventDefault();
+  if (usesCollectionState())
+    selectCollectionTicket(row.dataset.ticketSlug!, {
+      range: keyboard.shiftKey,
+      toggle: keyboard.metaKey || keyboard.ctrlKey,
+    });
+  else row.click();
+});
+delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, target) => {
+  event.preventDefault();
+  const pointer = event as MouseEvent;
+  const row = target as HTMLElement;
+  if (usesCollectionState()) {
+    if (!collectionTickets.value.find((ticket) => ticket.slug === row.dataset.ticketSlug)?.selected)
+      selectCollectionTicket(row.dataset.ticketSlug!);
+    recordCollectionEvent(`Context menu opened for ${row.dataset.ticketSlug}`);
     contextMenu.value = {
       x: pointer.clientX,
       y: pointer.clientY,
       ticketSlug: row.dataset.ticketSlug,
     };
-  },
-);
-delegate(
-  root,
-  'dblclick',
-  '[data-action="select-ticket-row"]',
-  (event, target) => {
-    if (
-      (event.target as Element).closest(
-        'button, input, textarea, select, a, [contenteditable="true"]',
-      )
-    )
-      return;
-    if (usesCollectionState())
-      selectCollectionTicket((target as HTMLElement).dataset.ticketSlug!);
-    recordCollectionEvent(
-      `Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`,
-    );
-    openDemoTicketReader();
-  },
-);
+    return;
+  }
+  ticketRowSettings.selected.value = true;
+  ticketRowSettings.event.value = 'Context menu opened';
+  const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
+  if (selected) selected.checked = true;
+  contextMenu.value = {
+    x: pointer.clientX,
+    y: pointer.clientY,
+    ticketSlug: row.dataset.ticketSlug,
+  };
+});
+delegate(root, 'dblclick', '[data-action="select-ticket-row"]', (event, target) => {
+  if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
+  if (usesCollectionState()) selectCollectionTicket((target as HTMLElement).dataset.ticketSlug!);
+  recordCollectionEvent(`Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`);
+  openDemoTicketReader();
+});
 delegate(root, 'click', '[data-context-field]', (event, target) => {
   event.stopPropagation();
-  const field = (target as HTMLElement).dataset.contextField as
-    | 'category'
-    | 'priority'
-    | 'status';
+  const field = (target as HTMLElement).dataset.contextField as 'category' | 'priority' | 'status';
   const value = (target as HTMLElement).dataset.contextValue!;
   if (usesCollectionState() && contextMenu.value?.ticketSlug) {
-    const selected = new Set(
-      collectionTickets.value
-        .filter((ticket) => ticket.selected)
-        .map((ticket) => ticket.slug),
-    );
+    const selected = new Set(collectionTickets.value.filter((ticket) => ticket.selected).map((ticket) => ticket.slug));
     if (!selected.size) selected.add(contextMenu.value.ticketSlug);
     collectionTickets.value = collectionTickets.value.map((ticket) => {
       if (!selected.has(ticket.slug)) return ticket;
       if (field === 'category') return { ...ticket, category: value };
-      if (field === 'priority')
-        return { ...ticket, priority: value as typeof ticket.priority };
+      if (field === 'priority') return { ...ticket, priority: value as typeof ticket.priority };
       return { ...ticket, status: value as typeof ticket.status };
     });
-    recordCollectionEvent(
-      `${field} changed to ${value} for ${selected.size} ticket${selected.size === 1 ? '' : 's'}`,
-    );
+    recordCollectionEvent(`${field} changed to ${value} for ${selected.size} ticket${selected.size === 1 ? '' : 's'}`);
   }
   contextMenu.value = undefined;
 });
@@ -2148,9 +2294,7 @@ delegate(root, 'click', '[data-context-action]', (_event, target) => {
   }
   if (action === 'Toggle Up Next') {
     ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
-    const control = root.querySelector<FormControl>(
-      '[data-settings="ticket-list-row"] [name="up-next"]',
-    );
+    const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
     if (control) control.checked = ticketRowSettings.upNext.value;
   }
   ticketRowSettings.event.value = `${action} selected`;
@@ -2159,95 +2303,60 @@ delegate(root, 'click', '[data-context-action]', (_event, target) => {
 delegate(root, 'click', '[data-action="open-not-working-demo"]', () => {
   notWorkingDemoOpen.value = true;
   notWorkingDemoEvent.value = '';
-  queueMicrotask(() =>
-    root
-      .querySelector<HTMLTextAreaElement>('[name="not-working-note"]')
-      ?.focus(),
-  );
+  queueMicrotask(() => root.querySelector<HTMLTextAreaElement>('[name="not-working-note"]')?.focus());
 });
 delegate(root, 'input', '[name="not-working-note"]', (_event, target) => {
   notWorkingDemoNote.value = (target as HTMLTextAreaElement).value;
 });
-delegate(
-  root,
-  'change',
-  'input[name="not-working-attachments"]',
-  (_event, target) => {
-    const input = target as HTMLInputElement;
-    if (input.files?.length)
-      notWorkingDemoFiles.value = [
-        ...notWorkingDemoFiles.value,
-        ...Array.from(input.files).map((file, index) => ({
-          id: `demo-${Date.now()}-${index}`,
-          name: file.name,
-        })),
-      ];
-    input.value = '';
-  },
-);
-delegate(
-  root,
-  'click',
-  '[data-action="remove-not-working-attachment"]',
-  (_event, target) => {
-    notWorkingDemoFiles.value = notWorkingDemoFiles.value.filter(
-      (item) => item.id !== (target as HTMLElement).dataset.pendingAttachmentId,
-    );
-  },
-);
-delegate(
-  root,
-  'dragover',
-  '[data-not-working-dropzone="true"]',
-  (event, target) => {
-    event.preventDefault();
-    (target as HTMLElement).dataset.dragging = 'true';
-  },
-);
-delegate(
-  root,
-  'dragleave',
-  '[data-not-working-dropzone="true"]',
-  (_event, target) => {
-    delete (target as HTMLElement).dataset.dragging;
-  },
-);
-delegate(
-  root,
-  'drop',
-  '[data-not-working-dropzone="true"]',
-  (event, target) => {
-    event.preventDefault();
-    delete (target as HTMLElement).dataset.dragging;
-    const files = (event as DragEvent).dataTransfer?.files;
-    if (files?.length)
-      notWorkingDemoFiles.value = [
-        ...notWorkingDemoFiles.value,
-        ...Array.from(files).map((file, index) => ({
-          id: `drop-${Date.now()}-${index}`,
-          name: file.name,
-        })),
-      ];
-  },
-);
+delegate(root, 'change', 'input[name="not-working-attachments"]', (_event, target) => {
+  const input = target as HTMLInputElement;
+  if (input.files?.length)
+    notWorkingDemoFiles.value = [
+      ...notWorkingDemoFiles.value,
+      ...Array.from(input.files).map((file, index) => ({
+        id: `demo-${Date.now()}-${index}`,
+        name: file.name,
+      })),
+    ];
+  input.value = '';
+});
+delegate(root, 'click', '[data-action="remove-not-working-attachment"]', (_event, target) => {
+  notWorkingDemoFiles.value = notWorkingDemoFiles.value.filter(
+    (item) => item.id !== (target as HTMLElement).dataset.pendingAttachmentId,
+  );
+});
+delegate(root, 'dragover', '[data-not-working-dropzone="true"]', (event, target) => {
+  event.preventDefault();
+  (target as HTMLElement).dataset.dragging = 'true';
+});
+delegate(root, 'dragleave', '[data-not-working-dropzone="true"]', (_event, target) => {
+  delete (target as HTMLElement).dataset.dragging;
+});
+delegate(root, 'drop', '[data-not-working-dropzone="true"]', (event, target) => {
+  event.preventDefault();
+  delete (target as HTMLElement).dataset.dragging;
+  const files = (event as DragEvent).dataTransfer?.files;
+  if (files?.length)
+    notWorkingDemoFiles.value = [
+      ...notWorkingDemoFiles.value,
+      ...Array.from(files).map((file, index) => ({
+        id: `drop-${Date.now()}-${index}`,
+        name: file.name,
+      })),
+    ];
+});
 delegate(root, 'submit', '[data-action="submit-not-working"]', (event) => {
   event.preventDefault();
-  notWorkingDemoEvent.value =
-    'Ticket returned to Not Started and added to Up Next.';
+  notWorkingDemoEvent.value = 'Ticket returned to Not Started and added to Up Next.';
   notWorkingDemoOpen.value = false;
 });
 delegate(root, 'click', '[data-action="cancel-not-working"]', () => {
   notWorkingDemoOpen.value = false;
   notWorkingDemoEvent.value = 'Report cancelled.';
 });
-delegate(
-  root,
-  'wa-request-close',
-  '[data-component="not-working-dialog"]',
-  (event) => {
-    event.preventDefault();
-  },
-);
+delegate(root, 'wa-request-close', '[data-component="not-working-dialog"]', (event) => {
+  event.preventDefault();
+});
 delegate(root, 'click', '[data-action="open-gallery-demo"]', () => {
   setGalleryDemo(true);
 });
@@ -2274,8 +2383,14 @@ delegate(root, 'click', '[data-action="toggle-gallery-playback"]', () => {
   galleryDemoPlaying.value = !galleryDemoPlaying.value;
 });
 delegate(root, 'keydown', '[data-component="attachment-gallery"]', (event) => {
-  const keyboard = event as KeyboardEvent, origin = event.target as Element, playheadControl = origin.matches('input[name="gallery-playhead"]');
-  if (!root.querySelector('.attachment-gallery video') || (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))) return;
+  const keyboard = event as KeyboardEvent,
+    origin = event.target as Element,
+    playheadControl = origin.matches('input[name="gallery-playhead"]');
+  if (
+    !root.querySelector('.attachment-gallery video') ||
+    (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
+  )
+    return;
   const action = attachmentGalleryKeyboardAction(keyboard.key, galleryDemoPlayhead.value, 6000, keyboard.shiftKey);
   if (!action) return;
   event.preventDefault();
@@ -2291,7 +2406,8 @@ delegate(root, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
 delegate(root, 'click', '[data-action="seek-gallery-annotation"]', (_event, target) => {
   const element = target as HTMLElement;
   galleryDemoPlayhead.value = Number(element.dataset.annotationTime ?? 0);
-  if (galleryDemoMarkup.value && element.dataset.annotationId) galleryDemoSelectedAnnotation.value = element.dataset.annotationId;
+  if (galleryDemoMarkup.value && element.dataset.annotationId)
+    galleryDemoSelectedAnnotation.value = element.dataset.annotationId;
 });
 delegate(root, 'input', 'input[name="gallery-volume"]', (_event, target) => {
   galleryDemoVolume.value = Number((target as HTMLInputElement).value);
@@ -2303,8 +2419,9 @@ delegate(root, 'click', '[data-action="toggle-gallery-volume"]', () => {
 delegate(root, 'click', '[data-action="toggle-gallery-muted"]', () => {
   galleryDemoMuted.value = !galleryDemoMuted.value;
 });
-root.addEventListener('click', event => {
-  if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume')) galleryDemoVolumeOpen.value = false;
+root.addEventListener('click', (event) => {
+  if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume'))
+    galleryDemoVolumeOpen.value = false;
 });
 delegateCapture(root, 'pointerdown', '[data-gallery-annotation-surface="true"]', (event) => {
   if (!galleryDemoMarkup.value || (event.target as Element).closest('[data-annotation-id]')) return;
@@ -2317,22 +2434,31 @@ delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
   const endpoint = (target as HTMLElement).dataset.galleryRangeHandle;
   const annotation = galleryDemoVideoAnnotations.value[0];
   if (endpoint !== 'start' && endpoint !== 'end') return;
-  setGalleryDemoAnnotationEndpoint(endpoint, (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + (keyboard.key === 'ArrowLeft' ? -100 : 100));
+  setGalleryDemoAnnotationEndpoint(
+    endpoint,
+    (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + (keyboard.key === 'ArrowLeft' ? -100 : 100),
+  );
 });
-let galleryDemoRangeGesture:{ pointerId: number; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
+let galleryDemoRangeGesture: { pointerId: number; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
 delegateCapture(root, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
-  const pointer = event as PointerEvent, element = target as HTMLElement, endpoint = element.dataset.galleryRangeHandle, track = element.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect();
+  const pointer = event as PointerEvent,
+    element = target as HTMLElement,
+    endpoint = element.dataset.galleryRangeHandle,
+    track = element.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect();
   if ((endpoint !== 'start' && endpoint !== 'end') || !track) return;
   event.preventDefault();
   galleryDemoRangeGesture = { pointerId: pointer.pointerId, endpoint, track };
 });
-document.addEventListener('pointermove', event => {
+document.addEventListener('pointermove', (event) => {
   const gesture = galleryDemoRangeGesture;
   if (!gesture || event.pointerId !== gesture.pointerId) return;
   event.preventDefault();
-  setGalleryDemoAnnotationEndpoint(gesture.endpoint, (event.clientX - gesture.track.left) * 6000 / gesture.track.width);
+  setGalleryDemoAnnotationEndpoint(
+    gesture.endpoint,
+    ((event.clientX - gesture.track.left) * 6000) / gesture.track.width,
+  );
 });
-document.addEventListener('pointerup', event => {
+document.addEventListener('pointerup', (event) => {
   if (!galleryDemoRangeGesture || event.pointerId !== galleryDemoRangeGesture.pointerId) return;
   galleryDemoRangeGesture = undefined;
 });
@@ -2365,7 +2491,12 @@ delegate(root, 'keydown', '[name="attachment-batch-label"]', (event, target) => 
   if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
   input.blur();
   requestAnimationFrame(() => {
-    if (ids) root.querySelector<HTMLElement>(`[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`)?.focus();
+    if (ids)
+      root
+        .querySelector<HTMLElement>(
+          `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+        )
+        ?.focus();
   });
 });
 delegate(root, 'change', '[name="attachment-batch-label"]', (_event, target) => {
@@ -2376,7 +2507,7 @@ delegateCapture(root, 'blur', '[name="attachment-batch-label"]', (_event, target
   delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
   delete (target as HTMLInputElement).dataset.originalValue;
 });
-let draggedDemoAttachment:string | undefined;
+let draggedDemoAttachment: string | undefined;
 const clearDemoAttachmentDrag = () => {
   draggedDemoAttachment = undefined;
   const surface = root.querySelector<HTMLElement>('[data-component="ticket-attachments"]');
@@ -2391,31 +2522,58 @@ delegate(root, 'dragstart', '[data-drag-attachment-id]', (event, target) => {
   if (transfer && draggedDemoAttachment) transfer.setData('application/x-hotsheet-attachment', draggedDemoAttachment);
 });
 delegate(root, 'dragend', '[data-drag-attachment-id]', clearDemoAttachmentDrag);
-delegate(root, 'dragover', '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]', (event, target) => {
-  if (!draggedDemoAttachment) return;
-  event.preventDefault();
-  (target as HTMLElement).dataset.dragOver = 'true';
-});
-delegate(root, 'drop', '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]', (event, target) => {
-  if (!draggedDemoAttachment) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const id = draggedDemoAttachment;
-  const newGroup = target.matches('[data-attachment-new-group-drop-target]');
-  const batch = target.closest<HTMLElement>('[data-attachment-group-drop-target]')?.dataset.attachmentBatch;
-  clearDemoAttachmentDrag();
-  regroupAttachmentDemo(id, newGroup ? undefined : batch);
-});
+delegate(
+  root,
+  'dragover',
+  '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
+  (event, target) => {
+    if (!draggedDemoAttachment) return;
+    event.preventDefault();
+    (target as HTMLElement).dataset.dragOver = 'true';
+  },
+);
+delegate(
+  root,
+  'drop',
+  '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
+  (event, target) => {
+    if (!draggedDemoAttachment) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = draggedDemoAttachment;
+    const newGroup = target.matches('[data-attachment-new-group-drop-target]');
+    const batch = target.closest<HTMLElement>('[data-attachment-group-drop-target]')?.dataset.attachmentBatch;
+    clearDemoAttachmentDrag();
+    regroupAttachmentDemo(id, newGroup ? undefined : batch);
+  },
+);
 delegate(root, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
   recordCollectionEvent(`${target.textContent.trim() || 'Attachment action'} selected`);
   closeAttachmentDemoMenu();
 });
-addEventListener('pointerdown', (event) => {
-  if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
-  if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu')) tabContextMenu.value = undefined;
-  if (terminalDashboardContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"], [data-action="open-terminal-context-menu"]')) terminalDashboardContextMenu.value = undefined;
-  if (attachmentDemoMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]')) closeAttachmentDemoMenu();
-}, { capture: true });
+addEventListener(
+  'pointerdown',
+  (event) => {
+    if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
+    if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu'))
+      tabContextMenu.value = undefined;
+    if (
+      terminalDashboardContextMenu.value &&
+      !(event.target as Element).closest(
+        '[data-component="terminal-context-menu"], [data-action="open-terminal-context-menu"]',
+      )
+    )
+      terminalDashboardContextMenu.value = undefined;
+    if (
+      attachmentDemoMenu.value &&
+      !(event.target as Element).closest(
+        '[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]',
+      )
+    )
+      closeAttachmentDemoMenu();
+  },
+  { capture: true },
+);
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') contextMenu.value = undefined;
   if (event.key === 'Escape') terminalDashboardContextMenu.value = undefined;

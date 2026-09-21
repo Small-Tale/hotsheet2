@@ -22,7 +22,17 @@ describe('NoteCard', () => {
   });
 
   it('renders a controlled editor only when editing is requested', () => {
-    const markup = String(NoteCard({ id: 'editable', kind: 'regular', author: 'Codex', time: 'Now', body: 'Saved body', editing: true, draft: 'Draft body' }));
+    const markup = String(
+      NoteCard({
+        id: 'editable',
+        kind: 'regular',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Saved body',
+        editing: true,
+        draft: 'Draft body',
+      }),
+    );
     expect(markup).toContain('note-card--editing');
     expect(markup).toContain('aria-label="Note body"');
     expect(markup).toContain('Draft body');
@@ -34,24 +44,46 @@ describe('NoteCard', () => {
   });
 
   it('prefills direct feedback-note edits while keeping reader responses empty', () => {
-    const editing = String(NoteCard({ id: 'feedback-edit', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Existing feedback question', editing: true }));
+    const editing = String(
+      NoteCard({
+        id: 'feedback-edit',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Existing feedback question',
+        editing: true,
+      }),
+    );
     expect(editing).toContain('aria-label="Note body"');
     expect(editing).toContain('Existing feedback question');
-    const responding = String(NoteCard({ id: 'feedback-response', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Existing feedback question', readerMode: true }));
+    const responding = String(
+      NoteCard({
+        id: 'feedback-response',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Existing feedback question',
+        readerMode: true,
+      }),
+    );
     expect(responding).toContain('aria-label="Feedback response"');
-    expect(responding).toContain('<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>');
+    expect(responding).toContain(
+      '<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>',
+    );
   });
 
   it('turns feedback text into character-position insertion targets with removable responses', () => {
-    const markup = String(NoteCard({
-      id: 'inline-feedback',
-      kind: 'feedback_needed',
-      author: 'Codex',
-      time: 'Now',
-      body: 'Choose:\n\n1. First\n2. Second',
-      readerMode: true,
-      inlineReplies: [{ offset: 7, text: 'Reply after a character' }],
-    }));
+    const markup = String(
+      NoteCard({
+        id: 'inline-feedback',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Choose:\n\n1. First\n2. Second',
+        readerMode: true,
+        inlineReplies: [{ offset: 7, text: 'Reply after a character' }],
+      }),
+    );
     expect(markup.match(/data-action="add-inline-feedback-reply"/g)).toHaveLength(2);
     expect(markup).toContain('aria-label="Response at character 7"');
     expect(markup).toContain('Reply after a character');
@@ -62,16 +94,18 @@ describe('NoteCard', () => {
   });
 
   it('renders selectable Markdown choices while preserving a freeform response', () => {
-    const markup = String(NoteCard({
-      id: 'choice-feedback',
-      kind: 'feedback_needed',
-      author: 'Codex',
-      time: 'Now',
-      body: 'Pick a direction.\n\nCHOICE:\n- **Keep** this\n- `attachment:proof.png`',
-      readerMode: true,
-      selectedChoices: ['choice-2'],
-      attachmentContext: { checkout: 'project', ticket: 'HS2-CHOICE' },
-    }));
+    const markup = String(
+      NoteCard({
+        id: 'choice-feedback',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Pick a direction.\n\nCHOICE:\n- **Keep** this\n- `attachment:proof.png`',
+        readerMode: true,
+        selectedChoices: ['choice-2'],
+        attachmentContext: { checkout: 'project', ticket: 'HS2-CHOICE' },
+      }),
+    );
     expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(markup).not.toContain('CHOICE:');
     expect(markup).toContain('<strong>Keep</strong>');
@@ -91,23 +125,50 @@ describe('NoteCard', () => {
   });
 
   it('renders note Markdown through the shared safe new-tab boundary', () => {
-    const markup = String(NoteCard({ id: 'link', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read the [runbook](/docs/runbook).' }));
+    const markup = String(
+      NoteCard({
+        id: 'link',
+        kind: 'regular',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Read the [runbook](/docs/runbook).',
+      }),
+    );
     expect(markup).toContain('href="/docs/runbook" target="_blank" rel="noopener noreferrer"');
   });
 
   it('renders feedback-needed notes with the same Markdown support as regular notes', () => {
-    const markup = String(NoteCard({ id: 'feedback-markdown', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Choose one:\n\n1. **Keep** this\n2. Use `that`' }));
+    const markup = String(
+      NoteCard({
+        id: 'feedback-markdown',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Choose one:\n\n1. **Keep** this\n2. Use `that`',
+      }),
+    );
     expect(markup).toContain('<ol>');
     expect(markup).toContain('<strong>Keep</strong>');
     expect(markup).toContain('<code>that</code>');
   });
 
   it('keeps regular reader notes directly editable while preserving feedback response behavior', () => {
-    const regular = String(NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }));
+    const regular = String(
+      NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }),
+    );
     expect(regular).toContain('data-edit-on-double-click="true"');
     expect(regular).toContain('aria-label="Edit note"');
     expect(regular).not.toContain('data-action="edit-note"');
-    const needed = String(NoteCard({ id: 'needed', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Please answer', readerMode: true }));
+    const needed = String(
+      NoteCard({
+        id: 'needed',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'Please answer',
+        readerMode: true,
+      }),
+    );
     expect(needed).toContain('Please answer');
     expect(needed).toContain('aria-label="Feedback response"');
     expect(needed).toContain('data-note-response="true"');
@@ -117,24 +178,71 @@ describe('NoteCard', () => {
     expect(needed).toContain('size="small" appearance="outlined"');
     expect(needed).toContain('size="small" appearance="accent"');
     expect(needed).not.toContain('data-lucide="circle-check"');
-    const draft = String(NoteCard({ id: 'draft', kind: 'feedback_draft', author: 'You', time: 'Now', body: 'Continue me', readerMode: true }));
+    const draft = String(
+      NoteCard({
+        id: 'draft',
+        kind: 'feedback_draft',
+        author: 'You',
+        time: 'Now',
+        body: 'Continue me',
+        readerMode: true,
+      }),
+    );
     expect(draft).toContain('aria-label="Note body"');
     expect(draft).toContain('Continue me');
     expect(draft).toContain('Submit');
   });
 
   it('renders feedback reader navigation only on an opted-in inspector note', () => {
-    const props = { id: 'needed', kind: 'feedback_needed' as const, author: 'Codex', time: 'Now', body: 'Please answer', respondToFeedback: true };
+    const props = {
+      id: 'needed',
+      kind: 'feedback_needed' as const,
+      author: 'Codex',
+      time: 'Now',
+      body: 'Please answer',
+      respondToFeedback: true,
+    };
     expect(String(NoteCard(props))).toContain('data-action="respond-to-feedback"');
     expect(String(NoteCard({ ...props, readerMode: true }))).not.toContain('respond-to-feedback');
   });
 
-  it('marks the exact regular acknowledgement for subtle presentation',()=>{const acknowledgement=String(NoteCard({id:'ack',kind:'regular',author:'You',time:'Now',body:'No response needed'}));expect(acknowledgement).toContain('data-acknowledgement="true"');expect(String(NoteCard({id:'other',kind:'regular',author:'You',time:'Now',body:'No response needed here'}))).not.toContain('data-acknowledgement="true"')});
+  it('marks the exact regular acknowledgement for subtle presentation', () => {
+    const acknowledgement = String(
+      NoteCard({ id: 'ack', kind: 'regular', author: 'You', time: 'Now', body: 'No response needed' }),
+    );
+    expect(acknowledgement).toContain('data-acknowledgement="true"');
+    expect(
+      String(NoteCard({ id: 'other', kind: 'regular', author: 'You', time: 'Now', body: 'No response needed here' })),
+    ).not.toContain('data-acknowledgement="true"');
+  });
 
-  it('uses canonical semantic spacing while retaining note-control geometry',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).not.toContain('--wa-space-');expect(css).toMatch(/\.note-card \{[^}]*padding: var\(--kui-space-m\);[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/\.note-card__choice \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*grid-template-columns: remify\(24px\)[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);expect(css).toMatch(/\[data-kind="activity"\] \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*gap: var\(--kui-space-2xs\)/)});
+  it('uses canonical semantic spacing while retaining note-control geometry', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.note-card \{[^}]*padding: var\(--kui-space-m\);[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(
+      /\.note-card__choice \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*grid-template-columns: remify\(24px\)[^}]*gap: var\(--kui-space-xs\)/,
+    );
+    expect(css).toMatchSource(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
+    expect(css).toMatchSource(
+      /\[data-kind="activity"\] \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*gap: var\(--kui-space-2xs\)/,
+    );
+  });
 
-  it('keeps AI attribution, limitations, and feedback in the note accessible name',()=>{
-    const markup=String(NoteCard({id:'distilled',kind:'activity',author:'Hot Sheet AI',aiAuthored:true,aiTool:'Codex',time:'Now',body:'Summarized the test run.'}));
+  it('keeps AI attribution, limitations, and feedback in the note accessible name', () => {
+    const markup = String(
+      NoteCard({
+        id: 'distilled',
+        kind: 'activity',
+        author: 'Hot Sheet AI',
+        aiAuthored: true,
+        aiTool: 'Codex',
+        time: 'Now',
+        body: 'Summarized the test run.',
+      }),
+    );
     expect(markup).toContain('data-ai-authored="true"');
     expect(markup).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
     expect(markup).toContain('data-component="ai-content-label"');

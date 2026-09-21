@@ -98,7 +98,9 @@ describe('UI stability diagnostics', () => {
       activeToolTurn: false,
     };
     expect(renderStormSuppressionReason(idle)).toBeUndefined();
-    expect(renderStormSuppressionReason({ ...idle, backgroundProjectRefresh: true })).toBe('background-project-refresh');
+    expect(renderStormSuppressionReason({ ...idle, backgroundProjectRefresh: true })).toBe(
+      'background-project-refresh',
+    );
     expect(renderStormSuppressionReason({ ...idle, activeToolTurn: true })).toBe('active-tool-turn');
   });
 

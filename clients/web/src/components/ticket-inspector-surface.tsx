@@ -11,12 +11,18 @@ export function InspectorPlaceholder({ selectionCount }: { selectionCount: numbe
   return <TicketInspectorPlaceholder selectionCount={selectionCount} />;
 }
 
-export function CorruptInspector({ ticket, recovery, selectionCount }: {
+export function CorruptInspector({
+  ticket,
+  recovery,
+  selectionCount,
+}: {
   ticket?: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
   selectionCount: number;
 }) {
-  return ticket
-    ? <CorruptTicketInspector ticket={ticket} recovery={recovery} />
-    : <InspectorPlaceholder selectionCount={selectionCount} />;
+  return ticket ? (
+    <CorruptTicketInspector ticket={ticket} recovery={recovery} />
+  ) : (
+    <InspectorPlaceholder selectionCount={selectionCount} />
+  );
 }

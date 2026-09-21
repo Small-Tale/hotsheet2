@@ -55,12 +55,12 @@ preserve the wireframe's reading order, grouping, emphasis, and available action
 
 The supporting documents have distinct jobs:
 
-| Source | What it governs |
-|---|---|
-| Product requirements and explicit direction | What the product must do |
-| This philosophy | How to judge tradeoffs and overall UI quality |
-| [Design guidelines](design-guidelines.md) | Concrete Apple HIG and platform rules |
-| [UX component catalog](ux-components.md) | Exact component boundaries and contracts |
+| Source                                      | What it governs                               |
+| ------------------------------------------- | --------------------------------------------- |
+| Product requirements and explicit direction | What the product must do                      |
+| This philosophy                             | How to judge tradeoffs and overall UI quality |
+| [Design guidelines](design-guidelines.md)   | Concrete Apple HIG and platform rules         |
+| [UX component catalog](ux-components.md)    | Exact component boundaries and contracts      |
 
 If an implementation intentionally departs from a lower-level rule, record the reason.
 Do not let an accidental local style become precedent.
@@ -326,19 +326,19 @@ Automation should reduce effort without obscuring authorship, consequence, or sc
 
 ## 4. Resolving common tensions
 
-| Tension | Decision rule |
-|---|---|
-| Consistency vs. local context | Share the semantic component; add an explicit variant when the context genuinely changes its anatomy or behavior. |
-| Density vs. clarity | Remove chrome and secondary labels before reducing type, icons, or hit targets below the system's usable scale. |
-| Wireframe fidelity vs. responsiveness | Preserve hierarchy, relationships, emphasis, and actions; adapt exact geometry. |
-| Native convention vs. cross-platform parity | Keep the same outcome and mental model; use the host platform's presentation and terminology. |
-| Animation vs. continuity | Animate a user-caused transition only when it explains causality; never animate routine refresh churn. |
-| Abstraction vs. independence | Extract when meaning and behavior align; do not couple components that merely share current styling. |
-| Automation vs. trust | Make automated work visible, bounded, reversible, and non-disruptive. |
-| Completeness vs. honest simplicity | Omit or visibly disable an unavailable action with a reason; never ship an enabled fiction. |
-| Novelty vs. familiarity | Spend novelty on product-specific value, not on relearning standard controls. |
-| Helpful expansion vs. requested scope | Preserve unrelated controls and styling; propose collateral redesign separately unless it is required for correctness. |
-| Immediate response vs. authoritative data | Project the safe local consequence immediately, then reconcile without flicker. |
+| Tension                                     | Decision rule                                                                                                          |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Consistency vs. local context               | Share the semantic component; add an explicit variant when the context genuinely changes its anatomy or behavior.      |
+| Density vs. clarity                         | Remove chrome and secondary labels before reducing type, icons, or hit targets below the system's usable scale.        |
+| Wireframe fidelity vs. responsiveness       | Preserve hierarchy, relationships, emphasis, and actions; adapt exact geometry.                                        |
+| Native convention vs. cross-platform parity | Keep the same outcome and mental model; use the host platform's presentation and terminology.                          |
+| Animation vs. continuity                    | Animate a user-caused transition only when it explains causality; never animate routine refresh churn.                 |
+| Abstraction vs. independence                | Extract when meaning and behavior align; do not couple components that merely share current styling.                   |
+| Automation vs. trust                        | Make automated work visible, bounded, reversible, and non-disruptive.                                                  |
+| Completeness vs. honest simplicity          | Omit or visibly disable an unavailable action with a reason; never ship an enabled fiction.                            |
+| Novelty vs. familiarity                     | Spend novelty on product-specific value, not on relearning standard controls.                                          |
+| Helpful expansion vs. requested scope       | Preserve unrelated controls and styling; propose collateral redesign separately unless it is required for correctness. |
+| Immediate response vs. authoritative data   | Project the safe local consequence immediately, then reconcile without flicker.                                        |
 
 ## 5. Implementation consequences for Kerf
 
@@ -390,19 +390,19 @@ CSS polish.
 
 Before a new shared component is considered established, document or encode:
 
-| Contract area | Question to answer |
-|---|---|
-| Purpose | What single semantic role does this component own? |
-| Anatomy | Which parts and alignment anchors are stable? |
-| State | What are its empty, loading, error, offline, disabled, selected, focused, and unsupported states? |
-| Ownership | Who owns each durable and transient state, and what is authoritative? |
-| Interaction | What pointer, keyboard, menu, and touch actions produce each semantic event? |
-| Layout | How does it wrap, truncate, hide, resize, and scroll at supported dimensions? |
-| Accessibility | What is its role, name, order, focus behavior, contrast, and non-color cue? |
-| Feedback | Where do progress, validation, errors, confirmation, and undo appear? |
-| Composition | In which real screens and neighboring states must it be proven? |
-| Evidence | Which automated checks and inspected visual states demonstrate the contract? |
-| Performance | What appears in the interaction frame, what is deferred, and which resources are bounded and disposed? |
+| Contract area | Question to answer                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| Purpose       | What single semantic role does this component own?                                                     |
+| Anatomy       | Which parts and alignment anchors are stable?                                                          |
+| State         | What are its empty, loading, error, offline, disabled, selected, focused, and unsupported states?      |
+| Ownership     | Who owns each durable and transient state, and what is authoritative?                                  |
+| Interaction   | What pointer, keyboard, menu, and touch actions produce each semantic event?                           |
+| Layout        | How does it wrap, truncate, hide, resize, and scroll at supported dimensions?                          |
+| Accessibility | What is its role, name, order, focus behavior, contrast, and non-color cue?                            |
+| Feedback      | Where do progress, validation, errors, confirmation, and undo appear?                                  |
+| Composition   | In which real screens and neighboring states must it be proven?                                        |
+| Evidence      | Which automated checks and inspected visual states demonstrate the contract?                           |
+| Performance   | What appears in the interaction frame, what is deferred, and which resources are bounded and disposed? |
 
 Components should expose semantic events such as `selectTicket` or `openDiff`, not
 transport operations. Provider capability decides whether an action is available; the
@@ -476,24 +476,24 @@ design-critique clusters in detail. The history shows repeated system-level them
 a collection of unrelated pixel defects. These examples are retained as provenance for
 the philosophy.
 
-| Recurring lesson | Representative tickets | Resulting rule |
-|---|---|---|
-| Shared roles need shared geometry | HS2-T2S6Q3, HS2-KB8XSD, HS2-X7WKV9 | Alignment and selection treatment belong to the role-owning component. |
-| Structure matters more than decorative similarity | HS2-5WZXME, HS2-J9Y0J3, HS2-J23P84 | Preserve region hierarchy and consistent content anchors before polishing. |
-| Excess chrome obscures the tool | HS2-XRVA64, HS2-GCZZ6F, HS2-5SS0ZE | Remove redundant boxes, footers, and framing; let primary content occupy its region. |
-| Responsive behavior must express priorities | HS2-RA3TRX, HS2-3ME1T2, HS2-STVA92 | Protect legibility, icons, and targets; choose wrapping, truncation, and scrolling deliberately. |
-| Reuse is semantic, not cosmetic | HS2-DM4STX, HS2-09F07P, HS2-2P9K4Y, HS2-G7P7S7 | Use the same implementation for the same feature, but keep controls independent when their semantics differ. |
-| A polished demo is not product proof | HS2-VW5EW4, HS2-R2FGZ5, HS2-Z0M2VV | Use production components, realistic fixtures, normal triggers, and working actions. |
-| Live UI continuity is a correctness requirement | HS2-AYSQ1C, HS2-M3CDNG, HS2-GGE650, HS2-KP0HQ8, HS2-DBE4BF | Stable identity and explicit state ownership must protect the user's current action. |
-| The workspace should remember the user | HS2-3QXHF3, HS2-8H7F72, HS2-W3FDPM, HS2-BH8ZVD | Restore preferences, drafts, and contextual choices best-effort instead of resetting them. |
-| Editing should be direct and low-ceremony | HS2-NZRBHY, HS2-BE8A3V, HS2-X3GX39, HS2-JZTVKC | Prefer inline editing, autosave, familiar gestures, and questions only for real ambiguity. |
-| Perceived latency changes meaning | HS2-NCT01M, HS2-W52RER, HS2-6PPVJC, HS2-S2C5RY | Acknowledge intent immediately, render progressively, and keep interaction frames free of heavy work. |
-| Transient surfaces are a system | HS2-RN6X3E, HS2-SWC9E4, HS2-MVJ85W, HS2-35N9RS, HS2-WQE7BR | Share viewport collision, anchoring, layering, focus, and predictable dismissal rules. |
-| Unknown is not empty and busy is not done | HS2-CSYQHX, HS2-E2AZ2N, HS2-N718B0, HS2-RHQATM | State copy and affordances must describe the true lifecycle and available behavior. |
-| Visual choices need a finite vocabulary | HS2-66M88K, HS2-RZA0H3 | Use semantic tokens and a deliberate type/spacing scale instead of arbitrary local values. |
-| Actual evidence must be inspected | HS2-B2KPNW, HS2-G4G95R, HS2-SK42H7 | Review wide and constrained screenshots for visible defects, not just test completion. |
-| Placement and timing carry meaning | HS2-8DYEQM, HS2-9QCCH3, HS2-FW96JM | Put actions by what they affect and reveal transient UI only when requested. |
-| Scope fidelity protects learned behavior | HS2-7CTQJC, HS2-CV0J2E, HS2-E729WG | Solve the requested problem without gratuitous redesign; simplify only where the workflow calls for it. |
+| Recurring lesson                                  | Representative tickets                                     | Resulting rule                                                                                               |
+| ------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Shared roles need shared geometry                 | HS2-T2S6Q3, HS2-KB8XSD, HS2-X7WKV9                         | Alignment and selection treatment belong to the role-owning component.                                       |
+| Structure matters more than decorative similarity | HS2-5WZXME, HS2-J9Y0J3, HS2-J23P84                         | Preserve region hierarchy and consistent content anchors before polishing.                                   |
+| Excess chrome obscures the tool                   | HS2-XRVA64, HS2-GCZZ6F, HS2-5SS0ZE                         | Remove redundant boxes, footers, and framing; let primary content occupy its region.                         |
+| Responsive behavior must express priorities       | HS2-RA3TRX, HS2-3ME1T2, HS2-STVA92                         | Protect legibility, icons, and targets; choose wrapping, truncation, and scrolling deliberately.             |
+| Reuse is semantic, not cosmetic                   | HS2-DM4STX, HS2-09F07P, HS2-2P9K4Y, HS2-G7P7S7             | Use the same implementation for the same feature, but keep controls independent when their semantics differ. |
+| A polished demo is not product proof              | HS2-VW5EW4, HS2-R2FGZ5, HS2-Z0M2VV                         | Use production components, realistic fixtures, normal triggers, and working actions.                         |
+| Live UI continuity is a correctness requirement   | HS2-AYSQ1C, HS2-M3CDNG, HS2-GGE650, HS2-KP0HQ8, HS2-DBE4BF | Stable identity and explicit state ownership must protect the user's current action.                         |
+| The workspace should remember the user            | HS2-3QXHF3, HS2-8H7F72, HS2-W3FDPM, HS2-BH8ZVD             | Restore preferences, drafts, and contextual choices best-effort instead of resetting them.                   |
+| Editing should be direct and low-ceremony         | HS2-NZRBHY, HS2-BE8A3V, HS2-X3GX39, HS2-JZTVKC             | Prefer inline editing, autosave, familiar gestures, and questions only for real ambiguity.                   |
+| Perceived latency changes meaning                 | HS2-NCT01M, HS2-W52RER, HS2-6PPVJC, HS2-S2C5RY             | Acknowledge intent immediately, render progressively, and keep interaction frames free of heavy work.        |
+| Transient surfaces are a system                   | HS2-RN6X3E, HS2-SWC9E4, HS2-MVJ85W, HS2-35N9RS, HS2-WQE7BR | Share viewport collision, anchoring, layering, focus, and predictable dismissal rules.                       |
+| Unknown is not empty and busy is not done         | HS2-CSYQHX, HS2-E2AZ2N, HS2-N718B0, HS2-RHQATM             | State copy and affordances must describe the true lifecycle and available behavior.                          |
+| Visual choices need a finite vocabulary           | HS2-66M88K, HS2-RZA0H3                                     | Use semantic tokens and a deliberate type/spacing scale instead of arbitrary local values.                   |
+| Actual evidence must be inspected                 | HS2-B2KPNW, HS2-G4G95R, HS2-SK42H7                         | Review wide and constrained screenshots for visible defects, not just test completion.                       |
+| Placement and timing carry meaning                | HS2-8DYEQM, HS2-9QCCH3, HS2-FW96JM                         | Put actions by what they affect and reveal transient UI only when requested.                                 |
+| Scope fidelity protects learned behavior          | HS2-7CTQJC, HS2-CV0J2E, HS2-E729WG                         | Solve the requested problem without gratuitous redesign; simplify only where the workflow calls for it.      |
 
 Clusters of automated UI-stability reports should first be treated as evidence of a
 shared ownership, identity, focus, or render-lifecycle defect. Fix and suppress the

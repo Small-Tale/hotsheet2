@@ -19,15 +19,17 @@ const server = resolve(repoRoot, 'target/debug/hotsheet-server');
 const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 export function parseScaleCounts(value) {
-  const counts = String(value).split(',').map(item => Number(item.trim()));
-  if (!counts.length || counts.some(item => !Number.isSafeInteger(item) || item < 1)) {
+  const counts = String(value)
+    .split(',')
+    .map((item) => Number(item.trim()));
+  if (!counts.length || counts.some((item) => !Number.isSafeInteger(item) || item < 1)) {
     throw new Error(`Invalid --counts value: ${value}`);
   }
   return [...new Set(counts)].sort((left, right) => left - right);
 }
 
 function optionValue(argv, name, fallback) {
-  const inline = argv.find(argument => argument.startsWith(`${name}=`));
+  const inline = argv.find((argument) => argument.startsWith(`${name}=`));
   if (inline) return inline.slice(name.length + 1);
   const index = argv.indexOf(name);
   return index >= 0 ? argv[index + 1] : fallback;
@@ -98,12 +100,25 @@ export function assertWeb100kAcceptance(count, server, web) {
   if (count !== 100_000) return;
   for (const name of ['list_compact', 'list_compact_next']) {
     const page = server?.scenarios?.[name];
-    if (!page || page.error || page.item_count !== 200 || !page.has_next_cursor || page.response_bytes > 1_000_000 || page.wall_ms > 60_000) {
+    if (
+      !page ||
+      page.error ||
+      page.item_count !== 200 ||
+      !page.has_next_cursor ||
+      page.response_bytes > 1_000_000 ||
+      page.wall_ms > 60_000
+    ) {
       throw new Error(`100K server ${name} exceeded the bounded-page acceptance threshold: ${JSON.stringify(page)}`);
     }
   }
   const scenarios = web?.scenarios;
-  if (!scenarios || !scenarios.initial_load || scenarios.initial_load.wall_ms > 120_000 || scenarios.browser_heap_mb == null || scenarios.browser_heap_mb > 192) {
+  if (
+    !scenarios ||
+    !scenarios.initial_load ||
+    scenarios.initial_load.wall_ms > 120_000 ||
+    scenarios.browser_heap_mb == null ||
+    scenarios.browser_heap_mb > 192
+  ) {
     throw new Error(`100K web initial load/heap exceeded acceptance thresholds: ${JSON.stringify(scenarios)}`);
   }
   for (const name of ['switch_backlog', 'switch_archive', 'switch_queue']) {
@@ -112,7 +127,9 @@ export function assertWeb100kAcceptance(count, server, web) {
     }
   }
   if (scenarios.view_switch_refresh_requests !== 0) {
-    throw new Error(`100K rapid built-in view round trip launched redundant ticket refreshes: ${scenarios.view_switch_refresh_requests}`);
+    throw new Error(
+      `100K rapid built-in view round trip launched redundant ticket refreshes: ${scenarios.view_switch_refresh_requests}`,
+    );
   }
   const mutation = scenarios.modify_ticket;
   if (!mutation || mutation.error || typeof mutation.wall_ms !== 'number' || mutation.wall_ms > 30_000) {
@@ -141,14 +158,20 @@ export function syntheticTicket(index, epochMs = 1_788_739_200_000) {
 }
 
 async function requireBinary(path, hint) {
-  try { await stat(path); } catch { throw new Error(`${hint} is missing at ${path}. Run cargo build --workspace first.`); }
+  try {
+    await stat(path);
+  } catch {
+    throw new Error(`${hint} is missing at ${path}. Run cargo build --workspace first.`);
+  }
 }
 
 async function processRssKb(pid) {
   try {
     const { stdout } = await execFileAsync('ps', ['-o', 'rss=', '-p', String(pid)]);
     return Number(stdout.trim()) || 0;
-  } catch { return 0; }
+  } catch {
+    return 0;
+  }
 }
 
 function boundedAppend(current, chunk, limit = 64_000) {
@@ -163,9 +186,16 @@ async function runMeasured(command, args, options = {}) {
     env: options.env ?? process.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let stdout = '', stderr = '', peakRssKb = 0, sampling = false;
-  child.stdout.on('data', chunk => { stdout = boundedAppend(stdout, chunk.toString()); });
-  child.stderr.on('data', chunk => { stderr = boundedAppend(stderr, chunk.toString()); });
+  let stdout = '',
+    stderr = '',
+    peakRssKb = 0,
+    sampling = false;
+  child.stdout.on('data', (chunk) => {
+    stdout = boundedAppend(stdout, chunk.toString());
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr = boundedAppend(stderr, chunk.toString());
+  });
   const sample = async () => {
     if (sampling) return;
     sampling = true;
@@ -173,12 +203,16 @@ async function runMeasured(command, args, options = {}) {
     sampling = false;
   };
   void sample();
-  const interval = setInterval(() => { void sample(); }, 100);
+  const interval = setInterval(() => {
+    void sample();
+  }, 100);
   let timedOut = false;
   const timeout = setTimeout(() => {
     timedOut = true;
     child.kill('SIGTERM');
-    setTimeout(() => { if (child.exitCode === null) child.kill('SIGKILL'); }, 2_000).unref();
+    setTimeout(() => {
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }, 2_000).unref();
   }, options.timeoutMs ?? 300_000);
   const code = await new Promise((resolveExit, reject) => {
     child.once('error', reject);
@@ -187,8 +221,14 @@ async function runMeasured(command, args, options = {}) {
   clearInterval(interval);
   clearTimeout(timeout);
   await sample();
-  const result = { wall_ms: Math.round(performance.now() - started), peak_rss_kb: peakRssKb, exit_code: code, timed_out: timedOut };
-  if (code !== 0 && !options.allowFailure) throw new Error(`${command} ${args.join(' ')} failed (${code}): ${stderr || stdout}`);
+  const result = {
+    wall_ms: Math.round(performance.now() - started),
+    peak_rss_kb: peakRssKb,
+    exit_code: code,
+    timed_out: timedOut,
+  };
+  if (code !== 0 && !options.allowFailure)
+    throw new Error(`${command} ${args.join(' ')} failed (${code}): ${stderr || stdout}`);
   return { ...result, stdout, stderr };
 }
 
@@ -215,26 +255,57 @@ async function generateTickets(store, start, end) {
 async function checkoutFor(env, store, projectRoot) {
   const result = await runMeasured(cli, ['-C', store, 'checkout', 'list'], { env });
   const checkouts = JSON.parse(result.stdout);
-  const checkout = checkouts.find(item => item.root === projectRoot);
+  const checkout = checkouts.find((item) => item.root === projectRoot);
   if (!checkout) throw new Error(`Bootstrap did not register checkout ${projectRoot}`);
   return checkout;
 }
 
 function summarizeProcess(result) {
-  return { wall_ms: result.wall_ms, peak_rss_mb: Number((result.peak_rss_kb / 1024).toFixed(1)), ...(result.exit_code !== 0 ? { exit_code: result.exit_code } : {}), ...(result.timed_out ? { timed_out: true } : {}) };
+  return {
+    wall_ms: result.wall_ms,
+    peak_rss_mb: Number((result.peak_rss_kb / 1024).toFixed(1)),
+    ...(result.exit_code !== 0 ? { exit_code: result.exit_code } : {}),
+    ...(result.timed_out ? { timed_out: true } : {}),
+  };
 }
 
-function processFailure(error) { return { error: error instanceof Error ? error.message : String(error) }; }
-function processSucceeded(result) { return !result.error && !result.timed_out && (result.exit_code === undefined || result.exit_code === 0); }
+function processFailure(error) {
+  return { error: error instanceof Error ? error.message : String(error) };
+}
+function processSucceeded(result) {
+  return !result.error && !result.timed_out && (result.exit_code === undefined || result.exit_code === 0);
+}
 
 export async function commitFixtureTier({ store, count, env, timeoutMs, run = runMeasured }) {
   let stage;
-  try { stage = summarizeProcess(await run('git', ['-C', store, 'add', 'tickets'], { env, timeoutMs, allowFailure: true })); }
-  catch (error) { stage = processFailure(error); }
+  try {
+    stage = summarizeProcess(await run('git', ['-C', store, 'add', 'tickets'], { env, timeoutMs, allowFailure: true }));
+  } catch (error) {
+    stage = processFailure(error);
+  }
   if (!processSucceeded(stage)) return { stage, commit: { skipped: 'stage failed' }, mutations_safe: false };
   let commit;
-  try { commit = summarizeProcess(await run('git', ['-C', store, '-c', 'user.name=Hot Sheet Scale', '-c', 'user.email=scale@hotsheet.local', 'commit', '-m', `Scale fixture ${count}`], { env, timeoutMs, allowFailure: true })); }
-  catch (error) { commit = processFailure(error); }
+  try {
+    commit = summarizeProcess(
+      await run(
+        'git',
+        [
+          '-C',
+          store,
+          '-c',
+          'user.name=Hot Sheet Scale',
+          '-c',
+          'user.email=scale@hotsheet.local',
+          'commit',
+          '-m',
+          `Scale fixture ${count}`,
+        ],
+        { env, timeoutMs, allowFailure: true },
+      ),
+    );
+  } catch (error) {
+    commit = processFailure(error);
+  }
   return { stage, commit, mutations_safe: processSucceeded(commit) };
 }
 
@@ -242,28 +313,45 @@ async function benchmarkCli(env, store, count, timeoutMs, allowMutations = true)
   const scenarios = {};
   const processOptions = { env, timeoutMs };
   const record = async (name, operation) => {
-    try { return scenarios[name] = summarizeProcess(await operation()); }
-    catch (error) { return scenarios[name] = { error: error instanceof Error ? error.message : String(error) }; }
+    try {
+      return (scenarios[name] = summarizeProcess(await operation()));
+    } catch (error) {
+      return (scenarios[name] = { error: error instanceof Error ? error.message : String(error) });
+    }
   };
   await record('reindex', () => runMeasured(cli, ['-C', store, 'reindex'], processOptions));
-  await record('list_first_100', () => runMeasured(cli, ['-C', store, 'ls', '--open', '--limit', '100'], processOptions));
-  await record('full_text_query', () => runMeasured(cli, ['-C', store, 'ls', '--text', `needle-${count - 1}`, '--limit', '20'], processOptions));
-  await record('show_ticket', () => runMeasured(cli, ['-C', store, 'show', syntheticTicket(count).slug], processOptions));
+  await record('list_first_100', () =>
+    runMeasured(cli, ['-C', store, 'ls', '--open', '--limit', '100'], processOptions),
+  );
+  await record('full_text_query', () =>
+    runMeasured(cli, ['-C', store, 'ls', '--text', `needle-${count - 1}`, '--limit', '20'], processOptions),
+  );
+  await record('show_ticket', () =>
+    runMeasured(cli, ['-C', store, 'show', syntheticTicket(count).slug], processOptions),
+  );
   if (!allowMutations) {
     scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
     scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
     return scenarios;
   }
   let created;
-  try { created = await runMeasured(cli, ['-C', store, 'new', '--title', `CLI scale mutation ${count}`, '--category', 'task'], processOptions); }
-  catch (error) {
+  try {
+    created = await runMeasured(
+      cli,
+      ['-C', store, 'new', '--title', `CLI scale mutation ${count}`, '--category', 'task'],
+      processOptions,
+    );
+  } catch (error) {
     scenarios.create_ticket = { error: error instanceof Error ? error.message : String(error) };
     scenarios.modify_ticket = { skipped: 'create_ticket failed' };
     return scenarios;
   }
   const createdSlug = created.stdout.match(/\bST-[0-9A-Z]+\b/)?.[0];
   scenarios.create_ticket = summarizeProcess(created);
-  if (createdSlug) await record('modify_ticket', () => runMeasured(cli, ['-C', store, 'edit', createdSlug, '--priority', 'high'], processOptions));
+  if (createdSlug)
+    await record('modify_ticket', () =>
+      runMeasured(cli, ['-C', store, 'edit', createdSlug, '--priority', 'high'], processOptions),
+    );
   else scenarios.modify_ticket = { error: `Could not parse created ticket slug from: ${created.stdout.trim()}` };
   return scenarios;
 }
@@ -276,7 +364,8 @@ async function fetchMeasured(url, secret, path, init = {}) {
     headers: { 'content-type': 'application/json', 'x-hotsheet-secret': secret, ...request.headers },
     signal: AbortSignal.timeout(timeoutMs ?? 300_000),
   });
-  let bytes = 0, text = '';
+  let bytes = 0,
+    text = '';
   if (capture) {
     text = await response.text();
     bytes = Buffer.byteLength(text);
@@ -290,8 +379,15 @@ async function fetchMeasured(url, secret, path, init = {}) {
 async function startMeasuredServer(env, store, indexPath, timeoutMs) {
   const secret = `scale-${Date.now()}`;
   const started = performance.now();
-  const child = spawn(server, ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--index', indexPath], { cwd: repoRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = '', stderr = '', peakRssKb = 0, sampling = false;
+  const child = spawn(server, ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--index', indexPath], {
+    cwd: repoRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '',
+    stderr = '',
+    peakRssKb = 0,
+    sampling = false;
   const sample = async () => {
     if (sampling) return;
     sampling = true;
@@ -299,19 +395,26 @@ async function startMeasuredServer(env, store, indexPath, timeoutMs) {
     sampling = false;
   };
   void sample();
-  const interval = setInterval(() => { void sample(); }, 100);
-  child.stderr.on('data', chunk => { stderr = boundedAppend(stderr, chunk.toString()); });
+  const interval = setInterval(() => {
+    void sample();
+  }, 100);
+  child.stderr.on('data', (chunk) => {
+    stderr = boundedAppend(stderr, chunk.toString());
+  });
   let url;
   try {
     url = await new Promise((resolveUrl, reject) => {
       const timer = setTimeout(() => reject(new Error(`Server startup timed out: ${stderr}`)), timeoutMs);
-      child.stdout.on('data', chunk => {
+      child.stdout.on('data', (chunk) => {
         stdout = boundedAppend(stdout, chunk.toString());
         const match = stdout.match(/listening on (http:\/\/[^ ]+)/);
-        if (match) { clearTimeout(timer); resolveUrl(match[1]); }
+        if (match) {
+          clearTimeout(timer);
+          resolveUrl(match[1]);
+        }
       });
       child.once('error', reject);
-      child.once('exit', code => reject(new Error(`Server exited during startup (${code}): ${stderr || stdout}`)));
+      child.once('exit', (code) => reject(new Error(`Server exited during startup (${code}): ${stderr || stdout}`)));
     });
   } catch (error) {
     clearInterval(interval);
@@ -319,12 +422,17 @@ async function startMeasuredServer(env, store, indexPath, timeoutMs) {
     throw error;
   }
   return {
-    child, secret, url,
+    child,
+    secret,
+    url,
     startup_ms: Math.round(performance.now() - started),
     peakRssMb: () => Number((peakRssKb / 1024).toFixed(1)),
     async stop() {
       child.kill('SIGTERM');
-      await Promise.race([new Promise(resolveExit => child.once('exit', resolveExit)), new Promise(resolveWait => setTimeout(resolveWait, 5_000))]);
+      await Promise.race([
+        new Promise((resolveExit) => child.once('exit', resolveExit)),
+        new Promise((resolveWait) => setTimeout(resolveWait, 5_000)),
+      ]);
       clearInterval(interval);
       await sample();
     },
@@ -337,60 +445,121 @@ async function benchmarkServer(env, store, checkout, count, root, timeoutMs, all
     const encodedCheckout = encodeURIComponent(checkout.id);
     const scenarios = {};
     const record = async (name, operation) => {
-      try { return scenarios[name] = await operation(); }
-      catch (error) { return scenarios[name] = { error: error instanceof Error ? error.message : String(error) }; }
+      try {
+        return (scenarios[name] = await operation());
+      } catch (error) {
+        return (scenarios[name] = { error: error instanceof Error ? error.message : String(error) });
+      }
     };
     let firstPage;
     await record('list_compact', async () => {
-      const measured = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200`, { capture: true, timeoutMs });
+      const measured = await fetchMeasured(
+        instance.url,
+        instance.secret,
+        `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200`,
+        { capture: true, timeoutMs },
+      );
       firstPage = JSON.parse(measured.text);
-      return { wall_ms: measured.wall_ms, response_bytes: measured.response_bytes, item_count: firstPage.items.length, has_next_cursor: Boolean(firstPage.next_cursor), total_count: firstPage.counts.total };
+      return {
+        wall_ms: measured.wall_ms,
+        response_bytes: measured.response_bytes,
+        item_count: firstPage.items.length,
+        has_next_cursor: Boolean(firstPage.next_cursor),
+        total_count: firstPage.counts.total,
+      };
     });
-    if (firstPage?.next_cursor) await record('list_compact_next', async () => {
-      const measured = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200&cursor=${encodeURIComponent(firstPage.next_cursor)}`, { capture: true, timeoutMs });
-      const page = JSON.parse(measured.text);
-      return { wall_ms: measured.wall_ms, response_bytes: measured.response_bytes, item_count: page.items.length, has_next_cursor: Boolean(page.next_cursor), total_count: page.counts.total };
-    });
-    await record('view_ticket', () => fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets/${syntheticTicket(count).slug}`, { timeoutMs }));
+    if (firstPage?.next_cursor)
+      await record('list_compact_next', async () => {
+        const measured = await fetchMeasured(
+          instance.url,
+          instance.secret,
+          `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200&cursor=${encodeURIComponent(firstPage.next_cursor)}`,
+          { capture: true, timeoutMs },
+        );
+        const page = JSON.parse(measured.text);
+        return {
+          wall_ms: measured.wall_ms,
+          response_bytes: measured.response_bytes,
+          item_count: page.items.length,
+          has_next_cursor: Boolean(page.next_cursor),
+          total_count: page.counts.total,
+        };
+      });
+    await record('view_ticket', () =>
+      fetchMeasured(
+        instance.url,
+        instance.secret,
+        `/checkouts/${encodedCheckout}/tickets/${syntheticTicket(count).slug}`,
+        { timeoutMs },
+      ),
+    );
     if (!allowMutations) {
       scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
       scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
       return { startup_ms: instance.startup_ms, peak_rss_mb: instance.peakRssMb(), scenarios };
     }
     let created;
-    try { created = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets`, { method: 'POST', body: JSON.stringify({ title: `Server scale mutation ${count}`, category: 'task', status: 'not_started' }), capture: true, timeoutMs }); }
-    catch (error) {
+    try {
+      created = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets`, {
+        method: 'POST',
+        body: JSON.stringify({ title: `Server scale mutation ${count}`, category: 'task', status: 'not_started' }),
+        capture: true,
+        timeoutMs,
+      });
+    } catch (error) {
       scenarios.create_ticket = { error: error instanceof Error ? error.message : String(error) };
       scenarios.modify_ticket = { skipped: 'create_ticket failed' };
       return { startup_ms: instance.startup_ms, peak_rss_mb: instance.peakRssMb(), scenarios };
     }
     const ticket = JSON.parse(created.text);
     scenarios.create_ticket = { wall_ms: created.wall_ms, response_bytes: created.response_bytes };
-    await record('modify_ticket', () => fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets/${encodeURIComponent(ticket.qualified_id ?? ticket.slug)}`, { method: 'PATCH', body: JSON.stringify({ priority: 'low' }), timeoutMs }));
+    await record('modify_ticket', () =>
+      fetchMeasured(
+        instance.url,
+        instance.secret,
+        `/checkouts/${encodedCheckout}/tickets/${encodeURIComponent(ticket.qualified_id ?? ticket.slug)}`,
+        { method: 'PATCH', body: JSON.stringify({ priority: 'low' }), timeoutMs },
+      ),
+    );
     return { startup_ms: instance.startup_ms, peak_rss_mb: instance.peakRssMb(), scenarios };
-  } finally { await instance.stop(); }
+  } finally {
+    await instance.stop();
+  }
 }
 
 async function unusedPort() {
   const listener = createServer();
   await new Promise((resolveListen, reject) => listener.listen(0, '127.0.0.1', resolveListen).once('error', reject));
   const address = listener.address();
-  await new Promise(resolveClose => listener.close(resolveClose));
+  await new Promise((resolveClose) => listener.close(resolveClose));
   return address.port;
 }
 
 async function startVite(env, timeoutMs) {
   const port = await unusedPort();
-  const child = spawn('npm', ['run', 'dev:hot', '--', '--port', String(port)], { cwd: webRoot, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('npm', ['run', 'dev:hot', '--', '--port', String(port)], {
+    cwd: webRoot,
+    env,
+    detached: process.platform !== 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let output = '';
-  child.stdout.on('data', chunk => { output = boundedAppend(output, chunk.toString()); });
-  child.stderr.on('data', chunk => { output = boundedAppend(output, chunk.toString()); });
+  child.stdout.on('data', (chunk) => {
+    output = boundedAppend(output, chunk.toString());
+  });
+  child.stderr.on('data', (chunk) => {
+    output = boundedAppend(output, chunk.toString());
+  });
   const baseUrl = `http://127.0.0.1:${port}`;
   const started = performance.now();
   while (performance.now() - started < timeoutMs) {
     if (child.exitCode !== null) throw new Error(`Vite exited during startup: ${output}`);
-    try { if ((await fetch(`${baseUrl}/ux-demo`)).ok) return { baseUrl, child }; } catch { /* retry */ }
-    await new Promise(resolveWait => setTimeout(resolveWait, 100));
+    try {
+      if ((await fetch(`${baseUrl}/ux-demo`)).ok) return { baseUrl, child };
+    } catch {
+      /* retry */
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
   child.kill('SIGTERM');
   throw new Error(`Vite startup timed out: ${output}`);
@@ -398,7 +567,7 @@ async function startVite(env, timeoutMs) {
 
 async function stopStoreServer(env, store) {
   await runMeasured(server, ['-C', store, '--stop'], { env, timeoutMs: 15_000, allowFailure: true });
-  await new Promise(resolveWait => setTimeout(resolveWait, 250));
+  await new Promise((resolveWait) => setTimeout(resolveWait, 250));
 }
 
 function stopVite(instance) {
@@ -406,15 +575,19 @@ function stopVite(instance) {
   try {
     if (process.platform === 'win32') instance.child.kill('SIGTERM');
     else process.kill(-instance.child.pid, 'SIGTERM');
-  } catch { instance.child.kill('SIGTERM'); }
+  } catch {
+    instance.child.kill('SIGTERM');
+  }
 }
 
 async function removeWorkspace(path) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    try { await rm(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); return; }
-    catch (error) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      return;
+    } catch (error) {
       if (attempt === 9) throw error;
-      await new Promise(resolveWait => setTimeout(resolveWait, 250));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 250));
     }
   }
 }
@@ -430,7 +603,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
-  await page.addInitScript(root => {
+  await page.addInitScript((root) => {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify([root]));
     localStorage.setItem('hotsheet.workspace.active-project-root.v1', root);
   }, projectRoot);
@@ -442,9 +615,10 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     await page.locator('[data-component="ticket-list-row"]').first().waitFor();
     scenarios.initial_load = { wall_ms: Math.round(performance.now() - loadStarted) };
     let viewSwitchRefreshRequests = 0;
-    page.on('request', request => {
+    page.on('request', (request) => {
       const url = new URL(request.url());
-      if (request.method() === 'GET' && /\/checkouts\/[^/]+\/tickets$/.test(url.pathname)) viewSwitchRefreshRequests += 1;
+      if (request.method() === 'GET' && /\/checkouts\/[^/]+\/tickets$/.test(url.pathname))
+        viewSwitchRefreshRequests += 1;
     });
     for (const view of ['Backlog', 'Archive', 'Queue']) {
       scenarios[`switch_${view.toLowerCase()}`] = await measuredUiAction(
@@ -456,7 +630,10 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     scenarios.view_switch_refresh_requests = viewSwitchRefreshRequests;
     const first = page.locator('[data-component="ticket-list-row"]').first();
     const slug = await first.getAttribute('data-ticket-slug');
-    scenarios.view_ticket = await measuredUiAction(() => first.click(), () => page.locator('[data-component="ticket-inspector"]').getByText(slug, { exact: true }).waitFor());
+    scenarios.view_ticket = await measuredUiAction(
+      () => first.click(),
+      () => page.locator('[data-component="ticket-inspector"]').getByText(slug, { exact: true }).waitFor(),
+    );
     if (!allowMutations) {
       scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
       scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
@@ -467,30 +644,43 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
       return { scenarios };
     }
     const title = `Web scale mutation ${count}-${Date.now()}`;
-    scenarios.create_ticket = await measuredUiAction(async () => {
-      await page.getByRole('button', { name: 'New ticket…' }).click();
-      await page.getByRole('textbox', { name: 'Ticket title' }).fill(title);
-      await page.getByRole('button', { name: 'Create ticket' }).click();
-    }, () => page.locator('[data-component="ticket-list-row"]', { hasText: title }).waitFor());
+    scenarios.create_ticket = await measuredUiAction(
+      async () => {
+        await page.getByRole('button', { name: 'New ticket…' }).click();
+        await page.getByRole('textbox', { name: 'Ticket title' }).fill(title);
+        await page.getByRole('button', { name: 'Create ticket' }).click();
+      },
+      () => page.locator('[data-component="ticket-list-row"]', { hasText: title }).waitFor(),
+    );
     const created = page.locator('[data-component="ticket-list-row"]', { hasText: title });
     const upNext = created.getByRole('button', { name: /Up Next/ });
-    const response = page.waitForResponse(item => item.request().method() === 'PATCH' && item.url().includes('/tickets/'));
-    scenarios.modify_ticket = await measuredUiAction(() => upNext.click(), () => response);
+    const response = page.waitForResponse(
+      (item) => item.request().method() === 'PATCH' && item.url().includes('/tickets/'),
+    );
+    scenarios.modify_ticket = await measuredUiAction(
+      () => upNext.click(),
+      () => response,
+    );
     scenarios.browser_heap_mb = await page.evaluate(() => {
       const memory = performance.memory;
       return memory ? Number((memory.usedJSHeapSize / 1024 / 1024).toFixed(1)) : null;
     });
     return { scenarios };
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--assert-reindex-budgets] [--assert-web-100k] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
+    console.log(
+      'Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--assert-reindex-budgets] [--assert-web-100k] [--keep] [--timeout-ms 300000] [--output /path/report.json]',
+    );
     return;
   }
-  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000)
+    throw new Error('--timeout-ms must be at least 1000');
   await Promise.all([requireBinary(cli, 'hotsheet-cli'), requireBinary(server, 'hotsheet-server')]);
   const root = await realpath(await mkdtemp(join(tmpdir(), 'hotsheet-scale-')));
   const projectRoot = join(root, 'project');
@@ -505,11 +695,19 @@ async function main() {
     dataset: { root, store, kept: options.keep },
     runs: [],
   };
-  let vite, browser, generated = 0, generatedBytes = 0;
+  let vite,
+    browser,
+    generated = 0,
+    generatedBytes = 0;
   const cliBudgetErrors = [];
   try {
     console.log(`Disposable scale workspace: ${root}`);
-    report.bootstrap = summarizeProcess(await runMeasured(cli, ['bootstrap', '--project', projectRoot, '--store', store, '--prefix', 'ST'], { env, timeoutMs: options.timeoutMs }));
+    report.bootstrap = summarizeProcess(
+      await runMeasured(cli, ['bootstrap', '--project', projectRoot, '--store', store, '--prefix', 'ST'], {
+        env,
+        timeoutMs: options.timeoutMs,
+      }),
+    );
     const checkout = await checkoutFor(env, store, projectRoot);
     if (!options.skipWeb) {
       vite = await startVite(env, options.timeoutMs);
@@ -526,13 +724,33 @@ async function main() {
       for (const [name, operation] of [
         ['cli', () => benchmarkCli(env, store, count, options.timeoutMs, allowMutations)],
         ['server', () => benchmarkServer(env, store, checkout, count, root, options.timeoutMs, allowMutations)],
-        ...(!options.skipWeb ? [['web', async () => {
-          try { return await benchmarkWeb(browser, vite.baseUrl, projectRoot, count, options.timeoutMs, allowMutations); }
-          finally { await stopStoreServer(env, store); }
-        }]] : []),
+        ...(!options.skipWeb
+          ? [
+              [
+                'web',
+                async () => {
+                  try {
+                    return await benchmarkWeb(
+                      browser,
+                      vite.baseUrl,
+                      projectRoot,
+                      count,
+                      options.timeoutMs,
+                      allowMutations,
+                    );
+                  } finally {
+                    await stopStoreServer(env, store);
+                  }
+                },
+              ],
+            ]
+          : []),
       ]) {
-        try { run[name] = await operation(); }
-        catch (error) { run[name] = { error: error instanceof Error ? error.message : String(error) }; }
+        try {
+          run[name] = await operation();
+        } catch (error) {
+          run[name] = { error: error instanceof Error ? error.message : String(error) };
+        }
       }
       if (options.assertCliBudgets) {
         try {
@@ -592,5 +810,8 @@ async function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error); process.exitCode = 1; });
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

@@ -35,7 +35,7 @@ locator:
   "locator": "small-tale/hotsheet2",
   "name": "GitHub issues",
   "default": true,
-  "settings": { "credential": { "secret": "github-small-tale" } }
+  "settings": { "credential": { "secret": "github-small-tale" } },
 }
 ```
 

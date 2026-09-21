@@ -1,200 +1,794 @@
-import type {CatalogEntry,CatalogSection} from '@kerfjs/ui/catalog';
+import type { CatalogEntry, CatalogSection } from '@kerfjs/ui/catalog';
 
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 
 export type DemoPhase = 'feature-floor' | 'desktop' | 'later';
-export interface DemoDefinition { id: string; name: string; description: string; phase: DemoPhase; implemented?: boolean; uses?: string[] }
-export interface DemoCategory { id: string; name: string; children?: DemoCategory[]; demos?: DemoDefinition[] }
+export interface DemoDefinition {
+  id: string;
+  name: string;
+  description: string;
+  phase: DemoPhase;
+  implemented?: boolean;
+  uses?: string[];
+}
+export interface DemoCategory {
+  id: string;
+  name: string;
+  children?: DemoCategory[];
+  demos?: DemoDefinition[];
+}
 
-const demo = (id: string, name: string, description: string, phase: DemoPhase = 'feature-floor', implemented = false, uses?: string[]): DemoDefinition =>
-  ({ id, name, description, phase, implemented, uses });
+const demo = (
+  id: string,
+  name: string,
+  description: string,
+  phase: DemoPhase = 'feature-floor',
+  implemented = false,
+  uses?: string[],
+): DemoDefinition => ({ id, name, description, phase, implemented, uses });
 
 export const demoCatalog: DemoCategory[] = [
-  { id: 'shell', name: 'Application shell', demos: [
-    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'toolbar', 'toolbar-control-group', 'floating-toolbar', 'ticket-list', 'ticket-inspector']),
-    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'drive-options-menu', 'list-item', 'list-header']),
-    demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
-    demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
-    demo('repository-status-popover', 'RepositoryStatusPopover', 'Master/detail repository files, commits, and host actions.', 'feature-floor', true, ['dialog-header','value-table','list-item', 'list-header', 'ticket-code-review']),
-    demo('change-evidence-dialog', 'ChangeEvidenceDialog', 'Ticket commit-range files grouped by evidence type.', 'feature-floor', true, ['dialog-header','list-item','list-header']),
-    demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
-    demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
-    demo('command-settings-editor', 'CommandSettingsEditor', 'Master-detail editor for custom command buttons, incl. color and icon pickers.', 'feature-floor', true, ['command-navigation']),
-    demo('drive-control', 'DriveControl', 'Split AI workflow action and provider override trigger.', 'feature-floor', true),
-    demo('drive-options-menu', 'DriveOptionsMenu', 'Provider, model, and effort overrides for a driven session.', 'feature-floor', true),
-    demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
-    demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
-    demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, ['app-tab']),
-    demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
-    demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
-    demo('connection-state-banner', 'ConnectionStateBanner', 'Connection progress, interruption, compatibility, and authentication states.', 'feature-floor', true),
-    demo('connection-details-dialog', 'ConnectionDetailsDialog', 'Dismissible client/server compatibility metadata and recovery guidance.', 'feature-floor', true, ['dialog-header','value-table']),
-    demo('settings-navigation', 'SettingsNavigation', 'Grouped settings categories in an unpadded sidebar pane.', 'feature-floor', true, ['list-item', 'toolbar']),
-    demo('notification-navigation', 'NotificationNavigation', 'Notification views with attention counts in an unpadded sidebar pane.', 'feature-floor', true, ['list-item', 'toolbar']),
-  ]},
-  { id: 'tickets', name: 'Ticket workspace', children: [
-    { id: 'ticket-list', name: 'List', demos: [
-      demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.', 'feature-floor', true, ['ticket-category-select', 'ticket-list']),
-      demo('ticket-list', 'TicketList', 'Responsive, keyboard-navigable ticket collection.', 'feature-floor', true, ['ticket-row']),
-      demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, ['status-badge', 'tag-chip']),
-    ]},
-    { id: 'ticket-board', name: 'Columns', demos: [
-      demo('ticket-board', 'TicketBoard', 'Status/category column workspace.', 'feature-floor', true, ['ticket-board-column']),
-      demo('ticket-board-column', 'TicketBoardColumn', 'One titled, independently scrollable ticket column.', 'feature-floor', true, ['ticket-row']),
-    ]},
-  ]},
-  { id: 'inspector', name: 'Ticket inspector', children: [
-    { id: 'metadata', name: 'Metadata', demos: [
-      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']),
-      demo('ticket-inspector-skeleton', 'TicketInspectorSkeleton', 'Shape-preserving loading placeholder shown while the next ticket loads.', 'feature-floor', true),
-      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'list-header', 'note-card', 'note-composer']),
-      demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
-      demo('ticket-code-review', 'TicketCodeReview', 'Ticket-associated commits and configured diff-tool actions.', 'feature-floor', true),
-      demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true, ['attachment-gallery']),
-      demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true, ['select']),
-      demo('ticket-priority-select', 'TicketPrioritySelect', 'Priority chooser with semantic icons.', 'feature-floor', true, ['select']),
-      demo('ticket-status-menu', 'TicketStatusMenu', 'Badge-triggered status chooser with semantic icons.', 'feature-floor', true, ['status-badge']),
-      demo('metadata-editor', 'TicketMetadataEditor', 'Capability-aware category, priority, and status fields.'),
-      demo('status-badge', 'StatusBadge', 'Readable ticket state with reinforcing iconography.', 'feature-floor', true),
-      demo('tag-chip', 'TagChip', 'Compact tag label with optional removal behavior.', 'feature-floor', true),
-      demo('tag-picker', 'TagPicker', 'Find, create, and attach ticket tags.'),
-    ]},
-    { id: 'content', name: 'Content', demos: [
-      demo('ticket-reader', 'TicketReader', 'Large dialog presentation of the complete ticket inspector.', 'feature-floor', true, ['ticket-inspector']),
-      demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
-      demo('attachment-gallery', 'AttachmentGallery', 'Full-screen keyboard, arrow, and swipe image viewer.', 'feature-floor', true),
-      demo('ticket-close-dialog', 'TicketCloseDialog', 'Structured close outcomes with duplicate-target search and validation.', 'feature-floor', true, ['select', 'list-item']),
-      demo('not-working-dialog', 'NotWorkingDialog', 'Completed-ticket verification failure report with notes and evidence.', 'feature-floor', true, ['pending-attachment-picker']),
-      demo('bulk-ticket-dialog', 'BulkTicketDialog', 'Confirm bulk tag, delete, and empty-trash actions across selected tickets.', 'feature-floor', true),
-      demo('saved-view-dialog', 'SavedViewDialog', 'Create or rename a saved ticket view from the current query.', 'feature-floor', true),
-      demo('ticket-link-choice-dialog', 'TicketLinkChoiceDialog', 'Disambiguate a ticket reference that matches more than one ticket.', 'feature-floor', true, ['list-item']),
-      demo('project-dialog', 'ProjectDialog', 'Open a local checkout or choose a checkout already known to a remote server.', 'feature-floor', true),
-      demo('project-close-dialog', 'ProjectCloseDialog', 'Warn about running terminals and AI chats before closing a project, with a live resource preview.', 'feature-floor', true, ['list-item', 'ai-conversation']),
-      demo('conversation-export-dialog', 'ConversationExportDialog', 'Two-step wizard to choose a message scope then a destination, format, and bundle options.', 'feature-floor', true, ['content-transition']),
-      demo('command-run-dialog', 'CommandRunDialog', 'Native modal dialog presenting the latest run state and output for a configured command, with a Close action.', 'feature-floor', true),
-    ]},
-    { id: 'notes', name: 'Notes and activity', demos: [
-      demo('note-composer', 'NoteComposer', 'Create or cancel a provider-backed ticket note.', 'feature-floor', true),
-      demo('note-card', 'NoteCard', 'Kind-specific note presentation.', 'feature-floor', true),
-      demo('feedback-draft', 'FeedbackDraftEditor', 'Local draft response to feedback.'),
-      demo('activity-timeline', 'ActivityTimeline', 'Chronological durable activity notes.'),
-    ]},
-  ]},
-  { id: 'ai', name: 'AI and attention', demos: [
-    demo('ai-conversation', 'AIConversation', 'Multi-turn streamed AI conversation with inline permissions and interruption.', 'feature-floor', true, ['permission-request','drive-control']),
-    demo('ai-tool-settings', 'AiToolSettings', 'Machine-local default AI provider, model, and effort discovered from plugins.', 'feature-floor', true, ['select']),
-    demo('manual-model-dialog', 'ManualModelDialog', 'Enter an exact model identifier a provider accepts.', 'feature-floor', true),
-    demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
-    demo('permission-request', 'PermissionRequestCard', 'Human approval with timeout, project identity, and supported decision scopes.', 'feature-floor', true),
-    demo('command-button', 'CommandButton', 'Configured safe command action.', 'later'),
-    demo('notification-center', 'NotificationCenter', 'Pending permission requests and newest-first decision history.', 'feature-floor', true, ['permission-request']),
-  ]},
-  { id: 'terminal', name: 'Drawer and terminals', demos: [
-    demo('terminal-drawer', 'TerminalDrawer', 'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.', 'feature-floor', true, ['app-tab','list-item','list-header','ai-conversation']),
-    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive workspace grid for terminals, AI chats, and future cross-project tools.', 'feature-floor', true, ['fixed-aspect-terminal-card','floating-toolbar','toolbar-control-group','list-item']),
-    demo('terminal-operations-sidebar', 'TerminalOperationsSidebar', 'Per-project and aggregate completion and in-progress summaries beside the workspace grid.', 'feature-floor', true, ['project-summary','list-header','toolbar']),
-    demo('terminal-ticket-rail', 'TerminalTicketRail', 'Compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail.', 'feature-floor', true, ['ticket-list','ticket-inspector','content-transition','workspace-header','quick-ticket-composer']),
-    demo('fixed-aspect-terminal-card', 'FixedAspectTerminalCard', 'Shared 5:3 terminal viewport card in preview and magnified variants.', 'feature-floor', true),
-    demo('terminal-visibility-dialog', 'TerminalVisibilityDialog', 'Named visibility groups and per-terminal inclusion.', 'feature-floor', true, ['list-item']),
-    demo('terminal-rename-dialog', 'TerminalRenameDialog', 'Rename a terminal while retaining its stable identity.', 'feature-floor', true),
-    demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),
-    demo('terminal-pane', 'TerminalPane', 'Live shared terminal and actions.', 'desktop'),
-    demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
-  ]},
-  { id: 'shared', name: 'Shared interactions', demos: [
-    demo('app-empty-state', 'AppEmptyState', 'Initial project-opening and remembered-project restoration states.', 'feature-floor', true),
-    demo('content-transition', 'ContentTransition', 'Reusable A/B push and crossfade transitions.', 'feature-floor', true),
-    demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.', 'feature-floor', true),
-    demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
-    demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),
-    demo('floating-toolbar', 'FloatingToolbar', 'Forced-dark controls floating over positioned content.', 'feature-floor', true, ['toolbar-control-group']),
-    demo('list-item', 'ListItem', 'Aligned icon, label, trailing value, and selection geometry for list rows.', 'feature-floor', true),
-    demo('list-header', 'ListHeader', 'Aligned section heading and optional action for list groups.', 'feature-floor', true),
-    demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
-    demo('toolbar-text', 'ToolbarText', 'Vertically aligned large, default, and small toolbar identity text.', 'feature-floor', true),
-    demo('dialog-header', 'DialogHeader', 'Shared icon, title, subtitle, actions, and divider geometry for dialogs.', 'feature-floor', true),
-    demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.', 'feature-floor', true),
-    demo('pending-attachment-picker', 'PendingAttachmentPicker', 'Drop, browse, review, and remove evidence before submission.', 'feature-floor', true),
-    demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
-    demo('empty-state', 'EmptyState', 'Actionable absence of content.'),
-    demo('loading-skeleton', 'LoadingSkeleton', 'Stable loading presentation.'),
-    demo('provider-capability', 'ProviderCapabilityNotice', 'Explains unavailable provider operations.'),
-  ]},
-  { id: 'setup', name: 'Setup and settings', demos: [
-    demo('hs1-migration-dialog', 'Hs1MigrationDialog', 'Detected Hot Sheet 1 source details and destination-only import flow.', 'feature-floor', true, ['value-table']),
-    demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Import and post-backup cleanup notices for Hot Sheet 1.', 'feature-floor', true),
-    demo('ticket-source-setup-dialog', 'TicketSourceSetupDialog', 'Choose and configure a git or external ticket source.', 'feature-floor', true, ['content-transition', 'list-item']),
-    demo('provider-setup-form', 'ProviderSetupForm', 'Provider credentials, repository locator, and default-source settings.', 'feature-floor', true),
-    demo('ticket-sources-settings', 'TicketSourcesSettings', 'Connected git and external ticket-source inventory.', 'feature-floor', true, ['list-item']),
-    demo('settings-workspace', 'SettingsWorkspace', 'One category-selected project or app settings surface.', 'feature-floor', true, ['ticket-sources-settings']),
-    demo('keyboard-settings', 'KeyboardSettings', 'Grouped reference and rebinding of documented keyboard shortcuts.', 'feature-floor', true),
-    demo('trash-settings', 'TrashSettings', 'Trash retention window and empty-trash entry point.', 'feature-floor', true),
-    demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),
-    demo('add-project-flow', 'AddProjectFlow', 'Discover or connect a local or remote project.'),
-    demo('settings-window', 'SettingsWindow', 'Effective-first scoped settings.', 'later'),
-    demo('provider-connections', 'TicketProviderConnections', 'Configure authoritative ticket sources.', 'later'),
-  ]},
-  { id: 'later', name: 'Later major surfaces', demos: [
-    demo('analytics-dashboard', 'AnalyticsDashboard', 'Ticket flow, usage, and cost visualizations.', 'later'),
-    demo('custom-view-builder', 'CustomViewBuilder', 'Saved query and view construction.', 'later'),
-    demo('announcer-overlay', 'AnnouncerOverlay', 'Live and digest narration experience.', 'later'),
-  ]},
+  {
+    id: 'shell',
+    name: 'Application shell',
+    demos: [
+      demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, [
+        'project-sidebar',
+        'workspace-header',
+        'project-tabs',
+        'connection-state-banner',
+        'resizable-region',
+        'toolbar',
+        'toolbar-control-group',
+        'floating-toolbar',
+        'ticket-list',
+        'ticket-inspector',
+      ]),
+      demo(
+        'project-sidebar',
+        'ProjectSidebar',
+        'Project summary, repository state, views, commands, and drive controls.',
+        'feature-floor',
+        true,
+        [
+          'toolbar',
+          'project-summary',
+          'repository-summary',
+          'view-navigation',
+          'command-navigation',
+          'drive-control',
+          'drive-options-menu',
+          'list-item',
+          'list-header',
+        ],
+      ),
+      demo(
+        'project-summary',
+        'ProjectSummary',
+        'Seven-day completion history and current ticket counts.',
+        'feature-floor',
+        true,
+      ),
+      demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
+      demo(
+        'repository-status-popover',
+        'RepositoryStatusPopover',
+        'Master/detail repository files, commits, and host actions.',
+        'feature-floor',
+        true,
+        ['dialog-header', 'value-table', 'list-item', 'list-header', 'ticket-code-review'],
+      ),
+      demo(
+        'change-evidence-dialog',
+        'ChangeEvidenceDialog',
+        'Ticket commit-range files grouped by evidence type.',
+        'feature-floor',
+        true,
+        ['dialog-header', 'list-item', 'list-header'],
+      ),
+      demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
+      demo(
+        'command-navigation',
+        'CommandNavigation',
+        'Grouped colored project command actions.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'command-settings-editor',
+        'CommandSettingsEditor',
+        'Master-detail editor for custom command buttons, incl. color and icon pickers.',
+        'feature-floor',
+        true,
+        ['command-navigation'],
+      ),
+      demo(
+        'drive-control',
+        'DriveControl',
+        'Split AI workflow action and provider override trigger.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'drive-options-menu',
+        'DriveOptionsMenu',
+        'Provider, model, and effort overrides for a driven session.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'workspace-header',
+        'WorkspaceHeader',
+        'Project identity, display modes, sorting, settings, and search.',
+        'feature-floor',
+        true,
+        ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board'],
+      ),
+      demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
+      demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, [
+        'app-tab',
+      ]),
+      demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, [
+        'project-tab',
+      ]),
+      demo(
+        'resizable-region',
+        'ResizableRegion',
+        'Accessible horizontal and vertical shell splitters.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'connection-state-banner',
+        'ConnectionStateBanner',
+        'Connection progress, interruption, compatibility, and authentication states.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'connection-details-dialog',
+        'ConnectionDetailsDialog',
+        'Dismissible client/server compatibility metadata and recovery guidance.',
+        'feature-floor',
+        true,
+        ['dialog-header', 'value-table'],
+      ),
+      demo(
+        'settings-navigation',
+        'SettingsNavigation',
+        'Grouped settings categories in an unpadded sidebar pane.',
+        'feature-floor',
+        true,
+        ['list-item', 'toolbar'],
+      ),
+      demo(
+        'notification-navigation',
+        'NotificationNavigation',
+        'Notification views with attention counts in an unpadded sidebar pane.',
+        'feature-floor',
+        true,
+        ['list-item', 'toolbar'],
+      ),
+    ],
+  },
+  {
+    id: 'tickets',
+    name: 'Ticket workspace',
+    children: [
+      {
+        id: 'ticket-list',
+        name: 'List',
+        demos: [
+          demo(
+            'quick-ticket-composer',
+            'QuickTicketComposer',
+            'Compact ticket creation that expands in place.',
+            'feature-floor',
+            true,
+            ['ticket-category-select', 'ticket-list'],
+          ),
+          demo(
+            'ticket-list',
+            'TicketList',
+            'Responsive, keyboard-navigable ticket collection.',
+            'feature-floor',
+            true,
+            ['ticket-row'],
+          ),
+          demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, [
+            'status-badge',
+            'tag-chip',
+          ]),
+        ],
+      },
+      {
+        id: 'ticket-board',
+        name: 'Columns',
+        demos: [
+          demo('ticket-board', 'TicketBoard', 'Status/category column workspace.', 'feature-floor', true, [
+            'ticket-board-column',
+          ]),
+          demo(
+            'ticket-board-column',
+            'TicketBoardColumn',
+            'One titled, independently scrollable ticket column.',
+            'feature-floor',
+            true,
+            ['ticket-row'],
+          ),
+        ],
+      },
+    ],
+  },
+  {
+    id: 'inspector',
+    name: 'Ticket inspector',
+    children: [
+      {
+        id: 'metadata',
+        name: 'Metadata',
+        demos: [
+          demo(
+            'ticket-inspector',
+            'TicketInspector',
+            'Trailing ticket detail and editing surface.',
+            'feature-floor',
+            true,
+            [
+              'toolbar',
+              'toolbar-text',
+              'toolbar-control-group',
+              'ticket-info-panel',
+              'ticket-timeline',
+              'ticket-code-review',
+              'ticket-attachments',
+              'note-card',
+              'note-composer',
+            ],
+          ),
+          demo(
+            'ticket-inspector-skeleton',
+            'TicketInspectorSkeleton',
+            'Shape-preserving loading placeholder shown while the next ticket loads.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'ticket-info-panel',
+            'TicketInfoPanel',
+            'Ticket metadata, details, tags, notes, and provenance.',
+            'feature-floor',
+            true,
+            [
+              'ticket-category-select',
+              'ticket-priority-select',
+              'ticket-status-menu',
+              'markdown-editor',
+              'tag-chip',
+              'list-header',
+              'note-card',
+              'note-composer',
+            ],
+          ),
+          demo(
+            'ticket-timeline',
+            'TicketTimeline',
+            'Chronological ticket activity inspector section.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'ticket-code-review',
+            'TicketCodeReview',
+            'Ticket-associated commits and configured diff-tool actions.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'ticket-attachments',
+            'TicketAttachments',
+            'Ticket attachment inspector section.',
+            'feature-floor',
+            true,
+            ['attachment-gallery'],
+          ),
+          demo(
+            'ticket-category-select',
+            'TicketCategorySelect',
+            'Category chooser with configured icons and colors.',
+            'feature-floor',
+            true,
+            ['select'],
+          ),
+          demo(
+            'ticket-priority-select',
+            'TicketPrioritySelect',
+            'Priority chooser with semantic icons.',
+            'feature-floor',
+            true,
+            ['select'],
+          ),
+          demo(
+            'ticket-status-menu',
+            'TicketStatusMenu',
+            'Badge-triggered status chooser with semantic icons.',
+            'feature-floor',
+            true,
+            ['status-badge'],
+          ),
+          demo('metadata-editor', 'TicketMetadataEditor', 'Capability-aware category, priority, and status fields.'),
+          demo(
+            'status-badge',
+            'StatusBadge',
+            'Readable ticket state with reinforcing iconography.',
+            'feature-floor',
+            true,
+          ),
+          demo('tag-chip', 'TagChip', 'Compact tag label with optional removal behavior.', 'feature-floor', true),
+          demo('tag-picker', 'TagPicker', 'Find, create, and attach ticket tags.'),
+        ],
+      },
+      {
+        id: 'content',
+        name: 'Content',
+        demos: [
+          demo(
+            'ticket-reader',
+            'TicketReader',
+            'Large dialog presentation of the complete ticket inspector.',
+            'feature-floor',
+            true,
+            ['ticket-inspector'],
+          ),
+          demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
+          demo(
+            'attachment-gallery',
+            'AttachmentGallery',
+            'Full-screen keyboard, arrow, and swipe image viewer.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'ticket-close-dialog',
+            'TicketCloseDialog',
+            'Structured close outcomes with duplicate-target search and validation.',
+            'feature-floor',
+            true,
+            ['select', 'list-item'],
+          ),
+          demo(
+            'not-working-dialog',
+            'NotWorkingDialog',
+            'Completed-ticket verification failure report with notes and evidence.',
+            'feature-floor',
+            true,
+            ['pending-attachment-picker'],
+          ),
+          demo(
+            'bulk-ticket-dialog',
+            'BulkTicketDialog',
+            'Confirm bulk tag, delete, and empty-trash actions across selected tickets.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'saved-view-dialog',
+            'SavedViewDialog',
+            'Create or rename a saved ticket view from the current query.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'ticket-link-choice-dialog',
+            'TicketLinkChoiceDialog',
+            'Disambiguate a ticket reference that matches more than one ticket.',
+            'feature-floor',
+            true,
+            ['list-item'],
+          ),
+          demo(
+            'project-dialog',
+            'ProjectDialog',
+            'Open a local checkout or choose a checkout already known to a remote server.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'project-close-dialog',
+            'ProjectCloseDialog',
+            'Warn about running terminals and AI chats before closing a project, with a live resource preview.',
+            'feature-floor',
+            true,
+            ['list-item', 'ai-conversation'],
+          ),
+          demo(
+            'conversation-export-dialog',
+            'ConversationExportDialog',
+            'Two-step wizard to choose a message scope then a destination, format, and bundle options.',
+            'feature-floor',
+            true,
+            ['content-transition'],
+          ),
+          demo(
+            'command-run-dialog',
+            'CommandRunDialog',
+            'Native modal dialog presenting the latest run state and output for a configured command, with a Close action.',
+            'feature-floor',
+            true,
+          ),
+        ],
+      },
+      {
+        id: 'notes',
+        name: 'Notes and activity',
+        demos: [
+          demo(
+            'note-composer',
+            'NoteComposer',
+            'Create or cancel a provider-backed ticket note.',
+            'feature-floor',
+            true,
+          ),
+          demo('note-card', 'NoteCard', 'Kind-specific note presentation.', 'feature-floor', true),
+          demo('feedback-draft', 'FeedbackDraftEditor', 'Local draft response to feedback.'),
+          demo('activity-timeline', 'ActivityTimeline', 'Chronological durable activity notes.'),
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ai',
+    name: 'AI and attention',
+    demos: [
+      demo(
+        'ai-conversation',
+        'AIConversation',
+        'Multi-turn streamed AI conversation with inline permissions and interruption.',
+        'feature-floor',
+        true,
+        ['permission-request', 'drive-control'],
+      ),
+      demo(
+        'ai-tool-settings',
+        'AiToolSettings',
+        'Machine-local default AI provider, model, and effort discovered from plugins.',
+        'feature-floor',
+        true,
+        ['select'],
+      ),
+      demo(
+        'manual-model-dialog',
+        'ManualModelDialog',
+        'Enter an exact model identifier a provider accepts.',
+        'feature-floor',
+        true,
+      ),
+      demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
+      demo(
+        'permission-request',
+        'PermissionRequestCard',
+        'Human approval with timeout, project identity, and supported decision scopes.',
+        'feature-floor',
+        true,
+      ),
+      demo('command-button', 'CommandButton', 'Configured safe command action.', 'later'),
+      demo(
+        'notification-center',
+        'NotificationCenter',
+        'Pending permission requests and newest-first decision history.',
+        'feature-floor',
+        true,
+        ['permission-request'],
+      ),
+    ],
+  },
+  {
+    id: 'terminal',
+    name: 'Drawer and terminals',
+    demos: [
+      demo(
+        'terminal-drawer',
+        'TerminalDrawer',
+        'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.',
+        'feature-floor',
+        true,
+        ['app-tab', 'list-item', 'list-header', 'ai-conversation'],
+      ),
+      demo(
+        'terminal-dashboard',
+        'TerminalDashboard',
+        'Responsive workspace grid for terminals, AI chats, and future cross-project tools.',
+        'feature-floor',
+        true,
+        ['fixed-aspect-terminal-card', 'floating-toolbar', 'toolbar-control-group', 'list-item'],
+      ),
+      demo(
+        'terminal-operations-sidebar',
+        'TerminalOperationsSidebar',
+        'Per-project and aggregate completion and in-progress summaries beside the workspace grid.',
+        'feature-floor',
+        true,
+        ['project-summary', 'list-header', 'toolbar'],
+      ),
+      demo(
+        'terminal-ticket-rail',
+        'TerminalTicketRail',
+        'Compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail.',
+        'feature-floor',
+        true,
+        ['ticket-list', 'ticket-inspector', 'content-transition', 'workspace-header', 'quick-ticket-composer'],
+      ),
+      demo(
+        'fixed-aspect-terminal-card',
+        'FixedAspectTerminalCard',
+        'Shared 5:3 terminal viewport card in preview and magnified variants.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'terminal-visibility-dialog',
+        'TerminalVisibilityDialog',
+        'Named visibility groups and per-terminal inclusion.',
+        'feature-floor',
+        true,
+        ['list-item'],
+      ),
+      demo(
+        'terminal-rename-dialog',
+        'TerminalRenameDialog',
+        'Rename a terminal while retaining its stable identity.',
+        'feature-floor',
+        true,
+      ),
+      demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),
+      demo('terminal-pane', 'TerminalPane', 'Live shared terminal and actions.', 'desktop'),
+      demo(
+        'terminal-size-notice',
+        'TerminalSizeMismatchNotice',
+        'PTY size ownership and resize affordance.',
+        'desktop',
+      ),
+    ],
+  },
+  {
+    id: 'shared',
+    name: 'Shared interactions',
+    demos: [
+      demo(
+        'app-empty-state',
+        'AppEmptyState',
+        'Initial project-opening and remembered-project restoration states.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'content-transition',
+        'ContentTransition',
+        'Reusable A/B push and crossfade transitions.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'app-tab',
+        'AppTab',
+        'Shared project and terminal tab geometry, state, and close action.',
+        'feature-floor',
+        true,
+      ),
+      demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
+      demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, [
+        'toolbar-text',
+        'toolbar-control-group',
+      ]),
+      demo(
+        'floating-toolbar',
+        'FloatingToolbar',
+        'Forced-dark controls floating over positioned content.',
+        'feature-floor',
+        true,
+        ['toolbar-control-group'],
+      ),
+      demo(
+        'list-item',
+        'ListItem',
+        'Aligned icon, label, trailing value, and selection geometry for list rows.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'list-header',
+        'ListHeader',
+        'Aligned section heading and optional action for list groups.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'toolbar-control-group',
+        'ToolbarControlGroup',
+        'Consistent rounded grouping for toolbar controls.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'toolbar-text',
+        'ToolbarText',
+        'Vertically aligned large, default, and small toolbar identity text.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'dialog-header',
+        'DialogHeader',
+        'Shared icon, title, subtitle, actions, and divider geometry for dialogs.',
+        'feature-floor',
+        true,
+      ),
+      demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.', 'feature-floor', true),
+      demo(
+        'pending-attachment-picker',
+        'PendingAttachmentPicker',
+        'Drop, browse, review, and remove evidence before submission.',
+        'feature-floor',
+        true,
+      ),
+      demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
+      demo('empty-state', 'EmptyState', 'Actionable absence of content.'),
+      demo('loading-skeleton', 'LoadingSkeleton', 'Stable loading presentation.'),
+      demo('provider-capability', 'ProviderCapabilityNotice', 'Explains unavailable provider operations.'),
+    ],
+  },
+  {
+    id: 'setup',
+    name: 'Setup and settings',
+    demos: [
+      demo(
+        'hs1-migration-dialog',
+        'Hs1MigrationDialog',
+        'Detected Hot Sheet 1 source details and destination-only import flow.',
+        'feature-floor',
+        true,
+        ['value-table'],
+      ),
+      demo(
+        'hs1-migration-banner',
+        'Hs1MigrationBanner',
+        'Import and post-backup cleanup notices for Hot Sheet 1.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'ticket-source-setup-dialog',
+        'TicketSourceSetupDialog',
+        'Choose and configure a git or external ticket source.',
+        'feature-floor',
+        true,
+        ['content-transition', 'list-item'],
+      ),
+      demo(
+        'provider-setup-form',
+        'ProviderSetupForm',
+        'Provider credentials, repository locator, and default-source settings.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'ticket-sources-settings',
+        'TicketSourcesSettings',
+        'Connected git and external ticket-source inventory.',
+        'feature-floor',
+        true,
+        ['list-item'],
+      ),
+      demo(
+        'settings-workspace',
+        'SettingsWorkspace',
+        'One category-selected project or app settings surface.',
+        'feature-floor',
+        true,
+        ['ticket-sources-settings'],
+      ),
+      demo(
+        'keyboard-settings',
+        'KeyboardSettings',
+        'Grouped reference and rebinding of documented keyboard shortcuts.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'trash-settings',
+        'TrashSettings',
+        'Trash retention window and empty-trash entry point.',
+        'feature-floor',
+        true,
+      ),
+      demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),
+      demo('add-project-flow', 'AddProjectFlow', 'Discover or connect a local or remote project.'),
+      demo('settings-window', 'SettingsWindow', 'Effective-first scoped settings.', 'later'),
+      demo('provider-connections', 'TicketProviderConnections', 'Configure authoritative ticket sources.', 'later'),
+    ],
+  },
+  {
+    id: 'later',
+    name: 'Later major surfaces',
+    demos: [
+      demo('analytics-dashboard', 'AnalyticsDashboard', 'Ticket flow, usage, and cost visualizations.', 'later'),
+      demo('custom-view-builder', 'CustomViewBuilder', 'Saved query and view construction.', 'later'),
+      demo('announcer-overlay', 'AnnouncerOverlay', 'Live and digest narration experience.', 'later'),
+    ],
+  },
 ];
 
 export function flattenCatalog(categories: DemoCategory[] = demoCatalog): DemoDefinition[] {
-  return categories.flatMap(category => [...(category.demos ?? []), ...flattenCatalog(category.children ?? [])]);
+  return categories.flatMap((category) => [...(category.demos ?? []), ...flattenCatalog(category.children ?? [])]);
 }
 
 export function findDemo(id: string): DemoDefinition | undefined {
-  return flattenCatalog().find(item => item.id === id);
+  return flattenCatalog().find((item) => item.id === id);
 }
 
 export function demosUsing(id: string): DemoDefinition[] {
-  return flattenCatalog().filter(item => item.uses?.includes(id));
+  return flattenCatalog().filter((item) => item.uses?.includes(id));
 }
 
-const demoKinds=new Map(componentCatalogExtension.entries.map(entry=>[entry.id,entry.kind as 'component'|'composition'] as const));
+const demoKinds = new Map(
+  componentCatalogExtension.entries.map((entry) => [entry.id, entry.kind as 'component' | 'composition'] as const),
+);
 
-export function demoKind(id:string):'component'|'composition'{
-  return demoKinds.get(id)??'component';
+export function demoKind(id: string): 'component' | 'composition' {
+  return demoKinds.get(id) ?? 'component';
 }
 
 /** Kerf geometry belongs to focused components, never to composed application layouts. */
-export function usesCatalogGeometryOverlay(id:string):boolean{
-  return demoKind(id)==='component';
+export function usesCatalogGeometryOverlay(id: string): boolean {
+  return demoKind(id) === 'component';
 }
 
-const phaseLabel:Record<DemoPhase,string>={'feature-floor':'Feature floor',desktop:'Desktop',later:'Later'};
+const phaseLabel: Record<DemoPhase, string> = { 'feature-floor': 'Feature floor', desktop: 'Desktop', later: 'Later' };
 
-function catalogEntry(item:DemoDefinition,modified:Readonly<Record<string,string>>):CatalogEntry{
-  const uses=(item.uses??[]).map(findDemo).filter((demo):demo is DemoDefinition=>Boolean(demo));
-  const usedBy=demosUsing(item.id),changed=modified[item.id];
-  return{
-    id:item.id,
-    name:item.name,
-    description:item.description,
-    tags:[phaseLabel[item.phase],...(item.implemented?[]:['Planned']),...(changed?[relativeModified(changed)]:[])],
-    related:[...usedBy.map(demo=>({id:demo.id,name:demo.name,group:'Used by'})),...uses.map(demo=>({id:demo.id,name:demo.name,group:'Uses'}))],
+function catalogEntry(item: DemoDefinition, modified: Readonly<Record<string, string>>): CatalogEntry {
+  const uses = (item.uses ?? []).map(findDemo).filter((demo): demo is DemoDefinition => Boolean(demo));
+  const usedBy = demosUsing(item.id),
+    changed = modified[item.id];
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    tags: [
+      phaseLabel[item.phase],
+      ...(item.implemented ? [] : ['Planned']),
+      ...(changed ? [relativeModified(changed)] : []),
+    ],
+    related: [
+      ...usedBy.map((demo) => ({ id: demo.id, name: demo.name, group: 'Used by' })),
+      ...uses.map((demo) => ({ id: demo.id, name: demo.name, group: 'Uses' })),
+    ],
   };
 }
 
-function relativeModified(value:string):string{
-  const elapsed=Date.now()-new Date(value).getTime();
-  if(elapsed<60_000)return'Now';
-  if(elapsed<3_600_000)return`${Math.floor(elapsed/60_000)}m`;
-  if(elapsed<86_400_000)return`${Math.floor(elapsed/3_600_000)}h`;
-  if(elapsed<604_800_000)return`${Math.floor(elapsed/86_400_000)}d`;
-  return new Date(value).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+function relativeModified(value: string): string {
+  const elapsed = Date.now() - new Date(value).getTime();
+  if (elapsed < 60_000) return 'Now';
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h`;
+  if (elapsed < 604_800_000) return `${Math.floor(elapsed / 86_400_000)}d`;
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 /** Flatten nested Hot Sheet categories into Kerf's flat section contract while retaining the path. */
-export function kerfCatalogSections(categories:readonly DemoCategory[]=demoCatalog,modified:Readonly<Record<string,string>>={}):CatalogSection[]{
-  const sections:CatalogSection[]=[];
-  const visit=(category:DemoCategory,parents:readonly string[])=>{
-    const path=[...parents,category.name];
-    if(category.demos?.length)sections.push({category:path.join(' · '),entries:category.demos.map(item=>catalogEntry(item,modified))});
-    for(const child of category.children??[])visit(child,path);
+export function kerfCatalogSections(
+  categories: readonly DemoCategory[] = demoCatalog,
+  modified: Readonly<Record<string, string>> = {},
+): CatalogSection[] {
+  const sections: CatalogSection[] = [];
+  const visit = (category: DemoCategory, parents: readonly string[]) => {
+    const path = [...parents, category.name];
+    if (category.demos?.length)
+      sections.push({
+        category: path.join(' · '),
+        entries: category.demos.map((item) => catalogEntry(item, modified)),
+      });
+    for (const child of category.children ?? []) visit(child, path);
   };
-  for(const category of categories)visit(category,[]);
+  for (const category of categories) visit(category, []);
   return sections;
 }

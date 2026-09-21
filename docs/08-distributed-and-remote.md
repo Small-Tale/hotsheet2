@@ -10,13 +10,13 @@
 
 Keep two separable concerns apart:
 
-1. **Distributed *execution*** — many AI-tool workers draining one project's Up
+1. **Distributed _execution_** — many AI-tool workers draining one project's Up
    Next pool in parallel. Solved at the data layer by the **claim/lease
    primitive** + git-worktree isolation + "workers never merge, the integrator
    merges." This is largely inherited from HS1 and works on the git+index
    foundation (claim state persists to ticket frontmatter, selection runs over the
    index — [05](05-ai-tool-plugins.md) §5.7). Single-machine first.
-2. **Distributed *hosting*** — several servers, each owning some projects,
+2. **Distributed _hosting_** — several servers, each owning some projects,
    surfaced together in one client. This is the "orchestrated through a single UI"
    question and is mostly a **client + transport** concern, not a data one.
 
@@ -25,8 +25,8 @@ Keep two separable concerns apart:
 The model carried from HS1's shipped remote-client work (§112) already fits:
 
 - A client holds a **machine-global registry of remote servers** (`~/.hotsheet2/
-  remotes.json`): `{ servers: [{ origin, label, deviceClientId, projects: [{ id,
-  secret, name }] }] }`.
+remotes.json`): `{ servers: [{ origin, label, deviceClientId, projects: [{ id,
+secret, name }] }] }`.
 - Each project tab carries a server `(origin, secret)` — a **local** project's
   origin is this machine's own server (`https?://127.0.0.1:<port>`), a **remote**
   project's is another device's. Every tab is server-backed; there is no
@@ -37,15 +37,16 @@ The model carried from HS1's shipped remote-client work (§112) already fits:
 
 **Orchestration is live-mount only** (maintainer decision, 2026-08-19). A client
 reaches another machine's project by **attaching to that machine's running server**
-over mTLS (real-time; it drives the AI tools *there*). That is the one path.
+over mTLS (real-time; it drives the AI tools _there_). That is the one path.
 
 > **Decisions (resolved 2026-08-19).**
-> - **O1 — orchestration path: live-mount only.** *Automatic cloning is **not** a
->   Hot Sheet feature and never will be.* If a user wants a local copy of a store,
+>
+> - **O1 — orchestration path: live-mount only.** _Automatic cloning is **not** a
+>   Hot Sheet feature and never will be._ If a user wants a local copy of a store,
 >   they **clone it by hand** and run a local server against it — at which point it
 >   is simply a **normal local project** (a `127.0.0.1` origin like any other), not a
 >   special "clone-and-serve" mode Hot Sheet manages. This keeps the product's job
->   narrow: Hot Sheet mounts *running servers*; plain git handles copies.
+>   narrow: Hot Sheet mounts _running servers_; plain git handles copies.
 > - **O2 — cross-server aggregate views: deferred past v1.** A single view spanning
 >   multiple servers (e.g. "everything Up Next everywhere") is a new client-side
 >   query-fan-out surface; ship per-server views first.
@@ -74,11 +75,12 @@ The ticket asks how mobile devices connect to one or more servers. Directions:
   side ([06](06-clients.md) §6.4).
 
 > **Open decisions.**
+>
 > - **O4 — local stores on a phone.** Since clients don't embed the core and iOS
 >   can't run an independent background server (§9.1e, §6.4), **iOS is a remote
 >   client** — it does not host a local store. (A phone-local store would require an
 >   on-device server iOS won't allow.) Recommend **remote-only on iOS**; revisit
->   only if Apple's background-execution story changes. Android, which *can* run a
+>   only if Apple's background-execution story changes. Android, which _can_ run a
 >   background service, could host a local server later — a separate question.
 > - **O5 — push notifications: deferred past v1** (resolved 2026-08-19). A
 >   backgrounded-iPhone push (permission waiting / worker finished) needs APNs — new
@@ -120,13 +122,13 @@ Two regimes, kept distinct:
 - **One claim marker per ticket** under a **reserved ref namespace** —
   `refs/hotsheet/claims/<ulid>`. To claim, a worker **pushes to create that ref**.
   The remote serializes pushes, so the **first push wins and the second is rejected**
-  (the ref exists / not a fast-forward). That rejection *is* a distributed
+  (the ref exists / not a fast-forward). That rejection _is_ a distributed
   **compare-and-swap**: the git remote is the arbiter, and no Hot Sheet coordinator
   process exists.
 - **Metadata in the marker's payload, not its name.** The ref points at a tiny
   object (an orphan commit / annotated-tag object) whose message carries
   `{ worker, expires_at }`. The name stays stable and CAS-able; encoding
-  worker/timestamp in the *name* (an early sketch) would break that.
+  worker/timestamp in the _name_ (an early sketch) would break that.
 - **Renew** = fast-forward the marker with `--force-with-lease` (itself a CAS: it
   only succeeds if the marker is still what you last saw, so two workers can't both
   renew/steal).
@@ -151,7 +153,7 @@ needed** (§8.2 O3).
   `ls-remote`s / fetches the `refs/hotsheet/claims/*` namespace.)
 - **True mutual exclusion.** Unlike a file-based claim (both workers could commit
   locally and only discover the clash on sync), push-CAS rejects the second claimant
-  *at claim time* — so two paid AI workers never both start the same ticket.
+  _at claim time_ — so two paid AI workers never both start the same ticket.
 - **Same trust boundary as editing.** Anyone with push access can claim; that's the
   same access that edits tickets.
 
@@ -171,11 +173,12 @@ Empirically validated, so this is no longer a bet:
   (invisible to normal git + the GitHub UI, bulk-prunable), with **reserved-prefix
   tags as a documented fallback** for any remote that rejects custom refs. The
   CAS/lease semantics are identical either way — a git server-side guarantee.
-- **Not stress-tested:** a truly concurrent push race *against GitHub specifically*
+- **Not stress-tested:** a truly concurrent push race _against GitHub specifically_
   (vs. the local proof) — it's a git protocol guarantee, but worth a load test if we
   ever see contention anomalies.
 
 ## 8.6 Cross-references
+
 - Client tabs/registry: [06-clients.md](06-clients.md)
 - Claim/lease execution primitive (single-server regime): [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7
 - Git-native multi-machine claim/lease: §8.5

@@ -1,8 +1,8 @@
 import { clampRegionSize } from '@kerfjs/ui/resizable-region';
 
 export type AppRegionId = 'app-sidebar' | 'app-inspector' | 'app-terminal-drawer';
-export const TERMINAL_DRAWER_MIN_SIZE=228;
-export const TERMINAL_DRAWER_COLLAPSE_OVERSHOOT=48;
+export const TERMINAL_DRAWER_MIN_SIZE = 228;
+export const TERMINAL_DRAWER_COLLAPSE_OVERSHOOT = 48;
 
 export const APP_REGION_BOUNDS: Record<AppRegionId, { min: number; max: number; fallback: number }> = {
   'app-sidebar': { min: 250, max: 360, fallback: 272 },
@@ -26,9 +26,7 @@ export function normalizeAppRegionSize(id: AppRegionId, size: number): number {
 
 export function loadAppRegionSize(storage: Pick<Storage, 'getItem'>, id: AppRegionId): number {
   const saved = Number(storage.getItem(storageKey(id)));
-  return Number.isFinite(saved) && saved > 0
-    ? normalizeAppRegionSize(id, saved)
-    : APP_REGION_BOUNDS[id].fallback;
+  return Number.isFinite(saved) && saved > 0 ? normalizeAppRegionSize(id, saved) : APP_REGION_BOUNDS[id].fallback;
 }
 
 export function saveAppRegionSize(storage: Pick<Storage, 'setItem'>, id: AppRegionId, size: number): number {
@@ -41,6 +39,9 @@ export function terminalDrawerMaximum(mainBottom: number, workAreaTop: number): 
   return Math.max(APP_REGION_BOUNDS['app-terminal-drawer'].min, Math.floor(mainBottom - workAreaTop));
 }
 
-export function terminalDrawerDragDecision(rawSize:number,maximum:number):{size:number;collapse:boolean}{
-  return{size:Math.min(maximum,Math.max(TERMINAL_DRAWER_MIN_SIZE,Math.round(rawSize))),collapse:rawSize<=TERMINAL_DRAWER_MIN_SIZE-TERMINAL_DRAWER_COLLAPSE_OVERSHOOT};
+export function terminalDrawerDragDecision(rawSize: number, maximum: number): { size: number; collapse: boolean } {
+  return {
+    size: Math.min(maximum, Math.max(TERMINAL_DRAWER_MIN_SIZE, Math.round(rawSize))),
+    collapse: rawSize <= TERMINAL_DRAWER_MIN_SIZE - TERMINAL_DRAWER_COLLAPSE_OVERSHOOT,
+  };
 }

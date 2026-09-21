@@ -1,33 +1,200 @@
-.keyboard-settings { display: grid; gap: var(--kui-space-l); padding: var(--kui-space-m); }
-.keyboard-settings__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--kui-space-m); flex-wrap: wrap; }
-.keyboard-settings__intro { max-width: remify(672px); margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); line-height: 1.5; }
-.keyboard-settings__reset-all { display: inline-flex; align-items: center; gap: var(--kui-space-2xs); min-height: remify(36px); padding: 0 remify(12px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-text-normal); cursor: pointer; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; white-space: nowrap; }
-.keyboard-settings__reset-all:hover:not(:disabled) { background: var(--wa-color-neutral-fill-quiet); }
-.keyboard-settings__reset-all:disabled { opacity: .5; cursor: not-allowed; }
-.keyboard-settings__reset-all svg { width: remify(14.4px); height: remify(14.4px); }
-.keyboard-settings__group { display: grid; gap: var(--kui-space-2xs); }
-.keyboard-settings__group-title { margin: 0 0 var(--kui-space-2xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.keyboard-settings__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: var(--wa-border-radius-l); overflow: hidden; background: var(--wa-color-surface-default); }
-.keyboard-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--kui-space-m); min-height: remify(52px); margin: 0; padding: var(--kui-space-xs); border-top: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-default); }
-.keyboard-settings__row:first-child { border-top: 0; }
-.keyboard-settings__row[data-capturing="true"] { background: var(--wa-color-brand-fill-quiet); }
-.keyboard-settings__meta { display: grid; gap: var(--kui-space-2xs); min-width: 0; }
-.keyboard-settings__label { color: var(--wa-color-text-normal); font-size: var(--wa-font-size-s); font-weight: 600; }
-.keyboard-settings__description { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.keyboard-settings__conflict { display: inline-flex; align-items: center; gap: var(--kui-space-2xs); margin-top: var(--kui-space-2xs); color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 600; }
-.keyboard-settings__conflict svg { width: remify(12.8px); height: remify(12.8px); }
-.keyboard-settings__controls { display: flex; align-items: center; gap: var(--kui-space-2xs); flex: none; }
+.keyboard-settings {
+  display: grid;
+  gap: var(--kui-space-l);
+  padding: var(--kui-space-m);
+}
+.keyboard-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--kui-space-m);
+  flex-wrap: wrap;
+}
+.keyboard-settings__intro {
+  max-width: remify(672px);
+  margin: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+  line-height: 1.5;
+}
+.keyboard-settings__reset-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  min-height: remify(36px);
+  padding: 0 remify(12px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-text-normal);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--wa-font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.keyboard-settings__reset-all:hover:not(:disabled) {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.keyboard-settings__reset-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.keyboard-settings__reset-all svg {
+  width: remify(14.4px);
+  height: remify(14.4px);
+}
+.keyboard-settings__group {
+  display: grid;
+  gap: var(--kui-space-2xs);
+}
+.keyboard-settings__group-title {
+  margin: 0 0 var(--kui-space-2xs);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.keyboard-settings__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-l);
+  overflow: hidden;
+  background: var(--wa-color-surface-default);
+}
+.keyboard-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--kui-space-m);
+  min-height: remify(52px);
+  margin: 0;
+  padding: var(--kui-space-xs);
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+  background: var(--wa-color-surface-default);
+}
+.keyboard-settings__row:first-child {
+  border-top: 0;
+}
+.keyboard-settings__row[data-capturing='true'] {
+  background: var(--wa-color-brand-fill-quiet);
+}
+.keyboard-settings__meta {
+  display: grid;
+  gap: var(--kui-space-2xs);
+  min-width: 0;
+}
+.keyboard-settings__label {
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-s);
+  font-weight: 600;
+}
+.keyboard-settings__description {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.keyboard-settings__conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  margin-top: var(--kui-space-2xs);
+  color: var(--wa-color-warning-on-quiet);
+  font-size: var(--wa-font-size-2xs);
+  font-weight: 600;
+}
+.keyboard-settings__conflict svg {
+  width: remify(12.8px);
+  height: remify(12.8px);
+}
+.keyboard-settings__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  flex: none;
+}
 /* Clean, uniform chip matching the adjacent action buttons — the WA native `kbd` keycap treatment
    (a dark bottom box-shadow plus a 2px bottom border) read as a heavy, lopsided gray edge (HS2-186WJT). */
-.keyboard-settings__chord { display: inline-flex; align-items: center; justify-content: center; min-width: remify(52px); min-height: remify(30.4px); padding: 0 var(--kui-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); box-shadow: none; background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-text-normal); font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-xs); font-weight: 600; white-space: nowrap; }
-.keyboard-settings__capture { min-width: remify(128px); min-height: remify(30.4px); padding: 0 var(--kui-space-xs); border: 1px solid var(--wa-color-focus); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-brand-on-quiet); cursor: text; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; }
-.keyboard-settings__capture:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }
-.keyboard-settings__action { display: inline-grid; place-items: center; width: remify(30.4px); height: remify(30.4px); padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-quiet); cursor: pointer; }
-.keyboard-settings__action:hover:not(:disabled) { background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-text-normal); }
-.keyboard-settings__action:disabled { opacity: .4; cursor: not-allowed; }
-.keyboard-settings__action svg { width: remify(14.4px); height: remify(14.4px); }
-.keyboard-settings__fixed { display: inline-flex; align-items: center; min-height: remify(30.4px); padding: 0 var(--kui-space-xs); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 600; }
+.keyboard-settings__chord {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: remify(52px);
+  min-height: remify(30.4px);
+  padding: 0 var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  box-shadow: none;
+  background: var(--wa-color-neutral-fill-quiet);
+  color: var(--wa-color-text-normal);
+  font-family: var(--wa-font-family-mono);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.keyboard-settings__capture {
+  min-width: remify(128px);
+  min-height: remify(30.4px);
+  padding: 0 var(--kui-space-xs);
+  border: 1px solid var(--wa-color-focus);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-brand-on-quiet);
+  cursor: text;
+  font: inherit;
+  font-size: var(--wa-font-size-xs);
+  font-weight: 600;
+}
+.keyboard-settings__capture:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 1px;
+}
+.keyboard-settings__action {
+  display: inline-grid;
+  place-items: center;
+  width: remify(30.4px);
+  height: remify(30.4px);
+  padding: 0;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-neutral-on-quiet);
+  cursor: pointer;
+}
+.keyboard-settings__action:hover:not(:disabled) {
+  background: var(--wa-color-neutral-fill-quiet);
+  color: var(--wa-color-text-normal);
+}
+.keyboard-settings__action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.keyboard-settings__action svg {
+  width: remify(14.4px);
+  height: remify(14.4px);
+}
+.keyboard-settings__fixed {
+  display: inline-flex;
+  align-items: center;
+  min-height: remify(30.4px);
+  padding: 0 var(--kui-space-xs);
+  border-radius: var(--wa-border-radius-pill);
+  background: var(--wa-color-neutral-fill-quiet);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-2xs);
+  font-weight: 600;
+}
 @media (max-width: remify(544px)) {
-  .keyboard-settings__row { align-items: flex-start; flex-direction: column; gap: var(--kui-space-2xs); }
-  .keyboard-settings__controls { align-self: stretch; justify-content: flex-end; }
+  .keyboard-settings__row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--kui-space-2xs);
+  }
+  .keyboard-settings__controls {
+    align-self: stretch;
+    justify-content: flex-end;
+  }
 }

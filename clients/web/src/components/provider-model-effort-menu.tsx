@@ -5,7 +5,10 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Brain, Gauge, type IconNode, Pencil } from 'lucide';
 
 /** One id/label choice a submenu offers (a provider or a model). */
-export interface ProviderModelEffortChoice { id: string; label: string }
+export interface ProviderModelEffortChoice {
+  id: string;
+  label: string;
+}
 
 /** The Provider/Model/Effort submenu group, shared by every surface that lets a user pick
  * an AI provider, model, and optional effort (the Drive options popup and the in-conversation
@@ -68,7 +71,14 @@ export function ProviderModelEffortSubmenus({ actions, providers, model, effort 
           </span>
           Provider<span slot="details">{providers.currentLabel}</span>
           {providers.choices.map((choice) =>
-            providerModelEffortChoice(actions.provider!, choice.id, choice.label, choice.id === providers.currentId, Bot, 'bot'),
+            providerModelEffortChoice(
+              actions.provider!,
+              choice.id,
+              choice.label,
+              choice.id === providers.currentId,
+              Bot,
+              'bot',
+            ),
           )}
         </wa-dropdown-item>
       )}
@@ -81,7 +91,14 @@ export function ProviderModelEffortSubmenus({ actions, providers, model, effort 
           {model.customModel &&
             providerModelEffortChoice(actions.model, model.customModel, model.customModel, true, Brain, 'brain')}
           {model.choices.map((choice) =>
-            providerModelEffortChoice(actions.model, choice.id, choice.label, choice.id === model.currentId, Brain, 'brain'),
+            providerModelEffortChoice(
+              actions.model,
+              choice.id,
+              choice.label,
+              choice.id === model.currentId,
+              Brain,
+              'brain',
+            ),
           )}
           <wa-divider slot="submenu"></wa-divider>
           {providerModelEffortChoice(actions.manualModel, 'other', 'Other…', false, Pencil, 'pencil')}

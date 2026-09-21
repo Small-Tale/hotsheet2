@@ -6,7 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { TicketList } from './ticket-list';
 import type { TicketRowProps } from './ticket-row';
 
-const ticket: TicketRowProps = { slug: 'HS2-LIST', title: 'Shared list row', status: 'started', priority: 'default', category: 'task', tags: [] };
+const ticket: TicketRowProps = {
+  slug: 'HS2-LIST',
+  title: 'Shared list row',
+  status: 'started',
+  priority: 'default',
+  category: 'task',
+  tags: [],
+};
 
 describe('TicketList', () => {
   it('renders every item through TicketRow with listbox semantics', () => {
@@ -21,8 +28,8 @@ describe('TicketList', () => {
     expect(markup).not.toContain('ticket-card');
   });
 
-  it('reports progressive rendering without losing the authoritative total',()=>{
-    const markup=String(TicketList({tickets:[ticket],totalCount:250,label:'Archive tickets'}));
+  it('reports progressive rendering without losing the authoritative total', () => {
+    const markup = String(TicketList({ tickets: [ticket], totalCount: 250, label: 'Archive tickets' }));
     expect(markup).toContain('data-rendered-count="1"');
     expect(markup).toContain('data-total-count="250"');
     expect(markup).toContain('data-ticket-progressive-loading="true"');
@@ -30,10 +37,12 @@ describe('TicketList', () => {
   });
 
   it('keeps actionable corrupt diagnostics outside the healthy-ticket listbox', () => {
-    const markup = String(TicketList({
-      tickets: [ticket],
-      corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
-    }));
+    const markup = String(
+      TicketList({
+        tickets: [ticket],
+        corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
+      }),
+    );
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
     expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
     expect(markup).toContain('role="group"');
@@ -51,7 +60,9 @@ describe('TicketList', () => {
 
   it('overlaps only adjacent selected list-row borders into one seam', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
-    expect(css).toContain(':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)');
+    expect(css).toContainSource(
+      ':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)',
+    );
     expect(css).toContain('margin-top: -1px');
   });
 
@@ -60,8 +71,12 @@ describe('TicketList', () => {
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const narrowListRule = rowCss.match(/\.ticket-list-row--list \{([^}]*)\}/)?.[1] ?? '';
     expect(narrowListRule).not.toContain('border-radius');
-    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: remify(10.4px) remify(10.4px) 0 0; }');
-    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 remify(10.4px) remify(10.4px); }');
+    expect(listCss).toContainSource(
+      '.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: remify(10.4px) remify(10.4px) 0 0; }',
+    );
+    expect(listCss).toContainSource(
+      '.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 remify(10.4px) remify(10.4px); }',
+    );
   });
 
   it('fills the width supplied by its host instead of imposing an internal cap', () => {

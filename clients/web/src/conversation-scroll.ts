@@ -1,6 +1,9 @@
 const BOTTOM_SLOP_PX = 32;
 
-interface TranscriptScrollState {pinned:boolean;top:number}
+interface TranscriptScrollState {
+  pinned: boolean;
+  top: number;
+}
 
 /**
  * Reader intent per mounted transcript, derived from its scroll events. Kept outside the
@@ -16,14 +19,18 @@ function atLatestEdge(transcript: HTMLElement): boolean {
 function trackedState(transcript: HTMLElement): TranscriptScrollState {
   let state = transcriptStates.get(transcript);
   if (state) return state;
-  const created: TranscriptScrollState = {pinned: true, top: transcript.scrollTop};
+  const created: TranscriptScrollState = { pinned: true, top: transcript.scrollTop };
   transcriptStates.set(transcript, created);
-  transcript.addEventListener('scroll', () => {
-    const top = transcript.scrollTop;
-    if (atLatestEdge(transcript)) created.pinned = true;
-    else if (top < created.top) created.pinned = false;
-    created.top = top;
-  }, {passive: true});
+  transcript.addEventListener(
+    'scroll',
+    () => {
+      const top = transcript.scrollTop;
+      if (atLatestEdge(transcript)) created.pinned = true;
+      else if (top < created.top) created.pinned = false;
+      created.top = top;
+    },
+    { passive: true },
+  );
   state = created;
   return state;
 }

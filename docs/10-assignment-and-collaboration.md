@@ -1,11 +1,11 @@
 # 10. Assignment & Human-in-the-Loop Collaboration
 
 > **Status: Core data model + write path shipped (HS2-20).** Addresses the
-> maintainer's note (2026-08-19): *"need to think about ticket assignment/claiming in
+> maintainer's note (2026-08-19): _"need to think about ticket assignment/claiming in
 > a distributed setting and tickets that humans need to be assigned to / in the loop
 > for. On teams we might want the specific attention of one or more people to either
 > directly do work or to provide feedback. Need to figure out how that works with
-> git-based tickets."* Tracked: HS2-20.
+> git-based tickets."_ Tracked: HS2-20.
 >
 > **Built:** the `assignees` / `review_requests` frontmatter fields (§10.2), the
 > committed **`people.json` roster** (`hotsheet-ticketing::roster`), the semantic
@@ -33,15 +33,15 @@ HS1 has exactly one mechanism (`claim/lease`) and it is about **machine workers*
 draining a pool. Teams need a **second, orthogonal** mechanism about **people**.
 Conflating them is the trap.
 
-| | **Claim / lease** (machines) | **Assignment** (humans) |
-|---|---|---|
-| Who | An AI worker / agent process | A named person |
-| Purpose | Prevent two workers doing the same ticket right now | Direct a person's attention to do work or give feedback |
-| Lifetime | Seconds–minutes, **expiring** (auto-reclaimed) | Durable until the person acts / it's cleared |
-| Storage | `claim_*` frontmatter, ephemeral | `assignees` / `review_requests` frontmatter, shared |
-| Distributed role | Coordination correctness | Team workflow / notification |
+|                  | **Claim / lease** (machines)                        | **Assignment** (humans)                                 |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| Who              | An AI worker / agent process                        | A named person                                          |
+| Purpose          | Prevent two workers doing the same ticket right now | Direct a person's attention to do work or give feedback |
+| Lifetime         | Seconds–minutes, **expiring** (auto-reclaimed)      | Durable until the person acts / it's cleared            |
+| Storage          | `claim_*` frontmatter, ephemeral                    | `assignees` / `review_requests` frontmatter, shared     |
+| Distributed role | Coordination correctness                            | Team workflow / notification                            |
 
-A ticket can have both at once: assigned to *Dana* (human) while an *agent* holds a
+A ticket can have both at once: assigned to _Dana_ (human) while an _agent_ holds a
 live claim doing the mechanical part. They don't contend.
 
 ## 10.2 The data model (shared, in the ticket file)
@@ -50,13 +50,13 @@ Two frontmatter fields, both **Tier A shared** ([02](02-ticket-storage.md) §2.1
 so every teammate sees them and they sync + merge automatically:
 
 ```yaml
-assignees: [dana@example.com, alex@example.com]    # people expected to do the work
-review_requests:                                   # people whose input is wanted
+assignees: [dana@example.com, alex@example.com] # people expected to do the work
+review_requests: # people whose input is wanted
   - { who: dana@example.com, kind: feedback, by: 01J9ZK…req-ulid, at: 2026-08-19T…, requested_by: alex@example.com }
-  - { who: sam@example.com,  kind: review,   by: 01J9ZK…req-ulid, at: 2026-08-19T…, requested_by: alex@example.com }
+  - { who: sam@example.com, kind: review, by: 01J9ZK…req-ulid, at: 2026-08-19T…, requested_by: alex@example.com }
 ```
 
-- **`assignees`** — a set of person identities expected to *do* the ticket.
+- **`assignees`** — a set of person identities expected to _do_ the ticket.
 - **`review_requests`** — a set of "I need this person in the loop" asks, each with
   a **kind**: `feedback` (weigh in), `review` (approve/verify), or `fyi` (awareness).
   `requested_by` is the requesting person's git email. Each request carries its own
@@ -90,8 +90,8 @@ Because tickets are just git, "notifying" is layered:
    fetch and raises a local/desktop (or, later, iOS push) notification. No central
    server required; the git remote is the delivery channel.
 
-So the *record* of "you're wanted" is always in git (durable, offline-safe); the
-*alerting* is best-effort on top (live when connected, on-sync otherwise).
+So the _record_ of "you're wanted" is always in git (durable, offline-safe); the
+_alerting_ is best-effort on top (live when connected, on-sync otherwise).
 
 ## 10.4 Distributed claiming (machines) — restated for this setting
 
@@ -106,20 +106,22 @@ Two refinements for the distributed/team case:
   to it.
 - **A human assignment is not a lease.** It does not block a machine worker or
   expire; it's a durable "this person owns the outcome." The write-conflict guard
-  (which protects against two *simultaneous editors*) still applies regardless of
+  (which protects against two _simultaneous editors_) still applies regardless of
   who's assigned.
 
 ## 10.5 Decisions & remaining questions (HS2-20)
 
 **Resolved (maintainer, 2026-08-19):**
+
 - **Identity + roster.** Git email is the key; the display roster is a **committed
   `people.json` in the store**, so it syncs to the team (§10.2).
-- **UX.** **One "People…" control** sets assignees *and* adds review requests (each
+- **UX.** **One "People…" control** sets assignees _and_ adds review requests (each
   with a work/feedback/review/fyi kind) — not two separate controls.
 - **Review vs. `blocked_by`.** Review requests stay **soft** (attention only); use
   `blocked_by` for hard ordering. A review never hard-blocks a ticket.
 
 **Still open (smaller):**
+
 - **Client presentation.** The shared People control, identity-derived views, and
   on-sync/native attention UX are tracked by HS2-CRW5CP.
 - **Notification transport off-server.** In-app + on-sync desktop notifications are
@@ -129,6 +131,7 @@ GitHub collaborator seeding for `people.json` shipped in HS2-NZT80R; git identit
 continues to work without it.
 
 ## 10.6 Cross-references
+
 - The `assignees` / `review_requests` fields + shared/local tiering: [02](02-ticket-storage.md) §2.5, §2.11
 - **Close reasons** — the other collaboration-motivated field (why a shared ticket
   was closed: completed / not_planned / duplicate): [02](02-ticket-storage.md) §2.6a

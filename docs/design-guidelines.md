@@ -44,15 +44,15 @@ fake a native macOS surface it cannot actually be.
 
 **Reading order for a task.**
 
-| You are about to… | Read |
-|---|---|
-| Add or change any client surface | §1 (scope), §10 (checklist), then the matching §2–§6 section |
-| Build a menu, toolbar, context menu, or shortcut | §4.3–§4.5, §5.1, §8.1 |
-| Present a dialog, popover, alert, sheet, or panel | §4.7 decision table, §3.4 |
-| Show AI output (notes, repairs, narration, permission requests) | §6.1, §3.12, §9 |
-| Touch color, type, spacing, icons, dark mode | §2.1–§2.7, §9 |
-| Start the SwiftUI macOS app | §8.1 (the whole native plan) |
-| Work on Tauri | §8.2 |
+| You are about to…                                               | Read                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------ |
+| Add or change any client surface                                | §1 (scope), §10 (checklist), then the matching §2–§6 section |
+| Build a menu, toolbar, context menu, or shortcut                | §4.3–§4.5, §5.1, §8.1                                        |
+| Present a dialog, popover, alert, sheet, or panel               | §4.7 decision table, §3.4                                    |
+| Show AI output (notes, repairs, narration, permission requests) | §6.1, §3.12, §9                                              |
+| Touch color, type, spacing, icons, dark mode                    | §2.1–§2.7, §9                                                |
+| Start the SwiftUI macOS app                                     | §8.1 (the whole native plan)                                 |
+| Work on Tauri                                                   | §8.2                                                         |
 
 ---
 
@@ -76,7 +76,7 @@ through their documented tokens and parts, and with Kerf-owned state. Do **not**
 counterfeit native chrome: no CSS-drawn title bars or traffic lights, no imitation
 Liquid Glass refraction, no SF Symbols (Lucide is the shared icon vocabulary), no
 platform-specific cursor quirks that browsers do not have. On Linux and Windows the
-same client keeps the HIG's *behavioral* rules (menus, undo, feedback, modality,
+same client keeps the HIG's _behavioral_ rules (menus, undo, feedback, modality,
 focus) with that platform's modifier keys and native window decorations.
 
 **iOS/iPadOS (later):** out of scope for this revision. The digests already contain
@@ -87,7 +87,7 @@ the iOS platform considerations; HS2-46RA38 adds them before the iOS client star
 - A Mac-first product whose users live in the terminal and in native tools expects
   the menu bar, standard shortcuts, native windows, and honest feedback. The HIG is
   the most complete, maintained statement of those expectations.
-- Two clients that share *conventions* (menu order, label grammar, undo naming,
+- Two clients that share _conventions_ (menu order, label grammar, undo naming,
   selection colors, dialog button placement, notification policy) feel like one
   product even though they share no rendering code — exactly the cross-client
   contract in [ux-components.md](ux-components.md) §1.
@@ -99,31 +99,31 @@ the iOS platform considerations; HS2-46RA38 adds them before the iOS client star
 Ratings: **Adopt** (apply as written), **Translate** (keep intent, web primitives),
 **Analogy** (borrow the principle only), **Skip** (not applicable on desktop).
 
-| HIG area | macOS app | Web / Tauri | Where in this doc |
-|---|---|---|---|
-| Accessibility, VoiceOver, Full Keyboard Access | Adopt | Translate (ARIA, `:focus-visible`, `prefers-*`) | §2.1, §6.2 |
-| Color, Dark Mode, materials, Liquid Glass | Adopt | Translate (tokens, `prefers-color-scheme`); no imitation glass | §2.2, §2.3, §2.6 |
-| Typography (SF Pro, 13 pt body, 10 pt floor) | Adopt | Translate (system font stack, px scale) | §2.4 |
-| Layout, split views, sidebar, inspector | Adopt | Translate (CSS grid, `wa-split-panel`) | §2.5, §4.2 |
-| Icons (SF Symbols) | Decision pending (HS2-0P83KD) | Lucide (project rule) | §2.7, §9 |
-| Motion | Adopt | Translate (`prefers-reduced-motion`) | §2.8 |
-| Writing, inclusion, RTL | Adopt | Adopt | §2.9, §2.11 |
-| Privacy, app icon, branding, images | Adopt | Translate | §2.10, §2.12 |
-| Launching, loading, feedback, modality, undo | Adopt | Adopt | §3.1–§3.5 |
-| Drag and drop, entering data, searching, settings | Adopt | Translate | §3.6–§3.9 |
-| File management, full screen, multitasking | Adopt | Translate (Tauri) / Analogy (browser) | §3.10, §3.11 |
-| Notifications, help, onboarding, accounts, sharing, charts, printing | Adopt | Translate | §3.12–§3.17 |
-| Audio, haptics, video, workouts, live-viewing, ratings | Analogy | Skip | §3.18 |
-| Windows, toolbars, menu bar, menus, context menus | Adopt | Translate (Tauri native menu; in-browser command surface) | §4.1, §4.3–§4.5 |
-| Lists/tables/outline views, buttons, text controls, toggles, pickers, progress | Adopt | Translate (Web Awesome) | §4.6–§4.13 |
-| Sheets, alerts, popovers, panels | Adopt | Translate (`wa-dialog`, `wa-popover`, `wa-drawer`) | §4.7 |
-| Column views, page controls, ornaments, lockups, tab-bar-as-navigation | Skip | Skip | §4.14 |
-| Notifications, widgets, App Intents, Dock menu, menu bar extra | Adopt | Tauri: notifications, tray | §4.12, §8.1 |
-| Keyboards, pointing devices, focus and selection, gestures | Adopt | Translate | §5 |
-| Other inputs (Pencil, Crown, eyes, remotes, game controls…) | Skip | Skip | §5.5 |
-| Generative AI, Machine learning | Adopt | Adopt | §6.1 |
-| Mac Catalyst, Siri/App Intents, iCloud, Sign in with Apple, SharePlay | Analogy / later | Analogy | §6.3–§6.4 |
-| Remaining technologies (Pay, Wallet, HomeKit, Maps…) | Skip (principles noted) | Skip | §6.5 |
+| HIG area                                                                       | macOS app                     | Web / Tauri                                                    | Where in this doc |
+| ------------------------------------------------------------------------------ | ----------------------------- | -------------------------------------------------------------- | ----------------- |
+| Accessibility, VoiceOver, Full Keyboard Access                                 | Adopt                         | Translate (ARIA, `:focus-visible`, `prefers-*`)                | §2.1, §6.2        |
+| Color, Dark Mode, materials, Liquid Glass                                      | Adopt                         | Translate (tokens, `prefers-color-scheme`); no imitation glass | §2.2, §2.3, §2.6  |
+| Typography (SF Pro, 13 pt body, 10 pt floor)                                   | Adopt                         | Translate (system font stack, px scale)                        | §2.4              |
+| Layout, split views, sidebar, inspector                                        | Adopt                         | Translate (CSS grid, `wa-split-panel`)                         | §2.5, §4.2        |
+| Icons (SF Symbols)                                                             | Decision pending (HS2-0P83KD) | Lucide (project rule)                                          | §2.7, §9          |
+| Motion                                                                         | Adopt                         | Translate (`prefers-reduced-motion`)                           | §2.8              |
+| Writing, inclusion, RTL                                                        | Adopt                         | Adopt                                                          | §2.9, §2.11       |
+| Privacy, app icon, branding, images                                            | Adopt                         | Translate                                                      | §2.10, §2.12      |
+| Launching, loading, feedback, modality, undo                                   | Adopt                         | Adopt                                                          | §3.1–§3.5         |
+| Drag and drop, entering data, searching, settings                              | Adopt                         | Translate                                                      | §3.6–§3.9         |
+| File management, full screen, multitasking                                     | Adopt                         | Translate (Tauri) / Analogy (browser)                          | §3.10, §3.11      |
+| Notifications, help, onboarding, accounts, sharing, charts, printing           | Adopt                         | Translate                                                      | §3.12–§3.17       |
+| Audio, haptics, video, workouts, live-viewing, ratings                         | Analogy                       | Skip                                                           | §3.18             |
+| Windows, toolbars, menu bar, menus, context menus                              | Adopt                         | Translate (Tauri native menu; in-browser command surface)      | §4.1, §4.3–§4.5   |
+| Lists/tables/outline views, buttons, text controls, toggles, pickers, progress | Adopt                         | Translate (Web Awesome)                                        | §4.6–§4.13        |
+| Sheets, alerts, popovers, panels                                               | Adopt                         | Translate (`wa-dialog`, `wa-popover`, `wa-drawer`)             | §4.7              |
+| Column views, page controls, ornaments, lockups, tab-bar-as-navigation         | Skip                          | Skip                                                           | §4.14             |
+| Notifications, widgets, App Intents, Dock menu, menu bar extra                 | Adopt                         | Tauri: notifications, tray                                     | §4.12, §8.1       |
+| Keyboards, pointing devices, focus and selection, gestures                     | Adopt                         | Translate                                                      | §5                |
+| Other inputs (Pencil, Crown, eyes, remotes, game controls…)                    | Skip                          | Skip                                                           | §5.5              |
+| Generative AI, Machine learning                                                | Adopt                         | Adopt                                                          | §6.1              |
+| Mac Catalyst, Siri/App Intents, iCloud, Sign in with Apple, SharePlay          | Analogy / later               | Analogy                                                        | §6.3–§6.4         |
+| Remaining technologies (Pay, Wallet, HomeKit, Maps…)                           | Skip (principles noted)       | Skip                                                           | §6.5              |
 
 ## 2. Foundations
 
@@ -256,7 +256,7 @@ subtle shadow that appears only once content scrolls beneath the header.
   Regular glass (blurred, luminosity-adjusted) for text-heavy or legibility-sensitive
   surfaces; clear glass only over rich media, with a 35% dark dimming layer when the
   media is bright.
-- Standard materials differentiate *within* the content layer; choose by semantic
+- Standard materials differentiate _within_ the content layer; choose by semantic
   purpose, use vibrant colors on top, thicker for fine text, thinner to preserve
   context. macOS offers `NSVisualEffectView` materials with behind-window or
   within-window blending.
@@ -266,7 +266,7 @@ subtle shadow that appears only once content scrolls beneath the header.
 **Hot Sheet application.** Native: let `NavigationSplitView`, `.toolbar`,
 `.inspector`, sheets, and menus supply glass; the terminal drawer, board columns,
 and ticket rows are content and get standard materials at most. Web: approximate the
-*layering* (one translucent treatment for navigation chrome with
+_layering_ (one translucent treatment for navigation chrome with
 `backdrop-filter`, opaque content surfaces, scroll-edge fade) and fall back to an
 opaque `--wa-color-surface-raised` under `prefers-reduced-transparency`. Do not build
 imitation refraction or specular highlights.
@@ -647,7 +647,7 @@ task with a request for anything.
 auxiliary `Window` for a detached terminal or notifications, `.windowResizability`
 enforcing the 1024×600 floor. Tauri: native decorations, `minWidth: 1024,
 minHeight: 600`, mute accent-colored selection on `blur` so the web UI follows
-key/inactive. The project tab bar is a *window* tab bar (Safari/Finder style), so
+key/inactive. The project tab bar is a _window_ tab bar (Safari/Finder style), so
 Window menu tab commands apply (§4.4).
 
 ### 4.2 Split views, sidebars, inspectors
@@ -701,16 +701,16 @@ Dynamic (Option-modified) items are shortcuts, never the only path.
 
 Standard contents that apply to Hot Sheet:
 
-| Menu | Items (in order) |
-|---|---|
-| Hot Sheet | About Hot Sheet · Settings… ⌘, · Services ▸ · Hide Hot Sheet ⌘H · Hide Others ⌥⌘H · Show All · Quit Hot Sheet ⌘Q |
-| File | New Ticket… ⌘N · New Window ⇧⌘N · Open Store… ⌘O · Open Recent ▸ · Close ⌘W / Close Tab · Close Window ⇧⌘W · Export As… · Print… ⌘P |
-| Edit | Undo/Redo (result-named) ⌘Z ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Paste and Match Style ⌥⇧⌘V · Delete · Select All ⌘A · Deselect All ⇧⌘A · Find ▸ (Find ⌘F focuses search) · Spelling and Grammar ▸ · Substitutions ▸ · Transformations ▸ · Speech ▸ · (Start Dictation, Emoji & Symbols added by the system) |
-| View | as List / as Board (checkmarked) · Sort By ▸ · Group By ▸ · Show/Hide Tab Bar · Show/Hide Toolbar · Customize Toolbar… · Show/Hide Sidebar ⌃⌘S · Show/Hide Inspector ⌥⌘I · Show/Hide Terminal · Enter Full Screen ⌃⌘F |
-| Project | Switch to open projects · Reload · Ticket Sources… · Commands… · Permissions… |
-| Ticket | Open · Open in New Window · Start · Complete · Mark Verified · Report Not Working… · Set Status ▸ · Set Priority ▸ · Set Category ▸ · Move to Up Next / Backlog · Claim / Release · Add Tag… · Duplicate · Copy Slug · Copy Link · Move to Store… · Archive · Delete… |
-| Window | Minimize ⌘M · Zoom · Show Previous/Next Tab · Move Tab to New Window · Merge All Windows · Bring All to Front · open windows |
-| Help | Hot Sheet Help · Release Notes · Keyboard Shortcuts |
+| Menu      | Items (in order)                                                                                                                                                                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hot Sheet | About Hot Sheet · Settings… ⌘, · Services ▸ · Hide Hot Sheet ⌘H · Hide Others ⌥⌘H · Show All · Quit Hot Sheet ⌘Q                                                                                                                                                                                            |
+| File      | New Ticket… ⌘N · New Window ⇧⌘N · Open Store… ⌘O · Open Recent ▸ · Close ⌘W / Close Tab · Close Window ⇧⌘W · Export As… · Print… ⌘P                                                                                                                                                                         |
+| Edit      | Undo/Redo (result-named) ⌘Z ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Paste and Match Style ⌥⇧⌘V · Delete · Select All ⌘A · Deselect All ⇧⌘A · Find ▸ (Find ⌘F focuses search) · Spelling and Grammar ▸ · Substitutions ▸ · Transformations ▸ · Speech ▸ · (Start Dictation, Emoji & Symbols added by the system) |
+| View      | as List / as Board (checkmarked) · Sort By ▸ · Group By ▸ · Show/Hide Tab Bar · Show/Hide Toolbar · Customize Toolbar… · Show/Hide Sidebar ⌃⌘S · Show/Hide Inspector ⌥⌘I · Show/Hide Terminal · Enter Full Screen ⌃⌘F                                                                                       |
+| Project   | Switch to open projects · Reload · Ticket Sources… · Commands… · Permissions…                                                                                                                                                                                                                               |
+| Ticket    | Open · Open in New Window · Start · Complete · Mark Verified · Report Not Working… · Set Status ▸ · Set Priority ▸ · Set Category ▸ · Move to Up Next / Backlog · Claim / Release · Add Tag… · Duplicate · Copy Slug · Copy Link · Move to Store… · Archive · Delete…                                       |
+| Window    | Minimize ⌘M · Zoom · Show Previous/Next Tab · Move Tab to New Window · Merge All Windows · Bring All to Front · open windows                                                                                                                                                                                |
+| Help      | Hot Sheet Help · Release Notes · Keyboard Shortcuts                                                                                                                                                                                                                                                         |
 
 App-specific menus mirror the hierarchy (projects contain tickets), so Project
 precedes Ticket. Format is omitted (Markdown, not rich text). Menu bar extra: only if
@@ -770,14 +770,14 @@ HS2-A2A9GT).
 
 ### 4.7 Presentation: which surface to use
 
-| Need | Use | Rules |
-|---|---|---|
-| A few related, safe-to-dismiss options anchored to a control | **Popover** (`.popover` / `wa-popover`) | One at a time; never a popover on a popover; never for warnings; autosave on light dismiss, discard only on explicit Cancel; detachable into a panel on macOS |
-| A scoped task before returning to the parent | **Sheet** (`.sheet` / modal `wa-dialog`) | One per window; Cancel plus a verb-named default (never Done alone); Esc cancels; other windows stay usable; if people must watch results while iterating, use a panel or inspector instead |
-| Critical, unexpected, non-undoable information or confirmation | **Alert** (`.alert` / `NSAlert` / alert-style `wa-dialog`) | Title says what and why (never "Error"); ≤ 3 buttons; specific verbs, "OK" only when purely informational, never Yes/No; default trailing, Cancel leading and never default; destructive style only when the person did not choose the action; caution icon rarely; Esc and ⌘. cancel; suppression checkbox for repeats |
-| Choices related to an action just taken | **Confirmation dialog** (`confirmationDialog` / small `wa-dialog`) | Destructive first and styled, Cancel last; short title; no scrolling list of choices |
-| Selection-following details or tools used while watching results | **Inspector pane or panel** (`.inspector`, `NSPanel` / `wa-drawer`) | Noun title; follows app activation; not in the Window menu's document list |
-| Self-contained work | **New window** | Offer via context menu / File menu |
+| Need                                                             | Use                                                                 | Rules                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A few related, safe-to-dismiss options anchored to a control     | **Popover** (`.popover` / `wa-popover`)                             | One at a time; never a popover on a popover; never for warnings; autosave on light dismiss, discard only on explicit Cancel; detachable into a panel on macOS                                                                                                                                                           |
+| A scoped task before returning to the parent                     | **Sheet** (`.sheet` / modal `wa-dialog`)                            | One per window; Cancel plus a verb-named default (never Done alone); Esc cancels; other windows stay usable; if people must watch results while iterating, use a panel or inspector instead                                                                                                                             |
+| Critical, unexpected, non-undoable information or confirmation   | **Alert** (`.alert` / `NSAlert` / alert-style `wa-dialog`)          | Title says what and why (never "Error"); ≤ 3 buttons; specific verbs, "OK" only when purely informational, never Yes/No; default trailing, Cancel leading and never default; destructive style only when the person did not choose the action; caution icon rarely; Esc and ⌘. cancel; suppression checkbox for repeats |
+| Choices related to an action just taken                          | **Confirmation dialog** (`confirmationDialog` / small `wa-dialog`)  | Destructive first and styled, Cancel last; short title; no scrolling list of choices                                                                                                                                                                                                                                    |
+| Selection-following details or tools used while watching results | **Inspector pane or panel** (`.inspector`, `NSPanel` / `wa-drawer`) | Noun title; follows app activation; not in the Window menu's document list                                                                                                                                                                                                                                              |
+| Self-contained work                                              | **New window**                                                      | Offer via context menu / File menu                                                                                                                                                                                                                                                                                      |
 
 Never use `window.alert`/`confirm` on the web; disable `light-dismiss` on
 data-bearing dialogs. The permission-request popup is an expected, actionable
@@ -883,19 +883,19 @@ Use the same metaphor everywhere an action appears (menu bar, context menu,
 toolbar, buttons). Lucide names for the web; SF Symbol names for the native app if
 HS2-0P83KD chooses SF Symbols.
 
-| Action | Lucide | SF Symbol |
-|---|---|---|
-| Cut / Copy / Paste | `scissors` / `copy` / `clipboard-paste` | `scissors` / `document.on.document` / `document.on.clipboard` |
-| Done / Cancel | `check` / `x` | `checkmark` / `xmark` |
-| Delete | `trash-2` | `trash` |
-| Undo / Redo | `undo-2` / `redo-2` | `arrow.uturn.backward` / `arrow.uturn.forward` |
-| New / Compose | `square-pen` | `square.and.pencil` |
-| Duplicate / Rename / Move to | `copy-plus` / `pencil` / `folder` | `plus.square.on.square` / `pencil` / `folder` |
-| Attach / Add / More | `paperclip` / `plus` / `ellipsis` | `paperclip` / `plus` / `ellipsis` |
-| Search / Filter | `search` / `list-filter` | `magnifyingglass` / `line.3.horizontal.decrease` |
-| Share / Print | `share` / `printer` | `square.and.arrow.up` / `printer` |
-| Archive / Calendar / Account | `archive` / `calendar` / `circle-user` | `archivebox` / `calendar` / `person.crop.circle` |
-| Sidebar / Inspector toggle | `panel-left` / `panel-right` | `sidebar.leading` / `sidebar.trailing` |
+| Action                       | Lucide                                  | SF Symbol                                                     |
+| ---------------------------- | --------------------------------------- | ------------------------------------------------------------- |
+| Cut / Copy / Paste           | `scissors` / `copy` / `clipboard-paste` | `scissors` / `document.on.document` / `document.on.clipboard` |
+| Done / Cancel                | `check` / `x`                           | `checkmark` / `xmark`                                         |
+| Delete                       | `trash-2`                               | `trash`                                                       |
+| Undo / Redo                  | `undo-2` / `redo-2`                     | `arrow.uturn.backward` / `arrow.uturn.forward`                |
+| New / Compose                | `square-pen`                            | `square.and.pencil`                                           |
+| Duplicate / Rename / Move to | `copy-plus` / `pencil` / `folder`       | `plus.square.on.square` / `pencil` / `folder`                 |
+| Attach / Add / More          | `paperclip` / `plus` / `ellipsis`       | `paperclip` / `plus` / `ellipsis`                             |
+| Search / Filter              | `search` / `list-filter`                | `magnifyingglass` / `line.3.horizontal.decrease`              |
+| Share / Print                | `share` / `printer`                     | `square.and.arrow.up` / `printer`                             |
+| Archive / Calendar / Account | `archive` / `calendar` / `circle-user`  | `archivebox` / `calendar` / `person.crop.circle`              |
+| Sidebar / Inspector toggle   | `panel-left` / `panel-right`            | `sidebar.leading` / `sidebar.trailing`                        |
 
 ### 4.14 Components not adopted
 
@@ -927,27 +927,27 @@ never advertise") are folded into §2 and §3.
 Windows and must not intercept Control combinations on macOS, which belong to the
 terminal and the system):
 
-| Shortcut | Command | Notes |
-|---|---|---|
-| ⌘N | New Ticket… | |
-| ⇧⌘N | New Window | |
-| ⌘O / ⌘W / ⇧⌘W / ⌘Q / ⌘M / ⌘H | Open Store… / Close (Tab) / Close Window / Quit / Minimize / Hide | system meanings, never rebound |
-| ⌘, | Settings… | |
-| ⌘Z / ⇧⌘Z | Undo / Redo (result-named) | text-level undo inside editors |
-| ⌘X / ⌘C / ⌘V | Cut / Copy / Paste ticket(s) when the work area owns focus; text otherwise | existing focus-ownership rule |
-| ⌘A / ⇧⌘A | Select All / Deselect All tickets in the focused list | |
-| ⌘F / ⌥⌘F | Focus workspace search | |
-| ⌘J | Scroll to selected ticket | |
-| ⌃⌘S / ⌥⌘I | Show/Hide Sidebar / Inspector | |
-| ⌃⌘F | Enter/Exit Full Screen | system |
-| ⌘P | Print… | |
-| ⌘? | Help | |
-| ⇧⌘[ / ⇧⌘] | Previous / Next project tab | window-tab convention |
-| ⌘1 / ⌘2 | View as List / as Board | app-specific, Command-only |
-| Return / ⌘↓ | Open selected ticket in the reader | `Return` opens; `⌘↓` mirrors Finder |
-| Space | Quick Look-style preview of an attachment | when the attachment list has focus |
-| Delete / ⌘Delete | Archive selected / Delete… selected | Delete-key parity with Edit › Delete |
-| Esc / ⌘. | Cancel, close popover or dialog, clear search | |
+| Shortcut                     | Command                                                                    | Notes                                |
+| ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------ |
+| ⌘N                           | New Ticket…                                                                |                                      |
+| ⇧⌘N                          | New Window                                                                 |                                      |
+| ⌘O / ⌘W / ⇧⌘W / ⌘Q / ⌘M / ⌘H | Open Store… / Close (Tab) / Close Window / Quit / Minimize / Hide          | system meanings, never rebound       |
+| ⌘,                           | Settings…                                                                  |                                      |
+| ⌘Z / ⇧⌘Z                     | Undo / Redo (result-named)                                                 | text-level undo inside editors       |
+| ⌘X / ⌘C / ⌘V                 | Cut / Copy / Paste ticket(s) when the work area owns focus; text otherwise | existing focus-ownership rule        |
+| ⌘A / ⇧⌘A                     | Select All / Deselect All tickets in the focused list                      |                                      |
+| ⌘F / ⌥⌘F                     | Focus workspace search                                                     |                                      |
+| ⌘J                           | Scroll to selected ticket                                                  |                                      |
+| ⌃⌘S / ⌥⌘I                    | Show/Hide Sidebar / Inspector                                              |                                      |
+| ⌃⌘F                          | Enter/Exit Full Screen                                                     | system                               |
+| ⌘P                           | Print…                                                                     |                                      |
+| ⌘?                           | Help                                                                       |                                      |
+| ⇧⌘[ / ⇧⌘]                    | Previous / Next project tab                                                | window-tab convention                |
+| ⌘1 / ⌘2                      | View as List / as Board                                                    | app-specific, Command-only           |
+| Return / ⌘↓                  | Open selected ticket in the reader                                         | `Return` opens; `⌘↓` mirrors Finder  |
+| Space                        | Quick Look-style preview of an attachment                                  | when the attachment list has focus   |
+| Delete / ⌘Delete             | Archive selected / Delete… selected                                        | Delete-key parity with Edit › Delete |
+| Esc / ⌘.                     | Cancel, close popover or dialog, clear search                              |                                      |
 
 The single source for this table is the command registry (HS2-80VPPW, HS2-KTHGVE).
 
@@ -1112,20 +1112,20 @@ and never re-ask for sign-in.
 An honest reading of the shipped web client against §2–§6 (2026-09-03). Items in
 the "gap" column are tracked by the tickets in §11.
 
-| Area | Already conforms | Gap |
-|---|---|---|
-| Structure | Sidebar · workspace · inspector split view with persistent splitters, 1024×600 floor, inspector-first collapse, header-owned restore controls, terminal drawer | Key/inactive window muting (Tauri), background extension under chrome, scroll-edge treatment |
-| Menus and commands | Icon-bearing context menus identical in list and board; outside-click and Esc dismissal | No menu bar / command registry; no in-browser command surface; shortcut table not centralized (HS2-80VPPW, HS2-KTHGVE) |
-| Editing | 150 ms autosave, no Save/Cancel, field-aware live merge, reader escalation | Result-named undo entries; Edit-menu wiring |
-| Selection and focus | Native click/⌘/⇧ selection model; no focus theft on live updates; work-area focus ownership | Accent-vs-gray highlight by list focus; roving tabindex audit (HS2-A2A9GT) |
-| Feedback and modality | Non-modal permission popups with queueing; inline connection banner; silent background reconciliation | Dialog button grammar audit; specific progress text; ellipsis rule (HS2-A2A9GT) |
-| Color and appearance | Semantic Web Awesome tokens, `--hs-*` aliases limited to domain states, literal-token lint | Light-only; no `prefers-color-scheme`, `prefers-contrast`, `prefers-reduced-motion`, `prefers-reduced-transparency` (HS2-DKZG9S) |
-| Typography | Token-based sizes | Inter-first stack instead of system font; scale not mapped to macOS text styles (HS2-PS29TA) |
-| Icons | Lucide only through a shared component with the icon-policy test | Native decision pending (HS2-0P83KD); standard-action map in §4.13 to enforce |
-| Cursors | `cursor-semantics.css` for native and Web Awesome parts, splitter cursors | `dropEffect` copy/none semantics |
-| Notifications | Permission events, history view, "Decision made outside Hot Sheet" | Interruption-level policy and coalescing once native/Tauri notifications ship |
-| AI content | Attributed activity timeline; Attempt AI repair creates a ticket instead of editing files | Persistent AI labels, feedback, undo/retry affordances (HS2-WBW3Z9) |
-| Help | Tooltips on icon actions | 60–75 character verb-first audit; contextual tips; Help menu content |
+| Area                  | Already conforms                                                                                                                                               | Gap                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Structure             | Sidebar · workspace · inspector split view with persistent splitters, 1024×600 floor, inspector-first collapse, header-owned restore controls, terminal drawer | Key/inactive window muting (Tauri), background extension under chrome, scroll-edge treatment                                     |
+| Menus and commands    | Icon-bearing context menus identical in list and board; outside-click and Esc dismissal                                                                        | No menu bar / command registry; no in-browser command surface; shortcut table not centralized (HS2-80VPPW, HS2-KTHGVE)           |
+| Editing               | 150 ms autosave, no Save/Cancel, field-aware live merge, reader escalation                                                                                     | Result-named undo entries; Edit-menu wiring                                                                                      |
+| Selection and focus   | Native click/⌘/⇧ selection model; no focus theft on live updates; work-area focus ownership                                                                    | Accent-vs-gray highlight by list focus; roving tabindex audit (HS2-A2A9GT)                                                       |
+| Feedback and modality | Non-modal permission popups with queueing; inline connection banner; silent background reconciliation                                                          | Dialog button grammar audit; specific progress text; ellipsis rule (HS2-A2A9GT)                                                  |
+| Color and appearance  | Semantic Web Awesome tokens, `--hs-*` aliases limited to domain states, literal-token lint                                                                     | Light-only; no `prefers-color-scheme`, `prefers-contrast`, `prefers-reduced-motion`, `prefers-reduced-transparency` (HS2-DKZG9S) |
+| Typography            | Token-based sizes                                                                                                                                              | Inter-first stack instead of system font; scale not mapped to macOS text styles (HS2-PS29TA)                                     |
+| Icons                 | Lucide only through a shared component with the icon-policy test                                                                                               | Native decision pending (HS2-0P83KD); standard-action map in §4.13 to enforce                                                    |
+| Cursors               | `cursor-semantics.css` for native and Web Awesome parts, splitter cursors                                                                                      | `dropEffect` copy/none semantics                                                                                                 |
+| Notifications         | Permission events, history view, "Decision made outside Hot Sheet"                                                                                             | Interruption-level policy and coalescing once native/Tauri notifications ship                                                    |
+| AI content            | Attributed activity timeline; Attempt AI repair creates a ticket instead of editing files                                                                      | Persistent AI labels, feedback, undo/retry affordances (HS2-WBW3Z9)                                                              |
+| Help                  | Tooltips on icon actions                                                                                                                                       | 60–75 character verb-first audit; contextual tips; Help menu content                                                             |
 
 ---
 
@@ -1208,18 +1208,18 @@ and recorded here.
 
 These are deliberate. Do not "fix" them toward the HIG without a maintainer decision.
 
-| Hot Sheet rule | Relationship to the HIG |
-|---|---|
-| **Lucide icons only** in the web client and as the shared metaphor vocabulary (CLAUDE.md, [09](09-technology-decisions.md) §9.5) | The HIG assumes SF Symbols on Apple platforms. Keep Lucide on the web; native decision pending (HS2-0P83KD). Standard-action metaphors still align (§4.13). |
-| **Every actionable context-menu item carries an icon** | The HIG says icons per group all-or-none and sparingly; Hot Sheet chooses "all", which satisfies uniformity. |
-| **Autosave at 150 ms with no Save/Cancel buttons** for details, notes, titles, tags, blocked reasons | Consistent with "avoid explicit save"; Hot Sheet fixes the debounce and forbids routine Save/Cancel. Explicit submission remains for creating objects and completing workflows. |
-| **Cursor semantics: `pointer` on clickable controls and selectable rows** | The HIG/AppKit shows an arrow over buttons and rows; the web convention is kept deliberately (§5.2). |
-| **1024×600 AppShell floor**; sidebars ≥ 250 px; no auto-hiding at breakpoints | A Hot Sheet-specific application of the HIG's minimum-size and "defer compact layouts" guidance. |
-| **No fixed-interval polling; WebSocket or long polling only** | Not a HIG topic; it underpins the "silent, automatic sync" and "never steal focus" behaviors. |
-| **Feedback needed = Needs review** with a purple rail that outranks blocked and Up Next rails | Hot Sheet's own state model; obeys "never color alone" via the badge text. |
-| **Permission popups are non-modal and visible across projects; auto-Allow/Deny timers are opt-in per project** | The HIG discourages time-boxed UI; Hot Sheet's timers are explicit user settings, paused when hidden, with a visible pause control — an accepted, documented deviation. |
-| **Provider capability gating**: unsupported actions are hidden or explained, never emulated | Matches "show when a gesture/command is unavailable"; extends it to provider capabilities. |
-| **Visual QA in a real browser before completion** | Stricter than the HIG's "preview on devices"; it is the enforcement mechanism for everything in this document. |
+| Hot Sheet rule                                                                                                                   | Relationship to the HIG                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lucide icons only** in the web client and as the shared metaphor vocabulary (CLAUDE.md, [09](09-technology-decisions.md) §9.5) | The HIG assumes SF Symbols on Apple platforms. Keep Lucide on the web; native decision pending (HS2-0P83KD). Standard-action metaphors still align (§4.13).                     |
+| **Every actionable context-menu item carries an icon**                                                                           | The HIG says icons per group all-or-none and sparingly; Hot Sheet chooses "all", which satisfies uniformity.                                                                    |
+| **Autosave at 150 ms with no Save/Cancel buttons** for details, notes, titles, tags, blocked reasons                             | Consistent with "avoid explicit save"; Hot Sheet fixes the debounce and forbids routine Save/Cancel. Explicit submission remains for creating objects and completing workflows. |
+| **Cursor semantics: `pointer` on clickable controls and selectable rows**                                                        | The HIG/AppKit shows an arrow over buttons and rows; the web convention is kept deliberately (§5.2).                                                                            |
+| **1024×600 AppShell floor**; sidebars ≥ 250 px; no auto-hiding at breakpoints                                                    | A Hot Sheet-specific application of the HIG's minimum-size and "defer compact layouts" guidance.                                                                                |
+| **No fixed-interval polling; WebSocket or long polling only**                                                                    | Not a HIG topic; it underpins the "silent, automatic sync" and "never steal focus" behaviors.                                                                                   |
+| **Feedback needed = Needs review** with a purple rail that outranks blocked and Up Next rails                                    | Hot Sheet's own state model; obeys "never color alone" via the badge text.                                                                                                      |
+| **Permission popups are non-modal and visible across projects; auto-Allow/Deny timers are opt-in per project**                   | The HIG discourages time-boxed UI; Hot Sheet's timers are explicit user settings, paused when hidden, with a visible pause control — an accepted, documented deviation.         |
+| **Provider capability gating**: unsupported actions are hidden or explained, never emulated                                      | Matches "show when a gesture/command is unavailable"; extends it to provider capabilities.                                                                                      |
+| **Visual QA in a real browser before completion**                                                                                | Stricter than the HIG's "preview on devices"; it is the enforcement mechanism for everything in this document.                                                                  |
 
 ---
 
@@ -1282,15 +1282,15 @@ These are deliberate. Do not "fix" them toward the HIG without a maintainer deci
 
 ## 11. Follow-up tickets created with this document
 
-| Ticket | Scope |
-|---|---|
+| Ticket     | Scope                                                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | HS2-DKZG9S | Web client follows system appearance: dark palette for every token and `--hs-*` alias, `prefers-color-scheme`, `prefers-contrast`, `prefers-reduced-motion`, `prefers-reduced-transparency`, contrast verification |
-| HS2-PS29TA | Web typography: system font stack decision and a 13 px HIG-aligned type scale |
-| HS2-0P83KD | Decision: SF Symbols vs Lucide in the native macOS app (with a metaphor map) |
-| HS2-80VPPW | Command registry driving the Tauri native menu, the in-browser command surface, and the SwiftUI menu bar; coordinates with HS2-KTHGVE (platform-aware shortcuts) |
-| HS2-A2A9GT | HIG conformance audit of every shipped web surface against §10 |
-| HS2-WBW3Z9 | AI labeling, feedback, undo/retry, and confirmation affordances per §6.1 |
-| HS2-46RA38 | iOS/iPadOS platform considerations before the iOS client starts |
+| HS2-PS29TA | Web typography: system font stack decision and a 13 px HIG-aligned type scale                                                                                                                                      |
+| HS2-0P83KD | Decision: SF Symbols vs Lucide in the native macOS app (with a metaphor map)                                                                                                                                       |
+| HS2-80VPPW | Command registry driving the Tauri native menu, the in-browser command surface, and the SwiftUI menu bar; coordinates with HS2-KTHGVE (platform-aware shortcuts)                                                   |
+| HS2-A2A9GT | HIG conformance audit of every shipped web surface against §10                                                                                                                                                     |
+| HS2-WBW3Z9 | AI labeling, feedback, undo/retry, and confirmation affordances per §6.1                                                                                                                                           |
+| HS2-46RA38 | iOS/iPadOS platform considerations before the iOS client starts                                                                                                                                                    |
 
 ---
 

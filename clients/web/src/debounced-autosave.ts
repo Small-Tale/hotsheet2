@@ -8,7 +8,10 @@ export interface DebouncedAutosave<T> {
 }
 
 /** Coalesces text edits while keeping blur/navigation able to flush the latest value. */
-export function createDebouncedAutosave<T>(save: (value: T) => Promise<boolean>, delay = AUTOSAVE_DELAY_MS): DebouncedAutosave<T> {
+export function createDebouncedAutosave<T>(
+  save: (value: T) => Promise<boolean>,
+  delay = AUTOSAVE_DELAY_MS,
+): DebouncedAutosave<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queued: T | undefined;
   let hasQueuedValue = false;
@@ -27,8 +30,11 @@ export function createDebouncedAutosave<T>(save: (value: T) => Promise<boolean>,
     timer = undefined;
     const current = save(value);
     active = current;
-    try { return await current; }
-    finally { if (active === current) active = undefined; }
+    try {
+      return await current;
+    } finally {
+      if (active === current) active = undefined;
+    }
   };
 
   return {
@@ -36,7 +42,9 @@ export function createDebouncedAutosave<T>(save: (value: T) => Promise<boolean>,
       queued = value;
       hasQueuedValue = true;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { void persist(); }, delay);
+      timer = setTimeout(() => {
+        void persist();
+      }, delay);
     },
     flush: persist,
     cancel() {

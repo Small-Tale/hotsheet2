@@ -25,7 +25,12 @@ describe('content components', () => {
     expect(markup).toContain('<span class="kui-list-item__label">Add note</span>');
   });
   it('places a focused new-note composer after existing notes', () => {
-    const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
+    const markup = String(
+      TicketNotes({
+        notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }],
+        composing: true,
+      }),
+    );
     expect(markup.indexOf('data-component="note-card"')).toBeLessThan(markup.indexOf('data-component="note-composer"'));
     expect(markup).not.toContain('data-action="add-ticket-note"');
   });
@@ -38,7 +43,13 @@ describe('content components', () => {
     expect(inspector.match(/data-action="respond-to-feedback"/g)).toHaveLength(1);
     expect(inspector).toMatch(/data-note-id="active"[^]*data-action="respond-to-feedback" data-note-id="active"/);
     expect(String(TicketNotes({ notes, readerMode: true }))).not.toContain('respond-to-feedback');
-    expect(String(TicketNotes({ notes: [...notes, { id: 'answer', kind: 'regular', author: 'You', time: 'Later', body: 'Answered' }] }))).not.toContain('respond-to-feedback');
+    expect(
+      String(
+        TicketNotes({
+          notes: [...notes, { id: 'answer', kind: 'regular', author: 'You', time: 'Later', body: 'Answered' }],
+        }),
+      ),
+    ).not.toContain('respond-to-feedback');
   });
   it('renders Markdown source, preview, and expansion as explicit states without a save footer', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
@@ -54,9 +65,13 @@ describe('content components', () => {
     expect(embedded).not.toContain('<footer>');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-editor.css'), 'utf8');
     expect(css).toMatch(/markdown-editor--embedded \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*gap: 0;/);
-    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface \{[^}]*display: grid;[^}]*padding: 0;[^}]*overflow: visible;/);
+    expect(css).toMatch(
+      /markdown-editor--embedded \.markdown-editor__surface \{[^}]*display: grid;[^}]*padding: 0;[^}]*overflow: visible;/,
+    );
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: remify\(12px\);/);
-    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: remify\(12px\);[^}]*resize: vertical/);
+    expect(css).toMatch(
+      /markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: remify\(12px\);[^}]*resize: vertical/,
+    );
     // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
     expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
@@ -72,7 +87,12 @@ describe('content components', () => {
   });
 
   it('projects GFM Markdown with safe new-tab links while escaping raw HTML and unsafe protocols', () => {
-    const markup = String(MarkdownPreview({ source: '# Title\n\n**bold** and `code`\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[safe](/guide "Guide") and <https://example.com/docs>\n\n[unsafe](javascript:alert(1))\n\n<script>alert(1)</script>' }));
+    const markup = String(
+      MarkdownPreview({
+        source:
+          '# Title\n\n**bold** and `code`\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[safe](/guide "Guide") and <https://example.com/docs>\n\n[unsafe](javascript:alert(1))\n\n<script>alert(1)</script>',
+      }),
+    );
     expect(markup).toContain('<h1');
     expect(markup).toContain('<strong>bold</strong>');
     expect(markup).toContain('<code>code</code>');
@@ -82,31 +102,44 @@ describe('content components', () => {
     expect(markup).toContain('href="#" target="_blank" rel="noopener noreferrer"');
     expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
-    expect(css).toContain('.markdown-preview p { margin: var(--kui-space-m) 0; }');
+    expect(css).toContainSource('.markdown-preview p { margin: var(--kui-space-m) 0; }');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(panelCss).toContain('.ticket-inspector__content :where(p) { margin: 0;');
+    expect(panelCss).toContainSource('.ticket-inspector__content :where(p) { margin: 0;');
     expect(panelCss).not.toContain('.ticket-inspector__content p {');
-    expect(css).toMatch(/blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: var\(--wa-font-size-xs\);[^}]*line-height: 1\.5;/);
-    expect(css).toMatch(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
+    expect(css).toMatch(
+      /blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: var\(--wa-font-size-xs\);[^}]*line-height: 1\.5;/,
+    );
+    expect(css).toMatchSource(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
     expect(css).toMatch(/\.markdown-preview img \{[^}]*display: block;[^}]*height: auto;/);
-    expect(css).toMatch(/\.markdown-preview__attachment-image \{[^}]*width: fit-content;[^}]*height: auto;[^}]*overflow: hidden;/);
+    expect(css).toMatch(
+      /\.markdown-preview__attachment-image \{[^}]*width: fit-content;[^}]*height: auto;[^}]*overflow: hidden;/,
+    );
   });
 
-  it('links plain ticket references in details and notes without nesting links or changing code',()=>{
-    const markup=String(MarkdownPreview({source:'Depends on HS2-BD09B6 and HS2-OTHER2. Keep `HS2-CODE12` literal and preserve [HS2-LINK12](/tickets).'}));
+  it('links plain ticket references in details and notes without nesting links or changing code', () => {
+    const markup = String(
+      MarkdownPreview({
+        source: 'Depends on HS2-BD09B6 and HS2-OTHER2. Keep `HS2-CODE12` literal and preserve [HS2-LINK12](/tickets).',
+      }),
+    );
     expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
     expect(markup).toContain('data-ticket-slug="HS2-BD09B6"');
     expect(markup).toContain('data-ticket-slug="HS2-OTHER2"');
     expect(markup).toContain('<code>HS2-CODE12</code>');
     expect(markup).toContain('>HS2-LINK12</a>');
     expect(markup).not.toContain('data-ticket-slug="HS2-LINK12"');
-    const css=readFileSync(resolve(import.meta.dirname,'markdown-preview.css'),'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
     expect(css).toContain('.markdown-preview__ticket-reference:hover');
   });
 
-  it('renders filename attachment references as host actions and inline gallery images',()=>{
-    const context={baseUrl:'/project-api/demo',checkout:'checkout',ticket:'HS2-LOCAL'};
-    const markup=String(MarkdownPreview({source:'`attachment:report.pdf`\n\n`attachment:[HS2-OTHER]screen shot.svg`',attachmentContext:context}));
+  it('renders filename attachment references as host actions and inline gallery images', () => {
+    const context = { baseUrl: '/project-api/demo', checkout: 'checkout', ticket: 'HS2-LOCAL' };
+    const markup = String(
+      MarkdownPreview({
+        source: '`attachment:report.pdf`\n\n`attachment:[HS2-OTHER]screen shot.svg`',
+        attachmentContext: context,
+      }),
+    );
     expect(markup).toContain('data-action="open-referenced-attachment"');
     expect(markup).toContain('data-attachment-name="report.pdf"');
     expect(markup).toContain('data-action="open-attachment-gallery"');
@@ -114,20 +147,40 @@ describe('content components', () => {
     expect(markup).toContain('/tickets/HS2-OTHER/attachments/by-name/screen%20shot.svg');
   });
 
-  it('uses a known attachment id for inline evidence while keeping prose punctuation outside the image',()=>{
-    const context={baseUrl:'/project-api/demo',checkout:'checkout',ticket:'HS2-LOCAL',attachments:[{id:'01M22Q0ZGMJ0M0FE24ZSCGXRSS',filename:'proof.png'}]};
-    const markup=String(MarkdownPreview({source:'Evidence: attachment:proof.png.',attachmentContext:context}));
-    expect(markup).toContain('src="/project-api/demo/checkouts/checkout/tickets/HS2-LOCAL/attachments/01M22Q0ZGMJ0M0FE24ZSCGXRSS"');
+  it('uses a known attachment id for inline evidence while keeping prose punctuation outside the image', () => {
+    const context = {
+      baseUrl: '/project-api/demo',
+      checkout: 'checkout',
+      ticket: 'HS2-LOCAL',
+      attachments: [{ id: '01M22Q0ZGMJ0M0FE24ZSCGXRSS', filename: 'proof.png' }],
+    };
+    const markup = String(MarkdownPreview({ source: 'Evidence: attachment:proof.png.', attachmentContext: context }));
+    expect(markup).toContain(
+      'src="/project-api/demo/checkouts/checkout/tickets/HS2-LOCAL/attachments/01M22Q0ZGMJ0M0FE24ZSCGXRSS"',
+    );
     expect(markup).toContain('data-attachment-name="proof.png"');
     expect(markup).toContain('data-gallery-attachment-id="01M22Q0ZGMJ0M0FE24ZSCGXRSS"');
     expect(markup).toContain('</button>.');
   });
 
   it('derives the TicketReader note count and reuses NoteCard', () => {
-    const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
+    const markup = String(
+      TicketReader({
+        slug: 'HS2-TEST',
+        title: 'Reader',
+        status: 'started',
+        priority: 'high',
+        category: 'feature',
+        tags: ['client'],
+        details: 'Details',
+        notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }],
+      }),
+    );
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('<h2 class="kui-list-header__label" aria-label="Notes, 1 note">Notes</h2><span class="kui-list-header__count" aria-hidden="true">1</span>');
+    expect(markup).toContain(
+      '<h2 class="kui-list-header__label" aria-label="Notes, 1 note">Notes</h2><span class="kui-list-header__count" aria-hidden="true">1</span>',
+    );
     expect(markup).toContain('data-has-count="true"');
     expect(markup).toContain('<wa-dialog');
     expect(markup).toContain('label="Read and edit HS2-TEST"');
@@ -135,19 +188,58 @@ describe('content components', () => {
     expect(markup).toContain('data-large-text="false"');
     expect(markup).toContain('data-inspector-tab="attachments"');
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
-    expect(readerCss).toMatch(/\.ticket-reader-dialog \{[^}]*--width: min\(remify\(1024px\), calc\(100vw - remify\(48px\)\)\)/);
+    expect(readerCss).toMatch(
+      /\.ticket-reader-dialog \{[^}]*--width: min\(remify\(1024px\), calc\(100vw - remify\(48px\)\)\)/,
+    );
     expect(readerCss).not.toMatch(/\.ticket-reader-dialog \{[^}]*\b(?:display|height):/);
     expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - remify\(48px\)\);/);
-    expect(readerCss).toMatch(/\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
-    expect(readerCss).toMatch(/\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
-    expect(readerCss).toMatch(/\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
-    expect(readerCss).toMatch(/\.markdown-preview blockquote :is\(p, li, h1, h2, h3, h4, h5, h6, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
-    expect(readerCss).toContain('.ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }');
+    expect(readerCss).toMatchSource(
+      /\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    );
+    expect(readerCss).toMatchSource(
+      /\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    );
+    expect(readerCss).toMatchSource(
+      /\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    );
+    expect(readerCss).toMatchSource(
+      /\.markdown-preview blockquote :is\(p, li, h1, h2, h3, h4, h5, h6, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    );
+    expect(readerCss).toContainSource(
+      '.ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }',
+    );
   });
 
   it('forwards every shared code-review state through the reader inspector', () => {
-    const review = { difftool: 'Glassbox', truncated: false, ranges: [], commits: [{ sha: 'abcdef', short_sha: 'abcdef', subject: 'Reader parity', body: 'First line\n\nExpanded detail', committed_at: '2026-09-07T00:00:00Z' }] };
-    const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReview: review, codeReviewMessage: 'Shared launch state', expandedCodeReviewCommits: ['abcdef'] }));
+    const review = {
+      difftool: 'Glassbox',
+      truncated: false,
+      ranges: [],
+      commits: [
+        {
+          sha: 'abcdef',
+          short_sha: 'abcdef',
+          subject: 'Reader parity',
+          body: 'First line\n\nExpanded detail',
+          committed_at: '2026-09-07T00:00:00Z',
+        },
+      ],
+    };
+    const markup = String(
+      TicketReader({
+        slug: 'HS2-TEST',
+        title: 'Reader',
+        status: 'started',
+        priority: 'default',
+        category: 'bug',
+        tags: [],
+        details: '',
+        activeTab: 'code-review',
+        codeReview: review,
+        codeReviewMessage: 'Shared launch state',
+        expandedCodeReviewCommits: ['abcdef'],
+      }),
+    );
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-component="ticket-code-review"');
     expect(markup).toContain('Opens in Glassbox');
@@ -155,19 +247,65 @@ describe('content components', () => {
     expect(markup).toContain('Expanded detail');
     expect(markup).toContain('Shared launch state');
     expect(markup).toContain('data-expanded="true"');
-    expect(String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReviewLoading: true }))).toContain('Finding ticket commits');
+    expect(
+      String(
+        TicketReader({
+          slug: 'HS2-TEST',
+          title: 'Reader',
+          status: 'started',
+          priority: 'default',
+          category: 'bug',
+          tags: [],
+          details: '',
+          activeTab: 'code-review',
+          codeReviewLoading: true,
+        }),
+      ),
+    ).toContain('Finding ticket commits');
   });
 
   it('labels layered cross-project readers without reimplementing native dialog modality', () => {
-    const markup = String(TicketReader({ slug: 'HS2-LINKED', title: 'Linked reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: 'More at HS2-DEEPER.', active: true, readOnly: true, projectName: 'Other project', stackPosition: 2, stackSize: 3 }));
+    const markup = String(
+      TicketReader({
+        slug: 'HS2-LINKED',
+        title: 'Linked reader',
+        status: 'started',
+        priority: 'default',
+        category: 'bug',
+        tags: [],
+        details: 'More at HS2-DEEPER.',
+        active: true,
+        readOnly: true,
+        projectName: 'Other project',
+        stackPosition: 2,
+        stackSize: 3,
+      }),
+    );
     expect(markup).toContain('label="Read HS2-LINKED in Other project"');
     expect(markup).toContain('data-reader-position="2" data-reader-count="3"');
     expect(markup).toContain('<span>Other project</span><small>Reader 2 of 3</small>');
     expect(markup).not.toContain('data-action="toggle-inspector-up-next"');
-    const covered = String(TicketReader({ slug: 'HS2-COVERED', title: 'Covered reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', active: false, projectName: 'First project', stackPosition: 1, stackSize: 2 }));
+    const covered = String(
+      TicketReader({
+        slug: 'HS2-COVERED',
+        title: 'Covered reader',
+        status: 'started',
+        priority: 'default',
+        category: 'bug',
+        tags: [],
+        details: '',
+        active: false,
+        projectName: 'First project',
+        stackPosition: 1,
+        stackSize: 2,
+      }),
+    );
     expect(covered).toContain('data-reader-active="false"');
     expect(covered).not.toContain('aria-modal=');
   });
 
-  it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: remify\(40px\); \}/)});
+  it('keeps the feedback catchall at half the ordinary note-editor minimum height', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(css).toMatchSource(/textarea\[data-note-response="true"\] \{ min-height: remify\(40px\); \}/);
+  });
 });

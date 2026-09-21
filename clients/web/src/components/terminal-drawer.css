@@ -1,28 +1,162 @@
 @import '@kerfjs/ui/tab-bar.css';
 
-.terminal-drawer { display: flex; width: 100%; height: 100%; min-height: 0; flex-direction: column; background: var(--wa-color-surface-default); }
-.terminal-drawer__rail { display: flex; min-height: remify(44px); align-items: center; border-bottom: 1px solid var(--wa-color-surface-border); user-select: none; }
-.terminal-drawer__views { --kui-toolbar-group-size: remify(40px); --kui-toolbar-gap: var(--kui-space-xs); padding: var(--kui-space-xs) var(--kui-space-m); }
-.terminal-drawer__views .kui-tab-bar__tabs { margin: calc(var(--kui-space-2xs) * -1); padding: var(--kui-space-2xs); flex: 0 1 auto; gap: var(--kui-space-xs); }
-.terminal-drawer__views .kui-app-tab { height: remify(32px); }
-.terminal-drawer__views .kui-tab-bar__trailing { gap: var(--kui-space-xs); flex: 1 1 auto; }
-.terminal-drawer__grid-tab { position: sticky; z-index: 2; left: 0; background: var(--wa-color-surface-default); }
-.terminal-drawer__grid-tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
-.terminal-drawer__rail > button, .terminal-drawer__create, .terminal-drawer__actions > button { display: inline-flex; min-width: remify(32px); height: remify(32px); padding: 0 var(--kui-space-xs); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--kui-space-2xs); font: inherit; }
-.terminal-drawer__rail .terminal-tab .kui-app-tab__name { max-width: remify(144px); }
-.terminal-drawer__rail .terminal-tab i { width: remify(7.2px); height: remify(7.2px); border-radius: var(--wa-border-radius-circle); background: var(--wa-color-success-fill-loud); flex: none; }
-.terminal-drawer__rail > button:hover, .terminal-drawer__create:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
-.terminal-drawer__rail > button:focus-visible, .terminal-drawer__create:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
-.terminal-drawer__rail svg { width: remify(16px); height: remify(16px); flex: none; }
-.terminal-drawer__create-wrap { position: relative; flex: none; }
-.terminal-drawer__create { flex: none; }
-.terminal-drawer__create-menu { position: absolute; z-index: 30; bottom: calc(100% + var(--kui-space-xs)); left: 0; display: grid; width: remify(224px); padding: var(--kui-space-xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-raised); box-shadow: var(--wa-shadow-l); gap: var(--kui-space-none); }
-.terminal-drawer__create-menu wa-dropdown-item { width: 100%; }
-.terminal-drawer__actions { display: flex; margin-left: auto; align-items: center; flex: none; gap: var(--kui-space-xs); }
-.terminal-drawer__actions button span { font-size: var(--wa-font-size-2xs); }
-.terminal-drawer__content { min-width: 0; min-height: 0; flex: 1; }
-.terminal-drawer__content .terminal-dashboard__content { padding-top: var(--kui-space-xs); }
-.terminal-session { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--hs-terminal-background); }
-.terminal-session .terminal-viewport { position: relative; inset: auto; display: block; width: 100%; height: 100%; padding: var(--kui-space-xs); overflow: hidden; background: var(--hs-terminal-background); box-sizing: border-box; }
-.terminal-session .xterm { background: var(--hs-terminal-background); }
-@media (max-width: remify(768px)) { .terminal-drawer__rail .terminal-tab .kui-app-tab__name { max-width: remify(112px); } }
+.terminal-drawer {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--wa-color-surface-default);
+}
+.terminal-drawer__rail {
+  display: flex;
+  min-height: remify(44px);
+  align-items: center;
+  border-bottom: 1px solid var(--wa-color-surface-border);
+  user-select: none;
+}
+.terminal-drawer__views {
+  --kui-toolbar-group-size: remify(40px);
+  --kui-toolbar-gap: var(--kui-space-xs);
+  padding: var(--kui-space-xs) var(--kui-space-m);
+}
+.terminal-drawer__views .kui-tab-bar__tabs {
+  margin: calc(var(--kui-space-2xs) * -1);
+  padding: var(--kui-space-2xs);
+  flex: 0 1 auto;
+  gap: var(--kui-space-xs);
+}
+.terminal-drawer__views .kui-app-tab {
+  height: remify(32px);
+}
+.terminal-drawer__views .kui-tab-bar__trailing {
+  gap: var(--kui-space-xs);
+  flex: 1 1 auto;
+}
+.terminal-drawer__grid-tab {
+  position: sticky;
+  z-index: 2;
+  left: 0;
+  background: var(--wa-color-surface-default);
+}
+.terminal-drawer__grid-tab .kui-app-tab__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+.terminal-drawer__rail > button,
+.terminal-drawer__create,
+.terminal-drawer__actions > button {
+  display: inline-flex;
+  min-width: remify(32px);
+  height: remify(32px);
+  padding: 0 var(--kui-space-xs);
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
+  cursor: pointer;
+  gap: var(--kui-space-2xs);
+  font: inherit;
+}
+.terminal-drawer__rail .terminal-tab .kui-app-tab__name {
+  max-width: remify(144px);
+}
+.terminal-drawer__rail .terminal-tab i {
+  width: remify(7.2px);
+  height: remify(7.2px);
+  border-radius: var(--wa-border-radius-circle);
+  background: var(--wa-color-success-fill-loud);
+  flex: none;
+}
+.terminal-drawer__rail > button:hover,
+.terminal-drawer__create:hover,
+.terminal-drawer__actions > button:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.terminal-drawer__rail > button:focus-visible,
+.terminal-drawer__create:focus-visible,
+.terminal-drawer__actions > button:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+.terminal-drawer__rail svg {
+  width: remify(16px);
+  height: remify(16px);
+  flex: none;
+}
+.terminal-drawer__create-wrap {
+  position: relative;
+  flex: none;
+}
+.terminal-drawer__create {
+  flex: none;
+}
+.terminal-drawer__create-menu {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + var(--kui-space-xs));
+  left: 0;
+  display: grid;
+  width: remify(224px);
+  padding: var(--kui-space-xs);
+  border: 1px solid var(--wa-color-surface-border);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-raised);
+  box-shadow: var(--wa-shadow-l);
+  gap: var(--kui-space-none);
+}
+.terminal-drawer__create-menu wa-dropdown-item {
+  width: 100%;
+}
+.terminal-drawer__actions {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  flex: none;
+  gap: var(--kui-space-xs);
+}
+.terminal-drawer__actions button span {
+  font-size: var(--wa-font-size-2xs);
+}
+.terminal-drawer__content {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+.terminal-drawer__content .terminal-dashboard__content {
+  padding-top: var(--kui-space-xs);
+}
+.terminal-session {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--hs-terminal-background);
+}
+.terminal-session .terminal-viewport {
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: var(--kui-space-xs);
+  overflow: hidden;
+  background: var(--hs-terminal-background);
+  box-sizing: border-box;
+}
+.terminal-session .xterm {
+  background: var(--hs-terminal-background);
+}
+@media (max-width: remify(768px)) {
+  .terminal-drawer__rail .terminal-tab .kui-app-tab__name {
+    max-width: remify(112px);
+  }
+}

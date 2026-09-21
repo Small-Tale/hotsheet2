@@ -1,27 +1,124 @@
-.ticket-link-choice-dialog::part(dialog) { width: min(remify(560px), calc(100vw - remify(32px))); }
-.ticket-link-choice-dialog__body { display: grid; gap: var(--kui-space-m); }
-.ticket-link-choice-dialog__body > p { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.45; }
-.ticket-link-choice-dialog__matches { display: grid; padding: 0; margin: 0; gap: var(--kui-space-none); list-style: none; }
-.ticket-link-choice-dialog__matches > li > button { display: grid; width: 100%; min-width: 0; min-height: remify(72px); padding: var(--kui-space-xs); border: 0; border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-normal); background: transparent; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--kui-space-xs); font: inherit; text-align: left; cursor: pointer; }
-.ticket-link-choice-dialog__matches > li > button:hover, .ticket-link-choice-dialog__matches > li > button:focus-visible { background: var(--wa-color-neutral-fill-quiet); }
-.ticket-link-choice-dialog__matches > li > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
-.ticket-link-choice-dialog__matches > li > button > svg { width: remify(16px); height: remify(16px); color: var(--wa-color-neutral-on-quiet); }
-.ticket-link-choice-dialog__status { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
-.ticket-link-choice-dialog__status[data-status="started"] { color: var(--wa-color-brand-on-quiet); }
-.ticket-link-choice-dialog__status[data-status="completed"], .ticket-link-choice-dialog__status[data-status="verified"] { color: var(--wa-color-success-on-quiet); }
-.ticket-link-choice-dialog__status svg { width: remify(13.6px); height: remify(13.6px); }
-.ticket-link-choice-dialog__ticket, .ticket-link-choice-dialog__source { display: grid; min-width: 0; gap: var(--kui-space-2xs); }
-.ticket-link-choice-dialog__ticket > span { overflow: hidden; color: var(--wa-color-neutral-on-quiet); text-overflow: ellipsis; white-space: nowrap; }
-.ticket-link-choice-dialog__source { justify-items: end; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.ticket-link-choice-dialog__source > span { display: inline-flex; align-items: center; gap: var(--kui-space-2xs); }
-.ticket-link-choice-dialog__source svg { width: remify(12px); height: remify(12px); }
-.ticket-link-choice-dialog__actions { display: flex; justify-content: flex-end; }
+.ticket-link-choice-dialog::part(dialog) {
+  width: min(remify(560px), calc(100vw - remify(32px)));
+}
+.ticket-link-choice-dialog__body {
+  display: grid;
+  gap: var(--kui-space-m);
+}
+.ticket-link-choice-dialog__body > p {
+  margin: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  line-height: 1.45;
+}
+.ticket-link-choice-dialog__matches {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  gap: var(--kui-space-none);
+  list-style: none;
+}
+.ticket-link-choice-dialog__matches > li > button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: remify(72px);
+  padding: var(--kui-space-xs);
+  border: 0;
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-neutral-on-normal);
+  background: transparent;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--kui-space-xs);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ticket-link-choice-dialog__matches > li > button:hover,
+.ticket-link-choice-dialog__matches > li > button:focus-visible {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.ticket-link-choice-dialog__matches > li > button:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+.ticket-link-choice-dialog__matches > li > button > svg {
+  width: remify(16px);
+  height: remify(16px);
+  color: var(--wa-color-neutral-on-quiet);
+}
+.ticket-link-choice-dialog__status {
+  display: inline-flex;
+  color: var(--wa-color-neutral-on-quiet);
+}
+.ticket-link-choice-dialog__status[data-status='started'] {
+  color: var(--wa-color-brand-on-quiet);
+}
+.ticket-link-choice-dialog__status[data-status='completed'],
+.ticket-link-choice-dialog__status[data-status='verified'] {
+  color: var(--wa-color-success-on-quiet);
+}
+.ticket-link-choice-dialog__status svg {
+  width: remify(13.6px);
+  height: remify(13.6px);
+}
+.ticket-link-choice-dialog__ticket,
+.ticket-link-choice-dialog__source {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-2xs);
+}
+.ticket-link-choice-dialog__ticket > span {
+  overflow: hidden;
+  color: var(--wa-color-neutral-on-quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticket-link-choice-dialog__source {
+  justify-items: end;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.ticket-link-choice-dialog__source > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+}
+.ticket-link-choice-dialog__source svg {
+  width: remify(12px);
+  height: remify(12px);
+}
+.ticket-link-choice-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+}
 
 @media (max-width: remify(512px)) {
-  .ticket-link-choice-dialog::part(dialog) { width: calc(100vw - remify(16px)); }
-  .ticket-link-choice-dialog__matches > li > button { min-height: remify(88px); grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "status ticket arrow" ". source ."; align-items: start; row-gap: var(--kui-space-xs); }
-  .ticket-link-choice-dialog__status { grid-area: status; margin-top: var(--kui-space-2xs); }
-  .ticket-link-choice-dialog__ticket { grid-area: ticket; }
-  .ticket-link-choice-dialog__source { display: flex; grid-area: source; align-items: center; justify-content: flex-start; gap: var(--kui-space-xs); }
-  .ticket-link-choice-dialog__matches > li > button > svg { grid-area: arrow; }
+  .ticket-link-choice-dialog::part(dialog) {
+    width: calc(100vw - remify(16px));
+  }
+  .ticket-link-choice-dialog__matches > li > button {
+    min-height: remify(88px);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'status ticket arrow' '. source .';
+    align-items: start;
+    row-gap: var(--kui-space-xs);
+  }
+  .ticket-link-choice-dialog__status {
+    grid-area: status;
+    margin-top: var(--kui-space-2xs);
+  }
+  .ticket-link-choice-dialog__ticket {
+    grid-area: ticket;
+  }
+  .ticket-link-choice-dialog__source {
+    display: flex;
+    grid-area: source;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--kui-space-xs);
+  }
+  .ticket-link-choice-dialog__matches > li > button > svg {
+    grid-area: arrow;
+  }
 }

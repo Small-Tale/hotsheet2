@@ -1,18 +1,83 @@
-.project-summary { display: block; width: 100%; min-height:calc(remify(51.2px) + remify(20px)); padding: var(--kui-space-xs); border: 0; border-radius: var(--wa-border-radius-m); color: inherit; background: transparent; cursor: pointer; font: inherit; text-align: left; }
-.project-summary__content { display:grid; width:100%; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--kui-space-s); }
-.project-summary:hover { background: var(--wa-color-neutral-fill-quiet); }
-.project-summary:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: -2px; }
-.project-summary__chart { display: flex; min-width: 0; height: remify(51.2px); align-items: end; gap: remify(4.8px); }
-.project-summary__bar-slot { position: relative; width: remify(14.4px); min-width: remify(4.8px); max-width: remify(14.4px); height: 100%; flex: 1 1 remify(14.4px); }
+.project-summary {
+  display: block;
+  width: 100%;
+  min-height: calc(remify(51.2px) + remify(20px));
+  padding: var(--kui-space-xs);
+  border: 0;
+  border-radius: var(--wa-border-radius-m);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.project-summary__content {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--kui-space-s);
+}
+.project-summary:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.project-summary:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: -2px;
+}
+.project-summary__chart {
+  display: flex;
+  min-width: 0;
+  height: remify(51.2px);
+  align-items: end;
+  gap: remify(4.8px);
+}
+.project-summary__bar-slot {
+  position: relative;
+  width: remify(14.4px);
+  min-width: remify(4.8px);
+  max-width: remify(14.4px);
+  height: 100%;
+  flex: 1 1 remify(14.4px);
+}
 /* A small min-height only keeps a non-zero bar visible; it stays low enough that small bars remain
    proportional (a fraction no longer clamps up to look like the whole bar) — HS2-C9JM65. */
 .project-summary__bar-background,
-.project-summary__bar-foreground { position: absolute; bottom: 0; height: var(--bar-height); min-height: remify(2px); border-radius: remify(2.88px) remify(2.88px) 0 0; }
-.project-summary__bar-background { inset-inline: 0; background: var(--wa-color-neutral-fill-normal); }
-.project-summary__bar-foreground { inset-inline: remify(1.28px); background: var(--wa-color-brand-fill-loud); }
-.project-summary:not([data-chart-background="true"]) .project-summary__bar-foreground { inset-inline: 0; }
-.project-summary[data-chart-tone="success"] .project-summary__bar-foreground:not([data-zero="true"]) { background: var(--wa-color-success-fill-loud); }
-.project-summary__bar-foreground[data-zero="true"],
-.project-summary__bar-background[data-background-zero="true"] { height: 1px; min-height: 1px; border-radius: 0; background: var(--wa-color-neutral-border-loud); }
-.project-summary__counts { display: grid; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.35; }
-.project-summary__counts strong { color: var(--wa-color-neutral-on-normal); font-weight: 650; }
+.project-summary__bar-foreground {
+  position: absolute;
+  bottom: 0;
+  height: var(--bar-height);
+  min-height: remify(2px);
+  border-radius: remify(2.88px) remify(2.88px) 0 0;
+}
+.project-summary__bar-background {
+  inset-inline: 0;
+  background: var(--wa-color-neutral-fill-normal);
+}
+.project-summary__bar-foreground {
+  inset-inline: remify(1.28px);
+  background: var(--wa-color-brand-fill-loud);
+}
+.project-summary:not([data-chart-background='true']) .project-summary__bar-foreground {
+  inset-inline: 0;
+}
+.project-summary[data-chart-tone='success'] .project-summary__bar-foreground:not([data-zero='true']) {
+  background: var(--wa-color-success-fill-loud);
+}
+.project-summary__bar-foreground[data-zero='true'],
+.project-summary__bar-background[data-background-zero='true'] {
+  height: 1px;
+  min-height: 1px;
+  border-radius: 0;
+  background: var(--wa-color-neutral-border-loud);
+}
+.project-summary__counts {
+  display: grid;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  line-height: 1.35;
+}
+.project-summary__counts strong {
+  color: var(--wa-color-neutral-on-normal);
+  font-weight: 650;
+}

@@ -50,9 +50,7 @@ export async function runCommand(
   } catch (cause) {
     const detail = cause as { code?: number | string; stderr?: string | Buffer };
     const stderr = detail.stderr ? detail.stderr.toString() : '';
-    const error = new Error(
-      `Command failed: ${command}${stderr.trim() ? `\n${stderr.trim()}` : ''}`,
-    ) as CommandError;
+    const error = new Error(`Command failed: ${command}${stderr.trim() ? `\n${stderr.trim()}` : ''}`) as CommandError;
     error.command = command;
     error.code = detail.code;
     error.stderr = stderr;

@@ -2,7 +2,30 @@
    as a descendant of that dialog so it is neither inert nor painted beneath it, HS2-EZ10RS).
    Positioned with viewport-space `fixed` coordinates; the reader drops its dialog transform for the
    active layer so `fixed` stays viewport-relative there. */
-.attachment-context-menu { position: fixed; z-index: 1410; display: grid; width: remify(224px); max-width: calc(100vw - remify(16px)); max-height: calc(100vh - remify(16px)); padding: var(--kui-space-2xs); overflow: auto; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
-.attachment-context-menu hr { width: calc(100% - remify(17.6px)); margin: var(--kui-space-2xs) remify(8.8px); border: 0; border-top: 1px solid var(--wa-color-surface-border); }
-.attachment-context-menu .attachment-context-menu__danger { color: var(--wa-color-danger-on-quiet); }
-.attachment-context-menu .attachment-context-menu__danger:hover, .attachment-context-menu .attachment-context-menu__danger:focus-visible { background: var(--wa-color-danger-fill-normal); }
+.attachment-context-menu {
+  position: fixed;
+  z-index: 1410;
+  display: grid;
+  width: remify(224px);
+  max-width: calc(100vw - remify(16px));
+  max-height: calc(100vh - remify(16px));
+  padding: var(--kui-space-2xs);
+  overflow: auto;
+  border: 1px solid var(--wa-color-surface-border);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
+.attachment-context-menu hr {
+  width: calc(100% - remify(17.6px));
+  margin: var(--kui-space-2xs) remify(8.8px);
+  border: 0;
+  border-top: 1px solid var(--wa-color-surface-border);
+}
+.attachment-context-menu .attachment-context-menu__danger {
+  color: var(--wa-color-danger-on-quiet);
+}
+.attachment-context-menu .attachment-context-menu__danger:hover,
+.attachment-context-menu .attachment-context-menu__danger:focus-visible {
+  background: var(--wa-color-danger-fill-normal);
+}

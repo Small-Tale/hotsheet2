@@ -7,4 +7,10 @@ const choices = [
   { value: 'bug', label: 'Bug', icon: Bug, iconName: 'bug', color: '#ef4444' },
 ] as const;
 
-export function SelectDemo() { return <section class="metadata-control-demo" aria-label="Select demo"><Select name="example-select" label="Ticket type" value="feature" choices={choices} /></section>; }
+export function SelectDemo() {
+  return (
+    <section class="metadata-control-demo" aria-label="Select demo">
+      <Select name="example-select" label="Ticket type" value="feature" choices={choices} />
+    </section>
+  );
+}

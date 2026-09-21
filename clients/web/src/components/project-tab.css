@@ -1,24 +1,109 @@
-.project-tab[data-dragging-ticket="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); box-shadow: inset 0 0 0 2px var(--wa-color-brand-border-normal); }
-.project-tab[data-disconnected="true"] { color: var(--wa-color-neutral-on-quiet); }
-.project-tab[data-attention="true"] .kui-app-tab__name { color: var(--wa-color-danger-on-quiet); }
-.project-tab .kui-app-tab__name { overflow: visible; text-overflow: clip; }
-.project-tab__busy { display: grid; width: remify(16px); height: remify(16px); place-items: center; }
-.project-tab__busy .kui-loading-spinner { width: remify(12.8px); height: remify(12.8px); }
-.project-tab__state { color: var(--wa-color-neutral-on-quiet); }
-.project-tab__state--attention { color: var(--wa-color-danger-on-quiet); }
-.project-tab__indicators { display: flex; align-items: center; gap: var(--kui-space-2xs); }
-.project-tab__notification { display: flex; color: var(--wa-color-warning-on-quiet); align-items: center; gap: remify(1.28px); font-size: var(--wa-font-size-3xs); font-weight: 750; }
-.project-tab__notification svg { width: remify(11.52px); height: remify(11.52px); }
-.project-tab__work { position: relative; display: grid; width: remify(20.4px); height: remify(20.4px); overflow: visible; border-radius: var(--wa-border-radius-pill); color: var(--hs-ticket-state-up-next-on); background: var(--hs-ticket-state-up-next); font-size: var(--wa-font-size-3xs); font-weight: 750; line-height: 1; place-items: center; }
-.project-tab__work[data-active="true"] { color: var(--hs-ticket-state-up-next); background: transparent; }
-.project-tab__activity-ring { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke-width:4; }
-.project-tab__activity-track { stroke:var(--wa-color-neutral-fill-quiet); }
-.project-tab__activity-segments { stroke:currentColor; transform-origin:12px 12px; animation:project-tab-activity-rotate 1.7s linear infinite; }
+.project-tab[data-dragging-ticket='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-normal);
+  box-shadow: inset 0 0 0 2px var(--wa-color-brand-border-normal);
+}
+.project-tab[data-disconnected='true'] {
+  color: var(--wa-color-neutral-on-quiet);
+}
+.project-tab[data-attention='true'] .kui-app-tab__name {
+  color: var(--wa-color-danger-on-quiet);
+}
+.project-tab .kui-app-tab__name {
+  overflow: visible;
+  text-overflow: clip;
+}
+.project-tab__busy {
+  display: grid;
+  width: remify(16px);
+  height: remify(16px);
+  place-items: center;
+}
+.project-tab__busy .kui-loading-spinner {
+  width: remify(12.8px);
+  height: remify(12.8px);
+}
+.project-tab__state {
+  color: var(--wa-color-neutral-on-quiet);
+}
+.project-tab__state--attention {
+  color: var(--wa-color-danger-on-quiet);
+}
+.project-tab__indicators {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+}
+.project-tab__notification {
+  display: flex;
+  color: var(--wa-color-warning-on-quiet);
+  align-items: center;
+  gap: remify(1.28px);
+  font-size: var(--wa-font-size-3xs);
+  font-weight: 750;
+}
+.project-tab__notification svg {
+  width: remify(11.52px);
+  height: remify(11.52px);
+}
+.project-tab__work {
+  position: relative;
+  display: grid;
+  width: remify(20.4px);
+  height: remify(20.4px);
+  overflow: visible;
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--hs-ticket-state-up-next-on);
+  background: var(--hs-ticket-state-up-next);
+  font-size: var(--wa-font-size-3xs);
+  font-weight: 750;
+  line-height: 1;
+  place-items: center;
+}
+.project-tab__work[data-active='true'] {
+  color: var(--hs-ticket-state-up-next);
+  background: transparent;
+}
+.project-tab__activity-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke-width: 4;
+}
+.project-tab__activity-track {
+  stroke: var(--wa-color-neutral-fill-quiet);
+}
+.project-tab__activity-segments {
+  stroke: currentColor;
+  transform-origin: 12px 12px;
+  animation: project-tab-activity-rotate 1.7s linear infinite;
+}
 /* Dark ink keeps the up-next count legible on the always-yellow filled badge in both themes (HS2-SXXK5Q).
    In the active (transparent, activity-ring) state the ring keeps the up-next accent (currentColor from
    .project-tab__work) but the count itself uses primary text — black in light, white in dark — instead of
    yellow, so the number stays readable on the tab (HS2-TF43Y0). */
-.project-tab__work-count { position: relative; z-index: 1; color: var(--hs-ticket-state-up-next-on); }
-.project-tab__work[data-active="true"] .project-tab__work-count { color: var(--wa-color-text-normal); }
-@keyframes project-tab-activity-rotate { from { transform:rotate(-90deg); } to { transform:rotate(270deg); } }
-@media (prefers-reduced-motion:reduce) { .project-tab__activity-segments { animation:none; transform:rotate(-90deg); } }
+.project-tab__work-count {
+  position: relative;
+  z-index: 1;
+  color: var(--hs-ticket-state-up-next-on);
+}
+.project-tab__work[data-active='true'] .project-tab__work-count {
+  color: var(--wa-color-text-normal);
+}
+@keyframes project-tab-activity-rotate {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-tab__activity-segments {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}

@@ -11,16 +11,26 @@ export function ticketEditorSizeStorageKey(kind: TicketEditorKind, presentation:
   return `${PREFIX}.${kind}.${presentation}`;
 }
 
-export function loadTicketEditorSizes(storage: Pick<Storage, 'getItem'>, style: Pick<CSSStyleDeclaration, 'setProperty'>): void {
+export function loadTicketEditorSizes(
+  storage: Pick<Storage, 'getItem'>,
+  style: Pick<CSSStyleDeclaration, 'setProperty'>,
+): void {
   for (const kind of ['details', 'blocked-reason', 'note', 'new-ticket-details'] as const) {
     for (const presentation of ['sidebar', 'reader'] as const) {
       const value = Number(storage.getItem(ticketEditorSizeStorageKey(kind, presentation)));
-      if (Number.isFinite(value) && value > 0) style.setProperty(ticketEditorSizeVariable(kind, presentation), `${Math.round(value)}px`);
+      if (Number.isFinite(value) && value > 0)
+        style.setProperty(ticketEditorSizeVariable(kind, presentation), `${Math.round(value)}px`);
     }
   }
 }
 
-export function saveTicketEditorSize(storage: Pick<Storage, 'setItem'>, style: Pick<CSSStyleDeclaration, 'setProperty'>, kind: TicketEditorKind, presentation: TicketEditorPresentation, height: number): void {
+export function saveTicketEditorSize(
+  storage: Pick<Storage, 'setItem'>,
+  style: Pick<CSSStyleDeclaration, 'setProperty'>,
+  kind: TicketEditorKind,
+  presentation: TicketEditorPresentation,
+  height: number,
+): void {
   if (!Number.isFinite(height) || height <= 0) return;
   const value = Math.round(height);
   storage.setItem(ticketEditorSizeStorageKey(kind, presentation), String(value));

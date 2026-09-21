@@ -3,16 +3,46 @@ import './dev-review.css';
 import html2canvas from 'html2canvas';
 
 import { normalizeCaptureColors } from './capture-colors';
-import { captureCssSnapshot, CSS_LIVE_EDIT_TICKET_NOTES,cssSnapshotAttachment } from './css-live-edit';
+import { captureCssSnapshot, CSS_LIVE_EDIT_TICKET_NOTES, cssSnapshotAttachment } from './css-live-edit';
 import { createFrameBatcher } from './frame-batcher';
-import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
+import {
+  clampRectToViewport,
+  intersectRectWithViewport,
+  normalizeRect,
+  type ResizeHandle,
+  resizeRect,
+  type ReviewRect,
+  translateAnchoredRect,
+} from './geometry';
 import { promoteDevReviewPopover } from './request';
 
-export interface ReviewCapture { id: string; filename: string; dataUrl: string; width: number; height: number }
-export interface ReviewAttachment { id: string; filename: string; dataUrl: string; mimeType: string; size: number }
+export interface ReviewCapture {
+  id: string;
+  filename: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+export interface ReviewAttachment {
+  id: string;
+  filename: string;
+  dataUrl: string;
+  mimeType: string;
+  size: number;
+}
 export type DevReviewActorRole = 'human' | 'ai' | 'system';
-export interface DevReviewSubmission { notes: string; captures: ReviewCapture[]; attachments: ReviewAttachment[]; actorRole: DevReviewActorRole; pageUrl: string; viewport: { width: number; height: number } }
-export interface DevReviewResult { slug: string; url?: string }
+export interface DevReviewSubmission {
+  notes: string;
+  captures: ReviewCapture[];
+  attachments: ReviewAttachment[];
+  actorRole: DevReviewActorRole;
+  pageUrl: string;
+  viewport: { width: number; height: number };
+}
+export interface DevReviewResult {
+  slug: string;
+  url?: string;
+}
 export interface DevReviewOptions {
   submit: (submission: DevReviewSubmission) => Promise<DevReviewResult>;
   diagnostics?: () => ReviewAttachment;
@@ -21,9 +51,24 @@ export interface DevReviewOptions {
   hintDurationMs?: number;
   document?: Document;
 }
-export interface DevReviewPerformanceMetrics { pointerMoves: number; geometryWrites: number; captureStarts: number; captureStartsDuringGesture: number; maxPointerMoveMs: number }
-interface Selection extends ReviewRect { capture?: ReviewCapture; capturePromise?: Promise<void>; revision: number; anchor?: { element: Element; point: { x: number; y: number } }; element?: HTMLElement }
-type Gesture = { kind: 'draw'; startX: number; startY: number; id: string } | { kind: 'move'; id: string; startX: number; startY: number; origin: ReviewRect } | { kind: 'resize'; id: string; handle: ResizeHandle };
+export interface DevReviewPerformanceMetrics {
+  pointerMoves: number;
+  geometryWrites: number;
+  captureStarts: number;
+  captureStartsDuringGesture: number;
+  maxPointerMoveMs: number;
+}
+interface Selection extends ReviewRect {
+  capture?: ReviewCapture;
+  capturePromise?: Promise<void>;
+  revision: number;
+  anchor?: { element: Element; point: { x: number; y: number } };
+  element?: HTMLElement;
+}
+type Gesture =
+  | { kind: 'draw'; startX: number; startY: number; id: string }
+  | { kind: 'move'; id: string; startX: number; startY: number; origin: ReviewRect }
+  | { kind: 'resize'; id: string; handle: ResizeHandle };
 
 export function installDevReview(options: DevReviewOptions): { destroy(): void } {
   const doc = options.document ?? document;
@@ -44,41 +89,62 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   let deleteModifierHeld = false;
   let scrollFrame: number | undefined;
   const dirtySelectionIds = new Set<string>();
-  const performanceMetrics: DevReviewPerformanceMetrics = { pointerMoves: 0, geometryWrites: 0, captureStarts: 0, captureStartsDuringGesture: 0, maxPointerMoveMs: 0 };
+  const performanceMetrics: DevReviewPerformanceMetrics = {
+    pointerMoves: 0,
+    geometryWrites: 0,
+    captureStarts: 0,
+    captureStartsDuringGesture: 0,
+    maxPointerMoveMs: 0,
+  };
 
   const root = doc.createElement('div');
   root.className = 'hs-dev-review';
   root.dataset.hotsheetDevReview = 'true';
   Object.defineProperty(root, 'performanceMetrics', { value: performanceMetrics });
-  root.innerHTML = '<div class="hs-dev-review__toolbar"><button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button></div>';
+  root.innerHTML =
+    '<div class="hs-dev-review__toolbar"><button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button></div>';
   doc.body.append(root);
   const toolbar = root.querySelector<HTMLElement>('.hs-dev-review__toolbar')!;
   toolbar.setAttribute('popover', 'manual');
-  const promoteToolbar = () => { promoteDevReviewPopover(toolbar); };
-  let toolbarFrame:number|undefined;
+  const promoteToolbar = () => {
+    promoteDevReviewPopover(toolbar);
+  };
+  let toolbarFrame: number | undefined;
   const placeToolbar = () => {
-    toolbarFrame=undefined;
-    const nativeDialogs=[...doc.querySelectorAll<HTMLElement>('dialog[open]')];
-    const componentDialogs=[...doc.querySelectorAll<HTMLElement>('wa-dialog[open]')];
-    const host=nativeDialogs.at(-1)??componentDialogs.at(-1)??root;
-    if(toolbar.parentElement!==host)host.append(toolbar);
+    toolbarFrame = undefined;
+    const nativeDialogs = [...doc.querySelectorAll<HTMLElement>('dialog[open]')];
+    const componentDialogs = [...doc.querySelectorAll<HTMLElement>('wa-dialog[open]')];
+    const host = nativeDialogs.at(-1) ?? componentDialogs.at(-1) ?? root;
+    if (toolbar.parentElement !== host) host.append(toolbar);
     promoteToolbar();
   };
   const promoteToolbarAfterDialog = () => {
-    if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame);
-    toolbarFrame=view.requestAnimationFrame(placeToolbar);
+    if (toolbarFrame !== undefined) view.cancelAnimationFrame(toolbarFrame);
+    toolbarFrame = view.requestAnimationFrame(placeToolbar);
   };
   placeToolbar();
   doc.addEventListener('wa-show', promoteToolbarAfterDialog, true);
   doc.addEventListener('wa-hide', promoteToolbarAfterDialog, true);
-  const dialogObserver=new view.MutationObserver(records=>{
-    const dialogTreeChanged=records.some(record=>record.type==='attributes'||[...record.addedNodes,...record.removedNodes].some(node=>{
-      const element=node as Element;
-      return typeof element.matches==='function'&&(element.matches('dialog,wa-dialog')||Boolean(element.querySelector('dialog,wa-dialog')));
-    }));
-    if(!toolbar.isConnected||dialogTreeChanged)promoteToolbarAfterDialog();
+  const dialogObserver = new view.MutationObserver((records) => {
+    const dialogTreeChanged = records.some(
+      (record) =>
+        record.type === 'attributes' ||
+        [...record.addedNodes, ...record.removedNodes].some((node) => {
+          const element = node as Element;
+          return (
+            typeof element.matches === 'function' &&
+            (element.matches('dialog,wa-dialog') || Boolean(element.querySelector('dialog,wa-dialog')))
+          );
+        }),
+    );
+    if (!toolbar.isConnected || dialogTreeChanged) promoteToolbarAfterDialog();
   });
-  dialogObserver.observe(doc.documentElement,{attributes:true,attributeFilter:['open'],childList:true,subtree:true});
+  dialogObserver.observe(doc.documentElement, {
+    attributes: true,
+    attributeFilter: ['open'],
+    childList: true,
+    subtree: true,
+  });
 
   const setModifiers = (alt: boolean, shift = false) => {
     deleteModifierHeld = enabled && alt && shift;
@@ -105,7 +171,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
   const geometryBatch = createFrameBatcher(view, () => {
     for (const id of dirtySelectionIds) {
-      const selection = selections.find(item => item.id === id);
+      const selection = selections.find((item) => item.id === id);
       if (selection) updateSelectionElement(selection);
     }
     dirtySelectionIds.clear();
@@ -116,7 +182,10 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const leaveFeedback = () => {
-    if (hintTimer) { view.clearTimeout(hintTimer); hintTimer = undefined; }
+    if (hintTimer) {
+      view.clearTimeout(hintTimer);
+      hintTimer = undefined;
+    }
     hintVisible = false;
     utilitiesOpen = false;
     setModifiers(false);
@@ -126,7 +195,10 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const leaveCssLiveEdit = () => {
-    if (hintTimer) { view.clearTimeout(hintTimer); hintTimer = undefined; }
+    if (hintTimer) {
+      view.clearTimeout(hintTimer);
+      hintTimer = undefined;
+    }
     hintVisible = false;
     utilitiesOpen = false;
     cssLiveEditBefore = undefined;
@@ -141,11 +213,14 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     if (cssLiveEditBefore !== undefined) {
       toolbar.innerHTML = `<button class="hs-dev-review__css-live-edit" type="button" aria-pressed="true" title="Cancel CSS Live Edit"${cssLiveEditSubmitting ? ' disabled' : ''}>CSS Live Edit</button><button data-action="new-css-ticket" type="button"${cssLiveEditSubmitting ? ' disabled' : ''}>${cssLiveEditSubmitting ? 'Creating…' : 'New Ticket'}</button>`;
     } else if (enabled) {
-      toolbar.innerHTML = '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>';
+      toolbar.innerHTML =
+        '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>';
     } else {
       toolbar.innerHTML = `<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button><button class="hs-dev-review__utilities" type="button" aria-label="Additional review utilities" aria-haspopup="menu" aria-expanded="${utilitiesOpen}"></button>${utilitiesOpen ? '<div class="hs-dev-review__utilities-menu" role="menu"><button type="button" role="menuitem" data-action="css-live-edit">CSS Live Edit</button></div>' : ''}`;
     }
-    root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach(node => { node.remove(); });
+    root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach((node) => {
+      node.remove();
+    });
     if (cssLiveEditBefore !== undefined) {
       const hint = doc.createElement('div');
       hint.className = hintVisible ? 'hs-dev-review__hint' : 'hs-dev-review__hint hs-dev-review__hint--hidden';
@@ -166,14 +241,23 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       box.dataset.index = String(index + 1);
       box.style.cssText = `left:${selection.x}px;top:${selection.y}px;width:${selection.width}px;height:${selection.height}px`;
       selection.element = box;
-      for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const) box.insertAdjacentHTML('beforeend', `<button class="hs-dev-review__handle" type="button" data-handle="${handle}" aria-label="Resize capture ${index + 1} from ${handle}"></button>`);
+      for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const)
+        box.insertAdjacentHTML(
+          'beforeend',
+          `<button class="hs-dev-review__handle" type="button" data-handle="${handle}" aria-label="Resize capture ${index + 1} from ${handle}"></button>`,
+        );
       root.append(box);
     });
   };
 
   const anchorSelection = (selection: Selection) => {
-    const element = doc.elementsFromPoint(selection.x + 1, selection.y + 1).find(candidate => !root.contains(candidate));
-    if (!element) { selection.anchor = undefined; return; }
+    const element = doc
+      .elementsFromPoint(selection.x + 1, selection.y + 1)
+      .find((candidate) => !root.contains(candidate));
+    if (!element) {
+      selection.anchor = undefined;
+      return;
+    }
     const bounds = element.getBoundingClientRect();
     selection.anchor = { element, point: { x: bounds.left, y: bounds.top } };
   };
@@ -184,7 +268,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       if (!selection.anchor?.element.isConnected || gesture?.id === selection.id) continue;
       const bounds = selection.anchor.element.getBoundingClientRect();
       const next = translateAnchoredRect(selection, selection.anchor.point, { x: bounds.left, y: bounds.top });
-      selection.x = next.x; selection.y = next.y;
+      selection.x = next.x;
+      selection.y = next.y;
       selection.anchor.point = { x: bounds.left, y: bounds.top };
       updateSelectionElement(selection);
     }
@@ -193,30 +278,48 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   const captureSelections = (targets: Selection[]): Promise<void> => {
     performanceMetrics.captureStarts += 1;
     if (gesture) performanceMetrics.captureStartsDuringGesture += 1;
-    const revisions = new Map(targets.map(selection => [selection.id, selection.revision]));
+    const revisions = new Map(targets.map((selection) => [selection.id, selection.revision]));
     const promise = (async () => {
       for (const selection of targets) {
         if (selection.revision !== revisions.get(selection.id)) continue;
         const bounded = intersectRectWithViewport(selection, view.innerWidth, view.innerHeight);
         const cropped = await html2canvas(doc.documentElement, {
-          x: bounded.x + view.scrollX, y: bounded.y + view.scrollY, width: bounded.width, height: bounded.height,
-          windowWidth: view.innerWidth, windowHeight: view.innerHeight, scrollX: view.scrollX, scrollY: view.scrollY,
+          x: bounded.x + view.scrollX,
+          y: bounded.y + view.scrollY,
+          width: bounded.width,
+          height: bounded.height,
+          windowWidth: view.innerWidth,
+          windowHeight: view.innerHeight,
+          scrollX: view.scrollX,
+          scrollY: view.scrollY,
           // Review rectangles use CSS viewport pixels; keep the output in that same
           // coordinate space on Retina/high-DPI displays.
-          scale: 1, backgroundColor: null, logging: false,
-          ignoreElements: element => element.hasAttribute('data-hotsheet-dev-review'),
+          scale: 1,
+          backgroundColor: null,
+          logging: false,
+          ignoreElements: (element) => element.hasAttribute('data-hotsheet-dev-review'),
           onclone: normalizeCaptureColors,
         });
-        selection.capture = { id: selection.id, filename: `ux-feedback-${selection.id}.png`, dataUrl: cropped.toDataURL('image/png'), width: cropped.width, height: cropped.height };
+        selection.capture = {
+          id: selection.id,
+          filename: `ux-feedback-${selection.id}.png`,
+          dataUrl: cropped.toDataURL('image/png'),
+          width: cropped.width,
+          height: cropped.height,
+        };
       }
-    })().finally(() => { for (const selection of targets) if (selection.capturePromise === promise) selection.capturePromise = undefined; });
+    })().finally(() => {
+      for (const selection of targets) if (selection.capturePromise === promise) selection.capturePromise = undefined;
+    });
     for (const selection of targets) selection.capturePromise = promise;
     return promise;
   };
 
   const flushCaptures = async () => {
-    await Promise.all([...new Set(selections.flatMap(selection => selection.capturePromise ? [selection.capturePromise] : []))]);
-    const missing = selections.filter(selection => !selection.capture);
+    await Promise.all([
+      ...new Set(selections.flatMap((selection) => (selection.capturePromise ? [selection.capturePromise] : []))),
+    ]);
+    const missing = selections.filter((selection) => !selection.capture);
     if (missing.length > 0) await captureSelections(missing);
   };
 
@@ -239,67 +342,165 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     const attachmentList = dialog.querySelector<HTMLElement>('.hs-dev-review__attachments')!;
     const showPreview = (index: number) => {
       selectedPreview = index;
-      thumbnails.querySelectorAll<HTMLButtonElement>('[data-action="review-capture"]').forEach((button, buttonIndex) => { button.setAttribute('aria-pressed', String(buttonIndex === index)); });
-      preview.innerHTML = captures[index] ? `<img src="${captures[index].dataUrl}" alt="Captured region ${index + 1} preview">` : '<span>No captured regions</span>';
+      thumbnails
+        .querySelectorAll<HTMLButtonElement>('[data-action="review-capture"]')
+        .forEach((button, buttonIndex) => {
+          button.setAttribute('aria-pressed', String(buttonIndex === index));
+        });
+      preview.innerHTML = captures[index]
+        ? `<img src="${captures[index].dataUrl}" alt="Captured region ${index + 1} preview">`
+        : '<span>No captured regions</span>';
     };
     const showCaptures = () => {
       thumbnails.replaceChildren();
       captures.forEach((item, index) => {
-        const wrapper = doc.createElement('div'); wrapper.className = 'hs-dev-review__item';
-        const button = doc.createElement('button'); button.type = 'button'; button.className = 'hs-dev-review__thumbnail'; button.dataset.action = 'review-capture'; button.setAttribute('aria-label', `Review captured region ${index + 1}`); button.innerHTML = `<img src="${item.dataUrl}" alt="">`; button.addEventListener('click', () => { showPreview(index); });
-        const remove = doc.createElement('button'); remove.type = 'button'; remove.className = 'hs-dev-review__remove'; remove.setAttribute('aria-label', `Remove captured region ${index + 1}`); remove.addEventListener('click', () => { captures.splice(index, 1); const selectionIndex = selections.findIndex(selection => selection.id === item.id); if (selectionIndex >= 0) selections.splice(selectionIndex, 1); selectedPreview = Math.min(selectedPreview, Math.max(0, captures.length - 1)); render(); showCaptures(); });
-        wrapper.append(button, remove); thumbnails.append(wrapper);
+        const wrapper = doc.createElement('div');
+        wrapper.className = 'hs-dev-review__item';
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.className = 'hs-dev-review__thumbnail';
+        button.dataset.action = 'review-capture';
+        button.setAttribute('aria-label', `Review captured region ${index + 1}`);
+        button.innerHTML = `<img src="${item.dataUrl}" alt="">`;
+        button.addEventListener('click', () => {
+          showPreview(index);
+        });
+        const remove = doc.createElement('button');
+        remove.type = 'button';
+        remove.className = 'hs-dev-review__remove';
+        remove.setAttribute('aria-label', `Remove captured region ${index + 1}`);
+        remove.addEventListener('click', () => {
+          captures.splice(index, 1);
+          const selectionIndex = selections.findIndex((selection) => selection.id === item.id);
+          if (selectionIndex >= 0) selections.splice(selectionIndex, 1);
+          selectedPreview = Math.min(selectedPreview, Math.max(0, captures.length - 1));
+          render();
+          showCaptures();
+        });
+        wrapper.append(button, remove);
+        thumbnails.append(wrapper);
       });
       showPreview(selectedPreview);
     };
     const showAttachments = () => {
       attachmentList.replaceChildren();
       attachments.forEach((item, index) => {
-        const wrapper = doc.createElement('div'); wrapper.className = 'hs-dev-review__attachment';
-        if (item.mimeType.startsWith('image/')) { const image = doc.createElement('img'); image.src = item.dataUrl; image.alt = ''; wrapper.append(image); }
-        const name = doc.createElement('span'); name.textContent = item.filename;
-        const remove = doc.createElement('button'); remove.type = 'button'; remove.className = 'hs-dev-review__remove'; remove.setAttribute('aria-label', `Remove attachment ${item.filename}`); remove.addEventListener('click', () => { attachments.splice(index, 1); showAttachments(); });
-        wrapper.append(name, remove); attachmentList.append(wrapper);
+        const wrapper = doc.createElement('div');
+        wrapper.className = 'hs-dev-review__attachment';
+        if (item.mimeType.startsWith('image/')) {
+          const image = doc.createElement('img');
+          image.src = item.dataUrl;
+          image.alt = '';
+          wrapper.append(image);
+        }
+        const name = doc.createElement('span');
+        name.textContent = item.filename;
+        const remove = doc.createElement('button');
+        remove.type = 'button';
+        remove.className = 'hs-dev-review__remove';
+        remove.setAttribute('aria-label', `Remove attachment ${item.filename}`);
+        remove.addEventListener('click', () => {
+          attachments.splice(index, 1);
+          showAttachments();
+        });
+        wrapper.append(name, remove);
+        attachmentList.append(wrapper);
       });
     };
     const addFiles = async (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
-        const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { resolve(String(reader.result)); }; reader.onerror = () => { reject(reader.error); }; reader.readAsDataURL(file); });
-        attachments.push({ id: `attachment-${Date.now()}-${attachments.length}`, filename: file.name, dataUrl, mimeType: file.type || 'application/octet-stream', size: file.size });
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve(String(reader.result));
+          };
+          reader.onerror = () => {
+            reject(reader.error);
+          };
+          reader.readAsDataURL(file);
+        });
+        attachments.push({
+          id: `attachment-${Date.now()}-${attachments.length}`,
+          filename: file.name,
+          dataUrl,
+          mimeType: file.type || 'application/octet-stream',
+          size: file.size,
+        });
       }
       showAttachments();
     };
-    input.addEventListener('change', () => { if (input.files) void addFiles(input.files); input.value = ''; });
-    for (const type of ['dragenter', 'dragover']) dropzone.addEventListener(type, event => { event.preventDefault(); dropzone.dataset.dragging = 'true'; });
-    for (const type of ['dragleave', 'drop']) dropzone.addEventListener(type, event => { event.preventDefault(); delete dropzone.dataset.dragging; });
-    dropzone.addEventListener('drop', event => { if (event.dataTransfer?.files.length) void addFiles(event.dataTransfer.files); });
-    dialog.querySelectorAll<HTMLElement>('[data-action="close-dialog"]').forEach(button => { button.addEventListener('click', () => { dialog.close(); }); });
-    dialog.addEventListener('close', () => { dialog.remove(); });
-    dialog.querySelector('form')!.addEventListener('submit', async event => {
+    input.addEventListener('change', () => {
+      if (input.files) void addFiles(input.files);
+      input.value = '';
+    });
+    for (const type of ['dragenter', 'dragover'])
+      dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.dataset.dragging = 'true';
+      });
+    for (const type of ['dragleave', 'drop'])
+      dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        delete dropzone.dataset.dragging;
+      });
+    dropzone.addEventListener('drop', (event) => {
+      if (event.dataTransfer?.files.length) void addFiles(event.dataTransfer.files);
+    });
+    dialog.querySelectorAll<HTMLElement>('[data-action="close-dialog"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        dialog.close();
+      });
+    });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+    });
+    dialog.querySelector('form')!.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (submitting) return;
       const textarea = dialog.querySelector<HTMLTextAreaElement>('textarea')!;
       if (!textarea.reportValidity()) return;
       submitting = true;
-      submit.disabled = true; status.textContent = 'Creating ticket and attaching captures…';
+      submit.disabled = true;
+      status.textContent = 'Creating ticket and attaching captures…';
       try {
         const submissionAttachments = [...attachments];
         const diagnosticToggle = dialog.querySelector<HTMLInputElement>('.hs-dev-review__diagnostics input');
-        if (diagnosticToggle?.checked && options.diagnostics && submissionAttachments.length < 20) submissionAttachments.push(options.diagnostics());
-        const result = await options.submit({ notes: textarea.value.trim(), captures, attachments: submissionAttachments, actorRole: 'human', pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
+        if (diagnosticToggle?.checked && options.diagnostics && submissionAttachments.length < 20)
+          submissionAttachments.push(options.diagnostics());
+        const result = await options.submit({
+          notes: textarea.value.trim(),
+          captures,
+          attachments: submissionAttachments,
+          actorRole: 'human',
+          pageUrl: view.location.href,
+          viewport: { width: view.innerWidth, height: view.innerHeight },
+        });
         status.textContent = `${result.slug} created.`;
         leaveFeedback();
-        view.setTimeout(() => { dialog.close(); }, 500);
+        view.setTimeout(() => {
+          dialog.close();
+        }, 500);
       } catch (error) {
         status.textContent = error instanceof Error ? error.message : 'Ticket creation failed.';
         submit.disabled = false;
-      } finally { submitting = false; }
+      } finally {
+        submitting = false;
+      }
     });
     dialog.showModal();
     dialog.querySelector<HTMLTextAreaElement>('textarea')!.focus();
-    submit.disabled = true; status.textContent = 'Preparing captures…'; preview.innerHTML = '<span>Preparing captures…</span>';
-    try { await flushCaptures(); captures = selections.flatMap(selection => selection.capture ? [selection.capture] : []); showCaptures(); status.textContent = ''; submit.disabled = false; }
-    catch (error) { status.textContent = error instanceof Error ? error.message : 'Capture failed.'; }
+    submit.disabled = true;
+    status.textContent = 'Preparing captures…';
+    preview.innerHTML = '<span>Preparing captures…</span>';
+    try {
+      await flushCaptures();
+      captures = selections.flatMap((selection) => (selection.capture ? [selection.capture] : []));
+      showCaptures();
+      status.textContent = '';
+      submit.disabled = false;
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : 'Capture failed.';
+    }
   };
 
   const startCssLiveEdit = () => {
@@ -324,7 +525,14 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
         cssSnapshotAttachment(view, 'css-live-edit-before.css', before),
         cssSnapshotAttachment(view, 'css-live-edit-after.css', after),
       ];
-      const result = await options.submit({ notes: CSS_LIVE_EDIT_TICKET_NOTES, captures: [], attachments, actorRole: 'human', pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
+      const result = await options.submit({
+        notes: CSS_LIVE_EDIT_TICKET_NOTES,
+        captures: [],
+        attachments,
+        actorRole: 'human',
+        pageUrl: view.location.href,
+        viewport: { width: view.innerWidth, height: view.innerHeight },
+      });
       cssLiveEditMessage = `${result.slug} created.`;
       render();
       view.setTimeout(leaveCssLiveEdit, 800);
@@ -358,7 +566,13 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       if (enabled) {
         if (selections.length > 0 && !view.confirm('Discard the captured feedback regions?')) return;
         leaveFeedback();
-      } else { utilitiesOpen = false; enabled = true; hintVisible = true; render(); scheduleHintFade(); }
+      } else {
+        utilitiesOpen = false;
+        enabled = true;
+        hintVisible = true;
+        render();
+        scheduleHintFade();
+      }
       return;
     }
     if (target.closest('[data-action="new-ticket"]')) void openDialog();
@@ -376,8 +590,9 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     const target = event.target as HTMLElement;
     const box = target.closest<HTMLElement>('.hs-dev-review__rect');
     if (box && event.altKey && event.shiftKey) {
-      event.preventDefault(); event.stopPropagation();
-      const index = selections.findIndex(item => item.id === box.dataset.selectionId);
+      event.preventDefault();
+      event.stopPropagation();
+      const index = selections.findIndex((item) => item.id === box.dataset.selectionId);
       if (index >= 0) {
         selections.splice(index, 1);
         render();
@@ -385,7 +600,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       return;
     }
     if (event.altKey && !target.closest('.hs-dev-review__toolbar,.hs-dev-review__dialog')) {
-      event.preventDefault(); event.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
       const id = String(sequence++);
       selections.push({ id, x: event.clientX, y: event.clientY, width: 1, height: 1, revision: 0 });
       gesture = { kind: 'draw', id, startX: event.clientX, startY: event.clientY };
@@ -393,10 +609,13 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       return;
     }
     if (box) {
-      event.preventDefault(); event.stopPropagation();
-      const selection = selections.find(item => item.id === box.dataset.selectionId)!;
+      event.preventDefault();
+      event.stopPropagation();
+      const selection = selections.find((item) => item.id === box.dataset.selectionId)!;
       const handle = target.closest<HTMLElement>('[data-handle]')?.dataset.handle as ResizeHandle | undefined;
-      gesture = handle ? { kind: 'resize', id: selection.id, handle } : { kind: 'move', id: selection.id, startX: event.clientX, startY: event.clientY, origin: { ...selection } };
+      gesture = handle
+        ? { kind: 'resize', id: selection.id, handle }
+        : { kind: 'move', id: selection.id, startX: event.clientX, startY: event.clientY, origin: { ...selection } };
       return;
     }
   };
@@ -406,37 +625,86 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     if (!gesture) return;
     performanceMetrics.pointerMoves += 1;
     event.preventDefault();
-    const index = selections.findIndex(item => item.id === gesture!.id);
+    const index = selections.findIndex((item) => item.id === gesture!.id);
     if (index < 0) return;
     const current = selections[index];
-    const next = gesture.kind === 'draw' ? normalizeRect(current.id, gesture.startX, gesture.startY, event.clientX, event.clientY)
-      : gesture.kind === 'resize' ? resizeRect(current, gesture.handle, event.clientX, event.clientY)
-        : { ...gesture.origin, x: gesture.origin.x + event.clientX - gesture.startX, y: gesture.origin.y + event.clientY - gesture.startY };
-    selections[index] = { ...current, ...clampRectToViewport(next, view.innerWidth, view.innerHeight), capture: undefined, revision: current.revision + 1 };
+    const next =
+      gesture.kind === 'draw'
+        ? normalizeRect(current.id, gesture.startX, gesture.startY, event.clientX, event.clientY)
+        : gesture.kind === 'resize'
+          ? resizeRect(current, gesture.handle, event.clientX, event.clientY)
+          : {
+              ...gesture.origin,
+              x: gesture.origin.x + event.clientX - gesture.startX,
+              y: gesture.origin.y + event.clientY - gesture.startY,
+            };
+    selections[index] = {
+      ...current,
+      ...clampRectToViewport(next, view.innerWidth, view.innerHeight),
+      capture: undefined,
+      revision: current.revision + 1,
+    };
     scheduleSelectionElementUpdate(selections[index]);
-    performanceMetrics.maxPointerMoveMs = Math.max(performanceMetrics.maxPointerMoveMs, view.performance.now() - startedAt);
+    performanceMetrics.maxPointerMoveMs = Math.max(
+      performanceMetrics.maxPointerMoveMs,
+      view.performance.now() - startedAt,
+    );
   };
 
   const onPointerUp = () => {
     if (!gesture) return;
-    const selection = selections.find(item => item.id === gesture!.id);
+    const selection = selections.find((item) => item.id === gesture!.id);
     gesture = undefined;
     if (!selection) return;
-    if (selection.width < 12 || selection.height < 12) { selections.splice(selections.indexOf(selection), 1); render(); }
-    else { geometryBatch.flush(); anchorSelection(selection); }
+    if (selection.width < 12 || selection.height < 12) {
+      selections.splice(selections.indexOf(selection), 1);
+      render();
+    } else {
+      geometryBatch.flush();
+      anchorSelection(selection);
+    }
   };
   doc.addEventListener('pointerdown', onPointerDown, true);
-  const onKeyChange = (event: KeyboardEvent) => { setModifiers(event.altKey, event.shiftKey); };
-  const onWindowBlur = () => { setModifiers(false); };
+  const onKeyChange = (event: KeyboardEvent) => {
+    setModifiers(event.altKey, event.shiftKey);
+  };
+  const onWindowBlur = () => {
+    setModifiers(false);
+  };
   doc.addEventListener('keydown', onKeyChange, true);
   doc.addEventListener('keyup', onKeyChange, true);
   view.addEventListener('blur', onWindowBlur);
   view.addEventListener('pointermove', onPointerMove, true);
   view.addEventListener('pointerup', onPointerUp, true);
-  const onScroll = () => { if (scrollFrame === undefined) scrollFrame = view.requestAnimationFrame(updateAnchoredSelections); };
+  const onScroll = () => {
+    if (scrollFrame === undefined) scrollFrame = view.requestAnimationFrame(updateAnchoredSelections);
+  };
   doc.addEventListener('scroll', onScroll, true);
   view.addEventListener('resize', onScroll);
   render();
 
-  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame); dialogObserver.disconnect(); geometryBatch.cancel(); setModifiers(false); toolbar.removeEventListener('click', onRootClick); doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true); doc.removeEventListener('wa-hide', promoteToolbarAfterDialog, true); doc.removeEventListener('pointerdown', closeUtilities, true); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); toolbar.remove(); root.remove(); } };
+  return {
+    destroy() {
+      if (hintTimer) view.clearTimeout(hintTimer);
+      if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame);
+      if (toolbarFrame !== undefined) view.cancelAnimationFrame(toolbarFrame);
+      dialogObserver.disconnect();
+      geometryBatch.cancel();
+      setModifiers(false);
+      toolbar.removeEventListener('click', onRootClick);
+      doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true);
+      doc.removeEventListener('wa-hide', promoteToolbarAfterDialog, true);
+      doc.removeEventListener('pointerdown', closeUtilities, true);
+      doc.removeEventListener('pointerdown', onPointerDown, true);
+      doc.removeEventListener('keydown', onKeyChange, true);
+      doc.removeEventListener('keyup', onKeyChange, true);
+      doc.removeEventListener('scroll', onScroll, true);
+      view.removeEventListener('resize', onScroll);
+      view.removeEventListener('blur', onWindowBlur);
+      view.removeEventListener('pointermove', onPointerMove, true);
+      view.removeEventListener('pointerup', onPointerUp, true);
+      toolbar.remove();
+      root.remove();
+    },
+  };
 }

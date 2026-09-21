@@ -13,11 +13,12 @@ describe('devReviewRequested', () => {
   });
 
   it('promotes a supported toolbar popover above a newly opened dialog', () => {
-    const showPopover=vi.fn(),hidePopover=vi.fn();
-    const toolbar={matches:vi.fn(()=>true),showPopover,hidePopover};
+    const showPopover = vi.fn(),
+      hidePopover = vi.fn();
+    const toolbar = { matches: vi.fn(() => true), showPopover, hidePopover };
     promoteDevReviewPopover(toolbar);
     expect(hidePopover).toHaveBeenCalledOnce();
     expect(showPopover).toHaveBeenCalledOnce();
-    promoteDevReviewPopover({matches:vi.fn(()=>false)});
+    promoteDevReviewPopover({ matches: vi.fn(() => false) });
   });
 });

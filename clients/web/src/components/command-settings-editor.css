@@ -1,83 +1,429 @@
-.command-settings-editor { display:grid; container-type:inline-size; gap:var(--kui-space-l); }
-.command-settings-editor__heading { display:flex; align-items:end; justify-content:space-between; gap:var(--kui-space-m); }
-.command-settings-editor__heading h2,.command-settings-editor__heading p { margin:0; }
-.command-settings-editor__heading p { max-width:remify(520px); margin-top:var(--kui-space-2xs); color:var(--wa-color-text-quiet); }
-.command-settings-editor__heading-actions { display:flex; flex:0 0 auto; gap:var(--kui-space-2xs); }
-.command-settings-editor button { display:inline-flex; min-height:remify(36px); padding:0 var(--kui-space-xs); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-m); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); align-items:center; justify-content:center; gap:var(--kui-space-2xs); cursor:pointer; font:inherit; }
-.command-settings-editor button:hover { background:var(--wa-color-neutral-fill-quiet); }
-.command-settings-editor button:disabled { opacity:.45; cursor:default; }
-.command-settings-editor button svg { width:remify(16px); height:remify(16px); }
-.command-settings-editor__add-command { color:var(--wa-color-brand-on-loud); border-color:transparent; background:var(--wa-color-brand-fill-loud); }
-.command-settings-editor__add-command:hover { background:var(--wa-color-brand-fill-loud); filter:brightness(1.05); }
+.command-settings-editor {
+  display: grid;
+  container-type: inline-size;
+  gap: var(--kui-space-l);
+}
+.command-settings-editor__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--kui-space-m);
+}
+.command-settings-editor__heading h2,
+.command-settings-editor__heading p {
+  margin: 0;
+}
+.command-settings-editor__heading p {
+  max-width: remify(520px);
+  margin-top: var(--kui-space-2xs);
+  color: var(--wa-color-text-quiet);
+}
+.command-settings-editor__heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--kui-space-2xs);
+}
+.command-settings-editor button {
+  display: inline-flex;
+  min-height: remify(36px);
+  padding: 0 var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  align-items: center;
+  justify-content: center;
+  gap: var(--kui-space-2xs);
+  cursor: pointer;
+  font: inherit;
+}
+.command-settings-editor button:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.command-settings-editor button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.command-settings-editor button svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.command-settings-editor__add-command {
+  color: var(--wa-color-brand-on-loud);
+  border-color: transparent;
+  background: var(--wa-color-brand-fill-loud);
+}
+.command-settings-editor__add-command:hover {
+  background: var(--wa-color-brand-fill-loud);
+  filter: brightness(1.05);
+}
 
 /* WYSIWYG command list (HS2-656XJ2, HS2-D9JBXT) — drag-to-reorder grouped rows aligned like the sidebar. */
-.command-settings-editor__list { display:grid; margin:0; padding:0; gap:var(--kui-space-m); list-style:none; }
-.command-settings-editor__section { display:grid; gap:var(--kui-space-2xs); }
-.command-settings-editor__group-header { display:flex; align-items:center; gap:var(--kui-space-2xs); min-height:remify(24px); padding:0 var(--kui-space-2xs); }
-.command-settings-editor__group-label { color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
-.command-settings-editor__group-delete { width:remify(24px); min-height:remify(24px); padding:0; border-color:transparent; background:transparent; }
-.command-settings-editor__group-delete:hover { color:var(--wa-color-danger-on-quiet); border-color:var(--wa-color-neutral-border-normal); background:var(--wa-color-surface-default); }
-.command-settings-editor__group-delete svg { width:remify(14px); height:remify(14px); }
-.command-settings-editor__group-items { display:grid; margin:0; padding:0; gap:var(--kui-space-none); list-style:none; border-radius:var(--wa-border-radius-m); }
-.command-settings-editor__group-items[data-command-drop-active="true"] { outline:2px dashed var(--wa-color-brand-border-loud); outline-offset:2px; }
-.command-settings-editor__group-empty { padding:var(--kui-space-xs); color:var(--wa-color-text-quiet); font-size:var(--wa-font-size-s); text-align:center; border:1px dashed var(--wa-color-surface-border); border-radius:var(--wa-border-radius-m); }
+.command-settings-editor__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--kui-space-m);
+  list-style: none;
+}
+.command-settings-editor__section {
+  display: grid;
+  gap: var(--kui-space-2xs);
+}
+.command-settings-editor__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  min-height: remify(24px);
+  padding: 0 var(--kui-space-2xs);
+}
+.command-settings-editor__group-label {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.command-settings-editor__group-delete {
+  width: remify(24px);
+  min-height: remify(24px);
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.command-settings-editor__group-delete:hover {
+  color: var(--wa-color-danger-on-quiet);
+  border-color: var(--wa-color-neutral-border-normal);
+  background: var(--wa-color-surface-default);
+}
+.command-settings-editor__group-delete svg {
+  width: remify(14px);
+  height: remify(14px);
+}
+.command-settings-editor__group-items {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--kui-space-none);
+  list-style: none;
+  border-radius: var(--wa-border-radius-m);
+}
+.command-settings-editor__group-items[data-command-drop-active='true'] {
+  outline: 2px dashed var(--wa-color-brand-border-loud);
+  outline-offset: 2px;
+}
+.command-settings-editor__group-empty {
+  padding: var(--kui-space-xs);
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-s);
+  text-align: center;
+  border: 1px dashed var(--wa-color-surface-border);
+  border-radius: var(--wa-border-radius-m);
+}
 
-.command-settings-editor__row { display:flex; align-items:center; gap:var(--kui-space-xs); padding:var(--kui-space-2xs); border-radius:var(--wa-border-radius-m); cursor:pointer; }
-.command-settings-editor__row:hover { background:var(--wa-color-neutral-fill-quiet); }
-.command-settings-editor__row[data-selected="true"] { background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px var(--wa-color-brand-border-normal); }
-.command-settings-editor__row[data-editing="true"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-quiet); }
-.command-settings-editor__row[data-command-dragging="true"] { opacity:.4; }
-.command-settings-editor__row[data-command-drop-position="before"] { box-shadow:inset 0 2px 0 var(--wa-color-brand-border-loud); }
-.command-settings-editor__row[data-command-drop-position="after"] { box-shadow:inset 0 -2px 0 var(--wa-color-brand-border-loud); }
-.command-settings-editor__row-grip { display:inline-flex; flex:0 0 auto; color:var(--wa-color-neutral-on-quiet); cursor:grab; opacity:.55; }
-.command-settings-editor__row-grip svg { width:remify(16px); height:remify(16px); }
-.command-settings-editor__row-icon { display:grid; width:remify(32px); height:remify(32px); flex:0 0 auto; border-radius:var(--wa-border-radius-m); color:var(--command-text-color); background:var(--command-color); place-items:center; }
-.command-settings-editor__row-icon[data-transparent="true"],.command-settings-editor__dialog-icon[data-transparent="true"] { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-normal); }
-.command-settings-editor__swatch[data-transparent="true"] span[aria-hidden="true"] { background:var(--wa-color-surface-default); background-image:linear-gradient(45deg,transparent 46%,var(--wa-color-danger-border-loud) 46% 54%,transparent 54%); }
-.command-settings-editor__row-icon svg { width:remify(18px); height:remify(18px); }
-.command-settings-editor__row-text { display:grid; min-width:0; flex:1 1 auto; }
-.command-settings-editor__row-text strong { overflow:hidden; color:var(--wa-color-text-normal); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
-.command-settings-editor__row-text small { color:var(--wa-color-text-quiet); }
-.command-settings-editor__row-menu { flex:0 0 auto; }
-.command-settings-editor__row-menu-trigger { display:grid; width:remify(32px); min-height:remify(32px); padding:0; border:1px solid transparent; border-radius:var(--wa-border-radius-m); color:var(--wa-color-neutral-on-normal); background:transparent; cursor:pointer; place-items:center; }
-.command-settings-editor__row-menu-trigger:hover { border-color:var(--wa-color-neutral-border-normal); background:var(--wa-color-surface-default); }
-.command-settings-editor__row-menu-trigger svg { width:remify(18px); height:remify(18px); }
+.command-settings-editor__row {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-xs);
+  padding: var(--kui-space-2xs);
+  border-radius: var(--wa-border-radius-m);
+  cursor: pointer;
+}
+.command-settings-editor__row:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.command-settings-editor__row[data-selected='true'] {
+  background: var(--wa-color-brand-fill-quiet);
+  box-shadow: inset 0 0 0 1px var(--wa-color-brand-border-normal);
+}
+.command-settings-editor__row[data-editing='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.command-settings-editor__row[data-command-dragging='true'] {
+  opacity: 0.4;
+}
+.command-settings-editor__row[data-command-drop-position='before'] {
+  box-shadow: inset 0 2px 0 var(--wa-color-brand-border-loud);
+}
+.command-settings-editor__row[data-command-drop-position='after'] {
+  box-shadow: inset 0 -2px 0 var(--wa-color-brand-border-loud);
+}
+.command-settings-editor__row-grip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--wa-color-neutral-on-quiet);
+  cursor: grab;
+  opacity: 0.55;
+}
+.command-settings-editor__row-grip svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.command-settings-editor__row-icon {
+  display: grid;
+  width: remify(32px);
+  height: remify(32px);
+  flex: 0 0 auto;
+  border-radius: var(--wa-border-radius-m);
+  color: var(--command-text-color);
+  background: var(--command-color);
+  place-items: center;
+}
+.command-settings-editor__row-icon[data-transparent='true'],
+.command-settings-editor__dialog-icon[data-transparent='true'] {
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-neutral-fill-normal);
+}
+.command-settings-editor__swatch[data-transparent='true'] span[aria-hidden='true'] {
+  background: var(--wa-color-surface-default);
+  background-image: linear-gradient(
+    45deg,
+    transparent 46%,
+    var(--wa-color-danger-border-loud) 46% 54%,
+    transparent 54%
+  );
+}
+.command-settings-editor__row-icon svg {
+  width: remify(18px);
+  height: remify(18px);
+}
+.command-settings-editor__row-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.command-settings-editor__row-text strong {
+  overflow: hidden;
+  color: var(--wa-color-text-normal);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.command-settings-editor__row-text small {
+  color: var(--wa-color-text-quiet);
+}
+.command-settings-editor__row-menu {
+  flex: 0 0 auto;
+}
+.command-settings-editor__row-menu-trigger {
+  display: grid;
+  width: remify(32px);
+  min-height: remify(32px);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-neutral-on-normal);
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.command-settings-editor__row-menu-trigger:hover {
+  border-color: var(--wa-color-neutral-border-normal);
+  background: var(--wa-color-surface-default);
+}
+.command-settings-editor__row-menu-trigger svg {
+  width: remify(18px);
+  height: remify(18px);
+}
 
-.command-settings-editor__blank { display:grid; padding:var(--kui-space-l); border:1px dashed var(--wa-color-surface-border); border-radius:var(--wa-border-radius-l); color:var(--wa-color-text-quiet); gap:var(--kui-space-2xs); place-items:center; text-align:center; }
-.command-settings-editor__blank p { margin:0; }
-.command-settings-editor > footer { display:flex; min-height:remify(20px); align-items:center; }
-.command-settings-editor > footer span { color:var(--wa-color-text-quiet); font-size:var(--wa-font-size-xs); }
+.command-settings-editor__blank {
+  display: grid;
+  padding: var(--kui-space-l);
+  border: 1px dashed var(--wa-color-surface-border);
+  border-radius: var(--wa-border-radius-l);
+  color: var(--wa-color-text-quiet);
+  gap: var(--kui-space-2xs);
+  place-items: center;
+  text-align: center;
+}
+.command-settings-editor__blank p {
+  margin: 0;
+}
+.command-settings-editor > footer {
+  display: flex;
+  min-height: remify(20px);
+  align-items: center;
+}
+.command-settings-editor > footer span {
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-xs);
+}
 
 /* Edit command dialog (native popover) reusing the detail grid + pickers. */
 /* Keep `display` off the base rule so a CLOSED popover stays UA-hidden ([popover]:not(:popover-open){display:none});
    setting display here unconditionally rendered the empty closed dialog as a 2px bordered strip (HS2-D9JBXT). */
-.command-settings-editor__dialog { width:min(remify(560px),calc(100vw - remify(32px))); max-height:calc(100vh - remify(64px)); flex-direction:column; }
-.command-settings-editor__dialog:popover-open { display:flex; }
-.command-settings-editor__dialog-icon { display:grid; width:remify(28px); height:remify(28px); border-radius:var(--wa-border-radius-m); color:var(--command-text-color); background:var(--command-color); place-items:center; }
-.command-settings-editor__dialog-icon svg { width:remify(16px); height:remify(16px); }
-.command-settings-editor__dialog-done { min-height:remify(32px); color:var(--wa-color-brand-on-loud); border-color:transparent; background:var(--wa-color-brand-fill-loud); }
-.command-settings-editor__dialog-done:hover { background:var(--wa-color-brand-fill-loud); filter:brightness(1.05); }
-.command-settings-editor__dialog-body { min-height:0; padding:var(--kui-space-l); overflow:auto; flex:1 1 auto; }
+.command-settings-editor__dialog {
+  width: min(remify(560px), calc(100vw - remify(32px)));
+  max-height: calc(100vh - remify(64px));
+  flex-direction: column;
+}
+.command-settings-editor__dialog:popover-open {
+  display: flex;
+}
+.command-settings-editor__dialog-icon {
+  display: grid;
+  width: remify(28px);
+  height: remify(28px);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--command-text-color);
+  background: var(--command-color);
+  place-items: center;
+}
+.command-settings-editor__dialog-icon svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.command-settings-editor__dialog-done {
+  min-height: remify(32px);
+  color: var(--wa-color-brand-on-loud);
+  border-color: transparent;
+  background: var(--wa-color-brand-fill-loud);
+}
+.command-settings-editor__dialog-done:hover {
+  background: var(--wa-color-brand-fill-loud);
+  filter: brightness(1.05);
+}
+.command-settings-editor__dialog-body {
+  min-height: 0;
+  padding: var(--kui-space-l);
+  overflow: auto;
+  flex: 1 1 auto;
+}
 
-.command-settings-editor__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--kui-space-m); }
-.command-settings-editor__grid label { display:grid; min-width:0; color:var(--wa-color-text-normal); font-size:var(--wa-font-size-s); font-weight:600; gap:var(--kui-space-2xs); }
-.command-settings-editor__grid input,.command-settings-editor__grid select,.command-settings-editor__grid textarea { box-sizing:border-box; width:100%; min-width:0; padding:remify(8.8px) remify(10.4px); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-m); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); font:inherit; font-weight:400; }
-.command-settings-editor__grid textarea { min-height:remify(80px); resize:vertical; }
-.command-settings-editor__grid small { color:var(--wa-color-text-quiet); font-weight:400; }
-.command-settings-editor__wide { grid-column:1 / -1; }
-.command-settings-editor__ai-selection { display:grid; min-width:0; color:var(--wa-color-text-normal); font-size:var(--wa-font-size-s); font-weight:600; gap:var(--kui-space-2xs); }
-.command-settings-editor__ai-selection wa-dropdown { min-width:0; }
-.command-settings-editor .command-settings-editor__ai-trigger { width:100%; min-width:0; justify-content:flex-start; font-weight:400; }
-.command-settings-editor__ai-trigger span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-@container (max-width:remify(672px)) { .command-settings-editor__heading { align-items:stretch; flex-direction:column; } .command-settings-editor__heading-actions { flex-wrap:wrap; } }
-@media (max-width:remify(560px)) { .command-settings-editor__grid { grid-template-columns:1fr; } .command-settings-editor__wide { grid-column:auto; } }
+.command-settings-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--kui-space-m);
+}
+.command-settings-editor__grid label {
+  display: grid;
+  min-width: 0;
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-s);
+  font-weight: 600;
+  gap: var(--kui-space-2xs);
+}
+.command-settings-editor__grid input,
+.command-settings-editor__grid select,
+.command-settings-editor__grid textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: remify(8.8px) remify(10.4px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  font: inherit;
+  font-weight: 400;
+}
+.command-settings-editor__grid textarea {
+  min-height: remify(80px);
+  resize: vertical;
+}
+.command-settings-editor__grid small {
+  color: var(--wa-color-text-quiet);
+  font-weight: 400;
+}
+.command-settings-editor__wide {
+  grid-column: 1 / -1;
+}
+.command-settings-editor__ai-selection {
+  display: grid;
+  min-width: 0;
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-s);
+  font-weight: 600;
+  gap: var(--kui-space-2xs);
+}
+.command-settings-editor__ai-selection wa-dropdown {
+  min-width: 0;
+}
+.command-settings-editor .command-settings-editor__ai-trigger {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  font-weight: 400;
+}
+.command-settings-editor__ai-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container (max-width:remify(672px)) {
+  .command-settings-editor__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .command-settings-editor__heading-actions {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: remify(560px)) {
+  .command-settings-editor__grid {
+    grid-template-columns: 1fr;
+  }
+  .command-settings-editor__wide {
+    grid-column: auto;
+  }
+}
 
 /* Color and icon pickers for custom command buttons (HS2-656XJ2). */
-.command-settings-editor__swatches { display: flex; min-width: 0; margin: 0; padding: 0; border: 0; flex-wrap: wrap; gap: var(--kui-space-xs); }
-.command-settings-editor__icons { display: block; min-width: 0; margin: 0; padding: 0; border: 0; }
-.command-settings-editor__swatches legend, .command-settings-editor__icons legend { width: 100%; margin-bottom: var(--kui-space-2xs); padding: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); font-weight: 650; }
-.command-settings-editor__swatches .command-settings-editor__swatch { display: inline-flex; align-items: center; gap: var(--kui-space-2xs); padding: var(--kui-space-2xs) var(--kui-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-pill); cursor: pointer; font-size: var(--wa-font-size-xs); }
-.command-settings-editor__swatch span[aria-hidden="true"] { width: remify(16px); height: remify(16px); border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-neutral-on-normal) 15%, transparent); }
-.command-settings-editor__swatch input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.command-settings-editor__swatch:has(input:checked) { border-color: var(--wa-color-brand-border-loud); background: var(--wa-color-brand-fill-quiet); }
-.command-settings-editor__swatch:has(input:focus-visible) { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.command-settings-editor__swatches {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: wrap;
+  gap: var(--kui-space-xs);
+}
+.command-settings-editor__icons {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.command-settings-editor__swatches legend,
+.command-settings-editor__icons legend {
+  width: 100%;
+  margin-bottom: var(--kui-space-2xs);
+  padding: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+  font-weight: 650;
+}
+.command-settings-editor__swatches .command-settings-editor__swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-pill);
+  cursor: pointer;
+  font-size: var(--wa-font-size-xs);
+}
+.command-settings-editor__swatch span[aria-hidden='true'] {
+  width: remify(16px);
+  height: remify(16px);
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-neutral-on-normal) 15%, transparent);
+}
+.command-settings-editor__swatch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.command-settings-editor__swatch:has(input:checked) {
+  border-color: var(--wa-color-brand-border-loud);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.command-settings-editor__swatch:has(input:focus-visible) {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}

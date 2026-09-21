@@ -1,2 +1,7 @@
-.notification-inspector-empty { height: 100%; background: var(--wa-color-surface-default); }
-.notification-inspector-empty .kui-toolbar { border-bottom: 0; }
+.notification-inspector-empty {
+  height: 100%;
+  background: var(--wa-color-surface-default);
+}
+.notification-inspector-empty .kui-toolbar {
+  border-bottom: 0;
+}

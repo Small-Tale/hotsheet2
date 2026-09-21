@@ -5,18 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const excludedTopLevel = new Set([
-  'coverage',
-  'dist',
-  'node_modules',
-  'playwright-report',
-  'target',
-  'test-results',
-]);
+const excludedTopLevel = new Set(['coverage', 'dist', 'node_modules', 'playwright-report', 'target', 'test-results']);
 
 export async function createStableSnapshot(sourceRoot = scriptRoot, temporaryRoot = tmpdir()) {
   const snapshotRoot = await mkdtemp(join(temporaryRoot, 'hotsheet-web-stable-'));
-  const filter = source => {
+  const filter = (source) => {
     const firstSegment = relative(sourceRoot, source).split('/')[0];
     return !excludedTopLevel.has(firstSegment);
   };

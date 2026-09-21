@@ -33,6 +33,7 @@ automatic conflict resolution locally. This keeps one uniform storage model (and
 one backup story — git history) across shared and private tickets alike.
 
 Why this beats the HS1 PGLite approach:
+
 - **Inspectable & diffable.** `git log`/`git diff` show ticket history for free.
   A user with a text editor can read and repair anything.
 - **Selective sharing with real ACLs.** A store can be a GitHub repo with
@@ -43,7 +44,7 @@ Why this beats the HS1 PGLite approach:
 - **No opaque-blob fragility.** HS1 needed tiered snapshots, backups, a repair
   subsystem, cluster eviction, and a `template1` pin to keep an embedded Postgres
   cluster alive across upgrades. Files + git eliminate that entire class of work —
-  git *is* the backup and history.
+  git _is_ the backup and history.
 - **Distribution-native.** Offline edits, clones, and merges are git's core
   competency. No central DB writer.
 
@@ -55,6 +56,7 @@ Why this beats the HS1 PGLite approach:
   shows as a tab; a store is where a given ticket physically lives.
 
 A project references multiple stores because (per the ticket):
+
 - some tickets need **different access permissions**, enforced externally (e.g. a
   private GitHub repo vs. a public one);
 - some tickets are **single-user and/or local-only** (never pushed anywhere).
@@ -64,32 +66,32 @@ A project references multiple stores because (per the ticket):
 
 ```jsonc
 {
-  "id": "01J9Z…",                 // ULID
+  "id": "01J9Z…", // ULID
   "name": "Hot Sheet 2",
   "stores": [
     {
-      "id": "main",                 // stable machine key (referenced by config + index)
-      "name": "Team backlog",       // human label for the UI (optional)
+      "id": "main", // stable machine key (referenced by config + index)
+      "name": "Team backlog", // human label for the UI (optional)
       "path": ".hotsheet2/tickets", // relative to project root, or absolute
-      "visibility": "shared",       // "shared" | "local"
+      "visibility": "shared", // "shared" | "local"
       "sync": { "mode": "git-remote", "remote": "origin", "branch": "main" },
-      "default": true               // new tickets land here unless directed
+      "default": true, // new tickets land here unless directed
     },
     {
       "id": "security",
       "name": "Security (private)",
       "path": "~/hotsheet-private/acme",
       "visibility": "shared",
-      "sync": { "mode": "git-remote", "remote": "origin", "branch": "main" }
+      "sync": { "mode": "git-remote", "remote": "origin", "branch": "main" },
     },
     {
       "id": "scratch",
       "name": "My scratch",
       "path": ".hotsheet2/local-tickets",
       "visibility": "local",
-      "sync": { "mode": "local-only" }  // still a git repo — just no remote configured
-    }
-  ]
+      "sync": { "mode": "local-only" }, // still a git repo — just no remote configured
+    },
+  ],
 }
 ```
 
@@ -100,7 +102,7 @@ A project references multiple stores because (per the ticket):
   and git is their backup too.
 - `sync.mode: git-remote` stores have a remote and participate in push/pull;
   `local-only` stores have none. `visibility: local` additionally marks a store as
-  private to this machine/user — gitignored from the *project* repo (or kept as its
+  private to this machine/user — gitignored from the _project_ repo (or kept as its
   own separate repo) so it isn't shared even incidentally.
 - A ticket's **store is part of its identity for routing** (which remote, which
   permissions) but not its global ID — IDs are globally unique across stores
@@ -114,18 +116,18 @@ Three layers of "which store," from machine to human:
   The project config and the index reference stores by `id`; it never changes.
 - **`name`** — an optional human label for the UI ("Security (private)").
 - **`ticketPrefix`** (per store, in `hotsheet-store.json` — §2.3) — the **at-a-glance
-  human signal.** Give each store its own prefix and a slug *shows* its store:
+  human signal.** Give each store its own prefix and a slug _shows_ its store:
   `HS-7F3K9Q` lives in the team backlog, `SEC-2M8XQ1` in the security store. This is
   the cheapest "which repo is this?" cue there is.
 
-**Store membership is *positional*, not a frontmatter field.** The store a ticket
-belongs to is simply *the store whose `tickets/` directory physically contains its
-file* — nothing in the ticket file records its store. This is deliberate: a copy or
+**Store membership is _positional_, not a frontmatter field.** The store a ticket
+belongs to is simply _the store whose `tickets/` directory physically contains its
+file_ — nothing in the ticket file records its store. This is deliberate: a copy or
 move is then just a file in a different store root, with **no stale `store:` field
 to reconcile** and no way for the file to disagree with its location. The **index**
 records the derived `store_id` (recomputed from location on every reindex) so the UI
 can filter/group by store fast, and it keys a ticket by **`(store_id, id)`** — a
-ticket's full identity is *store + ULID*. A global ULID still resolves to exactly
+ticket's full identity is _store + ULID_. A global ULID still resolves to exactly
 one **live** ticket (see the move tombstones in §2.13).
 
 ## 2.3 On-disk layout of a store
@@ -144,12 +146,13 @@ one **live** ticket (see the move tombstones in §2.13).
 ```
 
 `hotsheet-store.json`:
+
 ```jsonc
 {
   "schemaVersion": "hotsheet/v3-random-suffix-shards",
-  "ticketPrefix": "HS",       // display prefix; the dash is added automatically
+  "ticketPrefix": "HS", // display prefix; the dash is added automatically
   "idStrategy": "ulid",
-  "shard": "id-suffix-2"      // final 2 random ULID characters
+  "shard": "id-suffix-2", // final 2 random ULID characters
 }
 ```
 
@@ -208,7 +211,7 @@ increasing**. We use **ULIDs** (128-bit, Crockford base32, 26 chars):
   in a distributed, git-merged world.
 - **Collision-free** in practice (80 bits of randomness per millisecond).
 - **k-sortable.** A ULID's leading 48 bits are a timestamp, so lexicographic sort
-  ≈ creation order — we get a sensible default ordering *for free*, without a
+  ≈ creation order — we get a sensible default ordering _for free_, without a
   counter, and IDs shard evenly by their trailing random bits.
 
 **Human-facing form.** Users don't want to read a 26-char ULID. Each ticket also
@@ -216,8 +219,9 @@ carries a **short display slug**, rendered in **ALL CAPS** (maintainer preferenc
 2026-08-19): `<PREFIX>-<BASE32 of a hash of the ULID, truncated>`, e.g.
 `HS-7F3K9Q`. Crockford base32 is uppercase-canonical, so this is natural. The slug
 is:
+
 - derived deterministically from the ULID (so it needs no allocation),
-- checked for collision *within the index* at display time; on the astronomically
+- checked for collision _within the index_ at display time; on the astronomically
   rare clash, we lengthen the truncation for the newer ticket. The full ULID is
   always the real key; the slug is a convenience.
 
@@ -243,15 +247,15 @@ tags: [dashboard, ui]
 blocked_by: [01J9ZK…another-ulid]
 # human assignment (shared; see 10-assignment-and-collaboration.md)
 assignees: [alex@example.com]
-review_requests: []          # e.g. [{ who: dana@example.com, kind: feedback }]
+review_requests: [] # e.g. [{ who: dana@example.com, kind: feedback }]
 created_at: 2026-08-19T14:03:11Z
 updated_at: 2026-08-19T15:20:44Z
 completed_at: null
 verified_at: null
 # close outcome (set when the ticket is closed; see §2.6a)
 closed_at: null
-close_reason: null            # completed | not_planned | duplicate | obsolete
-duplicate_of: null            # exact ticket reference; required when close_reason == duplicate
+close_reason: null # completed | not_planned | duplicate | obsolete
+duplicate_of: null # exact ticket reference; required when close_reason == duplicate
 # coordination (optional; omitted when unclaimed)
 claimed_by: worker-1
 claim_lease_expires_at: 2026-08-19T15:50:44Z
@@ -260,18 +264,22 @@ schema: hotsheet/v2-bounded-notes
 ---
 
 <!-- hotsheet:body:begin -->
+
 The dashboard flashes white for one frame when switching projects because the
 terminal gutter paints `var(--bg)` before the theme is applied.
 <!-- hotsheet:body:end -->
 
 <!-- hotsheet:notes:begin -->
+
 ## Notes
 
 <!-- hotsheet:note:begin 01J9ZK4A0R… created_at: 2026-08-19T15:20:44Z edited_at: 2026-08-19T15:20:44Z -->
+
 Reproduced on macOS; root cause is the pre-theme paint.
 <!-- hotsheet:note:end -->
 
 <!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed created_at: 2026-08-19T15:31:02Z edited_at: 2026-08-19T15:31:02Z -->
+
 should the fix also cover the dashboard dedicated view?
 <!-- hotsheet:note:end -->
 <!-- hotsheet:notes:end -->
@@ -296,7 +304,7 @@ should the fix also cover the dashboard dedicated view?
     prefix, promoted to a first-class kind). **Shared** (committed).
   - `feedback_draft` — a user's half-written response to a `feedback_needed` ask.
     **Local / per-user** — it lives in the gitignored local overlay (§2.11 Tier B),
-    *not* the committed ticket file; on submit it becomes a `regular` shared note.
+    _not_ the committed ticket file; on submit it becomes a `regular` shared note.
   - `status` — a system-generated event note (e.g. "claim expired — reclaimed",
     "QUARANTINED"). **Shared** (committed), informational for the team.
   - `activity` — a durable chronological account of meaningful work and lifecycle
@@ -305,12 +313,12 @@ should the fix also cover the dashboard dedicated view?
     history, not the primary home for important prose: investigation conclusions,
     decisions, and recommendations belong in `regular` Markdown notes; an activity may
     briefly point to the result. **Shared**.
-  Activity/status notes may also carry an optional plain-text `summary`, encoded in
-  their marker as the forward-compatible `summary_hex:` token. It is the concise
-  Timeline headline; the Markdown body remains the full record in Notes. Missing
-  summaries are valid for old files and external providers.
-  The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
-  get the reader) — [06-clients.md](06-clients.md) §6.8.
+    Activity/status notes may also carry an optional plain-text `summary`, encoded in
+    their marker as the forward-compatible `summary_hex:` token. It is the concise
+    Timeline headline; the Markdown body remains the full record in Notes. Missing
+    summaries are valid for old files and external providers.
+    The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
+    get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store
   payloads under `attachments/<ticket-id>/<attachment-id>/<filename>`. The attachment
   ULID remains stable across rename/copy/move; `created_at` is immutable. Concurrent
@@ -343,12 +351,12 @@ CLI, MCP, server, external-provider, and browser creation all use these semantic
 ways:
 
 - **(A) Inline** in the ticket file, under a `## Notes` section (as above).
-  *Pro:* one file per ticket, simple, everything in one place. *Con:* two agents
+  _Pro:_ one file per ticket, simple, everything in one place. _Con:_ two agents
   appending notes to the same ticket concurrently can conflict on the same file
   region (though appends usually auto-merge).
 - **(B) Per-note files** under `tickets/<id>/notes/<note-ulid>.md`, with the
-  ticket body in `tickets/<id>/ticket.md`. *Pro:* concurrent appends never
-  conflict (each note is a new file). *Con:* many small files, more complex.
+  ticket body in `tickets/<id>/ticket.md`. _Pro:_ concurrent appends never
+  conflict (each note is a new file). _Con:_ many small files, more complex.
 
 **Decision (confirmed, 2026-08-19): (A) inline**, because the common case is one
 agent per ticket at a time (the claim/lease primitive enforces this — see §2.7),
@@ -360,7 +368,7 @@ inline-append conflicts survive the merge driver in practice (they shouldn't).
 ## 2.6a Close reasons — why a ticket was closed
 
 > **New for HS2** (maintainer, 2026-08-19), motivated by the collaborative nature
-> of shared tickets: when someone closes a ticket, others need to know *why* — not
+> of shared tickets: when someone closes a ticket, others need to know _why_ — not
 > just that it's closed. Modeled on GitHub's close reasons. Build: **HS2-61**.
 
 Three frontmatter fields record the **outcome** of a close, distinct from the
@@ -383,12 +391,12 @@ workflow `status`:
 - **`closed_at`** — timestamp of the close.
 
 **Relationship to `status` (and to the status decision, HS2-24).** `close_reason`
-is *metadata on a closed ticket* that records **why**, not a replacement for the
+is _metadata on a closed ticket_ that records **why**, not a replacement for the
 status. It is a separate OPTIONAL field and we do **not** collapse the status set
 into an open/closed axis or add a `closed` status (HS1's set stays as-is:
 `not_started` / `started` / `completed` / `verified` / `backlog` / `archive` /
 `deleted`, plus our `moved` tombstone). But the two are **not free to disagree** — a
-`close_reason` may never sit on an *active* status (**HS2-3XHT9P**):
+`close_reason` may never sit on an _active_ status (**HS2-3XHT9P**):
 
 - **Setting a `close_reason` settles the status.** Closing an active ticket
   (`not_started` / `started`) moves it to `completed` (stamping `completed_at`). A
@@ -398,7 +406,7 @@ into an open/closed axis or add a `closed` status (HS1's set stays as-is:
   status clears `close_reason` / `closed_at` / `duplicate_of`, so the invariant holds
   from both directions.
 
-So the field still just *annotates why*, and a ticket with no `close_reason` is
+So the field still just _annotates why_, and a ticket with no `close_reason` is
 untracked in that dimension — but "closed" (a reason is set) always implies a terminal
 status, and `verified` remains the human-checked flag on top of a completed ticket.
 This mirrors the up-next rule (a ticket leaving the active set drops off Up Next,
@@ -414,7 +422,7 @@ never participate in the Up Next queue.
 stays in the store with `status: deleted` and forms the built-in `trash` collection,
 separate from `archive` (archived tickets and `moved` tombstones). Every status change
 already records a `Status changed from X to Y` activity note, so the most recent
-transition into Deleted supplies both *when* the ticket was trashed and *what it left*.
+transition into Deleted supplies both _when_ the ticket was trashed and _what it left_.
 Restoring (`ops::restore`, `POST /checkouts/{id}/tickets/{ticket}/restore`,
 `hotsheet-cli restore`) moves a Trash ticket back to that prior status through the normal
 update path, recording the transition; an unknown or hidden prior status restores to
@@ -439,7 +447,7 @@ remain substantive even when they also
 clear `up_next`; an attempted requeue of an already-inactive ticket is normalized away
 without changing its timestamp.
 
-**Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
+**Freeform vs. structured.** `close_reason` is the _structured_ tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose
 the other approach in HS-8842"), so the two compose: reason for the machine, note
 for the human.
@@ -468,20 +476,20 @@ active state.
 Four layers, each removing conflicts before the next has to act:
 
 **1 — File-per-ticket isolates by construction.** Different tickets are different
-files and *never* conflict. Attachments are separate files and never conflict.
+files and _never_ conflict. Attachments are separate files and never conflict.
 This alone removes the overwhelming majority of potential conflicts.
 
 **2 — Claim/lease keeps a single active writer per ticket.** The coordination
 primitive (carried from HS1 `src/db/claims.ts`) means at most one worker actively
 edits a given ticket at a time; the write chokepoint rejects a write to a ticket
-another actor holds a live lease on. So two *simultaneous* edits to one ticket are
+another actor holds a live lease on. So two _simultaneous_ edits to one ticket are
 already the exception. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.
 Moving a ticket to any terminal status automatically clears `claimed_by`,
 `claim_lease_expires_at`, and `worker_label`, so completion cannot continue advertising
 active work. Reopening a legacy terminal ticket clears stale claim metadata as well.
 
 **3 — A semantic git merge driver makes same-ticket merges automatic.** When two
-branches *do* touch the same ticket file (e.g. an offline edit merged against an
+branches _do_ touch the same ticket file (e.g. an offline edit merged against an
 upstream edit), we do **not** rely on git's line-based merge. Each store installs
 a custom merge driver, registered via `.gitattributes`:
 
@@ -511,7 +519,7 @@ the same core code, tested once — [04-core-server-cli.md](04-core-server-cli.m
   unique ids, this is a clean union essentially always — which is exactly why the
   maintainer asked for timestamp-ordered UUIDs on notes.
 - **Body (`details` prose):** if only one side changed it, take that side. If both
-  changed it, run a standard 3-way text merge on *just the body*. This is the
+  changed it, run a standard 3-way text merge on _just the body_. This is the
   **only** place a human-visible conflict can still occur — two people rewriting
   the same paragraph of one ticket's description — and it's scoped to that
   paragraph, never the structured fields or notes.
@@ -543,6 +551,7 @@ silently bypassed.
 ## 2.8 Where a project's default store lives
 
 Two supported shapes — **both are git repos** (§2.1):
+
 1. **In-repo:** `.hotsheet2/tickets/` inside the project's existing git repo —
    tickets versioned alongside code. The default store is committed; `local`
    stores are gitignored.
@@ -563,7 +572,7 @@ clients may present the two shapes as a choice.
 **Recommended default — standalone for actively-developed projects** (maintainer,
 2026-08-21, HS2-5CXKZ0): for a project under active development, the **standalone**
 tickets repo (option 2) is the recommended default, **not** in-repo and **not** a
-submodule. Ticket updates churn aggressively and *independently* of code commits, so
+submodule. Ticket updates churn aggressively and _independently_ of code commits, so
 co-locating them pollutes the code repo's history, branches, and CI; a submodule just
 re-introduces that churn as pinned-SHA bumps (plus submodule pain). **In-repo** stays
 a fine choice for **low-churn** projects or where tight ticket↔PR coupling is wanted.
@@ -595,9 +604,9 @@ Hot Sheet 2 itself uses this shape: its tickets live in the standalone repo
 
 ## 2.11 Shared vs. local data — what's committed, what stays per-user
 
-> **Maintainer question (2026-08-19):** *"what goes into stored tickets and if
+> **Maintainer question (2026-08-19):** _"what goes into stored tickets and if
 > anything is local-only — and if it is, is it still stored on disk (a gitignored
-> file) or only in the db?"* This section answers it. Tracked: HS2-21.
+> file) or only in the db?"_ This section answers it. Tracked: HS2-21.
 
 Not everything about a ticket is shared. A shared git store is seen by every
 teammate, so **per-user or per-machine** facts must not be committed into the
@@ -609,10 +618,11 @@ ticket file (my read state is not your read state). Three tiers:
 ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)),
 `attachments`, and the shared timestamps (`created_at`, `updated_at`,
 `completed_at`, `verified_at`). Coordination `claim_*` fields are shared too — they
-*are* the distributed-work signal — but expiring, so they never wedge anything.
+_are_ the distributed-work signal — but expiring, so they never wedge anything.
 
 **Tier B — Local (per-user / per-machine, NOT committed, but ON DISK).** Facts that
 differ per person or per device:
+
 - **Read tracking** (`last_read_at` / unread state) — inherently per-user.
 - **Feedback drafts** (HS1's `feedback_drafts`) — a half-written response is yours.
 - **UI / view state** that is per-machine (last view, scroll, drawer state).
@@ -624,37 +634,37 @@ Local ticket overlays are stored in **gitignored files inside the store**, e.g.
 The `.gitignore` block ignores `.hotsheet2/local/**` while the ticket files stay
 committed. This follows the cardinal principle
 ([00-vision-and-principles.md](00-vision-and-principles.md) §0.4): **everything
-reconstructs from disk.** If local data lived *only* in the SQLite index and the
+reconstructs from disk.** If local data lived _only_ in the SQLite index and the
 index is disposable, a rebuild would lose it — so local data is on disk, and the
 index caches it exactly as it caches the shared ticket fields. **The DB/index is
 never the sole home of any durable data**, shared or local. (Truly ephemeral,
 recomputable state — an in-flight busy timer — may stay in memory; that's not
 durable data.)
 
-**Tier C — Local-only *stores*.** A whole store with `visibility: local` (§2.2) is
+**Tier C — Local-only _stores_.** A whole store with `visibility: local` (§2.2) is
 the "single-user, local-only tickets" case. It is **still a git repo, just with no
 remote** (§2.1) — its ticket files are committed and versioned locally, and are
-gitignored from the *project* repo (or kept as a separate repo) so they're never
+gitignored from the _project_ repo (or kept as a separate repo) so they're never
 shared. That's different from Tier B: Tier C is entire tickets that are private
-(but fully git-versioned); Tier B is per-user *slivers* of otherwise-shared tickets
+(but fully git-versioned); Tier B is per-user _slivers_ of otherwise-shared tickets
 that are deliberately kept out of git entirely.
 
 **The precise field-by-field classification (HS2-21).** Every ticket-related datum
 maps to exactly one tier:
 
-| Datum | Tier | Home |
-|---|---|---|
-| `title` · `details` · `category` · `priority` · `status` · `up_next` · `tags` · `blocked_by` · `blocked_reason` | A (shared) | committed ticket frontmatter/body |
-| `notes` (kind `regular` / `feedback_needed` / `status`) | A (shared) | committed `## Notes` |
-| `assignees` · `review_requests` · `external` | A (shared) | committed frontmatter |
-| `attachments` | A (shared) | committed `attachments/<ulid>/` |
-| `created_at` · `updated_at` · `completed_at` · `verified_at` · close/move fields (`closed_at` · `close_reason` · `duplicate_of` · `moved_to_store` · `moved_at`) | A (shared) | committed frontmatter |
-| `claimed_by` · `claim_lease_expires_at` · `worker_label` · `claim_count` | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges |
-| **read state** (`last_read_at` / unread) | **B (local)** | `local/reads.json` (gitignored), keyed by ULID |
-| **feedback drafts** (notes of kind `feedback_draft`) | **B (local)** | dropped from the committed file today; overlay persistence is HS2-AWTHJE |
-| **UI / view state** (last view, scroll, drawer) | **B (local)** | overlay `local/…` — HS2-AWTHJE |
-| **machine preferences** | **B (local)** | `<project-root>/.hotsheet2/settings.local.json` (gitignored, `Scope::Local`); unlike ticket overlays, project settings are not owned by a ticket store |
-| a whole `visibility: local` store | C | its own git repo, no remote, gitignored from the project |
+| Datum                                                                                                                                                            | Tier                     | Home                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `title` · `details` · `category` · `priority` · `status` · `up_next` · `tags` · `blocked_by` · `blocked_reason`                                                  | A (shared)               | committed ticket frontmatter/body                                                                                                                      |
+| `notes` (kind `regular` / `feedback_needed` / `status`)                                                                                                          | A (shared)               | committed `## Notes`                                                                                                                                   |
+| `assignees` · `review_requests` · `external`                                                                                                                     | A (shared)               | committed frontmatter                                                                                                                                  |
+| `attachments`                                                                                                                                                    | A (shared)               | committed `attachments/<ulid>/`                                                                                                                        |
+| `created_at` · `updated_at` · `completed_at` · `verified_at` · close/move fields (`closed_at` · `close_reason` · `duplicate_of` · `moved_to_store` · `moved_at`) | A (shared)               | committed frontmatter                                                                                                                                  |
+| `claimed_by` · `claim_lease_expires_at` · `worker_label` · `claim_count`                                                                                         | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges                                                                                     |
+| **read state** (`last_read_at` / unread)                                                                                                                         | **B (local)**            | `local/reads.json` (gitignored), keyed by ULID                                                                                                         |
+| **feedback drafts** (notes of kind `feedback_draft`)                                                                                                             | **B (local)**            | dropped from the committed file today; overlay persistence is HS2-AWTHJE                                                                               |
+| **UI / view state** (last view, scroll, drawer)                                                                                                                  | **B (local)**            | overlay `local/…` — HS2-AWTHJE                                                                                                                         |
+| **machine preferences**                                                                                                                                          | **B (local)**            | `<project-root>/.hotsheet2/settings.local.json` (gitignored, `Scope::Local`); unlike ticket overlays, project settings are not owned by a ticket store |
+| a whole `visibility: local` store                                                                                                                                | C                        | its own git repo, no remote, gitignored from the project                                                                                               |
 
 **Built (HS2-21):** the Tier B **overlay mechanism** — `ticketing::LocalOverlay`
 reads/writes gitignored files under `<store>/local/` (adding `local/` to
@@ -666,15 +676,15 @@ state, and machine-pref reconciliation slot into the same overlay next
 
 ## 2.12 Automatic repo syncing — aggressive, hands-off
 
-> **Maintainer requirement (2026-08-19):** *"syncing of the tickets repo should be
+> **Maintainer requirement (2026-08-19):** _"syncing of the tickets repo should be
 > entirely / almost entirely automatic. Fetching, pushing, rebasing/merging should
 > all be done by Hot Sheet fairly aggressively. Users CAN do these things
-> themselves, but that should almost never be required."* Tracked: HS2-19.
+> themselves, but that should almost never be required."_ Tracked: HS2-19.
 
 For every store with `sync.mode: git-remote`, Hot Sheet runs a **background sync
 engine** so the user effectively never runs git by hand:
 
-- **Fetch** aggressively — on a short interval *and* event-driven (on focus, after
+- **Fetch** aggressively — on a short interval _and_ event-driven (on focus, after
   a local change, on reconnect).
 - **Integrate** incoming changes by rebase/merge **through the semantic merge
   driver** (§2.7), so pulls land automatically. Because merges are automatic
@@ -692,7 +702,7 @@ engine** so the user effectively never runs git by hand:
 
 Manual `git`/`hotsheet sync` remains available (power users, debugging, or an
 explicit "sync now"), but the default posture is **hands-off**. A `local-only`
-store skips only the *remote* half — there's no remote to fetch/push — but Hot
+store skips only the _remote_ half — there's no remote to fetch/push — but Hot
 Sheet **still auto-commits its edits locally**, so it keeps full git history and
 the merge driver still governs any local branch merges. Detailed design +
 cadence/backoff: HS2-19.
@@ -710,7 +720,7 @@ records `copied_from: <source-ulid>` provenance in its frontmatter. (This mirror
 HS1's copy/paste = a new ticket number.)
 
 **Move — there is no true git "move" across repos.** Once content is committed to a
-git repo it is in that repo's history *permanently*, barring a force history
+git repo it is in that repo's history _permanently_, barring a force history
 rewrite (which Hot Sheet **never** does automatically). So "move" is implemented as
 **copy-to-destination (keeping the same ULID) + a tombstone left in the source**
 (approach confirmed by the maintainer, 2026-08-19 — keeping the ULID is what lets
@@ -718,24 +728,24 @@ references survive a move):
 
 - The **destination** store gets the ticket file with the **same ULID** — so every
   reference to it (`blocked_by`, mentions) keeps resolving — and the destination
-  store's prefix (its *slug* changes, e.g. `HS-7F3K9Q` → `SEC-7F3K9Q`; the ULID is
+  store's prefix (its _slug_ changes, e.g. `HS-7F3K9Q` → `SEC-7F3K9Q`; the ULID is
   the stable key, the slug is cosmetic). Attachments move with it.
 - The **source** store keeps a small **tombstone / redirect** for that ULID —
   `status: moved`, `moved_to_store: <dest-id>`, `moved_at` — which the UI hides from
   normal views. It exists so the source store's final committed state cleanly says
-  *"this went to `<store>`"* rather than showing a bare deletion, and so anyone
+  _"this went to `<store>`"_ rather than showing a bare deletion, and so anyone
   browsing the source (or its history) can follow the pointer.
 - The **index** resolves a ULID to its single **live** instance (the non-tombstone),
   keying rows by `(store_id, id)` and excluding `moved` rows from ticket lists.
 
 **The retention caveat — say it out loud (security-relevant).** Because git never
-forgets, **moving a ticket *out* of a shared/remote store does NOT remove it from
+forgets, **moving a ticket _out_ of a shared/remote store does NOT remove it from
 that store's history or its remote.** The tombstone marks it moved, but every past
 commit — and the copy already pushed to the remote — still holds the full content.
-So *"move it to my private store"* is **not** a way to un-expose something already
+So _"move it to my private store"_ is **not** a way to un-expose something already
 committed to a shared repo. Genuinely purging it needs a manual history rewrite
 (`git filter-repo` / BFG) + force-push, which Hot Sheet leaves entirely to the user.
-Symmetrically, moving a ticket *into* a shared store **exposes** it and the sync
+Symmetrically, moving a ticket _into_ a shared store **exposes** it and the sync
 engine (§2.12) will push it. **Hot Sheet warns before any move that changes a
 ticket's exposure** (private → shared, or shared → "hidden" that history retains).
 
@@ -748,6 +758,7 @@ onto a store, or a "Move to store…" menu — mirroring HS1's cross-project dra
 the exposure warning shown before confirming — still to build (**client work**).
 
 ## 2.14 Cross-references
+
 - IDs and slugs feed the index: [03-indexing-and-query.md](03-indexing-and-query.md).
 - Migration from the PGLite schema: [07-migration.md](07-migration.md).
 - Claim/lease coordination: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.

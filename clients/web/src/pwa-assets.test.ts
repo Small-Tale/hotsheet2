@@ -15,13 +15,13 @@ function pngSize(filename: string): { width: number; height: number } {
 describe('PWA identity', () => {
   it('publishes matching browser, installed-app, and Apple metadata', () => {
     const html = readFileSync(resolve(webRoot, 'index.html'), 'utf8');
-    expect(html).toContain('<meta name="theme-color" content="#f2f2f7">');
-    expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest">');
-    expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
-    expect(html).toContain('<link rel="icon" href="/favicon-256.png" type="image/png" sizes="256x256">');
-    expect(html).toContain('<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">');
-    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">');
-    expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
+    expect(html).toContainSource('<meta name="theme-color" content="#f2f2f7">');
+    expect(html).toContainSource('<link rel="manifest" href="/manifest.webmanifest">');
+    expect(html).toContainSource('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
+    expect(html).toContainSource('<link rel="icon" href="/favicon-256.png" type="image/png" sizes="256x256">');
+    expect(html).toContainSource('<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">');
+    expect(html).toContainSource('<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">');
+    expect(html).toContainSource('<meta name="apple-mobile-web-app-capable" content="yes">');
     expect(readFileSync(resolve(publicRoot, 'favicon.svg'), 'utf8')).toContain('<title>favicon</title>');
   });
 

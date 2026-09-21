@@ -1,167 +1,966 @@
-import { expect,test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-test.use({deviceScaleFactor:2});
+test.use({ deviceScaleFactor: 2 });
 
-const project={id:'terminal-feedback',root:'/work/terminal-feedback',name:'Terminal feedback',stores:['/work/terminal-feedback.hs2'],apiPath:'/__hotsheet/project-api/terminal-feedback'};
-const capabilities={create:true,update:true,close:true,notes:true,note_edit:true,note_delete:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};
+const project = {
+  id: 'terminal-feedback',
+  root: '/work/terminal-feedback',
+  name: 'Terminal feedback',
+  stores: ['/work/terminal-feedback.hs2'],
+  apiPath: '/__hotsheet/project-api/terminal-feedback',
+};
+const capabilities = {
+  create: true,
+  update: true,
+  close: true,
+  notes: true,
+  note_edit: true,
+  note_delete: true,
+  attachments: true,
+  assignment: true,
+  review_requests: true,
+  dependencies: true,
+  up_next: true,
+  close_reasons: true,
+  claims: true,
+  atomic_batch: true,
+  not_working_report: true,
+  offline_mutation: true,
+  history: true,
+  watch: true,
+  provider_idempotency: true,
+  query_fields: [],
+};
 
-type TerminalFrame={ready?:string;hidden:boolean;viewportHeight:number;screenHeight:number;contained:boolean};
-type TerminalFrameState=typeof window&{__terminalFrameSamples?:Record<string,Promise<Array<TerminalFrame|undefined>>>};
+type TerminalFrame = {
+  ready?: string;
+  hidden: boolean;
+  viewportHeight: number;
+  screenHeight: number;
+  contained: boolean;
+};
+type TerminalFrameState = typeof window & {
+  __terminalFrameSamples?: Record<string, Promise<Array<TerminalFrame | undefined>>>;
+};
 
-async function startTerminalFrameSampling(page:import('@playwright/test').Page,selector:string,frameCount=45){
-  return page.evaluate(({selector,frameCount})=>{const state=window as TerminalFrameState,id=`terminal-frames-${performance.now()}-${Math.random()}`;state.__terminalFrameSamples??={};state.__terminalFrameSamples[id]=new Promise(resolve=>{const frames:Array<TerminalFrame|undefined>=[];const schedule=()=>requestAnimationFrame(()=>setTimeout(sample));const sample=()=>{const element=document.querySelector<HTMLElement>(selector),screen=element?.querySelector<HTMLElement>('.xterm-screen'),terminal=element?.querySelector<HTMLElement>('.terminal');if(!element||!screen||!terminal)frames.push(undefined);else{const viewportRect=element.getBoundingClientRect(),screenRect=screen.getBoundingClientRect();frames.push({ready:element.dataset.geometryReady,hidden:getComputedStyle(terminal).visibility==='hidden',viewportHeight:viewportRect.height,screenHeight:screenRect.height,contained:screenRect.left>=viewportRect.left-1&&screenRect.top>=viewportRect.top-1&&screenRect.right<=viewportRect.right+1&&screenRect.bottom<=viewportRect.bottom+1})}if(frames.length===frameCount)resolve(frames);else schedule()};sample()});return id},{selector,frameCount});
+async function startTerminalFrameSampling(page: import('@playwright/test').Page, selector: string, frameCount = 45) {
+  return page.evaluate(
+    ({ selector, frameCount }) => {
+      const state = window as TerminalFrameState,
+        id = `terminal-frames-${performance.now()}-${Math.random()}`;
+      state.__terminalFrameSamples ??= {};
+      state.__terminalFrameSamples[id] = new Promise((resolve) => {
+        const frames: Array<TerminalFrame | undefined> = [];
+        const schedule = () => requestAnimationFrame(() => setTimeout(sample));
+        const sample = () => {
+          const element = document.querySelector<HTMLElement>(selector),
+            screen = element?.querySelector<HTMLElement>('.xterm-screen'),
+            terminal = element?.querySelector<HTMLElement>('.terminal');
+          if (!element || !screen || !terminal) frames.push(undefined);
+          else {
+            const viewportRect = element.getBoundingClientRect(),
+              screenRect = screen.getBoundingClientRect();
+            frames.push({
+              ready: element.dataset.geometryReady,
+              hidden: getComputedStyle(terminal).visibility === 'hidden',
+              viewportHeight: viewportRect.height,
+              screenHeight: screenRect.height,
+              contained:
+                screenRect.left >= viewportRect.left - 1 &&
+                screenRect.top >= viewportRect.top - 1 &&
+                screenRect.right <= viewportRect.right + 1 &&
+                screenRect.bottom <= viewportRect.bottom + 1,
+            });
+          }
+          if (frames.length === frameCount) resolve(frames);
+          else schedule();
+        };
+        sample();
+      });
+      return id;
+    },
+    { selector, frameCount },
+  );
 }
 
-async function finishTerminalFrameSampling(page:import('@playwright/test').Page,id:string){
-  return page.evaluate(async sampleId=>{const state=window as TerminalFrameState,frames=await state.__terminalFrameSamples![sampleId];Reflect.deleteProperty(state.__terminalFrameSamples!,sampleId);return frames},id);
+async function finishTerminalFrameSampling(page: import('@playwright/test').Page, id: string) {
+  return page.evaluate(async (sampleId) => {
+    const state = window as TerminalFrameState,
+      frames = await state.__terminalFrameSamples![sampleId];
+    Reflect.deleteProperty(state.__terminalFrameSamples!, sampleId);
+    return frames;
+  }, id);
 }
 
-async function doubleClickDrawerRail(page:import('@playwright/test').Page,drawer:import('@playwright/test').Locator){const box=await drawer.locator('.terminal-drawer__rail').boundingBox();if(!box)throw new Error('Terminal drawer rail is not visible');await page.mouse.dblclick(box.x+box.width/2,box.y+box.height-2)}
-
-async function clickTerminalReference(page:import('@playwright/test').Page,viewport:import('@playwright/test').Locator,reference:string,assertPointer=false){
-  const output='HS2-EXACT HS2-SHARED @terminal-feedback/HS2-QUALIFIED HS2-MISSING',column=output.indexOf(reference),screen=viewport.locator('.xterm-screen'),box=await screen.boundingBox(),row=viewport.locator('.xterm-rows > div').nth(2),rowBox=await row.boundingBox();
-  if(!box||!rowBox||column<0)throw new Error(`Cannot locate terminal reference ${reference}`);
-  const cols=Number((await viewport.getAttribute('data-grid-size'))?.split('x')[0]??80),point={x:box.x+(column+.5)*box.width/cols,y:rowBox.y+rowBox.height/2};
-  await page.mouse.move(box.x-4,box.y-4);
-  await page.mouse.move(point.x,point.y);
-  if(assertPointer)await expect.poll(()=>viewport.evaluate(element=>getComputedStyle(element.querySelector<HTMLElement>('.xterm-screen')!).cursor)).toBe('pointer');
-  await page.mouse.click(point.x,point.y);
+async function doubleClickDrawerRail(
+  page: import('@playwright/test').Page,
+  drawer: import('@playwright/test').Locator,
+) {
+  const box = await drawer.locator('.terminal-drawer__rail').boundingBox();
+  if (!box) throw new Error('Terminal drawer rail is not visible');
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height - 2);
 }
 
-async function installTerminalFixture(page:import('@playwright/test').Page,leadingZshMarker=false,ticketLinks=false){
-  await page.addInitScript(({leadingZshMarker,ticketLinks})=>{
-    const nano=(cols=80,rows=24)=>{const bar=(value:string)=>`\u001b[7m${value.padEnd(cols).slice(0,cols)}\u001b[0m`,references=ticketLinks?'\u001b[3;1HHS2-EXACT HS2-SHARED @terminal-feedback/HS2-QUALIFIED HS2-MISSING':'';return `\u001b[2J\u001b[H${bar('  GNU nano 8.4                 terminal-fill-proof.txt')}\u001b[2;1H${bar('File: terminal-fill-proof.txt')}${references}\u001b[${Math.max(4,Math.floor(rows/2))};20H${cols} columns × ${rows} rows\u001b[${Math.max(2,rows-1)};1H${bar('^G Help  ^O Write Out  ^W Where Is  ^K Cut  ^T Execute')}\u001b[${rows};1H${bar('^X Exit  ^R Read File  ^\\ Replace  ^U Paste  ^J Justify')}`};
-    const sockets:FakeSocket[]=[];
-    class FakeSocket extends EventTarget{
-      static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;readyState=0;binaryType='blob';sent:unknown[]=[];
-      constructor(public url:string){super();sockets.push(this);setTimeout(()=>{if(this.readyState===FakeSocket.CLOSED)return;this.readyState=FakeSocket.OPEN;this.dispatchEvent(new Event('open'));const output=leadingZshMarker?'\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ':nano();this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(output).buffer}))})}
-      send(value:unknown){this.sent.push(value);if(typeof value!=='string')return;try{const resize=JSON.parse(value).resize;if(resize){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({pty_size:{cols:resize.cols,rows:resize.rows},driven_by:resize.viewer_id})}));if(!leadingZshMarker)this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(nano(resize.cols,resize.rows)).buffer}))}}catch{/* input */}}
-      close(){this.readyState=3;this.dispatchEvent(new CloseEvent('close'))}
+async function clickTerminalReference(
+  page: import('@playwright/test').Page,
+  viewport: import('@playwright/test').Locator,
+  reference: string,
+  assertPointer = false,
+) {
+  const output = 'HS2-EXACT HS2-SHARED @terminal-feedback/HS2-QUALIFIED HS2-MISSING',
+    column = output.indexOf(reference),
+    screen = viewport.locator('.xterm-screen'),
+    box = await screen.boundingBox(),
+    row = viewport.locator('.xterm-rows > div').nth(2),
+    rowBox = await row.boundingBox();
+  if (!box || !rowBox || column < 0) throw new Error(`Cannot locate terminal reference ${reference}`);
+  const cols = Number((await viewport.getAttribute('data-grid-size'))?.split('x')[0] ?? 80),
+    point = { x: box.x + ((column + 0.5) * box.width) / cols, y: rowBox.y + rowBox.height / 2 };
+  await page.mouse.move(box.x - 4, box.y - 4);
+  await page.mouse.move(point.x, point.y);
+  if (assertPointer)
+    await expect
+      .poll(() =>
+        viewport.evaluate((element) => getComputedStyle(element.querySelector<HTMLElement>('.xterm-screen')!).cursor),
+      )
+      .toBe('pointer');
+  await page.mouse.click(point.x, point.y);
+}
+
+async function installTerminalFixture(
+  page: import('@playwright/test').Page,
+  leadingZshMarker = false,
+  ticketLinks = false,
+) {
+  await page.addInitScript(
+    ({ leadingZshMarker, ticketLinks }) => {
+      const nano = (cols = 80, rows = 24) => {
+        const bar = (value: string) => `\u001b[7m${value.padEnd(cols).slice(0, cols)}\u001b[0m`,
+          references = ticketLinks
+            ? '\u001b[3;1HHS2-EXACT HS2-SHARED @terminal-feedback/HS2-QUALIFIED HS2-MISSING'
+            : '';
+        return `\u001b[2J\u001b[H${bar('  GNU nano 8.4                 terminal-fill-proof.txt')}\u001b[2;1H${bar('File: terminal-fill-proof.txt')}${references}\u001b[${Math.max(4, Math.floor(rows / 2))};20H${cols} columns × ${rows} rows\u001b[${Math.max(2, rows - 1)};1H${bar('^G Help  ^O Write Out  ^W Where Is  ^K Cut  ^T Execute')}\u001b[${rows};1H${bar('^X Exit  ^R Read File  ^\\ Replace  ^U Paste  ^J Justify')}`;
+      };
+      const sockets: FakeSocket[] = [];
+      class FakeSocket extends EventTarget {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        readyState = 0;
+        binaryType = 'blob';
+        sent: unknown[] = [];
+        constructor(public url: string) {
+          super();
+          sockets.push(this);
+          setTimeout(() => {
+            if (this.readyState === FakeSocket.CLOSED) return;
+            this.readyState = FakeSocket.OPEN;
+            this.dispatchEvent(new Event('open'));
+            const output = leadingZshMarker ? '\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ' : nano();
+            this.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+          });
+        }
+        send(value: unknown) {
+          this.sent.push(value);
+          if (typeof value !== 'string') return;
+          try {
+            const resize = JSON.parse(value).resize;
+            if (resize) {
+              this.dispatchEvent(
+                new MessageEvent('message', {
+                  data: JSON.stringify({
+                    pty_size: { cols: resize.cols, rows: resize.rows },
+                    driven_by: resize.viewer_id,
+                  }),
+                }),
+              );
+              if (!leadingZshMarker)
+                this.dispatchEvent(
+                  new MessageEvent('message', {
+                    data: new TextEncoder().encode(nano(resize.cols, resize.rows)).buffer,
+                  }),
+                );
+            }
+          } catch {
+            /* input */
+          }
+        }
+        close() {
+          this.readyState = 3;
+          this.dispatchEvent(new CloseEvent('close'));
+        }
+      }
+      Object.assign(window, { WebSocket: FakeSocket, __terminalFeedbackSockets: sockets });
+    },
+    { leadingZshMarker, ticketLinks },
+  );
+  let createdTerminal = false;
+  const ticketRow = (id: string, slug: string, title: string) => ({
+      connection_id: 'git-local',
+      native_id: id,
+      qualified_id: `git-local:${id}`,
+      id,
+      slug,
+      title,
+      category: 'feature',
+      priority: 'default',
+      status: 'started',
+      up_next: true,
+      feedback_needed: false,
+      tags: [],
+      blocked_by: [],
+      claim_count: 0,
+      created_at: '2026-09-21T00:00:00Z',
+      updated_at: '2026-09-21T00:00:00Z',
+    }),
+    linkTickets = [
+      ticketRow('exact', 'HS2-EXACT', 'Exact terminal destination'),
+      ticketRow('shared-a', 'HS2-SHARED', 'Shared terminal destination A'),
+      ticketRow('shared-b', 'HS2-SHARED', 'Shared terminal destination B'),
+      ticketRow('qualified', 'HS2-QUALIFIED', 'Qualified terminal destination'),
+    ];
+  await page.route('**/*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname;
+    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (ticketLinks && path.endsWith('/tickets')) {
+      const text = url.searchParams.get('text')?.toLocaleLowerCase();
+      return route.fulfill({
+        json: text ? linkTickets.filter((ticket) => ticket.slug.toLocaleLowerCase() === text) : [],
+      });
     }
-    Object.assign(window,{WebSocket:FakeSocket,__terminalFeedbackSockets:sockets});
-  },{leadingZshMarker,ticketLinks});
-  let createdTerminal=false;
-  const ticketRow=(id:string,slug:string,title:string)=>({connection_id:'git-local',native_id:id,qualified_id:`git-local:${id}`,id,slug,title,category:'feature',priority:'default',status:'started',up_next:true,feedback_needed:false,tags:[],blocked_by:[],claim_count:0,created_at:'2026-09-21T00:00:00Z',updated_at:'2026-09-21T00:00:00Z'}),linkTickets=[ticketRow('exact','HS2-EXACT','Exact terminal destination'),ticketRow('shared-a','HS2-SHARED','Shared terminal destination A'),ticketRow('shared-b','HS2-SHARED','Shared terminal destination B'),ticketRow('qualified','HS2-QUALIFIED','Qualified terminal destination')];
-  await page.route('**/*',route=>{
-    const request=route.request(),url=new URL(request.url()),path=url.pathname;
-    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project});
-    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]});
-    if(ticketLinks&&path.endsWith('/tickets')){const text=url.searchParams.get('text')?.toLocaleLowerCase();return route.fulfill({json:text?linkTickets.filter(ticket=>ticket.slug.toLocaleLowerCase()===text):[]})}
-    if(ticketLinks&&path.match(/\/tickets\/[^/]+$/)){const id=decodeURIComponent(path.split('/').at(-1)!),ticket=linkTickets.find(item=>item.id===id);if(ticket)return route.fulfill({json:{store:'git-local',...ticket,details:`Opened ${ticket.slug} from the terminal.`,blocked_reason:null,concurrency_token:'token',notes:[],attachments:[]}})}
-    if(path.endsWith('/permissions')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/tickets')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
-    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(new URL(request.url()).searchParams.get('since')??0),events:[],overflow:false}});
-    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
-    if(path.endsWith('/terminals')&&request.method()==='POST'){createdTerminal=true;return route.fulfill({status:201,json:{id:'terminal-new',alive:true,busy:false,cwd:project.root}})}
-    if(path.endsWith('/terminals'))return route.fulfill({json:[{id:'nano',alive:true,busy:true,cwd:project.root,progress:50},...(createdTerminal?[{id:'terminal-new',alive:true,busy:false,cwd:project.root}]:[])]});
-    if(path.endsWith('/terminals/nano'))return route.fulfill({json:{id:'nano',alive:true,busy:true,cwd:project.root,progress:50,scrollback:'GNU nano 8.4\n80 columns × 24 rows\n^X Exit'}});
+    if (ticketLinks && path.match(/\/tickets\/[^/]+$/)) {
+      const id = decodeURIComponent(path.split('/').at(-1)!),
+        ticket = linkTickets.find((item) => item.id === id);
+      if (ticket)
+        return route.fulfill({
+          json: {
+            store: 'git-local',
+            ...ticket,
+            details: `Opened ${ticket.slug} from the terminal.`,
+            blocked_reason: null,
+            concurrency_token: 'token',
+            notes: [],
+            attachments: [],
+          },
+        });
+    }
+    if (
+      path.endsWith('/permissions') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/tickets') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    if (path.endsWith('/ws/poll'))
+      return route.fulfill({
+        json: { cursor: Number(new URL(request.url()).searchParams.get('since') ?? 0), events: [], overflow: false },
+      });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/terminals') && request.method() === 'POST') {
+      createdTerminal = true;
+      return route.fulfill({ status: 201, json: { id: 'terminal-new', alive: true, busy: false, cwd: project.root } });
+    }
+    if (path.endsWith('/terminals'))
+      return route.fulfill({
+        json: [
+          { id: 'nano', alive: true, busy: true, cwd: project.root, progress: 50 },
+          ...(createdTerminal ? [{ id: 'terminal-new', alive: true, busy: false, cwd: project.root }] : []),
+        ],
+      });
+    if (path.endsWith('/terminals/nano'))
+      return route.fulfill({
+        json: {
+          id: 'nano',
+          alive: true,
+          busy: true,
+          cwd: project.root,
+          progress: 50,
+          scrollback: 'GNU nano 8.4\n80 columns × 24 rows\n^X Exit',
+        },
+      });
     return route.continue();
   });
 }
 
-test('keeps magnified terminal focus inside the modal and removes a leading zsh replay marker',async({page})=>{
-  await page.setViewportSize({width:1440,height:900});await installTerminalFixture(page,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Workspace grid'}).click();
-  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),preview=tile.locator('[data-display-mode="scaled-preview"]');await expect(preview).toHaveAttribute('data-geometry-ready','true');const rowText=async(locator:typeof preview)=>(await locator.locator('.xterm-rows > div').allTextContents()).map(text=>text.trimEnd()).filter(Boolean);await expect.poll(()=>rowText(preview)).toEqual(['prompt %']);await tile.click();const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]'),sidebar=page.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]'),inspector=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]'),sidebarHandle=page.locator('[data-kui-resize-handle][data-region-id="app-sidebar"]'),inspectorHandle=page.locator('[data-kui-resize-handle][data-region-id="app-inspector"]');await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();await expect.poll(()=>rowText(viewport)).toEqual(['prompt %']);const focusPresentation=await page.locator('.app-shell__work-area').evaluate(element=>({outline:getComputedStyle(element).outlineColor,border:getComputedStyle(element,'::after').borderColor}));expect(focusPresentation).toEqual({outline:'rgba(0, 0, 0, 0)',border:'rgba(0, 0, 0, 0)'});expect(await sidebar.evaluate(element=>getComputedStyle(element,'::after').display)).toBe('none');await expect(inspector).toHaveCSS('border-left-color','rgba(0, 0, 0, 0)');for(const handle of [sidebarHandle,inspectorHandle])expect(await handle.evaluate(element=>getComputedStyle(element,'::before').backgroundColor)).toBe('rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-fxj64w-magnified-wide-after.png',fullPage:true});await page.setViewportSize({width:1024,height:650});await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();expect(await sidebar.evaluate(element=>getComputedStyle(element,'::after').display)).toBe('none');await expect(inspector).toHaveCSS('border-left-color','rgba(0, 0, 0, 0)');for(const handle of [sidebarHandle,inspectorHandle])expect(await handle.evaluate(element=>getComputedStyle(element,'::before').backgroundColor)).toBe('rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-fxj64w-magnified-narrow-after.png',fullPage:true});
+test('keeps magnified terminal focus inside the modal and removes a leading zsh replay marker', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page, true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]');
+  await expect(preview).toHaveAttribute('data-geometry-ready', 'true');
+  const rowText = async (locator: typeof preview) =>
+    (await locator.locator('.xterm-rows > div').allTextContents()).map((text) => text.trimEnd()).filter(Boolean);
+  await expect.poll(() => rowText(preview)).toEqual(['prompt %']);
+  await tile.click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    viewport = magnified.locator('[data-display-mode="interactive"]'),
+    sidebar = page.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]'),
+    inspector = page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]'),
+    sidebarHandle = page.locator('[data-kui-resize-handle][data-region-id="app-sidebar"]'),
+    inspectorHandle = page.locator('[data-kui-resize-handle][data-region-id="app-inspector"]');
+  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect.poll(() => rowText(viewport)).toEqual(['prompt %']);
+  const focusPresentation = await page.locator('.app-shell__work-area').evaluate((element) => ({
+    outline: getComputedStyle(element).outlineColor,
+    border: getComputedStyle(element, '::after').borderColor,
+  }));
+  expect(focusPresentation).toEqual({ outline: 'rgba(0, 0, 0, 0)', border: 'rgba(0, 0, 0, 0)' });
+  expect(await sidebar.evaluate((element) => getComputedStyle(element, '::after').display)).toBe('none');
+  await expect(inspector).toHaveCSS('border-left-color', 'rgba(0, 0, 0, 0)');
+  for (const handle of [sidebarHandle, inspectorHandle])
+    expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
+      'rgba(0, 0, 0, 0)',
+    );
+  await page.screenshot({ path: '/private/tmp/hs2-fxj64w-magnified-wide-after.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 650 });
+  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  expect(await sidebar.evaluate((element) => getComputedStyle(element, '::after').display)).toBe('none');
+  await expect(inspector).toHaveCSS('border-left-color', 'rgba(0, 0, 0, 0)');
+  for (const handle of [sidebarHandle, inspectorHandle])
+    expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
+      'rgba(0, 0, 0, 0)',
+    );
+  await page.screenshot({ path: '/private/tmp/hs2-fxj64w-magnified-narrow-after.png', fullPage: true });
 });
 
-test('opens ticket references from interactive terminals without linking scaled previews (HS2-2DW829)',async({page})=>{
-  await page.setViewportSize({width:1280,height:820});await installTerminalFixture(page,false,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Workspace grid'}).click();
-  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),preview=tile.locator('[data-display-mode="scaled-preview"]');await expect(preview).toHaveAttribute('data-geometry-ready','true');await expect(preview.locator('.xterm-rows')).toContainText('HS2-EXACT');const previewScreen=(await preview.locator('.xterm-screen').boundingBox())!;await page.mouse.move(previewScreen.x+previewScreen.width/20,previewScreen.y+previewScreen.height/8);await expect.poll(()=>preview.evaluate(element=>getComputedStyle(element.querySelector<HTMLElement>('.xterm-screen')!).cursor)).not.toBe('pointer');
-  await tile.click();const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]'),remount=async()=>{if(await magnified.count()){await magnified.click({position:{x:5,y:5}});await expect(magnified).toHaveCount(0)}await tile.click();await expect(viewport).toHaveAttribute('data-geometry-ready','true');await expect(viewport.locator('.xterm-rows')).toContainText('HS2-QUALIFIED')};await expect(viewport).toHaveAttribute('data-geometry-ready','true');await expect(viewport.locator('.xterm-rows')).toContainText('HS2-QUALIFIED');
-  await clickTerminalReference(page,viewport,'HS2-EXACT',true);let reader=page.getByRole('dialog',{name:'Read and edit HS2-EXACT in Terminal feedback'});await expect(reader).toContainText('Opened HS2-EXACT from the terminal.');await reader.getByRole('button',{name:'Close ticket reader'}).click();await remount();
-  await clickTerminalReference(page,viewport,'HS2-MISSING');await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');await remount();
-  await clickTerminalReference(page,viewport,'HS2-SHARED');const choice=page.locator('[data-component="ticket-link-choice-dialog"]');await expect(choice).toHaveJSProperty('open',true);await expect(choice.getByRole('button').filter({hasText:'Shared terminal destination'})).toHaveCount(2);await page.keyboard.press('Escape');await remount();
-  await clickTerminalReference(page,viewport,'@terminal-feedback/HS2-QUALIFIED');reader=page.getByRole('dialog',{name:'Read and edit HS2-QUALIFIED in Terminal feedback'});await expect(reader).toContainText('Opened HS2-QUALIFIED from the terminal.');await page.screenshot({path:'/private/tmp/hs2-2dw829-terminal-ticket-reader-wide.png',fullPage:true});await reader.getByRole('button',{name:'Close ticket reader'}).click();
-  const selectableRow=(await viewport.locator('.xterm-rows > div').nth(2).boundingBox())!;await page.mouse.move(selectableRow.x+4,selectableRow.y+selectableRow.height/2);await page.mouse.down();await page.mouse.move(selectableRow.x+selectableRow.width/3,selectableRow.y+selectableRow.height/2,{steps:5});await page.mouse.up();await expect(viewport.locator('.xterm-selection')).toHaveCount(1);
-  await viewport.click({position:{x:20,y:80}});await page.keyboard.type('echo link-input');await expect.poll(()=>page.evaluate(()=>(window as unknown as {__terminalFeedbackSockets:Array<{url:string;sent:unknown[]}>}).__terminalFeedbackSockets.filter(socket=>socket.url.includes('/terminals/nano/attach')).flatMap(socket=>socket.sent).filter((value):value is string=>typeof value==='string'&&!value.startsWith('{')).join(''))).toContain('echo link-input');
-  await page.setViewportSize({width:1024,height:650});await expect(viewport).toHaveAttribute('data-grid-size','80x24');await page.screenshot({path:'/private/tmp/hs2-2dw829-interactive-terminal-narrow.png',fullPage:true});
+test('opens ticket references from interactive terminals without linking scaled previews (HS2-2DW829)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await installTerminalFixture(page, false, true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]');
+  await expect(preview).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(preview.locator('.xterm-rows')).toContainText('HS2-EXACT');
+  const previewScreen = (await preview.locator('.xterm-screen').boundingBox())!;
+  await page.mouse.move(previewScreen.x + previewScreen.width / 20, previewScreen.y + previewScreen.height / 8);
+  await expect
+    .poll(() =>
+      preview.evaluate((element) => getComputedStyle(element.querySelector<HTMLElement>('.xterm-screen')!).cursor),
+    )
+    .not.toBe('pointer');
+  await tile.click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    viewport = magnified.locator('[data-display-mode="interactive"]'),
+    remount = async () => {
+      if (await magnified.count()) {
+        await magnified.click({ position: { x: 5, y: 5 } });
+        await expect(magnified).toHaveCount(0);
+      }
+      await tile.click();
+      await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+      await expect(viewport.locator('.xterm-rows')).toContainText('HS2-QUALIFIED');
+    };
+  await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(viewport.locator('.xterm-rows')).toContainText('HS2-QUALIFIED');
+  await clickTerminalReference(page, viewport, 'HS2-EXACT', true);
+  let reader = page.getByRole('dialog', { name: 'Read and edit HS2-EXACT in Terminal feedback' });
+  await expect(reader).toContainText('Opened HS2-EXACT from the terminal.');
+  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await remount();
+  await clickTerminalReference(page, viewport, 'HS2-MISSING');
+  await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
+  await remount();
+  await clickTerminalReference(page, viewport, 'HS2-SHARED');
+  const choice = page.locator('[data-component="ticket-link-choice-dialog"]');
+  await expect(choice).toHaveJSProperty('open', true);
+  await expect(choice.getByRole('button').filter({ hasText: 'Shared terminal destination' })).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await remount();
+  await clickTerminalReference(page, viewport, '@terminal-feedback/HS2-QUALIFIED');
+  reader = page.getByRole('dialog', { name: 'Read and edit HS2-QUALIFIED in Terminal feedback' });
+  await expect(reader).toContainText('Opened HS2-QUALIFIED from the terminal.');
+  await page.screenshot({ path: '/private/tmp/hs2-2dw829-terminal-ticket-reader-wide.png', fullPage: true });
+  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  const selectableRow = (await viewport.locator('.xterm-rows > div').nth(2).boundingBox())!;
+  await page.mouse.move(selectableRow.x + 4, selectableRow.y + selectableRow.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(selectableRow.x + selectableRow.width / 3, selectableRow.y + selectableRow.height / 2, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect(viewport.locator('.xterm-selection')).toHaveCount(1);
+  await viewport.click({ position: { x: 20, y: 80 } });
+  await page.keyboard.type('echo link-input');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalFeedbackSockets
+          .filter((socket) => socket.url.includes('/terminals/nano/attach'))
+          .flatMap((socket) => socket.sent)
+          .filter((value): value is string => typeof value === 'string' && !value.startsWith('{'))
+          .join(''),
+      ),
+    )
+    .toContain('echo link-input');
+  await page.setViewportSize({ width: 1024, height: 650 });
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+  await page.screenshot({ path: '/private/tmp/hs2-2dw829-interactive-terminal-narrow.png', fullPage: true });
 });
 
-test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicated row contained',async({page})=>{
-  await page.setViewportSize({width:1440,height:1100});await installTerminalFixture(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Workspace grid'}).click();
-  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),preview=tile.locator('[data-display-mode="scaled-preview"]'),geometry=(locator:typeof preview)=>locator.evaluate(element=>{const screen=element.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect(),box=element.getBoundingClientRect(),frameElement=element.closest<HTMLElement>('.terminal-tile__viewport-frame'),frame=frameElement?.getBoundingClientRect(),previewPanel=frameElement?.parentElement?.getBoundingClientRect(),cardElement=element.closest<HTMLElement>('.terminal-tile'),card=cardElement?.getBoundingClientRect(),footer=cardElement?.querySelector<HTMLElement>('.terminal-tile__footer')?.getBoundingClientRect(),matrix=new DOMMatrixReadOnly(getComputedStyle(element.querySelector<HTMLElement>('.terminal')!).transform),border=cardElement?Number.parseFloat(getComputedStyle(cardElement).borderTopWidth):0;return screen&&frame&&previewPanel&&card&&footer?{left:Math.abs(screen.left-box.left),top:Math.abs(screen.top-box.top),right:Math.abs(screen.right-box.right),bottom:Math.abs(screen.bottom-box.bottom),scaleSkew:Math.abs(matrix.a-matrix.d),aspect:screen.width/screen.height,frameAspect:frame.width/frame.height,viewportRight:Math.abs(box.right-frame.right),viewportBottom:Math.abs(box.bottom-frame.bottom),cardResidual:Math.abs(card.height-(frame.height+2*(frame.top-previewPanel.top)+footer.height+2*border))}:undefined}),assertGridGeometry=async(locator=preview)=>{await expect.poll(async()=>{const value=await geometry(locator);return Boolean(value&&value.viewportRight<=2&&value.viewportBottom<=2&&value.cardResidual<=1.5&&value.scaleSkew<.001&&Math.abs(value.frameAspect-5/3)<.01)}).toBe(true);const value=await geometry(locator);expect(value).toBeDefined();expect(value!.frameAspect).toBeCloseTo(5/3,2);expect(value!.viewportRight).toBeLessThanOrEqual(2);expect(value!.viewportBottom).toBeLessThanOrEqual(2);expect(value!.cardResidual).toBeLessThanOrEqual(1.5);expect(value!.scaleSkew).toBeLessThan(.001);return value!};await expect(preview).toHaveAttribute('data-grid-size','80x24');await expect(preview).toHaveAttribute('data-pty-size','80x24');await expect(preview).toHaveAttribute('data-sizing-focus','true');await expect(preview).toHaveAttribute('data-viewport-visible','true');await expect(preview).toHaveAttribute('data-renderer','dom');await expect(preview.locator('canvas')).toHaveCount(0);await expect(preview).toHaveAttribute('data-geometry-ready','true');await expect(preview.locator('.xterm-rows')).toContainText('GNU nano');await expect(preview.locator('.xterm-rows')).toContainText('Exit');await expect(page.locator('wa-select[name="terminal-grouping"]')).toHaveCount(0);const wideAspect=(await assertGridGeometry()).aspect,wideFont=await preview.getAttribute('data-font-size');await page.waitForTimeout(250);await expect(preview).toHaveAttribute('data-font-size',wideFont!);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-canonical-grid-post-paint-after.png',fullPage:true});await page.setViewportSize({width:900,height:580});await expect(dashboard).toHaveAttribute('data-basis','high');await expect.poll(async()=>Math.abs((await geometry(preview))!.aspect-wideAspect)).toBeLessThan(.02);await assertGridGeometry();await page.screenshot({path:'/private/tmp/hs2-ap9dsm-fixed-card-narrow-after.png',fullPage:true});await page.setViewportSize({width:1440,height:1100});for(let step=0;step<3;step+=1)await dashboard.getByRole('button',{name:/Zoom in/}).click();await expect(dashboard).toHaveAttribute('data-fit','1');await expect.poll(async()=>Math.abs((await geometry(preview))!.aspect-wideAspect)).toBeLessThan(.02);await assertGridGeometry();
-  const menuButton=tile.getByRole('button',{name:'More actions for nano'});await menuButton.click();const footerMenu=dashboard.getByRole('menu');await expect(footerMenu.getByText('Open')).toBeVisible();await expect(footerMenu.getByText('Hide Terminal')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-rq290f-terminal-footer-menu-after.png',fullPage:true});await page.keyboard.press('Escape');
-  await tile.click();const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),magnifiedViewport=magnified.locator('[data-display-mode="interactive"]');await expect(magnifiedViewport).toHaveAttribute('data-grid-size','80x24');await expect(magnifiedViewport).toHaveAttribute('data-pty-size','80x24');await expect(magnifiedViewport).toHaveAttribute('data-sizing-focus','true');await expect(magnifiedViewport).toHaveAttribute('data-renderer','dom');await expect(magnifiedViewport.locator('canvas')).toHaveCount(0);await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready','true');await expect(magnifiedViewport.locator('.xterm-helper-textarea')).toBeFocused();await expect(magnifiedViewport.locator('.xterm-rows')).toContainText('Exit');await assertGridGeometry(magnifiedViewport);const magnifiedFont=await magnifiedViewport.getAttribute('data-font-size');await page.waitForTimeout(250);await expect(magnifiedViewport).toHaveAttribute('data-font-size',magnifiedFont!);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-canonical-80x24-magnified-after.png',fullPage:true});
-  await magnified.getByRole('button',{name:'Open nano in project terminal drawer'}).click();const drawer=page.locator('[data-component="terminal-drawer"]');await expect(drawer).toHaveAttribute('data-mode','dedicated');await expect(drawer.getByRole('button',{name:'Manage workspace visibility'})).toHaveCount(0);const dedicatedViewport=drawer.locator('[data-display-mode="interactive"]'),initialGrid=await dedicatedViewport.getAttribute('data-grid-size');await expect(dedicatedViewport).toHaveAttribute('data-renderer','webgl');const webglCanvas=dedicatedViewport.locator('.xterm-screen canvas').first();await expect(webglCanvas).toBeVisible();await doubleClickDrawerRail(page,drawer);await expect(drawer).toHaveAttribute('data-maximized','true');await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{resolve()}))));await expect(dedicatedViewport).not.toHaveAttribute('data-grid-size',initialGrid!);await expect(dedicatedViewport).toHaveAttribute('data-pty-size',await dedicatedViewport.getAttribute('data-grid-size')??'');await expect(dedicatedViewport).toHaveAttribute('data-sizing-focus','true');const dedicatedInput=drawer.getByRole('textbox',{name:'Terminal input'});await expect(dedicatedInput).toBeFocused();await expect(dedicatedInput.evaluate(node=>getComputedStyle(node.closest<HTMLElement>('.terminal-viewport')!).overflow)).resolves.toBe('hidden');const dedicatedEdges=await dedicatedViewport.evaluate(element=>{const box=element.getBoundingClientRect(),screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),canvas=element.querySelector<HTMLCanvasElement>('.xterm-screen canvas')!,canvasBox=canvas.getBoundingClientRect();return{top:screen.top-box.top,bottom:box.bottom-screen.bottom,canvasWidthError:Math.abs(canvas.width-canvasBox.width*devicePixelRatio),canvasHeightError:Math.abs(canvas.height-canvasBox.height*devicePixelRatio)}});expect(dedicatedEdges.top).toBeGreaterThanOrEqual(0);expect(dedicatedEdges.bottom).toBeGreaterThanOrEqual(0);expect(dedicatedEdges.canvasWidthError).toBeLessThanOrEqual(2);expect(dedicatedEdges.canvasHeightError).toBeLessThanOrEqual(2);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-maximize-immediate-after.png',fullPage:true});
-  await drawer.getByRole('tab',{name:'Project grid'}).click();await expect(drawer).toHaveAttribute('data-mode','grid');await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-p0pyh7-drawer-without-visibility.png',fullPage:true});
+test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicated row contained', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]'),
+    geometry = (locator: typeof preview) =>
+      locator.evaluate((element) => {
+        const screen = element.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect(),
+          box = element.getBoundingClientRect(),
+          frameElement = element.closest<HTMLElement>('.terminal-tile__viewport-frame'),
+          frame = frameElement?.getBoundingClientRect(),
+          previewPanel = frameElement?.parentElement?.getBoundingClientRect(),
+          cardElement = element.closest<HTMLElement>('.terminal-tile'),
+          card = cardElement?.getBoundingClientRect(),
+          footer = cardElement?.querySelector<HTMLElement>('.terminal-tile__footer')?.getBoundingClientRect(),
+          matrix = new DOMMatrixReadOnly(getComputedStyle(element.querySelector<HTMLElement>('.terminal')!).transform),
+          border = cardElement ? Number.parseFloat(getComputedStyle(cardElement).borderTopWidth) : 0;
+        return screen && frame && previewPanel && card && footer
+          ? {
+              left: Math.abs(screen.left - box.left),
+              top: Math.abs(screen.top - box.top),
+              right: Math.abs(screen.right - box.right),
+              bottom: Math.abs(screen.bottom - box.bottom),
+              scaleSkew: Math.abs(matrix.a - matrix.d),
+              aspect: screen.width / screen.height,
+              frameAspect: frame.width / frame.height,
+              viewportRight: Math.abs(box.right - frame.right),
+              viewportBottom: Math.abs(box.bottom - frame.bottom),
+              cardResidual: Math.abs(
+                card.height - (frame.height + 2 * (frame.top - previewPanel.top) + footer.height + 2 * border),
+              ),
+            }
+          : undefined;
+      }),
+    assertGridGeometry = async (locator = preview) => {
+      await expect
+        .poll(async () => {
+          const value = await geometry(locator);
+          return Boolean(
+            value &&
+            value.viewportRight <= 2 &&
+            value.viewportBottom <= 2 &&
+            value.cardResidual <= 1.5 &&
+            value.scaleSkew < 0.001 &&
+            Math.abs(value.frameAspect - 5 / 3) < 0.01,
+          );
+        })
+        .toBe(true);
+      const value = await geometry(locator);
+      expect(value).toBeDefined();
+      expect(value!.frameAspect).toBeCloseTo(5 / 3, 2);
+      expect(value!.viewportRight).toBeLessThanOrEqual(2);
+      expect(value!.viewportBottom).toBeLessThanOrEqual(2);
+      expect(value!.cardResidual).toBeLessThanOrEqual(1.5);
+      expect(value!.scaleSkew).toBeLessThan(0.001);
+      return value!;
+    };
+  await expect(preview).toHaveAttribute('data-grid-size', '80x24');
+  await expect(preview).toHaveAttribute('data-pty-size', '80x24');
+  await expect(preview).toHaveAttribute('data-sizing-focus', 'true');
+  await expect(preview).toHaveAttribute('data-viewport-visible', 'true');
+  await expect(preview).toHaveAttribute('data-renderer', 'dom');
+  await expect(preview.locator('canvas')).toHaveCount(0);
+  await expect(preview).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(preview.locator('.xterm-rows')).toContainText('GNU nano');
+  await expect(preview.locator('.xterm-rows')).toContainText('Exit');
+  await expect(page.locator('wa-select[name="terminal-grouping"]')).toHaveCount(0);
+  const wideAspect = (await assertGridGeometry()).aspect,
+    wideFont = await preview.getAttribute('data-font-size');
+  await page.waitForTimeout(250);
+  await expect(preview).toHaveAttribute('data-font-size', wideFont!);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-canonical-grid-post-paint-after.png', fullPage: true });
+  await page.setViewportSize({ width: 900, height: 580 });
+  await expect(dashboard).toHaveAttribute('data-basis', 'high');
+  await expect.poll(async () => Math.abs((await geometry(preview))!.aspect - wideAspect)).toBeLessThan(0.02);
+  await assertGridGeometry();
+  await page.screenshot({ path: '/private/tmp/hs2-ap9dsm-fixed-card-narrow-after.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  for (let step = 0; step < 3; step += 1) await dashboard.getByRole('button', { name: /Zoom in/ }).click();
+  await expect(dashboard).toHaveAttribute('data-fit', '1');
+  await expect.poll(async () => Math.abs((await geometry(preview))!.aspect - wideAspect)).toBeLessThan(0.02);
+  await assertGridGeometry();
+  const menuButton = tile.getByRole('button', { name: 'More actions for nano' });
+  await menuButton.click();
+  const footerMenu = dashboard.getByRole('menu');
+  await expect(footerMenu.getByText('Open')).toBeVisible();
+  await expect(footerMenu.getByText('Hide Terminal')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-rq290f-terminal-footer-menu-after.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await tile.click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnifiedViewport).toHaveAttribute('data-pty-size', '80x24');
+  await expect(magnifiedViewport).toHaveAttribute('data-sizing-focus', 'true');
+  await expect(magnifiedViewport).toHaveAttribute('data-renderer', 'dom');
+  await expect(magnifiedViewport.locator('canvas')).toHaveCount(0);
+  await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(magnifiedViewport.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(magnifiedViewport.locator('.xterm-rows')).toContainText('Exit');
+  await assertGridGeometry(magnifiedViewport);
+  const magnifiedFont = await magnifiedViewport.getAttribute('data-font-size');
+  await page.waitForTimeout(250);
+  await expect(magnifiedViewport).toHaveAttribute('data-font-size', magnifiedFont!);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-canonical-80x24-magnified-after.png', fullPage: true });
+  await magnified.getByRole('button', { name: 'Open nano in project terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
+  const dedicatedViewport = drawer.locator('[data-display-mode="interactive"]'),
+    initialGrid = await dedicatedViewport.getAttribute('data-grid-size');
+  await expect(dedicatedViewport).toHaveAttribute('data-renderer', 'webgl');
+  const webglCanvas = dedicatedViewport.locator('.xterm-screen canvas').first();
+  await expect(webglCanvas).toBeVisible();
+  await doubleClickDrawerRail(page, drawer);
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            resolve();
+          }),
+        ),
+      ),
+  );
+  await expect(dedicatedViewport).not.toHaveAttribute('data-grid-size', initialGrid!);
+  await expect(dedicatedViewport).toHaveAttribute(
+    'data-pty-size',
+    (await dedicatedViewport.getAttribute('data-grid-size')) ?? '',
+  );
+  await expect(dedicatedViewport).toHaveAttribute('data-sizing-focus', 'true');
+  const dedicatedInput = drawer.getByRole('textbox', { name: 'Terminal input' });
+  await expect(dedicatedInput).toBeFocused();
+  await expect(
+    dedicatedInput.evaluate((node) => getComputedStyle(node.closest<HTMLElement>('.terminal-viewport')!).overflow),
+  ).resolves.toBe('hidden');
+  const dedicatedEdges = await dedicatedViewport.evaluate((element) => {
+    const box = element.getBoundingClientRect(),
+      screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+      canvas = element.querySelector<HTMLCanvasElement>('.xterm-screen canvas')!,
+      canvasBox = canvas.getBoundingClientRect();
+    return {
+      top: screen.top - box.top,
+      bottom: box.bottom - screen.bottom,
+      canvasWidthError: Math.abs(canvas.width - canvasBox.width * devicePixelRatio),
+      canvasHeightError: Math.abs(canvas.height - canvasBox.height * devicePixelRatio),
+    };
+  });
+  expect(dedicatedEdges.top).toBeGreaterThanOrEqual(0);
+  expect(dedicatedEdges.bottom).toBeGreaterThanOrEqual(0);
+  expect(dedicatedEdges.canvasWidthError).toBeLessThanOrEqual(2);
+  expect(dedicatedEdges.canvasHeightError).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
+  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await expect(drawer).toHaveAttribute('data-mode', 'grid');
+  await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });
 });
 
-test('releases magnified terminal resources and bounds duplicated scrollback',async({page})=>{
-  const detailRequests:string[]=[];page.on('request',request=>{if(/\/terminals\/[^/]+$/.test(new URL(request.url()).pathname))detailRequests.push(request.url())});await page.setViewportSize({width:1180,height:760});await installTerminalFixture(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Workspace grid'}).click();
-  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-component="terminal-tile"][data-terminal-key="terminal-feedback:nano"]'),preview=tile.locator('[data-display-mode="scaled-preview"]');await expect(preview).toHaveAttribute('data-scrollback-limit','0');await expect(preview).toHaveAttribute('data-connection','connected');const baselineTerminals=await page.locator('.xterm').count(),liveSockets=()=>page.evaluate(()=>(window as unknown as {__terminalFeedbackSockets:Array<{readyState:number;url:string}>}).__terminalFeedbackSockets.filter(socket=>socket.readyState===1&&socket.url.includes('/terminals/')).length),baselineSockets=await liveSockets();expect(baselineSockets).toBe(baselineTerminals);expect(baselineSockets).toBeGreaterThan(0);
-  for(let cycle=0;cycle<8;cycle+=1){await tile.click();const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]');await expect(viewport).toHaveAttribute('data-scrollback-limit','1000');await expect(viewport).toHaveAttribute('data-geometry-ready','true');await magnified.click({position:{x:5,y:5}});await expect(magnified).toHaveCount(0);await expect.poll(liveSockets).toBe(baselineSockets);expect(await page.locator('.xterm').count()).toBe(baselineTerminals)}expect(detailRequests).toHaveLength(0);
+test('releases magnified terminal resources and bounds duplicated scrollback', async ({ page }) => {
+  const detailRequests: string[] = [];
+  page.on('request', (request) => {
+    if (/\/terminals\/[^/]+$/.test(new URL(request.url()).pathname)) detailRequests.push(request.url());
+  });
+  await page.setViewportSize({ width: 1180, height: 760 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-component="terminal-tile"][data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]');
+  await expect(preview).toHaveAttribute('data-scrollback-limit', '0');
+  await expect(preview).toHaveAttribute('data-connection', 'connected');
+  const baselineTerminals = await page.locator('.xterm').count(),
+    liveSockets = () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as { __terminalFeedbackSockets: Array<{ readyState: number; url: string }> }
+          ).__terminalFeedbackSockets.filter((socket) => socket.readyState === 1 && socket.url.includes('/terminals/'))
+            .length,
+      ),
+    baselineSockets = await liveSockets();
+  expect(baselineSockets).toBe(baselineTerminals);
+  expect(baselineSockets).toBeGreaterThan(0);
+  for (let cycle = 0; cycle < 8; cycle += 1) {
+    await tile.click();
+    const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+      viewport = magnified.locator('[data-display-mode="interactive"]');
+    await expect(viewport).toHaveAttribute('data-scrollback-limit', '1000');
+    await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+    await magnified.click({ position: { x: 5, y: 5 } });
+    await expect(magnified).toHaveCount(0);
+    await expect.poll(liveSockets).toBe(baselineSockets);
+    expect(await page.locator('.xterm').count()).toBe(baselineTerminals);
+  }
+  expect(detailRequests).toHaveLength(0);
 });
 
-test('keeps current terminal geometry through the complete drawer dashboard round trip',async({page})=>{
-  await page.setViewportSize({width:1440,height:900});await installTerminalFixture(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Show terminal drawer'}).click();let drawer=page.locator('[data-component="terminal-drawer"]');await drawer.getByRole('button',{name:'New drawer item'}).click();await drawer.getByRole('menu',{name:'New drawer item'}).getByText('Default shell').click();let dedicated=drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');await expect(dedicated).toHaveAttribute('data-connection','connected');await dedicated.click();await page.keyboard.type('nano');await page.keyboard.press('Enter');await expect.poll(()=>page.evaluate(()=>(window as unknown as {__terminalFeedbackSockets:Array<{url:string;sent:unknown[]}>}).__terminalFeedbackSockets.filter(socket=>socket.url.includes('/terminals/terminal-new/attach')).flatMap(socket=>socket.sent).filter((value):value is string=>typeof value==='string'&&!value.startsWith('{')).join(''))).toContain('nano');
-  const latestClaim=()=>page.evaluate(() => {const sockets=(window as unknown as {__terminalFeedbackSockets:Array<{url:string;sent:unknown[]}>}).__terminalFeedbackSockets.filter(socket=>socket.url.includes('/terminals/terminal-new/attach')),claims=sockets.flatMap(socket=>socket.sent.filter((value):value is string=>typeof value==='string'&&value.startsWith('{')).map(value=>(JSON.parse(value) as {resize:{cols:number;rows:number;focus:boolean;visible:boolean}}).resize));return claims.at(-1)});
-  const assertDedicated=async(viewport:typeof dedicated)=>{const mobile=await page.evaluate(()=>innerWidth<=1024);await expect(viewport).toHaveAttribute('data-driving','true');await expect(viewport).toHaveAttribute('data-sizing-focus','true');await expect(viewport).toHaveAttribute('data-viewport-visible','true');await expect(viewport).toHaveAttribute('data-renderer',mobile?'dom':'webgl');await expect(viewport).toHaveAttribute('data-grid-size',mobile?/^80x\d+$/:/^\d+x\d+$/);await expect(viewport).toHaveAttribute('data-pty-size',/^\d+x\d+$/);const geometry=await viewport.evaluate(element=>{const box=element.getBoundingClientRect(),screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),canvas=element.querySelector<HTMLCanvasElement>('.xterm-screen canvas'),canvasBox=canvas?.getBoundingClientRect();return{contained:screen.left>=box.left-1&&screen.top>=box.top-1&&screen.right<=box.right+1&&screen.bottom<=box.bottom+1,grid:element.dataset.gridSize,pty:element.dataset.ptySize,bottom:box.bottom-screen.bottom,canvasWidthError:canvas&&canvasBox?Math.abs(canvas.width-canvasBox.width*devicePixelRatio):undefined,canvasHeightError:canvas&&canvasBox?Math.abs(canvas.height-canvasBox.height*devicePixelRatio):undefined}});expect(geometry.contained).toBe(true);expect(geometry.bottom).toBeGreaterThanOrEqual(-1);if(mobile){expect(geometry.canvasWidthError).toBeUndefined();expect(geometry.canvasHeightError).toBeUndefined()}else{expect(geometry.canvasWidthError).toBeLessThanOrEqual(2);expect(geometry.canvasHeightError).toBeLessThanOrEqual(2)}await expect.poll(async()=>{const claim=await latestClaim(),[cols,rows]=geometry.grid!.split("x").map(Number);if(!claim)return false;return claim.cols===cols&&claim.rows===rows}).toBe(true);const claim=await latestClaim();if(!claim)throw new Error('missing terminal resize claim');expect(claim).toMatchObject({focus:true,visible:true});expect(`${claim.cols}x${claim.rows}`).toBe(geometry.grid);await expect(viewport).toHaveAttribute('data-pty-size',geometry.grid!);return geometry.grid!};
-  const resizeDrawer=async(delta:number)=>{const handle=page.getByRole('separator',{name:'Resize Terminal drawer'}),box=(await handle.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+delta,{steps:8});await page.mouse.up()};
-  const initial=await assertDedicated(dedicated);await resizeDrawer(-96);await expect.poll(()=>dedicated.getAttribute('data-grid-size')).not.toBe(initial);const expanded=await assertDedicated(dedicated);await resizeDrawer(72);await expect.poll(()=>dedicated.getAttribute('data-grid-size')).not.toBe(expanded);await assertDedicated(dedicated);const maximizeFramesId=await startTerminalFrameSampling(page,'[data-component="terminal-session"] [data-terminal-id="terminal-new"]');await doubleClickDrawerRail(page,drawer);const maximizeFrames=await finishTerminalFrameSampling(page,maximizeFramesId),firstMaximizedFrame=maximizeFrames.find(frame=>frame&&Math.abs(frame.viewportHeight-maximizeFrames.find(Boolean)!.viewportHeight)>40);expect(firstMaximizedFrame).toBeDefined();expect(Math.abs(firstMaximizedFrame!.screenHeight-maximizeFrames.find(Boolean)!.screenHeight)).toBeGreaterThan(40);expect(firstMaximizedFrame!.contained).toBe(true);await expect(drawer).toHaveAttribute('data-maximized','true');await assertDedicated(dedicated);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-post-paint-maximized-wide-after.png',fullPage:true});
-  const dashboardFramesId=await startTerminalFrameSampling(page,'[data-component="terminal-dashboard"] [data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]');await page.getByRole('button',{name:'Workspace grid'}).click();const dashboardFrames=await finishTerminalFrameSampling(page,dashboardFramesId),firstDashboardFrame=dashboardFrames.findIndex(Boolean),readyDashboardFrame=dashboardFrames.findIndex(frame=>frame?.ready==='true');expect(firstDashboardFrame).toBeGreaterThanOrEqual(0);expect(readyDashboardFrame-firstDashboardFrame).toBeLessThanOrEqual(4);expect(dashboardFrames.slice(firstDashboardFrame,readyDashboardFrame).every(frame=>frame?.hidden)).toBe(true);const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]'),assertFixed=async(viewport:typeof dedicated)=>{await expect(viewport).toHaveAttribute('data-grid-size','80x24');await expect(viewport).toHaveAttribute('data-pty-size','80x24');await expect(viewport).toHaveAttribute('data-sizing-focus','true');await expect(viewport).toHaveAttribute('data-viewport-visible','true');await expect(viewport).toHaveAttribute('data-renderer','dom');await expect(viewport.locator('canvas')).toHaveCount(0);await expect(viewport).toHaveAttribute('data-geometry-ready','true');const contained=await viewport.evaluate(element=>{const screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),frame=element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();return screen.left>=frame.left-1&&screen.top>=frame.top-1&&screen.right<=frame.right+1&&screen.bottom<=frame.bottom+1});expect(contained).toBe(true)};await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));const magnifiedFramesId=await startTerminalFrameSampling(page,'[data-magnified="true"] [data-display-mode="interactive"]');await tile.click();const magnifiedFrames=await finishTerminalFrameSampling(page,magnifiedFramesId),firstMagnifiedFrame=magnifiedFrames.findIndex(Boolean),readyMagnifiedFrame=magnifiedFrames.findIndex(frame=>frame?.ready==='true');expect(firstMagnifiedFrame).toBeGreaterThanOrEqual(0);expect(readyMagnifiedFrame-firstMagnifiedFrame).toBeLessThanOrEqual(3);expect(magnifiedFrames.slice(firstMagnifiedFrame,readyMagnifiedFrame).every(frame=>frame?.hidden)).toBe(true);const magnified=dashboard.getByRole('dialog',{name:'Magnified Terminal New'});await assertFixed(magnified.locator('[data-display-mode="interactive"]'));await magnified.click({position:{x:5,y:5}});await expect(magnified).toHaveCount(0);await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));await tile.dblclick();drawer=page.locator('[data-component="terminal-drawer"]');await expect(drawer).toHaveAttribute('data-mode','dedicated');dedicated=drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');await assertDedicated(dedicated);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-post-paint-roundtrip-wide-after.png',fullPage:true});await page.setViewportSize({width:900,height:650});await assertDedicated(dedicated);await page.screenshot({path:'/private/tmp/hs2-hpjb1k-post-paint-roundtrip-narrow-after.png',fullPage:true});
+test('keeps current terminal geometry through the complete drawer dashboard round trip', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  let drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  let dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  await dedicated.click();
+  await page.keyboard.type('nano');
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalFeedbackSockets
+          .filter((socket) => socket.url.includes('/terminals/terminal-new/attach'))
+          .flatMap((socket) => socket.sent)
+          .filter((value): value is string => typeof value === 'string' && !value.startsWith('{'))
+          .join(''),
+      ),
+    )
+    .toContain('nano');
+  const latestClaim = () =>
+    page.evaluate(() => {
+      const sockets = (
+          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalFeedbackSockets.filter((socket) => socket.url.includes('/terminals/terminal-new/attach')),
+        claims = sockets.flatMap((socket) =>
+          socket.sent
+            .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
+            .map(
+              (value) =>
+                (JSON.parse(value) as { resize: { cols: number; rows: number; focus: boolean; visible: boolean } })
+                  .resize,
+            ),
+        );
+      return claims.at(-1);
+    });
+  const assertDedicated = async (viewport: typeof dedicated) => {
+    const mobile = await page.evaluate(() => innerWidth <= 1024);
+    await expect(viewport).toHaveAttribute('data-driving', 'true');
+    await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
+    await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
+    await expect(viewport).toHaveAttribute('data-renderer', mobile ? 'dom' : 'webgl');
+    await expect(viewport).toHaveAttribute('data-grid-size', mobile ? /^80x\d+$/ : /^\d+x\d+$/);
+    await expect(viewport).toHaveAttribute('data-pty-size', /^\d+x\d+$/);
+    const geometry = await viewport.evaluate((element) => {
+      const box = element.getBoundingClientRect(),
+        screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+        canvas = element.querySelector<HTMLCanvasElement>('.xterm-screen canvas'),
+        canvasBox = canvas?.getBoundingClientRect();
+      return {
+        contained:
+          screen.left >= box.left - 1 &&
+          screen.top >= box.top - 1 &&
+          screen.right <= box.right + 1 &&
+          screen.bottom <= box.bottom + 1,
+        grid: element.dataset.gridSize,
+        pty: element.dataset.ptySize,
+        bottom: box.bottom - screen.bottom,
+        canvasWidthError: canvas && canvasBox ? Math.abs(canvas.width - canvasBox.width * devicePixelRatio) : undefined,
+        canvasHeightError:
+          canvas && canvasBox ? Math.abs(canvas.height - canvasBox.height * devicePixelRatio) : undefined,
+      };
+    });
+    expect(geometry.contained).toBe(true);
+    expect(geometry.bottom).toBeGreaterThanOrEqual(-1);
+    if (mobile) {
+      expect(geometry.canvasWidthError).toBeUndefined();
+      expect(geometry.canvasHeightError).toBeUndefined();
+    } else {
+      expect(geometry.canvasWidthError).toBeLessThanOrEqual(2);
+      expect(geometry.canvasHeightError).toBeLessThanOrEqual(2);
+    }
+    await expect
+      .poll(async () => {
+        const claim = await latestClaim(),
+          [cols, rows] = geometry.grid!.split('x').map(Number);
+        if (!claim) return false;
+        return claim.cols === cols && claim.rows === rows;
+      })
+      .toBe(true);
+    const claim = await latestClaim();
+    if (!claim) throw new Error('missing terminal resize claim');
+    expect(claim).toMatchObject({ focus: true, visible: true });
+    expect(`${claim.cols}x${claim.rows}`).toBe(geometry.grid);
+    await expect(viewport).toHaveAttribute('data-pty-size', geometry.grid!);
+    return geometry.grid!;
+  };
+  const resizeDrawer = async (delta: number) => {
+    const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+      box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + delta, { steps: 8 });
+    await page.mouse.up();
+  };
+  const initial = await assertDedicated(dedicated);
+  await resizeDrawer(-96);
+  await expect.poll(() => dedicated.getAttribute('data-grid-size')).not.toBe(initial);
+  const expanded = await assertDedicated(dedicated);
+  await resizeDrawer(72);
+  await expect.poll(() => dedicated.getAttribute('data-grid-size')).not.toBe(expanded);
+  await assertDedicated(dedicated);
+  const maximizeFramesId = await startTerminalFrameSampling(
+    page,
+    '[data-component="terminal-session"] [data-terminal-id="terminal-new"]',
+  );
+  await doubleClickDrawerRail(page, drawer);
+  const maximizeFrames = await finishTerminalFrameSampling(page, maximizeFramesId),
+    firstMaximizedFrame = maximizeFrames.find(
+      (frame) => frame && Math.abs(frame.viewportHeight - maximizeFrames.find(Boolean)!.viewportHeight) > 40,
+    );
+  expect(firstMaximizedFrame).toBeDefined();
+  expect(Math.abs(firstMaximizedFrame!.screenHeight - maximizeFrames.find(Boolean)!.screenHeight)).toBeGreaterThan(40);
+  expect(firstMaximizedFrame!.contained).toBe(true);
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await assertDedicated(dedicated);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-maximized-wide-after.png', fullPage: true });
+  const dashboardFramesId = await startTerminalFrameSampling(
+    page,
+    '[data-component="terminal-dashboard"] [data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]',
+  );
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboardFrames = await finishTerminalFrameSampling(page, dashboardFramesId),
+    firstDashboardFrame = dashboardFrames.findIndex(Boolean),
+    readyDashboardFrame = dashboardFrames.findIndex((frame) => frame?.ready === 'true');
+  expect(firstDashboardFrame).toBeGreaterThanOrEqual(0);
+  expect(readyDashboardFrame - firstDashboardFrame).toBeLessThanOrEqual(4);
+  expect(dashboardFrames.slice(firstDashboardFrame, readyDashboardFrame).every((frame) => frame?.hidden)).toBe(true);
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]'),
+    assertFixed = async (viewport: typeof dedicated) => {
+      await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+      await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+      await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
+      await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
+      await expect(viewport).toHaveAttribute('data-renderer', 'dom');
+      await expect(viewport.locator('canvas')).toHaveCount(0);
+      await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+      const contained = await viewport.evaluate((element) => {
+        const screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+          frame = element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();
+        return (
+          screen.left >= frame.left - 1 &&
+          screen.top >= frame.top - 1 &&
+          screen.right <= frame.right + 1 &&
+          screen.bottom <= frame.bottom + 1
+        );
+      });
+      expect(contained).toBe(true);
+    };
+  await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));
+  const magnifiedFramesId = await startTerminalFrameSampling(
+    page,
+    '[data-magnified="true"] [data-display-mode="interactive"]',
+  );
+  await tile.click();
+  const magnifiedFrames = await finishTerminalFrameSampling(page, magnifiedFramesId),
+    firstMagnifiedFrame = magnifiedFrames.findIndex(Boolean),
+    readyMagnifiedFrame = magnifiedFrames.findIndex((frame) => frame?.ready === 'true');
+  expect(firstMagnifiedFrame).toBeGreaterThanOrEqual(0);
+  expect(readyMagnifiedFrame - firstMagnifiedFrame).toBeLessThanOrEqual(3);
+  expect(magnifiedFrames.slice(firstMagnifiedFrame, readyMagnifiedFrame).every((frame) => frame?.hidden)).toBe(true);
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified Terminal New' });
+  await assertFixed(magnified.locator('[data-display-mode="interactive"]'));
+  await magnified.click({ position: { x: 5, y: 5 } });
+  await expect(magnified).toHaveCount(0);
+  await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));
+  await tile.dblclick();
+  drawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await assertDedicated(dedicated);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-roundtrip-wide-after.png', fullPage: true });
+  await page.setViewportSize({ width: 900, height: 650 });
+  await assertDedicated(dedicated);
+  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-roundtrip-narrow-after.png', fullPage: true });
 });
 
 // HS2-3ZBQDG: the size arbiter follows the last *interacted* viewport, so a device's steady
 // heartbeats must not steal control from the device the user last touched. The client marks
 // heartbeat/geometry claims `interacting:false` and genuine taps/keystrokes `interacting:true`.
-test('marks genuine terminal interaction claims so the last-interacted viewport controls sizing (HS2-3ZBQDG)',async({page})=>{
-  await page.setViewportSize({width:1440,height:900});await installTerminalFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.getByRole('button',{name:'Show terminal drawer'}).click();const drawer=page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button',{name:'New drawer item'}).click();await drawer.getByRole('menu',{name:'New drawer item'}).getByText('Default shell').click();
-  const dedicated=drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');await expect(dedicated).toHaveAttribute('data-connection','connected');
-  const claims=()=>page.evaluate(()=>{const sockets=(window as unknown as {__terminalFeedbackSockets:Array<{url:string;sent:unknown[]}>}).__terminalFeedbackSockets.filter(socket=>socket.url.includes('/terminals/terminal-new/attach'));return sockets.flatMap(socket=>socket.sent.filter((value):value is string=>typeof value==='string'&&value.startsWith('{')).map(value=>(JSON.parse(value) as {resize:{focus:boolean;visible:boolean;interacting:boolean}}).resize))});
+test('marks genuine terminal interaction claims so the last-interacted viewport controls sizing (HS2-3ZBQDG)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  const claims = () =>
+    page.evaluate(() => {
+      const sockets = (
+        window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+      ).__terminalFeedbackSockets.filter((socket) => socket.url.includes('/terminals/terminal-new/attach'));
+      return sockets.flatMap((socket) =>
+        socket.sent
+          .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
+          .map(
+            (value) =>
+              (JSON.parse(value) as { resize: { focus: boolean; visible: boolean; interacting: boolean } }).resize,
+          ),
+      );
+    });
   // The connect/geometry claims exist and are non-interacting, so a peer device's heartbeats can never steal sizing.
-  await expect.poll(async()=>(await claims()).filter(claim=>!claim.interacting).length).toBeGreaterThan(0);
-  await expect.poll(async()=>(await claims()).every(claim=>typeof claim.interacting==='boolean')).toBe(true);
-  const beforeInteraction=(await claims()).length;
+  await expect.poll(async () => (await claims()).filter((claim) => !claim.interacting).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await claims()).every((claim) => typeof claim.interacting === 'boolean')).toBe(true);
+  const beforeInteraction = (await claims()).length;
   // A deliberate keystroke is a genuine interaction → an interacting claim is sent.
-  await dedicated.click();await page.keyboard.type('echo hi');
-  await expect.poll(async()=>(await claims()).some(claim=>claim.interacting)).toBe(true);
+  await dedicated.click();
+  await page.keyboard.type('echo hi');
+  await expect.poll(async () => (await claims()).some((claim) => claim.interacting)).toBe(true);
   // Interacting claims still report focus + visibility so the arbiter treats this viewport as a driver.
-  const interacting=(await claims()).find(claim=>claim.interacting)!;expect(interacting.focus).toBe(true);expect(interacting.visible).toBe(true);
+  const interacting = (await claims()).find((claim) => claim.interacting)!;
+  expect(interacting.focus).toBe(true);
+  expect(interacting.visible).toBe(true);
   expect((await claims()).length).toBeGreaterThan(beforeInteraction);
   // Evidence: the terminal still renders content (not empty) on a phone-width viewport.
-  await page.getByRole('button',{name:'Workspace grid'}).click();await page.setViewportSize({width:390,height:844});
-  const mobileTile=page.getByRole('region',{name:'Workspace grid'}).locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]');
-  await expect(mobileTile).toHaveAttribute('data-geometry-ready','true');await expect(mobileTile).toHaveAttribute('data-sizing-focus','true');
-  await page.screenshot({path:'/private/tmp/hs2-3zbqdg-mobile-terminal-grid.png',fullPage:true});
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileTile = page
+    .getByRole('region', { name: 'Workspace grid' })
+    .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]');
+  await expect(mobileTile).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'true');
+  await page.screenshot({ path: '/private/tmp/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
 });
 
-test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS2-3ZBQDG, HS2-S708S3)',async({browser})=>{
-  const context=await browser.newContext({colorScheme:'dark',deviceScaleFactor:2,isMobile:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Version/27.0 Safari/604.1',viewport:{width:390,height:844}}),page=await context.newPage();
-  await installTerminalFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.getByRole('button',{name:'Show terminal drawer'}).click();const drawer=page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button',{name:'New drawer item'}).click();await drawer.getByRole('menu',{name:'New drawer item'}).getByText('Default shell').click();
-  const dedicated=drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
-  await expect(dedicated).toHaveAttribute('data-connection','connected');await expect(dedicated).toHaveAttribute('data-renderer','dom');await expect(dedicated.locator('canvas')).toHaveCount(0);
-  await expect.poll(()=>dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
-  await expect(dedicated).toHaveAttribute('data-grid-size',/^80x\d+$/);await expect.poll(async()=>Number((await dedicated.getAttribute('data-grid-size'))!.split('x')[1])).toBeGreaterThan(24);
-  const scale=Number(await dedicated.getAttribute('data-physical-scale'));expect(scale).toBeGreaterThan(0);expect(scale).toBeLessThan(1);
-  const contained=await dedicated.evaluate(element=>{const screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),viewport=element.getBoundingClientRect();return screen.left>=viewport.left-1&&screen.top>=viewport.top-1&&screen.right<=viewport.right+1&&screen.bottom<=viewport.bottom+1});expect(contained).toBe(true);
-  await dedicated.screenshot({path:'/private/tmp/hs2-s708s3-mobile-dedicated-80xm.png',scale:'css'});
+test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS2-3ZBQDG, HS2-S708S3)', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+      colorScheme: 'dark',
+      deviceScaleFactor: 2,
+      isMobile: true,
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Version/27.0 Safari/604.1',
+      viewport: { width: 390, height: 844 },
+    }),
+    page = await context.newPage();
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  await expect(dedicated).toHaveAttribute('data-renderer', 'dom');
+  await expect(dedicated.locator('canvas')).toHaveCount(0);
+  await expect.poll(() => dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
+  await expect(dedicated).toHaveAttribute('data-grid-size', /^80x\d+$/);
+  await expect
+    .poll(async () => Number((await dedicated.getAttribute('data-grid-size'))!.split('x')[1]))
+    .toBeGreaterThan(24);
+  const scale = Number(await dedicated.getAttribute('data-physical-scale'));
+  expect(scale).toBeGreaterThan(0);
+  expect(scale).toBeLessThan(1);
+  const contained = await dedicated.evaluate((element) => {
+    const screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+      viewport = element.getBoundingClientRect();
+    return (
+      screen.left >= viewport.left - 1 &&
+      screen.top >= viewport.top - 1 &&
+      screen.right <= viewport.right + 1 &&
+      screen.bottom <= viewport.bottom + 1
+    );
+  });
+  expect(contained).toBe(true);
+  await dedicated.screenshot({ path: '/private/tmp/hs2-s708s3-mobile-dedicated-80xm.png', scale: 'css' });
   await context.close();
 });
 
 // HS2-Z84F78: on a phone the magnified terminal keeps 80 columns but fills the available height
 // with M rows (M >> the desktop 24) and scales to fit width, instead of letterboxing a 5:3 80×24.
-test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F78)',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await installTerminalFixture(page);await page.goto('/');
-  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.getByRole('button',{name:'Workspace grid'}).click();
-  const dashboard=page.getByRole('region',{name:'Workspace grid'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
-  await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready','true');
+test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F78)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+  await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
   await tile.click();
-  const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]');
-  await expect(viewport).toHaveAttribute('data-geometry-ready','true');
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    viewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
   // 80 columns, and far more than the desktop 24 rows to fill the tall phone.
-  await expect(viewport).toHaveAttribute('data-grid-size',/^80x\d+$/);
-  await expect.poll(async()=>Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1])).toBeGreaterThan(30);
-  await expect(viewport).toHaveAttribute('data-pty-size',/^80x\d+$/);
+  await expect(viewport).toHaveAttribute('data-grid-size', /^80x\d+$/);
+  await expect
+    .poll(async () => Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1]))
+    .toBeGreaterThan(30);
+  await expect(viewport).toHaveAttribute('data-pty-size', /^80x\d+$/);
   // Scaled to fit the phone width (well under 1:1), with the 80-col screen contained in the frame.
-  const scale=Number(await viewport.getAttribute('data-physical-scale'));expect(scale).toBeGreaterThan(0);expect(scale).toBeLessThan(1);
-  const geometry=await viewport.evaluate(element=>{const screen=element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),frame=element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();return{withinWidth:screen.left>=frame.left-1&&screen.right<=frame.right+1,frameFillsHeight:frame.height>500}});
+  const scale = Number(await viewport.getAttribute('data-physical-scale'));
+  expect(scale).toBeGreaterThan(0);
+  expect(scale).toBeLessThan(1);
+  const geometry = await viewport.evaluate((element) => {
+    const screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+      frame = element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();
+    return {
+      withinWidth: screen.left >= frame.left - 1 && screen.right <= frame.right + 1,
+      frameFillsHeight: frame.height > 500,
+    };
+  });
   expect(geometry.withinWidth).toBe(true);
   expect(geometry.frameFillsHeight).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-z84f78-mobile-magnified.png',fullPage:true});
+  await page.screenshot({ path: '/private/tmp/hs2-z84f78-mobile-magnified.png', fullPage: true });
 });

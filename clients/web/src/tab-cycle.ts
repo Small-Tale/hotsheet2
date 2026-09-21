@@ -10,7 +10,11 @@
  * (nothing selected yet, or a stale selection), the cycle enters at the first id going forward and the
  * last id going backward, so a shortcut always has a defined starting point.
  */
-export function cycleTabId(order: readonly string[], current: string | undefined, direction: 1 | -1): string | undefined {
+export function cycleTabId(
+  order: readonly string[],
+  current: string | undefined,
+  direction: 1 | -1,
+): string | undefined {
   if (order.length === 0) return undefined;
   const index = current === undefined ? -1 : order.indexOf(current);
   if (index < 0) return direction === 1 ? order[0] : order[order.length - 1];

@@ -1,14 +1,52 @@
-.command-navigation { display: grid; gap: remify(4px); }
-.command-navigation__group { display: grid; gap: var(--kui-space-2xs); }
-.command-navigation__group > .kui-list-header { min-height: remify(23.2px); }
-.command-navigation__items { display: grid; gap: remify(4.8px); }
+.command-navigation {
+  display: grid;
+  gap: remify(4px);
+}
+.command-navigation__group {
+  display: grid;
+  gap: var(--kui-space-2xs);
+}
+.command-navigation__group > .kui-list-header {
+  min-height: remify(23.2px);
+}
+.command-navigation__items {
+  display: grid;
+  gap: remify(4.8px);
+}
 /* The command color is applied through kerf's own --kui-list-item-* tokens (set inline) so it
    wins regardless of CSS bundle order; kerf's transparent default previously overrode a plain
    background here at equal specificity (HS2-YVYA8H). */
-.command-navigation__command { min-height: remify(40px); font-weight: 650; }
-.command-navigation__command:hover { filter: brightness(.9); }
-.command-navigation__type { display: inline-flex; opacity: .5; }
-.command-navigation__type svg { width: remify(16px); height: remify(16px); }
-.command-navigation__command i { width: remify(8px); height: remify(8px); border: 2px solid color-mix(in srgb, var(--wa-color-neutral-on-loud) 45%, transparent); border-top-color: var(--wa-color-neutral-on-loud); border-radius: 50%; animation: command-spin .8s linear infinite; }
-@keyframes command-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .command-navigation__command i { animation: none; border-color: var(--wa-color-neutral-on-loud); } }
+.command-navigation__command {
+  min-height: remify(40px);
+  font-weight: 650;
+}
+.command-navigation__command:hover {
+  filter: brightness(0.9);
+}
+.command-navigation__type {
+  display: inline-flex;
+  opacity: 0.5;
+}
+.command-navigation__type svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.command-navigation__command i {
+  width: remify(8px);
+  height: remify(8px);
+  border: 2px solid color-mix(in srgb, var(--wa-color-neutral-on-loud) 45%, transparent);
+  border-top-color: var(--wa-color-neutral-on-loud);
+  border-radius: 50%;
+  animation: command-spin 0.8s linear infinite;
+}
+@keyframes command-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .command-navigation__command i {
+    animation: none;
+    border-color: var(--wa-color-neutral-on-loud);
+  }
+}

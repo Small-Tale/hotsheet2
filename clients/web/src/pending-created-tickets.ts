@@ -26,7 +26,7 @@ export class PendingCreatedTickets {
   /** Record a locally created row so later refreshes keep it until the index reflects it. */
   register(projectId: string, row: WireTicketRow, now = Date.now()): void {
     this.prune(now);
-    this.pending = this.pending.filter(item => !(item.projectId === projectId && item.row.id === row.id));
+    this.pending = this.pending.filter((item) => !(item.projectId === projectId && item.row.id === row.id));
     this.pending.push({ projectId, row, createdAt: now });
   }
 
@@ -37,9 +37,9 @@ export class PendingCreatedTickets {
    */
   retain(projectId: string, fetched: readonly WireTicketRow[], now = Date.now()): WireTicketRow[] {
     this.prune(now);
-    const fetchedIds = new Set(fetched.map(ticket => ticket.id));
+    const fetchedIds = new Set(fetched.map((ticket) => ticket.id));
     const kept: WireTicketRow[] = [];
-    this.pending = this.pending.filter(item => {
+    this.pending = this.pending.filter((item) => {
       if (item.projectId !== projectId) return true;
       if (fetchedIds.has(item.row.id)) return false; // the index caught up; the server row wins.
       kept.push(item.row);
@@ -50,11 +50,11 @@ export class PendingCreatedTickets {
 
   /** Drop every pending row for a project (e.g. when the project tab closes). */
   forgetProject(projectId: string): void {
-    this.pending = this.pending.filter(item => item.projectId !== projectId);
+    this.pending = this.pending.filter((item) => item.projectId !== projectId);
   }
 
   private prune(now: number): void {
-    this.pending = this.pending.filter(item => now - item.createdAt <= PENDING_TTL_MS);
+    this.pending = this.pending.filter((item) => now - item.createdAt <= PENDING_TTL_MS);
   }
 }
 
@@ -67,6 +67,6 @@ export function mergeRetainedCreatedRows(
   retained: readonly WireTicketRow[],
 ): WireTicketRow[] {
   if (retained.length === 0) return [...fetched];
-  const fetchedIds = new Set(fetched.map(ticket => ticket.id));
-  return [...retained.filter(row => !fetchedIds.has(row.id)), ...fetched];
+  const fetchedIds = new Set(fetched.map((ticket) => ticket.id));
+  return [...retained.filter((row) => !fetchedIds.has(row.id)), ...fetched];
 }

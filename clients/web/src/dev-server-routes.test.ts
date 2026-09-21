@@ -11,11 +11,11 @@ describe('development server route boundary', () => {
     '/__hotsheet/projects/open',
     '/__hotsheet/server/recover-unhealthy',
     '/__hotsheet/project-api/project/tickets',
-  ])('passes %s through to the Hono bridge', path => {
+  ])('passes %s through to the Hono bridge', (path) => {
     expect(devServerRouteExclude.test(path)).toBe(false);
   });
 
-  it.each(['/', '/src/main.tsx', '/__hotsheet/not-a-route'])('leaves %s with Vite', path => {
+  it.each(['/', '/src/main.tsx', '/__hotsheet/not-a-route'])('leaves %s with Vite', (path) => {
     expect(devServerRouteExclude.test(path)).toBe(true);
   });
 });

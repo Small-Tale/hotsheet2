@@ -15,9 +15,13 @@ export interface ServerBusyBarsProps {
  */
 export function ServerBusyBars({ count, busy }: ServerBusyBarsProps) {
   const bars = Math.max(0, Math.trunc(count));
-  return <div class="server-busy-bars" data-component="server-busy-bars" data-visible={String(busy)} aria-hidden="true">
-    {Array.from({ length: bars }, (_bar, index) => <span class="server-busy-bars__bar" style={`--bar-index:${index}`}></span>)}
-  </div>;
+  return (
+    <div class="server-busy-bars" data-component="server-busy-bars" data-visible={String(busy)} aria-hidden="true">
+      {Array.from({ length: bars }, (_bar, index) => (
+        <span class="server-busy-bars__bar" style={`--bar-index:${index}`}></span>
+      ))}
+    </div>
+  );
 }
 
 export interface ServerBusyMessageProps {
@@ -33,5 +37,15 @@ export interface ServerBusyMessageProps {
  * the host gates `visible` on the General settings toggle. Decorative/status-only.
  */
 export function ServerBusyMessage({ message, visible }: ServerBusyMessageProps) {
-  return <div class="server-busy-message" data-component="server-busy-message" data-visible={String(visible && Boolean(message))} role="status" aria-live="polite">{message}</div>;
+  return (
+    <div
+      class="server-busy-message"
+      data-component="server-busy-message"
+      data-visible={String(visible && Boolean(message))}
+      role="status"
+      aria-live="polite"
+    >
+      {message}
+    </div>
+  );
 }

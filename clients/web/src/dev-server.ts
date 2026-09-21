@@ -7,76 +7,188 @@ import type { Checkout } from './api';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, listServerCheckouts, migrateHs1Project, openLocalProject, proxyProjectRequest, recoverUnhealthyServer, removeImportedHs1Data, revealCorruptTicket, type UnhealthyServerRecovery,unhealthyServerRecovery } from './project-bridge';
+import {
+  chooseLocalFolder,
+  connectGitTicketStoreRemote,
+  createLocalGitTicketStore,
+  gitTicketStoreConnectionId,
+  listServerCheckouts,
+  migrateHs1Project,
+  openLocalProject,
+  proxyProjectRequest,
+  recoverUnhealthyServer,
+  removeImportedHs1Data,
+  revealCorruptTicket,
+  type UnhealthyServerRecovery,
+  unhealthyServerRecovery,
+} from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data,recover:(value:UnhealthyServerRecovery)=>Promise<unknown>=recoverUnhealthyServer,listCheckouts:()=>Promise<Checkout[]>=listServerCheckouts): Hono {
+export function createDevApp(
+  dev = true,
+  submitFeedback?: DevReviewSubmitter,
+  reveal = revealCorruptTicket,
+  chooseFolder: () => Promise<string | undefined> = () => chooseLocalFolder(),
+  setupGit: (root: string, location?: string) => Promise<string> = createLocalGitTicketStore,
+  connectRemote: (store: string, remote: string) => Promise<void> = connectGitTicketStoreRemote,
+  migrate: (root: string, location?: string) => Promise<unknown> = migrateHs1Project,
+  removeHs1: (project: string) => Promise<string[]> = removeImportedHs1Data,
+  recover: (value: UnhealthyServerRecovery) => Promise<unknown> = recoverUnhealthyServer,
+  listCheckouts: () => Promise<Checkout[]> = listServerCheckouts,
+): Hono {
   const app = new Hono();
-  const conversationExports=createConversationExportBridge(chooseFolder);
+  const conversationExports = createConversationExportBridge(chooseFolder);
   // The cross-device project picker (a non-loopback client can't browse the filesystem) lists the
   // checkouts the bootstrap server knows about. Unlike the local-filesystem endpoints this is NOT
   // dev-gated — it is exactly the endpoint a remote client needs (HS2-QMR41J, HS2-VFNCXG).
-  app.get('/__hotsheet/checkouts',async context=>{
-    try{return context.json(await listCheckouts())}catch(error){return context.json({error:error instanceof Error?error.message:'Could not list the projects open on the Hot Sheet server.'},502)}
-  });
-  app.post('/__hotsheet/projects/open', async context => {
-    if (!dev) return context.notFound();
+  app.get('/__hotsheet/checkouts', async (context) => {
     try {
-      const body = await context.req.json<{root:string;ticketStore?:string}>();
-      return context.json(await openLocalProject(body.root, body.ticketStore), 201);
+      return context.json(await listCheckouts());
     } catch (error) {
-      return context.json({ error: error instanceof Error ? error.message : 'Could not open project.',recovery:unhealthyServerRecovery(error) }, 400);
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not list the projects open on the Hot Sheet server.' },
+        502,
+      );
     }
   });
-  app.post('/__hotsheet/server/recover-unhealthy',async context=>{
-    if(!dev)return context.notFound();
-    try{await recover(await context.req.json<UnhealthyServerRecovery>());return context.json({recovered:true})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not recover the unresponsive server.'},409)}
+  app.post('/__hotsheet/projects/open', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{ root: string; ticketStore?: string }>();
+      return context.json(await openLocalProject(body.root, body.ticketStore), 201);
+    } catch (error) {
+      return context.json(
+        {
+          error: error instanceof Error ? error.message : 'Could not open project.',
+          recovery: unhealthyServerRecovery(error),
+        },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/folders/choose',async context=>{
-    if(!dev)return context.notFound();
-    try{return context.json({path:await chooseFolder()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the folder chooser.'},400)}
+  app.post('/__hotsheet/server/recover-unhealthy', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      await recover(await context.req.json<UnhealthyServerRecovery>());
+      return context.json({ recovered: true });
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not recover the unresponsive server.' },
+        409,
+      );
+    }
   });
-  app.post('/__hotsheet/conversation-exports/destination',async context=>{
-    if(!dev)return context.notFound();
-    try{const body=await context.req.json<{suggestedName:string}>();return context.json({destination:await conversationExports.chooseDestination(body.suggestedName)})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not choose a conversation export destination.'},400)}
+  app.post('/__hotsheet/folders/choose', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json({ path: await chooseFolder() });
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not open the folder chooser.' },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/conversation-exports/write',async context=>{
-    if(!dev)return context.notFound();
-    try{return context.json(await conversationExports.write(await context.req.json<ConversationExportPayload>()),201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not save the conversation export.'},400)}
+  app.post('/__hotsheet/conversation-exports/destination', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{ suggestedName: string }>();
+      return context.json({ destination: await conversationExports.chooseDestination(body.suggestedName) });
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not choose a conversation export destination.' },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/conversation-exports/open',async context=>{
-    if(!dev)return context.notFound();
-    try{return context.json({conversation:await conversationExports.open()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the saved conversation.'},400)}
+  app.post('/__hotsheet/conversation-exports/write', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json(await conversationExports.write(await context.req.json<ConversationExportPayload>()), 201);
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not save the conversation export.' },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/projects/setup-git',async context=>{
-    if(!dev)return context.notFound();
-    try{const body=await context.req.json<{root:string;location?:string}>(),ticketStore=await setupGit(body.root,body.location);return context.json({ticketStore,connectionId:gitTicketStoreConnectionId(ticketStore)},201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not create the git ticket store.'},400)}
+  app.post('/__hotsheet/conversation-exports/open', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json({ conversation: await conversationExports.open() });
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not open the saved conversation.' },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/projects/setup-git-remote',async context=>{
-    if(!dev)return context.notFound();
-    try{const body=await context.req.json<{store:string;remote:string}>();await connectRemote(body.store,body.remote);return context.json({connected:true})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not connect the Git remote.'},400)}
+  app.post('/__hotsheet/projects/setup-git', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{ root: string; location?: string }>(),
+        ticketStore = await setupGit(body.root, body.location);
+      return context.json({ ticketStore, connectionId: gitTicketStoreConnectionId(ticketStore) }, 201);
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not create the git ticket store.' },
+        400,
+      );
+    }
   });
-  app.post('/__hotsheet/projects/migrate-hs1',async context=>{
-    if(!dev)return context.notFound();
-    try{const body=await context.req.json<{root:string;location?:string}>();return context.json(await migrate(body.root,body.location),201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not import the Hot Sheet 1 project.'},400)}
+  app.post('/__hotsheet/projects/setup-git-remote', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{ store: string; remote: string }>();
+      await connectRemote(body.store, body.remote);
+      return context.json({ connected: true });
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not connect the Git remote.' }, 400);
+    }
   });
-  app.delete('/__hotsheet/projects/:project/hs1-data',async context=>{
-    if(!dev)return context.notFound();
-    try{return context.json({removed:await removeHs1(context.req.param('project'))})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not remove the old Hot Sheet 1 data.'},400)}
+  app.post('/__hotsheet/projects/migrate-hs1', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{ root: string; location?: string }>();
+      return context.json(await migrate(body.root, body.location), 201);
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not import the Hot Sheet 1 project.' },
+        400,
+      );
+    }
   });
-  app.all('/__hotsheet/project-api/:project/*', async context => {
+  app.delete('/__hotsheet/projects/:project/hs1-data', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json({ removed: await removeHs1(context.req.param('project')) });
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not remove the old Hot Sheet 1 data.' },
+        400,
+      );
+    }
+  });
+  app.all('/__hotsheet/project-api/:project/*', async (context) => {
     if (!dev) return context.notFound();
     const prefix = `/__hotsheet/project-api/${encodeURIComponent(context.req.param('project'))}`;
     const path = context.req.path.slice(prefix.length) || '/';
-    return proxyProjectRequest(context.req.param('project'), `${path}${new URL(context.req.url).search}`, context.req.raw);
+    return proxyProjectRequest(
+      context.req.param('project'),
+      `${path}${new URL(context.req.url).search}`,
+      context.req.raw,
+    );
   });
-  app.post('/__hotsheet/projects/:project/corrupt-tickets/reveal', async context => {
+  app.post('/__hotsheet/projects/:project/corrupt-tickets/reveal', async (context) => {
     if (!dev) return context.notFound();
     try {
-      const body = await context.req.json<{path:string}>();
+      const body = await context.req.json<{ path: string }>();
       await reveal(context.req.param('project'), body.path);
       return context.json({ revealed: true });
     } catch (error) {
-      return context.json({ error: error instanceof Error ? error.message : 'Could not show the corrupt ticket file.' }, 400);
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not show the corrupt ticket file.' },
+        400,
+      );
     }
   });
   app.get('/ux-demo', (context) => {
@@ -95,19 +207,21 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
   </body>
 </html>`);
   });
-  app.get('/__hotsheet/demo-modified', async context => {
+  app.get('/__hotsheet/demo-modified', async (context) => {
     if (!dev) return context.notFound();
     return context.json(await demoModifiedTimes(resolve(process.cwd(), 'src')));
   });
-  app.post('/__hotsheet/dev-review/tickets', async context => {
+  app.post('/__hotsheet/dev-review/tickets', async (context) => {
     if (!dev || context.req.header('x-hotsheet-dev-review') !== '1') return context.notFound();
     try {
       const submission = validateDevReviewSubmission(await context.req.json());
-      const submit = submitFeedback ?? createCliDevReviewSubmitter({
-        repoRoot: process.env.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? resolve(process.cwd(), '../..'),
-        storePath: process.env.HOTSHEET_DEV_REVIEW_STORE,
-        cliPath: process.env.HOTSHEET_DEV_REVIEW_CLI,
-      });
+      const submit =
+        submitFeedback ??
+        createCliDevReviewSubmitter({
+          repoRoot: process.env.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? resolve(process.cwd(), '../..'),
+          storePath: process.env.HOTSHEET_DEV_REVIEW_STORE,
+          cliPath: process.env.HOTSHEET_DEV_REVIEW_CLI,
+        });
       return context.json(await submit(submission), 201);
     } catch (error) {
       return context.json({ error: error instanceof Error ? error.message : 'Ticket creation failed.' }, 400);
@@ -117,17 +231,51 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
 }
 
 const demoEntries: Record<string, string> = {
-  'app-shell': 'ux-demo/app-shell-demo.tsx', 'project-tab': 'ux-demo/app-shell-demo.tsx', 'project-tabs': 'ux-demo/app-shell-demo.tsx', 'resizable-region': 'ux-demo/app-shell-demo.tsx', 'connection-state-banner': 'ux-demo/app-shell-demo.tsx', 'connection-details-dialog': 'ux-demo/connection-details-demo.tsx',
-  'app-tab': 'ux-demo/main.tsx', 'terminal-drawer': 'components/terminal-drawer.tsx',
+  'app-shell': 'ux-demo/app-shell-demo.tsx',
+  'project-tab': 'ux-demo/app-shell-demo.tsx',
+  'project-tabs': 'ux-demo/app-shell-demo.tsx',
+  'resizable-region': 'ux-demo/app-shell-demo.tsx',
+  'connection-state-banner': 'ux-demo/app-shell-demo.tsx',
+  'connection-details-dialog': 'ux-demo/connection-details-demo.tsx',
+  'app-tab': 'ux-demo/main.tsx',
+  'terminal-drawer': 'components/terminal-drawer.tsx',
   'terminal-visibility-dialog': 'components/terminal-visibility-dialog.tsx',
   'content-transition': 'ux-demo/content-transition-demo.tsx',
-  'project-sidebar': 'ux-demo/project-sidebar-demo.tsx', 'project-summary': 'ux-demo/project-sidebar-demo.tsx', 'repository-summary': 'ux-demo/project-sidebar-demo.tsx', 'view-navigation': 'ux-demo/project-sidebar-demo.tsx', 'command-navigation': 'ux-demo/project-sidebar-demo.tsx', 'drive-control': 'ux-demo/project-sidebar-demo.tsx',
+  'project-sidebar': 'ux-demo/project-sidebar-demo.tsx',
+  'project-summary': 'ux-demo/project-sidebar-demo.tsx',
+  'repository-summary': 'ux-demo/project-sidebar-demo.tsx',
+  'view-navigation': 'ux-demo/project-sidebar-demo.tsx',
+  'command-navigation': 'ux-demo/project-sidebar-demo.tsx',
+  'drive-control': 'ux-demo/project-sidebar-demo.tsx',
   'repository-status-popover': 'ux-demo/repository-status-demo.tsx',
-  'workspace-header': 'ux-demo/workspace-components-demo.tsx', 'page-header': 'ux-demo/workspace-components-demo.tsx', 'quick-ticket-composer': 'ux-demo/workspace-components-demo.tsx', 'ticket-inspector': 'ux-demo/workspace-components-demo.tsx',
-  'ticket-list': 'ux-demo/ticket-collections-demo.tsx', 'ticket-row': 'ux-demo/ticket-row-demo.tsx', 'ticket-board': 'ux-demo/ticket-collections-demo.tsx', 'ticket-board-column': 'ux-demo/ticket-collections-demo.tsx',
-  'ticket-info-panel': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-timeline': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-attachments': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-category-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-priority-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-status-menu': 'ux-demo/ticket-metadata-demo.tsx',
-  'ticket-reader': 'ux-demo/content-components-demo.tsx', 'markdown-editor': 'ux-demo/content-components-demo.tsx', 'note-card': 'ux-demo/content-components-demo.tsx', 'note-composer': 'ux-demo/content-components-demo.tsx', 'tag-chip': 'ux-demo/tag-chip-demo.tsx', 'status-badge': 'ux-demo/status-badge-demo.tsx',
-  'select': 'ux-demo/select-demo.tsx', 'toolbar': 'ux-demo/toolbar-demo.tsx', 'menu-item': 'ux-demo/menu-item-demo.tsx', 'menu-header': 'ux-demo/menu-header-demo.tsx', 'toolbar-control-group': 'ux-demo/toolbar-control-group-demo.tsx', 'toolbar-text': 'ux-demo/toolbar-text-demo.tsx', 'dialog-header': 'ux-demo/dialog-layout-demo.tsx', 'value-table': 'ux-demo/dialog-layout-demo.tsx',
+  'workspace-header': 'ux-demo/workspace-components-demo.tsx',
+  'page-header': 'ux-demo/workspace-components-demo.tsx',
+  'quick-ticket-composer': 'ux-demo/workspace-components-demo.tsx',
+  'ticket-inspector': 'ux-demo/workspace-components-demo.tsx',
+  'ticket-list': 'ux-demo/ticket-collections-demo.tsx',
+  'ticket-row': 'ux-demo/ticket-row-demo.tsx',
+  'ticket-board': 'ux-demo/ticket-collections-demo.tsx',
+  'ticket-board-column': 'ux-demo/ticket-collections-demo.tsx',
+  'ticket-info-panel': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-timeline': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-attachments': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-category-select': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-priority-select': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-status-menu': 'ux-demo/ticket-metadata-demo.tsx',
+  'ticket-reader': 'ux-demo/content-components-demo.tsx',
+  'markdown-editor': 'ux-demo/content-components-demo.tsx',
+  'note-card': 'ux-demo/content-components-demo.tsx',
+  'note-composer': 'ux-demo/content-components-demo.tsx',
+  'tag-chip': 'ux-demo/tag-chip-demo.tsx',
+  'status-badge': 'ux-demo/status-badge-demo.tsx',
+  select: 'ux-demo/select-demo.tsx',
+  toolbar: 'ux-demo/toolbar-demo.tsx',
+  'menu-item': 'ux-demo/menu-item-demo.tsx',
+  'menu-header': 'ux-demo/menu-header-demo.tsx',
+  'toolbar-control-group': 'ux-demo/toolbar-control-group-demo.tsx',
+  'toolbar-text': 'ux-demo/toolbar-text-demo.tsx',
+  'dialog-header': 'ux-demo/dialog-layout-demo.tsx',
+  'value-table': 'ux-demo/dialog-layout-demo.tsx',
 };
 
 async function demoModifiedTimes(sourceRoot: string): Promise<Record<string, string>> {
@@ -135,25 +283,41 @@ async function demoModifiedTimes(sourceRoot: string): Promise<Record<string, str
     const base = resolve(from, '..', specifier);
     for (const suffix of ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx']) {
       const candidate = `${base}${suffix}`;
-      try { if ((await stat(candidate)).isFile()) return candidate; } catch { /* try next extension */ }
+      try {
+        if ((await stat(candidate)).isFile()) return candidate;
+      } catch {
+        /* try next extension */
+      }
     }
   };
   const dependencyTime = async (entry: string): Promise<number> => {
-    const pending = [resolve(sourceRoot, entry)]; const seen = new Set<string>(); let newest = 0;
+    const pending = [resolve(sourceRoot, entry)];
+    const seen = new Set<string>();
+    let newest = 0;
     while (pending.length) {
-      const file = pending.pop()!; if (seen.has(file)) continue; seen.add(file);
+      const file = pending.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
       try {
         newest = Math.max(newest, (await stat(file)).mtimeMs);
         const source = await readFile(file, 'utf8');
         for (const match of source.matchAll(/(?:from\s*|import\s*)['"](\.{1,2}\/[^'"]+)['"]/g)) {
-          const dependency = await resolveImport(file, match[1]); if (dependency) pending.push(dependency);
+          const dependency = await resolveImport(file, match[1]);
+          if (dependency) pending.push(dependency);
         }
-      } catch { /* a removed optional dependency contributes no timestamp */ }
+      } catch {
+        /* a removed optional dependency contributes no timestamp */
+      }
     }
-    for (const shared of ['ux-demo/main.tsx', 'ux-demo/style.css']) newest = Math.max(newest, (await stat(resolve(sourceRoot, shared))).mtimeMs);
+    for (const shared of ['ux-demo/main.tsx', 'ux-demo/style.css'])
+      newest = Math.max(newest, (await stat(resolve(sourceRoot, shared))).mtimeMs);
     return newest;
   };
-  return Object.fromEntries(await Promise.all(Object.entries(demoEntries).map(async ([id, entry]) => [id, new Date(await dependencyTime(entry)).toISOString()])));
+  return Object.fromEntries(
+    await Promise.all(
+      Object.entries(demoEntries).map(async ([id, entry]) => [id, new Date(await dependencyTime(entry)).toISOString()]),
+    ),
+  );
 }
 
 // This entry is loaded only by Vite's `serve` command (see vite.config.ts). It is

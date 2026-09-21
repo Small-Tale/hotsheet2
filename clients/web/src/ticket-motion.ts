@@ -1,149 +1,380 @@
 interface TicketMotionRow {
-  rect:DOMRect;
-  parent:string;
-  container:HTMLElement;
-  visual:HTMLElement;
-  borderRadius:string;
+  rect: DOMRect;
+  parent: string;
+  container: HTMLElement;
+  visual: HTMLElement;
+  borderRadius: string;
 }
-export interface TicketMotionSnapshot {scope:string;rows:Map<string,TicketMotionRow>}
+export interface TicketMotionSnapshot {
+  scope: string;
+  rows: Map<string, TicketMotionRow>;
+}
 
-const LAYOUT_DURATION=240,FADE_DURATION=160,MOTION_EASING='cubic-bezier(.2,.8,.2,1)';
-export const TICKET_MOTION_LAYER='90';
-const activeLayoutAnimations=new WeakMap<HTMLElement,Animation>();
-const activeTicketAnimations=new Set<Animation>();
+const LAYOUT_DURATION = 240,
+  FADE_DURATION = 160,
+  MOTION_EASING = 'cubic-bezier(.2,.8,.2,1)';
+export const TICKET_MOTION_LAYER = '90';
+const activeLayoutAnimations = new WeakMap<HTMLElement, Animation>();
+const activeTicketAnimations = new Set<Animation>();
 
-function trackTicketAnimation(animation:Animation){
+function trackTicketAnimation(animation: Animation) {
   activeTicketAnimations.add(animation);
-  void animation.finished.catch(()=>undefined).finally(()=>{activeTicketAnimations.delete(animation)});
+  void animation.finished
+    .catch(() => undefined)
+    .finally(() => {
+      activeTicketAnimations.delete(animation);
+    });
   return animation;
 }
 
 /** Resolves after every ticket animation that is currently running has settled. */
-export async function waitForTicketMotionSettled(){
-  while(activeTicketAnimations.size)await Promise.all([...activeTicketAnimations].map(animation=>animation.finished.catch(()=>undefined)));
+export async function waitForTicketMotionSettled() {
+  while (activeTicketAnimations.size)
+    await Promise.all([...activeTicketAnimations].map((animation) => animation.finished.catch(() => undefined)));
 }
 
-function motionScope(root:ParentNode){const workspace=root.querySelector<HTMLElement>('.app-shell__workspace'),collection=workspace?.querySelector<HTMLElement>('[data-component="ticket-list"], [data-component="ticket-board"]');return`${workspace?.dataset.presentation??''}:${collection?.dataset.component??''}`}
-function scopedMotionScope(root:ParentNode,collectionKey:string){const scope=motionScope(root);return collectionKey?`${collectionKey}:${scope}`:scope}
-function motionContainers(root:ParentNode){return [...root.querySelectorAll<HTMLElement>('[data-component="ticket-list-row-container"]')].filter(container=>Boolean(ticketVisual(container)?.dataset.ticketSlug))}
-function ticketVisual(container:HTMLElement){return container.querySelector<HTMLElement>(':scope > [data-component="ticket-list-row"][data-ticket-slug]')}
-function parentKey(container:HTMLElement){return container.closest<HTMLElement>('[data-column-id]')?.dataset.columnId??container.closest<HTMLElement>('[data-component="ticket-list"]')?.dataset.component??''}
-function currentRow(container:HTMLElement):TicketMotionRow|undefined{
-  const visual=ticketVisual(container);
-  if(!visual)return undefined;
-  return{rect:container.getBoundingClientRect(),parent:parentKey(container),container,visual,borderRadius:container.ownerDocument.defaultView?.getComputedStyle(visual).borderRadius??''};
+function motionScope(root: ParentNode) {
+  const workspace = root.querySelector<HTMLElement>('.app-shell__workspace'),
+    collection = workspace?.querySelector<HTMLElement>(
+      '[data-component="ticket-list"], [data-component="ticket-board"]',
+    );
+  return `${workspace?.dataset.presentation ?? ''}:${collection?.dataset.component ?? ''}`;
+}
+function scopedMotionScope(root: ParentNode, collectionKey: string) {
+  const scope = motionScope(root);
+  return collectionKey ? `${collectionKey}:${scope}` : scope;
+}
+function motionContainers(root: ParentNode) {
+  return [...root.querySelectorAll<HTMLElement>('[data-component="ticket-list-row-container"]')].filter((container) =>
+    Boolean(ticketVisual(container)?.dataset.ticketSlug),
+  );
+}
+function ticketVisual(container: HTMLElement) {
+  return container.querySelector<HTMLElement>(':scope > [data-component="ticket-list-row"][data-ticket-slug]');
+}
+function parentKey(container: HTMLElement) {
+  return (
+    container.closest<HTMLElement>('[data-column-id]')?.dataset.columnId ??
+    container.closest<HTMLElement>('[data-component="ticket-list"]')?.dataset.component ??
+    ''
+  );
+}
+function currentRow(container: HTMLElement): TicketMotionRow | undefined {
+  const visual = ticketVisual(container);
+  if (!visual) return undefined;
+  return {
+    rect: container.getBoundingClientRect(),
+    parent: parentKey(container),
+    container,
+    visual,
+    borderRadius: container.ownerDocument.defaultView?.getComputedStyle(visual).borderRadius ?? '',
+  };
 }
 
-export function captureTicketMotion(root:ParentNode,collectionKey=''):TicketMotionSnapshot{
-  const rows=new Map<string,TicketMotionRow>();
-  for(const container of motionContainers(root)){const row=currentRow(container),slug=row?.visual.dataset.ticketSlug;if(row&&slug)rows.set(slug,row)}
-  return{scope:scopedMotionScope(root,collectionKey),rows};
-}
-
-export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches,collectionKey=''){
-  if(reduceMotion||before.scope!==scopedMotionScope(root,collectionKey))return;
-  const after=new Map<string,TicketMotionRow>();
-  for(const container of motionContainers(root)){const row=currentRow(container),slug=row?.visual.dataset.ticketSlug;if(row&&slug)after.set(slug,row)}
-  const removed=[...before.rows].filter(([slug])=>!after.has(slug)),incoming=[...after].filter(([slug])=>!before.rows.has(slug)),removedParents=new Set(removed.map(([,row])=>row.parent));
-  const layoutMotion=new Map<string,{current:TicketMotionRow;previous:TicketMotionRow;x:number;y:number;movedColumn:boolean}>();
-  for(const [slug,previous] of before.rows){
-    const current=after.get(slug);
-    if(!current)continue;
-    const x=previous.rect.left-current.rect.left,y=previous.rect.top-current.rect.top;
-    if(Math.abs(x)<.5&&Math.abs(y)<.5)continue;
-    layoutMotion.set(slug,{current,previous,x,y,movedColumn:previous.parent!==current.parent});
+export function captureTicketMotion(root: ParentNode, collectionKey = ''): TicketMotionSnapshot {
+  const rows = new Map<string, TicketMotionRow>();
+  for (const container of motionContainers(root)) {
+    const row = currentRow(container),
+      slug = row?.visual.dataset.ticketSlug;
+    if (row && slug) rows.set(slug, row);
   }
-  const crossColumn=[...layoutMotion.values()].filter(item=>item.movedColumn);
-  if(removed.length===0&&incoming.length===0&&crossColumn.length===0)return;
-  const changedParents=new Set([...removedParents,...incoming.map(([,row])=>row.parent),...crossColumn.flatMap(item=>[item.previous.parent,item.current.parent])]);
-  for(const [slug,previous] of removed)fadeRemovedTicket(slug,previous);
-  for(const {current,previous,x,y,movedColumn} of layoutMotion.values()){
-    if(movedColumn){animateMovedTicket(current,x,y);continue}
-    if(!changedParents.has(previous.parent)||Math.abs(y)<.5)continue;
-    animateLayout(current.container,y,removedParents.has(previous.parent)?FADE_DURATION:0);
+  return { scope: scopedMotionScope(root, collectionKey), rows };
+}
+
+export function animateTicketMotion(
+  before: TicketMotionSnapshot,
+  root: ParentNode,
+  reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches,
+  collectionKey = '',
+) {
+  if (reduceMotion || before.scope !== scopedMotionScope(root, collectionKey)) return;
+  const after = new Map<string, TicketMotionRow>();
+  for (const container of motionContainers(root)) {
+    const row = currentRow(container),
+      slug = row?.visual.dataset.ticketSlug;
+    if (row && slug) after.set(slug, row);
   }
-  for(const [slug,row] of incoming){
-    const makesRoom=[...layoutMotion.values()].some(item=>!item.movedColumn&&Math.abs(item.y)>=.5&&item.current.parent===row.parent);
-    fadeIncomingTicket(slug,row,makesRoom?LAYOUT_DURATION:0);
+  const removed = [...before.rows].filter(([slug]) => !after.has(slug)),
+    incoming = [...after].filter(([slug]) => !before.rows.has(slug)),
+    removedParents = new Set(removed.map(([, row]) => row.parent));
+  const layoutMotion = new Map<
+    string,
+    { current: TicketMotionRow; previous: TicketMotionRow; x: number; y: number; movedColumn: boolean }
+  >();
+  for (const [slug, previous] of before.rows) {
+    const current = after.get(slug);
+    if (!current) continue;
+    const x = previous.rect.left - current.rect.left,
+      y = previous.rect.top - current.rect.top;
+    if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) continue;
+    layoutMotion.set(slug, { current, previous, x, y, movedColumn: previous.parent !== current.parent });
+  }
+  const crossColumn = [...layoutMotion.values()].filter((item) => item.movedColumn);
+  if (removed.length === 0 && incoming.length === 0 && crossColumn.length === 0) return;
+  const changedParents = new Set([
+    ...removedParents,
+    ...incoming.map(([, row]) => row.parent),
+    ...crossColumn.flatMap((item) => [item.previous.parent, item.current.parent]),
+  ]);
+  for (const [slug, previous] of removed) fadeRemovedTicket(slug, previous);
+  for (const { current, previous, x, y, movedColumn } of layoutMotion.values()) {
+    if (movedColumn) {
+      animateMovedTicket(current, x, y);
+      continue;
+    }
+    if (!changedParents.has(previous.parent) || Math.abs(y) < 0.5) continue;
+    animateLayout(current.container, y, removedParents.has(previous.parent) ? FADE_DURATION : 0);
+  }
+  for (const [slug, row] of incoming) {
+    const makesRoom = [...layoutMotion.values()].some(
+      (item) => !item.movedColumn && Math.abs(item.y) >= 0.5 && item.current.parent === row.parent,
+    );
+    fadeIncomingTicket(slug, row, makesRoom ? LAYOUT_DURATION : 0);
   }
 }
 
-function animateLayout(container:HTMLElement,y:number,delay:number){
+function animateLayout(container: HTMLElement, y: number, delay: number) {
   activeLayoutAnimations.get(container)?.cancel();
-  const animation=trackTicketAnimation(container.animate([{transform:`translate(0px, ${y}px)`},{transform:'translate(0, 0)'}],{delay,duration:LAYOUT_DURATION,easing:MOTION_EASING,fill:'backwards'}));
-  activeLayoutAnimations.set(container,animation);
-  animation.finished.finally(()=>{if(activeLayoutAnimations.get(container)===animation)activeLayoutAnimations.delete(container)}).catch(()=>undefined);
+  const animation = trackTicketAnimation(
+    container.animate([{ transform: `translate(0px, ${y}px)` }, { transform: 'translate(0, 0)' }], {
+      delay,
+      duration: LAYOUT_DURATION,
+      easing: MOTION_EASING,
+      fill: 'backwards',
+    }),
+  );
+  activeLayoutAnimations.set(container, animation);
+  animation.finished
+    .finally(() => {
+      if (activeLayoutAnimations.get(container) === animation) activeLayoutAnimations.delete(container);
+    })
+    .catch(() => undefined);
 }
 
-function fadeRemovedTicket(slug:string,previous:TicketMotionRow){
-  if(hasGhost(previous.container.ownerDocument,'outgoing',slug))return;
-  const ghost=previous.container.cloneNode(true) as HTMLElement;
-  prepareGhost(ghost,slug,'outgoing',previous.rect,previous.borderRadius);appendGhost(previous.container.ownerDocument,ghost,previous.rect);
-  removeAfter(trackTicketAnimation(ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:FADE_DURATION,easing:'ease-in'})),ghost);
+function fadeRemovedTicket(slug: string, previous: TicketMotionRow) {
+  if (hasGhost(previous.container.ownerDocument, 'outgoing', slug)) return;
+  const ghost = previous.container.cloneNode(true) as HTMLElement;
+  prepareGhost(ghost, slug, 'outgoing', previous.rect, previous.borderRadius);
+  appendGhost(previous.container.ownerDocument, ghost, previous.rect);
+  removeAfter(
+    trackTicketAnimation(
+      ghost.animate(
+        [
+          { opacity: 1, transform: 'scale(1)' },
+          { opacity: 0, transform: 'scale(.985)' },
+        ],
+        { duration: FADE_DURATION, easing: 'ease-in' },
+      ),
+    ),
+    ghost,
+  );
 }
 
-function animateMovedTicket(current:TicketMotionRow,x:number,y:number){
-  const slug=current.visual.dataset.ticketSlug??'';
-  if(hasGhost(current.container.ownerDocument,'move',slug))return;
-  const ghost=current.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(current.container,slug);
-  prepareGhost(ghost,slug,'move',current.rect,current.borderRadius);appendGhost(current.container.ownerDocument,ghost,current.rect);
-  const animation=trackTicketAnimation(ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:TICKET_MOTION_LAYER},{transform:'translate(0, 0)',zIndex:TICKET_MOTION_LAYER}],{duration:LAYOUT_DURATION,easing:MOTION_EASING}));
-  animation.finished.finally(()=>{removeGhost(ghost);hideRule.remove();current.container.style.visibility=visibility}).catch(()=>{removeGhost(ghost);hideRule.remove();current.container.style.visibility=visibility});
+function animateMovedTicket(current: TicketMotionRow, x: number, y: number) {
+  const slug = current.visual.dataset.ticketSlug ?? '';
+  if (hasGhost(current.container.ownerDocument, 'move', slug)) return;
+  const ghost = current.container.cloneNode(true) as HTMLElement,
+    { visibility, hideRule } = hideRealTicket(current.container, slug);
+  prepareGhost(ghost, slug, 'move', current.rect, current.borderRadius);
+  appendGhost(current.container.ownerDocument, ghost, current.rect);
+  const animation = trackTicketAnimation(
+    ghost.animate(
+      [
+        { transform: `translate(${x}px, ${y}px)`, zIndex: TICKET_MOTION_LAYER },
+        { transform: 'translate(0, 0)', zIndex: TICKET_MOTION_LAYER },
+      ],
+      { duration: LAYOUT_DURATION, easing: MOTION_EASING },
+    ),
+  );
+  animation.finished
+    .finally(() => {
+      removeGhost(ghost);
+      hideRule.remove();
+      current.container.style.visibility = visibility;
+    })
+    .catch(() => {
+      removeGhost(ghost);
+      hideRule.remove();
+      current.container.style.visibility = visibility;
+    });
 }
 
-function fadeIncomingTicket(slug:string,row:TicketMotionRow,delay:number){
-  if(hasGhost(row.container.ownerDocument,'incoming',slug))return;
-  const ghost=row.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(row.container,slug);
-  prepareGhost(ghost,slug,'incoming',row.rect,row.borderRadius);appendGhost(row.container.ownerDocument,ghost,row.rect);
-  const stopTracking=trackTicketPosition(row.container.ownerDocument,ghost,slug);
-  const animation=trackTicketAnimation(ghost.animate([{opacity:0},{opacity:1}],{delay,duration:FADE_DURATION,easing:'ease-out',fill:'backwards'}));
-  animation.finished.finally(()=>{stopTracking();removeGhost(ghost);hideRule.remove();row.container.style.visibility=visibility}).catch(()=>{stopTracking();removeGhost(ghost);hideRule.remove();row.container.style.visibility=visibility});
+function fadeIncomingTicket(slug: string, row: TicketMotionRow, delay: number) {
+  if (hasGhost(row.container.ownerDocument, 'incoming', slug)) return;
+  const ghost = row.container.cloneNode(true) as HTMLElement,
+    { visibility, hideRule } = hideRealTicket(row.container, slug);
+  prepareGhost(ghost, slug, 'incoming', row.rect, row.borderRadius);
+  appendGhost(row.container.ownerDocument, ghost, row.rect);
+  const stopTracking = trackTicketPosition(row.container.ownerDocument, ghost, slug);
+  const animation = trackTicketAnimation(
+    ghost.animate([{ opacity: 0 }, { opacity: 1 }], {
+      delay,
+      duration: FADE_DURATION,
+      easing: 'ease-out',
+      fill: 'backwards',
+    }),
+  );
+  animation.finished
+    .finally(() => {
+      stopTracking();
+      removeGhost(ghost);
+      hideRule.remove();
+      row.container.style.visibility = visibility;
+    })
+    .catch(() => {
+      stopTracking();
+      removeGhost(ghost);
+      hideRule.remove();
+      row.container.style.visibility = visibility;
+    });
 }
 
-function hideRealTicket(container:HTMLElement,slug:string){
-  const visibility=container.style.visibility,hideRule=container.ownerDocument.createElement('style'),escaped=container.ownerDocument.defaultView?.CSS.escape(slug)??slug;
-  hideRule.dataset.ticketMotionHide=slug;hideRule.textContent=`[data-component="ticket-list-row-container"]:has(> [data-component="ticket-list-row"][data-ticket-slug="${escaped}"]){visibility:hidden!important}`;container.ownerDocument.head.append(hideRule);container.style.visibility='hidden';
-  return{visibility,hideRule};
+function hideRealTicket(container: HTMLElement, slug: string) {
+  const visibility = container.style.visibility,
+    hideRule = container.ownerDocument.createElement('style'),
+    escaped = container.ownerDocument.defaultView?.CSS.escape(slug) ?? slug;
+  hideRule.dataset.ticketMotionHide = slug;
+  hideRule.textContent = `[data-component="ticket-list-row-container"]:has(> [data-component="ticket-list-row"][data-ticket-slug="${escaped}"]){visibility:hidden!important}`;
+  container.ownerDocument.head.append(hideRule);
+  container.style.visibility = 'hidden';
+  return { visibility, hideRule };
 }
 
-function prepareGhost(ghost:HTMLElement,slug:string,kind:'move'|'incoming'|'outgoing',rect:DOMRect,borderRadius:string){
-  ghost.ariaHidden='true';ghost.inert=true;ghost.dataset.ticketMotionGhost=kind;ghost.dataset.ticketMotionSlug=slug;
+function prepareGhost(
+  ghost: HTMLElement,
+  slug: string,
+  kind: 'move' | 'incoming' | 'outgoing',
+  rect: DOMRect,
+  borderRadius: string,
+) {
+  ghost.ariaHidden = 'true';
+  ghost.inert = true;
+  ghost.dataset.ticketMotionGhost = kind;
+  ghost.dataset.ticketMotionSlug = slug;
   isolateGhostText(ghost);
-  for(const element of [ghost,...ghost.querySelectorAll<HTMLElement>('*')]){
-    delete element.dataset.ticketSlug;delete element.dataset.component;delete element.dataset.action;delete element.dataset.attachmentDropTarget;delete element.dataset.key;
-    element.removeAttribute('role');element.removeAttribute('tabindex');element.removeAttribute('aria-selected');element.removeAttribute('aria-label');element.removeAttribute('draggable');element.removeAttribute('id');
+  for (const element of [ghost, ...ghost.querySelectorAll<HTMLElement>('*')]) {
+    delete element.dataset.ticketSlug;
+    delete element.dataset.component;
+    delete element.dataset.action;
+    delete element.dataset.attachmentDropTarget;
+    delete element.dataset.key;
+    element.removeAttribute('role');
+    element.removeAttribute('tabindex');
+    element.removeAttribute('aria-selected');
+    element.removeAttribute('aria-label');
+    element.removeAttribute('draggable');
+    element.removeAttribute('id');
   }
-  const visual=ghost.querySelector<HTMLElement>('.ticket-list-row');if(visual&&borderRadius)visual.style.borderRadius=borderRadius;
-  ghost.style.cssText=`position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;will-change:transform,opacity`;
+  const visual = ghost.querySelector<HTMLElement>('.ticket-list-row');
+  if (visual && borderRadius) visual.style.borderRadius = borderRadius;
+  ghost.style.cssText = `position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;will-change:transform,opacity`;
 }
 
-function isolateGhostText(ghost:HTMLElement){
-  const createWalker=(ghost.ownerDocument as unknown as {createTreeWalker?:Document['createTreeWalker']}).createTreeWalker?.bind(ghost.ownerDocument);
-  if(createWalker){
-    const walker=createWalker(ghost,NodeFilter.SHOW_TEXT),nodes:Text[]=[];let node=walker.nextNode();
-    while(node){if(node.textContent?.trim())nodes.push(node as Text);node=walker.nextNode()}
-    for(const textNode of nodes){const visualText=ghost.ownerDocument.createElement('span');visualText.dataset.ticketMotionVisualText=textNode.data;textNode.replaceWith(visualText)}
-  }else for(const element of ghost.querySelectorAll<HTMLElement>('*'))if(element.childElementCount===0&&element.textContent){element.dataset.ticketMotionVisualText=element.textContent;element.textContent=''}
-  const style=ghost.ownerDocument.createElement('style');style.textContent='[data-ticket-motion-ghost] [data-ticket-motion-visual-text]::before{content:attr(data-ticket-motion-visual-text)}';ghost.prepend(style);
+function isolateGhostText(ghost: HTMLElement) {
+  const createWalker = (
+    ghost.ownerDocument as unknown as { createTreeWalker?: Document['createTreeWalker'] }
+  ).createTreeWalker?.bind(ghost.ownerDocument);
+  if (createWalker) {
+    const walker = createWalker(ghost, NodeFilter.SHOW_TEXT),
+      nodes: Text[] = [];
+    let node = walker.nextNode();
+    while (node) {
+      if (node.textContent?.trim()) nodes.push(node as Text);
+      node = walker.nextNode();
+    }
+    for (const textNode of nodes) {
+      const visualText = ghost.ownerDocument.createElement('span');
+      visualText.dataset.ticketMotionVisualText = textNode.data;
+      textNode.replaceWith(visualText);
+    }
+  } else
+    for (const element of ghost.querySelectorAll<HTMLElement>('*'))
+      if (element.childElementCount === 0 && element.textContent) {
+        element.dataset.ticketMotionVisualText = element.textContent;
+        element.textContent = '';
+      }
+  const style = ghost.ownerDocument.createElement('style');
+  style.textContent =
+    '[data-ticket-motion-ghost] [data-ticket-motion-visual-text]::before{content:attr(data-ticket-motion-visual-text)}';
+  ghost.prepend(style);
 }
 
-function hasGhost(document:Document,kind:string,slug:string){return[...document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]')].some(existing=>existing.dataset.ticketMotionGhost===kind&&existing.dataset.ticketMotionSlug===slug)}
-
-function trackTicketPosition(document:Document,ghost:HTMLElement,slug:string){
-  const view=document.defaultView;
-  if(!view?.requestAnimationFrame)return()=>undefined;
-  let frame=0;
-  const update=()=>{const visual=[...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]')].find(candidate=>candidate.dataset.ticketSlug===slug),container=visual?.closest<HTMLElement>('[data-component="ticket-list-row-container"]');if(container){placeGhost(ghost,container.getBoundingClientRect())}frame=view.requestAnimationFrame(update)};
-  frame=view.requestAnimationFrame(update);return()=>{view.cancelAnimationFrame(frame)};
+function hasGhost(document: Document, kind: string, slug: string) {
+  return [...document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]')].some(
+    (existing) => existing.dataset.ticketMotionGhost === kind && existing.dataset.ticketMotionSlug === slug,
+  );
 }
 
-function appendGhost(document:Document,ghost:HTMLElement,rect:DOMRect){
-  for(const existing of document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]'))if(existing.dataset.ticketMotionGhost===ghost.dataset.ticketMotionGhost&&existing.dataset.ticketMotionSlug===ghost.dataset.ticketMotionSlug)removeGhost(existing);
-  const workspace=document.querySelector<HTMLElement>('.app-shell__workspace');
-  if(!workspace){document.body.append(ghost);return}
-  const workspaceBounds=workspace.getBoundingClientRect(),drawer=document.querySelector<HTMLElement>('[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),drawerTop=drawer?.getBoundingClientRect().top??workspaceBounds.bottom,bounds={left:workspaceBounds.left,top:workspaceBounds.top,width:workspaceBounds.width,height:Math.max(0,Math.min(workspaceBounds.bottom,drawerTop)-workspaceBounds.top)},layer=document.createElement('div');layer.dataset.ticketMotionLayer='';layer.ariaHidden='true';layer.style.cssText=`position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;overflow:hidden;left:${bounds.left}px;top:${bounds.top}px;width:${bounds.width}px;height:${bounds.height}px`;layer.append(ghost);document.body.append(layer);placeGhost(ghost,rect);
+function trackTicketPosition(document: Document, ghost: HTMLElement, slug: string) {
+  const view = document.defaultView;
+  if (!view?.requestAnimationFrame) return () => undefined;
+  let frame = 0;
+  const update = () => {
+    const visual = [
+        ...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]'),
+      ].find((candidate) => candidate.dataset.ticketSlug === slug),
+      container = visual?.closest<HTMLElement>('[data-component="ticket-list-row-container"]');
+    if (container) {
+      placeGhost(ghost, container.getBoundingClientRect());
+    }
+    frame = view.requestAnimationFrame(update);
+  };
+  frame = view.requestAnimationFrame(update);
+  return () => {
+    view.cancelAnimationFrame(frame);
+  };
 }
 
-function placeGhost(ghost:HTMLElement,rect:DOMRect){const layer=ghost.parentElement?.dataset.ticketMotionLayer!==undefined?ghost.parentElement:undefined,bounds=layer?.getBoundingClientRect();ghost.style.position=bounds?'absolute':'fixed';ghost.style.left=`${rect.left-(bounds?.left??0)}px`;ghost.style.top=`${rect.top-(bounds?.top??0)}px`;ghost.style.width=`${rect.width}px`;ghost.style.height=`${rect.height}px`}
-function removeGhost(ghost:HTMLElement){const layer=ghost.parentElement?.dataset.ticketMotionLayer!==undefined?ghost.parentElement:undefined;ghost.remove();layer?.remove()}
-function removeAfter(animation:Animation,element:HTMLElement){animation.finished.finally(()=>{removeGhost(element)}).catch(()=>{removeGhost(element)})}
+function appendGhost(document: Document, ghost: HTMLElement, rect: DOMRect) {
+  for (const existing of document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]'))
+    if (
+      existing.dataset.ticketMotionGhost === ghost.dataset.ticketMotionGhost &&
+      existing.dataset.ticketMotionSlug === ghost.dataset.ticketMotionSlug
+    )
+      removeGhost(existing);
+  const workspace = document.querySelector<HTMLElement>('.app-shell__workspace');
+  if (!workspace) {
+    document.body.append(ghost);
+    return;
+  }
+  const workspaceBounds = workspace.getBoundingClientRect(),
+    drawer = document.querySelector<HTMLElement>('[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),
+    drawerTop = drawer?.getBoundingClientRect().top ?? workspaceBounds.bottom,
+    bounds = {
+      left: workspaceBounds.left,
+      top: workspaceBounds.top,
+      width: workspaceBounds.width,
+      height: Math.max(0, Math.min(workspaceBounds.bottom, drawerTop) - workspaceBounds.top),
+    },
+    layer = document.createElement('div');
+  layer.dataset.ticketMotionLayer = '';
+  layer.ariaHidden = 'true';
+  layer.style.cssText = `position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;overflow:hidden;left:${bounds.left}px;top:${bounds.top}px;width:${bounds.width}px;height:${bounds.height}px`;
+  layer.append(ghost);
+  document.body.append(layer);
+  placeGhost(ghost, rect);
+}
+
+function placeGhost(ghost: HTMLElement, rect: DOMRect) {
+  const layer = ghost.parentElement?.dataset.ticketMotionLayer !== undefined ? ghost.parentElement : undefined,
+    bounds = layer?.getBoundingClientRect();
+  ghost.style.position = bounds ? 'absolute' : 'fixed';
+  ghost.style.left = `${rect.left - (bounds?.left ?? 0)}px`;
+  ghost.style.top = `${rect.top - (bounds?.top ?? 0)}px`;
+  ghost.style.width = `${rect.width}px`;
+  ghost.style.height = `${rect.height}px`;
+}
+function removeGhost(ghost: HTMLElement) {
+  const layer = ghost.parentElement?.dataset.ticketMotionLayer !== undefined ? ghost.parentElement : undefined;
+  ghost.remove();
+  layer?.remove();
+}
+function removeAfter(animation: Animation, element: HTMLElement) {
+  animation.finished
+    .finally(() => {
+      removeGhost(element);
+    })
+    .catch(() => {
+      removeGhost(element);
+    });
+}

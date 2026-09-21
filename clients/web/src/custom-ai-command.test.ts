@@ -15,7 +15,9 @@ const connection = (value: Partial<ToolConnection> & Pick<ToolConnection, 'id'>)
 
 describe('custom AI commands', () => {
   it('becomes an urgent Up Next task that preserves the configured prompt', () => {
-    expect(customAiCommandTicket({id:'review',title:' Review changes ',kind:'ai',prompt:' Inspect the diff '})).toEqual({
+    expect(
+      customAiCommandTicket({ id: 'review', title: ' Review changes ', kind: 'ai', prompt: ' Inspect the diff ' }),
+    ).toEqual({
       title: 'Review changes',
       details: 'Inspect the diff',
       category: 'task',
@@ -27,21 +29,21 @@ describe('custom AI commands', () => {
 
   it('prefers an idle sendable main connection for the configured tool', () => {
     const connections = [
-      connection({id:'busy-main',busy:true}),
-      connection({id:'worker',role:'worker'}),
-      connection({id:'claude-main',tool:'Claude'}),
-      connection({id:'codex-main'}),
+      connection({ id: 'busy-main', busy: true }),
+      connection({ id: 'worker', role: 'worker' }),
+      connection({ id: 'claude-main', tool: 'Claude' }),
+      connection({ id: 'codex-main' }),
     ];
-    expect(customAiCommandSignalConnection(connections,'CODEX','claude')?.id).toBe('codex-main');
-    expect(customAiCommandSignalConnection(connections,undefined,'claude')?.id).toBe('claude-main');
+    expect(customAiCommandSignalConnection(connections, 'CODEX', 'claude')?.id).toBe('codex-main');
+    expect(customAiCommandSignalConnection(connections, undefined, 'claude')?.id).toBe('claude-main');
   });
 
   it('does not signal a busy, read-only, or mismatched connection', () => {
     const connections = [
-      connection({id:'busy',busy:true}),
-      connection({id:'readonly',actions:['interrupt']}),
-      connection({id:'claude',tool:'claude'}),
+      connection({ id: 'busy', busy: true }),
+      connection({ id: 'readonly', actions: ['interrupt'] }),
+      connection({ id: 'claude', tool: 'claude' }),
     ];
-    expect(customAiCommandSignalConnection(connections,'codex','codex')).toBeUndefined();
+    expect(customAiCommandSignalConnection(connections, 'codex', 'codex')).toBeUndefined();
   });
 });

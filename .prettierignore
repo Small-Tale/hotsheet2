@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+**/target
+/.git
+/.agents
+/.claude
+/.codex
+/.hotsheet
+/.hotsheet2
+/test-projects
+**/.claude
+**/tests/fixtures
+/clients/web/ai/component-catalog-extension.json

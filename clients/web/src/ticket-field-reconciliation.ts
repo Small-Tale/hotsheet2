@@ -46,7 +46,7 @@ export function reconcileActiveDraft(base: string, draft: string, remote: string
 }
 
 function ticketField(ticket: FullTicket, field: string, noteId?: string): unknown {
-  if (field === 'note') return ticket.notes.find(note => note.id === noteId)?.text ?? '';
+  if (field === 'note') return ticket.notes.find((note) => note.id === noteId)?.text ?? '';
   return ticket[field as keyof FullTicket];
 }
 
@@ -54,11 +54,17 @@ function ticketField(ticket: FullTicket, field: string, noteId?: string): unknow
  * Compares only fields in a local patch. Whole-ticket token drift caused by unrelated
  * remote changes is safe to retry; a divergent change to the same field is surfaced.
  */
-export function reconcileTicketPatch(base: FullTicket, remote: FullTicket, patch: TicketPatch): { retry: TicketPatch; conflicts: TicketFieldConflict[] } {
+export function reconcileTicketPatch(
+  base: FullTicket,
+  remote: FullTicket,
+  patch: TicketPatch,
+): { retry: TicketPatch; conflicts: TicketFieldConflict[] } {
   const retry: TicketPatch = {};
   const conflicts: TicketFieldConflict[] = [];
   const noteId = typeof patch.note_id === 'string' ? patch.note_id : undefined;
-  const fields = Object.keys(patch).filter(field => field !== 'expected_token' && field !== 'note_id' && field !== 'note_kind' && field !== 'note_summary');
+  const fields = Object.keys(patch).filter(
+    (field) => field !== 'expected_token' && field !== 'note_id' && field !== 'note_kind' && field !== 'note_summary',
+  );
   for (const field of fields) {
     const logicalField = field === 'note' && noteId ? 'note' : field;
     const baseValue = ticketField(base, logicalField, noteId);
@@ -72,7 +78,7 @@ export function reconcileTicketPatch(base: FullTicket, remote: FullTicket, patch
     conflicts.push({
       key: logicalField === 'note' ? `note:${noteId}` : logicalField,
       field: logicalField,
-      label: logicalField === 'note' ? 'Note' : labels[logicalField] ?? logicalField,
+      label: logicalField === 'note' ? 'Note' : (labels[logicalField] ?? logicalField),
       base: display(baseValue),
       mine: display(localValue),
       theirs: display(remoteValue),

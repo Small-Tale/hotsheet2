@@ -1,40 +1,250 @@
-import {expect,test} from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-test.use({deviceScaleFactor:2,video:'on'});
+test.use({ deviceScaleFactor: 2, video: 'on' });
 
-const capabilities={create:true,update:true,close:true,notes:true,note_edit:true,note_delete:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};
+const capabilities = {
+  create: true,
+  update: true,
+  close: true,
+  notes: true,
+  note_edit: true,
+  note_delete: true,
+  attachments: true,
+  assignment: true,
+  review_requests: true,
+  dependencies: true,
+  up_next: true,
+  close_reasons: true,
+  claims: true,
+  atomic_batch: true,
+  not_working_report: true,
+  offline_mutation: true,
+  history: true,
+  watch: true,
+  provider_idempotency: true,
+  query_fields: [],
+};
 
-test('reveals a restored terminal workspace atomically and separates All Projects',async({page})=>{
-  const completedAt=(daysAgo:number)=>{const value=new Date();value.setHours(12,0,0,0);value.setDate(value.getDate()-daysAgo);return value.toISOString()};
-  const completedRows=(project:string,count:number)=>Array.from({length:count},(_,index)=>({connection_id:'git-local',native_id:`${project}-${index}`,qualified_id:`git-local:${project}-${index}`,id:`${project}-${index}`,slug:`HS2-${project.toUpperCase()}${index}`,title:`${project} completed ${index}`,status:'completed',up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0,completed_at:completedAt(2)}));
-  await page.setViewportSize({width:1440,height:900});
-  await page.addInitScript(()=>{
-    localStorage.setItem('hotsheet.open-projects',JSON.stringify(['/work/demo','/work/other']));
-    localStorage.setItem('hotsheet.workspace.active-project-root.v1','/work/demo');
-    localStorage.setItem('hotsheet.terminals.drawer-open','true');
-    localStorage.setItem('hotsheet.project.demo-checkout.terminal-drawer-selection','demo-shell');
-    localStorage.setItem('hotsheet.project.other-checkout.terminal-drawer-selection','other-shell');
-    class FakeSocket extends EventTarget{
-      static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;readyState=0;binaryType='blob';
-      constructor(public url:string){super();(window as typeof window&{__terminalStartupSockets?:FakeSocket[]}).__terminalStartupSockets??=[];(window as typeof window&{__terminalStartupSockets:FakeSocket[]}).__terminalStartupSockets.push(this);setTimeout(()=>{this.readyState=1;this.dispatchEvent(new Event('open'));this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode('ready % ').buffer}))})}
-      sent:unknown[]=[];
-      send(value:unknown){this.sent.push(value);if(typeof value!=='string')return;try{const resize=JSON.parse(value).resize;if(resize)this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({pty_size:{cols:resize.cols,rows:resize.rows},driven_by:resize.viewer_id})}))}catch{/* terminal input */}}
-      close(){this.readyState=3;this.dispatchEvent(new CloseEvent('close'))}
+test('reveals a restored terminal workspace atomically and separates All Projects', async ({ page }) => {
+  const completedAt = (daysAgo: number) => {
+    const value = new Date();
+    value.setHours(12, 0, 0, 0);
+    value.setDate(value.getDate() - daysAgo);
+    return value.toISOString();
+  };
+  const completedRows = (project: string, count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      connection_id: 'git-local',
+      native_id: `${project}-${index}`,
+      qualified_id: `git-local:${project}-${index}`,
+      id: `${project}-${index}`,
+      slug: `HS2-${project.toUpperCase()}${index}`,
+      title: `${project} completed ${index}`,
+      status: 'completed',
+      up_next: false,
+      feedback_needed: false,
+      tags: [],
+      blocked_by: [],
+      claim_count: 0,
+      completed_at: completedAt(2),
+    }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/demo', '/work/other']));
+    localStorage.setItem('hotsheet.workspace.active-project-root.v1', '/work/demo');
+    localStorage.setItem('hotsheet.terminals.drawer-open', 'true');
+    localStorage.setItem('hotsheet.project.demo-checkout.terminal-drawer-selection', 'demo-shell');
+    localStorage.setItem('hotsheet.project.other-checkout.terminal-drawer-selection', 'other-shell');
+    class FakeSocket extends EventTarget {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+      readyState = 0;
+      binaryType = 'blob';
+      constructor(public url: string) {
+        super();
+        (window as typeof window & { __terminalStartupSockets?: FakeSocket[] }).__terminalStartupSockets ??= [];
+        (window as typeof window & { __terminalStartupSockets: FakeSocket[] }).__terminalStartupSockets.push(this);
+        setTimeout(() => {
+          this.readyState = 1;
+          this.dispatchEvent(new Event('open'));
+          this.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode('ready % ').buffer }));
+        });
+      }
+      sent: unknown[] = [];
+      send(value: unknown) {
+        this.sent.push(value);
+        if (typeof value !== 'string') return;
+        try {
+          const resize = JSON.parse(value).resize;
+          if (resize)
+            this.dispatchEvent(
+              new MessageEvent('message', {
+                data: JSON.stringify({
+                  pty_size: { cols: resize.cols, rows: resize.rows },
+                  driven_by: resize.viewer_id,
+                }),
+              }),
+            );
+        } catch {
+          /* terminal input */
+        }
+      }
+      close() {
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent('close'));
+      }
     }
-    Object.assign(window,{WebSocket:FakeSocket});
+    Object.assign(window, { WebSocket: FakeSocket });
   });
-  await page.route('**/*',async route=>{
-    const request=route.request(),url=new URL(request.url()),path=url.pathname,other=path.includes('other-checkout');
-    if(path==='/__hotsheet/projects/open'){const root=request.postDataJSON().root as string,id=root==='/work/other'?'other-checkout':'demo-checkout';return route.fulfill({status:201,json:{id,root,name:root.split('/').at(-1),stores:[`${root}.hs2`],apiPath:`/__hotsheet/project-api/${id}`}})}
-    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]});
-    if(path.endsWith('/tickets')){await new Promise(resolve=>setTimeout(resolve,700));return route.fulfill({json:completedRows(other?'other':'demo',other?3:2)})}
-    if(path.endsWith('/terminals')){await new Promise(resolve=>setTimeout(resolve,250));return route.fulfill({json:[{id:'demo-shell',alive:true,busy:false,cwd:'/work/demo'},{id:'other-shell',alive:true,busy:false,cwd:'/work/other'}]})}
-    if(path.endsWith('/permissions')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
-    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
-    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:Number(url.searchParams.get('since')??0),events:[],overflow:false}});
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname,
+      other = path.includes('other-checkout');
+    if (path === '/__hotsheet/projects/open') {
+      const root = request.postDataJSON().root as string,
+        id = root === '/work/other' ? 'other-checkout' : 'demo-checkout';
+      return route.fulfill({
+        status: 201,
+        json: {
+          id,
+          root,
+          name: root.split('/').at(-1),
+          stores: [`${root}.hs2`],
+          apiPath: `/__hotsheet/project-api/${id}`,
+        },
+      });
+    }
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (path.endsWith('/tickets')) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      return route.fulfill({ json: completedRows(other ? 'other' : 'demo', other ? 3 : 2) });
+    }
+    if (path.endsWith('/terminals')) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return route.fulfill({
+        json: [
+          { id: 'demo-shell', alive: true, busy: false, cwd: '/work/demo' },
+          { id: 'other-shell', alive: true, busy: false, cwd: '/work/other' },
+        ],
+      });
+    }
+    if (
+      path.endsWith('/permissions') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/ws/poll'))
+      return route.fulfill({
+        json: { cursor: Number(url.searchParams.get('since') ?? 0), events: [], overflow: false },
+      });
     return route.continue();
   });
-  const video=page.video();await page.goto('/?dev-review=false');const restoring=page.locator('[data-component="project-restore-state"]');await expect(restoring).toBeVisible();await page.waitForTimeout(450);await expect(restoring).toBeVisible();await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-rpgs2s-atomic-restore-loading.png',fullPage:true});
-  const shell=page.locator('[data-component="app-shell"]');await expect(shell).toBeVisible({timeout:5_000});await expect(restoring).toHaveCount(0);const drawer=page.locator('[data-component="terminal-drawer"]'),claimsFor=(terminalId:string)=>page.evaluate(id=>(window as typeof window&{__terminalStartupSockets?:Array<{url:string;sent:unknown[]}>}).__terminalStartupSockets?.filter(socket=>socket.url.includes(`/terminals/${id}/`)).flatMap(socket=>socket.sent.flatMap(value=>{if(typeof value!=='string')return[];try{return[JSON.parse(value).resize]}catch{return[]}}))??[],terminalId);await expect(drawer).toBeVisible();await expect(drawer).toHaveAttribute('data-mode','dedicated');await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(1);await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(0);await expect.poll(()=>claimsFor('demo-shell')).not.toEqual([]);expect(await claimsFor('demo-shell')).not.toContainEqual(expect.objectContaining({cols:80,rows:24}));await page.getByRole('tab',{name:/other/}).click();await expect(drawer).toHaveAttribute('data-mode','dedicated');await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(0);await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(1);await expect.poll(()=>claimsFor('other-shell')).not.toEqual([]);expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({cols:80,rows:24}));await page.screenshot({path:'/private/tmp/hs2-a0ykmh-project-switch-dedicated.png',fullPage:true});await page.getByRole('button',{name:'Workspace grid'}).click();const sidebar=page.locator('[data-component="terminal-operations-sidebar"]'),all=sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),summaries=sidebar.locator('[data-component="project-summary"]'),demoSummary=sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),otherSummary=sidebar.locator('[data-project-id="other-checkout"] [data-component="project-summary"]'),dashboard=page.getByRole('region',{name:'Workspace grid'});await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);await expect(dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="demo-checkout"])')).toHaveCount(1);await expect(dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="other-checkout"])')).toHaveCount(1);await expect(sidebar.locator('.terminal-operations-sidebar__group')).toHaveCount(3);await expect(all).toHaveCSS('border-bottom-width','1px');for(const summary of await summaries.all())await expect(summary).toHaveAttribute('data-chart-maximum','5');await expect(all.locator('[data-component="project-summary"]')).toHaveAttribute('data-chart-background','false');await expect(demoSummary).toHaveAttribute('data-chart-background','true');await expect(otherSummary).toHaveAttribute('data-chart-background','true');await expect(all.locator('[data-zero="false"]')).toHaveAttribute('style','--bar-height:100%');await expect(demoSummary.locator('[data-zero="false"]')).toHaveAttribute('style','--bar-height:40%');await expect(otherSummary.locator('[data-zero="false"]')).toHaveAttribute('style','--bar-height:60%');const demoForeground=demoSummary.locator('[data-zero="false"]'),demoBackground=demoSummary.locator('[data-background-zero="false"]');await expect(demoBackground).toHaveAttribute('style','--bar-height:100%');await expect(demoBackground).not.toHaveCSS('background-color',await demoForeground.evaluate(element=>getComputedStyle(element).backgroundColor));const layers=await Promise.all([demoBackground,demoForeground].map(locator=>locator.boundingBox()));expect(layers[0]!.height).toBeGreaterThan(layers[1]!.height);expect(layers[0]!.width).toBeGreaterThan(layers[1]!.width);expect(Math.abs((layers[0]!.y+layers[0]!.height)-(layers[1]!.y+layers[1]!.height))).toBeLessThan(1);await page.screenshot({path:'/private/tmp/hs2-hph6c5-workspace-scale-wide.png',fullPage:true});await page.setViewportSize({width:1024,height:650});await expect(all).toHaveCSS('border-bottom-width','1px');await expect(demoSummary).toHaveAttribute('data-chart-background','true');await page.screenshot({path:'/private/tmp/hs2-hph6c5-workspace-scale-narrow.png',fullPage:true});
-  await page.close();await video?.saveAs('/private/tmp/hs2-rpgs2s-atomic-refresh-after.webm');
+  const video = page.video();
+  await page.goto('/?dev-review=false');
+  const restoring = page.locator('[data-component="project-restore-state"]');
+  await expect(restoring).toBeVisible();
+  await page.waitForTimeout(450);
+  await expect(restoring).toBeVisible();
+  await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-rpgs2s-atomic-restore-loading.png', fullPage: true });
+  const shell = page.locator('[data-component="app-shell"]');
+  await expect(shell).toBeVisible({ timeout: 5_000 });
+  await expect(restoring).toHaveCount(0);
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    claimsFor = (terminalId: string) =>
+      page.evaluate(
+        (id) =>
+          (
+            window as typeof window & { __terminalStartupSockets?: Array<{ url: string; sent: unknown[] }> }
+          ).__terminalStartupSockets
+            ?.filter((socket) => socket.url.includes(`/terminals/${id}/`))
+            .flatMap((socket) =>
+              socket.sent.flatMap((value) => {
+                if (typeof value !== 'string') return [];
+                try {
+                  return [JSON.parse(value).resize];
+                } catch {
+                  return [];
+                }
+              }),
+            ) ?? [],
+        terminalId,
+      );
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(1);
+  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(0);
+  await expect.poll(() => claimsFor('demo-shell')).not.toEqual([]);
+  expect(await claimsFor('demo-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
+  await page.getByRole('tab', { name: /other/ }).click();
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(0);
+  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(1);
+  await expect.poll(() => claimsFor('other-shell')).not.toEqual([]);
+  expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
+  await page.screenshot({ path: '/private/tmp/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const sidebar = page.locator('[data-component="terminal-operations-sidebar"]'),
+    all = sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),
+    summaries = sidebar.locator('[data-component="project-summary"]'),
+    demoSummary = sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),
+    otherSummary = sidebar.locator('[data-project-id="other-checkout"] [data-component="project-summary"]'),
+    dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
+  await expect(
+    dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="demo-checkout"])'),
+  ).toHaveCount(1);
+  await expect(
+    dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="other-checkout"])'),
+  ).toHaveCount(1);
+  await expect(sidebar.locator('.terminal-operations-sidebar__group')).toHaveCount(3);
+  await expect(all).toHaveCSS('border-bottom-width', '1px');
+  for (const summary of await summaries.all()) await expect(summary).toHaveAttribute('data-chart-maximum', '5');
+  await expect(all.locator('[data-component="project-summary"]')).toHaveAttribute('data-chart-background', 'false');
+  await expect(demoSummary).toHaveAttribute('data-chart-background', 'true');
+  await expect(otherSummary).toHaveAttribute('data-chart-background', 'true');
+  await expect(all.locator('[data-zero="false"]')).toHaveAttribute('style', '--bar-height:100%');
+  await expect(demoSummary.locator('[data-zero="false"]')).toHaveAttribute('style', '--bar-height:40%');
+  await expect(otherSummary.locator('[data-zero="false"]')).toHaveAttribute('style', '--bar-height:60%');
+  const demoForeground = demoSummary.locator('[data-zero="false"]'),
+    demoBackground = demoSummary.locator('[data-background-zero="false"]');
+  await expect(demoBackground).toHaveAttribute('style', '--bar-height:100%');
+  await expect(demoBackground).not.toHaveCSS(
+    'background-color',
+    await demoForeground.evaluate((element) => getComputedStyle(element).backgroundColor),
+  );
+  const layers = await Promise.all([demoBackground, demoForeground].map((locator) => locator.boundingBox()));
+  expect(layers[0]!.height).toBeGreaterThan(layers[1]!.height);
+  expect(layers[0]!.width).toBeGreaterThan(layers[1]!.width);
+  expect(Math.abs(layers[0]!.y + layers[0]!.height - (layers[1]!.y + layers[1]!.height))).toBeLessThan(1);
+  await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 650 });
+  await expect(all).toHaveCSS('border-bottom-width', '1px');
+  await expect(demoSummary).toHaveAttribute('data-chart-background', 'true');
+  await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-narrow.png', fullPage: true });
+  await page.close();
+  await video?.saveAs('/private/tmp/hs2-rpgs2s-atomic-refresh-after.webm');
 });

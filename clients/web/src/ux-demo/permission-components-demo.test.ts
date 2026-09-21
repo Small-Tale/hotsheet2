@@ -89,8 +89,12 @@ describe('PermissionRequestCard demo settings', () => {
       alwaysSupported: permissionRequestSettings.alwaysSupported.value,
       explanation: permissionRequestSettings.explanation.value,
     }).toEqual({
-      presentation: 'popup', variant: 'pending', request: 'edit', automation: 'allow',
-      alwaysSupported: true, explanation: true,
+      presentation: 'popup',
+      variant: 'pending',
+      request: 'edit',
+      automation: 'allow',
+      alwaysSupported: true,
+      explanation: true,
     });
   });
 });

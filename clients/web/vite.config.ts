@@ -1,15 +1,17 @@
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
-import { defineConfig,type Plugin,type UserConfig } from 'vite';
+import { defineConfig, type Plugin, type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
 import { devServerRouteExclude } from './src/dev-server-routes';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
 
-export function viteDependencyIsolation(environment:NodeJS.ProcessEnv=process.env):Pick<UserConfig,'cacheDir'|'optimizeDeps'> {
-  const cacheDir=environment.HOTSHEET_VITE_CACHE_DIR;
+export function viteDependencyIsolation(
+  environment: NodeJS.ProcessEnv = process.env,
+): Pick<UserConfig, 'cacheDir' | 'optimizeDeps'> {
+  const cacheDir = environment.HOTSHEET_VITE_CACHE_DIR;
   return {
-    ...(cacheDir?{cacheDir}:{}),
-    ...(environment.HOTSHEET_WEB_STABLE_DEV==='1'?{optimizeDeps:{noDiscovery:true,include:[]}}:{}),
+    ...(cacheDir ? { cacheDir } : {}),
+    ...(environment.HOTSHEET_WEB_STABLE_DEV === '1' ? { optimizeDeps: { noDiscovery: true, include: [] } } : {}),
   };
 }
 
@@ -18,8 +20,8 @@ export function viteDependencyIsolation(environment:NodeJS.ProcessEnv=process.en
  * restart, so HMR gives nothing (HS2-8JV12R). The hot dev server (`npm run dev:hot`) and Playwright
  * keep HMR on.
  */
-export function stableDevHmr(environment:NodeJS.ProcessEnv=process.env):false|undefined {
-  return environment.HOTSHEET_WEB_STABLE_DEV==='1'?false:undefined;
+export function stableDevHmr(environment: NodeJS.ProcessEnv = process.env): false | undefined {
+  return environment.HOTSHEET_WEB_STABLE_DEV === '1' ? false : undefined;
 }
 
 /**
@@ -32,44 +34,55 @@ export function stableDevHmr(environment:NodeJS.ProcessEnv=process.env):false|un
  * code (which the snapshot needs a restart for anyway). Returns `false` in stable-dev, else the
  * default (undefined → the client is injected as usual for `npm run dev:hot` and Playwright).
  */
-export function stableDevInjectClientScript(environment:NodeJS.ProcessEnv=process.env):false|undefined {
-  return environment.HOTSHEET_WEB_STABLE_DEV==='1'?false:undefined;
+export function stableDevInjectClientScript(environment: NodeJS.ProcessEnv = process.env): false | undefined {
+  return environment.HOTSHEET_WEB_STABLE_DEV === '1' ? false : undefined;
 }
 
 /** Remove Vite core's external dev-client tag from index HTML in frozen stable-dev. Hono's
  * `injectClientScript` option controls only Hono-rendered responses; Vite's own index middleware
  * independently injects this tag for `/`, including when `server.hmr` is false (HS2-8JV12R). */
-export function stripStableDevClientTag(html:string,environment:NodeJS.ProcessEnv=process.env):string {
-  if(environment.HOTSHEET_WEB_STABLE_DEV!=='1')return html;
-  return html.replace(/<script\b(?=[^>]*\btype=["']module["'])(?=[^>]*\bsrc=["'][^"']*\/@vite\/client["'])[^>]*><\/script>\s*/giu,'');
+export function stripStableDevClientTag(html: string, environment: NodeJS.ProcessEnv = process.env): string {
+  if (environment.HOTSHEET_WEB_STABLE_DEV !== '1') return html;
+  return html.replace(
+    /<script\b(?=[^>]*\btype=["']module["'])(?=[^>]*\bsrc=["'][^"']*\/@vite\/client["'])[^>]*><\/script>\s*/giu,
+    '',
+  );
 }
 
-export function stableDevClientStripPlugin(environment:NodeJS.ProcessEnv=process.env):Plugin {
+export function stableDevClientStripPlugin(environment: NodeJS.ProcessEnv = process.env): Plugin {
   return {
-    name:'hotsheet-stable-dev-client-strip',
-    configureServer(server){
-      if(environment.HOTSHEET_WEB_STABLE_DEV!=='1')return;
-      server.middlewares.use((request,response,next)=>{
-        if(request.url?.split('?',1)[0]!=='/@vite/client'){next();return}
-        response.statusCode=200;
-        response.setHeader('content-type','text/javascript');
+    name: 'hotsheet-stable-dev-client-strip',
+    configureServer(server) {
+      if (environment.HOTSHEET_WEB_STABLE_DEV !== '1') return;
+      server.middlewares.use((request, response, next) => {
+        if (request.url?.split('?', 1)[0] !== '/@vite/client') {
+          next();
+          return;
+        }
+        response.statusCode = 200;
+        response.setHeader('content-type', 'text/javascript');
         response.end('export * from "/src/stable-vite-client.ts";\n');
       });
     },
-    transformIndexHtml:{order:'post',handler:html=>stripStableDevClientTag(html,environment)},
+    transformIndexHtml: { order: 'post', handler: (html) => stripStableDevClientTag(html, environment) },
   };
 }
 
 export default defineConfig(({ command }) => ({
   ...viteDependencyIsolation(),
-  plugins: command === 'serve'
-    ? [{name:'hotsheet-project-websocket-bridge',configureServer:installProjectWebSocketBridge},devServer({
-        entry: 'src/dev-server.ts',
-        exclude: [devServerRouteExclude, ...defaultOptions.exclude],
-        injectClientScript: stableDevInjectClientScript(),
-      }),stableDevClientStripPlugin()]
-    : [],
-  define:{'import.meta.env.HOTSHEET_WEB_STABLE_DEV':JSON.stringify(process.env.HOTSHEET_WEB_STABLE_DEV==='1')},
+  plugins:
+    command === 'serve'
+      ? [
+          { name: 'hotsheet-project-websocket-bridge', configureServer: installProjectWebSocketBridge },
+          devServer({
+            entry: 'src/dev-server.ts',
+            exclude: [devServerRouteExclude, ...defaultOptions.exclude],
+            injectClientScript: stableDevInjectClientScript(),
+          }),
+          stableDevClientStripPlugin(),
+        ]
+      : [],
+  define: { 'import.meta.env.HOTSHEET_WEB_STABLE_DEV': JSON.stringify(process.env.HOTSHEET_WEB_STABLE_DEV === '1') },
   css: { postcss: { plugins: [remifyCss()] } },
   server: { host: '127.0.0.1', port: 4175, strictPort: true, hmr: stableDevHmr() },
   build: { sourcemap: true },

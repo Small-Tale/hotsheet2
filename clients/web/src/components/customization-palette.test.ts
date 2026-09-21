@@ -4,7 +4,17 @@ import { CUSTOMIZATION_COLORS, customizationContrastColor, resolveCustomizationC
 
 describe('shared HS1 customization palette', () => {
   it('retains the exact ordered custom-command colors', () => {
-    expect(CUSTOMIZATION_COLORS.map(option => option.value)).toEqual(['#e5e7eb', '#3b82f6', '#22c55e', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6b7280']);
+    expect(CUSTOMIZATION_COLORS.map((option) => option.value)).toEqual([
+      '#e5e7eb',
+      '#3b82f6',
+      '#22c55e',
+      '#f97316',
+      '#ef4444',
+      '#8b5cf6',
+      '#ec4899',
+      '#14b8a6',
+      '#6b7280',
+    ]);
   });
 
   it('rejects arbitrary colors and preserves readable neutral contrast', () => {

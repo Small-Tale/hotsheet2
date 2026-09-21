@@ -12,12 +12,15 @@ export function isTicketActivelyWorkedOn(ticket: ClaimState, now = Date.now()): 
 
 export function nextActiveTicketExpiry(tickets: ClaimState[], now = Date.now()): number | undefined {
   const expiries = tickets
-    .filter(ticket => isTicketActivelyWorkedOn(ticket, now))
-    .map(ticket => Date.parse(ticket.claim_lease_expires_at!));
+    .filter((ticket) => isTicketActivelyWorkedOn(ticket, now))
+    .map((ticket) => Date.parse(ticket.claim_lease_expires_at!));
   return expiries.length ? Math.min(...expiries) : undefined;
 }
 
-export function projectTabTicketState(tickets: readonly TicketRow[], now = Date.now()): { upNextCount: number; activeTicketCount: number } {
+export function projectTabTicketState(
+  tickets: readonly TicketRow[],
+  now = Date.now(),
+): { upNextCount: number; activeTicketCount: number } {
   let upNextCount = 0;
   let activeTicketCount = 0;
   for (const ticket of tickets) {

@@ -5,8 +5,7 @@ export type CommandDropPosition = 'before' | 'after';
 
 /** A drag drop target: onto another row (relative position) or into a group's open area. */
 export type CommandDropTarget =
-  | { kind: 'row'; id: string; position: CommandDropPosition }
-  | { kind: 'group'; group: string };
+  { kind: 'row'; id: string; position: CommandDropPosition } | { kind: 'group'; group: string };
 
 /** The normalized group key of a command; blank means ungrouped. */
 export function commandGroupKey(command: CommandDefinition): string {
@@ -27,22 +26,25 @@ export function reorderCommands(
   sourceId: string,
   target: CommandDropTarget,
 ): CommandDefinition[] {
-  const source = commands.find(command => command.id === sourceId);
+  const source = commands.find((command) => command.id === sourceId);
   if (!source) return [...commands];
-  const targetGroup = target.kind === 'row'
-    ? commandGroupKey(commands.find(command => command.id === target.id) ?? source)
-    : target.group;
+  const targetGroup =
+    target.kind === 'row'
+      ? commandGroupKey(commands.find((command) => command.id === target.id) ?? source)
+      : target.group;
   const moved = withGroup(source, targetGroup);
-  const remaining = commands.filter(command => command.id !== sourceId);
+  const remaining = commands.filter((command) => command.id !== sourceId);
   if (target.kind === 'row') {
     if (target.id === sourceId) return [...commands];
-    const index = remaining.findIndex(command => command.id === target.id);
+    const index = remaining.findIndex((command) => command.id === target.id);
     if (index < 0) return [...commands];
     remaining.splice(index + (target.position === 'after' ? 1 : 0), 0, moved);
     return remaining;
   }
   let lastIndex = -1;
-  remaining.forEach((command, index) => { if (commandGroupKey(command) === targetGroup) lastIndex = index; });
+  remaining.forEach((command, index) => {
+    if (commandGroupKey(command) === targetGroup) lastIndex = index;
+  });
   if (lastIndex >= 0) remaining.splice(lastIndex + 1, 0, moved);
   else remaining.push(moved);
   return remaining;
@@ -59,23 +61,26 @@ export function reorderCommandsMultiple(
   target: CommandDropTarget,
 ): CommandDefinition[] {
   const ids = new Set(sourceIds);
-  const moved = commands.filter(command => ids.has(command.id));
+  const moved = commands.filter((command) => ids.has(command.id));
   if (moved.length === 0) return [...commands];
   if (moved.length === 1) return reorderCommands(commands, moved[0].id, target);
-  const targetGroup = target.kind === 'row'
-    ? commandGroupKey(commands.find(command => command.id === target.id) ?? moved[0])
-    : target.group;
-  const regrouped = moved.map(command => withGroup(command, targetGroup));
-  const remaining = commands.filter(command => !ids.has(command.id));
+  const targetGroup =
+    target.kind === 'row'
+      ? commandGroupKey(commands.find((command) => command.id === target.id) ?? moved[0])
+      : target.group;
+  const regrouped = moved.map((command) => withGroup(command, targetGroup));
+  const remaining = commands.filter((command) => !ids.has(command.id));
   if (target.kind === 'row') {
     if (ids.has(target.id)) return [...commands];
-    const index = remaining.findIndex(command => command.id === target.id);
+    const index = remaining.findIndex((command) => command.id === target.id);
     if (index < 0) return [...commands];
     remaining.splice(index + (target.position === 'after' ? 1 : 0), 0, ...regrouped);
     return remaining;
   }
   let lastIndex = -1;
-  remaining.forEach((command, index) => { if (commandGroupKey(command) === targetGroup) lastIndex = index; });
+  remaining.forEach((command, index) => {
+    if (commandGroupKey(command) === targetGroup) lastIndex = index;
+  });
   if (lastIndex >= 0) remaining.splice(lastIndex + 1, 0, ...regrouped);
   else remaining.push(...regrouped);
   return remaining;
@@ -99,11 +104,18 @@ export function commandGroupSections(
   const buckets = new Map<string, CommandDefinition[]>();
   const ensure = (group: string): CommandDefinition[] => {
     let bucket = buckets.get(group);
-    if (!bucket) { bucket = []; buckets.set(group, bucket); if (group !== '') order.push(group); }
+    if (!bucket) {
+      bucket = [];
+      buckets.set(group, bucket);
+      if (group !== '') order.push(group);
+    }
     return bucket;
   };
   for (const command of commands) ensure(commandGroupKey(command)).push(command);
-  for (const group of extraGroups) { const key = group.trim(); if (key) ensure(key); }
+  for (const group of extraGroups) {
+    const key = group.trim();
+    if (key) ensure(key);
+  }
   const sections: CommandGroupSection[] = [];
   const ungrouped = buckets.get('');
   if (ungrouped?.length) sections.push({ group: '', commands: ungrouped });
@@ -112,16 +124,16 @@ export function commandGroupSections(
 }
 
 /** The still-empty groups from `extraGroups` (those with no commands), preserving their order. */
-export function emptyExtraGroups(
-  commands: readonly CommandDefinition[],
-  extraGroups: readonly string[],
-): string[] {
+export function emptyExtraGroups(commands: readonly CommandDefinition[], extraGroups: readonly string[]): string[] {
   const populated = new Set(commands.map(commandGroupKey));
   const seen = new Set<string>();
   const result: string[] = [];
   for (const group of extraGroups) {
     const key = group.trim();
-    if (key && !populated.has(key) && !seen.has(key)) { seen.add(key); result.push(key); }
+    if (key && !populated.has(key) && !seen.has(key)) {
+      seen.add(key);
+      result.push(key);
+    }
   }
   return result;
 }

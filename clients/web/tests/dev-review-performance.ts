@@ -17,7 +17,11 @@ interface Metrics {
   maxPointerMoveMs: number;
 }
 
-export async function measureFeedbackRectangle(page: Page, start: { x: number; y: number }, end: { x: number; y: number }): Promise<FeedbackRectangleMeasurement> {
+export async function measureFeedbackRectangle(
+  page: Page,
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): Promise<FeedbackRectangleMeasurement> {
   const tool = page.locator('.hs-dev-review');
   await tool.getByRole('button', { name: 'Feedback' }).click();
   await page.keyboard.down('Alt');
@@ -34,19 +38,31 @@ export async function measureFeedbackRectangle(page: Page, start: { x: number; y
     const before = { ...root.performanceMetrics };
     const bounds = node.getBoundingClientRect();
     const pointer = { pointerId: 91, pointerType: 'mouse', bubbles: true, cancelable: true, button: 0, buttons: 1 };
-    node.dispatchEvent(new PointerEvent('pointerdown', { ...pointer, clientX: bounds.left + 20, clientY: bounds.top + 20 }));
+    node.dispatchEvent(
+      new PointerEvent('pointerdown', { ...pointer, clientX: bounds.left + 20, clientY: bounds.top + 20 }),
+    );
     const startedAt = performance.now();
     for (let index = 0; index < 240; index += 1) {
-      window.dispatchEvent(new PointerEvent('pointermove', { ...pointer, clientX: bounds.left + 20 + index / 8, clientY: bounds.top + 20 + index / 12 }));
+      window.dispatchEvent(
+        new PointerEvent('pointermove', {
+          ...pointer,
+          clientX: bounds.left + 20 + index / 8,
+          clientY: bounds.top + 20 + index / 12,
+        }),
+      );
     }
-    window.dispatchEvent(new PointerEvent('pointerup', { ...pointer, buttons: 0, clientX: bounds.left + 50, clientY: bounds.top + 40 }));
+    window.dispatchEvent(
+      new PointerEvent('pointerup', { ...pointer, buttons: 0, clientX: bounds.left + 50, clientY: bounds.top + 40 }),
+    );
     return { before, dispatchMs: performance.now() - startedAt };
   });
 
   // Formerly a 350 ms timer started a full-document html2canvas pass here. Waiting
   // past that boundary proves annotation remains idle between gestures.
   await page.waitForTimeout(450);
-  const after = await tool.evaluate(root => ({ ...(root as HTMLElement & { performanceMetrics: Metrics }).performanceMetrics }));
+  const after = await tool.evaluate((root) => ({
+    ...(root as HTMLElement & { performanceMetrics: Metrics }).performanceMetrics,
+  }));
   return {
     dispatchMs: result.dispatchMs,
     pointerMoves: after.pointerMoves - result.before.pointerMoves,

@@ -13,9 +13,18 @@ describe('TicketTagEditor', () => {
   });
 
   it('renders the header-targeted add-tag popover with only unused autocomplete suggestions when editable', () => {
-    const editable = String(TicketTagEditor({ tags: ['client'], suggestions: ['server', 'client'], editable: true, popoverId: 'ticket-tag-sidebar-test' }));
+    const editable = String(
+      TicketTagEditor({
+        tags: ['client'],
+        suggestions: ['server', 'client'],
+        editable: true,
+        popoverId: 'ticket-tag-sidebar-test',
+      }),
+    );
     expect(editable).toContain('with-remove');
-    expect(editable).toContain('data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby="ticket-tag-sidebar-test-title"');
+    expect(editable).toContain(
+      'data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby="ticket-tag-sidebar-test-title"',
+    );
     expect(editable).toContain('name="ticket-tag-input" list="ticket-tag-sidebar-test-suggestions"');
     expect(editable).not.toContain('aria-haspopup="dialog"');
     expect(editable).toContain('<option value="server"');
@@ -33,6 +42,8 @@ describe('TicketTagEditor', () => {
     expect(css).toMatch(/__popover \{[^}]*margin: var\(--kui-space-2xs\) 0 0;[^}]*padding: var\(--kui-space-m\)/);
     expect(css).toMatch(/__popover strong \{[^}]*margin-bottom: var\(--kui-space-m\)/);
     expect(css).toMatch(/__popover label \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/\.ticket-tag-editor__popover \{[^}]*position: fixed;[^}]*position-area: block-end span-inline-end;[^}]*box-shadow: var\(--wa-shadow-l\)/);
+    expect(css).toMatch(
+      /\.ticket-tag-editor__popover \{[^}]*position: fixed;[^}]*position-area: block-end span-inline-end;[^}]*box-shadow: var\(--wa-shadow-l\)/,
+    );
   });
 });

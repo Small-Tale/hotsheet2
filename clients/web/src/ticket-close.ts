@@ -57,7 +57,16 @@ export function parseDuplicateReference(value: string): DuplicateReference | und
 }
 
 function lookupTarget(project: DuplicateLookupProject, ticket: DuplicateLookupTicket): DuplicateTarget {
-  return { id: ticket.id, slug: ticket.slug, title: ticket.title, projectId: project.id, projectName: project.name, connectionId: ticket.connection_id, nativeId: ticket.native_id, qualifiedId: ticket.qualified_id };
+  return {
+    id: ticket.id,
+    slug: ticket.slug,
+    title: ticket.title,
+    projectId: project.id,
+    projectName: project.name,
+    connectionId: ticket.connection_id,
+    nativeId: ticket.native_id,
+    qualifiedId: ticket.qualified_id,
+  };
 }
 
 export async function resolveDuplicateReferenceTarget(
@@ -67,12 +76,13 @@ export async function resolveDuplicateReferenceTarget(
 ): Promise<DuplicateTarget | undefined> {
   const reference = parseDuplicateReference(value);
   if (reference) {
-    const project = projects.find(item => item.id === reference.project_id);
+    const project = projects.find((item) => item.id === reference.project_id);
     if (!project) return undefined;
     return lookupTarget(project, await load(project, `${reference.connection_id}:${reference.native_id}`));
   }
-  const matches = (await Promise.allSettled(projects.map(async project => lookupTarget(project, await load(project, value)))))
-    .flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  const matches = (
+    await Promise.allSettled(projects.map(async (project) => lookupTarget(project, await load(project, value))))
+  ).flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
   return matches.length === 1 ? matches[0] : undefined;
 }
 
@@ -80,7 +90,11 @@ export function duplicateOutcomeLabel(target: DuplicateTarget, sourceProjectId: 
   return `${target.slug}${target.projectId === sourceProjectId ? '' : ` · ${target.projectName}`}`;
 }
 
-export function validateTicketClose(reason: TicketCloseReason, source: DuplicateTarget, target?: DuplicateTarget): string {
+export function validateTicketClose(
+  reason: TicketCloseReason,
+  source: DuplicateTarget,
+  target?: DuplicateTarget,
+): string {
   if (reason !== 'duplicate') return '';
   if (!target) return 'Select the existing ticket that this duplicates.';
   if (duplicateTargetKey(target) === duplicateTargetKey(source)) return 'A ticket cannot be a duplicate of itself.';
@@ -88,5 +102,5 @@ export function validateTicketClose(reason: TicketCloseReason, source: Duplicate
 }
 
 export function ticketCloseReasonLabel(reason?: TicketCloseReason): string | undefined {
-  return TICKET_CLOSE_REASON_CHOICES.find(choice => choice.value === reason)?.label;
+  return TICKET_CLOSE_REASON_CHOICES.find((choice) => choice.value === reason)?.label;
 }

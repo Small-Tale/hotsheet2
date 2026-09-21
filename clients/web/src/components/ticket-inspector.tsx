@@ -8,18 +8,34 @@ import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { ALargeSmall, BookOpen, CircleAlert, CopyX, Info, ListTree, MessageSquareCode, PanelRightClose, Paperclip, Star, X } from 'lucide';
+import {
+  ALargeSmall,
+  BookOpen,
+  CircleAlert,
+  CopyX,
+  Info,
+  ListTree,
+  MessageSquareCode,
+  PanelRightClose,
+  Paperclip,
+  Star,
+  X,
+} from 'lucide';
 
 import type { CodeReview, DuplicateBacklink, TicketCloseReason } from '../api';
-import type {AttachmentReferenceContext} from '../attachment-references';
+import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
 import type { TicketStatus } from './status-badge';
-import { type TicketAttachmentItem,TicketAttachments } from './ticket-attachments';
+import { type TicketAttachmentItem, TicketAttachments } from './ticket-attachments';
 import { TicketCodeReview } from './ticket-code-review';
-import { type DuplicateTargetSummary,TicketDuplicateBacklinks,TicketDuplicateTarget } from './ticket-duplicate-backlinks';
+import {
+  type DuplicateTargetSummary,
+  TicketDuplicateBacklinks,
+  TicketDuplicateTarget,
+} from './ticket-duplicate-backlinks';
 import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInfoPanel } from './ticket-info-panel';
 import type { TicketPriority } from './ticket-row';
@@ -92,33 +108,270 @@ const tabs = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canEditText = canUpdate, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', feedbackNeeded = false, closeReason, duplicateTarget, duplicateBacklinks = [], duplicateBacklinkInaccessibleProjects = [], timelineEntries, attachments, codeReview, codeReviewLoading = false, codeReviewMessage = '', expandedCodeReviewCommits, attachmentsEnabled = true, attachmentMessage = '', attachmentContext,notes, editingNoteId, noteDraft, inlineFeedbackReplies, feedbackChoiceSelections, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', slugPlacement, largeText = false, fieldConflict, fieldConflictResolution = fieldConflict?.mine ?? '' }: TicketInspectorProps) {
-  const star = <>{upNextEligible && <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>}</>;
-  const close = <button type="button" data-dialog={presentation === 'reader' ? 'close' : undefined} data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'} aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}><LucideIcon icon={presentation === 'reader' ? X : PanelRightClose} name={presentation === 'reader' ? 'x' : 'panel-right-close'} /></button>;
-  const actions = presentation === 'reader'
-    ? <>{upNextEligible && <ToolbarControlGroup appearance="borderless" single>{star}</ToolbarControlGroup>}<ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single><button type="button" data-action="toggle-reader-text-size" aria-label={largeText?'Use standard reader text size':'Use large reader text size'} aria-pressed={String(largeText)} title={largeText?'Standard text size':'Large text size'}><LucideIcon icon={ALargeSmall} name="a-large-small" /></button></ToolbarControlGroup><ToolbarControlGroup appearance="borderless" single>{close}</ToolbarControlGroup></>
-    : <ToolbarControlGroup appearance="borderless" label="Ticket actions">{star}<button type="button" data-action="open-ticket-reader" aria-label="Open ticket reader" title="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></button>{close}</ToolbarControlGroup>;
+export function TicketInspector({
+  slug,
+  title,
+  titleEditing = false,
+  titleDraft = title,
+  canUpdate = true,
+  canEditText = canUpdate,
+  canAddNotes = true,
+  canEditNotes = true,
+  canDeleteNotes = true,
+  composingNote = false,
+  composerDraft = '',
+  status,
+  priority,
+  category,
+  tags,
+  tagSuggestions,
+  details,
+  detailsMode,
+  detailsDirty,
+  activeTab = 'info',
+  upNext = false,
+  upNextEligible = status === 'not_started' || status === 'started',
+  feedbackNeeded = false,
+  closeReason,
+  duplicateTarget,
+  duplicateBacklinks = [],
+  duplicateBacklinkInaccessibleProjects = [],
+  timelineEntries,
+  attachments,
+  codeReview,
+  codeReviewLoading = false,
+  codeReviewMessage = '',
+  expandedCodeReviewCommits,
+  attachmentsEnabled = true,
+  attachmentMessage = '',
+  attachmentContext,
+  notes,
+  editingNoteId,
+  noteDraft,
+  inlineFeedbackReplies,
+  feedbackChoiceSelections,
+  blockedReason,
+  blockedReasonEditing,
+  blockedReasonDraft,
+  providerName,
+  updatedLabel,
+  presentation = 'sidebar',
+  slugPlacement,
+  largeText = false,
+  fieldConflict,
+  fieldConflictResolution = fieldConflict?.mine ?? '',
+}: TicketInspectorProps) {
+  const star = (
+    <>
+      {upNextEligible && (
+        <button
+          type="button"
+          class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`}
+          data-action="toggle-inspector-up-next"
+          aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+        >
+          <LucideIcon icon={Star} name="star" />
+        </button>
+      )}
+    </>
+  );
+  const close = (
+    <button
+      type="button"
+      data-dialog={presentation === 'reader' ? 'close' : undefined}
+      data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'}
+      aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}
+    >
+      <LucideIcon
+        icon={presentation === 'reader' ? X : PanelRightClose}
+        name={presentation === 'reader' ? 'x' : 'panel-right-close'}
+      />
+    </button>
+  );
+  const actions =
+    presentation === 'reader' ? (
+      <>
+        {upNextEligible && (
+          <ToolbarControlGroup appearance="borderless" single>
+            {star}
+          </ToolbarControlGroup>
+        )}
+        <ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single>
+          <button
+            type="button"
+            data-action="toggle-reader-text-size"
+            aria-label={largeText ? 'Use standard reader text size' : 'Use large reader text size'}
+            aria-pressed={String(largeText)}
+            title={largeText ? 'Standard text size' : 'Large text size'}
+          >
+            <LucideIcon icon={ALargeSmall} name="a-large-small" />
+          </button>
+        </ToolbarControlGroup>
+        <ToolbarControlGroup appearance="borderless" single>
+          {close}
+        </ToolbarControlGroup>
+      </>
+    ) : (
+      <ToolbarControlGroup appearance="borderless" label="Ticket actions">
+        {star}
+        <button
+          type="button"
+          data-action="open-ticket-reader"
+          aria-label="Open ticket reader"
+          title="Open ticket reader"
+        >
+          <LucideIcon icon={BookOpen} name="book-open" />
+        </button>
+        {close}
+      </ToolbarControlGroup>
+    );
   // The ticket number sits in the leading slot for both the sidebar inspector (HS2-9MCJ2B) and the
   // reader modal (HS2-FZ5HB2); only the terminal rail forces center, because its overlaid back
   // button occupies the leading edge (it passes slugPlacement="center" explicitly).
-  const slugButton = <button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>;
+  const slugButton = (
+    <button
+      type="button"
+      class="ticket-inspector__slug"
+      data-action="copy-ticket-slug"
+      aria-label={`Copy ticket number ${slug}`}
+      title="Copy ticket number"
+    >
+      <ToolbarText text={slug} size="small" />
+    </button>
+  );
   const slugCentered = (slugPlacement ?? 'leading') === 'center';
-  return <aside class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'} data-component="ticket-inspector" data-presentation={presentation} data-large-text={presentation==='reader'?String(largeText):undefined} data-ticket-slug={slug} data-needs-review={String(feedbackNeeded)} data-attachment-drop-target="true" aria-label={`${slug} inspector`}>
-    <header class="ticket-inspector__header">
-      <Toolbar divider={false} {...(slugCentered ? { center: slugButton } : { leading: slugButton })} trailing={actions} />
-      {titleEditing ? <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} /> : <h1 data-action={canUpdate ? 'edit-ticket-title' : undefined} data-editable={String(canUpdate)} tabIndex={canUpdate ? 0 : undefined} title={canUpdate ? 'Double-click to edit title' : undefined}>{title}</h1>}
-    </header>
-    {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
-    {closeReason&&closeReason!=='duplicate'&&<div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}><span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span></div>}
-    {closeReason==='duplicate'&&(duplicateTarget?<TicketDuplicateTarget target={duplicateTarget}/>:<div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate"><LucideIcon icon={CopyX} name="copy-x"/><span>Duplicate of another ticket</span></div>)}
-    <TicketDuplicateBacklinks backlinks={duplicateBacklinks} inaccessibleProjects={duplicateBacklinkInaccessibleProjects}/>
-    {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
-    <TabBar id={`ticket-inspector-${presentation}-${slug}`} label="Ticket inspector sections" className="ticket-inspector__tabs" activation="automatic">
-      {tabs.map(tab => <AppTab id={tab.id} name={tab.label} selected={activeTab === tab.id} closable={false} selectAction="set-inspector-tab" className="ticket-inspector__tab" rootAttributes={{'data-inspector-tab':tab.id}} leading={<LucideIcon icon={tab.icon} name={tab.iconName} />} trailing={tab.id === 'attachments' && attachments?.length ? <span class="ticket-inspector__tab-count"><span aria-hidden="true">{attachments.length}</span><span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span></span> : undefined} />)}
-    </TabBar>
-    {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} tagSuggestions={tagSuggestions} tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`} canUpdate={canUpdate} canEditText={canEditText} canAddNotes={canAddNotes} canEditNotes={canEditNotes} canDeleteNotes={canDeleteNotes} composingNote={composingNote} composerDraft={composerDraft} details={details} detailsMode={detailsMode} detailsDirty={detailsDirty} readerPresentation={presentation === 'reader'} feedbackNeeded={feedbackNeeded} notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} inlineFeedbackReplies={inlineFeedbackReplies} feedbackChoiceSelections={feedbackChoiceSelections} blockedReason={blockedReason} blockedReasonEditing={blockedReasonEditing} blockedReasonDraft={blockedReasonDraft} providerName={providerName} updatedLabel={updatedLabel} attachmentContext={attachmentContext} />}
-    {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
-    {activeTab === 'code-review' && <TicketCodeReview review={codeReview} loading={codeReviewLoading} message={codeReviewMessage} expandedCommits={expandedCodeReviewCommits} />}
-    {activeTab === 'attachments' && <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />}
-  </aside>;
+  return (
+    <aside
+      class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'}
+      data-component="ticket-inspector"
+      data-presentation={presentation}
+      data-large-text={presentation === 'reader' ? String(largeText) : undefined}
+      data-ticket-slug={slug}
+      data-needs-review={String(feedbackNeeded)}
+      data-attachment-drop-target="true"
+      aria-label={`${slug} inspector`}
+    >
+      <header class="ticket-inspector__header">
+        <Toolbar
+          divider={false}
+          {...(slugCentered ? { center: slugButton } : { leading: slugButton })}
+          trailing={actions}
+        />
+        {titleEditing ? (
+          <input
+            class="ticket-inspector__title-input"
+            name="ticket-title"
+            aria-label="Ticket title"
+            value={titleDraft}
+          />
+        ) : (
+          <h1
+            data-action={canUpdate ? 'edit-ticket-title' : undefined}
+            data-editable={String(canUpdate)}
+            tabIndex={canUpdate ? 0 : undefined}
+            title={canUpdate ? 'Double-click to edit title' : undefined}
+          >
+            {title}
+          </h1>
+        )}
+      </header>
+      {feedbackNeeded && (
+        <div class="ticket-inspector__feedback" role="status">
+          <LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" />
+          <span>Needs review</span>
+        </div>
+      )}
+      {closeReason && closeReason !== 'duplicate' && (
+        <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>
+          <span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span>
+        </div>
+      )}
+      {closeReason === 'duplicate' &&
+        (duplicateTarget ? (
+          <TicketDuplicateTarget target={duplicateTarget} />
+        ) : (
+          <div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate">
+            <LucideIcon icon={CopyX} name="copy-x" />
+            <span>Duplicate of another ticket</span>
+          </div>
+        ))}
+      <TicketDuplicateBacklinks
+        backlinks={duplicateBacklinks}
+        inaccessibleProjects={duplicateBacklinkInaccessibleProjects}
+      />
+      {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
+      <TabBar
+        id={`ticket-inspector-${presentation}-${slug}`}
+        label="Ticket inspector sections"
+        className="ticket-inspector__tabs"
+        activation="automatic"
+      >
+        {tabs.map((tab) => (
+          <AppTab
+            id={tab.id}
+            name={tab.label}
+            selected={activeTab === tab.id}
+            closable={false}
+            selectAction="set-inspector-tab"
+            className="ticket-inspector__tab"
+            rootAttributes={{ 'data-inspector-tab': tab.id }}
+            leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+            trailing={
+              tab.id === 'attachments' && attachments?.length ? (
+                <span class="ticket-inspector__tab-count">
+                  <span aria-hidden="true">{attachments.length}</span>
+                  <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
+                </span>
+              ) : undefined
+            }
+          />
+        ))}
+      </TabBar>
+      {activeTab === 'info' && (
+        <TicketInfoPanel
+          status={status}
+          priority={priority}
+          category={category}
+          tags={tags}
+          tagSuggestions={tagSuggestions}
+          tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`}
+          canUpdate={canUpdate}
+          canEditText={canEditText}
+          canAddNotes={canAddNotes}
+          canEditNotes={canEditNotes}
+          canDeleteNotes={canDeleteNotes}
+          composingNote={composingNote}
+          composerDraft={composerDraft}
+          details={details}
+          detailsMode={detailsMode}
+          detailsDirty={detailsDirty}
+          readerPresentation={presentation === 'reader'}
+          feedbackNeeded={feedbackNeeded}
+          notes={notes}
+          editingNoteId={editingNoteId}
+          noteDraft={noteDraft}
+          inlineFeedbackReplies={inlineFeedbackReplies}
+          feedbackChoiceSelections={feedbackChoiceSelections}
+          blockedReason={blockedReason}
+          blockedReasonEditing={blockedReasonEditing}
+          blockedReasonDraft={blockedReasonDraft}
+          providerName={providerName}
+          updatedLabel={updatedLabel}
+          attachmentContext={attachmentContext}
+        />
+      )}
+      {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
+      {activeTab === 'code-review' && (
+        <TicketCodeReview
+          review={codeReview}
+          loading={codeReviewLoading}
+          message={codeReviewMessage}
+          expandedCommits={expandedCodeReviewCommits}
+        />
+      )}
+      {activeTab === 'attachments' && (
+        <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />
+      )}
+    </aside>
+  );
 }

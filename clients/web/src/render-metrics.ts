@@ -13,7 +13,7 @@ export interface RenderMetrics {
 export function createRenderMetrics(root: Element): RenderMetrics {
   let passes = 0;
   let mutations = 0;
-  const observer = new MutationObserver(records => {
+  const observer = new MutationObserver((records) => {
     mutations += records.length;
   });
   observer.observe(root, {

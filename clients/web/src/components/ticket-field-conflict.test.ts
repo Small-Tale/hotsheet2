@@ -4,7 +4,12 @@ import { TicketFieldConflict } from './ticket-field-conflict';
 
 describe('TicketFieldConflict', () => {
   it('presents both versions and an editable merge choice', () => {
-    const html = String(TicketFieldConflict({ conflict: { key: 'details', field: 'details', label: 'Details', base: 'Base', mine: 'Mine', theirs: 'Theirs' }, resolution: 'Mine plus theirs' }));
+    const html = String(
+      TicketFieldConflict({
+        conflict: { key: 'details', field: 'details', label: 'Details', base: 'Base', mine: 'Mine', theirs: 'Theirs' },
+        resolution: 'Mine plus theirs',
+      }),
+    );
     expect(html).toContain('data-component="ticket-field-conflict"');
     expect(html).toContain('Their latest version');
     expect(html).toContain('Your version');

@@ -59,48 +59,155 @@ export function updatePermissionCountdownText(root: ParentNode, key: string, val
 }
 
 /** Shared permission presentation for floating prompts and notification history. */
-export function PermissionRequestCard({ item, presentation = 'list', state = 'pending', explanation, countdown, countdownAction = 'allow', error }: PermissionRequestCardProps) {
+export function PermissionRequestCard({
+  item,
+  presentation = 'list',
+  state = 'pending',
+  explanation,
+  countdown,
+  countdownAction = 'allow',
+  error,
+}: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
   const statusLabel = history ? historyLabel(item) : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
-    ? item.decision === 'allow' ? Check : item.decision === 'deny' ? X : ExternalLink
-    : state === 'failed' || state === 'disconnected' ? CircleAlert : state === 'resolving' ? Clock3 : ShieldCheck;
+    ? item.decision === 'allow'
+      ? Check
+      : item.decision === 'deny'
+        ? X
+        : ExternalLink
+    : state === 'failed' || state === 'disconnected'
+      ? CircleAlert
+      : state === 'resolving'
+        ? Clock3
+        : ShieldCheck;
   const iconName = history
-    ? item.decision === 'allow' ? 'check' : item.decision === 'deny' ? 'x' : 'external-link'
-    : state === 'failed' || state === 'disconnected' ? 'circle-alert' : state === 'resolving' ? 'clock-3' : 'shield-check';
+    ? item.decision === 'allow'
+      ? 'check'
+      : item.decision === 'deny'
+        ? 'x'
+        : 'external-link'
+    : state === 'failed' || state === 'disconnected'
+      ? 'circle-alert'
+      : state === 'resolving'
+        ? 'clock-3'
+        : 'shield-check';
 
-  return <article class={`permission-request-card permission-request-card--${presentation}`} data-component="permission-request-card" data-state={history ? item.decision : state} data-resolved={history ? 'true' : undefined} data-request-key={item.key}>
-    <header class="permission-request-card__header">
-      <span class="permission-request-card__identity"><LucideIcon icon={Bot} name="bot" /><strong>{item.agent}</strong><span aria-hidden="true">·</span><span>{item.role}</span></span>
-      <span class="permission-request-card__project" title={item.projectName}>{item.projectName}</span>
-      <time>{relativeTime(timestamp)}</time>
-    </header>
-    <div class="permission-request-card__summary">
-      <LucideIcon icon={stateIcon} name={iconName} />
-      <strong>{statusLabel}</strong>
-    </div>
-    {item.action.trim() && <pre class="permission-request-card__details"><code>{item.action}</code></pre>}
-    {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
-    {error && <p class="permission-request-card__error" role="alert">{error}</p>}
-    {!history && <footer class="permission-request-card__footer">
-      <button type="button" class="permission-request-card__quiet-action" data-action="ignore-permission" data-request-key={item.key}>Ignore</button>
-      <div class="permission-request-card__decision-area">
-        {countdown && <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>
-          <span class="permission-request-card__timer" role="timer" aria-label={`Automatic ${countdownAction} countdown`}>Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong></span>
-          <button type="button" class="permission-request-card__stop-automation" data-action="cancel-permission-automation" data-request-key={item.key} aria-label={`Stop auto-${countdownAction} countdown`} title={`Stop auto-${countdownAction} countdown for this request`}><LucideIcon icon={Pause} name="pause" /></button>
-        </div>}
-        <div class="permission-request-card__buttons">
-          <button type="button" data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key={item.key} disabled={state === 'resolving'}>Deny</button>
-          {alwaysSupported && <button type="button" data-action="resolve-permission" data-decision="allow" data-scope="always" data-request-key={item.key} disabled={state === 'resolving'}>Always Allow</button>}
-          <button type="button" class="permission-request-card__primary" data-action="resolve-permission" data-decision="allow" data-scope="once" data-request-key={item.key} disabled={state === 'resolving'}>{alwaysSupported ? 'Allow Once' : 'Allow'}</button>
-        </div>
+  return (
+    <article
+      class={`permission-request-card permission-request-card--${presentation}`}
+      data-component="permission-request-card"
+      data-state={history ? item.decision : state}
+      data-resolved={history ? 'true' : undefined}
+      data-request-key={item.key}
+    >
+      <header class="permission-request-card__header">
+        <span class="permission-request-card__identity">
+          <LucideIcon icon={Bot} name="bot" />
+          <strong>{item.agent}</strong>
+          <span aria-hidden="true">·</span>
+          <span>{item.role}</span>
+        </span>
+        <span class="permission-request-card__project" title={item.projectName}>
+          {item.projectName}
+        </span>
+        <time>{relativeTime(timestamp)}</time>
+      </header>
+      <div class="permission-request-card__summary">
+        <LucideIcon icon={stateIcon} name={iconName} />
+        <strong>{statusLabel}</strong>
       </div>
-    </footer>}
-  </article>;
+      {item.action.trim() && (
+        <pre class="permission-request-card__details">
+          <code>{item.action}</code>
+        </pre>
+      )}
+      {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
+      {error && (
+        <p class="permission-request-card__error" role="alert">
+          {error}
+        </p>
+      )}
+      {!history && (
+        <footer class="permission-request-card__footer">
+          <button
+            type="button"
+            class="permission-request-card__quiet-action"
+            data-action="ignore-permission"
+            data-request-key={item.key}
+          >
+            Ignore
+          </button>
+          <div class="permission-request-card__decision-area">
+            {countdown && (
+              <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>
+                <span
+                  class="permission-request-card__timer"
+                  role="timer"
+                  aria-label={`Automatic ${countdownAction} countdown`}
+                >
+                  Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong>
+                </span>
+                <button
+                  type="button"
+                  class="permission-request-card__stop-automation"
+                  data-action="cancel-permission-automation"
+                  data-request-key={item.key}
+                  aria-label={`Stop auto-${countdownAction} countdown`}
+                  title={`Stop auto-${countdownAction} countdown for this request`}
+                >
+                  <LucideIcon icon={Pause} name="pause" />
+                </button>
+              </div>
+            )}
+            <div class="permission-request-card__buttons">
+              <button
+                type="button"
+                data-action="resolve-permission"
+                data-decision="deny"
+                data-scope="once"
+                data-request-key={item.key}
+                disabled={state === 'resolving'}
+              >
+                Deny
+              </button>
+              {alwaysSupported && (
+                <button
+                  type="button"
+                  data-action="resolve-permission"
+                  data-decision="allow"
+                  data-scope="always"
+                  data-request-key={item.key}
+                  disabled={state === 'resolving'}
+                >
+                  Always Allow
+                </button>
+              )}
+              <button
+                type="button"
+                class="permission-request-card__primary"
+                data-action="resolve-permission"
+                data-decision="allow"
+                data-scope="once"
+                data-request-key={item.key}
+                disabled={state === 'resolving'}
+              >
+                {alwaysSupported ? 'Allow Once' : 'Allow'}
+              </button>
+            </div>
+          </div>
+        </footer>
+      )}
+    </article>
+  );
 }
 
 export function PermissionRequestPopup(props: Omit<PermissionRequestCardProps, 'presentation'>) {
-  return <aside class="permission-request-popup" data-component="permission-request-popup" aria-label="Permission request"><PermissionRequestCard {...props} presentation="popup" /></aside>;
+  return (
+    <aside class="permission-request-popup" data-component="permission-request-popup" aria-label="Permission request">
+      <PermissionRequestCard {...props} presentation="popup" />
+    </aside>
+  );
 }

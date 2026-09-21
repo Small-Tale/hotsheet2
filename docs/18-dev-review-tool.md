@@ -92,7 +92,7 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 import { installDevReview } from './dev-review';
 
 const review = installDevReview({
-  submit: submission => ticketService.createFromReview(submission),
+  submit: (submission) => ticketService.createFromReview(submission),
   diagnostics: () => stabilityRecorder.attachment(),
 });
 
@@ -136,7 +136,7 @@ For this repository the adapter invokes `target/debug/hotsheet-cli`, creates a b
 tagged `client` and `ux-feedback` in the sibling `hotsheet2.hs2` store, then attaches
 each decoded PNG. User-authored title and details are passed with option-bound values,
 so leading hyphens and other option-like text remain literal ticket content. When a CLI
-or git invocation fails, the adapter surfaces the failure with a *shell-quoted*,
+or git invocation fails, the adapter surfaces the failure with a _shell-quoted_,
 copy-paste-runnable command line (each argument POSIX-quoted) instead of Node's
 space-joined `Command failed:` message, so a maintainer can rerun the exact command from a
 terminal. The adapter's command boundary is injectable: unit tests validate the exact CLI

@@ -31,9 +31,7 @@ export async function createTicketWithAttachments<T>(
   return { ticket, failed };
 }
 
-export function describeNewTicketAttachmentFailures(
-  failures: readonly FailedNewTicketAttachment[],
-): string {
+export function describeNewTicketAttachmentFailures(failures: readonly FailedNewTicketAttachment[]): string {
   if (failures.length === 0) return '';
   const names = failures.map(({ name }) => `“${name}”`).join(', ');
   return `Ticket created, but ${names} could not be attached. Add the ${failures.length === 1 ? 'file' : 'files'} again from the ticket’s Attachments tab.`;

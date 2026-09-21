@@ -20,8 +20,12 @@ function fakeStorage(initial: Record<string, string> = {}) {
   return {
     map,
     getItem: (key: string) => map.get(key) ?? null,
-    setItem: (key: string, value: string) => { map.set(key, value); },
-    removeItem: (key: string) => { map.delete(key); },
+    setItem: (key: string, value: string) => {
+      map.set(key, value);
+    },
+    removeItem: (key: string) => {
+      map.delete(key);
+    },
   };
 }
 
@@ -32,14 +36,15 @@ function key(over: Partial<KeyboardEvent>): Pick<KeyboardEvent, 'key' | 'metaKey
 describe('keyboard-shortcuts registry', () => {
   it('has a stable, non-empty, unique-id catalog with valid defaults', () => {
     expect(KEYBOARD_SHORTCUTS.length).toBeGreaterThan(10);
-    const ids = KEYBOARD_SHORTCUTS.map(s => s.id);
+    const ids = KEYBOARD_SHORTCUTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const shortcut of KEYBOARD_SHORTCUTS) {
       expect(shortcut.label).toBeTruthy();
       expect(shortcut.defaultChord.key.length).toBeGreaterThan(0);
     }
     // The rebindable global chords exist.
-    for (const id of ['open-search', 'undo', 'redo']) expect(KEYBOARD_SHORTCUTS.find(s => s.id === id)?.editable).toBe(true);
+    for (const id of ['open-search', 'undo', 'redo'])
+      expect(KEYBOARD_SHORTCUTS.find((s) => s.id === id)?.editable).toBe(true);
   });
 
   it('defines the view/panel and tab-cycling command shortcuts as rebindable (HS2-9SHYWD)', () => {
@@ -60,7 +65,7 @@ describe('keyboard-shortcuts registry', () => {
       'drawer-tab-next': { key: 'ArrowDown', mod: true, alt: true, shift: true },
     };
     for (const [id, chord] of Object.entries(expected)) {
-      const def = KEYBOARD_SHORTCUTS.find(s => s.id === id);
+      const def = KEYBOARD_SHORTCUTS.find((s) => s.id === id);
       expect(def, id).toBeTruthy();
       expect(def?.editable, id).toBe(true);
       expect(def?.defaultChord, id).toEqual(chord);
@@ -76,17 +81,18 @@ describe('keyboard-shortcuts registry', () => {
       { key: 'ArrowUp', mod: true, alt: true },
       { key: 'ArrowDown', mod: true, alt: true },
     ];
-    const collisions = KEYBOARD_SHORTCUTS
-      .filter(shortcut => shortcut.editable)
-      .filter(shortcut => safariReserved.some(chord => chordsEqual(shortcut.defaultChord, chord)))
-      .map(shortcut => shortcut.id);
+    const collisions = KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.editable)
+      .filter((shortcut) => safariReserved.some((chord) => chordsEqual(shortcut.defaultChord, chord)))
+      .map((shortcut) => shortcut.id);
     expect(collisions).toEqual([]);
   });
 
   it('has no two editable shortcuts sharing a default chord (no self-conflicts)', () => {
-    const editable = KEYBOARD_SHORTCUTS.filter(s => s.editable);
+    const editable = KEYBOARD_SHORTCUTS.filter((s) => s.editable);
     for (const shortcut of editable) {
-      const clash = editable.find(other => other.id !== shortcut.id && chordsEqual(other.defaultChord, shortcut.defaultChord));
+      const clash = editable.find(
+        (other) => other.id !== shortcut.id && chordsEqual(other.defaultChord, shortcut.defaultChord),
+      );
       expect(clash, `${shortcut.id} vs ${clash?.id}`).toBeUndefined();
     }
   });
@@ -108,8 +114,18 @@ describe('keyboard-shortcuts registry', () => {
 
   it('captures a chord from an event, ignoring lone modifier presses', () => {
     expect(chordFromEvent(key({ key: 'Shift', shiftKey: true }), true)).toBeUndefined();
-    expect(chordFromEvent(key({ key: 'J', metaKey: true, shiftKey: true }), true)).toEqual({ key: 'j', mod: true, shift: true, alt: false });
-    expect(chordFromEvent(key({ key: 'ArrowUp' }), true)).toEqual({ key: 'ArrowUp', mod: false, shift: false, alt: false });
+    expect(chordFromEvent(key({ key: 'J', metaKey: true, shiftKey: true }), true)).toEqual({
+      key: 'j',
+      mod: true,
+      shift: true,
+      alt: false,
+    });
+    expect(chordFromEvent(key({ key: 'ArrowUp' }), true)).toEqual({
+      key: 'ArrowUp',
+      mod: false,
+      shift: false,
+      alt: false,
+    });
   });
 
   it('formats chords for Apple and non-Apple platforms', () => {
@@ -152,7 +168,13 @@ describe('override persistence (transition + adversarial)', () => {
 
   it('drops overrides for unknown or non-editable ids, and tolerates corrupt storage', () => {
     // A non-editable id (move-selection-up, a fixed ARIA affordance) and an unknown id must not be honored.
-    const storage = fakeStorage({ [KEYBOARD_SHORTCUT_STORAGE_KEY]: JSON.stringify({ 'move-selection-up': { key: 'q', mod: true }, 'not-a-shortcut': { key: 'w' }, 'open-search': { key: 'p', mod: true } }) });
+    const storage = fakeStorage({
+      [KEYBOARD_SHORTCUT_STORAGE_KEY]: JSON.stringify({
+        'move-selection-up': { key: 'q', mod: true },
+        'not-a-shortcut': { key: 'w' },
+        'open-search': { key: 'p', mod: true },
+      }),
+    });
     const loaded = loadShortcutOverrides(storage);
     expect(loaded).toEqual({ 'open-search': { key: 'p', mod: true, shift: false, alt: false } });
     // move-selection-up keeps its fixed default despite the stored override.

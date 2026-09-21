@@ -10,12 +10,14 @@ describe('ProjectRestoreError', () => {
   });
 
   it('keeps the exact failure, recovery context, root, and retry action visible', () => {
-    const markup = String(ProjectRestoreError({
-      root: '/work/older-server',
-      name: 'older-server',
-      error: 'The older server only supports schema 2.',
-      recoveryPid: 4242,
-    }));
+    const markup = String(
+      ProjectRestoreError({
+        root: '/work/older-server',
+        name: 'older-server',
+        error: 'The older server only supports schema 2.',
+        recoveryPid: 4242,
+      }),
+    );
     expect(markup).toContain('older-server could not be reopened');
     expect(markup).toContain('The older server only supports schema 2.');
     expect(markup).toContain('process (4242) is not responding');

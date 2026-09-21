@@ -5,15 +5,27 @@ import { describe, expect, it } from 'vitest';
 
 import { TicketInspector } from './ticket-inspector';
 
-const base = { slug: 'HS2-TEST', title: 'Inspect this ticket', status: 'started' as const, priority: 'high' as const, category: 'feature', tags: ['client'], details: 'Readable details.' };
+const base = {
+  slug: 'HS2-TEST',
+  title: 'Inspect this ticket',
+  status: 'started' as const,
+  priority: 'high' as const,
+  category: 'feature',
+  tags: ['client'],
+  details: 'Readable details.',
+};
 
 describe('TicketInspector', () => {
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0 0 var\(--kui-space-m\)/);
-    expect(css).toMatch(/\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.ticket-inspector__close-outcome \{[^}]*gap: var\(--kui-space-2xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/);
+    expect(css).toMatch(
+      /\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
+    );
+    expect(css).toMatch(
+      /\.ticket-inspector__close-outcome \{[^}]*gap: var\(--kui-space-2xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
+    );
     const titleRule = css.match(/\.ticket-inspector__header h1 \{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('overflow-wrap: anywhere');
     expect(titleRule).not.toContain('line-clamp');
@@ -23,12 +35,20 @@ describe('TicketInspector', () => {
     for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
       const markup = String(TicketInspector({ ...base, activeTab: tab }));
       expect(markup).toContain('HS2-TEST');
-      expect(markup).toContain('data-component="tab-bar" data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST" data-tab-activation="automatic" aria-label="Ticket inspector sections"');
-      expect(markup).toContain(`data-inspector-tab="${tab}" class="kui-app-tab ticket-inspector__tab" data-component="app-tab" data-tab-id="${tab}" data-selected="true"`);
-      expect(markup).toContain(`role="tab" aria-selected="true" data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`);
+      expect(markup).toContain(
+        'data-component="tab-bar" data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST" data-tab-activation="automatic" aria-label="Ticket inspector sections"',
+      );
+      expect(markup).toContain(
+        `data-inspector-tab="${tab}" class="kui-app-tab ticket-inspector__tab" data-component="app-tab" data-tab-id="${tab}" data-selected="true"`,
+      );
+      expect(markup).toContain(
+        `role="tab" aria-selected="true" data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,
+      );
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
-      expect(markup).toContain('data-component="toolbar-text" data-size="small"><span class="kui-toolbar-text__text">HS2-TEST');
+      expect(markup).toContain(
+        'data-component="toolbar-text" data-size="small"><span class="kui-toolbar-text__text">HS2-TEST',
+      );
       expect(markup).toContain('data-action="copy-ticket-slug" aria-label="Copy ticket number HS2-TEST"');
       expect(markup).toContain('data-appearance="borderless"');
       if (tab === 'info') {
@@ -41,7 +61,20 @@ describe('TicketInspector', () => {
   });
 
   it('changes only the Code Review tab icon', () => {
-    const markup = String(TicketInspector({ ...base, activeTab: 'code-review', codeReview: { difftool: 'Glassbox', truncated: false, ranges: [], commits: [{ sha: 'abcdef', short_sha: 'abcdef', subject: 'Review action', committed_at: '2026-09-02T08:00:00Z' }] } }));
+    const markup = String(
+      TicketInspector({
+        ...base,
+        activeTab: 'code-review',
+        codeReview: {
+          difftool: 'Glassbox',
+          truncated: false,
+          ranges: [],
+          commits: [
+            { sha: 'abcdef', short_sha: 'abcdef', subject: 'Review action', committed_at: '2026-09-02T08:00:00Z' },
+          ],
+        },
+      }),
+    );
     expect(markup).toContain('data-inspector-tab="code-review"');
     expect(markup).toContain('data-lucide="message-square-code"');
     expect(markup).toContain('ticket-code-review__graph');
@@ -64,13 +97,21 @@ describe('TicketInspector', () => {
   });
 
   it('uses the same capability surface at reader scale with dialog close semantics', () => {
-    const markup = String(TicketInspector({ ...base, presentation: 'reader', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
+    const markup = String(
+      TicketInspector({
+        ...base,
+        presentation: 'reader',
+        notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }],
+      }),
+    );
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-action="close-ticket-reader"');
     expect(markup).toContain('data-lucide="x"');
     expect(markup).toContain('data-lucide="a-large-small"');
     expect(markup).toContain('aria-label="Use large reader text size"');
-    expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*data-action="toggle-reader-text-size"/);
+    expect(markup).toMatch(
+      /data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*data-action="toggle-reader-text-size"/,
+    );
     const largeMarkup = String(TicketInspector({ ...base, presentation: 'reader', largeText: true }));
     expect(largeMarkup).toContain('aria-label="Use standard reader text size" aria-pressed="true"');
     expect(markup).toContain('data-component="note-card"');
@@ -80,7 +121,14 @@ describe('TicketInspector', () => {
     expect(markup).not.toContain('data-action="edit-note"');
     expect(markup).toContain('popoverTarget="ticket-tag-reader-hs2-test"');
     expect(String(TicketInspector({ ...base }))).toContain('popoverTarget="ticket-tag-sidebar-hs2-test"');
-    const editing = String(TicketInspector({ ...base, presentation: 'reader', detailsMode: 'write', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
+    const editing = String(
+      TicketInspector({
+        ...base,
+        presentation: 'reader',
+        detailsMode: 'write',
+        notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }],
+      }),
+    );
     expect(editing).toContain('name="markdown-source"');
     expect(editing).toContain('data-edit-on-double-click="true"');
   });
@@ -99,7 +147,14 @@ describe('TicketInspector', () => {
   });
 
   it('renders the structured duplicate outcome and canonical ticket action', () => {
-    const markup = String(TicketInspector({ ...base, status: 'completed', closeReason: 'duplicate', duplicateTarget: { id: 'target-id', projectName:'Hot Sheet 2',slug:'HS2-TARGET',title:'Canonical ticket' } }));
+    const markup = String(
+      TicketInspector({
+        ...base,
+        status: 'completed',
+        closeReason: 'duplicate',
+        duplicateTarget: { id: 'target-id', projectName: 'Hot Sheet 2', slug: 'HS2-TARGET', title: 'Canonical ticket' },
+      }),
+    );
     expect(markup).toContain('data-component="ticket-duplicate-target"');
     expect(markup).toContain('Duplicate of');
     expect(markup).toContain('Hot Sheet 2 · HS2-TARGET');
@@ -109,24 +164,58 @@ describe('TicketInspector', () => {
   });
 
   it('resolves same-ticket and cross-ticket attachment references in details', () => {
-    const markup=String(TicketInspector({...base,details:'Local `attachment:proof.png` and cross `attachment:[HS2-OTHER]report.pdf`.',attachments:[{id:'A1',name:'proof.png'}],attachmentContext:{baseUrl:'/project-api/demo',checkout:'checkout one',ticket:'HS2-TEST',attachments:[{id:'A1',filename:'proof.png'}]}}));
+    const markup = String(
+      TicketInspector({
+        ...base,
+        details: 'Local `attachment:proof.png` and cross `attachment:[HS2-OTHER]report.pdf`.',
+        attachments: [{ id: 'A1', name: 'proof.png' }],
+        attachmentContext: {
+          baseUrl: '/project-api/demo',
+          checkout: 'checkout one',
+          ticket: 'HS2-TEST',
+          attachments: [{ id: 'A1', filename: 'proof.png' }],
+        },
+      }),
+    );
     expect(markup).toContain('/project-api/demo/checkouts/checkout%20one/tickets/HS2-TEST/attachments/A1');
-    expect(markup).toContain('/project-api/demo/checkouts/checkout%20one/tickets/HS2-OTHER/attachments/by-name/report.pdf');
+    expect(markup).toContain(
+      '/project-api/demo/checkouts/checkout%20one/tickets/HS2-OTHER/attachments/by-name/report.pdf',
+    );
     expect(markup).toContain('data-action="open-referenced-attachment"');
   });
 
-  it('renders project-qualified reverse duplicate backlinks and partial lookup status',()=>{
-    const markup=String(TicketInspector({...base,duplicateBacklinks:[{reference:'@other/git-other:source',project_id:'other',project_name:'Other project',connection_id:'git-other',native_id:'source',qualified_id:'git-other:source',slug:'HS2-SAME',title:'Earlier report'}],duplicateBacklinkInaccessibleProjects:['Offline project']}));
-    expect(markup).toContain('data-component="ticket-duplicate-backlinks"');expect(markup).toContain('Other project · HS2-SAME');expect(markup).toContain('data-item-id="@other/git-other:source"');expect(markup).toContain('Could not check Offline project for additional duplicates.');
+  it('renders project-qualified reverse duplicate backlinks and partial lookup status', () => {
+    const markup = String(
+      TicketInspector({
+        ...base,
+        duplicateBacklinks: [
+          {
+            reference: '@other/git-other:source',
+            project_id: 'other',
+            project_name: 'Other project',
+            connection_id: 'git-other',
+            native_id: 'source',
+            qualified_id: 'git-other:source',
+            slug: 'HS2-SAME',
+            title: 'Earlier report',
+          },
+        ],
+        duplicateBacklinkInaccessibleProjects: ['Offline project'],
+      }),
+    );
+    expect(markup).toContain('data-component="ticket-duplicate-backlinks"');
+    expect(markup).toContain('Other project · HS2-SAME');
+    expect(markup).toContain('data-item-id="@other/git-other:source"');
+    expect(markup).toContain('Could not check Offline project for additional duplicates.');
   });
 
-  it('renders marked description choices as the reader feedback surface',()=>{
-    const details='FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
-    const sidebar=String(TicketInspector({...base,details,feedbackNeeded:true}));
+  it('renders marked description choices as the reader feedback surface', () => {
+    const details = 'FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
+    const sidebar = String(TicketInspector({ ...base, details, feedbackNeeded: true }));
     expect(sidebar).toContain('data-note-id="ticket-details"');
     expect(sidebar).toContain('data-feedback-needed="true"');
     expect(sidebar).toContain('Respond to Feedback');
-    const reader=String(TicketInspector({...base,details,feedbackNeeded:true,presentation:'reader'}));
+    const reader = String(TicketInspector({ ...base, details, feedbackNeeded: true, presentation: 'reader' }));
     expect(reader).toContain('data-details-feedback="true"');
     expect(reader).toContain('ticket-inspector__details-feedback-header');
     expect(reader).toContain('Feedback needed');
@@ -134,12 +223,22 @@ describe('TicketInspector', () => {
     expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
-    const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
-    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: var\(--kui-space-xs\);[^}]*warning-border-normal[^}]*warning-fill-quiet/);
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(css).toMatchSource(
+      /details-surface\[data-feedback-needed="true"\] \{[^}]*padding: var\(--kui-space-xs\);[^}]*warning-border-normal[^}]*warning-fill-quiet/,
+    );
   });
 
   it('shows a visible and accessible derived attachment count on the attachments tab', () => {
-    const markup = String(TicketInspector({ ...base, attachments: [{ id: 'one', name: 'one.png' }, { id: 'two', name: 'two.md' }] }));
+    const markup = String(
+      TicketInspector({
+        ...base,
+        attachments: [
+          { id: 'one', name: 'one.png' },
+          { id: 'two', name: 'two.md' },
+        ],
+      }),
+    );
     expect(markup).toContain('ticket-inspector__tab-count');
     expect(markup).toContain('<span aria-hidden="true">2</span>');
     expect(markup).toContain('ticket-inspector__tab-count-label">2 attachments</span>');
@@ -148,9 +247,13 @@ describe('TicketInspector', () => {
 
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(css).toContain('.ticket-inspector__attachment { display: flex; box-sizing: border-box; width: 100%; min-width: 0;');
-    expect(css).toContain('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
-    expect(css).toContain('.ticket-inspector__attachment-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;');
+    expect(css).toContainSource(
+      '.ticket-inspector__attachment { display: flex; box-sizing: border-box; width: 100%; min-width: 0;',
+    );
+    expect(css).toContainSource('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
+    expect(css).toContainSource(
+      '.ticket-inspector__attachment-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;',
+    );
   });
 
   it('contains metadata and ticket content within narrow inspector bounds', () => {
@@ -161,30 +264,42 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toMatch(/\.ticket-inspector__tab \{[^}]*min-width: 0;[^}]*flex: 1 1 0/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-    expect(panelCss).toContain('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
+    expect(panelCss).toContainSource('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
-    expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
-    expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);
-    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }');
+    expect(noteCss).toMatchSource(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
+    expect(noteCss).toMatchSource(
+      /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/,
+    );
+    expect(inspectorCss).toContainSource(
+      '@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
+    );
   });
 
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/);
+    expect(inspectorCss).toMatch(
+      /\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/,
+    );
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \.kui-tab-bar__tabs \{[^}]*padding: var\(--kui-space-2xs\)/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/);
+    expect(panelCss).toMatch(
+      /\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
+    );
     // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
     // 8px column — no negative margins anywhere (HS2-R64ETQ).
-    expect(panelCss).toMatch(/\.ticket-inspector__content > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
-    expect(panelCss).toContain('border-inline: 1px solid transparent; padding-inline: var(--kui-space-xs);');
+    expect(panelCss).toMatchSource(/\.ticket-inspector__content > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
+    expect(panelCss).toContainSource('border-inline: 1px solid transparent; padding-inline: var(--kui-space-xs);');
     expect(panelCss).not.toContain('margin-inline: calc((remify(8px) + 1px) * -1)');
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {
     expect(String(TicketInspector({ ...base }))).toContain('data-action="toggle-inspector-up-next"');
-    expect(String(TicketInspector({ ...base, status: 'completed' }))).not.toContain('data-action="toggle-inspector-up-next"');
-    expect(String(TicketInspector({ ...base, upNextEligible: false }))).not.toContain('data-action="toggle-inspector-up-next"');
+    expect(String(TicketInspector({ ...base, status: 'completed' }))).not.toContain(
+      'data-action="toggle-inspector-up-next"',
+    );
+    expect(String(TicketInspector({ ...base, upNextEligible: false }))).not.toContain(
+      'data-action="toggle-inspector-up-next"',
+    );
   });
 });

@@ -34,7 +34,7 @@ export async function screenAttachmentFiles(files: readonly File[]): Promise<Scr
 
 export function describeUnreadableAttachments(names: readonly string[]): string {
   if (names.length === 0) return '';
-  const listed = names.map(name => `“${name}”`).join(', ');
+  const listed = names.map((name) => `“${name}”`).join(', ');
   const subject = names.length === 1 ? `${listed} has` : `${listed} have`;
   return `${subject} no readable content yet. A new macOS screen capture can be dragged before it has been written to disk. Wait for it to appear on the desktop, then add it again.`;
 }

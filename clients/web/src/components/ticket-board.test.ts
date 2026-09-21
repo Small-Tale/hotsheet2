@@ -7,14 +7,25 @@ import { TicketBoard } from './ticket-board';
 import { TicketBoardColumn } from './ticket-board-column';
 import type { TicketRowProps } from './ticket-row';
 
-const ticket: TicketRowProps = { slug: 'HS2-BOARD', title: 'Shared board row', status: 'started', priority: 'high', category: 'feature', tags: ['client'] };
+const ticket: TicketRowProps = {
+  slug: 'HS2-BOARD',
+  title: 'Shared board row',
+  status: 'started',
+  priority: 'high',
+  category: 'feature',
+  tags: ['client'],
+};
 
 describe('TicketBoard', () => {
   it('renders labeled columns, accurate counts, and the same TicketRow component', () => {
-    const markup = String(TicketBoard({ columns: [
-      { id: 'active', title: 'Active', tickets: [ticket] },
-      { id: 'done', title: 'Done', tickets: [] },
-    ] }));
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'active', title: 'Active', tickets: [ticket] },
+          { id: 'done', title: 'Done', tickets: [] },
+        ],
+      }),
+    );
     expect(markup).toContain('data-column-id="active"');
     expect(markup).toContain('data-key="ticket-board"');
     expect(markup).toContain('data-key="ticket-column:active"');
@@ -39,14 +50,23 @@ describe('TicketBoard', () => {
     expect(rule).not.toMatch(/background|border|padding|border-radius/);
     expect(css).toMatch(/ticket-board-column > header h2[^}]*font: inherit/);
     expect(css).toMatch(/ticket-board-column__header[^}]*height: remify\(32px\)/);
-    expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) var\(--kui-space-m\)/);
+    expect(css).toMatch(
+      /ticket-board-column__tickets[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) var\(--kui-space-m\)/,
+    );
   });
 
   it('matches the outer margin and inter-column spacing (HS2-VX9E4Z)', () => {
     // Outer margin before the first column = board padding-inline (remify(8px)) + column padding (remify(8px)).
     // With a 0 column-grid gap, inter-column spacing = column padding (remify(8px)) + 0 + column padding (remify(8px)),
     // so the space between columns matches the space before the first / after the last column.
-    const markup = String(TicketBoard({ columns: [{ id: 'one', title: 'One', tickets: [] }, { id: 'two', title: 'Two', tickets: [] }] }));
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'one', title: 'One', tickets: [] },
+          { id: 'two', title: 'Two', tickets: [] },
+        ],
+      }),
+    );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
     expect(markup).toContain('--ticket-board-min-width:500px');
     expect(css).toMatch(/ticket-board[^}]*padding-inline: remify\(8px\)/);
@@ -65,43 +85,102 @@ describe('TicketBoard', () => {
     expect(css).toMatch(/ticket-board-column__tickets[^}]*overflow-y: auto/);
   });
 
-  it('keeps a column total authoritative while progressively rendering rows',()=>{
-    const markup=String(TicketBoardColumn({id:'archive',title:'Archive',tickets:[ticket],totalCount:300}));
+  it('keeps a column total authoritative while progressively rendering rows', () => {
+    const markup = String(TicketBoardColumn({ id: 'archive', title: 'Archive', tickets: [ticket], totalCount: 300 }));
     expect(markup).toContain('aria-label="300 tickets"');
     expect(markup).toContain('data-ticket-progressive-loading="true"');
     expect(markup).toContain('1 of 300 loaded');
   });
 
-  it('places each column continuation after that column final loaded row (HS2-8NBGBX)',()=>{
-    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201,continuation:{loading:false}}]}));
-    expect(markup).toContain('ticket-board-column__more');expect(markup).toContain('data-action="load-next-ticket-page"');expect(markup).toContain('Load more tickets');expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-board-column__more'));
-    expect(String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[],continuation:{loading:true}}]}))).toContain('Loading…');
+  it('places each column continuation after that column final loaded row (HS2-8NBGBX)', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'active', title: 'Active', tickets: [ticket], totalCount: 201, continuation: { loading: false } },
+        ],
+      }),
+    );
+    expect(markup).toContain('ticket-board-column__more');
+    expect(markup).toContain('data-action="load-next-ticket-page"');
+    expect(markup).toContain('Load more tickets');
+    expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-board-column__more'));
+    expect(
+      String(
+        TicketBoard({ columns: [{ id: 'active', title: 'Active', tickets: [], continuation: { loading: true } }] }),
+      ),
+    ).toContain('Loading…');
   });
 
-  it('paginates each column independently — a short column offers Load more while a long one does not (HS2-8NBGBX)',()=>{
-    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[ticket],totalCount:14,continuation:{loading:false}},{id:'completed',title:'Completed',tickets:[ticket],totalCount:1}]}));
+  it('paginates each column independently — a short column offers Load more while a long one does not (HS2-8NBGBX)', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          {
+            id: 'not-started',
+            title: 'Not Started',
+            tickets: [ticket],
+            totalCount: 14,
+            continuation: { loading: false },
+          },
+          { id: 'completed', title: 'Completed', tickets: [ticket], totalCount: 1 },
+        ],
+      }),
+    );
     // The short Not Started column gets its own Load more; the fully-loaded Completed column does not.
     expect(markup.match(/ticket-board-column__more/g)).toHaveLength(1);
-    const notStarted=markup.slice(markup.indexOf('data-column-id="not-started"'),markup.indexOf('data-column-id="completed"'));
+    const notStarted = markup.slice(
+      markup.indexOf('data-column-id="not-started"'),
+      markup.indexOf('data-column-id="completed"'),
+    );
     expect(notStarted).toContain('ticket-board-column__more');
   });
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {
-    expect(String(TicketBoardColumn({ id: 'not-started', title: 'Not Started', tickets: [] }))).toContain('data-ticket-drop-status="not_started"');
+    expect(String(TicketBoardColumn({ id: 'not-started', title: 'Not Started', tickets: [] }))).toContain(
+      'data-ticket-drop-status="not_started"',
+    );
   });
 
-  it('shows one differentiated board-wide placeholder when every column is empty',()=>{
-    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[]},{id:'started',title:'Started',tickets:[]}],emptyState:{kind:'search',query:'missing'}}));
-    expect(markup.match(/data-component="empty-state"/g)).toHaveLength(1);expect(markup).toContain('No tickets match “missing”');expect(markup).not.toContain('No tickets in Started');
+  it('shows one differentiated board-wide placeholder when every column is empty', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'not-started', title: 'Not Started', tickets: [] },
+          { id: 'started', title: 'Started', tickets: [] },
+        ],
+        emptyState: { kind: 'search', query: 'missing' },
+      }),
+    );
+    expect(markup.match(/data-component="empty-state"/g)).toHaveLength(1);
+    expect(markup).toContain('No tickets match “missing”');
+    expect(markup).not.toContain('No tickets in Started');
   });
 
-  it('can retain empty board headings without premature unresolved-state copy',()=>{
-    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[]},{id:'started',title:'Started',tickets:[]}]}));
-    expect(markup).toContain('Not Started');expect(markup).toContain('Started');expect(markup).not.toContain('data-component="empty-state"');expect(markup).not.toContain('No tickets');
+  it('can retain empty board headings without premature unresolved-state copy', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'not-started', title: 'Not Started', tickets: [] },
+          { id: 'started', title: 'Started', tickets: [] },
+        ],
+      }),
+    );
+    expect(markup).toContain('Not Started');
+    expect(markup).toContain('Started');
+    expect(markup).not.toContain('data-component="empty-state"');
+    expect(markup).not.toContain('No tickets');
   });
 
-  it('does not render a placeholder in an individual empty column',()=>{
-    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[ticket]},{id:'verified',title:'Verified',tickets:[]}]}));
-    expect(markup).not.toContain('data-component="empty-state"');expect(markup).not.toContain('No tickets in Verified');
+  it('does not render a placeholder in an individual empty column', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'not-started', title: 'Not Started', tickets: [ticket] },
+          { id: 'verified', title: 'Verified', tickets: [] },
+        ],
+      }),
+    );
+    expect(markup).not.toContain('data-component="empty-state"');
+    expect(markup).not.toContain('No tickets in Verified');
   });
 });

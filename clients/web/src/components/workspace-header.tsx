@@ -11,9 +11,26 @@ import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
-import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star } from 'lucide';
+import {
+  ArrowDownAZ,
+  ArrowDownWideNarrow,
+  ArrowUpAZ,
+  ArrowUpNarrowWide,
+  Bell,
+  CircleHelp,
+  ClockArrowDown,
+  ClockArrowUp,
+  Columns3,
+  List,
+  ListSortAscending,
+  ListSortDescending,
+  MoreHorizontal,
+  Search,
+  Settings,
+  Star,
+} from 'lucide';
 
-import {type InlineSearchToken,toTokenSearchToken} from '../inline-search';
+import { type InlineSearchToken, toTokenSearchToken } from '../inline-search';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
@@ -42,11 +59,47 @@ export interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceIdentity({ projectName }: { projectName: string }) {
-  return <div class="workspace-header__identity" data-component="workspace-identity"><ToolbarText text={projectName} size="large" /></div>;
+  return (
+    <div class="workspace-header__identity" data-component="workspace-identity">
+      <ToolbarText text={projectName} size="large" />
+    </div>
+  );
 }
 
-function ModeButton({ mode, current, label, icon, iconName, badge = 0 }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string; badge?:number }) {
-  return <button type="button" tabindex="0" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view${badge?`, ${badge} pending`:''}`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} />{badge>0&&<span class="view-mode-switcher__badge" aria-hidden="true">{badge>99?'99+':badge}</span>}</button>;
+function ModeButton({
+  mode,
+  current,
+  label,
+  icon,
+  iconName,
+  badge = 0,
+}: {
+  mode: WorkspaceViewMode;
+  current: WorkspaceViewMode;
+  label: string;
+  icon: IconNode;
+  iconName: string;
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      tabindex="0"
+      class="view-mode-switcher__button"
+      data-action="set-view-mode"
+      data-view-mode={mode}
+      aria-label={`${label} view${badge ? `, ${badge} pending` : ''}`}
+      aria-pressed={String(mode === current)}
+      title={`${label} view`}
+    >
+      <LucideIcon icon={icon} name={iconName} />
+      {badge > 0 && (
+        <span class="view-mode-switcher__badge" aria-hidden="true">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </button>
+  );
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
@@ -60,7 +113,11 @@ export function defaultWorkspaceSortDirection(sort: WorkspaceSort): WorkspaceSor
   return sort === 'updated' ? 'descending' : 'ascending';
 }
 
-export function nextWorkspaceSort(current: WorkspaceSort, direction: WorkspaceSortDirection, selected: WorkspaceSort): { sort: WorkspaceSort; direction: WorkspaceSortDirection } {
+export function nextWorkspaceSort(
+  current: WorkspaceSort,
+  direction: WorkspaceSortDirection,
+  selected: WorkspaceSort,
+): { sort: WorkspaceSort; direction: WorkspaceSortDirection } {
   if (selected !== current) return { sort: selected, direction: defaultWorkspaceSortDirection(selected) };
   return { sort: current, direction: direction === 'ascending' ? 'descending' : 'ascending' };
 }
@@ -70,98 +127,457 @@ export function applyWorkspaceSortDirection(comparison: number, direction: Works
 }
 
 const sortTriggerIcons: Record<WorkspaceSort, Record<WorkspaceSortDirection, { icon: IconNode; iconName: string }>> = {
-  updated: { ascending: { icon: ClockArrowUp, iconName: 'clock-arrow-up' }, descending: { icon: ClockArrowDown, iconName: 'clock-arrow-down' } },
-  priority: { ascending: { icon: ArrowUpNarrowWide, iconName: 'arrow-up-narrow-wide' }, descending: { icon: ArrowDownWideNarrow, iconName: 'arrow-down-wide-narrow' } },
-  title: { ascending: { icon: ArrowDownAZ, iconName: 'arrow-down-a-z' }, descending: { icon: ArrowUpAZ, iconName: 'arrow-up-a-z' } },
-  status: { ascending: { icon: ListSortAscending, iconName: 'list-sort-ascending' }, descending: { icon: ListSortDescending, iconName: 'list-sort-descending' } },
+  updated: {
+    ascending: { icon: ClockArrowUp, iconName: 'clock-arrow-up' },
+    descending: { icon: ClockArrowDown, iconName: 'clock-arrow-down' },
+  },
+  priority: {
+    ascending: { icon: ArrowUpNarrowWide, iconName: 'arrow-up-narrow-wide' },
+    descending: { icon: ArrowDownWideNarrow, iconName: 'arrow-down-wide-narrow' },
+  },
+  title: {
+    ascending: { icon: ArrowDownAZ, iconName: 'arrow-down-a-z' },
+    descending: { icon: ArrowUpAZ, iconName: 'arrow-up-a-z' },
+  },
+  status: {
+    ascending: { icon: ListSortAscending, iconName: 'list-sort-ascending' },
+    descending: { icon: ListSortDescending, iconName: 'list-sort-descending' },
+  },
 };
 
 export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSortDirection) {
   return sortTriggerIcons[sort][direction];
 }
 
-export function wireWorkspaceOverflowKeyboard(root:Document|HTMLElement):()=>void{
-  const onKeydown=(event:Event)=>{
-    const keyboard=event as KeyboardEvent;
-    if(!['Enter',' ','ArrowDown'].includes(keyboard.key))return;
-    const origin=keyboard.target;
-    if(!(origin instanceof Element))return;
-    const trigger=origin.closest<HTMLElement>('.workspace-header__overflow > [slot="trigger"]');
-    if(!trigger)return;
-    const dropdown=trigger.closest<HTMLElement&{open:boolean}>('.workspace-header__overflow');
-    if(!dropdown||dropdown.open)return;
-    keyboard.preventDefault();keyboard.stopPropagation();dropdown.open=true;
+export function wireWorkspaceOverflowKeyboard(root: Document | HTMLElement): () => void {
+  const onKeydown = (event: Event) => {
+    const keyboard = event as KeyboardEvent;
+    if (!['Enter', ' ', 'ArrowDown'].includes(keyboard.key)) return;
+    const origin = keyboard.target;
+    if (!(origin instanceof Element)) return;
+    const trigger = origin.closest<HTMLElement>('.workspace-header__overflow > [slot="trigger"]');
+    if (!trigger) return;
+    const dropdown = trigger.closest<HTMLElement & { open: boolean }>('.workspace-header__overflow');
+    if (!dropdown || dropdown.open) return;
+    keyboard.preventDefault();
+    keyboard.stopPropagation();
+    dropdown.open = true;
   };
-  const onAfterShow=(event:Event)=>{
-    const dropdown=event.target;
-    if(!(dropdown instanceof HTMLElement)||!dropdown.matches('.workspace-header__overflow'))return;
-    requestAnimationFrame(()=>{const first=dropdown.querySelector<HTMLElement&{active?:boolean}>('wa-dropdown-item:not([disabled])');if(!first)return;first.active=true;first.tabIndex=0;first.focus({preventScroll:true})});
+  const onAfterShow = (event: Event) => {
+    const dropdown = event.target;
+    if (!(dropdown instanceof HTMLElement) || !dropdown.matches('.workspace-header__overflow')) return;
+    requestAnimationFrame(() => {
+      const first = dropdown.querySelector<HTMLElement & { active?: boolean }>('wa-dropdown-item:not([disabled])');
+      if (!first) return;
+      first.active = true;
+      first.tabIndex = 0;
+      first.focus({ preventScroll: true });
+    });
   };
-  root.addEventListener('keydown',onKeydown);root.addEventListener('wa-after-show',onAfterShow);
-  return()=>{root.removeEventListener('keydown',onKeydown);root.removeEventListener('wa-after-show',onAfterShow)};
+  root.addEventListener('keydown', onKeydown);
+  root.addEventListener('wa-after-show', onAfterShow);
+  return () => {
+    root.removeEventListener('keydown', onKeydown);
+    root.removeEventListener('wa-after-show', onAfterShow);
+  };
 }
 
-function WorkspaceOverflowControls({mode,projectActionsDisabled,ticketActionsDisabled,searchOpen,sort,sortDirection,visibleSortOptions,notificationCount,selectedTicketsUpNext,selectedTicketsUpNextEligible,listOnly=false}:{mode:WorkspaceViewMode;projectActionsDisabled:boolean;ticketActionsDisabled:boolean;searchOpen:boolean;sort:WorkspaceSort;sortDirection:WorkspaceSortDirection;visibleSortOptions:ReadonlyArray<{value:WorkspaceSort;label:string}>;notificationCount:number;selectedTicketsUpNext:boolean;selectedTicketsUpNextEligible:boolean;listOnly?:boolean}){
-  const modes:ReadonlyArray<{value:WorkspaceViewMode;label:string;icon:IconNode;iconName:string}>=[
-    {value:'list',label:'Show List View',icon:List,iconName:'list'},
-    ...(listOnly?[]:[{value:'board' as const,label:'Show Columns View',icon:Columns3,iconName:'columns-3'}]),
-    {value:'notifications',label:`Show Notifications${notificationCount?` (${notificationCount} pending)`:''}`,icon:Bell,iconName:'bell'},
-    {value:'settings',label:'Show Settings',icon:Settings,iconName:'settings'},
+function WorkspaceOverflowControls({
+  mode,
+  projectActionsDisabled,
+  ticketActionsDisabled,
+  searchOpen,
+  sort,
+  sortDirection,
+  visibleSortOptions,
+  notificationCount,
+  selectedTicketsUpNext,
+  selectedTicketsUpNextEligible,
+  listOnly = false,
+}: {
+  mode: WorkspaceViewMode;
+  projectActionsDisabled: boolean;
+  ticketActionsDisabled: boolean;
+  searchOpen: boolean;
+  sort: WorkspaceSort;
+  sortDirection: WorkspaceSortDirection;
+  visibleSortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }>;
+  notificationCount: number;
+  selectedTicketsUpNext: boolean;
+  selectedTicketsUpNextEligible: boolean;
+  listOnly?: boolean;
+}) {
+  const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
+    { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
+    ...(listOnly
+      ? []
+      : [{ value: 'board' as const, label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' }]),
+    {
+      value: 'notifications',
+      label: `Show Notifications${notificationCount ? ` (${notificationCount} pending)` : ''}`,
+      icon: Bell,
+      iconName: 'bell',
+    },
+    { value: 'settings', label: 'Show Settings', icon: Settings, iconName: 'settings' },
   ];
-  return <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
-    <wa-button slot="trigger" appearance="plain" aria-label="More workspace controls" title="More workspace controls"><LucideIcon icon={MoreHorizontal} name="ellipsis"/></wa-button>
-    <wa-dropdown-item class="workspace-header__overflow-utility" type="checkbox" checked={selectedTicketsUpNext} disabled={ticketActionsDisabled||!selectedTicketsUpNextEligible} data-workspace-overflow-action="toggle-selected-up-next"><span slot="icon"><LucideIcon icon={Star} name="star"/></span>Toggle Up Next</wa-dropdown-item>
-    <wa-dropdown-item class="workspace-header__overflow-utility" disabled={ticketActionsDisabled} data-workspace-overflow-action="open-selected-ticket-actions"><span slot="icon"><LucideIcon icon={MoreHorizontal} name="ellipsis"/></span>Show Selected Ticket Actions…</wa-dropdown-item>
-    <wa-divider class="workspace-header__overflow-sort"/>
-    {visibleSortOptions.map(option=>{const direction=option.value===sort?sortDirection:defaultWorkspaceSortDirection(option.value),icon=workspaceSortTrigger(option.value,direction);return <wa-dropdown-item class="workspace-header__overflow-sort" type="checkbox" checked={option.value===sort} disabled={projectActionsDisabled} data-workspace-overflow-action="set-workspace-sort" data-workspace-sort={option.value}><span slot="icon"><LucideIcon icon={icon.icon} name={icon.iconName}/></span>{`Sort by ${option.label}${option.value===sort?`, ${direction}`:''}`}</wa-dropdown-item>})}
-    <wa-divider class="workspace-header__overflow-search"/>
-    <wa-dropdown-item class="workspace-header__overflow-search" disabled={projectActionsDisabled} data-workspace-overflow-action="open-workspace-search"><span slot="icon"><LucideIcon icon={Search} name="search"/></span>{searchOpen?'Focus Search':'Search Tickets'}</wa-dropdown-item>
-    <wa-divider class="workspace-header__overflow-view"/>
-    {modes.map(option=><wa-dropdown-item class="workspace-header__overflow-view" type="checkbox" checked={option.value===mode} data-workspace-overflow-action="set-view-mode" data-view-mode={option.value}><span slot="icon"><LucideIcon icon={option.icon} name={option.iconName}/></span>{option.label}</wa-dropdown-item>)}
-  </wa-dropdown>;
+  return (
+    <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
+      <wa-button slot="trigger" appearance="plain" aria-label="More workspace controls" title="More workspace controls">
+        <LucideIcon icon={MoreHorizontal} name="ellipsis" />
+      </wa-button>
+      <wa-dropdown-item
+        class="workspace-header__overflow-utility"
+        type="checkbox"
+        checked={selectedTicketsUpNext}
+        disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
+        data-workspace-overflow-action="toggle-selected-up-next"
+      >
+        <span slot="icon">
+          <LucideIcon icon={Star} name="star" />
+        </span>
+        Toggle Up Next
+      </wa-dropdown-item>
+      <wa-dropdown-item
+        class="workspace-header__overflow-utility"
+        disabled={ticketActionsDisabled}
+        data-workspace-overflow-action="open-selected-ticket-actions"
+      >
+        <span slot="icon">
+          <LucideIcon icon={MoreHorizontal} name="ellipsis" />
+        </span>
+        Show Selected Ticket Actions…
+      </wa-dropdown-item>
+      <wa-divider class="workspace-header__overflow-sort" />
+      {visibleSortOptions.map((option) => {
+        const direction = option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
+          icon = workspaceSortTrigger(option.value, direction);
+        return (
+          <wa-dropdown-item
+            class="workspace-header__overflow-sort"
+            type="checkbox"
+            checked={option.value === sort}
+            disabled={projectActionsDisabled}
+            data-workspace-overflow-action="set-workspace-sort"
+            data-workspace-sort={option.value}
+          >
+            <span slot="icon">
+              <LucideIcon icon={icon.icon} name={icon.iconName} />
+            </span>
+            {`Sort by ${option.label}${option.value === sort ? `, ${direction}` : ''}`}
+          </wa-dropdown-item>
+        );
+      })}
+      <wa-divider class="workspace-header__overflow-search" />
+      <wa-dropdown-item
+        class="workspace-header__overflow-search"
+        disabled={projectActionsDisabled}
+        data-workspace-overflow-action="open-workspace-search"
+      >
+        <span slot="icon">
+          <LucideIcon icon={Search} name="search" />
+        </span>
+        {searchOpen ? 'Focus Search' : 'Search Tickets'}
+      </wa-dropdown-item>
+      <wa-divider class="workspace-header__overflow-view" />
+      {modes.map((option) => (
+        <wa-dropdown-item
+          class="workspace-header__overflow-view"
+          type="checkbox"
+          checked={option.value === mode}
+          data-workspace-overflow-action="set-view-mode"
+          data-view-mode={option.value}
+        >
+          <span slot="icon">
+            <LucideIcon icon={option.icon} name={option.iconName} />
+          </span>
+          {option.label}
+        </wa-dropdown-item>
+      ))}
+    </wa-dropdown>
+  );
 }
 
-const localSearchDateExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short'}).format(new Date(2026,8,1));
-const localSearchDateTimeExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(new Date(2026,8,1,11,5));
+const localSearchDateExample = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(new Date(2026, 8, 1));
+const localSearchDateTimeExample = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'short',
+  timeStyle: 'short',
+}).format(new Date(2026, 8, 1, 11, 5));
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false,sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true,listOnly=false }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
-  const projectActionsDisabled = mode === 'settings'||mode==='notifications';
-  const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
-  const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
-  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>{const choiceIcon=workspaceSortTrigger(option.value,option.value===sort?sortDirection:defaultWorkspaceSortDirection(option.value));return {...option,icon:choiceIcon.icon,iconName:choiceIcon.iconName}});
-  const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
-  return <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
+export function WorkspaceControls({
+  mode,
+  searchOpen = false,
+  searchQuery = '',
+  searchTokens = [],
+  searchTagSuggestions = [],
+  searchDatePrefix,
+  searchHelpOpen = false,
+  sort = 'updated',
+  sortDirection = defaultWorkspaceSortDirection(sort),
+  notificationCount = 0,
+  selectedTicketCount = 0,
+  selectedTicketsUpNext = false,
+  selectedTicketsUpNextEligible = false,
+  selectedTicketsMutable = true,
+  listOnly = false,
+}: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+  const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
+  const ticketActionsDisabled = projectActionsDisabled || selectedTicketCount === 0 || !selectedTicketsMutable;
+  const visibleSortOptions = mode === 'board' ? sortOptions.filter((option) => option.value !== 'status') : sortOptions;
+  const sortChoices: ReadonlyArray<SelectChoice<WorkspaceSort>> = visibleSortOptions.map((option) => {
+    const choiceIcon = workspaceSortTrigger(
+      option.value,
+      option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
+    );
+    return { ...option, icon: choiceIcon.icon, iconName: choiceIcon.iconName };
+  });
+  const sortLabel = sortOptions.find((option) => option.value === sort)!.label,
+    trigger = workspaceSortTrigger(sort, sortDirection);
+  return (
+    <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
-        {listOnly ? <></> : <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />}
-        <ModeButton mode="notifications" current={mode} label="Notifications" icon={Bell} iconName="bell" badge={notificationCount}/>
+        {listOnly ? (
+          <></>
+        ) : (
+          <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
+        )}
+        <ModeButton
+          mode="notifications"
+          current={mode}
+          label="Notifications"
+          icon={Bell}
+          iconName="bell"
+          badge={notificationCount}
+        />
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>
-        <Select className="workspace-header__sort" name="workspace-sort" ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`} value={sort} choices={sortChoices} disabled={projectActionsDisabled} renderSelected={()=> <LucideIcon icon={trigger.icon} name={trigger.iconName} />} />
+        <Select
+          className="workspace-header__sort"
+          name="workspace-sort"
+          ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`}
+          value={sort}
+          choices={sortChoices}
+          disabled={projectActionsDisabled}
+          renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
+        />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
-        <wa-button appearance="plain" disabled={ticketActionsDisabled||!selectedTicketsUpNextEligible} data-action="toggle-selected-up-next" aria-label="Toggle Up Next for selected tickets" aria-pressed={String(selectedTicketsUpNext)} title="Toggle Up Next for selected tickets"><LucideIcon icon={Star} name="star" /></wa-button>
-        <wa-button appearance="plain" disabled={ticketActionsDisabled} data-action="open-selected-ticket-actions" aria-label="More actions for selected tickets" title="More actions for selected tickets"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
+        <wa-button
+          appearance="plain"
+          disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
+          data-action="toggle-selected-up-next"
+          aria-label="Toggle Up Next for selected tickets"
+          aria-pressed={String(selectedTicketsUpNext)}
+          title="Toggle Up Next for selected tickets"
+        >
+          <LucideIcon icon={Star} name="star" />
+        </wa-button>
+        <wa-button
+          appearance="plain"
+          disabled={ticketActionsDisabled}
+          data-action="open-selected-ticket-actions"
+          aria-label="More actions for selected tickets"
+          title="More actions for selected tickets"
+        >
+          <LucideIcon icon={MoreHorizontal} name="ellipsis" />
+        </wa-button>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
-        <TokenSearchField id="workspace-search" label="Search tickets" query={searchQuery} tokens={searchTokens.map(toTokenSearchToken)} placeholder="Search tickets" disabled={projectActionsDisabled} autofocus collapsible expanded={searchOpen} editAction="edit-workspace-search-token" removeAction="remove-workspace-search-token" clearAction="clear-workspace-search" clearLabel="Clear search" trailing={<button type="button" class="workspace-header__search-help-button" data-action="toggle-workspace-search-help" aria-label="Search syntax help" aria-expanded={String(searchHelpOpen)} title="Search syntax help"><LucideIcon icon={CircleHelp} name="circle-help" /></button>} />
-        {searchOpen&&searchTagSuggestions.length>0?<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags" data-token-search-keep-open>{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag.includes(' ')?`"${tag}"`:tag}</button>)}</div>:<></>}
-        {searchOpen&&searchDatePrefix?<div class="workspace-header__search-date" role="group" aria-label="Date and time helper" data-token-search-keep-open><label>Date<input name="workspace-search-date" type="date"/></label><label>Time (optional)<input name="workspace-search-time" type="time"/></label><button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>Apply</button></div>:<></>}
-        {searchOpen&&searchHelpOpen?<aside class="workspace-header__search-help" role="dialog" aria-label="Search syntax" data-token-search-keep-open><header><strong>Search syntax</strong><p>Type words, then add any filters you need.</p></header><dl>
-              <div><dt>Tags</dt><dd><code>tag:client</code><code>tag:&quot;needs design&quot;</code></dd></div>
-              <div><dt>Content</dt><dd><code>has:attachment</code><code>has:media-annotation</code><code>has:commit</code><code>attachment:*.png</code></dd></div>
-              <div><dt>Workflow</dt><dd><code>is:up-next</code><code>is:active</code><code>is:open</code><code>is:closed</code><code>is:duplicate</code><code>is:not-started</code><code>is:started</code><code>is:completed</code><code>is:verified</code><code>is:backlog</code><code>is:archived</code></dd></div>
-              <div><dt>Dates</dt><dd><code>updated-after:4h ago</code><code>{`created-after:${localSearchDateExample}`}</code><code>{`completed-before:${localSearchDateTimeExample}`}</code><code>updated-after:2026-09-01T11:05</code></dd></div>
-            </dl><div class="workspace-header__search-help-notes"><p><strong>Combine filters</strong> with case-insensitive <code>AND</code>, <code>OR</code>, <code>NOT</code>, and parentheses.</p><code>(client OR server) AND NOT is:archived</code><p>NOT binds before AND, and AND before OR.</p><p><strong>Date fields:</strong> created, completed, started, verified, archived, and updated. Add <code>-before</code> or <code>-after</code>; local, relative, and ISO 8601 dates work.</p></div></aside>:<></>}
+        <TokenSearchField
+          id="workspace-search"
+          label="Search tickets"
+          query={searchQuery}
+          tokens={searchTokens.map(toTokenSearchToken)}
+          placeholder="Search tickets"
+          disabled={projectActionsDisabled}
+          autofocus
+          collapsible
+          expanded={searchOpen}
+          editAction="edit-workspace-search-token"
+          removeAction="remove-workspace-search-token"
+          clearAction="clear-workspace-search"
+          clearLabel="Clear search"
+          trailing={
+            <button
+              type="button"
+              class="workspace-header__search-help-button"
+              data-action="toggle-workspace-search-help"
+              aria-label="Search syntax help"
+              aria-expanded={String(searchHelpOpen)}
+              title="Search syntax help"
+            >
+              <LucideIcon icon={CircleHelp} name="circle-help" />
+            </button>
+          }
+        />
+        {searchOpen && searchTagSuggestions.length > 0 ? (
+          <div
+            class="workspace-header__search-suggestions"
+            role="listbox"
+            aria-label="Matching tags"
+            data-token-search-keep-open
+          >
+            {searchTagSuggestions.map((tag) => (
+              <button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>
+                tag:{tag.includes(' ') ? `"${tag}"` : tag}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <></>
+        )}
+        {searchOpen && searchDatePrefix ? (
+          <div
+            class="workspace-header__search-date"
+            role="group"
+            aria-label="Date and time helper"
+            data-token-search-keep-open
+          >
+            <label>
+              Date
+              <input name="workspace-search-date" type="date" />
+            </label>
+            <label>
+              Time (optional)
+              <input name="workspace-search-time" type="time" />
+            </label>
+            <button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>
+              Apply
+            </button>
+          </div>
+        ) : (
+          <></>
+        )}
+        {searchOpen && searchHelpOpen ? (
+          <aside
+            class="workspace-header__search-help"
+            role="dialog"
+            aria-label="Search syntax"
+            data-token-search-keep-open
+          >
+            <header>
+              <strong>Search syntax</strong>
+              <p>Type words, then add any filters you need.</p>
+            </header>
+            <dl>
+              <div>
+                <dt>Tags</dt>
+                <dd>
+                  <code>tag:client</code>
+                  <code>tag:&quot;needs design&quot;</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Content</dt>
+                <dd>
+                  <code>has:attachment</code>
+                  <code>has:media-annotation</code>
+                  <code>has:commit</code>
+                  <code>attachment:*.png</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Workflow</dt>
+                <dd>
+                  <code>is:up-next</code>
+                  <code>is:active</code>
+                  <code>is:open</code>
+                  <code>is:closed</code>
+                  <code>is:duplicate</code>
+                  <code>is:not-started</code>
+                  <code>is:started</code>
+                  <code>is:completed</code>
+                  <code>is:verified</code>
+                  <code>is:backlog</code>
+                  <code>is:archived</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Dates</dt>
+                <dd>
+                  <code>updated-after:4h ago</code>
+                  <code>{`created-after:${localSearchDateExample}`}</code>
+                  <code>{`completed-before:${localSearchDateTimeExample}`}</code>
+                  <code>updated-after:2026-09-01T11:05</code>
+                </dd>
+              </div>
+            </dl>
+            <div class="workspace-header__search-help-notes">
+              <p>
+                <strong>Combine filters</strong> with case-insensitive <code>AND</code>, <code>OR</code>,{' '}
+                <code>NOT</code>, and parentheses.
+              </p>
+              <code>(client OR server) AND NOT is:archived</code>
+              <p>NOT binds before AND, and AND before OR.</p>
+              <p>
+                <strong>Date fields:</strong> created, completed, started, verified, archived, and updated. Add{' '}
+                <code>-before</code> or <code>-after</code>; local, relative, and ISO 8601 dates work.
+              </p>
+            </div>
+          </aside>
+        ) : (
+          <></>
+        )}
       </ToolbarControlGroup>
-      <WorkspaceOverflowControls mode={mode} projectActionsDisabled={projectActionsDisabled} ticketActionsDisabled={ticketActionsDisabled} searchOpen={searchOpen} sort={sort} sortDirection={sortDirection} visibleSortOptions={visibleSortOptions} notificationCount={notificationCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} listOnly={listOnly}/>
-    </div>;
+      <WorkspaceOverflowControls
+        mode={mode}
+        projectActionsDisabled={projectActionsDisabled}
+        ticketActionsDisabled={ticketActionsDisabled}
+        searchOpen={searchOpen}
+        sort={sort}
+        sortDirection={sortDirection}
+        visibleSortOptions={visibleSortOptions}
+        notificationCount={notificationCount}
+        selectedTicketsUpNext={selectedTicketsUpNext}
+        selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
+        listOnly={listOnly}
+      />
+    </div>
+  );
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '',searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false, sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true,listOnly=false }: WorkspaceHeaderProps) {
-  return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
-    <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} searchTokens={searchTokens} searchTagSuggestions={searchTagSuggestions} searchDatePrefix={searchDatePrefix} searchHelpOpen={searchHelpOpen} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} listOnly={listOnly} />}
-  </header>;
+export function WorkspaceHeader({
+  projectName,
+  mode,
+  searchOpen = false,
+  searchQuery = '',
+  searchTokens = [],
+  searchTagSuggestions = [],
+  searchDatePrefix,
+  searchHelpOpen = false,
+  sort = 'updated',
+  sortDirection = defaultWorkspaceSortDirection(sort),
+  controlsVisible = true,
+  notificationCount = 0,
+  selectedTicketCount = 0,
+  selectedTicketsUpNext = false,
+  selectedTicketsUpNextEligible = false,
+  selectedTicketsMutable = true,
+  listOnly = false,
+}: WorkspaceHeaderProps) {
+  return (
+    <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
+      <WorkspaceIdentity projectName={projectName} />
+      {controlsVisible && (
+        <WorkspaceControls
+          mode={mode}
+          searchOpen={searchOpen}
+          searchQuery={searchQuery}
+          searchTokens={searchTokens}
+          searchTagSuggestions={searchTagSuggestions}
+          searchDatePrefix={searchDatePrefix}
+          searchHelpOpen={searchHelpOpen}
+          sort={sort}
+          sortDirection={sortDirection}
+          notificationCount={notificationCount}
+          selectedTicketCount={selectedTicketCount}
+          selectedTicketsUpNext={selectedTicketsUpNext}
+          selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
+          selectedTicketsMutable={selectedTicketsMutable}
+          listOnly={listOnly}
+        />
+      )}
+    </header>
+  );
 }

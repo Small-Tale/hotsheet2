@@ -4,52 +4,507 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import './native-popover-dialog.css';
 
-import {LucideIcon} from '@kerfjs/ui/lucide-icon';
-import {PanelHeader} from '@kerfjs/ui/panel-header';
-import {ToolbarControlGroup} from '@kerfjs/ui/toolbar-control-group';
-import type {SafeHtml} from 'kerfjs/jsx-runtime';
-import {Activity,Bot,Brain,ChevronDown,CircleAlert,Copy,Download,Image,MessageSquare,Paperclip,Send,Square,X} from 'lucide';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
+import {
+  Activity,
+  Bot,
+  Brain,
+  ChevronDown,
+  CircleAlert,
+  Copy,
+  Download,
+  Image,
+  MessageSquare,
+  Paperclip,
+  Send,
+  Square,
+  X,
+} from 'lucide';
 
-import {type ConversationActivity,type ConversationMessage,conversationTimeline,type ConversationUsage,formatConversationCost,formatConversationTokens} from '../ai-conversation';
+import {
+  type ConversationActivity,
+  type ConversationMessage,
+  conversationTimeline,
+  type ConversationUsage,
+  formatConversationCost,
+  formatConversationTokens,
+} from '../ai-conversation';
 import type { PermissionItem } from '../permission-notifications';
-import {AIContentFeedback,AIContentLabel} from './ai-content-label';
-import {MarkdownPreview} from './markdown-preview';
-import {PermissionRequestCard} from './permission-request-card';
-import {ProviderModelEffortSubmenus} from './provider-model-effort-menu';
+import { AIContentFeedback, AIContentLabel } from './ai-content-label';
+import { MarkdownPreview } from './markdown-preview';
+import { PermissionRequestCard } from './permission-request-card';
+import { ProviderModelEffortSubmenus } from './provider-model-effort-menu';
 
-export interface AIConversationProps {open:boolean;tool:string;sessionId?:string;selectionId?:string;selectedMessageIds?:readonly string[];messages:ConversationMessage[];draft:string;busy:boolean;progress?:string;interruptible:boolean;permissions?:PermissionItem[];activity?:ConversationActivity[];totalUsage?:ConversationUsage;error?:string;feedbackAvailable?:boolean;presentation?:'dialog'|'embedded';foreground?:SafeHtml;providerId?:string;providers?:readonly {id:string;label:string}[];canChangeProvider?:boolean;model?:string;effort?:string;models?:readonly {id:string;label:string}[];efforts?:readonly string[];canChangeModel?:boolean;canChangeEffort?:boolean;readOnly?:boolean;readOnlyContext?:'saved'|'preview';savedSource?:string}
+export interface AIConversationProps {
+  open: boolean;
+  tool: string;
+  sessionId?: string;
+  selectionId?: string;
+  selectedMessageIds?: readonly string[];
+  messages: ConversationMessage[];
+  draft: string;
+  busy: boolean;
+  progress?: string;
+  interruptible: boolean;
+  permissions?: PermissionItem[];
+  activity?: ConversationActivity[];
+  totalUsage?: ConversationUsage;
+  error?: string;
+  feedbackAvailable?: boolean;
+  presentation?: 'dialog' | 'embedded';
+  foreground?: SafeHtml;
+  providerId?: string;
+  providers?: readonly { id: string; label: string }[];
+  canChangeProvider?: boolean;
+  model?: string;
+  effort?: string;
+  models?: readonly { id: string; label: string }[];
+  efforts?: readonly string[];
+  canChangeModel?: boolean;
+  canChangeEffort?: boolean;
+  readOnly?: boolean;
+  readOnlyContext?: 'saved' | 'preview';
+  savedSource?: string;
+}
 
-export function isConversationSurfaceLifecycleEvent(event:Pick<Event,'target'>,surface:Element){return event.target===surface}
+export function isConversationSurfaceLifecycleEvent(event: Pick<Event, 'target'>, surface: Element) {
+  return event.target === surface;
+}
 
-function UsageLine({usage,label='Turn usage'}:{usage:ConversationUsage;label?:string}){const total=usage.tokensIn+usage.tokensOut;return <p class="ai-conversation__usage" aria-label={`${label}: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`}><span>{formatConversationTokens(total)} tokens</span><span>{formatConversationCost(usage.costUsd)}</span>{usage.model&&<span title={usage.model}>{usage.model}</span>}</p>}
+function UsageLine({ usage, label = 'Turn usage' }: { usage: ConversationUsage; label?: string }) {
+  const total = usage.tokensIn + usage.tokensOut;
+  return (
+    <p
+      class="ai-conversation__usage"
+      aria-label={`${label}: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`}
+    >
+      <span>{formatConversationTokens(total)} tokens</span>
+      <span>{formatConversationCost(usage.costUsd)}</span>
+      {usage.model && <span title={usage.model}>{usage.model}</span>}
+    </p>
+  );
+}
 
-export function ConversationMessages({tool,messages,feedbackAvailable=false,selectedIds,selectionAction}:{tool:string;messages:readonly ConversationMessage[];feedbackAvailable?:boolean;selectedIds?:ReadonlySet<string>;selectionAction?:string}){const selectable=Boolean(selectionAction);return <>{messages.map(message=><article class={`ai-conversation__message ai-conversation__message--${message.role}`} data-message-id={message.id} data-status={message.status} data-action={selectionAction} data-selected={selectable?String(selectedIds?.has(message.id)):undefined} role={selectable?'option':undefined} aria-selected={selectable?String(selectedIds?.has(message.id)):undefined} tabindex={selectable?0:undefined} aria-label={message.role==='assistant'?`AI-generated response by ${tool}`:undefined}><strong>{message.role==='user'?'You':<AIContentLabel tool={tool} feedbackTarget={feedbackAvailable&&message.status==='completed'?`conversation:${message.id}`:undefined}/>}</strong>{message.content?<MarkdownPreview source={message.content}/>:<p aria-label="Awaiting response"> </p>}{message.files?.length&&<ul class="ai-conversation__files" aria-label="Referenced files">{message.files.map(file=><li><a href={file.url} download={file.filename}><LucideIcon icon={file.kind==='media'?Image:Paperclip} name={file.kind==='media'?'image':'paperclip'}/><span>{file.filename}</span></a></li>)}</ul>}{message.usage&&<UsageLine usage={message.usage}/>}</article>)}</>}
+export function ConversationMessages({
+  tool,
+  messages,
+  feedbackAvailable = false,
+  selectedIds,
+  selectionAction,
+}: {
+  tool: string;
+  messages: readonly ConversationMessage[];
+  feedbackAvailable?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  selectionAction?: string;
+}) {
+  const selectable = Boolean(selectionAction);
+  return (
+    <>
+      {messages.map((message) => (
+        <article
+          class={`ai-conversation__message ai-conversation__message--${message.role}`}
+          data-message-id={message.id}
+          data-status={message.status}
+          data-action={selectionAction}
+          data-selected={selectable ? String(selectedIds?.has(message.id)) : undefined}
+          role={selectable ? 'option' : undefined}
+          aria-selected={selectable ? String(selectedIds?.has(message.id)) : undefined}
+          tabindex={selectable ? 0 : undefined}
+          aria-label={message.role === 'assistant' ? `AI-generated response by ${tool}` : undefined}
+        >
+          <strong>
+            {message.role === 'user' ? (
+              'You'
+            ) : (
+              <AIContentLabel
+                tool={tool}
+                feedbackTarget={
+                  feedbackAvailable && message.status === 'completed' ? `conversation:${message.id}` : undefined
+                }
+              />
+            )}
+          </strong>
+          {message.content ? <MarkdownPreview source={message.content} /> : <p aria-label="Awaiting response"> </p>}
+          {message.files?.length && (
+            <ul class="ai-conversation__files" aria-label="Referenced files">
+              {message.files.map((file) => (
+                <li>
+                  <a href={file.url} download={file.filename}>
+                    <LucideIcon
+                      icon={file.kind === 'media' ? Image : Paperclip}
+                      name={file.kind === 'media' ? 'image' : 'paperclip'}
+                    />
+                    <span>{file.filename}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {message.usage && <UsageLine usage={message.usage} />}
+        </article>
+      ))}
+    </>
+  );
+}
 
-function ConversationActivityGroup({activity,feedbackAvailable}:{activity:readonly ConversationActivity[];feedbackAvailable:boolean}){return <section class="ai-conversation__activity" aria-label="AI-generated activity summaries; may contain errors"><header><span><LucideIcon icon={Activity} name="activity"/><strong>Activity</strong></span><span class="ai-conversation__activity-disclosure"><AIContentLabel mayContainErrors/></span></header><ol>{activity.map(item=><li data-activity-id={item.id} data-importance={item.importance}><MarkdownPreview source={item.summary}/>{feedbackAvailable&&<AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`}/>}</li>)}</ol></section>}
+function ConversationActivityGroup({
+  activity,
+  feedbackAvailable,
+}: {
+  activity: readonly ConversationActivity[];
+  feedbackAvailable: boolean;
+}) {
+  return (
+    <section class="ai-conversation__activity" aria-label="AI-generated activity summaries; may contain errors">
+      <header>
+        <span>
+          <LucideIcon icon={Activity} name="activity" />
+          <strong>Activity</strong>
+        </span>
+        <span class="ai-conversation__activity-disclosure">
+          <AIContentLabel mayContainErrors />
+        </span>
+      </header>
+      <ol>
+        {activity.map((item) => (
+          <li data-activity-id={item.id} data-importance={item.importance}>
+            <MarkdownPreview source={item.summary} />
+            {feedbackAvailable && <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
-export function AIConversation({open,tool,selectionId,selectedMessageIds=[],messages,draft,busy,progress,interruptible,permissions=[],activity=[],totalUsage,error,feedbackAvailable=false,presentation='dialog',foreground,providerId,providers=[],canChangeProvider=false,model,effort,models=[],efforts=[],canChangeModel=false,canChangeEffort=false,readOnly=false,readOnlyContext='saved',savedSource}:AIConversationProps){
-  const previewOnly=readOnly&&readOnlyContext==='preview',previewConfiguration=[model&&`Model ${model}`,effort&&`Effort ${effort}`].filter(Boolean).join(' · '),summary=previewOnly?'Read-only preview':readOnly?'Saved read-only transcript':busy?`${tool} is working`:messages.length===0?'Ready for your first message':`${messages.length} message${messages.length===1?'':'s'}`;
-  const saveAction=previewOnly?null:<wa-button class="ai-conversation__header-action" appearance="plain" size="small" data-action="save-conversation" disabled={busy||messages.length===0} aria-label="Save conversation" title={busy?'Wait for the active response before saving':'Save conversation'}><LucideIcon icon={Download} name="download"/></wa-button>;
-  const actions=<>{totalUsage&&<span class="ai-conversation__header-usage"><UsageLine usage={totalUsage} label="Conversation usage"/></span>}{saveAction}{busy&&interruptible&&<wa-button class="ai-conversation__header-action" appearance="plain" size="small" data-action="stop-conversation" aria-label={`Stop ${tool}`} title={`Stop ${tool}`}><LucideIcon icon={Square} name="square"/></wa-button>}</>;
-  const inlinePermissions=presentation==='dialog'&&foreground?[]:permissions,selectedIds=new Set(selectedMessageIds),selectionEnabled=Boolean(selectionId)&&messages.length>0,selectedCount=selectedIds.size;
-  const selectionStatus=selectionEnabled?<div class="ai-conversation__selection" data-active={String(selectedCount>0)}><span>{selectedCount?`${selectedCount} message${selectedCount===1?'':'s'} selected`:'Select a message, then another to select a range.'}</span>{selectedCount>0&&<span class="ai-conversation__selection-actions"><wa-button appearance="plain" size="small" data-action="copy-conversation-selection" aria-label="Copy selected messages" title="Copy selected messages"><LucideIcon icon={Copy} name="copy"/></wa-button><wa-button appearance="plain" size="small" data-action="clear-conversation-selection" aria-label="Clear message selection" title="Clear message selection"><LucideIcon icon={X} name="x"/></wa-button></span>}</div>:null;
-  const timeline=conversationTimeline(messages,activity),transcript=<section class="ai-conversation__transcript" aria-label="Conversation transcript" aria-live="polite">{messages.length===0&&<div class="ai-conversation__empty"><LucideIcon icon={MessageSquare} name="message-square"/><strong>{readOnly?'No conversation messages yet':'Start a conversation'}</strong><p>{readOnly?'This chat has not received any messages.':`Ask ${tool} about this project or send it a task.`}</p></div>}{selectionStatus}{timeline.map(group=>group.kind==='message'?<ConversationMessages tool={tool} messages={[group.message]} feedbackAvailable={feedbackAvailable} selectedIds={selectedIds} selectionAction={selectionEnabled?'pick-conversation-message':undefined}/>:<ConversationActivityGroup activity={group.activity} feedbackAvailable={feedbackAvailable}/>)}{inlinePermissions.map(item=><div data-permission-key={item.key}><PermissionRequestCard item={item} presentation="list"/></div>)}{busy&&progress&&<p class="ai-conversation__progress" role="status"><LucideIcon icon={Bot} name="bot"/>{progress}</p>}{error&&<p class="ai-conversation__error" role="alert"><LucideIcon icon={CircleAlert} name="circle-alert"/><span><strong>Conversation unavailable</strong>{error}</span></p>}</section>;
-  const activeModel=models.find(item=>item.id===model),currentModelLabel=activeModel?.label??model??(models[0]?.id??''),customModel=model&&!activeModel?model:undefined,currentEffort=effort??(efforts.length?efforts[0]:undefined);
-  const providerChoices=providers.filter(item=>item.id!==providerId),providerChangeable=canChangeProvider&&providerChoices.length>0,currentProviderLabel=providers.find(item=>item.id===providerId)?.label??tool;
-  const sessionControls=!readOnly&&(providerChangeable||canChangeModel&&models.length||canChangeEffort&&efforts.length)?<div class="ai-conversation__model" data-component="conversation-model-control" aria-label="AI session settings">
-    <span class="ai-conversation__model-current"><LucideIcon icon={Brain} name="brain" className="ai-conversation__model-icon" />{canChangeModel&&currentModelLabel&&<span class="ai-conversation__model-name" title={model}>{currentModelLabel}</span>}{canChangeEffort&&currentEffort&&<span class="ai-conversation__model-effort" title="Effort">{currentEffort}</span>}</span>
-    <wa-dropdown class="ai-conversation__model-menu" placement="top-end" distance={6}>
-      <button slot="trigger" type="button" class="ai-conversation__model-trigger" aria-label="Change provider, model, and effort" title="Change provider, model, and effort" aria-haspopup="menu"><LucideIcon icon={ChevronDown} name="chevron-down" /></button>
-      <ProviderModelEffortSubmenus
-        actions={{provider:'select-conversation-provider',model:'select-conversation-model',effort:'select-conversation-effort',manualModel:'open-conversation-manual-model'}}
-        providers={providerChangeable?{choices:providers,currentId:providerId,currentLabel:currentProviderLabel}:undefined}
-        model={canChangeModel&&models.length>0?{choices:models,currentId:activeModel?.id,currentLabel:currentModelLabel,customModel}:undefined}
-        effort={canChangeEffort&&efforts.length>0?{efforts,current:currentEffort}:undefined}
+export function AIConversation({
+  open,
+  tool,
+  selectionId,
+  selectedMessageIds = [],
+  messages,
+  draft,
+  busy,
+  progress,
+  interruptible,
+  permissions = [],
+  activity = [],
+  totalUsage,
+  error,
+  feedbackAvailable = false,
+  presentation = 'dialog',
+  foreground,
+  providerId,
+  providers = [],
+  canChangeProvider = false,
+  model,
+  effort,
+  models = [],
+  efforts = [],
+  canChangeModel = false,
+  canChangeEffort = false,
+  readOnly = false,
+  readOnlyContext = 'saved',
+  savedSource,
+}: AIConversationProps) {
+  const previewOnly = readOnly && readOnlyContext === 'preview',
+    previewConfiguration = [model && `Model ${model}`, effort && `Effort ${effort}`].filter(Boolean).join(' · '),
+    summary = previewOnly
+      ? 'Read-only preview'
+      : readOnly
+        ? 'Saved read-only transcript'
+        : busy
+          ? `${tool} is working`
+          : messages.length === 0
+            ? 'Ready for your first message'
+            : `${messages.length} message${messages.length === 1 ? '' : 's'}`;
+  const saveAction = previewOnly ? null : (
+    <wa-button
+      class="ai-conversation__header-action"
+      appearance="plain"
+      size="small"
+      data-action="save-conversation"
+      disabled={busy || messages.length === 0}
+      aria-label="Save conversation"
+      title={busy ? 'Wait for the active response before saving' : 'Save conversation'}
+    >
+      <LucideIcon icon={Download} name="download" />
+    </wa-button>
+  );
+  const actions = (
+    <>
+      {totalUsage && (
+        <span class="ai-conversation__header-usage">
+          <UsageLine usage={totalUsage} label="Conversation usage" />
+        </span>
+      )}
+      {saveAction}
+      {busy && interruptible && (
+        <wa-button
+          class="ai-conversation__header-action"
+          appearance="plain"
+          size="small"
+          data-action="stop-conversation"
+          aria-label={`Stop ${tool}`}
+          title={`Stop ${tool}`}
+        >
+          <LucideIcon icon={Square} name="square" />
+        </wa-button>
+      )}
+    </>
+  );
+  const inlinePermissions = presentation === 'dialog' && foreground ? [] : permissions,
+    selectedIds = new Set(selectedMessageIds),
+    selectionEnabled = Boolean(selectionId) && messages.length > 0,
+    selectedCount = selectedIds.size;
+  const selectionStatus = selectionEnabled ? (
+    <div class="ai-conversation__selection" data-active={String(selectedCount > 0)}>
+      <span>
+        {selectedCount
+          ? `${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`
+          : 'Select a message, then another to select a range.'}
+      </span>
+      {selectedCount > 0 && (
+        <span class="ai-conversation__selection-actions">
+          <wa-button
+            appearance="plain"
+            size="small"
+            data-action="copy-conversation-selection"
+            aria-label="Copy selected messages"
+            title="Copy selected messages"
+          >
+            <LucideIcon icon={Copy} name="copy" />
+          </wa-button>
+          <wa-button
+            appearance="plain"
+            size="small"
+            data-action="clear-conversation-selection"
+            aria-label="Clear message selection"
+            title="Clear message selection"
+          >
+            <LucideIcon icon={X} name="x" />
+          </wa-button>
+        </span>
+      )}
+    </div>
+  ) : null;
+  const timeline = conversationTimeline(messages, activity),
+    transcript = (
+      <section class="ai-conversation__transcript" aria-label="Conversation transcript" aria-live="polite">
+        {messages.length === 0 && (
+          <div class="ai-conversation__empty">
+            <LucideIcon icon={MessageSquare} name="message-square" />
+            <strong>{readOnly ? 'No conversation messages yet' : 'Start a conversation'}</strong>
+            <p>
+              {readOnly
+                ? 'This chat has not received any messages.'
+                : `Ask ${tool} about this project or send it a task.`}
+            </p>
+          </div>
+        )}
+        {selectionStatus}
+        {timeline.map((group) =>
+          group.kind === 'message' ? (
+            <ConversationMessages
+              tool={tool}
+              messages={[group.message]}
+              feedbackAvailable={feedbackAvailable}
+              selectedIds={selectedIds}
+              selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
+            />
+          ) : (
+            <ConversationActivityGroup activity={group.activity} feedbackAvailable={feedbackAvailable} />
+          ),
+        )}
+        {inlinePermissions.map((item) => (
+          <div data-permission-key={item.key}>
+            <PermissionRequestCard item={item} presentation="list" />
+          </div>
+        ))}
+        {busy && progress && (
+          <p class="ai-conversation__progress" role="status">
+            <LucideIcon icon={Bot} name="bot" />
+            {progress}
+          </p>
+        )}
+        {error && (
+          <p class="ai-conversation__error" role="alert">
+            <LucideIcon icon={CircleAlert} name="circle-alert" />
+            <span>
+              <strong>Conversation unavailable</strong>
+              {error}
+            </span>
+          </p>
+        )}
+      </section>
+    );
+  const activeModel = models.find((item) => item.id === model),
+    currentModelLabel = activeModel?.label ?? model ?? '',
+    customModel = model && !activeModel ? model : undefined,
+    currentEffort = effort ?? (efforts.length ? efforts[0] : undefined);
+  const providerChoices = providers.filter((item) => item.id !== providerId),
+    providerChangeable = canChangeProvider && providerChoices.length > 0,
+    currentProviderLabel = providers.find((item) => item.id === providerId)?.label ?? tool;
+  const sessionControls =
+    !readOnly && (providerChangeable || (canChangeModel && models.length) || (canChangeEffort && efforts.length)) ? (
+      <div class="ai-conversation__model" data-component="conversation-model-control" aria-label="AI session settings">
+        <span class="ai-conversation__model-current">
+          <LucideIcon icon={Brain} name="brain" className="ai-conversation__model-icon" />
+          {canChangeModel && currentModelLabel && (
+            <span class="ai-conversation__model-name" title={model}>
+              {currentModelLabel}
+            </span>
+          )}
+          {canChangeEffort && currentEffort && (
+            <span class="ai-conversation__model-effort" title="Effort">
+              {currentEffort}
+            </span>
+          )}
+        </span>
+        <wa-dropdown class="ai-conversation__model-menu" placement="top-end" distance={6}>
+          <button
+            slot="trigger"
+            type="button"
+            class="ai-conversation__model-trigger"
+            aria-label="Change provider, model, and effort"
+            title="Change provider, model, and effort"
+            aria-haspopup="menu"
+          >
+            <LucideIcon icon={ChevronDown} name="chevron-down" />
+          </button>
+          <ProviderModelEffortSubmenus
+            actions={{
+              provider: 'select-conversation-provider',
+              model: 'select-conversation-model',
+              effort: 'select-conversation-effort',
+              manualModel: 'open-conversation-manual-model',
+            }}
+            providers={
+              providerChangeable
+                ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
+                : undefined
+            }
+            model={
+              canChangeModel && models.length > 0
+                ? { choices: models, currentId: activeModel?.id, currentLabel: currentModelLabel, customModel }
+                : undefined
+            }
+            effort={canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined}
+          />
+        </wa-dropdown>
+      </div>
+    ) : null;
+  const savedNotice = readOnly ? (
+    <p class="ai-conversation__saved-notice">
+      <strong>{previewOnly ? 'Read-only preview' : 'Saved transcript'}</strong>
+      <span>
+        {previewOnly ? (
+          <>Return to the AI chat to continue this conversation.{previewConfiguration && ` ${previewConfiguration}`}</>
+        ) : (
+          <>
+            {savedSource ? `Opened from ${savedSource}. ` : ''}This selected range is read-only; save it again or open a
+            tail export with a resumable session to continue.
+          </>
+        )}
+      </span>
+    </p>
+  ) : null;
+  const composer = readOnly ? null : (
+    <form
+      slot={presentation === 'dialog' ? 'footer' : undefined}
+      class="ai-conversation__composer"
+      data-action="send-conversation-turn"
+    >
+      <label>
+        <span class="ai-conversation__composer-label">Message {tool}</span>
+        <textarea
+          name="conversation-draft"
+          aria-label={`Message ${tool}`}
+          placeholder={`Message ${tool}…`}
+          rows={2}
+          disabled={busy}
+        >
+          {draft}
+        </textarea>
+        <small>Enter to send · Shift+Enter for a new line</small>
+      </label>
+      <wa-button
+        appearance="accent"
+        type="submit"
+        disabled={busy || !draft.trim()}
+        aria-label={`Send message to ${tool}`}
+        title={busy ? `${tool} is still working` : `Send message to ${tool}`}
+      >
+        <LucideIcon icon={Send} name="send" />
+      </wa-button>
+    </form>
+  );
+  if (presentation === 'embedded')
+    return (
+      <section
+        class="ai-conversation ai-conversation--embedded"
+        data-component="ai-conversation"
+        data-presentation="embedded"
+        data-read-only={String(readOnly)}
+        data-selection-id={selectionId}
+        aria-label={`${tool} conversation`}
+      >
+        <header class="ai-conversation__embedded-header">
+          <span>
+            <LucideIcon icon={Bot} name="bot" />
+            <strong>{tool} conversation</strong>
+          </span>
+          <span class="ai-conversation__embedded-actions">
+            {saveAction}
+            {busy && interruptible && (
+              <wa-button
+                class="ai-conversation__header-action"
+                appearance="plain"
+                size="small"
+                data-action="stop-conversation"
+                aria-label={`Stop ${tool}`}
+                title={`Stop ${tool}`}
+              >
+                <LucideIcon icon={Square} name="square" />
+              </wa-button>
+            )}
+          </span>
+        </header>
+        {savedNotice}
+        {sessionControls}
+        {transcript}
+        {composer}
+      </section>
+    );
+  return (
+    <wa-dialog
+      class="ai-conversation"
+      data-component="ai-conversation"
+      data-presentation="dialog"
+      data-read-only={String(readOnly)}
+      data-selection-id={selectionId}
+      label={`${tool} conversation`}
+      open={open || undefined}
+      light-dismiss
+      without-header
+      with-footer={!readOnly}
+    >
+      <PanelHeader
+        title={`${tool} conversation`}
+        titleId="ai-conversation-title"
+        summary={summary}
+        icon={<LucideIcon icon={Bot} name="bot" />}
+        actions={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
       />
-    </wa-dropdown>
-  </div>:null;
-  const savedNotice=readOnly?<p class="ai-conversation__saved-notice"><strong>{previewOnly?'Read-only preview':'Saved transcript'}</strong><span>{previewOnly?<>Return to the AI chat to continue this conversation.{previewConfiguration&&` ${previewConfiguration}`}</>:<>{savedSource?`Opened from ${savedSource}. `:''}This selected range is read-only; save it again or open a tail export with a resumable session to continue.</>}</span></p>:null;
-  const composer=readOnly?null:<form slot={presentation==='dialog'?'footer':undefined} class="ai-conversation__composer" data-action="send-conversation-turn"><label><span class="ai-conversation__composer-label">Message {tool}</span><textarea name="conversation-draft" aria-label={`Message ${tool}`} placeholder={`Message ${tool}…`} rows={2} disabled={busy}>{draft}</textarea><small>Enter to send · Shift+Enter for a new line</small></label><wa-button appearance="accent" type="submit" disabled={busy||!draft.trim()} aria-label={`Send message to ${tool}`} title={busy?`${tool} is still working`:`Send message to ${tool}`}><LucideIcon icon={Send} name="send"/></wa-button></form>;
-  if(presentation==='embedded')return <section class="ai-conversation ai-conversation--embedded" data-component="ai-conversation" data-presentation="embedded" data-read-only={String(readOnly)} data-selection-id={selectionId} aria-label={`${tool} conversation`}><header class="ai-conversation__embedded-header"><span><LucideIcon icon={Bot} name="bot"/><strong>{tool} conversation</strong></span><span class="ai-conversation__embedded-actions">{saveAction}{busy&&interruptible&&<wa-button class="ai-conversation__header-action" appearance="plain" size="small" data-action="stop-conversation" aria-label={`Stop ${tool}`} title={`Stop ${tool}`}><LucideIcon icon={Square} name="square"/></wa-button>}</span></header>{savedNotice}{sessionControls}{transcript}{composer}</section>;
-  return <wa-dialog class="ai-conversation" data-component="ai-conversation" data-presentation="dialog" data-read-only={String(readOnly)} data-selection-id={selectionId} label={`${tool} conversation`} open={open||undefined} light-dismiss without-header with-footer={!readOnly}><PanelHeader title={`${tool} conversation`} titleId="ai-conversation-title" summary={summary} icon={<LucideIcon icon={Bot} name="bot"/>} actions={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}/>{foreground&&<div class="ai-conversation__foreground">{foreground}</div>}{savedNotice}{sessionControls}{transcript}{composer}</wa-dialog>;
+      {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
+      {savedNotice}
+      {sessionControls}
+      {transcript}
+      {composer}
+    </wa-dialog>
+  );
 }

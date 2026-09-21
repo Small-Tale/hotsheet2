@@ -1,8 +1,14 @@
 import type { ReviewAttachment } from './index';
 
 const SNAPSHOT_MIME = 'text/css';
-export interface CssSnapshotSheet { label: string; rules?: readonly string[] }
-export interface CssSnapshotInlineStyle { selector: string; cssText: string }
+export interface CssSnapshotSheet {
+  label: string;
+  rules?: readonly string[];
+}
+export interface CssSnapshotInlineStyle {
+  selector: string;
+  cssText: string;
+}
 
 function styleRoots(doc: Document): Array<Document | ShadowRoot> {
   const roots: Array<Document | ShadowRoot> = [doc];
@@ -29,7 +35,7 @@ function selectorSegment(element: Element): string {
   if (element.id) return `${tag}#${element.id.replaceAll(/[^a-zA-Z0-9_-]/g, '\\$&')}`;
   const parent = element.parentElement;
   if (!parent) return tag;
-  const siblings = [...parent.children].filter(sibling => sibling.tagName === element.tagName);
+  const siblings = [...parent.children].filter((sibling) => sibling.tagName === element.tagName);
   return siblings.length > 1 ? `${tag}:nth-of-type(${siblings.indexOf(element) + 1})` : tag;
 }
 
@@ -60,37 +66,51 @@ export function captureCssSnapshot(doc: Document): string {
     sheets.push(sheet);
     try {
       for (const rule of sheet.cssRules) if ('styleSheet' in rule) add((rule as CSSImportRule).styleSheet);
-    } catch { /* Cross-origin rules remain represented by their unavailable sheet label. */ }
+    } catch {
+      /* Cross-origin rules remain represented by their unavailable sheet label. */
+    }
   };
   for (const sheet of doc.styleSheets) add(sheet);
   for (const root of roots) {
-    for (const node of root.querySelectorAll<HTMLStyleElement | HTMLLinkElement>('style,link[rel="stylesheet"]')) add(node.sheet);
+    for (const node of root.querySelectorAll<HTMLStyleElement | HTMLLinkElement>('style,link[rel="stylesheet"]'))
+      add(node.sheet);
     for (const sheet of root.adoptedStyleSheets) add(sheet);
   }
 
   const stylesheetSnapshots = sheets.map((sheet, index): CssSnapshotSheet => {
     try {
-      return { label: describeSheet(sheet, index), rules: [...sheet.cssRules].map(rule => rule.cssText) };
+      return { label: describeSheet(sheet, index), rules: [...sheet.cssRules].map((rule) => rule.cssText) };
     } catch {
       return { label: `${describeSheet(sheet, index)} (rules unavailable to the browser)` };
     }
   });
-  const inline = roots.flatMap(root => [...root.querySelectorAll<HTMLElement>('[style]')])
-    .filter(element => element.style.length > 0)
-    .map(element => ({ selector: elementPath(element), cssText: element.style.cssText }));
+  const inline = roots
+    .flatMap((root) => [...root.querySelectorAll<HTMLElement>('[style]')])
+    .filter((element) => element.style.length > 0)
+    .map((element) => ({ selector: elementPath(element), cssText: element.style.cssText }));
   return formatCssSnapshot(stylesheetSnapshots, inline);
 }
 
-export function formatCssSnapshot(sheets: readonly CssSnapshotSheet[], inline: readonly CssSnapshotInlineStyle[]): string {
-  const blocks = sheets.map((sheet, index) => `/* stylesheet ${index + 1}: ${sheet.label} */${sheet.rules ? `\n${sheet.rules.join('\n')}` : ''}`);
-  if (inline.length > 0) blocks.push(`/* inline style declarations */\n${inline.map(style => `/* inline style: ${style.selector} */\n${style.selector} { ${style.cssText} }`).join('\n')}`);
+export function formatCssSnapshot(
+  sheets: readonly CssSnapshotSheet[],
+  inline: readonly CssSnapshotInlineStyle[],
+): string {
+  const blocks = sheets.map(
+    (sheet, index) =>
+      `/* stylesheet ${index + 1}: ${sheet.label} */${sheet.rules ? `\n${sheet.rules.join('\n')}` : ''}`,
+  );
+  if (inline.length > 0)
+    blocks.push(
+      `/* inline style declarations */\n${inline.map((style) => `/* inline style: ${style.selector} */\n${style.selector} { ${style.cssText} }`).join('\n')}`,
+    );
   return `${blocks.join('\n\n')}\n`;
 }
 
 function base64(view: Window, value: string): string {
   const bytes = new TextEncoder().encode(value);
   let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  for (let offset = 0; offset < bytes.length; offset += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   return view.btoa(binary);
 }
 

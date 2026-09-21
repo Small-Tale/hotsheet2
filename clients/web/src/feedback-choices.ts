@@ -1,9 +1,29 @@
-export interface FeedbackChoice { id: string; markdown: string }
-export interface FeedbackChoiceGroup { start: number; end: number; afterStart: number; before: string; after: string; choices: FeedbackChoice[] }
-export interface FeedbackChoiceModifiers { additive?: boolean; range?: boolean }
-export interface FeedbackChoiceSelection { selected: string[]; anchor?: string }
+export interface FeedbackChoice {
+  id: string;
+  markdown: string;
+}
+export interface FeedbackChoiceGroup {
+  start: number;
+  end: number;
+  afterStart: number;
+  before: string;
+  after: string;
+  choices: FeedbackChoice[];
+}
+export interface FeedbackChoiceModifiers {
+  additive?: boolean;
+  range?: boolean;
+}
+export interface FeedbackChoiceSelection {
+  selected: string[];
+  anchor?: string;
+}
 
-interface SourceLine { start: number; end: number; text: string }
+interface SourceLine {
+  start: number;
+  end: number;
+  text: string;
+}
 
 function sourceLines(source: string): SourceLine[] {
   const lines: SourceLine[] = [];
@@ -19,7 +39,7 @@ function sourceLines(source: string): SourceLine[] {
 /** Parse the first uppercase CHOICE block followed by a Markdown list. */
 export function parseFeedbackChoices(source: string): FeedbackChoiceGroup | undefined {
   const lines = sourceLines(source);
-  const headerIndex = lines.findIndex(line => /^\s*CHOICE:?\s*$/.test(line.text));
+  const headerIndex = lines.findIndex((line) => /^\s*CHOICE:?\s*$/.test(line.text));
   if (headerIndex < 0) return undefined;
   const choices: FeedbackChoice[] = [];
   let lineIndex = headerIndex + 1;
@@ -34,21 +54,35 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceGroup | unde
   const start = lines[headerIndex].start;
   const remainder = source.slice(end);
   const leadingBreaks = remainder.match(/^\n+/)?.[0].length ?? 0;
-  return { start, end, afterStart: end + leadingBreaks, before: source.slice(0, start).replace(/\n+$/, ''), after: remainder.slice(leadingBreaks), choices };
+  return {
+    start,
+    end,
+    afterStart: end + leadingBreaks,
+    before: source.slice(0, start).replace(/\n+$/, ''),
+    after: remainder.slice(leadingBreaks),
+    choices,
+  };
 }
 
-export function updateFeedbackChoiceSelection(choiceIds: readonly string[], current: readonly string[], clicked: string, anchor: string | undefined, modifiers: FeedbackChoiceModifiers): FeedbackChoiceSelection {
+export function updateFeedbackChoiceSelection(
+  choiceIds: readonly string[],
+  current: readonly string[],
+  clicked: string,
+  anchor: string | undefined,
+  modifiers: FeedbackChoiceModifiers,
+): FeedbackChoiceSelection {
   if (!choiceIds.includes(clicked)) return { selected: [...current], anchor };
   if (modifiers.range && anchor && choiceIds.includes(anchor)) {
     const [start, end] = [choiceIds.indexOf(anchor), choiceIds.indexOf(clicked)].sort((left, right) => left - right);
     const selected = new Set(current);
     for (const id of choiceIds.slice(start, end + 1)) selected.add(id);
-    return { selected: choiceIds.filter(id => selected.has(id)), anchor };
+    return { selected: choiceIds.filter((id) => selected.has(id)), anchor };
   }
   if (modifiers.additive) {
     const selected = new Set(current);
-    if (selected.has(clicked)) selected.delete(clicked); else selected.add(clicked);
-    return { selected: choiceIds.filter(id => selected.has(id)), anchor: clicked };
+    if (selected.has(clicked)) selected.delete(clicked);
+    else selected.add(clicked);
+    return { selected: choiceIds.filter((id) => selected.has(id)), anchor: clicked };
   }
   return { selected: current.length === 1 && current[0] === clicked ? [] : [clicked], anchor: clicked };
 }
@@ -57,7 +91,7 @@ export function selectedFeedbackChoicesMarkdown(source: string, selectedChoiceId
   const group = parseFeedbackChoices(source);
   if (!group) return '';
   const selected = new Set(selectedChoiceIds);
-  const choices = group.choices.filter(choice => selected.has(choice.id));
+  const choices = group.choices.filter((choice) => selected.has(choice.id));
   if (!choices.length) return '';
-  return `Selected choice${choices.length === 1 ? '' : 's'}:\n${choices.map(choice => `- ${choice.markdown.replace(/\n/g, '\n  ')}`).join('\n')}`;
+  return `Selected choice${choices.length === 1 ? '' : 's'}:\n${choices.map((choice) => `- ${choice.markdown.replace(/\n/g, '\n  ')}`).join('\n')}`;
 }

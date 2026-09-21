@@ -6,87 +6,559 @@ import { Terminal } from '@xterm/xterm';
 
 import { isMobileViewport } from './mobile-layout';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
-import { parseTerminalSizeMessage,stripLeadingZshPromptEolMark,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_RESIZE_SETTLE_MS,terminalDedicatedGridSize,terminalFittedFontSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalShouldUseWebgl,terminalUsesMobile80xM,terminalViewportClaimsSizingFocus,terminalViewportScale } from './terminal-viewport';
+import {
+  parseTerminalSizeMessage,
+  stripLeadingZshPromptEolMark,
+  TERMINAL_DASHBOARD_COLS,
+  TERMINAL_DASHBOARD_FONT_SIZE,
+  TERMINAL_DASHBOARD_LINE_HEIGHT,
+  TERMINAL_DASHBOARD_ROWS,
+  TERMINAL_DRAWER_RESIZE_END_EVENT,
+  TERMINAL_PREVIEW_NATURAL_HEIGHT,
+  TERMINAL_PREVIEW_NATURAL_WIDTH,
+  TERMINAL_RESIZE_SETTLE_MS,
+  terminalDedicatedGridSize,
+  terminalFittedFontSize,
+  terminalPhysicalScale,
+  terminalPreviewScale,
+  terminalReconnectDelay,
+  terminalResizeClaim,
+  terminalScrollbackLimit,
+  terminalShouldAdoptServerSize,
+  terminalShouldUseWebgl,
+  terminalUsesMobile80xM,
+  terminalViewportClaimsSizingFocus,
+  terminalViewportScale,
+} from './terminal-viewport';
 
-export function mountStaticTerminalViewportRuntime(element:HTMLElement,{output,autoFocus=false}:{output:string;autoFocus?:boolean}):()=>void {
-  const scaledPreview=element.dataset.displayMode==='scaled-preview',background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';
-  if(scaledPreview){element.style.width=`${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;element.style.height=`${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;element.dataset.naturalSize=`${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`}
-  const terminal=new Terminal({cols:TERMINAL_DASHBOARD_COLS,rows:TERMINAL_DASHBOARD_ROWS,lineHeight:TERMINAL_DASHBOARD_LINE_HEIGHT,cursorBlink:!scaledPreview,disableStdin:scaledPreview,convertEol:false,scrollback:terminalScrollbackLimit(element.dataset.displayMode,true),fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',fontSize:TERMINAL_DASHBOARD_FONT_SIZE,theme:{background}});
-  terminal.open(element);element.dataset.renderer='dom';element.dataset.connection='connected';element.dataset.driving='true';element.dataset.ptySize=`${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;element.dataset.gridSize=`${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;element.dataset.sizingFocus='true';element.dataset.viewportVisible='true';element.dataset.fontSize=String(TERMINAL_DASHBOARD_FONT_SIZE);element.dataset.letterSpacing='0';element.dataset.lineHeight=String(TERMINAL_DASHBOARD_LINE_HEIGHT);element.dataset.scrollbackLimit=String(terminalScrollbackLimit(element.dataset.displayMode,true));element.dataset.geometryReady='false';
-  let frame:number|undefined,disposed=false,initialFocusPending=autoFocus;
-  const fill=()=>{frame=undefined;if(disposed||!terminal.element)return;const screen=terminal.element.querySelector<HTMLElement>('.xterm-screen');if(!screen||screen.offsetWidth<=0||screen.offsetHeight<=0)return;const target=element.parentElement??element,scale=terminalPhysicalScale(screen.offsetWidth,screen.offsetHeight,Math.max(1,target.clientWidth-1),Math.max(1,target.clientHeight-1));if(scale<=0)return;terminal.element.style.transform=`scale(${scale})`;element.dataset.scale=String(scale);element.dataset.physicalScale=String(scale);element.dataset.geometryReady='true';if(initialFocusPending){initialFocusPending=false;if(document.activeElement===document.body||document.activeElement===null)terminal.focus()}};
-  const schedule=()=>{if(frame===undefined)frame=window.requestAnimationFrame(fill)};
-  const render=terminal.onRender(schedule),resize=new ResizeObserver(schedule);resize.observe(element.parentElement??element);terminal.write(output,schedule);schedule();
-  const focus=()=>{terminal.focus()};if(!scaledPreview)element.addEventListener('click',focus);
-  return()=>{disposed=true;if(frame!==undefined)window.cancelAnimationFrame(frame);resize.disconnect();render.dispose();if(!scaledPreview)element.removeEventListener('click',focus);terminal.dispose()};
+export function mountStaticTerminalViewportRuntime(
+  element: HTMLElement,
+  { output, autoFocus = false }: { output: string; autoFocus?: boolean },
+): () => void {
+  const scaledPreview = element.dataset.displayMode === 'scaled-preview',
+    background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
+  if (scaledPreview) {
+    element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
+    element.style.height = `${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;
+    element.dataset.naturalSize = `${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`;
+  }
+  const terminal = new Terminal({
+    cols: TERMINAL_DASHBOARD_COLS,
+    rows: TERMINAL_DASHBOARD_ROWS,
+    lineHeight: TERMINAL_DASHBOARD_LINE_HEIGHT,
+    cursorBlink: !scaledPreview,
+    disableStdin: scaledPreview,
+    convertEol: false,
+    scrollback: terminalScrollbackLimit(element.dataset.displayMode, true),
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: TERMINAL_DASHBOARD_FONT_SIZE,
+    theme: { background },
+  });
+  terminal.open(element);
+  element.dataset.renderer = 'dom';
+  element.dataset.connection = 'connected';
+  element.dataset.driving = 'true';
+  element.dataset.ptySize = `${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;
+  element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;
+  element.dataset.sizingFocus = 'true';
+  element.dataset.viewportVisible = 'true';
+  element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
+  element.dataset.letterSpacing = '0';
+  element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
+  element.dataset.scrollbackLimit = String(terminalScrollbackLimit(element.dataset.displayMode, true));
+  element.dataset.geometryReady = 'false';
+  let frame: number | undefined,
+    disposed = false,
+    initialFocusPending = autoFocus;
+  const fill = () => {
+    frame = undefined;
+    if (disposed || !terminal.element) return;
+    const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen');
+    if (!screen || screen.offsetWidth <= 0 || screen.offsetHeight <= 0) return;
+    const target = element.parentElement ?? element,
+      scale = terminalPhysicalScale(
+        screen.offsetWidth,
+        screen.offsetHeight,
+        Math.max(1, target.clientWidth - 1),
+        Math.max(1, target.clientHeight - 1),
+      );
+    if (scale <= 0) return;
+    terminal.element.style.transform = `scale(${scale})`;
+    element.dataset.scale = String(scale);
+    element.dataset.physicalScale = String(scale);
+    element.dataset.geometryReady = 'true';
+    if (initialFocusPending) {
+      initialFocusPending = false;
+      if (document.activeElement === document.body || document.activeElement === null) terminal.focus();
+    }
+  };
+  const schedule = () => {
+    if (frame === undefined) frame = window.requestAnimationFrame(fill);
+  };
+  const render = terminal.onRender(schedule),
+    resize = new ResizeObserver(schedule);
+  resize.observe(element.parentElement ?? element);
+  terminal.write(output, schedule);
+  schedule();
+  const focus = () => {
+    terminal.focus();
+  };
+  if (!scaledPreview) element.addEventListener('click', focus);
+  return () => {
+    disposed = true;
+    if (frame !== undefined) window.cancelAnimationFrame(frame);
+    resize.disconnect();
+    render.dispose();
+    if (!scaledPreview) element.removeEventListener('click', focus);
+    terminal.dispose();
+  };
 }
 
-export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId,autoFocus=false,onTicketReference}:{url:string;viewerId:string;autoFocus?:boolean;onTicketReference?:(reference:string)=>void}):()=>void {
-  const scaledPreview=element.dataset.displayMode==='scaled-preview',fixedDashboardGrid=element.dataset.gridPolicy==='dashboard-80x24',settledResize=element.classList.contains('terminal-viewport--dedicated'),insideDrawer=Boolean(element.closest('[data-region-id="app-terminal-drawer"]'));
-  const background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';
-  if(scaledPreview){element.style.width=`${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;element.style.height=`${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;element.dataset.naturalSize=`${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`}
-  const scrollback=terminalScrollbackLimit(element.dataset.displayMode,fixedDashboardGrid);element.dataset.scrollbackLimit=String(scrollback);
-  if(fixedDashboardGrid){element.dataset.geometryReady='false';element.dataset.fontSize=String(TERMINAL_DASHBOARD_FONT_SIZE);element.dataset.letterSpacing='0';element.dataset.lineHeight=String(TERMINAL_DASHBOARD_LINE_HEIGHT)}
-  const terminal=new Terminal({...fixedDashboardGrid?{cols:TERMINAL_DASHBOARD_COLS,rows:TERMINAL_DASHBOARD_ROWS,lineHeight:TERMINAL_DASHBOARD_LINE_HEIGHT}:{},cursorBlink:!scaledPreview,disableStdin:scaledPreview,convertEol:false,scrollback,fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',fontSize:fixedDashboardGrid?TERMINAL_DASHBOARD_FONT_SIZE:12,theme:{background}}),fit=new FitAddon();
-  terminal.loadAddon(fit);terminal.open(element);
-  const ticketLinks=!scaledPreview&&onTicketReference?registerTerminalTicketLinkProvider(terminal,onTicketReference):undefined;
-  let webgl:WebglAddon|undefined;
-  const mobile80xM=()=>terminalUsesMobile80xM(isMobileViewport(window.innerWidth),fixedDashboardGrid,scaledPreview,settledResize&&insideDrawer);
-  if(element.classList.contains('terminal-viewport--dedicated')&&!mobile80xM()&&terminalShouldUseWebgl(navigator.userAgent))try{webgl=new WebglAddon();terminal.loadAddon(webgl);element.dataset.renderer='webgl';webgl.onContextLoss(()=>{webgl?.dispose();webgl=undefined;element.dataset.renderer='dom'})}catch{element.dataset.renderer='dom'}else element.dataset.renderer='dom';
-  let socket:WebSocket|undefined,reconnect:number|undefined,heartbeat:number|undefined,fitFrame:number|undefined,dashboardFrame:number|undefined,settleClaim:number|undefined,attempt=0,visible=false,disposed=false,focusRequested=autoFocus,initialReplay=true,serverSize:{cols:number;rows:number}|undefined;
-  const focused=()=>terminalViewportClaimsSizingFocus(scaledPreview,fixedDashboardGrid,focusRequested,element.contains(document.activeElement));
+export function mountTerminalViewportRuntime(
+  element: HTMLElement,
+  {
+    url,
+    viewerId,
+    autoFocus = false,
+    onTicketReference,
+  }: { url: string; viewerId: string; autoFocus?: boolean; onTicketReference?: (reference: string) => void },
+): () => void {
+  const scaledPreview = element.dataset.displayMode === 'scaled-preview',
+    fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
+    settledResize = element.classList.contains('terminal-viewport--dedicated'),
+    insideDrawer = Boolean(element.closest('[data-region-id="app-terminal-drawer"]'));
+  const background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
+  if (scaledPreview) {
+    element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
+    element.style.height = `${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;
+    element.dataset.naturalSize = `${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`;
+  }
+  const scrollback = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid);
+  element.dataset.scrollbackLimit = String(scrollback);
+  if (fixedDashboardGrid) {
+    element.dataset.geometryReady = 'false';
+    element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
+    element.dataset.letterSpacing = '0';
+    element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
+  }
+  const terminal = new Terminal({
+      ...(fixedDashboardGrid
+        ? { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS, lineHeight: TERMINAL_DASHBOARD_LINE_HEIGHT }
+        : {}),
+      cursorBlink: !scaledPreview,
+      disableStdin: scaledPreview,
+      convertEol: false,
+      scrollback,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontSize: fixedDashboardGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
+      theme: { background },
+    }),
+    fit = new FitAddon();
+  terminal.loadAddon(fit);
+  terminal.open(element);
+  const ticketLinks =
+    !scaledPreview && onTicketReference ? registerTerminalTicketLinkProvider(terminal, onTicketReference) : undefined;
+  let webgl: WebglAddon | undefined;
+  const mobile80xM = () =>
+    terminalUsesMobile80xM(
+      isMobileViewport(window.innerWidth),
+      fixedDashboardGrid,
+      scaledPreview,
+      settledResize && insideDrawer,
+    );
+  if (
+    element.classList.contains('terminal-viewport--dedicated') &&
+    !mobile80xM() &&
+    terminalShouldUseWebgl(navigator.userAgent)
+  )
+    try {
+      webgl = new WebglAddon();
+      terminal.loadAddon(webgl);
+      element.dataset.renderer = 'webgl';
+      webgl.onContextLoss(() => {
+        webgl?.dispose();
+        webgl = undefined;
+        element.dataset.renderer = 'dom';
+      });
+    } catch {
+      element.dataset.renderer = 'dom';
+    }
+  else element.dataset.renderer = 'dom';
+  let socket: WebSocket | undefined,
+    reconnect: number | undefined,
+    heartbeat: number | undefined,
+    fitFrame: number | undefined,
+    dashboardFrame: number | undefined,
+    settleClaim: number | undefined,
+    attempt = 0,
+    visible = false,
+    disposed = false,
+    focusRequested = autoFocus,
+    initialReplay = true,
+    serverSize: { cols: number; rows: number } | undefined;
+  const focused = () =>
+    terminalViewportClaimsSizingFocus(
+      scaledPreview,
+      fixedDashboardGrid,
+      focusRequested,
+      element.contains(document.activeElement),
+    );
   // On a phone-width viewport an interactive fixed-grid terminal (the magnified surface) keeps the
   // canonical 80 columns but fills the available height with M rows, scaled to fit width, rather
   // than letterboxing a fixed 80×24 (HS2-Z84F78). `mobileGridRows` is the M the fill last measured.
-  let mobileGridRows=TERMINAL_DASHBOARD_ROWS,lastMobileClaimGrid='';
-  const proposed=()=>{if(mobile80xM())return{cols:TERMINAL_DASHBOARD_COLS,rows:mobileGridRows};if(fixedDashboardGrid)return{cols:TERMINAL_DASHBOARD_COLS,rows:TERMINAL_DASHBOARD_ROWS};const dimensions=fit.proposeDimensions()??{cols:terminal.cols,rows:terminal.rows};return settledResize?terminalDedicatedGridSize(dimensions.cols,dimensions.rows):dimensions};
-  const reconcileScale=()=>{if(!terminal.element)return;if(fixedDashboardGrid||mobile80xM()){const scale=scaledPreview?terminalPreviewScale(element.parentElement?.clientWidth??0,element.parentElement?.clientHeight??0):1;element.style.transform=scaledPreview?`scale(${scale})`:'';if(!mobile80xM())element.dataset.scale=String(scale);delete element.dataset.viewingLabel;element.removeAttribute('aria-description');return}if(!serverSize)return;const authoritative=focused()||element.dataset.driving==='true',size=proposed(),scale=authoritative?1:terminalViewportScale(size.cols,size.rows,serverSize.cols,serverSize.rows),mismatch=scale<1;terminal.element.style.transform=mismatch?`scale(${scale})`:'';terminal.element.style.width=mismatch?`${100/scale}%`:'';terminal.element.style.height=mismatch?`${100/scale}%`:'';element.dataset.scale=String(scale);if(element.dataset.driving==='false'&&!authoritative){const label=`Viewing at ${serverSize.cols}×${serverSize.rows} · focus to resize`;element.dataset.viewingLabel=label;element.setAttribute('aria-description',label)}else{delete element.dataset.viewingLabel;element.removeAttribute('aria-description')}};
+  let mobileGridRows = TERMINAL_DASHBOARD_ROWS,
+    lastMobileClaimGrid = '';
+  const proposed = () => {
+    if (mobile80xM()) return { cols: TERMINAL_DASHBOARD_COLS, rows: mobileGridRows };
+    if (fixedDashboardGrid) return { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
+    const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
+    return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
+  };
+  const reconcileScale = () => {
+    if (!terminal.element) return;
+    if (fixedDashboardGrid || mobile80xM()) {
+      const scale = scaledPreview
+        ? terminalPreviewScale(element.parentElement?.clientWidth ?? 0, element.parentElement?.clientHeight ?? 0)
+        : 1;
+      element.style.transform = scaledPreview ? `scale(${scale})` : '';
+      if (!mobile80xM()) element.dataset.scale = String(scale);
+      delete element.dataset.viewingLabel;
+      element.removeAttribute('aria-description');
+      return;
+    }
+    if (!serverSize) return;
+    const authoritative = focused() || element.dataset.driving === 'true',
+      size = proposed(),
+      scale = authoritative ? 1 : terminalViewportScale(size.cols, size.rows, serverSize.cols, serverSize.rows),
+      mismatch = scale < 1;
+    terminal.element.style.transform = mismatch ? `scale(${scale})` : '';
+    terminal.element.style.width = mismatch ? `${100 / scale}%` : '';
+    terminal.element.style.height = mismatch ? `${100 / scale}%` : '';
+    element.dataset.scale = String(scale);
+    if (element.dataset.driving === 'false' && !authoritative) {
+      const label = `Viewing at ${serverSize.cols}×${serverSize.rows} · focus to resize`;
+      element.dataset.viewingLabel = label;
+      element.setAttribute('aria-description', label);
+    } else {
+      delete element.dataset.viewingLabel;
+      element.removeAttribute('aria-description');
+    }
+  };
   // A heartbeat/geometry claim (interacting:false): keeps the lease alive and reports size, but
   // must NOT advance the arbiter's recency, so one device's heartbeats can't steal size control
   // from the device the user last touched (HS2-3ZBQDG).
-  const claim=()=>{const sizingFocus=focused();element.dataset.sizingFocus=String(sizingFocus);element.dataset.viewportVisible=String(visible);if(socket?.readyState!==WebSocket.OPEN)return;const size=proposed();socket.send(terminalResizeClaim(viewerId,size.cols,size.rows,sizingFocus,visible,false))};
+  const claim = () => {
+    const sizingFocus = focused();
+    element.dataset.sizingFocus = String(sizingFocus);
+    element.dataset.viewportVisible = String(visible);
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    const size = proposed();
+    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, false));
+  };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
   // makes this the "last interacted" viewport, so it takes over PTY sizing (HS2-3ZBQDG).
-  let lastInteractionAt=0;
-  const signalInteraction=()=>{if(scaledPreview||socket?.readyState!==WebSocket.OPEN)return;const sizingFocus=focused();element.dataset.sizingFocus=String(sizingFocus);element.dataset.viewportVisible=String(visible);const size=proposed();socket.send(terminalResizeClaim(viewerId,size.cols,size.rows,sizingFocus,visible,true));lastInteractionAt=Date.now()};
+  let lastInteractionAt = 0;
+  const signalInteraction = () => {
+    if (scaledPreview || socket?.readyState !== WebSocket.OPEN) return;
+    const sizingFocus = focused();
+    element.dataset.sizingFocus = String(sizingFocus);
+    element.dataset.viewportVisible = String(visible);
+    const size = proposed();
+    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, true));
+    lastInteractionAt = Date.now();
+  };
   // Typing fires per keystroke; throttle the interacting claim so steady typing doesn't flood the
   // socket while still keeping this device's recency fresh.
-  const signalInteractionThrottled=()=>{if(Date.now()-lastInteractionAt>=1_000)signalInteraction()};
-  const applyDashboardPhysicalFill=()=>{const screen=terminal.element?.querySelector<HTMLElement>('.xterm-screen');if(!terminal.element||!screen||screen.offsetWidth<=0||screen.offsetHeight<=0)return;const style=getComputedStyle(element),horizontalPadding=parseFloat(style.paddingLeft)+parseFloat(style.paddingRight),verticalPadding=parseFloat(style.paddingTop)+parseFloat(style.paddingBottom),targetWidth=Math.max(1,element.clientWidth-horizontalPadding-1),targetHeight=Math.max(1,element.clientHeight-verticalPadding-1);
-    if(mobile80xM()){
+  const signalInteractionThrottled = () => {
+    if (Date.now() - lastInteractionAt >= 1_000) signalInteraction();
+  };
+  const applyDashboardPhysicalFill = () => {
+    const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
+    if (!terminal.element || !screen || screen.offsetWidth <= 0 || screen.offsetHeight <= 0) return;
+    const style = getComputedStyle(element),
+      horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight),
+      verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+      targetWidth = Math.max(1, element.clientWidth - horizontalPadding - 1),
+      targetHeight = Math.max(1, element.clientHeight - verticalPadding - 1);
+    if (mobile80xM()) {
       // 80 columns fixed and scaled to fit the phone width; M rows chosen to fill the available
       // height at that scale (HS2-Z84F78). Resizing reflows the measured screen, so a cols/rows
       // change returns early and the next render re-measures before applying the transform.
-      if(terminal.cols!==TERMINAL_DASHBOARD_COLS){terminal.resize(TERMINAL_DASHBOARD_COLS,terminal.rows);return}
-      const scale=targetWidth/screen.offsetWidth;if(scale<=0)return;
-      const rowHeight=screen.offsetHeight/Math.max(1,terminal.rows),rows=Math.max(1,Math.floor(targetHeight/(scale*rowHeight)));
-      if(rows!==terminal.rows){mobileGridRows=rows;terminal.resize(TERMINAL_DASHBOARD_COLS,rows);element.dataset.gridSize=`${TERMINAL_DASHBOARD_COLS}x${rows}`;return}
-      mobileGridRows=rows;terminal.element.style.transformOrigin='top left';terminal.element.style.transform=`scale(${scale})`;terminal.element.style.width='';terminal.element.style.height='';element.dataset.scale=String(scale);element.dataset.physicalScale=String(scale);element.dataset.gridSize=`${TERMINAL_DASHBOARD_COLS}x${rows}`;element.dataset.geometryReady='true';if(autoFocus&&focusRequested)terminal.focus();const grid=`${TERMINAL_DASHBOARD_COLS}x${rows}`;if(lastMobileClaimGrid!==grid){lastMobileClaimGrid=grid;claim()}return;
+      if (terminal.cols !== TERMINAL_DASHBOARD_COLS) {
+        terminal.resize(TERMINAL_DASHBOARD_COLS, terminal.rows);
+        return;
+      }
+      const scale = targetWidth / screen.offsetWidth;
+      if (scale <= 0) return;
+      const rowHeight = screen.offsetHeight / Math.max(1, terminal.rows),
+        rows = Math.max(1, Math.floor(targetHeight / (scale * rowHeight)));
+      if (rows !== terminal.rows) {
+        mobileGridRows = rows;
+        terminal.resize(TERMINAL_DASHBOARD_COLS, rows);
+        element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+        return;
+      }
+      mobileGridRows = rows;
+      terminal.element.style.transformOrigin = 'top left';
+      terminal.element.style.transform = `scale(${scale})`;
+      terminal.element.style.width = '';
+      terminal.element.style.height = '';
+      element.dataset.scale = String(scale);
+      element.dataset.physicalScale = String(scale);
+      element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+      element.dataset.geometryReady = 'true';
+      if (autoFocus && focusRequested) terminal.focus();
+      const grid = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+      if (lastMobileClaimGrid !== grid) {
+        lastMobileClaimGrid = grid;
+        claim();
+      }
+      return;
     }
-    const scale=terminalPhysicalScale(screen.offsetWidth,screen.offsetHeight,targetWidth,targetHeight);if(scale<=0)return;
+    const scale = terminalPhysicalScale(screen.offsetWidth, screen.offsetHeight, targetWidth, targetHeight);
+    if (scale <= 0) return;
     // Keep pointer hit-testing, text selection, and link ranges aligned with glyphs on the
     // interactive magnified grid. xterm measures mouse cells before CSS transforms, so fit its
     // font to the frame instead of transforming this interactive surface.
-    if(fixedDashboardGrid&&!scaledPreview){const current=terminal.options.fontSize??TERMINAL_DASHBOARD_FONT_SIZE,naturalScale=terminalPhysicalScale(TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_PREVIEW_NATURAL_HEIGHT,targetWidth,targetHeight),next=Math.min(TERMINAL_DASHBOARD_FONT_SIZE,terminalFittedFontSize(TERMINAL_DASHBOARD_FONT_SIZE,naturalScale));if(Math.abs(next-current)>.25){terminal.options.fontSize=next;element.dataset.fontSize=String(next);element.dataset.geometryReady='false';terminal.element.style.transform='';return}terminal.element.style.transformOrigin='top left';terminal.element.style.transform=`scale(${scale})`;element.dataset.physicalScale=String(scale)}else{terminal.element.style.transformOrigin='';terminal.element.style.transform=`scale(${scale})`;element.dataset.physicalScale=String(scale)}terminal.element.style.width='';terminal.element.style.height='';element.dataset.geometryReady='true';if(autoFocus&&focusRequested){terminal.focus();claim()}};
-  const scheduleDashboardFill=()=>{if((!fixedDashboardGrid&&!mobile80xM())||dashboardFrame!==undefined)return;dashboardFrame=window.requestAnimationFrame(()=>{dashboardFrame=undefined;applyDashboardPhysicalFill()})};
-  const render=terminal.onRender(scheduleDashboardFill);
-  const applySettledGeometry=()=>{if(disposed)return;try{if(mobile80xM()){if(webgl){webgl.dispose();webgl=undefined;element.dataset.renderer='dom'}terminal.resize(TERMINAL_DASHBOARD_COLS,mobileGridRows);scheduleDashboardFill()}else if(fixedDashboardGrid){terminal.resize(TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_ROWS);scheduleDashboardFill()}else{fit.fit();if(settledResize){const contained=terminalDedicatedGridSize(terminal.cols,terminal.rows);terminal.resize(contained.cols,contained.rows);element.dataset.containmentRows='1'}}}catch{/* layout can be transiently zero-sized */}element.dataset.gridSize=`${terminal.cols}x${terminal.rows}`;reconcileScale();claim()};
-  const drawerResizeActive=()=>insideDrawer&&document.body.dataset.resizingRegion==='vertical';
-  const fitAndClaim=()=>{if(fitFrame!==undefined)window.cancelAnimationFrame(fitFrame);if(settleClaim!==undefined)window.clearTimeout(settleClaim);if(drawerResizeActive())return;fitFrame=window.requestAnimationFrame(()=>{fitFrame=undefined;applySettledGeometry();if(!fixedDashboardGrid)settleClaim=window.setTimeout(()=>{settleClaim=undefined;applySettledGeometry()},TERMINAL_RESIZE_SETTLE_MS)})};
-  const finishDrawerResize=()=>{if(!insideDrawer)return;if(settledResize)terminal.focus();applySettledGeometry()};
-  window.addEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT,finishDrawerResize);
-  const connect=()=>{
-    if(disposed)return;initialReplay=true;element.dataset.connection='connecting';const current=new WebSocket(url);socket=current;current.binaryType='arraybuffer';
-    current.addEventListener('open',()=>{if(socket!==current)return;attempt=0;element.dataset.connection='connected';fitAndClaim();if(autoFocus)terminal.focus();heartbeat=window.setInterval(claim,5_000)});
-    current.addEventListener('message',event=>{if(socket!==current)return;if(typeof event.data==='string'){const size=parseTerminalSizeMessage(event.data);if(!size)return;serverSize=size.pty_size;const drivenByViewer=size.driven_by===viewerId;if(!fixedDashboardGrid&&!mobile80xM()&&terminalShouldAdoptServerSize(scaledPreview,focused(),drivenByViewer))terminal.resize(size.pty_size.cols,size.pty_size.rows);else{const local=proposed();terminal.resize(local.cols,local.rows)}element.dataset.driving=String(drivenByViewer);element.dataset.ptySize=`${size.pty_size.cols}x${size.pty_size.rows}`;element.dataset.gridSize=`${terminal.cols}x${terminal.rows}`;queueMicrotask(reconcileScale);return}const write=(value:ArrayBuffer)=>{let bytes=new Uint8Array(value);if(initialReplay){initialReplay=false;if(fixedDashboardGrid)bytes=stripLeadingZshPromptEolMark(bytes)}terminal.write(bytes)};if(event.data instanceof Blob){void event.data.arrayBuffer().then(write);return}if(event.data instanceof ArrayBuffer)write(event.data)});
-    const disconnected=()=>{if(socket!==current||disposed)return;if(heartbeat!==undefined)window.clearInterval(heartbeat);heartbeat=undefined;element.dataset.connection='reconnecting';const delay=terminalReconnectDelay(attempt++);reconnect=window.setTimeout(connect,delay)};
-    current.addEventListener('close',disconnected);current.addEventListener('error',()=> { current.close(); });
+    if (fixedDashboardGrid && !scaledPreview) {
+      const current = terminal.options.fontSize ?? TERMINAL_DASHBOARD_FONT_SIZE,
+        naturalScale = terminalPhysicalScale(
+          TERMINAL_PREVIEW_NATURAL_WIDTH,
+          TERMINAL_PREVIEW_NATURAL_HEIGHT,
+          targetWidth,
+          targetHeight,
+        ),
+        next = Math.min(
+          TERMINAL_DASHBOARD_FONT_SIZE,
+          terminalFittedFontSize(TERMINAL_DASHBOARD_FONT_SIZE, naturalScale),
+        );
+      if (Math.abs(next - current) > 0.25) {
+        terminal.options.fontSize = next;
+        element.dataset.fontSize = String(next);
+        element.dataset.geometryReady = 'false';
+        terminal.element.style.transform = '';
+        return;
+      }
+      terminal.element.style.transformOrigin = 'top left';
+      terminal.element.style.transform = `scale(${scale})`;
+      element.dataset.physicalScale = String(scale);
+    } else {
+      terminal.element.style.transformOrigin = '';
+      terminal.element.style.transform = `scale(${scale})`;
+      element.dataset.physicalScale = String(scale);
+    }
+    terminal.element.style.width = '';
+    terminal.element.style.height = '';
+    element.dataset.geometryReady = 'true';
+    if (autoFocus && focusRequested) {
+      terminal.focus();
+      claim();
+    }
   };
-  const resize=new ResizeObserver(fitAndClaim);resize.observe(scaledPreview?element.parentElement??element:element);fitAndClaim();
-  const visibilityTarget=scaledPreview?element.parentElement??element:element,intersection=new IntersectionObserver(entries=>{const next=entries[0]?.isIntersecting??false;if(next!==visible){visible=next;claim()} });intersection.observe(visibilityTarget);
-  const focus=()=> {if(fixedDashboardGrid&&element.dataset.geometryReady!=='true')return;focusRequested=false;if(fixedDashboardGrid)claim();else applySettledGeometry() },focusTerminal=()=> { terminal.focus(); };if(!scaledPreview){element.addEventListener('click',focusTerminal);element.addEventListener('focusin',focus);element.addEventListener('focusout',focus);element.addEventListener('pointerdown',signalInteraction);element.addEventListener('focusin',signalInteraction)}
-  const input=terminal.onData(value=>{if(!scaledPreview&&socket?.readyState===WebSocket.OPEN){socket.send(value);signalInteractionThrottled()}});
+  const scheduleDashboardFill = () => {
+    if ((!fixedDashboardGrid && !mobile80xM()) || dashboardFrame !== undefined) return;
+    dashboardFrame = window.requestAnimationFrame(() => {
+      dashboardFrame = undefined;
+      applyDashboardPhysicalFill();
+    });
+  };
+  const render = terminal.onRender(scheduleDashboardFill);
+  const applySettledGeometry = () => {
+    if (disposed) return;
+    try {
+      if (mobile80xM()) {
+        if (webgl) {
+          webgl.dispose();
+          webgl = undefined;
+          element.dataset.renderer = 'dom';
+        }
+        terminal.resize(TERMINAL_DASHBOARD_COLS, mobileGridRows);
+        scheduleDashboardFill();
+      } else if (fixedDashboardGrid) {
+        terminal.resize(TERMINAL_DASHBOARD_COLS, TERMINAL_DASHBOARD_ROWS);
+        scheduleDashboardFill();
+      } else {
+        fit.fit();
+        if (settledResize) {
+          const contained = terminalDedicatedGridSize(terminal.cols, terminal.rows);
+          terminal.resize(contained.cols, contained.rows);
+          element.dataset.containmentRows = '1';
+        }
+      }
+    } catch {
+      /* layout can be transiently zero-sized */
+    }
+    element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
+    reconcileScale();
+    claim();
+  };
+  const drawerResizeActive = () => insideDrawer && document.body.dataset.resizingRegion === 'vertical';
+  const fitAndClaim = () => {
+    if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
+    if (drawerResizeActive()) return;
+    fitFrame = window.requestAnimationFrame(() => {
+      fitFrame = undefined;
+      applySettledGeometry();
+      if (!fixedDashboardGrid)
+        settleClaim = window.setTimeout(() => {
+          settleClaim = undefined;
+          applySettledGeometry();
+        }, TERMINAL_RESIZE_SETTLE_MS);
+    });
+  };
+  const finishDrawerResize = () => {
+    if (!insideDrawer) return;
+    if (settledResize) terminal.focus();
+    applySettledGeometry();
+  };
+  window.addEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
+  const connect = () => {
+    if (disposed) return;
+    initialReplay = true;
+    element.dataset.connection = 'connecting';
+    const current = new WebSocket(url);
+    socket = current;
+    current.binaryType = 'arraybuffer';
+    current.addEventListener('open', () => {
+      if (socket !== current) return;
+      attempt = 0;
+      element.dataset.connection = 'connected';
+      fitAndClaim();
+      if (autoFocus) terminal.focus();
+      heartbeat = window.setInterval(claim, 5_000);
+    });
+    current.addEventListener('message', (event) => {
+      if (socket !== current) return;
+      if (typeof event.data === 'string') {
+        const size = parseTerminalSizeMessage(event.data);
+        if (!size) return;
+        serverSize = size.pty_size;
+        const drivenByViewer = size.driven_by === viewerId;
+        if (
+          !fixedDashboardGrid &&
+          !mobile80xM() &&
+          terminalShouldAdoptServerSize(scaledPreview, focused(), drivenByViewer)
+        )
+          terminal.resize(size.pty_size.cols, size.pty_size.rows);
+        else {
+          const local = proposed();
+          terminal.resize(local.cols, local.rows);
+        }
+        element.dataset.driving = String(drivenByViewer);
+        element.dataset.ptySize = `${size.pty_size.cols}x${size.pty_size.rows}`;
+        element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
+        queueMicrotask(reconcileScale);
+        return;
+      }
+      const write = (value: ArrayBuffer) => {
+        let bytes = new Uint8Array(value);
+        if (initialReplay) {
+          initialReplay = false;
+          if (fixedDashboardGrid) bytes = stripLeadingZshPromptEolMark(bytes);
+        }
+        terminal.write(bytes);
+      };
+      if (event.data instanceof Blob) {
+        void event.data.arrayBuffer().then(write);
+        return;
+      }
+      if (event.data instanceof ArrayBuffer) write(event.data);
+    });
+    const disconnected = () => {
+      if (socket !== current || disposed) return;
+      if (heartbeat !== undefined) window.clearInterval(heartbeat);
+      heartbeat = undefined;
+      element.dataset.connection = 'reconnecting';
+      const delay = terminalReconnectDelay(attempt++);
+      reconnect = window.setTimeout(connect, delay);
+    };
+    current.addEventListener('close', disconnected);
+    current.addEventListener('error', () => {
+      current.close();
+    });
+  };
+  const resize = new ResizeObserver(fitAndClaim);
+  resize.observe(scaledPreview ? (element.parentElement ?? element) : element);
+  fitAndClaim();
+  const visibilityTarget = scaledPreview ? (element.parentElement ?? element) : element,
+    intersection = new IntersectionObserver((entries) => {
+      const next = entries[0]?.isIntersecting ?? false;
+      if (next !== visible) {
+        visible = next;
+        claim();
+      }
+    });
+  intersection.observe(visibilityTarget);
+  const focus = () => {
+      if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
+      focusRequested = false;
+      if (fixedDashboardGrid) claim();
+      else applySettledGeometry();
+    },
+    focusTerminal = () => {
+      terminal.focus();
+    };
+  if (!scaledPreview) {
+    element.addEventListener('click', focusTerminal);
+    element.addEventListener('focusin', focus);
+    element.addEventListener('focusout', focus);
+    element.addEventListener('pointerdown', signalInteraction);
+    element.addEventListener('focusin', signalInteraction);
+  }
+  const input = terminal.onData((value) => {
+    if (!scaledPreview && socket?.readyState === WebSocket.OPEN) {
+      socket.send(value);
+      signalInteractionThrottled();
+    }
+  });
   connect();
-  if(autoFocus){const focusIfCurrent=(force=false)=>{if(disposed||!terminal.element)return;const active=document.activeElement,activeTile=active instanceof Element?active.closest<HTMLElement>('[data-component="terminal-tile"]'):undefined,sameTerminalCard=activeTile?.dataset.terminalKey===`${element.dataset.projectId}:${element.dataset.terminalId}`;if(!force&&active!==document.body&&!element.contains(active)&&!element.closest('[data-magnified="true"]')?.contains(active)&&!sameTerminalCard)return;terminal.focus();claim()};focusIfCurrent(true);window.requestAnimationFrame(()=>{focusIfCurrent();window.setTimeout(focusIfCurrent,TERMINAL_RESIZE_SETTLE_MS)})}
-  return ()=>{disposed=true;if(reconnect!==undefined)window.clearTimeout(reconnect);if(heartbeat!==undefined)window.clearInterval(heartbeat);if(fitFrame!==undefined)window.cancelAnimationFrame(fitFrame);if(dashboardFrame!==undefined)window.cancelAnimationFrame(dashboardFrame);if(settleClaim!==undefined)window.clearTimeout(settleClaim);window.removeEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT,finishDrawerResize);resize.disconnect();intersection.disconnect();render.dispose();input.dispose();ticketLinks?.dispose();if(!scaledPreview){element.removeEventListener('click',focusTerminal);element.removeEventListener('focusin',focus);element.removeEventListener('focusout',focus);element.removeEventListener('pointerdown',signalInteraction);element.removeEventListener('focusin',signalInteraction)}socket?.close();terminal.dispose()};
+  if (autoFocus) {
+    const focusIfCurrent = (force = false) => {
+      if (disposed || !terminal.element) return;
+      const active = document.activeElement,
+        activeTile =
+          active instanceof Element ? active.closest<HTMLElement>('[data-component="terminal-tile"]') : undefined,
+        sameTerminalCard =
+          activeTile?.dataset.terminalKey === `${element.dataset.projectId}:${element.dataset.terminalId}`;
+      if (
+        !force &&
+        active !== document.body &&
+        !element.contains(active) &&
+        !element.closest('[data-magnified="true"]')?.contains(active) &&
+        !sameTerminalCard
+      )
+        return;
+      terminal.focus();
+      claim();
+    };
+    focusIfCurrent(true);
+    window.requestAnimationFrame(() => {
+      focusIfCurrent();
+      window.setTimeout(focusIfCurrent, TERMINAL_RESIZE_SETTLE_MS);
+    });
+  }
+  return () => {
+    disposed = true;
+    if (reconnect !== undefined) window.clearTimeout(reconnect);
+    if (heartbeat !== undefined) window.clearInterval(heartbeat);
+    if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+    if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
+    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
+    window.removeEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
+    resize.disconnect();
+    intersection.disconnect();
+    render.dispose();
+    input.dispose();
+    ticketLinks?.dispose();
+    if (!scaledPreview) {
+      element.removeEventListener('click', focusTerminal);
+      element.removeEventListener('focusin', focus);
+      element.removeEventListener('focusout', focus);
+      element.removeEventListener('pointerdown', signalInteraction);
+      element.removeEventListener('focusin', signalInteraction);
+    }
+    socket?.close();
+    terminal.dispose();
+  };
 }

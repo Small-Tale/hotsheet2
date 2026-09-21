@@ -2,7 +2,7 @@ import { DEFAULT_TICKET_CATEGORIES } from './components/category-presentation';
 
 const STORAGE_KEY = 'hotsheet.ticket-composer.last-category.v1';
 const FALLBACK_CATEGORY = 'task';
-const categoryValues = new Set(DEFAULT_TICKET_CATEGORIES.map(category => category.value));
+const categoryValues = new Set(DEFAULT_TICKET_CATEGORIES.map((category) => category.value));
 
 export function loadLastTicketCategory(storage: Pick<Storage, 'getItem'>): string {
   const stored = storage.getItem(STORAGE_KEY);

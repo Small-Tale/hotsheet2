@@ -1,12 +1,80 @@
-.notification-center { width: 100%; max-width: remify(1248px); margin: 0 auto; padding: remify(19.2px) clamp(remify(12.8px), 2vw, remify(24px)) remify(32px); color: var(--wa-color-neutral-on-normal); }
-.notification-center__header { display: flex; margin-bottom: remify(19.2px); align-items: center; justify-content: space-between; gap: var(--kui-space-m); }
-.notification-center__header > span { display: flex; align-items: center; gap: remify(8.8px); }
-.notification-center__header svg { width: remify(20px); height: remify(20px); color: var(--wa-color-neutral-on-quiet); }
-.notification-center__header h1 { margin: 0; font-size: var(--wa-font-size-l); letter-spacing: -.025em; }
-.notification-center__header > strong { min-width: remify(24.8px); padding: remify(3.2px) remify(7.2px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); text-align: center; font-size: var(--wa-font-size-xs); }
-.notification-center__section + .notification-center__section { margin-top: remify(27.2px); }
-.notification-center__section > h2 { display: flex; margin: 0 0 remify(9.6px); align-items: center; gap: remify(6.4px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); letter-spacing: .055em; text-transform: uppercase; }
-.notification-center__section > h2 span { min-width: remify(19.2px); padding: remify(1.28px) remify(5.44px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); text-align: center; font-size: var(--wa-font-size-2xs); }
-.notification-center__items { display: grid; gap: remify(11.2px); }
-.notification-center__empty { margin: 0; padding: var(--kui-space-xl) var(--kui-space-m); border: 1px dashed var(--wa-color-neutral-fill-normal); border-radius: remify(14.4px); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-surface-lowered); text-align: center; font-size: var(--wa-font-size-s); }
-@media (max-width: remify(672px)) { .notification-center { padding-right: remify(8.8px); padding-left: remify(8.8px); } }
+.notification-center {
+  width: 100%;
+  max-width: remify(1248px);
+  margin: 0 auto;
+  padding: remify(19.2px) clamp(remify(12.8px), 2vw, remify(24px)) remify(32px);
+  color: var(--wa-color-neutral-on-normal);
+}
+.notification-center__header {
+  display: flex;
+  margin-bottom: remify(19.2px);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--kui-space-m);
+}
+.notification-center__header > span {
+  display: flex;
+  align-items: center;
+  gap: remify(8.8px);
+}
+.notification-center__header svg {
+  width: remify(20px);
+  height: remify(20px);
+  color: var(--wa-color-neutral-on-quiet);
+}
+.notification-center__header h1 {
+  margin: 0;
+  font-size: var(--wa-font-size-l);
+  letter-spacing: -0.025em;
+}
+.notification-center__header > strong {
+  min-width: remify(24.8px);
+  padding: remify(3.2px) remify(7.2px);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-brand-fill-loud);
+  text-align: center;
+  font-size: var(--wa-font-size-xs);
+}
+.notification-center__section + .notification-center__section {
+  margin-top: remify(27.2px);
+}
+.notification-center__section > h2 {
+  display: flex;
+  margin: 0 0 remify(9.6px);
+  align-items: center;
+  gap: remify(6.4px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.notification-center__section > h2 span {
+  min-width: remify(19.2px);
+  padding: remify(1.28px) remify(5.44px);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-normal);
+  text-align: center;
+  font-size: var(--wa-font-size-2xs);
+}
+.notification-center__items {
+  display: grid;
+  gap: remify(11.2px);
+}
+.notification-center__empty {
+  margin: 0;
+  padding: var(--kui-space-xl) var(--kui-space-m);
+  border: 1px dashed var(--wa-color-neutral-fill-normal);
+  border-radius: remify(14.4px);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-surface-lowered);
+  text-align: center;
+  font-size: var(--wa-font-size-s);
+}
+@media (max-width: remify(672px)) {
+  .notification-center {
+    padding-right: remify(8.8px);
+    padding-left: remify(8.8px);
+  }
+}

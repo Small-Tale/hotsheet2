@@ -17,6 +17,7 @@ remote clients and to AI tools.](diagrams/architecture.svg)
 ## 1.2 Components
 
 ### hotsheet-core (library)
+
 The heart. Everything domain-specific lives here so it is written and tested
 once. It is **I/O-capable but policy-free**: it reads/writes files and spawns
 processes through injected adapters, so it can be unit-tested against in-memory
@@ -25,6 +26,7 @@ are not hosts; they use the server's API). See
 [04-core-server-cli.md](04-core-server-cli.md).
 
 Key modules:
+
 - **model** — `Ticket`, `Note`, `Attachment`, `Category`, `Store`, `Project`,
   status/priority enums, the claim/lease fields.
 - **ticket providers** — a normalized contract plus capability-aware routing and
@@ -41,7 +43,9 @@ Key modules:
 - **coord** — claim/lease primitive for distributed drain.
 
 ### hotsheet-server (binary)
+
 A thin `axum`/`tokio` process that wraps the core and exposes:
+
 - **REST** over HTTP for CRUD/query.
 - **WebSocket** for live push (index changes, claims, terminal streams,
   permission prompts).
@@ -53,6 +57,7 @@ Runs completely independently of any client. Multiple clients (local and remote)
 attach to one server. See [04-core-server-cli.md](04-core-server-cli.md) §4.3.
 
 ### hotsheet-cli (binary)
+
 A thin `clap` process that wraps the core for **direct-to-disk** operations —
 create/list/edit/search/complete tickets without a running server. When a server
 is running, disk changes it makes are picked up by the watcher and reindexed.
@@ -60,10 +65,12 @@ Also hosts developer/ops commands (`init`, `migrate`, `reindex`, `serve`,
 `doctor`). See [04-core-server-cli.md](04-core-server-cli.md) §4.4.
 
 ### Clients
+
 **Pure consumers of the server API in every case — no client ever embeds the
-core.** A local project and a remote project differ only in *which* server the
+core.** A local project and a remote project differ only in _which_ server the
 client talks to (a localhost server vs. a remote origin); the client is the same
 thin HTTP/WS/MCP consumer either way.
+
 - **Tauri desktop** — a Rust shell hosting a web UI. It **auto-starts and
   supervises the local server** when none is running, then talks to it over
   HTTP/WS; for a remote project it talks HTTP/WS over mTLS.
@@ -132,8 +139,8 @@ The UI never walks the store directory to draw a list; it always reads the index
 - **Exposed (Tier 1):** binding off-loopback requires mTLS + per-device client
   certs + ACLs, or the server refuses to start. Carried over from HS1's shipped
   §94/§97/§112 remote design. See [08-distributed-and-remote.md](08-distributed-and-remote.md).
-- **One writer per store working copy at a time** for the *index* is enforced by a
-  lock; git itself arbitrates concurrent *content* edits via normal merge. The
+- **One writer per store working copy at a time** for the _index_ is enforced by a
+  lock; git itself arbitrates concurrent _content_ edits via normal merge. The
   index is per-machine and disposable, so cross-machine index locking is a
   non-issue.
 
@@ -150,6 +157,7 @@ The UI never walks the store directory to draw a list; it always reads the index
   Claude is a plugin like any other. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md).
 
 ## 1.6 Cross-references
+
 - Technology choices and rationale: [09-technology-decisions.md](09-technology-decisions.md)
 - Storage: [02-ticket-storage.md](02-ticket-storage.md)
 - Indexing: [03-indexing-and-query.md](03-indexing-and-query.md)

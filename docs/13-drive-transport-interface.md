@@ -6,14 +6,15 @@
 > single universal transport (maintainer, 2026-08-19). This is the trait spec + a
 > conformance checklist. **Built (`crates/hotsheet-aitools`):** the `Drive` trait +
 > `Transport` tag + `Target` + `DriveCtx` + `TurnHandle` (`is_busy`/`wait`/`interrupt`)
-> + `DoneReason`, the injected `ProcessSpawner`/`SpawnedProcess` ports + the real
-> `SystemSpawner`, and the **spawn-per-run `SpawnDrive`** (Codex `exec` shape),
-> conformance-tested against a fake spawner (§13.7, minus the fake-agent parts).
-> **Streaming view added (HS2-116):** `TurnHandle` now also has `next_event() ->
-> Option<TurnEvent>` (`Output`/`PermissionAsked`/`Done`) — additive, so the sync
-> spawn/app-server drives keep the default (`None` → use `wait`), while the Claude channel
-> drive streams. The permission sink is still a later addition to `DriveCtx`; the
-> connection registry already landed (HS2-107).
+>
+> - `DoneReason`, the injected `ProcessSpawner`/`SpawnedProcess` ports + the real
+>   `SystemSpawner`, and the **spawn-per-run `SpawnDrive`** (Codex `exec` shape),
+>   conformance-tested against a fake spawner (§13.7, minus the fake-agent parts).
+>   **Streaming view added (HS2-116):** `TurnHandle` now also has `next_event() ->
+Option<TurnEvent>` (`Output`/`PermissionAsked`/`Done`) — additive, so the sync
+>   spawn/app-server drives keep the default (`None` → use `wait`), while the Claude channel
+>   drive streams. The permission sink is still a later addition to `DriveCtx`; the
+>   connection registry already landed (HS2-107).
 >
 > **Claude channel drive built (HS2-116):** `ClaudeChannelDrive` + `ClaudeChannel` — a
 > turn injected into a running `claude` stream-json session, streamed as `TurnEvent`s.
@@ -47,11 +48,11 @@
 > **Shared-daemon path (HS2-115):** the earlier "does not serve JSON-RPC / undocumented
 > protocol" reading was wrong. From codex 0.148 source, the daemon control socket is a
 > **plain WebSocket** endpoint (server does tungstenite `accept_async` on the UDS — **no**
-> auth token for the *local* socket; the `Authorization: Bearer` check is only on the
-> network `ws://IP:PORT` remote-control path), carrying the *same* `initialize`→`thread/*`→
+> auth token for the _local_ socket; the `Authorization: Bearer` check is only on the
+> network `ws://IP:PORT` remote-control path), carrying the _same_ `initialize`→`thread/*`→
 > `turn/*` JSON-RPC as WebSocket **text frames** on `ws://localhost/rpc`. The prior probe
 > drew zero bytes because it wrote raw newline JSON where an HTTP/WebSocket upgrade was
-> expected (and `codex app-server proxy` is a dumb `stdio_to_uds` byte relay that does *not*
+> expected (and `codex app-server proxy` is a dumb `stdio_to_uds` byte relay that does _not_
 > add the WS layer). `UdsWsTransport` now connects the UDS directly and frames JSON-RPC as
 > WS text frames (a dedicated Tokio thread bridging to the sync reader/writer halves);
 > proven end to end by a scripted-WS-daemon unit test **and live-verified (2026-08-21):**
@@ -66,12 +67,12 @@ Drivability is the integration priority (a tool that can't be driven against a
 persistent/continuous session is lower priority). Ground-truthed from the **installed
 CLIs** + official docs, not HS1's notes:
 
-| Tool | Persistent driving? | Mechanism | Transport | Priority |
-|---|---|---|---|---|
-| **Codex** 0.148 | **Yes (daemon)** | `app-server daemon` (JSON-RPC/control socket; `thread/start\|resume` + `turn/start\|interrupt`; `remote-control`+pairing); `exec-server`; `exec resume <id> "<prompt>"` no-daemon | `AppServer` | 1 |
-| **Claude** 2.1.238 | **Yes (channel)** | MCP-channel injection into a running session; `-p --input-format stream-json`; `--resume`/`--continue` | `ClaudeChannel` | 2 |
-| **OpenCode** 1.17.18 | **Yes (ACP/HTTP)** | `opencode acp` (live stdio client: initialize, new/load, prompt/update/cancel); `opencode serve` + `attach`; session mgmt | `Acp` | 3 |
-| **Antigravity (agy)** 1.1.7 | **No daemon** | `agy --conversation <id> --print "…"` (spawn-per-turn, resumed thread). `agy-mcp` community bridges wrap this for *delegation*; Antigravity only **consumes** MCP (`.agents/mcp_config.json`), it is not exposed as a driveable server | `Spawn`+resume | 4 |
+| Tool                        | Persistent driving? | Mechanism                                                                                                                                                                                                                              | Transport       | Priority |
+| --------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
+| **Codex** 0.148             | **Yes (daemon)**    | `app-server daemon` (JSON-RPC/control socket; `thread/start\|resume` + `turn/start\|interrupt`; `remote-control`+pairing); `exec-server`; `exec resume <id> "<prompt>"` no-daemon                                                      | `AppServer`     | 1        |
+| **Claude** 2.1.238          | **Yes (channel)**   | MCP-channel injection into a running session; `-p --input-format stream-json`; `--resume`/`--continue`                                                                                                                                 | `ClaudeChannel` | 2        |
+| **OpenCode** 1.17.18        | **Yes (ACP/HTTP)**  | `opencode acp` (live stdio client: initialize, new/load, prompt/update/cancel); `opencode serve` + `attach`; session mgmt                                                                                                              | `Acp`           | 3        |
+| **Antigravity (agy)** 1.1.7 | **No daemon**       | `agy --conversation <id> --print "…"` (spawn-per-turn, resumed thread). `agy-mcp` community bridges wrap this for _delegation_; Antigravity only **consumes** MCP (`.agents/mcp_config.json`), it is not exposed as a driveable server | `Spawn`+resume  | 4        |
 
 MCP-config setup targets differ per tool: Claude `.mcp.json`, Codex `.codex/config.toml`,
 Antigravity `.agents/mcp_config.json` (Gemini `mcpServers`), OpenCode its own config.
@@ -81,13 +82,13 @@ Antigravity `.agents/mcp_config.json` (Gemini `mcpServers`), OpenCode its own co
 "Drive" = the app tells a running AI tool to do something and observes it. The three
 shapes differ deeply:
 
-| | **Persistent channel** (Claude) | **Spawn / app-server** (Codex) | **ACP** (OpenCode, Goose) |
-|---|---|---|---|
-| trigger | inject a `<channel>` event into a long-lived session | `codex exec --json` per turn, *or* a JSON-RPC call to the app-server daemon | `session/prompt` |
-| done | Stop hook / channel idle | process exit / turn-end message | `stopReason` |
-| busy | hooks + spinner | process alive / turn in-flight | `session/update` |
+|             | **Persistent channel** (Claude)                        | **Spawn / app-server** (Codex)                                                     | **ACP** (OpenCode, Goose)    |
+| ----------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------- |
+| trigger     | inject a `<channel>` event into a long-lived session   | `codex exec --json` per turn, _or_ a JSON-RPC call to the app-server daemon        | `session/prompt`             |
+| done        | Stop hook / channel idle                               | process exit / turn-end message                                                    | `stopReason`                 |
+| busy        | hooks + spinner                                        | process alive / turn in-flight                                                     | `session/update`             |
 | permissions | native `PermissionRequest` hook / channel notification | app-server approval request or interactive `.codex/hooks.json` `PermissionRequest` | `session/request_permission` |
-| lifecycle | one persistent process | one-shot **or** a warm daemon | one process per session |
+| lifecycle   | one persistent process                                 | one-shot **or** a warm daemon                                                      | one process per session      |
 
 The interface must express all of these **without the caller ever branching on the
 tool id** (the §5.1 rule).
@@ -128,7 +129,7 @@ The ticket calls these out; here's how each is expressed once:
 1. **Transport identity** — a **declarative data tag** on the plugin
    (`Transport::{ClaudeChannel, Spawn, AppServer, Acp}`), client-safe, so the client
    and server agree without a mirror (the §132.11.7 drift). It routes `run` to the
-   right implementation; it is *identity, not behavior*.
+   right implementation; it is _identity, not behavior_.
 2. **The target selector** — `run(target, …)`: which live connection to hit when
    several exist (the main channel vs. a git-worktree worker's channel). The host's
    **connection registry** ([05](05-ai-tool-plugins.md) §5.6) enumerates connections;
@@ -156,6 +157,7 @@ enum TurnEvent { Started, Busy, Idle, Output(Bytes), PermissionAsked(PermReq), D
 
 Each transport **produces `TurnEvent`s from its native signal**, so the host consumes
 one stream:
+
 - **Claude:** Stop/PreToolUse/PostToolUse hooks + the spinner heuristic → Busy/Idle;
   channel idle / Stop → Done.
 - **Codex spawn:** process alive → Busy; exit code → Done. **App-server:** turn-start/
@@ -192,14 +194,14 @@ targets a specific (isolated) home.
 **Wired into the trigger (HS2-B7C66H, live-verified 2026-08-21):** `hotsheet-cli trigger
 codex --shared-daemon` builds a **daemon-ready isolated `CODEX_HOME`** (the HS2-YRDQNX
 MCP-free home, but under a short root so the control socket fits `sun_path`, with the managed
-standalone install symlinked in), starts the daemon for *that* home, and drives the turn over
-`UdsWsTransport` — so MCP isolation holds *and* one codex instance is reused. Available on
+standalone install symlinked in), starts the daemon for _that_ home, and drives the turn over
+`UdsWsTransport` — so MCP isolation holds _and_ one codex instance is reused. Available on
 both `trigger` and `work` via `--shared-daemon` (off by default: a fresh `app-server` process
 per connection). **Lifecycle handled (HS2-9M6T68):** the isolated home stops its daemon on
 drop (`ensure_codex_daemon_in` starts it, `stop_codex_daemon_in` tears it down), so a run
 never orphans a codex process; the `work` loop is the best case (one daemon reused across all
 turns, torn down at loop end — live-verified 2026-08-22). Still open: folding
-`ensure_codex_daemon` behind a `Drive::service()` accessor, and a *stable* per-project home if
+`ensure_codex_daemon` behind a `Drive::service()` accessor, and a _stable_ per-project home if
 cross-invocation reuse is ever wanted.
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
@@ -209,7 +211,7 @@ cross-invocation reuse is ever wanted.
 > `claude` stream-json session** (the HS1 play-button model), observed as an **async
 > `TurnEvent` stream** (`Output` … → `Done`), not a single terminal wait. Verified
 > `claude 2.1.238` protocol: `claude -p --input-format stream-json --output-format
-> stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init`
+stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init`
 > (session id), `assistant` (output), `result` (turn done). Same NDJSON framing as codex,
 > so it reuses the injected `RpcTransport`/`StreamChild` plumbing: `ClaudeStreamTransport`
 > spawns real `claude`, tests inject a **scripted claude**. This is what forced the
@@ -226,6 +228,7 @@ cross-invocation reuse is ever wanted.
 > emits `PermissionAsked` but runs a safe mode) and a channel interrupt.
 
 The interface is only real if the tool it was **not** designed around fits. Checks:
+
 - **Claude** needs `run` to be **async** (a turn on a running session) → `run` returns a
   `Result<TurnHandle>` whose `next_event()` streams `Output`/`PermissionAsked`/`Done`; the
   spawn/app-server drives are sync under the same signature (they return `None` from
@@ -238,15 +241,16 @@ The interface is only real if the tool it was **not** designed around fits. Chec
   ticket activity model.
 - **Codex** needs **`interrupt`** and a **backing service**; Claude declares neither,
   and nothing breaks — absence is the signal.
-- **ACP** needs permission-*as-a-response* (not a hook) → the `PermissionSink` adapter
+- **ACP** needs permission-_as-a-response_ (not a hook) → the `PermissionSink` adapter
   is per-transport; the bridge sees a uniform `PermReq`.
-- If a **fourth** shape needs a *new required* method or a third `run` allowance, the
+- If a **fourth** shape needs a _new required_ method or a third `run` allowance, the
   interface is accreting rather than generalizing — that's the red flag to watch
   (HS1's exact criterion, §132.11.5).
 
 ## 13.7 Conformance checklist (what the fake-agent suite verifies, HS2-64)
 
 Every plugin with a `drive` passes:
+
 - `transport` is a valid tag; the client-side `transportFor(id)` agrees (no mirror).
 - `run` with an **injected spawner/poster** reports the exact content it would send
   (no real tool) and returns a `TurnHandle`.
@@ -258,6 +262,7 @@ Every plugin with a `drive` passes:
 - Absent caps return `None` and are never called.
 
 ## 13.8 Resolved transport semantics
+
 - **`Target` when zero connections exist:** spawn drives start a process; channel,
   ACP, and app-server drives surface `NotConnected` when their backing service/session
   is unavailable.
@@ -332,11 +337,13 @@ connection. Recovery is project-root scoped and failure-isolated, so stale/corru
 one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2).
 
 ## 13.10 Build plan (follow-ups)
+
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
   drive) and **HS2-66** (Codex drive); the conformance checklist is built in **HS2-64**.
   No new ticket needed — those three own the build.
 
 ## 13.11 Cross-references
+
 - Drive/trigger overview + optional caps: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.5
 - Connection registry + busy: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.6
 - Permission bridge: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7

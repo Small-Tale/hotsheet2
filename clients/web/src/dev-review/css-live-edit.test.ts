@@ -27,6 +27,10 @@ html > body > section { margin-top: 4px; }
     const snapshot = '.label::after { content: "✓"; }\n';
     const attachment = cssSnapshotAttachment({ btoa } as Window, 'before.css', snapshot);
     expect(attachment).toMatchObject({ filename: 'before.css', mimeType: 'text/css' });
-    expect(new TextDecoder().decode(Uint8Array.from(atob(attachment.dataUrl.split(',')[1]), character => character.charCodeAt(0)))).toBe(snapshot);
+    expect(
+      new TextDecoder().decode(
+        Uint8Array.from(atob(attachment.dataUrl.split(',')[1]), (character) => character.charCodeAt(0)),
+      ),
+    ).toBe(snapshot);
   });
 });

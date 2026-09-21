@@ -5,7 +5,9 @@ import { customViewNameAvailable, uniqueCustomViewId } from './saved-views';
 describe('saved views', () => {
   it('creates readable collision-free ids', () => {
     expect(uniqueCustomViewId('Needs docs!', [])).toBe('needs-docs');
-    expect(uniqueCustomViewId('Needs docs', [{ id: 'needs-docs', name: 'Earlier', query: 'tag:docs' }])).toBe('needs-docs-2');
+    expect(uniqueCustomViewId('Needs docs', [{ id: 'needs-docs', name: 'Earlier', query: 'tag:docs' }])).toBe(
+      'needs-docs-2',
+    );
     expect(uniqueCustomViewId('✨', [])).toBe('view');
   });
 

@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import {tokenFromRaw} from '../inline-search';
+import { tokenFromRaw } from '../inline-search';
 import { SavedViewDeleteDialog, SavedViewDialog } from './saved-view-dialog';
 
 describe('SavedViewDialog', () => {
   it('collects a shared view name in the standard tokenized query editor', () => {
-    const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', query: ' AND NOT status:completed', queryTokens:[tokenFromRaw('tag:docs')!] }));
+    const markup = String(
+      SavedViewDialog({
+        open: true,
+        name: 'Needs docs',
+        query: ' AND NOT status:completed',
+        queryTokens: [tokenFromRaw('tag:docs')!],
+      }),
+    );
     expect(markup).toContain('data-component="saved-view-dialog"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
@@ -18,23 +25,33 @@ describe('SavedViewDialog', () => {
   });
 
   it('keeps validation feedback in the dialog and locks controls while saving', () => {
-    const markup = String(SavedViewDialog({ open: true, name: '', query: '', busy: true, error: 'That name is already in use.' }));
+    const markup = String(
+      SavedViewDialog({ open: true, name: '', query: '', busy: true, error: 'That name is already in use.' }),
+    );
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('That name is already in use.');
     expect(markup.match(/disabled/g)?.length).toBeGreaterThanOrEqual(3);
     expect(markup).toContain('Creating…');
   });
 
-  it('edits both the shared view name and tokenized query',()=>{
-    const markup=String(SavedViewDialog({open:true,mode:'rename',name:'Needs docs',query:'',queryTokens:[tokenFromRaw('tag:docs')!]}));
+  it('edits both the shared view name and tokenized query', () => {
+    const markup = String(
+      SavedViewDialog({
+        open: true,
+        mode: 'rename',
+        name: 'Needs docs',
+        query: '',
+        queryTokens: [tokenFromRaw('tag:docs')!],
+      }),
+    );
     expect(markup).toContain('label="Edit View"');
     expect(markup).toContain('Change the shared view name or search query.');
     expect(markup).toContain('name="saved-view-query"');
     expect(markup).toContain('data-action="edit-saved-view-query-token"');
   });
 
-  it('confirms shared deletion without implying tickets are removed',()=>{
-    const markup=String(SavedViewDeleteDialog({open:true,name:'Needs docs'}));
+  it('confirms shared deletion without implying tickets are removed', () => {
+    const markup = String(SavedViewDeleteDialog({ open: true, name: 'Needs docs' }));
     expect(markup).toContain('data-component="saved-view-delete-dialog"');
     expect(markup).toContain('Tickets are not affected.');
     expect(markup).toContain('data-action="confirm-delete-saved-view"');

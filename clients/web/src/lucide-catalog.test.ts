@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isLucideCatalogLoaded, loadLucideCatalog, lucideIconNode, lucidePascalToKebab, searchLucideCatalog } from './lucide-catalog';
+import {
+  isLucideCatalogLoaded,
+  loadLucideCatalog,
+  lucideIconNode,
+  lucidePascalToKebab,
+  searchLucideCatalog,
+} from './lucide-catalog';
 
 describe('lucidePascalToKebab', () => {
   it('converts Lucide export names to kebab-case ids', () => {
@@ -24,8 +30,8 @@ describe('loadLucideCatalog', () => {
     const results = searchLucideCatalog('git', 10);
     expect(results.length).toBeGreaterThan(0);
     expect(results.length).toBeLessThanOrEqual(10);
-    expect(results.every(entry => entry.name.includes('git'))).toBe(true);
-    expect(results.some(entry => entry.name === 'git-branch')).toBe(true);
+    expect(results.every((entry) => entry.name.includes('git'))).toBe(true);
+    expect(results.some((entry) => entry.name === 'git-branch')).toBe(true);
     // An unknown query returns nothing.
     expect(searchLucideCatalog('definitely-not-an-icon-zzz')).toEqual([]);
   });

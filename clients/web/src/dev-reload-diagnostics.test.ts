@@ -12,8 +12,12 @@ function createHot() {
   const handlers = new Map<string, (payload: unknown) => void>();
   return {
     handlers,
-    on: (event: string, callback: (payload: unknown) => void) => { handlers.set(event, callback); },
-    emit: (event: string, payload?: unknown) => { handlers.get(event)?.(payload); },
+    on: (event: string, callback: (payload: unknown) => void) => {
+      handlers.set(event, callback);
+    },
+    emit: (event: string, payload?: unknown) => {
+      handlers.get(event)?.(payload);
+    },
   };
 }
 
@@ -23,7 +27,9 @@ function createStorage(initial?: DevReloadRecord[]) {
   return {
     map,
     getItem: (key: string) => map.get(key) ?? null,
-    setItem: (key: string, value: string) => { map.set(key, value); },
+    setItem: (key: string, value: string) => {
+      map.set(key, value);
+    },
   };
 }
 
@@ -35,7 +41,9 @@ function logOf(storage: ReturnType<typeof createStorage>): DevReloadRecord[] {
 describe('installDevReloadDiagnostics', () => {
   let warn: ReturnType<typeof vi.fn<(message?: unknown, ...optionalParams: unknown[]) => void>>;
 
-  beforeEach(() => { warn = vi.fn<(message?: unknown, ...optionalParams: unknown[]) => void>(); });
+  beforeEach(() => {
+    warn = vi.fn<(message?: unknown, ...optionalParams: unknown[]) => void>();
+  });
 
   it('records a full-reload trigger with its blamed path and warns before the reload', () => {
     const hot = createHot();
@@ -86,11 +94,17 @@ describe('installDevReloadDiagnostics', () => {
   it('never throws when storage is unavailable', () => {
     const hot = createHot();
     const throwingStorage = {
-      getItem: (): string | null => { throw new Error('blocked'); },
-      setItem: (): void => { throw new Error('blocked'); },
+      getItem: (): string | null => {
+        throw new Error('blocked');
+      },
+      setItem: (): void => {
+        throw new Error('blocked');
+      },
     };
     expect(() => installDevReloadDiagnostics({ hot, storage: throwingStorage, logger: { warn } })).not.toThrow();
-    expect(() => { hot.emit('vite:beforeFullReload', { path: '/src/main.tsx' }); }).not.toThrow();
+    expect(() => {
+      hot.emit('vite:beforeFullReload', { path: '/src/main.tsx' });
+    }).not.toThrow();
   });
 
   it('ignores malformed persisted data instead of crashing', () => {
@@ -120,8 +134,17 @@ describe('installDevReloadDiagnostics', () => {
     const hot = createHot();
     const storage = createStorage(); // empty session log, as the user reported
     const persistentStorage = createStorage();
-    persistentStorage.map.set(DEV_RELOAD_LAST_KEY, JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord));
-    const prior = installDevReloadDiagnostics({ hot, storage, persistentStorage, navigationType: () => 'reload', logger: { warn } });
+    persistentStorage.map.set(
+      DEV_RELOAD_LAST_KEY,
+      JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord),
+    );
+    const prior = installDevReloadDiagnostics({
+      hot,
+      storage,
+      persistentStorage,
+      navigationType: () => 'reload',
+      logger: { warn },
+    });
     expect(prior).toEqual({ type: 'connection lost', at: 'earlier' });
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('connection lost'));
@@ -130,15 +153,30 @@ describe('installDevReloadDiagnostics', () => {
 
   it('explains a reload with no trace at all when even cross-context storage is empty', () => {
     const hot = createHot();
-    installDevReloadDiagnostics({ hot, storage: createStorage(), persistentStorage: createStorage(), navigationType: () => 'reload', logger: { warn } });
+    installDevReloadDiagnostics({
+      hot,
+      storage: createStorage(),
+      persistentStorage: createStorage(),
+      navigationType: () => 'reload',
+      logger: { warn },
+    });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('no HMR or websocket trace'));
   });
 
   it('stays quiet on a fresh navigation rather than a reload', () => {
     const hot = createHot();
     const persistentStorage = createStorage();
-    persistentStorage.map.set(DEV_RELOAD_LAST_KEY, JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord));
-    const prior = installDevReloadDiagnostics({ hot, storage: createStorage(), persistentStorage, navigationType: () => 'navigate', logger: { warn } });
+    persistentStorage.map.set(
+      DEV_RELOAD_LAST_KEY,
+      JSON.stringify({ type: 'connection lost', at: 'earlier' } satisfies DevReloadRecord),
+    );
+    const prior = installDevReloadDiagnostics({
+      hot,
+      storage: createStorage(),
+      persistentStorage,
+      navigationType: () => 'navigate',
+      logger: { warn },
+    });
     expect(prior).toBeUndefined();
     expect(warn).not.toHaveBeenCalled();
   });

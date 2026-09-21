@@ -42,23 +42,30 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).not.toContain('>Close</button>');
     expect(markup).not.toContain('connection-details-dialog__footer');
     expect(connectionRecoveryGuidance(stale)).toContain('cargo build -p hotsheet-server');
-    const css=readFileSync(resolve(import.meta.dirname,'connection-details-dialog.css'),'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'connection-details-dialog.css'), 'utf8');
     expect(css).not.toMatch(/__metadata[^}]*border:/);
     expect(css).not.toContain('__footer');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/__body \{[^}]*gap: var\(--kui-space-l\);[^}]*padding: var\(--kui-space-l\)/);
-    expect(css).toMatch(/__metadata > div \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(
+      /__metadata > div \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
+    );
   });
 
-  it('supports an embedded deterministic demo without changing production dismissal',()=>{
-    expect(String(ConnectionDetailsDialog({assessment:stale}))).toContain('popover="auto"');
-    const embedded=String(ConnectionDetailsDialog({assessment:stale,embedded:true}));
+  it('supports an embedded deterministic demo without changing production dismissal', () => {
+    expect(String(ConnectionDetailsDialog({ assessment: stale }))).toContain('popover="auto"');
+    const embedded = String(ConnectionDetailsDialog({ assessment: stale, embedded: true }));
     expect(embedded).toContain('data-embedded="true"');
     expect(embedded).not.toContain('popover="auto"');
   });
 
   it('does not imply an unsafe automatic restart when quiescence is unavailable', () => {
-    const guidance = connectionRecoveryGuidance({ ...stale, kind: 'server_too_old', sourceStale: false, canRestartServer: false });
+    const guidance = connectionRecoveryGuidance({
+      ...stale,
+      kind: 'server_too_old',
+      sourceStale: false,
+      canRestartServer: false,
+    });
     expect(guidance).toContain('stop the old server manually after its active work finishes');
     expect(guidance).toContain('Automatic restart is unavailable');
   });

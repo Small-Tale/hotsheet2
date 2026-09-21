@@ -32,16 +32,27 @@ const projects = [
 describe('ticket link resolution', () => {
   it('parses local references and the explicit cross-project syntax', () => {
     expect(parseTicketLinkReference('HS2-LOCAL1')).toEqual({ raw: 'HS2-LOCAL1', slug: 'HS2-LOCAL1' });
-    expect(parseTicketLinkReference('@beta-02/HS2-REMOTE1')).toEqual({ raw: '@beta-02/HS2-REMOTE1', projectId: 'beta-02', slug: 'HS2-REMOTE1' });
+    expect(parseTicketLinkReference('@beta-02/HS2-REMOTE1')).toEqual({
+      raw: '@beta-02/HS2-REMOTE1',
+      projectId: 'beta-02',
+      slug: 'HS2-REMOTE1',
+    });
     expect(formatTicketLinkReference('HS2-REMOTE1', 'beta-02')).toBe('@beta-02/HS2-REMOTE1');
     expect(parseTicketLinkReference('@Beta project/HS2-REMOTE1')).toBeUndefined();
     expect(() => formatTicketLinkReference('not a slug', 'beta-02')).toThrow();
-    expect('See HS2-LOCAL1 and @beta-02/HS2-REMOTE1.'.match(ticketReferencePattern())).toEqual(['HS2-LOCAL1', '@beta-02/HS2-REMOTE1']);
+    expect('See HS2-LOCAL1 and @beta-02/HS2-REMOTE1.'.match(ticketReferencePattern())).toEqual([
+      'HS2-LOCAL1',
+      '@beta-02/HS2-REMOTE1',
+    ]);
   });
 
   it('detects only the single-digit legacy HS1 exception among one-character suffixes (HS2-T9TVYT)', () => {
     expect(parseTicketLinkReference('HS-1')).toEqual({ raw: 'HS-1', slug: 'HS-1' });
-    expect(parseTicketLinkReference('@beta-02/HS-9')).toEqual({ raw: '@beta-02/HS-9', projectId: 'beta-02', slug: 'HS-9' });
+    expect(parseTicketLinkReference('@beta-02/HS-9')).toEqual({
+      raw: '@beta-02/HS-9',
+      projectId: 'beta-02',
+      slug: 'HS-9',
+    });
     expect('See HS-1, HS-9, AB-1, HS-A, and HS-10.'.match(ticketReferencePattern())).toEqual(['HS-1', 'HS-9', 'HS-10']);
     expect(parseTicketLinkReference('AB-1')).toBeUndefined();
     expect(parseTicketLinkReference('HS-A')).toBeUndefined();
@@ -75,8 +86,12 @@ describe('ticket link resolution', () => {
     const result = resolveTicketLink(parseTicketLinkReference('HS2-SHARED1')!, withDuplicates, 'alpha-01');
     expect(result.kind).toBe('choose');
     if (result.kind !== 'choose') throw new Error('Expected multiple exact matches.');
-    expect(result.matches.map(match => match.connectionId)).toEqual(['git', 'jira', 'github']);
-    expect(result.matches.map(ticketLinkMatchKey)).toEqual(['alpha-01::git%3AHS2-SHARED1', 'alpha-01::jira%3AHS2-SHARED1', 'beta-02::github%3AHS2-SHARED1']);
+    expect(result.matches.map((match) => match.connectionId)).toEqual(['git', 'jira', 'github']);
+    expect(result.matches.map(ticketLinkMatchKey)).toEqual([
+      'alpha-01::git%3AHS2-SHARED1',
+      'alpha-01::jira%3AHS2-SHARED1',
+      'beta-02::github%3AHS2-SHARED1',
+    ]);
   });
 
   it('resolves a bare legacy HS-N reference to the imported ticket by legacy_number (HS2-XB5R3Y)', () => {
@@ -115,7 +130,7 @@ describe('ticket link resolution', () => {
     const result = resolveTicketLink(parseTicketLinkReference('HS-42')!, withLegacy, 'alpha-01');
     expect(result.kind).toBe('choose');
     if (result.kind !== 'choose') throw new Error('Expected multiple legacy matches.');
-    expect(result.matches.map(match => match.slug)).toEqual(['HS2-IMPA', 'HS2-IMPB']);
+    expect(result.matches.map((match) => match.slug)).toEqual(['HS2-IMPA', 'HS2-IMPB']);
   });
 
   it('uses an explicit project ID to resolve a cross-project reference', () => {

@@ -1,7 +1,48 @@
-import { ArrowLeftRight, Balloon, Bot, Bug, CircleCheckBig, Cloud, Code, Database, Download, FileText, FlaskConical, FolderGit2, GitBranch, GitCompare, GitCompareArrows, GitMerge, GitPullRequest, Globe, Hammer, type IconNode, ListChecks, Package, Play, RefreshCw, Rocket, Search, Send, Settings, Shield, SoapDispenserDroplet, Sparkles, SquareTerminal, TestTube2, Upload, Wand, Wrench, Zap } from 'lucide';
+import {
+  ArrowLeftRight,
+  Balloon,
+  Bot,
+  Bug,
+  CircleCheckBig,
+  Cloud,
+  Code,
+  Database,
+  Download,
+  FileText,
+  FlaskConical,
+  FolderGit2,
+  GitBranch,
+  GitCompare,
+  GitCompareArrows,
+  GitMerge,
+  GitPullRequest,
+  Globe,
+  Hammer,
+  type IconNode,
+  ListChecks,
+  Package,
+  Play,
+  RefreshCw,
+  Rocket,
+  Search,
+  Send,
+  Settings,
+  Shield,
+  SoapDispenserDroplet,
+  Sparkles,
+  SquareTerminal,
+  TestTube2,
+  Upload,
+  Wand,
+  Wrench,
+  Zap,
+} from 'lucide';
 
 /** A bundled, always-available icon: its kebab-case name and Lucide node. */
-export interface PopularLucideIcon { name: string; icon: IconNode }
+export interface PopularLucideIcon {
+  name: string;
+  icon: IconNode;
+}
 
 /**
  * Curated command-button icons kept in the main bundle so the picker's default set and every legacy
@@ -47,4 +88,4 @@ export const POPULAR_LUCIDE_ICONS: readonly PopularLucideIcon[] = [
   { name: 'soap-dispenser-droplet', icon: SoapDispenserDroplet },
 ];
 
-export const POPULAR_LUCIDE_MAP = new Map(POPULAR_LUCIDE_ICONS.map(entry => [entry.name, entry.icon] as const));
+export const POPULAR_LUCIDE_MAP = new Map(POPULAR_LUCIDE_ICONS.map((entry) => [entry.name, entry.icon] as const));

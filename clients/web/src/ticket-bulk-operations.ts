@@ -20,7 +20,10 @@ export class BulkTicketMutationSequencer {
   enqueue<T>(projectId: string, task: () => Promise<T>): Promise<T> {
     const prior = this.tails.get(projectId) ?? Promise.resolve();
     const result = prior.then(task, task);
-    const tail = result.then(() => undefined, () => undefined);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
     this.tails.set(projectId, tail);
     void tail.then(() => {
       if (this.tails.get(projectId) === tail) this.tails.delete(projectId);
@@ -34,10 +37,13 @@ export function canBulkUpdate(
   tickets: readonly TicketRow[],
   capabilitiesFor: (connectionId: string) => Capabilities | undefined,
 ): boolean {
-  return tickets.length > 0 && tickets.every(ticket => {
-    const capabilities = capabilitiesFor(ticket.connection_id);
-    return Boolean(capabilities?.update);
-  });
+  return (
+    tickets.length > 0 &&
+    tickets.every((ticket) => {
+      const capabilities = capabilitiesFor(ticket.connection_id);
+      return Boolean(capabilities?.update);
+    })
+  );
 }
 
 /** One atomic request is safe only when every selected provider advertises it. */
@@ -45,11 +51,14 @@ export function canAtomicallyBulkUpdate(
   tickets: readonly TicketRow[],
   capabilitiesFor: (connectionId: string) => Capabilities | undefined,
 ): boolean {
-  return canBulkUpdate(tickets, capabilitiesFor) && tickets.every(ticket => capabilitiesFor(ticket.connection_id)?.atomic_batch === true);
+  return (
+    canBulkUpdate(tickets, capabilitiesFor) &&
+    tickets.every((ticket) => capabilitiesFor(ticket.connection_id)?.atomic_batch === true)
+  );
 }
 
 export function bulkTagChoices(tickets: readonly TicketRow[]): string[] {
-  return [...new Set(tickets.flatMap(ticket => ticket.tags))].sort((left, right) => left.localeCompare(right));
+  return [...new Set(tickets.flatMap((ticket) => ticket.tags))].sort((left, right) => left.localeCompare(right));
 }
 
 export function bulkTicketPatch(ticket: Pick<TicketRow, 'tags'>, action: BulkTicketAction): TicketPatch | undefined {
@@ -64,5 +73,5 @@ export function bulkTicketPatch(ticket: Pick<TicketRow, 'tags'>, action: BulkTic
     return { tags: [...ticket.tags, tag] };
   }
   if (!ticket.tags.includes(tag)) return undefined;
-  return { tags: ticket.tags.filter(value => value !== tag) };
+  return { tags: ticket.tags.filter((value) => value !== tag) };
 }

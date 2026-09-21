@@ -9,7 +9,7 @@ import { createStableSnapshot, removeStableSnapshot, runStableDev, stableDevEnvi
 
 const cleanup = [];
 afterEach(async () => {
-  await Promise.all(cleanup.splice(0).map(path => removeStableSnapshot(path)));
+  await Promise.all(cleanup.splice(0).map((path) => removeStableSnapshot(path)));
 });
 
 describe('stable dev snapshot', () => {
@@ -55,11 +55,17 @@ describe('stable dev snapshot', () => {
     const processHost = new EventEmitter();
     processHost.execPath = '/test/node';
     let finishSnapshot;
-    const snapshotReady = new Promise(resolveReady => { finishSnapshot = resolveReady; });
+    const snapshotReady = new Promise((resolveReady) => {
+      finishSnapshot = resolveReady;
+    });
     let announceRemoval;
-    const removalStarted = new Promise(resolveStarted => { announceRemoval = resolveStarted; });
+    const removalStarted = new Promise((resolveStarted) => {
+      announceRemoval = resolveStarted;
+    });
     let finishRemoval;
-    const removalFinished = new Promise(resolveFinished => { finishRemoval = resolveFinished; });
+    const removalFinished = new Promise((resolveFinished) => {
+      finishRemoval = resolveFinished;
+    });
     const removed = [];
     const running = runStableDev({
       sourceRoot: '/work/web',
@@ -70,16 +76,20 @@ describe('stable dev snapshot', () => {
         await snapshotReady;
         return '/tmp/runtime/hotsheet-web-stable-test';
       },
-      removeSnapshot: async path => {
+      removeSnapshot: async (path) => {
         removed.push(path);
         announceRemoval();
         await removalFinished;
       },
-      spawnChild: () => { throw new Error('Vite must not start after shutdown begins.'); },
+      spawnChild: () => {
+        throw new Error('Vite must not start after shutdown begins.');
+      },
       log: () => undefined,
     });
     let settled = false;
-    void running.finally(() => { settled = true; });
+    void running.finally(() => {
+      settled = true;
+    });
 
     processHost.emit('SIGTERM');
     finishSnapshot();

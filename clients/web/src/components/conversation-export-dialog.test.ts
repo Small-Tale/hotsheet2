@@ -14,16 +14,18 @@ const messages = [
 ];
 
 describe('ConversationExportDialog', () => {
-  it('uses Kerf semantic spacing for dialog regions, choices, and connected labels',()=>{
-    const css=readFileSync(resolve(import.meta.dirname,'conversation-export-dialog.css'),'utf8');
+  it('uses Kerf semantic spacing for dialog regions, choices, and connected labels', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'conversation-export-dialog.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toContain('gap: var(--kui-space-l)');
     expect(css).toContain('padding: var(--kui-space-xs)');
-    expect(css).toContain('gap:var(--kui-space-2xs)');
+    expect(css).toContainSource('gap:var(--kui-space-2xs)');
   });
 
   it('skips message scope when the chat has no selection', () => {
-    const markup = String(ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(),step:2 } }));
+    const markup = String(
+      ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(), step: 2 } }),
+    );
     expect(markup).toContain('data-component="conversation-export-dialog"');
     expect(markup).toContain('data-step="2"');
     expect(markup).toContain('data-navigation="none"');
@@ -35,9 +37,19 @@ describe('ConversationExportDialog', () => {
     expect(markup).not.toContain('previous-conversation-export-step');
   });
 
-  it('offers the already-selected chat range without asking users to pick it again',()=>{
-    const selectedRange={kind:'range' as const,startMessageId:'message-2',endMessageId:'message-3'};
-    const markup=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:1}}));
+  it('offers the already-selected chat range without asking users to pick it again', () => {
+    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+    const markup = String(
+      ConversationExportDialog({
+        state: {
+          source,
+          messages,
+          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
+          selectedRange,
+          step: 1,
+        },
+      }),
+    );
     expect(markup).toContain('data-step="1"');
     expect(markup).toContain('data-active-side="a"');
     expect(markup).toContain('Step 1 of 2');
@@ -51,9 +63,20 @@ describe('ConversationExportDialog', () => {
     expect(markup).toContain('data-action="next-conversation-export-step"');
   });
 
-  it('pushes forward and pops backward with the shared in-content back affordance',()=>{
-    const selectedRange={kind:'range' as const,startMessageId:'message-2',endMessageId:'message-3'};
-    const forward=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:2,navigation:'push'}}));
+  it('pushes forward and pops backward with the shared in-content back affordance', () => {
+    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+    const forward = String(
+      ConversationExportDialog({
+        state: {
+          source,
+          messages,
+          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
+          selectedRange,
+          step: 2,
+          navigation: 'push',
+        },
+      }),
+    );
     expect(forward).toContain('data-navigation="push"');
     expect(forward).toContain('data-transition-style="push"');
     expect(forward).toContain('data-transition-direction="forward"');
@@ -61,30 +84,45 @@ describe('ConversationExportDialog', () => {
     expect(forward).toContain('data-action="previous-conversation-export-step"');
     expect(forward).toContain('data-lucide="chevron-left"');
     expect(forward).toContain('Message scope');
-    const backward=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:1,navigation:'pop'}}));
+    const backward = String(
+      ConversationExportDialog({
+        state: {
+          source,
+          messages,
+          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
+          selectedRange,
+          step: 1,
+          navigation: 'pop',
+        },
+      }),
+    );
     expect(backward).toContain('data-navigation="pop"');
     expect(backward).toContain('data-transition-direction="backward"');
   });
 
   it('reviews an inclusive range and a same-conversation re-export choice', () => {
-    const selectedRange={kind:'range' as const,startMessageId:'message-2',endMessageId:'message-3'};
-    const markup = String(ConversationExportDialog({ state: {
-      source,
-      messages,
-      draft: {
-        scope: selectedRange,
-        destination: {
-          selectionToken: 'opaque-selection',
-          displayPath: '/Users/me/Exports/release-review',
-          kind: 'directory',
-          existing: { exportId: 'export-1', revision: 4, sourceConversationId: 'conversation-1' },
+    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+    const markup = String(
+      ConversationExportDialog({
+        state: {
+          source,
+          messages,
+          draft: {
+            scope: selectedRange,
+            destination: {
+              selectionToken: 'opaque-selection',
+              displayPath: '/Users/me/Exports/release-review',
+              kind: 'directory',
+              existing: { exportId: 'export-1', revision: 4, sourceConversationId: 'conversation-1' },
+            },
+            writeMode: 'reexport',
+            bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
+          },
+          step: 2,
+          selectedRange,
         },
-        writeMode: 'reexport',
-        bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
-      },
-      step:2,
-      selectedRange,
-    } }));
+      }),
+    );
     expect(markup).toContain('Step 2 of 2');
     expect(markup).toContain('Revision 4 of this conversation is already there.');
     expect(markup).toContain('name="conversation-export-write-mode" value="reexport" checked');
@@ -94,20 +132,24 @@ describe('ConversationExportDialog', () => {
   });
 
   it('requires overwrite for another conversation and explains a non-resumable source', () => {
-    const markup = String(ConversationExportDialog({ state: {
-      source: { conversationId: 'conversation-1', tool: 'Codex' },
-      messages,
-      step:2,
-      draft: {
-        ...defaultConversationExportDraft(),
-        destination: {
-          selectionToken: 'opaque-selection',
-          displayPath: '/Exports/existing',
-          kind: 'archive',
-          existing: { exportId: 'export-2', revision: 1, sourceConversationId: 'conversation-2' },
+    const markup = String(
+      ConversationExportDialog({
+        state: {
+          source: { conversationId: 'conversation-1', tool: 'Codex' },
+          messages,
+          step: 2,
+          draft: {
+            ...defaultConversationExportDraft(),
+            destination: {
+              selectionToken: 'opaque-selection',
+              displayPath: '/Exports/existing',
+              kind: 'archive',
+              existing: { exportId: 'export-2', revision: 1, sourceConversationId: 'conversation-2' },
+            },
+          },
         },
-      },
-    } }));
+      }),
+    );
     expect(markup).toContain('This destination contains a different conversation export.');
     expect(markup).not.toContain('value="reexport"');
     expect(markup).toContain('value="overwrite"');
@@ -115,23 +157,29 @@ describe('ConversationExportDialog', () => {
   });
 
   it('disables summary selection and submission when a stale summary choice is unavailable', () => {
-    const markup = String(ConversationExportDialog({ state: {
-      source,
-      messages,
-      step:2,
-      summaryAvailable: false,
-      draft: {
-        ...defaultConversationExportDraft(),
-        destination: { selectionToken: 'opaque-selection', displayPath: '/Exports/new', kind: 'directory' },
-        bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
-      },
-    } }));
+    const markup = String(
+      ConversationExportDialog({
+        state: {
+          source,
+          messages,
+          step: 2,
+          summaryAvailable: false,
+          draft: {
+            ...defaultConversationExportDraft(),
+            destination: { selectionToken: 'opaque-selection', displayPath: '/Exports/new', kind: 'directory' },
+            bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
+          },
+        },
+      }),
+    );
     expect(markup).toContain('name="conversation-export-summary" checked disabled');
     expect(markup).toContain('Summary export is unavailable for this conversation.');
   });
 
-  it('defers destination choice to the final save action',()=>{
-    const markup=String(ConversationExportDialog({state:{source,messages,draft:defaultConversationExportDraft(),step:2}}));
+  it('defers destination choice to the final save action', () => {
+    const markup = String(
+      ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(), step: 2 } }),
+    );
     expect(markup).not.toContain('Step 2 of 2');
     expect(markup).toContain('Save conversation');
     expect(markup).not.toContain('Choose where to save the conversation.');

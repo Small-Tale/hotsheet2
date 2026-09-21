@@ -1,30 +1,195 @@
-.ticket-inspector { position: relative; display: flex; width: min(remify(432px), 100%); min-width: 0; max-width: 100%; min-height: remify(544px); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(12.8px); background: var(--wa-color-surface-default); flex-direction: column; box-shadow: var(--wa-shadow-l); container-type: inline-size; }
-.ticket-inspector__header { display: block; padding: 0 0 var(--kui-space-m); }
-.ticket-inspector__slug { appearance: none; border: 0; padding: 0; color: inherit; background: transparent; cursor: pointer; }
-.ticket-inspector textarea[name="markdown-source"], .ticket-inspector textarea[name="blocked-reason"], .ticket-inspector textarea[name="note-body"] { box-sizing: border-box; }
-.ticket-inspector[data-presentation="sidebar"] textarea[name="markdown-source"] { height: var(--hs-details-sidebar-height, auto); }
-.ticket-inspector[data-presentation="reader"] textarea[name="markdown-source"] { height: var(--hs-details-reader-height, auto); }
-.ticket-inspector[data-presentation="sidebar"] textarea[name="blocked-reason"] { height: var(--hs-blocked-reason-sidebar-height, auto); }
-.ticket-inspector[data-presentation="reader"] textarea[name="blocked-reason"] { height: var(--hs-blocked-reason-reader-height, auto); }
-.ticket-inspector[data-presentation="sidebar"] textarea[name="note-body"] { height: var(--hs-note-sidebar-height, auto); }
-.ticket-inspector[data-presentation="reader"] textarea[name="note-body"] { height: var(--hs-note-reader-height, auto); }
-.ticket-inspector__header h1 { margin: var(--kui-space-2xs) var(--kui-space-m) 0; font-size: var(--wa-font-size-m); line-height: 1.3; overflow-wrap: anywhere; }
-.ticket-inspector__header h1[data-editable="true"] { cursor: text; }
-.ticket-inspector__title-input { width: calc(100% - var(--kui-space-m)); margin: var(--kui-space-2xs) var(--kui-space-xs) 0; padding: var(--kui-space-2xs) var(--kui-space-xs); border: 1px solid var(--wa-color-brand-border-quiet); border-radius: remify(6.4px); background: var(--wa-color-surface-default); outline: var(--wa-focus-ring); outline-offset: 1px; font: inherit; font-size: var(--wa-font-size-m); font-weight: 700; line-height: 1.3; }
-.ticket-inspector__header button { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; }
-.ticket-inspector__star--active { color: var(--hs-ticket-state-up-next) !important; }
-.ticket-inspector__star--active svg { fill: currentColor; }
-.ticket-inspector__feedback { display: flex; align-items: center; gap: var(--kui-space-xs); margin: 0 var(--kui-space-xs) var(--kui-space-m); padding: var(--kui-space-xs); border: 1px solid var(--wa-color-warning-border-normal); border-radius: remify(8px); color: var(--wa-color-warning-on-quiet); background: var(--wa-color-warning-fill-quiet); font-size: var(--wa-font-size-xs); font-weight: 600; }
-.ticket-inspector__feedback-icon { flex: none; width: remify(16px); height: remify(16px); }
-.ticket-inspector__close-outcome { display: flex; align-items: center; gap: var(--kui-space-2xs); margin: 0 var(--kui-space-xs) var(--kui-space-m); padding: var(--kui-space-xs); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); font-size: var(--wa-font-size-s); }
-.ticket-inspector__close-outcome svg { width: remify(16px); height: remify(16px); }
-.ticket-inspector__close-outcome button { border: 0; padding: 0; color: var(--wa-color-brand-on-quiet); background: transparent; cursor: pointer; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: .12em; }
-.ticket-inspector__tabs { min-width: 0; min-height: 0; margin: 0 var(--kui-space-xs) var(--kui-space-xs); padding: 0; background: transparent; gap: 0; }
-.ticket-inspector__tabs .kui-tab-bar__tabs { height: auto; padding: var(--kui-space-2xs); border: 0; border-radius: remify(8.8px); background: var(--wa-color-neutral-fill-normal); overflow: hidden; }
-.ticket-inspector__tab { width: auto; min-width: 0; height: remify(36px); border-radius: remify(6.4px); flex: 1 1 0; }
-.ticket-inspector__tab .kui-app-tab__select { justify-content: center; gap: var(--kui-space-2xs); }
-.ticket-inspector__tab .kui-app-tab__select > svg { width: remify(14.4px); height: remify(14.4px); }
-.ticket-inspector__tab-count { display: inline-grid; min-width: remify(16px); height: remify(16px); padding: 0 var(--kui-space-2xs); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); place-items: center; font-size: var(--wa-font-size-3xs); font-weight: 700; line-height: 1; }
-.ticket-inspector__tab[data-selected="true"] .ticket-inspector__tab-count { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); }
-.ticket-inspector__tab-count-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+.ticket-inspector {
+  position: relative;
+  display: flex;
+  width: min(remify(432px), 100%);
+  min-width: 0;
+  max-width: 100%;
+  min-height: remify(544px);
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(12.8px);
+  background: var(--wa-color-surface-default);
+  flex-direction: column;
+  box-shadow: var(--wa-shadow-l);
+  container-type: inline-size;
+}
+.ticket-inspector__header {
+  display: block;
+  padding: 0 0 var(--kui-space-m);
+}
+.ticket-inspector__slug {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.ticket-inspector textarea[name='markdown-source'],
+.ticket-inspector textarea[name='blocked-reason'],
+.ticket-inspector textarea[name='note-body'] {
+  box-sizing: border-box;
+}
+.ticket-inspector[data-presentation='sidebar'] textarea[name='markdown-source'] {
+  height: var(--hs-details-sidebar-height, auto);
+}
+.ticket-inspector[data-presentation='reader'] textarea[name='markdown-source'] {
+  height: var(--hs-details-reader-height, auto);
+}
+.ticket-inspector[data-presentation='sidebar'] textarea[name='blocked-reason'] {
+  height: var(--hs-blocked-reason-sidebar-height, auto);
+}
+.ticket-inspector[data-presentation='reader'] textarea[name='blocked-reason'] {
+  height: var(--hs-blocked-reason-reader-height, auto);
+}
+.ticket-inspector[data-presentation='sidebar'] textarea[name='note-body'] {
+  height: var(--hs-note-sidebar-height, auto);
+}
+.ticket-inspector[data-presentation='reader'] textarea[name='note-body'] {
+  height: var(--hs-note-reader-height, auto);
+}
+.ticket-inspector__header h1 {
+  margin: var(--kui-space-2xs) var(--kui-space-m) 0;
+  font-size: var(--wa-font-size-m);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.ticket-inspector__header h1[data-editable='true'] {
+  cursor: text;
+}
+.ticket-inspector__title-input {
+  width: calc(100% - var(--kui-space-m));
+  margin: var(--kui-space-2xs) var(--kui-space-xs) 0;
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  border: 1px solid var(--wa-color-brand-border-quiet);
+  border-radius: remify(6.4px);
+  background: var(--wa-color-surface-default);
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+  font: inherit;
+  font-size: var(--wa-font-size-m);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.ticket-inspector__header button {
+  border: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
+  cursor: pointer;
+}
+.ticket-inspector__star--active {
+  color: var(--hs-ticket-state-up-next) !important;
+}
+.ticket-inspector__star--active svg {
+  fill: currentColor;
+}
+.ticket-inspector__feedback {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-xs);
+  margin: 0 var(--kui-space-xs) var(--kui-space-m);
+  padding: var(--kui-space-xs);
+  border: 1px solid var(--wa-color-warning-border-normal);
+  border-radius: remify(8px);
+  color: var(--wa-color-warning-on-quiet);
+  background: var(--wa-color-warning-fill-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 600;
+}
+.ticket-inspector__feedback-icon {
+  flex: none;
+  width: remify(16px);
+  height: remify(16px);
+}
+.ticket-inspector__close-outcome {
+  display: flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  margin: 0 var(--kui-space-xs) var(--kui-space-m);
+  padding: var(--kui-space-xs);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+  font-size: var(--wa-font-size-s);
+}
+.ticket-inspector__close-outcome svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.ticket-inspector__close-outcome button {
+  border: 0;
+  padding: 0;
+  color: var(--wa-color-brand-on-quiet);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+.ticket-inspector__tabs {
+  min-width: 0;
+  min-height: 0;
+  margin: 0 var(--kui-space-xs) var(--kui-space-xs);
+  padding: 0;
+  background: transparent;
+  gap: 0;
+}
+.ticket-inspector__tabs .kui-tab-bar__tabs {
+  height: auto;
+  padding: var(--kui-space-2xs);
+  border: 0;
+  border-radius: remify(8.8px);
+  background: var(--wa-color-neutral-fill-normal);
+  overflow: hidden;
+}
+.ticket-inspector__tab {
+  width: auto;
+  min-width: 0;
+  height: remify(36px);
+  border-radius: remify(6.4px);
+  flex: 1 1 0;
+}
+.ticket-inspector__tab .kui-app-tab__select {
+  justify-content: center;
+  gap: var(--kui-space-2xs);
+}
+.ticket-inspector__tab .kui-app-tab__select > svg {
+  width: remify(14.4px);
+  height: remify(14.4px);
+}
+.ticket-inspector__tab-count {
+  display: inline-grid;
+  min-width: remify(16px);
+  height: remify(16px);
+  padding: 0 var(--kui-space-2xs);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-normal);
+  place-items: center;
+  font-size: var(--wa-font-size-3xs);
+  font-weight: 700;
+  line-height: 1;
+}
+.ticket-inspector__tab[data-selected='true'] .ticket-inspector__tab-count {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-normal);
+}
+.ticket-inspector__tab-count-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@container (max-width: remify(832px)) {
+  .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

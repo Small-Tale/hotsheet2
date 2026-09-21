@@ -1,21 +1,28 @@
-import {readFileSync} from 'node:fs';
+import { readFileSync } from 'node:fs';
 
-import {describe,expect,it} from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import {aggregateTerminalProjectSummaries,TerminalOperationsSidebar} from './terminal-operations-sidebar';
+import { aggregateTerminalProjectSummaries, TerminalOperationsSidebar } from './terminal-operations-sidebar';
 
-describe('TerminalOperationsSidebar',()=>{
-  const projects=[
-    {id:'one',name:'One',completedToday:2,inProgress:3,trend:[1,0,2]},
-    {id:'two',name:'Two',completedToday:4,inProgress:1,trend:[0,3,4]},
+describe('TerminalOperationsSidebar', () => {
+  const projects = [
+    { id: 'one', name: 'One', completedToday: 2, inProgress: 3, trend: [1, 0, 2] },
+    { id: 'two', name: 'Two', completedToday: 4, inProgress: 1, trend: [0, 3, 4] },
   ];
 
-  it('sums project counts and aligned trend days',()=>{
-    expect(aggregateTerminalProjectSummaries(projects)).toEqual({id:'all',name:'All projects',completedToday:6,inProgress:4,trend:[1,3,6]});
+  it('sums project counts and aligned trend days', () => {
+    expect(aggregateTerminalProjectSummaries(projects)).toEqual({
+      id: 'all',
+      name: 'All projects',
+      completedToday: 6,
+      inProgress: 4,
+      trend: [1, 3, 6],
+    });
   });
 
-  it('adds an aggregate group only when multiple projects are open',()=>{
-    const multiple=String(TerminalOperationsSidebar({projects})),single=String(TerminalOperationsSidebar({projects:[projects[0]]}));
+  it('adds an aggregate group only when multiple projects are open', () => {
+    const multiple = String(TerminalOperationsSidebar({ projects })),
+      single = String(TerminalOperationsSidebar({ projects: [projects[0]] }));
     expect(multiple).toContain('All projects');
     expect(multiple).toContain('data-chart-tone="success"');
     expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);
@@ -34,16 +41,20 @@ describe('TerminalOperationsSidebar',()=>{
     expect(single).not.toContain('data-background-bar=');
   });
 
-  it('separates the multi-project aggregate from individual projects',()=>{
-    const css=readFileSync(new URL('./terminal-operations-sidebar.css',import.meta.url),'utf8');
-    expect(css).toMatch(/terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--kui-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
+  it('separates the multi-project aggregate from individual projects', () => {
+    const css = readFileSync(new URL('./terminal-operations-sidebar.css', import.meta.url), 'utf8');
+    expect(css).toMatchSource(
+      /terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--kui-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/,
+    );
   });
 
-  it('aligns the group ListHeader label with the ProjectSummary content on one gutter (HS2-RSJ796)',()=>{
-    const css=readFileSync(new URL('./terminal-operations-sidebar.css',import.meta.url),'utf8');
+  it('aligns the group ListHeader label with the ProjectSummary content on one gutter (HS2-RSJ796)', () => {
+    const css = readFileSync(new URL('./terminal-operations-sidebar.css', import.meta.url), 'utf8');
     // Zero kerf's own inline margin + title padding so the header label is not indented past the
     // chart bars; both then share the single --kui-space-s wrapper inset.
-    expect(css).toMatch(/terminal-operations-sidebar__group > \.kui-list-header \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: 0;[^}]*padding-inline: var\(--kui-space-s\)/);
+    expect(css).toMatch(
+      /terminal-operations-sidebar__group > \.kui-list-header \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: 0;[^}]*padding-inline: var\(--kui-space-s\)/,
+    );
     expect(css).toMatch(/terminal-operations-sidebar__group > \.project-summary \{[^}]*padding: var\(--kui-space-s\)/);
   });
 });

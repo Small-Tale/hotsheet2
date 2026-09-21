@@ -1,7 +1,25 @@
-.ticket-status-menu { width: max-content; }
-.ticket-status-menu::part(combobox) { min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
-.ticket-status-menu::part(start) { margin: 0; }
-.ticket-status-menu::part(expand-icon) { display: none; }
-.ticket-status-menu wa-option::part(label) { font-weight: 400; }
-.ticket-status-menu .kui-select__custom-selected { pointer-events: none; }
-.ticket-status-menu .status-badge { font-weight: 600; }
+.ticket-status-menu {
+  width: max-content;
+}
+.ticket-status-menu::part(combobox) {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.ticket-status-menu::part(start) {
+  margin: 0;
+}
+.ticket-status-menu::part(expand-icon) {
+  display: none;
+}
+.ticket-status-menu wa-option::part(label) {
+  font-weight: 400;
+}
+.ticket-status-menu .kui-select__custom-selected {
+  pointer-events: none;
+}
+.ticket-status-menu .status-badge {
+  font-weight: 600;
+}

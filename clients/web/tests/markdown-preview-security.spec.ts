@@ -28,11 +28,11 @@ Related ticket: HS2-SAFE12.
 test('keeps attacker Markdown inert through kerf raw while preserving safe GFM and actions', async ({ page }) => {
   const dialogs: string[] = [];
   const suspiciousRequests: string[] = [];
-  page.on('dialog', async dialog => {
+  page.on('dialog', async (dialog) => {
     dialogs.push(dialog.message());
     await dialog.dismiss();
   });
-  page.on('request', request => {
+  page.on('request', (request) => {
     if (/markdown-xss-event|^(?:javascript|data):/i.test(request.url())) suspiciousRequests.push(request.url());
   });
   await page.addInitScript(() => {
@@ -61,7 +61,9 @@ test('keeps attacker Markdown inert through kerf raw while preserving safe GFM a
   await expect(preview.locator('table')).toContainText('Markdown');
   await expect(preview.locator('script, svg, [onerror], [onload], [onclick]')).toHaveCount(0);
   await expect(preview).toContainText('<script>window.__markdownXssAudit.script = true</script>');
-  await expect(preview).toContainText('<img src="/markdown-xss-event.png" onerror="window.__markdownXssAudit.handler = true">');
+  await expect(preview).toContainText(
+    '<img src="/markdown-xss-event.png" onerror="window.__markdownXssAudit.handler = true">',
+  );
 
   const unsafeLinks = preview.getByRole('link', { name: /^Unsafe/ });
   await expect(unsafeLinks).toHaveCount(2);
@@ -77,19 +79,27 @@ test('keeps attacker Markdown inert through kerf raw while preserving safe GFM a
   await expect(safeGuide).toHaveAttribute('href', '/ux-demo?component=tag-chip');
   await expect(safeGuide).toHaveAttribute('target', '_blank');
   await expect(safeGuide).toHaveAttribute('rel', 'noopener noreferrer');
-  await expect(preview.locator('[data-action="open-attachment-gallery"]')).toHaveAttribute('data-attachment-name', 'reader-wireframe.png');
-  await expect(preview.locator('[data-action="open-referenced-attachment"]')).toHaveAttribute('data-attachment-name', 'reader-notes.md');
+  await expect(preview.locator('[data-action="open-attachment-gallery"]')).toHaveAttribute(
+    'data-attachment-name',
+    'reader-wireframe.png',
+  );
+  await expect(preview.locator('[data-action="open-referenced-attachment"]')).toHaveAttribute(
+    'data-attachment-name',
+    'reader-notes.md',
+  );
   await expect(preview.locator('[data-action="open-linked-ticket"]')).toHaveAttribute('data-ticket-slug', 'HS2-SAFE12');
 
-  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__markdownXssAudit'))).toEqual({
-    script: false,
-    handler: false,
-    svg: false,
-    link: false,
-    dataLink: false,
-    image: false,
-    dataImage: false,
-  });
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, '__markdownXssAudit')))
+    .toEqual({
+      script: false,
+      handler: false,
+      svg: false,
+      link: false,
+      dataLink: false,
+      image: false,
+      dataImage: false,
+    });
   expect(dialogs).toEqual([]);
   expect(suspiciousRequests).toEqual([]);
 });

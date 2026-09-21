@@ -36,7 +36,7 @@ construction** instead of by accretion.
   user's own devices/servers, secured by mTLS (carried over from HS1's shipped
   design). No central Hot Sheet cloud.
 - **Not a feature-for-feature port on day one.** HS1 has ~188 requirement docs.
-  We port the *architecture-defining* capabilities first (storage, index, server,
+  We port the _architecture-defining_ capabilities first (storage, index, server,
   CLI, one client, one AI tool via the plugin path, migration) and layer the long
   tail (telemetry, announcer, dashboards, custom views, etc.) afterward, each as
   its own ticket.
@@ -64,7 +64,7 @@ construction** instead of by accretion.
   server **outlives the client** — close the app and in-flight AI work, terminals,
   and the watcher keep running. A client never holds state the service can't
   reconstruct; two clients on the same project see the same thing.
-- **Plugins declare; the host does the work.** An AI-tool plugin says *what* is
+- **Plugins declare; the host does the work.** An AI-tool plugin says _what_ is
   specific to its tool; shared machinery (PTYs, MCP config writers, permission
   bridge, hooks files) lives in the host so two plugins never re-implement the
   same logic. (This is the hard-won lesson of HS1 docs/132 — start there instead
@@ -74,7 +74,7 @@ construction** instead of by accretion.
   external trackers are accessed directly, never continuously mirrored into git.
 - **No tool is privileged.** Claude, Codex, Gemini, OpenCode, Antigravity,
   Goose, and editor tools are all just plugins. The interface must fit the tool it
-  was *not* designed around, or it isn't an interface.
+  was _not_ designed around, or it isn't an interface.
 - **Fail closed on trust boundaries.** Local (loopback) is trusted. Anything
   exposed off-box requires mTLS + per-device certs and refuses to serve
   plaintext.

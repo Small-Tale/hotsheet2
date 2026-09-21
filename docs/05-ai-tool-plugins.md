@@ -1,12 +1,12 @@
 # 05. AI-Tool Plugin Interface
 
 > **Status: Proposed.** This carries over HS1's hard-won plugin design (docs/132)
-> as a *starting point*, not an endpoint. HS1 spent an eight-phase epic clawing
+> as a _starting point_, not an endpoint. HS1 spent an eight-phase epic clawing
 > per-tool `if (tool === …)` branches back into one interface; HS2 begins there.
 >
 > **Ownership + extensibility decided (maintainer, 2026-08-20).** Two changes from
 > HS1: (1) the plugin registry and all setup/instruction/skill/MCP/settings
-> *management* lives in the **core**, driven by **either the CLI (headless — no
+> _management_ lives in the **core**, driven by **either the CLI (headless — no
 > client, no server) or the server**, not the app layer (§5.1a, §5.12). (2) plugins
 > are **external and loadable**, layered as manifest-only (data, no ABI) → behavioral
 > by capability (**subprocess** for process-shaped behaviors, **WASM** for
@@ -18,7 +18,7 @@
 **AI-tool integration is entirely plugin-based. No tool is first-class — not even
 Claude.** Every tool (Claude, Codex, Gemini, OpenCode, Antigravity, Goose, and
 the editor tools Cursor/Copilot/Windsurf) is one implementation of a single
-interface. The interface must fit the tool it was *not* designed around, or it is
+interface. The interface must fit the tool it was _not_ designed around, or it is
 a hierarchy, not an interface (HS1's acceptance test — Claude was migrated last,
 precisely because it's the deepest integration).
 
@@ -47,9 +47,9 @@ configuration into one idempotent headless workflow. Graphical project setup inv
 that workflow instead of maintaining a client-only implementation (HS2-J90FXF).
 
 The **client never implements setup**; consistent with "clients never embed the
-core" ([04](04-core-server-cli.md) §4.1), it *requests* setup through the server API
-and renders the plugin's declared `preferences`. What moved is *authorship of the
-artifacts*, from the app down into the shared core.
+core" ([04](04-core-server-cli.md) §4.1), it _requests_ setup through the server API
+and renders the plugin's declared `preferences`. What moved is _authorship of the
+artifacts_, from the app down into the shared core.
 
 Freshness uses the same ownership boundary (HS2-40HZMB): the headless
 `hotsheet setup --refresh` command and the server's non-blocking project-open hook both
@@ -95,15 +95,15 @@ repository** rather than mandating it. The four first-party blocks share one bod
 
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
-capability seen from two sides: the loader decides *what* tools exist, the setup
-capability decides *what each writes*, and either binary can drive it.
+capability seen from two sides: the loader decides _what_ tools exist, the setup
+capability decides _what each writes_, and either binary can drive it.
 
 Capabilities divide by lifetime, and that division is what makes headless work:
 
-| Bucket | Capabilities | Runs in |
-|---|---|---|
-| **One-shot, host-agnostic** | `setup`, `instructions`, `skills`, `mcp`-config, `permissions`-install, settings read/write | **CLI or server** — idempotent filesystem writes, no persistent host needed |
-| **Persistent, server-only** | terminals/PTY, `drive`/trigger, busy tracking, connection registry, runtime permission bridge | **server** — needs the always-on host (§5.4–§5.7) |
+| Bucket                      | Capabilities                                                                                  | Runs in                                                                     |
+| --------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **One-shot, host-agnostic** | `setup`, `instructions`, `skills`, `mcp`-config, `permissions`-install, settings read/write   | **CLI or server** — idempotent filesystem writes, no persistent host needed |
+| **Persistent, server-only** | terminals/PTY, `drive`/trigger, busy tracking, connection registry, runtime permission bridge | **server** — needs the always-on host (§5.4–§5.7)                           |
 
 The one-shot bucket is exactly the headless case. The persistent bucket is
 unchanged — it always needed the server.
@@ -112,14 +112,14 @@ unchanged — it always needed the server.
 
 The ticket enumerates what the AI-tool interface must cover. Mapped to the design:
 
-| Requirement | Where it lives |
-|---|---|
+| Requirement                                                  | Where it lives                |
+| ------------------------------------------------------------ | ----------------------------- |
 | Initialize AI tools in terminals (MCP + similar connections) | §5.3 `setup` + §5.4 terminals |
-| List AI-tool connections | §5.6 connection registry |
-| Trigger commands to a target connection | §5.5 drive/trigger |
-| Permission checks & other user prompts | §5.7 permission bridge |
-| Track AI-tool busy-ness | §5.6 busy tracking |
-| Carry over other useful concepts from HS1 | §5.9 |
+| List AI-tool connections                                     | §5.6 connection registry      |
+| Trigger commands to a target connection                      | §5.5 drive/trigger            |
+| Permission checks & other user prompts                       | §5.7 permission bridge        |
+| Track AI-tool busy-ness                                      | §5.6 busy tracking            |
+| Carry over other useful concepts from HS1                    | §5.9                          |
 
 ## 5.3 A plugin's shape
 
@@ -128,11 +128,12 @@ filesystem) and a **behavioral half** (needs the host: fs, processes) — the sp
 HS1 discovered is unavoidable because the registry is reachable from client code.
 
 **Declarative (data):**
+
 - `id`, `displayName` (short, for running text: "Codex finished"), `productName`
   (full, for menus: "Codex CLI").
 - `tier`: `cli-agent` (Hot Sheet drives it) vs `editor` (Hot Sheet only supplies
   context files).
-- `maturity`: `stable | beta | unreleased` — a property of the *integration*, not
+- `maturity`: `stable | beta | unreleased` — a property of the _integration_, not
   a per-project setting; controls whether it ships to users at all.
 - `detection`: `{ binaries, paths }` — evaluated by the host, not a closure, so the
   registry stays client-safe.
@@ -143,6 +144,7 @@ HS1 discovered is unavoidable because the registry is reachable from client code
   on/off"), rendered by a shared settings renderer — no hand-written UI per tool.
 
 **Behavioral (host-side, keyed by plugin id):**
+
 - `instructions`: the managed instruction file (`CLAUDE.md` / `AGENTS.md` /
   `GEMINI.md` / a rules file) + frontmatter + adapter-family flag.
 - `skills`: generate/refresh the worklist skill/rule artifact; report which
@@ -166,8 +168,8 @@ HS1 discovered is unavoidable because the registry is reachable from client code
   consume — a common cross-tool interface so narration isn't Claude-only (HS2-48).
   Design: HS2-70. A tool that exposes no activity stream omits it.
 
-> **Cross-cutting theme:** `drive`, `metrics`, and `activity` are all *seams that
-> generalize one concern across every tool*. Designing these capability interfaces
+> **Cross-cutting theme:** `drive`, `metrics`, and `activity` are all _seams that
+> generalize one concern across every tool_. Designing these capability interfaces
 > well (and early, HS2-67/HS2-69/HS2-70) is what keeps adding a tool cheap — the
 > §5.10 testability rule + conformance suite hold each to its contract.
 
@@ -179,21 +181,22 @@ can't be called by mistake.
 **The host carries the machinery.** If two plugins would write the same code, that
 code is a host helper, not per-plugin: the merge-safe hooks-file writer, managed
 instruction sections, the adapter skill-tree writer, the MCP-config primitive, the
-permission bridge, PTY/stdio framing, the commands-log emitter. A plugin *declares
-what's specific* and *calls host helpers for the rest* — a common-shape tool
+permission bridge, PTY/stdio framing, the commands-log emitter. A plugin _declares
+what's specific_ and _calls host helpers for the rest_ — a common-shape tool
 (AGENTS.md + a skills tree + a hooks file + a spawn drive) is nearly declarative.
 That "nearly" is the whole external-plugin story (§5.12): for most tools a plugin
-is *pure data*, which has no ABI problem and needs no code boundary.
+is _pure data_, which has no ABI problem and needs no code boundary.
 
 **"The host" is whichever binary runs the capability** (§5.1a), not "the server."
 The one-shot helpers above (instruction sections, skill-tree, MCP-config,
-permission-bridge *install*) are plain filesystem writes and run inside the **CLI**
+permission-bridge _install_) are plain filesystem writes and run inside the **CLI**
 headless just as well as inside the server; only the persistent machinery (PTY,
-drive runtime, busy, the *live* permission bridge) requires the always-on server.
+drive runtime, busy, the _live_ permission bridge) requires the always-on server.
 
 ## 5.4 Terminals & initialization (init AI tools in terminals)
 
 The **terminal/PTY manager** (in the core, hosted by the server) provides:
+
 - One or more PTYs per project, spawned lazily, keyed by `(project, terminalId)`.
 - A bare terminal-create request launches the host user's default shell (`SHELL` on
   Unix or `COMSPEC` on Windows, with `/bin/sh` and `cmd.exe` fallbacks), matching
@@ -214,7 +217,7 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   child shells — HS1 §22.13.1).
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
   (across devices) attach at once and want different sizes. The **server is the
-  sole arbiter** of the size: viewers send *size claims*, the server picks the size
+  sole arbiter** of the size: viewers send _size claims_, the server picks the size
   by a focus-follows policy with leases + hysteresis, and broadcasts the result.
   Full design: [06-clients.md](06-clients.md) §6.7. (This replaces HS1's ad-hoc
   "largest-or-last-writer" consensus, which never worked for remotes.)
@@ -288,7 +291,7 @@ models them as implementations of one `Drive` trait so a fifth is additive:
 
 `Drive::run(target, content)` sends a command/prompt to a **target connection**
 (the ticket's "triggering commands to a target connection"). `target` selects
-*which* connection when several exist (e.g. a git-worktree worker's channel vs the
+_which_ connection when several exist (e.g. a git-worktree worker's channel vs the
 main one). `run` may be sync (spawn) or async (POST to a running session) — both
 allowed by the trait.
 
@@ -306,7 +309,7 @@ declarative.
 
 > **Status: registry + busy wired (HS2-107/34X6BW/4M67VN).** `hotsheet_aitools::ConnectionRegistry`
 > — register/unregister/get/list/count over `Connection { id, project, tool, role
-> (Main|Worker|DriveSpawned), transport, pid, started_at }`, plus **busy as a derived
+(Main|Worker|DriveSpawned), transport, pid, started_at }`, plus **busy as a derived
 > sliding-window view**: `note_activity(id, now)` is one heartbeat both hooks and
 > byte-stream/spinner inference feed, `is_busy`/`busy_count` read the window, and
 > `set_idle` drops it on a `Done`. The clock is injected (deterministic). Live
@@ -325,7 +328,7 @@ declarative.
   2. **Byte-stream inference** — the PTY manager watches for the tool's animated
      spinner glyph; recent spinner output ⇒ busy even mid-single-tool-call, N
      seconds of silence ⇒ idle. This backstops a dropped Stop hook.
-  The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
+     The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is
 doing something, while a non-expired ticket claim lease answers which ticket a worker is
@@ -347,6 +350,7 @@ A **host-side permission bridge**: "ask the user, get a decision," with each
 plugin supplying only the transport-specific adapter (an ACP option-response, a
 permission hook CLI, a hooks.json entry). When a tool wants approval to run a
 command:
+
 1. The tool's adapter routes the request to the bridge.
 2. The bridge enqueues it (FIFO — concurrent requests preserved, not overwritten,
    an HS1 bug fixed in §12.10) and pushes it over the WebSocket to every client.
@@ -437,6 +441,7 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > `hotsheet_renew`, and `hotsheet_release`. It runs in
 > **two modes over one `Backend` trait**, so the tool surface is identical either
 > way — this is what lets a headless agent work **with or without a server**:
+>
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
 >   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
 >   §4.4). The headless default. A running server's watcher still picks up its writes.
@@ -451,11 +456,11 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > it accepts an optional checkout target, while explicit non-git provider connections
 > return a capability error because their deletion lifecycle is provider-owned (HS2-GTNZ2Q).
 
-
 AI tools reach tickets two ways, both over the one core:
+
 - **MCP** — the `hotsheet_*` tool surface (create/update/get/query/claim/etc.).
   **Decided (maintainer, 2026-08-19): a small per-project MCP shim** spawned into
-  each tool's config (as HS1 does with `channel.ts`), *not* the server exposing MCP
+  each tool's config (as HS1 does with `channel.ts`), _not_ the server exposing MCP
   directly. This keeps the per-project namespacing (`hotsheet-channel-<slug>`) and
   the channel model tools already expect, and lets a tool reach the right project by
   its own config. The plugin's `mcp` capability writes whichever entry the tool's
@@ -470,7 +475,7 @@ tools proxy the REST API — HS2's proxy the core directly).
 
 Per the ticket's "evaluate other AI-tool interface concepts to carry over":
 
-- **Worklist-as-file** (`worklist.md`) — keep. The file-based contract lets *any*
+- **Worklist-as-file** (`worklist.md`) — keep. The file-based contract lets _any_
   tool participate without the API.
 - **Auto-context** (HS1 docs/4 §4.18) — **keep; critical (HS2-25).** Per-category and
   per-tag guidance the user configures is **injected into the generated worklist**
@@ -505,7 +510,7 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   adapter** — `ProcessSpawner`, config-file writer, `PermissionTransport`,
   `McpConfigWriter`, `Clock`. **No plugin touches a real process, file, or global
   directly.** (HS1 half-learned this — docs/132 §132.7's "run() with an injected
-  spawner reports the content it *would* send"; here it's non-negotiable.) This is
+  spawner reports the content it _would_ send"; here it's non-negotiable.) This is
   what makes drive / permissions / MCP-config / command all deterministically
   testable, and it's a hard rule the conformance suite enforces.
 - **Tested against `hs-fake-agent`** — a scriptable test double that speaks the same
@@ -535,19 +540,19 @@ Full testing design: [12-code-organization-and-testing.md](12-code-organization-
 
 Rust has no stable ABI, so "loadable plugin" cannot mean "load a `.dylib`." The
 **declarative/behavioral split (§5.3) is the escape hatch**: most of a plugin is
-*data*, and data has no ABI problem. Plugins are therefore layered:
+_data_, and data has no ABI problem. Plugins are therefore layered:
 
 - **Manifest-only plugins — the bulk.** A directory with a manifest (id,
   `detection`, `preferences`, `tier`, `transport` id, launch command, the
-  MCP-config *format*) plus template files (instruction file, skills/rules tree).
+  MCP-config _format_) plus template files (instruction file, skills/rules tree).
   **No code, no ABI, no code sandbox** (there is no code). A common-shape tool
-  (§5.3) ships as *just this*. Loaded identically into the CLI and the server, so
+  (§5.3) ships as _just this_. Loaded identically into the CLI and the server, so
   `hotsheet setup <third-party-tool>` works headless.
 - **Behavioral plugins — manifest + code**, only for the custom bits (a persistent
   channel, an app-server drive, a bespoke permission bridge). The execution boundary
   is chosen **by capability**:
   - **Subprocess protocol (stdio JSON-RPC)** for the **process-shaped behaviors** —
-    `drive`/trigger, terminals, MCP. These are *already* subprocess-shaped in HS2
+    `drive`/trigger, terminals, MCP. These are _already_ subprocess-shaped in HS2
     (ACP, Codex app-server, the `hotsheet-mcp` shim), so an external drive plugin is
     just another executable speaking the capability protocol. Language-agnostic; OS
     crash-isolation.
@@ -574,15 +579,16 @@ a search path: **bundled built-ins → `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/`
 headless CLI set up a project for a plugin the user dropped in.
 
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
-*writes* is a supply-chain surface: a plugin's instruction template steers an agent,
-and its launch command *executes*. So:
+_writes_ is a supply-chain surface: a plugin's instruction template steers an agent,
+and its launch command _executes_. So:
+
 - **Install-time consent** shows exactly what a plugin will write and what it will
   launch, and its **provenance** (first-party / signed / unsigned third-party).
 - **`hotsheet plugin verify`** runs the §5.10 conformance suite against a plugin
   (against `hs-fake-agent`) — the acceptance test a third-party plugin must pass,
   since we can't gate someone else's plugin in our CI.
 - Subprocess/WASM behavior runs under the least-privilege boundary above; a
-  manifest-only plugin can *write* but never *executes host code*.
+  manifest-only plugin can _write_ but never _executes host code_.
 
 CLI surface: `hotsheet plugin list | info <id> | install <path|url> | verify <id> |
 remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
@@ -641,6 +647,7 @@ expanded value remains one literal process argument, so spaces, quotes, dollar s
 metacharacters in a manually entered model id are never reparsed as shell syntax.
 
 ## 5.12 Cross-references
+
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7
 - The core that hosts the plugin registry + settings model: [04-core-server-cli.md](04-core-server-cli.md) §4.1, §4.9
 - Clients that render permission prompts / busy state / plugin preferences: [06-clients.md](06-clients.md)

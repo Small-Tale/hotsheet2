@@ -1,15 +1,96 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe,expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { initialTerminalVisibilityState } from '../terminal-visibility';
-import { TerminalVisibilityDialog,TerminalVisibilityNameDialog } from './terminal-visibility-dialog';
+import { TerminalVisibilityDialog, TerminalVisibilityNameDialog } from './terminal-visibility-dialog';
 
-const groups=[{projectId:'project',projectName:'Project',sessions:[{id:'one',projectId:'project',projectName:'Project',title:'AI',alive:true,busy:false,scrollback:''}]}];
-describe('TerminalVisibilityDialog',()=>{
-  it('keeps the tab toolbar transparent',()=>{const css=readFileSync(resolve(import.meta.dirname,'terminal-visibility-dialog.css'),'utf8'),toolbar=css.match(/\.terminal-visibility-dialog__toolbar \{([^}]+)\}/)?.[1]??'';expect(toolbar).toContain('background:transparent');expect(toolbar).not.toContain('surface-lowered')});
-  it('uses selected app-tab styling, shared menu headers, and shared menu rows',()=>{const markup=String(TerminalVisibilityDialog({open:true,state:initialTerminalVisibilityState(),scope:'dashboard',groups}));expect(markup).toContain('role="tablist"');expect(markup).toContain('class="kui-app-tab terminal-visibility-dialog__tab"');expect(markup).toContain('data-component="app-tab"');expect(markup).toContain('data-selected="true"');expect(markup).toContain('data-component="list-header"');expect(markup).toContain('data-action="toggle-terminal-visibility"');expect(markup).toContain('aria-label="Hide AI"');expect(markup).toContain('>Visible</span>');expect(markup.indexOf('hide-all-terminals-in-group')).toBeLessThan(markup.indexOf('show-all-terminals-in-group'))});
-  it('limits a project scope to that project and gives only named groups a context menu',()=>{const state={groups:[...initialTerminalVisibilityState().groups,{id:'focus',name:'Focus',hiddenKeys:[]}],activeByScope:{'project:other':'focus'}},markup=String(TerminalVisibilityDialog({open:true,state,scope:'project:other',groups:[...groups,{...groups[0],projectId:'other',projectName:'Other',sessions:[{...groups[0].sessions[0],projectId:'other',projectName:'Other'}]}],contextMenu:{id:'focus',x:20,y:30}}));expect(markup).not.toContain('>Project</h2>');expect(markup).toContain('>Other</h2>');expect(markup).toContain('aria-label="Visibility group actions"');expect(markup).toContain('rename-terminal-visibility-group');expect(markup).toContain('remove-terminal-visibility-group');expect(String(TerminalVisibilityDialog({open:true,state,scope:'project:other',groups,contextMenu:{id:'default',x:0,y:0}}))).not.toContain('Visibility group actions')})
-  it('prompts for a name before add and rename mutations',()=>{const add=String(TerminalVisibilityNameDialog({prompt:{mode:'add',value:''}})),rename=String(TerminalVisibilityNameDialog({prompt:{mode:'rename',groupId:'focus',value:'Focus'}}));expect(add).toContain('label="Add Visibility Group"');expect(add).toContain('data-action="submit-terminal-visibility-name"');expect(add).toContain('>Add</wa-button>');expect(rename).toContain('label="Rename Visibility Group"');expect(rename).toContain('value="Focus"');expect(rename).toContain('>Rename</wa-button>')});
+const groups = [
+  {
+    projectId: 'project',
+    projectName: 'Project',
+    sessions: [
+      {
+        id: 'one',
+        projectId: 'project',
+        projectName: 'Project',
+        title: 'AI',
+        alive: true,
+        busy: false,
+        scrollback: '',
+      },
+    ],
+  },
+];
+describe('TerminalVisibilityDialog', () => {
+  it('keeps the tab toolbar transparent', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8'),
+      toolbar = css.match(/\.terminal-visibility-dialog__toolbar \{([^}]+)\}/)?.[1] ?? '';
+    expect(toolbar).toContainSource('background:transparent');
+    expect(toolbar).not.toContain('surface-lowered');
+  });
+  it('uses selected app-tab styling, shared menu headers, and shared menu rows', () => {
+    const markup = String(
+      TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
+    );
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('class="kui-app-tab terminal-visibility-dialog__tab"');
+    expect(markup).toContain('data-component="app-tab"');
+    expect(markup).toContain('data-selected="true"');
+    expect(markup).toContain('data-component="list-header"');
+    expect(markup).toContain('data-action="toggle-terminal-visibility"');
+    expect(markup).toContain('aria-label="Hide AI"');
+    expect(markup).toContain('>Visible</span>');
+    expect(markup.indexOf('hide-all-terminals-in-group')).toBeLessThan(markup.indexOf('show-all-terminals-in-group'));
+  });
+  it('limits a project scope to that project and gives only named groups a context menu', () => {
+    const state = {
+        groups: [...initialTerminalVisibilityState().groups, { id: 'focus', name: 'Focus', hiddenKeys: [] }],
+        activeByScope: { 'project:other': 'focus' },
+      },
+      markup = String(
+        TerminalVisibilityDialog({
+          open: true,
+          state,
+          scope: 'project:other',
+          groups: [
+            ...groups,
+            {
+              ...groups[0],
+              projectId: 'other',
+              projectName: 'Other',
+              sessions: [{ ...groups[0].sessions[0], projectId: 'other', projectName: 'Other' }],
+            },
+          ],
+          contextMenu: { id: 'focus', x: 20, y: 30 },
+        }),
+      );
+    expect(markup).not.toContain('>Project</h2>');
+    expect(markup).toContain('>Other</h2>');
+    expect(markup).toContain('aria-label="Visibility group actions"');
+    expect(markup).toContain('rename-terminal-visibility-group');
+    expect(markup).toContain('remove-terminal-visibility-group');
+    expect(
+      String(
+        TerminalVisibilityDialog({
+          open: true,
+          state,
+          scope: 'project:other',
+          groups,
+          contextMenu: { id: 'default', x: 0, y: 0 },
+        }),
+      ),
+    ).not.toContain('Visibility group actions');
+  });
+  it('prompts for a name before add and rename mutations', () => {
+    const add = String(TerminalVisibilityNameDialog({ prompt: { mode: 'add', value: '' } })),
+      rename = String(TerminalVisibilityNameDialog({ prompt: { mode: 'rename', groupId: 'focus', value: 'Focus' } }));
+    expect(add).toContain('label="Add Visibility Group"');
+    expect(add).toContain('data-action="submit-terminal-visibility-name"');
+    expect(add).toContain('>Add</wa-button>');
+    expect(rename).toContain('label="Rename Visibility Group"');
+    expect(rename).toContain('value="Focus"');
+    expect(rename).toContain('>Rename</wa-button>');
+  });
 });

@@ -1,4 +1,30 @@
-.note-composer { display: grid; padding: remify(11.2px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(9.6px); background: var(--wa-color-surface-default); gap: remify(8.8px); }
-.note-composer textarea { box-sizing: border-box; width: 100%; min-height: remify(96px); padding: remify(8.8px) remify(10.4px); resize: vertical; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: remify(7.2px); color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
-.note-composer textarea:focus { outline: var(--wa-focus-ring); outline-offset: 1px; }
-.note-composer footer { display: flex; justify-content: flex-end; gap: remify(5.6px); }
+.note-composer {
+  display: grid;
+  padding: remify(11.2px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(9.6px);
+  background: var(--wa-color-surface-default);
+  gap: remify(8.8px);
+}
+.note-composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: remify(96px);
+  padding: remify(8.8px) remify(10.4px);
+  resize: vertical;
+  border: 1px solid var(--wa-color-neutral-border-loud);
+  border-radius: remify(7.2px);
+  color: inherit;
+  background: var(--wa-color-surface-default);
+  font: inherit;
+  line-height: 1.5;
+}
+.note-composer textarea:focus {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+.note-composer footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: remify(5.6px);
+}

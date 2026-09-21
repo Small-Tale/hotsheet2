@@ -1,18 +1,87 @@
 @import './components/cursor-semantics.css';
 
-
-:root { --hotsheet-safe-area-right: env(safe-area-inset-right, 0px); --hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--wa-color-text-normal); background: var(--wa-color-surface-lowered); }
-* { box-sizing: border-box; }
-html, body, #app { width: 100%; height: 100%; height: 100dvh; margin: 0; overflow: hidden; }
-button, input, textarea, select { font: inherit; }
-.app-shell[data-component="app-shell"] { width: 100%; height: 100%; border: 0; border-radius: 0; }
-.app-empty { min-height: 100%; display: grid; place-content: center; justify-items: center; gap: var(--wa-space-s); text-align: center; padding: remify(32px); }
-.app-empty h1, .app-empty p { margin: 0; }
-.app-empty p { color: var(--wa-color-neutral-on-quiet); }
+:root {
+  --hotsheet-safe-area-right: env(safe-area-inset-right, 0px);
+  --hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-lowered);
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+.app-shell[data-component='app-shell'] {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.app-empty {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--wa-space-s);
+  text-align: center;
+  padding: remify(32px);
+}
+.app-empty h1,
+.app-empty p {
+  margin: 0;
+}
+.app-empty p {
+  color: var(--wa-color-neutral-on-quiet);
+}
 /* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
-.app-loading, .app-toast { position: fixed; z-index: 1000; right: remify(16px); bottom: remify(16px); padding: remify(10.4px) remify(13.6px); border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
+.app-loading,
+.app-toast {
+  position: fixed;
+  z-index: 1000;
+  right: remify(16px);
+  bottom: remify(16px);
+  padding: remify(10.4px) remify(13.6px);
+  border-radius: var(--wa-border-radius-m);
+  box-shadow: var(--wa-shadow-l);
+  background: var(--wa-color-neutral-fill-loud);
+  color: var(--wa-color-neutral-on-loud);
+}
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (ticket-inspector-skeleton.css), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
-.ticket-page-more { display:block; min-height:remify(40px); margin:var(--wa-space-m) auto; padding:0 var(--wa-space-l); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-pill); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); cursor:pointer; }
-.ticket-page-more:disabled { opacity:.55; cursor:wait; }
+.ticket-page-more {
+  display: block;
+  min-height: remify(40px);
+  margin: var(--wa-space-m) auto;
+  padding: 0 var(--wa-space-l);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+}
+.ticket-page-more:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

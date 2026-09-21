@@ -10,7 +10,8 @@ describe('transient operation feedback', () => {
       /showToast\('Attachment removed\.'\)/,
       /showToast\('Opened the file location\.'\)/,
       /showToast\(`Queued \$\{created\.slug\} for AI repair\.`\)/,
-    ]) expect(source).toMatch(pattern);
+    ])
+      expect(source).toMatch(pattern);
 
     expect(source).not.toMatch(/codeReviewMessage\.value=`Opened in/);
     expect(source).not.toContain("attachmentMessage.value='Attachment removed.'");

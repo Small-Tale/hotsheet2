@@ -2,15 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGliteOld } from 'pglite-old';
 import { execFileSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -94,9 +86,7 @@ describe('exportFromDb', () => {
     expect(root.priority).toBe('high');
     expect(root.tags).toEqual(['ui']);
     // Note timestamps come from the JSON column, so they pass through verbatim.
-    expect(root.notes).toEqual([
-      { id: 'n_abc', text: 'fixed', created_at: '2026-08-01T00:00:00Z' },
-    ]);
+    expect(root.notes).toEqual([{ id: 'n_abc', text: 'fixed', created_at: '2026-08-01T00:00:00Z' }]);
     expect(root.created_at).toBe('2026-08-01T00:00:00.000Z');
     expect(root.completed_at).toBe('2026-08-02T00:00:00.000Z');
     expect(root.verified_at).toBeNull();
@@ -181,12 +171,10 @@ describe('HS1 custom command settings', () => {
 
   it('treats a local array as a whole replacement and an empty delta as shared', () => {
     const shared = JSON.stringify([{ id: 'shared', name: 'Shared', prompt: 'one' }]);
-    expect(resolveCustomCommands(shared, {})).toEqual([
-      { id: 'shared', name: 'Shared', prompt: 'one' },
+    expect(resolveCustomCommands(shared, {})).toEqual([{ id: 'shared', name: 'Shared', prompt: 'one' }]);
+    expect(resolveCustomCommands(shared, [{ id: 'local', name: 'Local', prompt: 'two' }])).toEqual([
+      { id: 'local', name: 'Local', prompt: 'two' },
     ]);
-    expect(
-      resolveCustomCommands(shared, [{ id: 'local', name: 'Local', prompt: 'two' }]),
-    ).toEqual([{ id: 'local', name: 'Local', prompt: 'two' }]);
   });
 });
 
@@ -256,9 +244,7 @@ describe('one-command migrate via hotsheet-migrate', () => {
                 type: 'group',
                 id: 'checks',
                 name: 'Checks',
-                children: [
-                  { id: 'test', name: 'Test', prompt: 'npm test', target: 'shell' },
-                ],
+                children: [{ id: 'test', name: 'Test', prompt: 'npm test', target: 'shell' }],
               },
             ],
           }),
@@ -272,9 +258,7 @@ describe('one-command migrate via hotsheet-migrate', () => {
               childAdded: {
                 checks: {
                   group: { id: 'checks', name: 'Checks' },
-                  children: [
-                    { id: 'lint', name: 'Lint', prompt: 'npm run lint', target: 'shell' },
-                  ],
+                  children: [{ id: 'lint', name: 'Lint', prompt: 'npm run lint', target: 'shell' }],
                 },
               },
             },
@@ -290,9 +274,7 @@ describe('one-command migrate via hotsheet-migrate', () => {
         // The importer writes HS2 settings into the project's `.hotsheet2/`
         // tree (leaving the legacy `.hotsheet/` files untouched), so the
         // migrated typed `commands` land in `.hotsheet2/settings.local.json`.
-        const localSettings = JSON.parse(
-          readFileSync(join(project, '.hotsheet2', 'settings.local.json'), 'utf8'),
-        );
+        const localSettings = JSON.parse(readFileSync(join(project, '.hotsheet2', 'settings.local.json'), 'utf8'));
         expect(localSettings.commands).toHaveLength(2);
         expect(localSettings.commands[0]).toMatchObject({
           title: 'Review',
@@ -316,9 +298,7 @@ describe('one-command migrate via hotsheet-migrate', () => {
         // The legacy `.hotsheet/` tree is a read-only source: migration must
         // leave the original HS1 `settings.local.json` (its `custom_commands`
         // delta) untouched rather than rewriting it in place.
-        const legacyLocal = JSON.parse(
-          readFileSync(join(hs, 'settings.local.json'), 'utf8'),
-        );
+        const legacyLocal = JSON.parse(readFileSync(join(hs, 'settings.local.json'), 'utf8'));
         expect(legacyLocal).toHaveProperty('custom_commands');
         expect(legacyLocal).not.toHaveProperty('commands');
       } finally {
@@ -359,56 +339,48 @@ async function makeDatadir(EngineClass, ddl, seed) {
 }
 
 describe('cross-version export', () => {
-  it(
-    'bundled engine reads an OLD (0.3.x / v0.17.x) datadir — older schema, tables in template1',
-    async () => {
-      // Written by the old PGLite (0.3.x, which defaults its working DB to template1
-      // and predates ticket_blocked_by). The bundled 0.4.x engine opens it directly.
-      const hs = await makeDatadir(
-        PGliteOld,
-        OLD_TICKETS_DDL,
-        `insert into tickets (ticket_number, title, status, notes)
+  it('bundled engine reads an OLD (0.3.x / v0.17.x) datadir — older schema, tables in template1', async () => {
+    // Written by the old PGLite (0.3.x, which defaults its working DB to template1
+    // and predates ticket_blocked_by). The bundled 0.4.x engine opens it directly.
+    const hs = await makeDatadir(
+      PGliteOld,
+      OLD_TICKETS_DDL,
+      `insert into tickets (ticket_number, title, status, notes)
          values ('HS-1', 'old one', 'completed',
                  '[{"id":"n_1","text":"hi","created_at":"2026-01-01T00:00:00Z"}]'),
                 ('HS-2', 'old two', 'not_started', '');`,
-      );
-      try {
-        const out = await exportDatadir(hs, null);
-        expect(out.tickets).toHaveLength(2);
-        const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
-        expect(t1.status).toBe('completed');
-        expect(t1.notes[0].text).toBe('hi');
-        // No ticket_blocked_by table in this era → degrades to empty, no throw.
-        expect(t1.blocked_by).toEqual([]);
-      } finally {
-        rmSync(hs, { recursive: true, force: true });
-      }
-    },
-    30000,
-  );
+    );
+    try {
+      const out = await exportDatadir(hs, null);
+      expect(out.tickets).toHaveLength(2);
+      const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
+      expect(t1.status).toBe('completed');
+      expect(t1.notes[0].text).toBe('hi');
+      // No ticket_blocked_by table in this era → degrades to empty, no throw.
+      expect(t1.blocked_by).toEqual([]);
+    } finally {
+      rmSync(hs, { recursive: true, force: true });
+    }
+  }, 30000);
 
-  it(
-    'reads a CURRENT (0.4.x / v0.18.0+) datadir end-to-end — tables in postgres, with edges',
-    async () => {
-      const hs = await makeDatadir(
-        PGlite,
-        `${OLD_TICKETS_DDL}
+  it('reads a CURRENT (0.4.x / v0.18.0+) datadir end-to-end — tables in postgres, with edges', async () => {
+    const hs = await makeDatadir(
+      PGlite,
+      `${OLD_TICKETS_DDL}
          create table ticket_blocked_by (ticket_id int, blocks_on_ticket_id int);`,
-        `insert into tickets (ticket_number, title, status)
+      `insert into tickets (ticket_number, title, status)
          values ('HS-1', 'blocker', 'completed'), ('HS-2', 'blocked', 'started');
          insert into ticket_blocked_by (ticket_id, blocks_on_ticket_id) values (2, 1);`,
-      );
-      try {
-        const out = await exportDatadir(hs, null);
-        expect(out.tickets).toHaveLength(2);
-        const dep = out.tickets.find((t) => t.ticket_number === 'HS-2');
-        expect(dep.blocked_by).toEqual(['HS-1']);
-      } finally {
-        rmSync(hs, { recursive: true, force: true });
-      }
-    },
-    30000,
-  );
+    );
+    try {
+      const out = await exportDatadir(hs, null);
+      expect(out.tickets).toHaveLength(2);
+      const dep = out.tickets.find((t) => t.ticket_number === 'HS-2');
+      expect(dep.blocked_by).toEqual(['HS-1']);
+    } finally {
+      rmSync(hs, { recursive: true, force: true });
+    }
+  }, 30000);
 });
 
 describe('attachments', () => {

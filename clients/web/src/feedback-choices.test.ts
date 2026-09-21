@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseFeedbackChoices, selectedFeedbackChoicesMarkdown, updateFeedbackChoiceSelection } from './feedback-choices';
+import {
+  parseFeedbackChoices,
+  selectedFeedbackChoicesMarkdown,
+  updateFeedbackChoiceSelection,
+} from './feedback-choices';
 
 describe('feedback choices', () => {
   it('parses an uppercase header with an optional colon and Markdown list', () => {
@@ -23,10 +27,22 @@ describe('feedback choices', () => {
 
   it('supports exclusive, zero, additive, and range selection', () => {
     const ids = ['choice-1', 'choice-2', 'choice-3'];
-    expect(updateFeedbackChoiceSelection(ids, [], 'choice-2', undefined, {})).toEqual({ selected: ['choice-2'], anchor: 'choice-2' });
-    expect(updateFeedbackChoiceSelection(ids, ['choice-2'], 'choice-2', 'choice-2', {})).toEqual({ selected: [], anchor: 'choice-2' });
-    expect(updateFeedbackChoiceSelection(ids, ['choice-1'], 'choice-3', 'choice-1', { additive: true })).toEqual({ selected: ['choice-1', 'choice-3'], anchor: 'choice-3' });
-    expect(updateFeedbackChoiceSelection(ids, ['choice-1'], 'choice-3', 'choice-1', { range: true })).toEqual({ selected: ids, anchor: 'choice-1' });
+    expect(updateFeedbackChoiceSelection(ids, [], 'choice-2', undefined, {})).toEqual({
+      selected: ['choice-2'],
+      anchor: 'choice-2',
+    });
+    expect(updateFeedbackChoiceSelection(ids, ['choice-2'], 'choice-2', 'choice-2', {})).toEqual({
+      selected: [],
+      anchor: 'choice-2',
+    });
+    expect(updateFeedbackChoiceSelection(ids, ['choice-1'], 'choice-3', 'choice-1', { additive: true })).toEqual({
+      selected: ['choice-1', 'choice-3'],
+      anchor: 'choice-3',
+    });
+    expect(updateFeedbackChoiceSelection(ids, ['choice-1'], 'choice-3', 'choice-1', { range: true })).toEqual({
+      selected: ids,
+      anchor: 'choice-1',
+    });
   });
 
   it('serializes selected Markdown options into a durable response', () => {

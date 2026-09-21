@@ -39,7 +39,8 @@ export function terminalTicketLinksForBufferLine(
       if (!cell || cell.getWidth() === 0) continue;
       const chars = cell.getChars() || ' ';
       text += chars;
-      for (let offset = 0; offset < chars.length; offset += 1) positions.push({ x: x + 1, y: y + 1, width: cell.getWidth() });
+      for (let offset = 0; offset < chars.length; offset += 1)
+        positions.push({ x: x + 1, y: y + 1, width: cell.getWidth() });
     }
   }
   text = text.trimEnd();
@@ -55,7 +56,9 @@ export function terminalTicketLinksForBufferLine(
       text: match[0],
       range: { start: { x: start.x, y: start.y }, end: { x: end.x + end.width - 1, y: end.y } },
       decorations: { pointerCursor: true, underline: true },
-      activate: (_event, reference) => { activate(reference); },
+      activate: (_event, reference) => {
+        activate(reference);
+      },
     });
   }
   return links.length ? links : undefined;

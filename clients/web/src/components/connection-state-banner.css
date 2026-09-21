@@ -1,3 +1,13 @@
-.connection-state-banner__spinner { animation: connection-state-spin .9s linear infinite; }
-@keyframes connection-state-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .connection-state-banner__spinner { animation: none; } }
+.connection-state-banner__spinner {
+  animation: connection-state-spin 0.9s linear infinite;
+}
+@keyframes connection-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-state-banner__spinner {
+    animation: none;
+  }
+}

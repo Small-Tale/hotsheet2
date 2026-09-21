@@ -40,7 +40,11 @@ export function renderStormSuppressionReason(context: RenderStormContext): strin
 /** A complex intentional interaction can legitimately render for several seconds. Keep
  * those passes visible in diagnostics without allowing them to seed an automatic report;
  * a storm that truly persists will be detected afresh once this grace period ends. */
-export function renderStormTimingSuppressionReason(installedAt: number, lastUserIntentAt: number, now: number): string | undefined {
+export function renderStormTimingSuppressionReason(
+  installedAt: number,
+  lastUserIntentAt: number,
+  now: number,
+): string | undefined {
   if (now - installedAt <= STARTUP_GRACE_MS) return 'startup-grace';
   if (now - lastUserIntentAt <= RENDER_USER_INTENT_GRACE_MS) return 'recent-user-interaction';
   return undefined;
@@ -75,21 +79,28 @@ export function isUnexpectedQuickDismiss(openedAt: number, dismissedAt: number, 
 }
 
 export function hasDismissalThrash(dismissals: readonly number[], now: number): boolean {
-  return dismissals.filter(value => now - value <= THRASH_WINDOW_MS).length >= THRASH_COUNT;
+  return dismissals.filter((value) => now - value <= THRASH_WINDOW_MS).length >= THRASH_COUNT;
 }
 
 /** Tracks one continuous dismissal episode and rearms after its bounded window clears. */
-export function advanceDismissalThrash(state: DismissalThrashState, now: number): DismissalThrashState & { shouldReport: boolean } {
-  const dismissals = [...state.dismissals.filter(value => now - value <= THRASH_WINDOW_MS), now];
+export function advanceDismissalThrash(
+  state: DismissalThrashState,
+  now: number,
+): DismissalThrashState & { shouldReport: boolean } {
+  const dismissals = [...state.dismissals.filter((value) => now - value <= THRASH_WINDOW_MS), now];
   const thrashing = dismissals.length >= THRASH_COUNT;
   return { dismissals, reported: thrashing, shouldReport: thrashing && !state.reported };
 }
 
 /** Tracks root-render storms once per page lifecycle. A quiet interval clears stale
  * passes, but it must not create another ticket for an already-reported signature. */
-export function advanceRenderStorm(state: RenderStormState, now: number, suppressed = false): RenderStormState & { shouldReport: boolean } {
+export function advanceRenderStorm(
+  state: RenderStormState,
+  now: number,
+  suppressed = false,
+): RenderStormState & { shouldReport: boolean } {
   if (suppressed) return { passes: [], reported: state.reported, shouldReport: false };
-  const passes = [...state.passes.filter(value => now - value <= RENDER_STORM_WINDOW_MS), now];
+  const passes = [...state.passes.filter((value) => now - value <= RENDER_STORM_WINDOW_MS), now];
   const storming = passes.length >= RENDER_STORM_COUNT;
   return { passes, reported: state.reported || storming, shouldReport: storming && !state.reported };
 }
@@ -124,7 +135,12 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
   let reporting = false;
 
   const record = (kind: string, target?: Element, detail?: Record<string, unknown>) => {
-    events.push({ at: new Date(now()).toISOString(), kind, target: target ? describeElement(target) : undefined, detail });
+    events.push({
+      at: new Date(now()).toISOString(),
+      kind,
+      target: target ? describeElement(target) : undefined,
+      detail,
+    });
     if (events.length > EVENT_LIMIT) events.splice(0, events.length - EVENT_LIMIT);
   };
   const attachment = (): ReviewAttachment => {
@@ -138,7 +154,13 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
       events,
     };
     const text = JSON.stringify(payload, null, 2);
-    return { id: `ui-stability-${timestamp}`, filename: `hotsheet-ui-diagnostics-${timestamp}.json`, dataUrl: `data:application/json;base64,${encodeJson(payload)}`, mimeType: 'application/json', size: new TextEncoder().encode(text).byteLength };
+    return {
+      id: `ui-stability-${timestamp}`,
+      filename: `hotsheet-ui-diagnostics-${timestamp}.json`,
+      dataUrl: `data:application/json;base64,${encodeJson(payload)}`,
+      mimeType: 'application/json',
+      size: new TextEncoder().encode(text).byteLength,
+    };
   };
   const report = (kind: string) => {
     const timestamp = now();
@@ -146,9 +168,15 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
     lastReportAt = timestamp;
     reporting = true;
     record('automatic-report', undefined, { trigger: kind });
-    Promise.resolve(options.onThrash(attachment())).catch(() => undefined).finally(() => { reporting = false; });
+    Promise.resolve(options.onThrash(attachment()))
+      .catch(() => undefined)
+      .finally(() => {
+        reporting = false;
+      });
   };
-  const noteUserIntent = () => { lastUserIntentAt = now(); };
+  const noteUserIntent = () => {
+    lastUserIntentAt = now();
+  };
   const onShow = (event: Event) => {
     const target = event.target;
     if (!(target instanceof Element) || !target.matches('wa-select')) return;
@@ -169,42 +197,67 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
     dismissalThrash = nextDismissalThrash;
     if (nextDismissalThrash.shouldReport) report('repeated-unexpected-select-dismissal');
   };
-  const observer = new MutationObserver(records => {
+  const observer = new MutationObserver((records) => {
     let removedTrackedSelects = 0;
-    for (const mutation of records) for (const node of mutation.removedNodes) {
-      if (!(node instanceof Element)) continue;
-      const selects = [node.matches('wa-select') ? node : undefined, ...node.querySelectorAll('wa-select')].filter((value): value is Element => Boolean(value));
-      for (const select of selects) {
-        const openedAt = openedSelects.get(select);
-        if (openedAt === undefined) continue;
-        openedSelects.delete(select);
-        removedTrackedSelects += 1;
-        const timestamp = now();
-        record('open-select-removed', select, { open_ms: timestamp - openedAt });
-        const nextDismissalThrash = advanceDismissalThrash(dismissalThrash, timestamp);
-        dismissalThrash = nextDismissalThrash;
-        if (nextDismissalThrash.shouldReport) report('open-select-dom-removal');
+    for (const mutation of records)
+      for (const node of mutation.removedNodes) {
+        if (!(node instanceof Element)) continue;
+        const selects = [node.matches('wa-select') ? node : undefined, ...node.querySelectorAll('wa-select')].filter(
+          (value): value is Element => Boolean(value),
+        );
+        for (const select of selects) {
+          const openedAt = openedSelects.get(select);
+          if (openedAt === undefined) continue;
+          openedSelects.delete(select);
+          removedTrackedSelects += 1;
+          const timestamp = now();
+          record('open-select-removed', select, { open_ms: timestamp - openedAt });
+          const nextDismissalThrash = advanceDismissalThrash(dismissalThrash, timestamp);
+          dismissalThrash = nextDismissalThrash;
+          if (nextDismissalThrash.shouldReport) report('open-select-dom-removal');
+        }
       }
-    }
-    if (records.length >= 25) record('large-mutation-batch', undefined, { records: records.length, removed_open_selects: removedTrackedSelects });
+    if (records.length >= 25)
+      record('large-mutation-batch', undefined, {
+        records: records.length,
+        removed_open_selects: removedTrackedSelects,
+      });
   });
   observer.observe(doc.documentElement, { childList: true, subtree: true });
-  const onError = (event: ErrorEvent) => { record('window-error', undefined, { message: event.message, filename: event.filename, line: event.lineno, column: event.colno }); };
-  const onUnhandledRejection = (event: PromiseRejectionEvent) => { record('unhandled-rejection', undefined, { reason: event.reason instanceof Error ? event.reason.message : String(event.reason) }); };
-  const onInteractionTiming = (event: Event) => { const timing=(event as CustomEvent<InteractionTiming>).detail;record('interaction-timing',undefined,{...timing,...timing.detail?{detail:JSON.stringify(timing.detail)}:{}}) };
+  const onError = (event: ErrorEvent) => {
+    record('window-error', undefined, {
+      message: event.message,
+      filename: event.filename,
+      line: event.lineno,
+      column: event.colno,
+    });
+  };
+  const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+    record('unhandled-rejection', undefined, {
+      reason: event.reason instanceof Error ? event.reason.message : String(event.reason),
+    });
+  };
+  const onInteractionTiming = (event: Event) => {
+    const timing = (event as CustomEvent<InteractionTiming>).detail;
+    record('interaction-timing', undefined, {
+      ...timing,
+      ...(timing.detail ? { detail: JSON.stringify(timing.detail) } : {}),
+    });
+  };
   doc.addEventListener('pointerdown', noteUserIntent, true);
   doc.addEventListener('keydown', noteUserIntent, true);
   doc.addEventListener('wa-show', onShow, true);
   doc.addEventListener('wa-hide', onHide, true);
   view.addEventListener('error', onError);
   view.addEventListener('unhandledrejection', onUnhandledRejection);
-  doc.addEventListener('hotsheet:interaction-timing',onInteractionTiming);
+  doc.addEventListener('hotsheet:interaction-timing', onInteractionTiming);
 
   return {
     attachment,
     recordRender(metrics, automaticReportSuppressed) {
       const timestamp = now();
-      const suppressionReason = automaticReportSuppressed ?? renderStormTimingSuppressionReason(installedAt, lastUserIntentAt, timestamp);
+      const suppressionReason =
+        automaticReportSuppressed ?? renderStormTimingSuppressionReason(installedAt, lastUserIntentAt, timestamp);
       const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp, Boolean(suppressionReason));
       renderStorm = nextRenderStorm;
       record('render-pass', undefined, {
@@ -224,7 +277,7 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
       doc.removeEventListener('wa-hide', onHide, true);
       view.removeEventListener('error', onError);
       view.removeEventListener('unhandledrejection', onUnhandledRejection);
-      doc.removeEventListener('hotsheet:interaction-timing',onInteractionTiming);
+      doc.removeEventListener('hotsheet:interaction-timing', onInteractionTiming);
     },
   };
 }

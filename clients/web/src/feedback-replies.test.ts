@@ -4,7 +4,12 @@ import { combineFeedbackReply, sourceOffsetForVisibleOffset, splitFeedbackPrompt
 
 describe('inline feedback replies', () => {
   it('splits at exact character offsets in source order', () => {
-    expect(splitFeedbackPrompt('Something else', [{ offset: 4, text: 'First' }, { offset: 9, text: 'Second' }])).toEqual([
+    expect(
+      splitFeedbackPrompt('Something else', [
+        { offset: 4, text: 'First' },
+        { offset: 9, text: 'Second' },
+      ]),
+    ).toEqual([
       { start: 0, end: 4, markdown: 'Some', reply: { offset: 4, text: 'First' } },
       { start: 4, end: 9, markdown: 'thing', reply: { offset: 9, text: 'Second' } },
       { start: 9, end: 14, markdown: ' else' },
@@ -21,14 +26,16 @@ describe('inline feedback replies', () => {
   });
 
   it('combines selected choices with an optional freeform response', () => {
-    expect(combineFeedbackReply('CHOICE:\n- First\n- **Second**', [], 'Because it is clearer.', ['choice-2']))
-      .toBe('Selected choice:\n- **Second**\n\nBecause it is clearer.');
+    expect(combineFeedbackReply('CHOICE:\n- First\n- **Second**', [], 'Because it is clearer.', ['choice-2'])).toBe(
+      'Selected choice:\n- **Second**\n\nBecause it is clearer.',
+    );
   });
 
   it('omits choice syntax while interleaving inline and selected responses', () => {
     const prompt = 'Question before.\n\nCHOICE:\n- First\n- Second\n\nAnything after?';
-    expect(combineFeedbackReply(prompt, [{ offset: 'Question'.length, text: 'Inline answer.' }], '', ['choice-1']))
-      .toBe('> Question\n\nInline answer.\n\n>  before.\n\nSelected choice:\n- First\n\n> Anything after?');
+    expect(
+      combineFeedbackReply(prompt, [{ offset: 'Question'.length, text: 'Inline answer.' }], '', ['choice-1']),
+    ).toBe('> Question\n\nInline answer.\n\n>  before.\n\nSelected choice:\n- First\n\n> Anything after?');
   });
 
   it('quotes the prompt and interleaves responses after clicked characters', () => {
@@ -41,11 +48,14 @@ describe('inline feedback replies', () => {
       ],
       '',
     );
-    expect(result).toBe('> FEEDBACK NEEDED\n>\n> Hello there.\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
+    expect(result).toBe(
+      '> FEEDBACK NEEDED\n>\n> Hello there.\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response',
+    );
   });
 
   it('appends general feedback after inline responses', () => {
-    expect(combineFeedbackReply('First?\n\nSecond?', [{ offset: 6, text: 'Yes.' }], 'Overall note.'))
-      .toBe('> First?\n\nYes.\n\n> Second?\n\nOverall note.');
+    expect(combineFeedbackReply('First?\n\nSecond?', [{ offset: 6, text: 'Yes.' }], 'Overall note.')).toBe(
+      '> First?\n\nYes.\n\n> Second?\n\nOverall note.',
+    );
   });
 });

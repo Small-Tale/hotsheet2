@@ -44,7 +44,11 @@ const CAPTURED_EVENTS: ReadonlyArray<readonly [event: string, kind: string, immi
   ['vite:beforeFullReload', 'full reload', 'the client is about to reload'],
   ['vite:invalidate', 'module invalidate', 'a module invalidated; the client is about to reload'],
   ['vite:error', 'error', 'a build or HMR error occurred'],
-  ['vite:ws:disconnect', 'connection lost', 'the dev-server websocket dropped; a restart/crash reloads the client on reconnect'],
+  [
+    'vite:ws:disconnect',
+    'connection lost',
+    'the dev-server websocket dropped; a restart/crash reloads the client on reconnect',
+  ],
 ];
 
 function readLog(storage: Pick<Storage, 'getItem'>): DevReloadRecord[] {
@@ -149,7 +153,7 @@ export function installDevReloadDiagnostics({
     surfaced = surfaceConnectionLossReload(persistentStorage, navigationType, logger);
   }
   for (const [event, kind, imminent] of CAPTURED_EVENTS) {
-    hot.on(event, payload => {
+    hot.on(event, (payload) => {
       const record: DevReloadRecord = { type: kind, path: payloadPath(payload), at: now() };
       if (record.path === undefined) delete record.path;
       writeLog(storage, [...readLog(storage), record]);

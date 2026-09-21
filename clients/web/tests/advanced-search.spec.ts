@@ -1,94 +1,513 @@
-import {expect,test} from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const base={connection_id:'git',native_id:'1',qualified_id:'git:1',id:'1',slug:'HS2-ACTIVE',title:'Active parser work',category:'feature',priority:'default',status:'started',up_next:true,feedback_needed:false,tags:['client'],blocked_by:[],claim_count:1,claimed_by:'codex',claim_lease_expires_at:'2099-01-01T00:00:00Z',created_at:'2026-09-09T00:00:00Z',updated_at:'2026-09-09T00:00:00Z'};
-const rows=[base,{...base,native_id:'2',qualified_id:'git:2',id:'2',slug:'HS2-DONE',title:'Completed parser docs',status:'completed',up_next:false,claimed_by:undefined,claim_lease_expires_at:undefined},{...base,native_id:'3',qualified_id:'git:3',id:'3',slug:'HS2-VERIFIED',title:'Verified parser docs',status:'verified',up_next:false,claimed_by:undefined,claim_lease_expires_at:undefined},{...base,native_id:'4',qualified_id:'git:4',id:'4',slug:'HS2-BACKLOG',title:'Backlogged parser task',status:'backlog',up_next:false,claimed_by:undefined,claim_lease_expires_at:undefined},{...base,native_id:'5',qualified_id:'git:5',id:'5',slug:'HS2-ARCHIVE',title:'Archived parser task',status:'archive',up_next:false,claimed_by:undefined,claim_lease_expires_at:undefined},{...base,native_id:'6',qualified_id:'git:6',id:'6',slug:'HS2-DUPLICATE',title:'Duplicate parser task',status:'completed',close_reason:'duplicate',duplicate_of:'git:2',up_next:false,claimed_by:undefined,claim_lease_expires_at:undefined}];
+const base = {
+  connection_id: 'git',
+  native_id: '1',
+  qualified_id: 'git:1',
+  id: '1',
+  slug: 'HS2-ACTIVE',
+  title: 'Active parser work',
+  category: 'feature',
+  priority: 'default',
+  status: 'started',
+  up_next: true,
+  feedback_needed: false,
+  tags: ['client'],
+  blocked_by: [],
+  claim_count: 1,
+  claimed_by: 'codex',
+  claim_lease_expires_at: '2099-01-01T00:00:00Z',
+  created_at: '2026-09-09T00:00:00Z',
+  updated_at: '2026-09-09T00:00:00Z',
+};
+const rows = [
+  base,
+  {
+    ...base,
+    native_id: '2',
+    qualified_id: 'git:2',
+    id: '2',
+    slug: 'HS2-DONE',
+    title: 'Completed parser docs',
+    status: 'completed',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
+  {
+    ...base,
+    native_id: '3',
+    qualified_id: 'git:3',
+    id: '3',
+    slug: 'HS2-VERIFIED',
+    title: 'Verified parser docs',
+    status: 'verified',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
+  {
+    ...base,
+    native_id: '4',
+    qualified_id: 'git:4',
+    id: '4',
+    slug: 'HS2-BACKLOG',
+    title: 'Backlogged parser task',
+    status: 'backlog',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
+  {
+    ...base,
+    native_id: '5',
+    qualified_id: 'git:5',
+    id: '5',
+    slug: 'HS2-ARCHIVE',
+    title: 'Archived parser task',
+    status: 'archive',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
+  {
+    ...base,
+    native_id: '6',
+    qualified_id: 'git:6',
+    id: '6',
+    slug: 'HS2-DUPLICATE',
+    title: 'Duplicate parser task',
+    status: 'completed',
+    close_reason: 'duplicate',
+    duplicate_of: 'git:2',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
+];
 
-test('evaluates is: filters and boolean expressions in the workspace search',async({page})=>{
+test('evaluates is: filters and boolean expressions in the workspace search', async ({ page }) => {
   test.setTimeout(60_000);
-  const ticketQueries:URL[]=[];
-  await page.route('**/*',async route=>{const request=route.request(),path=new URL(request.url()).pathname;
-    if(!path.startsWith('/__hotsheet/'))return route.continue();
-    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:{id:'demo',root:'/work/demo',name:'Search demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo',needsTicketSetup:false,needsHs1Migration:false,hs1ImportCompleted:false,hs1CleanupEligible:false}});
-    if(path.endsWith('/tickets')&&request.method()==='GET'){const url=new URL(request.url());ticketQueries.push(url);return route.fulfill({json:url.searchParams.has('page_size')?{items:rows,counts:{total:rows.length,queued:3,backlog:1,archive:2,open:1,up_next:1,active:1,started:1,completed_today:0}}:rows})}
-    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git',provider:'git',display_name:'Hot Sheet git',locator:'/work/demo.hs2',default:true,capabilities:{create:true,update:true,notes:true,attachments:true,watch:true,query_fields:[]}}]});
-    if(path.endsWith('/connections')||path.endsWith('/permissions')||path.endsWith('/commands')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
-    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
-    if(path.endsWith('/terminal-settings'))return route.fulfill({json:{inherit_global_shell_history:false}});
-    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:0,events:[],overflow:false}});
-    return route.fulfill({status:404,json:{error:'not mocked'}});
+  const ticketQueries: URL[] = [];
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (!path.startsWith('/__hotsheet/')) return route.continue();
+    if (path === '/__hotsheet/projects/open')
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: 'demo',
+          root: '/work/demo',
+          name: 'Search demo',
+          stores: ['/work/demo.hs2'],
+          apiPath: '/__hotsheet/project-api/demo',
+          needsTicketSetup: false,
+          needsHs1Migration: false,
+          hs1ImportCompleted: false,
+          hs1CleanupEligible: false,
+        },
+      });
+    if (path.endsWith('/tickets') && request.method() === 'GET') {
+      const url = new URL(request.url());
+      ticketQueries.push(url);
+      return route.fulfill({
+        json: url.searchParams.has('page_size')
+          ? {
+              items: rows,
+              counts: {
+                total: rows.length,
+                queued: 3,
+                backlog: 1,
+                archive: 2,
+                open: 1,
+                up_next: 1,
+                active: 1,
+                started: 1,
+                completed_today: 0,
+              },
+            }
+          : rows,
+      });
+    }
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/work/demo.hs2',
+            default: true,
+            capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
+          },
+        ],
+      });
+    if (
+      path.endsWith('/connections') ||
+      path.endsWith('/permissions') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/terminals') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
+    if (path.endsWith('/ws/poll')) return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+    return route.fulfill({ status: 404, json: { error: 'not mocked' } });
   });
-  await page.setViewportSize({width:1800,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);await page.getByRole('button',{name:'Search tickets'}).click();const search=page.getByRole('searchbox',{name:'Search tickets'}),toolbar=page.locator('.app-shell__main > .kui-toolbar').filter({has:page.locator('.workspace-header__search-group')}),searchGroup=toolbar.locator('.workspace-header__search-group'),geometry=()=>page.evaluate(()=>{const rect=(selector:string)=>{const value=document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();return{top:value.top,bottom:value.bottom,height:value.height}},group=document.querySelector<HTMLElement>('.app-shell__main > .kui-toolbar .workspace-header__search-group')!;return{group:rect('.app-shell__main > .kui-toolbar .workspace-header__search-group'),mode:rect('.app-shell__main > .kui-toolbar .workspace-header__actions > .view-mode-switcher'),sort:rect('.app-shell__main > .kui-toolbar .workspace-header__sort-group'),toolbar:rect('.app-shell__main > .kui-toolbar'),tabs:rect('.app-shell__main > .project-tab-bar'),radius:getComputedStyle(group.querySelector<HTMLElement>('.kui-token-search')!).borderRadius}});await searchGroup.evaluate(async node=>{await Promise.all(node.getAnimations().map(animation=>animation.finished))});const single=await geometry();expect(Number.parseFloat(single.radius)).toBeGreaterThan(16);await page.screenshot({path:'/private/tmp/hs2-z4t3j0-single-line-search-wide.png',fullPage:true});await page.screenshot({path:'/private/tmp/hs2-0094cq-inline-search-wide.png',fullPage:true});
-  await search.pressSequentially('tag:h',{delay:30});await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);await expect(search).toContainText('tag:h');await search.pressSequentially('ello ');const hello=page.locator('[data-component="token-search-token"][data-token-value="tag:hello"]');await expect(hello).toBeVisible();expect(Math.abs((await geometry()).group.height-single.group.height)).toBeLessThanOrEqual(.5);
-  await page.getByRole('button',{name:'Clear search'}).click();await search.pressSequentially('tag:"hello ');await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);await expect(search).toContainText('tag:"hello ');await search.pressSequentially('world" ');await expect(page.getByRole('button',{name:'Edit tag hello world'})).toBeVisible();
-  await page.getByRole('button',{name:'Clear search'}).click();await search.pressSequentially('tag:client ');const trailingChip=page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');await expect(trailingChip).toBeVisible();await trailingChip.evaluate(node=>{const text=node.querySelector('button')!.firstChild!,range=document.createRange(),selection=getSelection()!;range.setStart(text,Math.min(2,text.textContent?.length??0));range.collapse(true);selection.removeAllRanges();selection.addRange(range)});await search.press('ArrowRight');expect(await search.evaluate(node=>{const selection=getSelection(),container=selection?.anchorNode;return Boolean(container&&node.contains(container)&&!(container instanceof Element?container:container.parentElement)?.closest('[data-component="token-search-token"]'))})).toBe(true);await page.keyboard.type('after');expect(await search.evaluate(node=>Array.from(node.childNodes).map(child=>child instanceof HTMLElement&&child.matches('[data-component="token-search-token"]')?`[${child.dataset.tokenValue}]`:child.textContent).join('').replaceAll('\u200b','').replaceAll(/\s+/g,' ').trim())).toBe('[tag:client]after');await search.press('Home');await page.keyboard.type('before ');await expect(page.getByRole('button',{name:'Edit tag client'})).toBeVisible();expect(await search.evaluate(node=>Array.from(node.childNodes).map(child=>child instanceof HTMLElement&&child.matches('[data-component="token-search-token"]')?`[${child.dataset.tokenValue}]`:child.textContent).join('').replaceAll('\u200b','').replaceAll(/\s+/g,' ').trim())).toBe('before [tag:client]after');await page.setViewportSize({width:680,height:720});await searchGroup.screenshot({path:'/private/tmp/hs2-4rd940-search-chip-caret-narrow.png'});await page.setViewportSize({width:1728,height:971});await searchGroup.screenshot({path:'/private/tmp/hs2-4rd940-search-chip-caret-wide.png'});await page.setViewportSize({width:1800,height:800});await page.getByRole('button',{name:'Clear search'}).click();await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);await expect(search).toHaveText('');
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search tickets' }),
+    toolbar = page
+      .locator('.app-shell__main > .kui-toolbar')
+      .filter({ has: page.locator('.workspace-header__search-group') }),
+    searchGroup = toolbar.locator('.workspace-header__search-group'),
+    geometry = () =>
+      page.evaluate(() => {
+        const rect = (selector: string) => {
+            const value = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+            return { top: value.top, bottom: value.bottom, height: value.height };
+          },
+          group = document.querySelector<HTMLElement>(
+            '.app-shell__main > .kui-toolbar .workspace-header__search-group',
+          )!;
+        return {
+          group: rect('.app-shell__main > .kui-toolbar .workspace-header__search-group'),
+          mode: rect('.app-shell__main > .kui-toolbar .workspace-header__actions > .view-mode-switcher'),
+          sort: rect('.app-shell__main > .kui-toolbar .workspace-header__sort-group'),
+          toolbar: rect('.app-shell__main > .kui-toolbar'),
+          tabs: rect('.app-shell__main > .project-tab-bar'),
+          radius: getComputedStyle(group.querySelector<HTMLElement>('.kui-token-search')!).borderRadius,
+        };
+      });
+  await searchGroup.evaluate(async (node) => {
+    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+  });
+  const single = await geometry();
+  expect(Number.parseFloat(single.radius)).toBeGreaterThan(16);
+  await page.screenshot({ path: '/private/tmp/hs2-z4t3j0-single-line-search-wide.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-0094cq-inline-search-wide.png', fullPage: true });
+  await search.pressSequentially('tag:h', { delay: 30 });
+  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(search).toContainText('tag:h');
+  await search.pressSequentially('ello ');
+  const hello = page.locator('[data-component="token-search-token"][data-token-value="tag:hello"]');
+  await expect(hello).toBeVisible();
+  expect(Math.abs((await geometry()).group.height - single.group.height)).toBeLessThanOrEqual(0.5);
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.pressSequentially('tag:"hello ');
+  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(search).toContainText('tag:"hello ');
+  await search.pressSequentially('world" ');
+  await expect(page.getByRole('button', { name: 'Edit tag hello world' })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.pressSequentially('tag:client ');
+  const trailingChip = page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
+  await expect(trailingChip).toBeVisible();
+  await trailingChip.evaluate((node) => {
+    const text = node.querySelector('button')!.firstChild!,
+      range = document.createRange(),
+      selection = getSelection()!;
+    range.setStart(text, Math.min(2, text.textContent?.length ?? 0));
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await search.press('ArrowRight');
+  expect(
+    await search.evaluate((node) => {
+      const selection = getSelection(),
+        container = selection?.anchorNode;
+      return Boolean(
+        container &&
+        node.contains(container) &&
+        !(container instanceof Element ? container : container.parentElement)?.closest(
+          '[data-component="token-search-token"]',
+        ),
+      );
+    }),
+  ).toBe(true);
+  await page.keyboard.type('after');
+  expect(
+    await search.evaluate((node) =>
+      Array.from(node.childNodes)
+        .map((child) =>
+          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+            ? `[${child.dataset.tokenValue}]`
+            : child.textContent,
+        )
+        .join('')
+        .replaceAll('\u200b', '')
+        .replaceAll(/\s+/g, ' ')
+        .trim(),
+    ),
+  ).toBe('[tag:client]after');
+  await search.press('Home');
+  await page.keyboard.type('before ');
+  await expect(page.getByRole('button', { name: 'Edit tag client' })).toBeVisible();
+  expect(
+    await search.evaluate((node) =>
+      Array.from(node.childNodes)
+        .map((child) =>
+          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+            ? `[${child.dataset.tokenValue}]`
+            : child.textContent,
+        )
+        .join('')
+        .replaceAll('\u200b', '')
+        .replaceAll(/\s+/g, ' ')
+        .trim(),
+    ),
+  ).toBe('before [tag:client]after');
+  await page.setViewportSize({ width: 680, height: 720 });
+  await searchGroup.screenshot({ path: '/private/tmp/hs2-4rd940-search-chip-caret-narrow.png' });
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await searchGroup.screenshot({ path: '/private/tmp/hs2-4rd940-search-chip-caret-wide.png' });
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(search).toHaveText('');
   await search.pressSequentially('NOT tag:client');
   await search.press('Enter');
-  const inlineTag=page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
-  await expect(search).toHaveAttribute('data-token-count','1');
+  const inlineTag = page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
+  await expect(search).toHaveAttribute('data-token-count', '1');
   await expect(inlineTag).toBeVisible();
   await search.pressSequentially(' AND parser');
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
-  expect(await search.evaluate(node=>Array.from(node.childNodes).map(child=>child instanceof HTMLElement&&child.matches('[data-component="token-search-token"]')?`[${child.dataset.tokenValue}]`:child.textContent).join('').replaceAll('\u200b','').replaceAll(/\s+/g,' ').trim())).toBe('NOT [tag:client] AND parser');
+  expect(
+    await search.evaluate((node) =>
+      Array.from(node.childNodes)
+        .map((child) =>
+          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+            ? `[${child.dataset.tokenValue}]`
+            : child.textContent,
+        )
+        .join('')
+        .replaceAll('\u200b', '')
+        .replaceAll(/\s+/g, ' ')
+        .trim(),
+    ),
+  ).toBe('NOT [tag:client] AND parser');
   await expect(page.getByText(/No tickets match/)).toContainText('NOT tag:client AND parser');
-  const inline=await geometry();
-  expect(Number.parseFloat(inline.radius)).toBeCloseTo(Number.parseFloat(single.radius),2);
-  expect(Math.abs(inline.mode.top-single.mode.top)).toBeLessThanOrEqual(4.1);
-  expect(Math.abs(inline.sort.top-single.sort.top)).toBeLessThanOrEqual(4.1);
-  await page.screenshot({path:'/private/tmp/hs2-mz9dmf-inline-search-wide.png',fullPage:true});
-  await page.getByRole('button',{name:'Edit tag client'}).click();
+  const inline = await geometry();
+  expect(Number.parseFloat(inline.radius)).toBeCloseTo(Number.parseFloat(single.radius), 2);
+  expect(Math.abs(inline.mode.top - single.mode.top)).toBeLessThanOrEqual(4.1);
+  expect(Math.abs(inline.sort.top - single.sort.top)).toBeLessThanOrEqual(4.1);
+  await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-wide.png', fullPage: true });
+  await page.getByRole('button', { name: 'Edit tag client' }).click();
   await expect(inlineTag).toHaveCount(0);
   await expect(search).toContainText('NOT tag:client AND parser');
   await search.press('Enter');
   await expect(inlineTag).toBeVisible();
-  await page.getByRole('button',{name:'Remove tag client'}).click();
+  await page.getByRole('button', { name: 'Remove tag client' }).click();
   await expect(inlineTag).toHaveCount(0);
   await expect(search).toBeFocused();
-  await page.getByRole('button',{name:'Clear search'}).click();
+  await page.getByRole('button', { name: 'Clear search' }).click();
   await search.pressSequentially('tag:cl');
-  await expect(page.getByRole('option',{name:'tag:client'})).toBeVisible();
-  await page.getByRole('option',{name:'tag:client'}).click();
+  await expect(page.getByRole('option', { name: 'tag:client' })).toBeVisible();
+  await page.getByRole('option', { name: 'tag:client' }).click();
   await expect(inlineTag).toBeVisible();
   await search.pressSequentially(' AND a-very-long-character-level-search-value-that-wraps-without-clipping');
-  await page.setViewportSize({width:680,height:720});
-  await expect.poll(()=>searchGroup.evaluate(node=>node.getBoundingClientRect().height)).toBeGreaterThan(single.group.height);
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-mz9dmf-inline-search-narrow.png',fullPage:true});
-  await page.setViewportSize({width:1024,height:600});await expect(page.getByText('Searching tickets')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-0094cq-inline-search-narrow.png',fullPage:true});
-  await page.setViewportSize({width:1800,height:800});
-  await page.getByRole('button',{name:'Clear search'}).click();
-  await search.fill('is:up-next ');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:up-next"]')).toBeVisible();await page.getByRole('button',{name:'Clear search'}).click();await search.fill('is:active');await page.getByRole('button',{name:'Search syntax help'}).click();await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toHaveCount(0);await search.press('Enter');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();await page.getByRole('button',{name:'Clear search'}).click();await search.fill('updated-after:4h ago ');await expect(page.locator('[data-component="token-search-token"][data-token-value="updated-after:4h ago"]')).toBeVisible();await page.getByRole('button',{name:'Clear search'}).click();await search.fill('updated-after:2026/09/07');await page.getByRole('button',{name:'Columns view'}).focus();await expect(page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]')).toHaveCount(0);await search.press('Enter');await expect(page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]')).toBeVisible();await search.fill('is:active ');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();await expect(page.getByText('Searching tickets')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-vx1v88-search-token-chips-wide.png',fullPage:true});await page.setViewportSize({width:680,height:720});await page.screenshot({path:'/private/tmp/hs2-vx1v88-search-token-chips-narrow.png',fullPage:true});await page.setViewportSize({width:1800,height:800});await page.getByRole('button',{name:'Clear search'}).click();
-  await search.fill('is:active OR (is:completed AND NOT is:verified)');await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-3cnnjm-boolean-search-wide.png',fullPage:true});
-  await search.fill('is:archived OR is:backlogged');await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
-  await search.fill('is:open ');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:open"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);await page.getByRole('button',{name:'Clear search'}).click();
-  await search.fill('is:closed ');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:closed"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);for(const slug of ['HS2-DONE','HS2-VERIFIED','HS2-ARCHIVE','HS2-DUPLICATE'])await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();expect(ticketQueries.at(-1)?.searchParams.get('text')??'').toBe('');await page.screenshot({path:'/private/tmp/hs2-m2zxjc-0y96fm-closed-wide.png',fullPage:true});await page.getByRole('button',{name:'Clear search'}).click();
-  await search.fill('is:duplicate ');await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-DUPLICATE"]')).toBeVisible();for(const slug of ['HS2-ACTIVE','HS2-DONE','HS2-VERIFIED','HS2-ARCHIVE'])await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);expect(ticketQueries.at(-1)?.searchParams.get('text')??'').toBe('');await page.setViewportSize({width:680,height:720});await page.screenshot({path:'/private/tmp/hs2-m2zxjc-0y96fm-duplicate-narrow.png',fullPage:true});
-  await page.getByRole('button',{name:'Search syntax help'}).click();const help=page.getByRole('dialog',{name:'Search syntax'});await expect(help.locator('dt')).toHaveText(['Tags','Content','Workflow','Dates']);await expect(help).toContainText('NOT binds before AND, and AND before OR');await expect(help).toContainText('is:active');await expect(help).toContainText('is:closed');await expect(help).toContainText('is:duplicate');await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-compact.png',fullPage:true});
+  await page.setViewportSize({ width: 680, height: 720 });
+  await expect
+    .poll(() => searchGroup.evaluate((node) => node.getBoundingClientRect().height))
+    .toBeGreaterThan(single.group.height);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 600 });
+  await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-0094cq-inline-search-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('is:up-next ');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:up-next"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('is:active');
+  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toHaveCount(0);
+  await search.press('Enter');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('updated-after:4h ago ');
+  await expect(
+    page.locator('[data-component="token-search-token"][data-token-value="updated-after:4h ago"]'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('updated-after:2026/09/07');
+  await page.getByRole('button', { name: 'Columns view' }).focus();
+  await expect(
+    page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]'),
+  ).toHaveCount(0);
+  await search.press('Enter');
+  await expect(
+    page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]'),
+  ).toBeVisible();
+  await search.fill('is:active ');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
+  await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-vx1v88-search-token-chips-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 680, height: 720 });
+  await page.screenshot({ path: '/private/tmp/hs2-vx1v88-search-token-chips-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('is:active OR (is:completed AND NOT is:verified)');
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-3cnnjm-boolean-search-wide.png', fullPage: true });
+  await search.fill('is:archived OR is:backlogged');
+  await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
+  await search.fill('is:open ');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:open"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);
+  await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('is:closed ');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:closed"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
+  for (const slug of ['HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE', 'HS2-DUPLICATE'])
+    await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();
+  expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
+  await page.screenshot({ path: '/private/tmp/hs2-m2zxjc-0y96fm-closed-wide.png', fullPage: true });
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('is:duplicate ');
+  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DUPLICATE"]')).toBeVisible();
+  for (const slug of ['HS2-ACTIVE', 'HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE'])
+    await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);
+  expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
+  await page.setViewportSize({ width: 680, height: 720 });
+  await page.screenshot({ path: '/private/tmp/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
+  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  const help = page.getByRole('dialog', { name: 'Search syntax' });
+  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help).toContainText('NOT binds before AND, and AND before OR');
+  await expect(help).toContainText('is:active');
+  await expect(help).toContainText('is:closed');
+  await expect(help).toContainText('is:duplicate');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-compact.png', fullPage: true });
 });
 
-test('keeps the project identity readable beside expanded search at 680px',async({page})=>{
-  await page.route('**/*',async route=>{const request=route.request(),path=new URL(request.url()).pathname;
-    if(!path.startsWith('/__hotsheet/'))return route.continue();
-    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:{id:'demo',root:'/work/demo',name:'Search demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo',needsTicketSetup:false,needsHs1Migration:false,hs1ImportCompleted:false,hs1CleanupEligible:false}});
-    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:{items:rows,counts:{total:rows.length,queued:3,backlog:1,archive:2,open:1,up_next:1,active:1,started:1,completed_today:0}}});
-    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git',provider:'git',display_name:'Hot Sheet git',locator:'/work/demo.hs2',default:true,capabilities:{create:true,update:true,notes:true,attachments:true,watch:true,query_fields:[]}}]});
-    if(path.endsWith('/connections')||path.endsWith('/permissions')||path.endsWith('/commands')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
-    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
-    if(path.endsWith('/terminal-settings'))return route.fulfill({json:{inherit_global_shell_history:false}});
-    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:0,events:[],overflow:false}});
-    return route.fulfill({status:404,json:{error:'not mocked'}});
+test('keeps the project identity readable beside expanded search at 680px', async ({ page }) => {
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (!path.startsWith('/__hotsheet/')) return route.continue();
+    if (path === '/__hotsheet/projects/open')
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: 'demo',
+          root: '/work/demo',
+          name: 'Search demo',
+          stores: ['/work/demo.hs2'],
+          apiPath: '/__hotsheet/project-api/demo',
+          needsTicketSetup: false,
+          needsHs1Migration: false,
+          hs1ImportCompleted: false,
+          hs1CleanupEligible: false,
+        },
+      });
+    if (path.endsWith('/tickets') && request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          items: rows,
+          counts: {
+            total: rows.length,
+            queued: 3,
+            backlog: 1,
+            archive: 2,
+            open: 1,
+            up_next: 1,
+            active: 1,
+            started: 1,
+            completed_today: 0,
+          },
+        },
+      });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/work/demo.hs2',
+            default: true,
+            capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
+          },
+        ],
+      });
+    if (
+      path.endsWith('/connections') ||
+      path.endsWith('/permissions') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/terminals') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
+    if (path.endsWith('/ws/poll')) return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+    return route.fulfill({ status: 404, json: { error: 'not mocked' } });
   });
-  await page.setViewportSize({width:680,height:720});
+  await page.setViewportSize({ width: 680, height: 720 });
   await page.goto('/');
-  await page.getByRole('button',{name:'Open project'}).click();
-  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.getByRole('button',{name:'Search tickets'}).click();
-  const search=page.getByRole('searchbox',{name:'Search tickets'});
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await search.fill('a wrapped production search query that leaves the project identity readable');
-  await search.evaluate(node=>{(node as HTMLElement).blur()});
-  await page.evaluate(()=>{scrollTo(0,0)});
-  await expect.poll(()=>page.evaluate(()=>scrollX)).toBe(0);
-  const geometry=await page.evaluate(()=>{const bounds=(node:HTMLElement)=>{const rect=node.getBoundingClientRect();return{top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right,width:rect.width,clientWidth:node.clientWidth,scrollWidth:node.scrollWidth}},toolbar=document.querySelector<HTMLElement>('.app-shell__main > .kui-toolbar:has(.workspace-header__search-group)')!,trailing=toolbar.querySelector<HTMLElement>('.kui-toolbar__trailing')!,search=toolbar.querySelector<HTMLElement>('.workspace-header__search-group')!,projectBar=document.querySelector<HTMLElement>('.app-shell__main > [data-component="project-tab-bar"]')!,identity=projectBar.querySelector<HTMLElement>('wa-select[name="mobile-project"]')!;return{toolbar:bounds(toolbar),trailing:bounds(trailing),search:bounds(search),projectBar:bounds(projectBar),identity:bounds(identity),identityValue:(identity as HTMLElement&{value:string}).value}});
+  await search.evaluate((node) => {
+    (node as HTMLElement).blur();
+  });
+  await page.evaluate(() => {
+    scrollTo(0, 0);
+  });
+  await expect.poll(() => page.evaluate(() => scrollX)).toBe(0);
+  const geometry = await page.evaluate(() => {
+    const bounds = (node: HTMLElement) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          clientWidth: node.clientWidth,
+          scrollWidth: node.scrollWidth,
+        };
+      },
+      toolbar = document.querySelector<HTMLElement>(
+        '.app-shell__main > .kui-toolbar:has(.workspace-header__search-group)',
+      )!,
+      trailing = toolbar.querySelector<HTMLElement>('.kui-toolbar__trailing')!,
+      search = toolbar.querySelector<HTMLElement>('.workspace-header__search-group')!,
+      projectBar = document.querySelector<HTMLElement>('.app-shell__main > [data-component="project-tab-bar"]')!,
+      identity = projectBar.querySelector<HTMLElement>('wa-select[name="mobile-project"]')!;
+    return {
+      toolbar: bounds(toolbar),
+      trailing: bounds(trailing),
+      search: bounds(search),
+      projectBar: bounds(projectBar),
+      identity: bounds(identity),
+      identityValue: (identity as HTMLElement & { value: string }).value,
+    };
+  });
   expect(geometry.identityValue).toBe('demo');
   expect(geometry.identity.scrollWidth).toBeLessThanOrEqual(geometry.identity.clientWidth);
   expect(geometry.identity.width).toBeGreaterThan(80);
@@ -97,20 +516,50 @@ test('keeps the project identity readable beside expanded search at 680px',async
   expect(geometry.trailing.right).toBeLessThanOrEqual(geometry.toolbar.right);
   expect(geometry.search.left).toBeGreaterThanOrEqual(3);
   expect(geometry.toolbar.bottom).toBeLessThanOrEqual(geometry.projectBar.top);
-  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.workspace.project-session.v1.demo')??'{}').searchOpen)).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-q0tg43-expanded-search-narrow-after.png',clip:{x:0,y:0,width:Math.min(680,Math.max(geometry.toolbar.right,geometry.projectBar.right)),height:geometry.projectBar.bottom}});
-  await page.screenshot({path:'/private/tmp/hs2-vt4r56-search-expanded-680.png',clip:{x:0,y:0,width:Math.min(680,Math.max(geometry.toolbar.right,geometry.projectBar.right)),height:geometry.projectBar.bottom}});
-  await page.getByRole('button',{name:'Clear search'}).click();
-  await search.evaluate(node=>{(node as HTMLElement).blur()});
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('hotsheet.workspace.project-session.v1.demo') ?? '{}').searchOpen,
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: '/private/tmp/hs2-q0tg43-expanded-search-narrow-after.png',
+    clip: {
+      x: 0,
+      y: 0,
+      width: Math.min(680, Math.max(geometry.toolbar.right, geometry.projectBar.right)),
+      height: geometry.projectBar.bottom,
+    },
+  });
+  await page.screenshot({
+    path: '/private/tmp/hs2-vt4r56-search-expanded-680.png',
+    clip: {
+      x: 0,
+      y: 0,
+      width: Math.min(680, Math.max(geometry.toolbar.right, geometry.projectBar.right)),
+      height: geometry.projectBar.bottom,
+    },
+  });
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.evaluate((node) => {
+    (node as HTMLElement).blur();
+  });
   await expect(search).toHaveCount(0);
-  const trigger=page.getByRole('button',{name:'Search tickets'});
+  const trigger = page.getByRole('button', { name: 'Search tickets' });
   await expect(trigger).toBeVisible();
   await trigger.click();
   await expect(search).toBeFocused();
   await search.press('Escape');
   await expect(search).toHaveCount(0);
   await expect(trigger).toBeFocused();
-  await expect.poll(()=>page.evaluate(()=>scrollX)).toBe(0);
-  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.workspace.project-session.v1.demo')??'{}').searchOpen)).toBe(false);
-  await page.screenshot({path:'/private/tmp/hs2-vt4r56-search-collapsed-680.png',fullPage:true});
+  await expect.poll(() => page.evaluate(() => scrollX)).toBe(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('hotsheet.workspace.project-session.v1.demo') ?? '{}').searchOpen,
+      ),
+    )
+    .toBe(false);
+  await page.screenshot({ path: '/private/tmp/hs2-vt4r56-search-collapsed-680.png', fullPage: true });
 });

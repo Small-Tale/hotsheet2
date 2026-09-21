@@ -9,7 +9,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   const tabs = drawer.locator('.kui-tab-bar__tabs');
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
 
-  const shadowGutter = await tabs.evaluate(node => {
+  const shadowGutter = await tabs.evaluate((node) => {
     const scroller = node.getBoundingClientRect();
     const selected = node.querySelector<HTMLElement>('.kui-app-tab[data-selected="true"]')!.getBoundingClientRect();
     return { above: selected.top - scroller.top, below: scroller.bottom - selected.bottom };
@@ -20,16 +20,18 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-wide.png' });
 
   const gridWidth = (await gridTab.boundingBox())!.width;
-  await drawer.evaluate(node => {
+  await drawer.evaluate((node) => {
     node.style.width = '520px';
   });
   await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-narrow.png' });
-  await drawer.evaluate(node => {
+  await drawer.evaluate((node) => {
     const tabs = node.querySelector('.kui-tab-bar__tabs')!;
     const source = tabs.querySelector('[data-tab-kind="terminal"]')!;
     for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));
   });
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);
   expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
-  expect(await tabs.evaluate(node => node.scrollWidth)).toBeGreaterThan(await tabs.evaluate(node => node.clientWidth));
+  expect(await tabs.evaluate((node) => node.scrollWidth)).toBeGreaterThan(
+    await tabs.evaluate((node) => node.clientWidth),
+  );
 });

@@ -3,14 +3,32 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { type TicketLinkChoice,TicketLinkChoiceDialog } from './ticket-link-choice-dialog';
+import { type TicketLinkChoice, TicketLinkChoiceDialog } from './ticket-link-choice-dialog';
 
 const choice: TicketLinkChoice = {
   kind: 'choose',
   reference: { raw: 'HS2-SHARED1', slug: 'HS2-SHARED1' },
   matches: [
-    { projectId: 'alpha-01', projectName: 'Alpha', ticketId: 'one', qualifiedId: 'git:one', connectionId: 'git', slug: 'HS2-SHARED1', title: 'Local implementation', status: 'started' },
-    { projectId: 'alpha-01', projectName: 'Alpha', ticketId: 'two', qualifiedId: 'github:42', connectionId: 'github', slug: 'HS2-SHARED1', title: 'Provider mirror', status: 'completed' },
+    {
+      projectId: 'alpha-01',
+      projectName: 'Alpha',
+      ticketId: 'one',
+      qualifiedId: 'git:one',
+      connectionId: 'git',
+      slug: 'HS2-SHARED1',
+      title: 'Local implementation',
+      status: 'started',
+    },
+    {
+      projectId: 'alpha-01',
+      projectName: 'Alpha',
+      ticketId: 'two',
+      qualifiedId: 'github:42',
+      connectionId: 'github',
+      slug: 'HS2-SHARED1',
+      title: 'Provider mirror',
+      status: 'completed',
+    },
   ],
 };
 
@@ -34,10 +52,12 @@ describe('TicketLinkChoiceDialog', () => {
     expect(String(TicketLinkChoiceDialog({}))).toBe('');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-link-choice-dialog.css'), 'utf8');
     expect(css).toContain('@media (max-width: remify(512px))');
-    expect(css).toContain('grid-template-areas: "status ticket arrow" ". source ."');
+    expect(css).toContainSource('grid-template-areas: "status ticket arrow" ". source ."');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/__matches \{[^}]*gap: var\(--kui-space-none\)/);
-    expect(css).toMatch(/__matches > li > button \{[^}]*min-height: remify\(72px\)[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/__ticket, \.ticket-link-choice-dialog__source \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(
+      /__matches > li > button \{[^}]*min-height: remify\(72px\)[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/,
+    );
+    expect(css).toMatchSource(/__ticket, \.ticket-link-choice-dialog__source \{[^}]*gap: var\(--kui-space-2xs\)/);
   });
 });

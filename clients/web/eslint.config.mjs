@@ -8,7 +8,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'test-results/**', 'playwright-report/**', 'scripts/**', 'eslint.config.mjs'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'test-results/**',
+      'playwright-report/**',
+      'scripts/**',
+      'eslint.config.mjs',
+    ],
   },
   {
     linterOptions: {
@@ -32,7 +39,17 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true, allow: [{ from: 'file', name: 'SafeHtml' }, { from: 'lib', name: 'URLSearchParams' }] }],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        {
+          allowNumber: true,
+          allowBoolean: true,
+          allow: [
+            { from: 'file', name: 'SafeHtml' },
+            { from: 'lib', name: 'URLSearchParams' },
+          ],
+        },
+      ],
       '@typescript-eslint/strict-boolean-expressions': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       'simple-import-sort/imports': 'error',
@@ -101,12 +118,7 @@ export default tseslint.config(
         2,
         {
           SwitchCase: 1,
-          ignoredNodes: [
-            'ConditionalExpression',
-            'ConditionalExpression *',
-            'TSUnionType',
-            'TSUnionType *',
-          ],
+          ignoredNodes: ['ConditionalExpression', 'ConditionalExpression *', 'TSUnionType', 'TSUnionType *'],
         },
       ],
       '@stylistic/key-spacing': 'error',

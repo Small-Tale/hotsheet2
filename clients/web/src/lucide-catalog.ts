@@ -29,23 +29,27 @@ export function lucidePascalToKebab(pascal: string): string {
  */
 export function loadLucideCatalog(): Promise<void> {
   if (catalog) return Promise.resolve();
-  loading ??= import('lucide').then(module => {
-    const map = new Map<string, IconNode>();
-    const seen = new Set<IconNode>();
-    const list: LucideCatalogEntry[] = [];
-    for (const [pascal, value] of Object.entries(module)) {
-      if (!Array.isArray(value) || seen.has(value)) continue;
-      seen.add(value);
-      const name = lucidePascalToKebab(pascal);
-      if (map.has(name)) continue;
-      map.set(name, value);
-      list.push({ name, icon: value, label: name.replace(/-/g, ' ') });
-    }
-    list.sort((left, right) => left.name.localeCompare(right.name));
-    catalog = map;
-    entries = list;
-    lucideCatalogVersion.value += 1;
-  }).catch(() => { loading = undefined; });
+  loading ??= import('lucide')
+    .then((module) => {
+      const map = new Map<string, IconNode>();
+      const seen = new Set<IconNode>();
+      const list: LucideCatalogEntry[] = [];
+      for (const [pascal, value] of Object.entries(module)) {
+        if (!Array.isArray(value) || seen.has(value)) continue;
+        seen.add(value);
+        const name = lucidePascalToKebab(pascal);
+        if (map.has(name)) continue;
+        map.set(name, value);
+        list.push({ name, icon: value, label: name.replace(/-/g, ' ') });
+      }
+      list.sort((left, right) => left.name.localeCompare(right.name));
+      catalog = map;
+      entries = list;
+      lucideCatalogVersion.value += 1;
+    })
+    .catch(() => {
+      loading = undefined;
+    });
   return loading;
 }
 

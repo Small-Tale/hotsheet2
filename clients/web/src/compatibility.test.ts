@@ -2,13 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import { assessCompatibility, type ServerCompatibility } from './compatibility';
 
-const server = (min: number, max: number, extra: Partial<ServerCompatibility> = {}): ServerCompatibility => ({ generation: 'hs2', protocol: { min, max }, ...extra });
+const server = (min: number, max: number, extra: Partial<ServerCompatibility> = {}): ServerCompatibility => ({
+  generation: 'hs2',
+  protocol: { min, max },
+  ...extra,
+});
 
 describe('assessCompatibility', () => {
   it.each([
-    [1, 1, 1, 1], [1, 2, 2, 3], [2, 4, 1, 2], [1, 5, 2, 3],
+    [1, 1, 1, 1],
+    [1, 2, 2, 3],
+    [2, 4, 1, 2],
+    [1, 5, 2, 3],
   ])('accepts intersecting inclusive ranges', (serverMin, serverMax, clientMin, clientMax) => {
-    expect(assessCompatibility(server(serverMin, serverMax), { min: clientMin, max: clientMax }).kind).toBe('compatible');
+    expect(assessCompatibility(server(serverMin, serverMax), { min: clientMin, max: clientMax }).kind).toBe(
+      'compatible',
+    );
   });
 
   it('distinguishes which side is too old', () => {
@@ -26,11 +35,41 @@ describe('assessCompatibility', () => {
   });
 
   it('treats revision differences as warnings and requires both restart safeguards', () => {
-    expect(assessCompatibility(server(1, 1, { application_version: '0.1.0', build_revision: 'server' }), { min: 1, max: 1 }, 'client')).toMatchObject({ kind: 'compatible', revisionMismatch: true, clientRevision: 'client', clientProtocol: { min: 1, max: 1 }, server: { application_version: '0.1.0', build_revision: 'server' } });
-    expect(assessCompatibility(server(1, 1, { build_revision: 'built', source_revision: 'current' }))).toMatchObject({ kind: 'compatible', revisionMismatch: true, sourceStale: true });
-    expect(assessCompatibility(server(1, 1, { source_stale: true }))).toMatchObject({ kind: 'compatible', revisionMismatch: true, sourceStale: true });
-    expect(assessCompatibility(server(1, 1, { build_revision: 'release', source_revision: null, source_stale: false }))).toMatchObject({ kind: 'compatible', revisionMismatch: false, sourceStale: false });
-    expect(assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true } }), { min: 2, max: 2 }).canRestartServer).toBe(false);
-    expect(assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true, lifecycle_quiescence: true } }), { min: 2, max: 2 }).canRestartServer).toBe(true);
+    expect(
+      assessCompatibility(
+        server(1, 1, { application_version: '0.1.0', build_revision: 'server' }),
+        { min: 1, max: 1 },
+        'client',
+      ),
+    ).toMatchObject({
+      kind: 'compatible',
+      revisionMismatch: true,
+      clientRevision: 'client',
+      clientProtocol: { min: 1, max: 1 },
+      server: { application_version: '0.1.0', build_revision: 'server' },
+    });
+    expect(assessCompatibility(server(1, 1, { build_revision: 'built', source_revision: 'current' }))).toMatchObject({
+      kind: 'compatible',
+      revisionMismatch: true,
+      sourceStale: true,
+    });
+    expect(assessCompatibility(server(1, 1, { source_stale: true }))).toMatchObject({
+      kind: 'compatible',
+      revisionMismatch: true,
+      sourceStale: true,
+    });
+    expect(
+      assessCompatibility(server(1, 1, { build_revision: 'release', source_revision: null, source_stale: false })),
+    ).toMatchObject({ kind: 'compatible', revisionMismatch: false, sourceStale: false });
+    expect(
+      assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true } }), { min: 2, max: 2 })
+        .canRestartServer,
+    ).toBe(false);
+    expect(
+      assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true, lifecycle_quiescence: true } }), {
+        min: 2,
+        max: 2,
+      }).canRestartServer,
+    ).toBe(true);
   });
 });

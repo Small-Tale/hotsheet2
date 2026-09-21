@@ -8,7 +8,7 @@ HS2 has two lifecycle phases with deliberately different rules.
 
 An incompatible ticket, store, project-registry, or settings change is allowed while
 the format is still being designed. It must be an explicit migration boundary: announce
-the affected formats and required restart/upgrade to the user *before activation*.
+the affected formats and required restart/upgrade to the user _before activation_.
 Ordinary reads and writes must not silently activate a breaking marker underneath a
 running process. A development source edit is not activation; rebuilding/restarting or
 running an explicit migration is. The retained `prerelease-*` fixtures are a regression

@@ -80,7 +80,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
 
     // The bridge helper reads the running server's real GET /checkouts (no mocked request).
     const listed = await listServerCheckouts();
-    const mine = listed.find(checkout => checkout.id === session.id);
+    const mine = listed.find((checkout) => checkout.id === session.id);
     expect(mine, `checkout ${session.id} missing from ${JSON.stringify(listed)}`).toBeDefined();
     expect(await realpath(mine!.root)).toBe(expectedRoot);
     expect(mine!.stores).toContain(store);
@@ -89,7 +89,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     const response = await createDevApp().request('/__hotsheet/checkouts');
     expect(response.status).toBe(200);
     const payload = (await response.json()) as Checkout[];
-    expect(payload.some(checkout => checkout.id === session.id)).toBe(true);
+    expect(payload.some((checkout) => checkout.id === session.id)).toBe(true);
     // The route must forward the server's real wire shape, not a reshaped convenience body.
     expect(payload).toEqual(listed);
   }, 120_000);

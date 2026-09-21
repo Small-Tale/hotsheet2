@@ -6,7 +6,10 @@ describe('new ticket attachments', () => {
   it('creates once and uploads every staged file in order', async () => {
     const files = [new File(['one'], 'one.txt'), new File(['two'], 'two.txt')];
     const create = vi.fn(async () => ({ id: 'ticket', attachments: [] as string[] }));
-    const upload = vi.fn(async (ticket: { id: string; attachments: string[] }, file: File) => ({ ...ticket, attachments: [...ticket.attachments, file.name] }));
+    const upload = vi.fn(async (ticket: { id: string; attachments: string[] }, file: File) => ({
+      ...ticket,
+      attachments: [...ticket.attachments, file.name],
+    }));
     const result = await createTicketWithAttachments(files, create, upload);
     expect(create).toHaveBeenCalledOnce();
     expect(upload.mock.calls.map(([, file]) => file.name)).toEqual(['one.txt', 'two.txt']);
@@ -17,9 +20,17 @@ describe('new ticket attachments', () => {
     const order: string[] = [];
     await createTicketWithAttachments(
       [new File(['proof'], 'proof.txt')],
-      async () => { order.push('created'); return { id: 'ticket' }; },
-      async (ticket) => { order.push('uploaded'); return ticket; },
-      (ticket) => { order.push(`projected:${ticket.id}`); },
+      async () => {
+        order.push('created');
+        return { id: 'ticket' };
+      },
+      async (ticket) => {
+        order.push('uploaded');
+        return ticket;
+      },
+      (ticket) => {
+        order.push(`projected:${ticket.id}`);
+      },
     );
     expect(order).toEqual(['created', 'projected:ticket', 'uploaded']);
   });
@@ -30,15 +41,29 @@ describe('new ticket attachments', () => {
       if (file.name === 'bad.txt') throw new Error('upload rejected');
       return { ...ticket, attachments: [...ticket.attachments, file.name] };
     });
-    const result = await createTicketWithAttachments(files, async () => ({ id: 'ticket', attachments: [] as string[] }), upload);
+    const result = await createTicketWithAttachments(
+      files,
+      async () => ({ id: 'ticket', attachments: [] as string[] }),
+      upload,
+    );
     expect(result.ticket.attachments).toEqual(['good.txt']);
     expect(result.failed).toEqual([{ name: 'bad.txt', reason: 'upload rejected' }]);
-    expect(describeNewTicketAttachmentFailures(result.failed)).toContain('Ticket created, but “bad.txt” could not be attached');
+    expect(describeNewTicketAttachmentFailures(result.failed)).toContain(
+      'Ticket created, but “bad.txt” could not be attached',
+    );
   });
 
   it('does not upload anything when ticket creation fails', async () => {
     const upload = vi.fn();
-    await expect(createTicketWithAttachments([new File(['proof'], 'proof.txt')], async () => { throw new Error('create failed'); }, upload)).rejects.toThrow('create failed');
+    await expect(
+      createTicketWithAttachments(
+        [new File(['proof'], 'proof.txt')],
+        async () => {
+          throw new Error('create failed');
+        },
+        upload,
+      ),
+    ).rejects.toThrow('create failed');
     expect(upload).not.toHaveBeenCalled();
   });
 });

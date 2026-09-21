@@ -20,16 +20,16 @@ target/debug/hotsheet-cli -C ./my-store import hotsheet-export.json
 Targets the **5 most recent production releases + the current beta**. These use two
 PGLite lines (both Postgres 17):
 
-| Hot Sheet | PGLite | Working DB |
-|---|---|---|
-| v0.17.2, v0.17.3 | 0.3.x | `template1` |
-| v0.18.0, v0.19.0, v0.20.0 | 0.4.x | `postgres` |
-| v0.21.0-beta (current beta) | 0.4.x | `postgres` |
+| Hot Sheet                   | PGLite | Working DB  |
+| --------------------------- | ------ | ----------- |
+| v0.17.2, v0.17.3            | 0.3.x  | `template1` |
+| v0.18.0, v0.19.0, v0.20.0   | 0.4.x  | `postgres`  |
+| v0.21.0-beta (current beta) | 0.4.x  | `postgres`  |
 
 ### Engine strategy — bundle one, fetch only what's newer
 
 A newer PGLite **reads older datadirs** but not the reverse (a 0.4.x engine opens
-0.3.x *and* 0.4.x datadirs; a 0.5.x engine opens neither). So the exporter bundles
+0.3.x _and_ 0.4.x datadirs; a 0.5.x engine opens neither). So the exporter bundles
 **one** engine — the line Hot Sheet ships, `@electric-sql/pglite` **0.4.x** — and
 tries it first. It opens every supported HS datadir directly.
 
@@ -37,7 +37,7 @@ Only a datadir written by a PGLite **newer than the bundle** (e.g. **PGLite 0.5.
 PG18**, a future Hot Sheet) can't be opened; those fall back to
 [`pglite-migrate`](https://www.npmjs.com/package/pglite-migrate), which fetches a
 pinned, hash-verified matching engine on demand (cached). Bundling the absolute-latest
-0.5.x would be *wrong* — it can't read today's 0.3.x/0.4.x data.
+0.5.x would be _wrong_ — it can't read today's 0.3.x/0.4.x data.
 
 - **Old datadirs.** v0.17.x (0.3.x) clusters open directly with the bundled 0.4.x
   engine — no fetch.

@@ -1,9 +1,13 @@
 export const MAX_INITIAL_ASSETS = 4;
 
 export function initialAssetPaths(html) {
-  return [...new Set([...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
-    .map(match => match[1])
-    .filter(path => path.startsWith('/assets/')))];
+  return [
+    ...new Set(
+      [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+        .map((match) => match[1])
+        .filter((path) => path.startsWith('/assets/')),
+    ),
+  ];
 }
 
 export function assertInitialAssetBudget(html, maximum = MAX_INITIAL_ASSETS) {

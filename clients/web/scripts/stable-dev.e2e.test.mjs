@@ -14,7 +14,7 @@ async function availablePort() {
   const server = createServer();
   await new Promise((resolveListen, reject) => server.once('error', reject).listen(0, '127.0.0.1', resolveListen));
   const address = server.address();
-  await new Promise(resolveClose => server.close(resolveClose));
+  await new Promise((resolveClose) => server.close(resolveClose));
   if (!address || typeof address === 'string') throw new Error('Could not allocate a test port.');
   return address.port;
 }
@@ -28,7 +28,7 @@ async function waitForSource(url) {
     } catch (error) {
       lastError = error;
     }
-    await new Promise(resolveWait => setTimeout(resolveWait, 50));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
   }
   throw lastError ?? new Error(`Timed out waiting for ${url}`);
 }
@@ -43,14 +43,18 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
   await writeFile(resolve(fixture, 'src/main.js'), 'window.snapshot = "before";');
   await symlink(resolve(webRoot, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
 
-  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
-    env: {
-      ...process.env,
-      HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
-      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+  const child = spawn(
+    process.execPath,
+    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
+    {
+      env: {
+        ...process.env,
+        HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
+        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+      },
+      stdio: 'ignore',
     },
-    stdio: 'ignore',
-  });
+  );
   try {
     const url = `http://127.0.0.1:${port}/src/main.js`;
     expect(await waitForSource(url)).toContain('before');
@@ -58,7 +62,7 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
     expect(await waitForSource(`${url}?after-edit`)).toContain('before');
   } finally {
     child.kill('SIGTERM');
-    await new Promise(resolveExit => child.once('exit', resolveExit));
+    await new Promise((resolveExit) => child.once('exit', resolveExit));
     const remainingSnapshots = await readdir(runtimeTemp);
     await rm(fixture, { recursive: true, force: true });
     await rm(runtimeTemp, { recursive: true, force: true });
@@ -70,16 +74,24 @@ it('does not reload when a later route first imports another dependency', async 
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const port = await availablePort();
   let output = '';
-  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
-    env: {
-      ...process.env,
-      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
-      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+  const child = spawn(
+    process.execPath,
+    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
+    {
+      env: {
+        ...process.env,
+        HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  );
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
   });
-  child.stdout.on('data', chunk => { output += chunk; });
-  child.stderr.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', (chunk) => {
+    output += chunk;
+  });
   const browser = await chromium.launch();
   try {
     await waitForSource(`http://127.0.0.1:${port}/`);
@@ -99,7 +111,7 @@ it('does not reload when a later route first imports another dependency', async 
   } finally {
     await browser.close();
     child.kill('SIGTERM');
-    await new Promise(resolveExit => child.once('exit', resolveExit));
+    await new Promise((resolveExit) => child.once('exit', resolveExit));
     expect(await readdir(runtimeTemp)).toEqual([]);
     await rm(runtimeTemp, { recursive: true, force: true });
   }
@@ -108,14 +120,18 @@ it('does not reload when a later route first imports another dependency', async 
 it('serves the app without a Vite reconnect client, HMR websocket, or reconnect logging', async () => {
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const port = await availablePort();
-  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
-    env: {
-      ...process.env,
-      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
-      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+  const child = spawn(
+    process.execPath,
+    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
+    {
+      env: {
+        ...process.env,
+        HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+      },
+      stdio: 'ignore',
     },
-    stdio: 'ignore',
-  });
+  );
   const browser = await chromium.launch();
   try {
     const origin = `http://127.0.0.1:${port}`;
@@ -132,20 +148,24 @@ it('serves the app without a Vite reconnect client, HMR websocket, or reconnect 
     const requested = [];
     const sockets = [];
     const consoleMessages = [];
-    page.on('request', request => requested.push(request.url()));
-    page.on('websocket', socket => sockets.push(socket.url()));
-    page.on('console', message => consoleMessages.push(message.text()));
+    page.on('request', (request) => requested.push(request.url()));
+    page.on('websocket', (socket) => sockets.push(socket.url()));
+    page.on('console', (message) => consoleMessages.push(message.text()));
     await page.goto(`${origin}/`);
     await page.waitForTimeout(500);
     expect(await page.locator('#app').count()).toBe(1);
-    expect(requested.filter(url => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
-    expect(sockets.filter(url => url.includes('vite-hmr'))).toEqual([]);
-    expect(consoleMessages.filter(message => message.includes('[vite] connecting') || message.includes('[vite] connected'))).toEqual([]);
+    expect(requested.filter((url) => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
+    expect(sockets.filter((url) => url.includes('vite-hmr'))).toEqual([]);
+    expect(
+      consoleMessages.filter(
+        (message) => message.includes('[vite] connecting') || message.includes('[vite] connected'),
+      ),
+    ).toEqual([]);
     await page.screenshot({ path: '/private/tmp/hs2-8jv12r-stable-client-after.png', fullPage: true });
   } finally {
     await browser.close();
     child.kill('SIGTERM');
-    await new Promise(resolveExit => child.once('exit', resolveExit));
+    await new Promise((resolveExit) => child.once('exit', resolveExit));
     expect(await readdir(runtimeTemp)).toEqual([]);
     await rm(runtimeTemp, { recursive: true, force: true });
   }
@@ -159,16 +179,24 @@ it('does not reload when the terminal runtime first lazy-loads its xterm depende
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const port = await availablePort();
   let output = '';
-  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
-    env: {
-      ...process.env,
-      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
-      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+  const child = spawn(
+    process.execPath,
+    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
+    {
+      env: {
+        ...process.env,
+        HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  );
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
   });
-  child.stdout.on('data', chunk => { output += chunk; });
-  child.stderr.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', (chunk) => {
+    output += chunk;
+  });
   const browser = await chromium.launch();
   try {
     await waitForSource(`http://127.0.0.1:${port}/`);
@@ -183,7 +211,8 @@ it('does not reload when the terminal runtime first lazy-loads its xterm depende
     // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
     // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
     const runtimeExports = await page.evaluate(
-      "import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())");
+      "import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())",
+    );
     expect(runtimeExports).toContain('mountTerminalViewportRuntime');
     await page.waitForTimeout(1_000);
     // A re-optimize would have full-reloaded the document, resetting/incrementing this counter.
@@ -193,7 +222,7 @@ it('does not reload when the terminal runtime first lazy-loads its xterm depende
   } finally {
     await browser.close();
     child.kill('SIGTERM');
-    await new Promise(resolveExit => child.once('exit', resolveExit));
+    await new Promise((resolveExit) => child.once('exit', resolveExit));
     expect(await readdir(runtimeTemp)).toEqual([]);
     await rm(runtimeTemp, { recursive: true, force: true });
   }
