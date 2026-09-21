@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { NoteCard } from './note-card';
@@ -127,6 +130,8 @@ describe('NoteCard', () => {
   });
 
   it('marks the exact regular acknowledgement for subtle presentation',()=>{const acknowledgement=String(NoteCard({id:'ack',kind:'regular',author:'You',time:'Now',body:'No response needed'}));expect(acknowledgement).toContain('data-acknowledgement="true"');expect(String(NoteCard({id:'other',kind:'regular',author:'You',time:'Now',body:'No response needed here'}))).not.toContain('data-acknowledgement="true"')});
+
+  it('uses canonical semantic spacing while retaining note-control geometry',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).not.toContain('--wa-space-');expect(css).toMatch(/\.note-card \{[^}]*padding: var\(--kui-space-m\);[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/\.note-card__choice \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*grid-template-columns: remify\(24px\)[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);expect(css).toMatch(/\[data-kind="activity"\] \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*gap: var\(--kui-space-2xs\)/)});
 
   it('keeps AI attribution, limitations, and feedback in the note accessible name',()=>{
     const markup=String(NoteCard({id:'distilled',kind:'activity',author:'Hot Sheet AI',aiAuthored:true,aiTool:'Codex',time:'Now',body:'Summarized the test run.'}));

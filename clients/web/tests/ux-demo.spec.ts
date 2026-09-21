@@ -587,6 +587,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
 });
 
 test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {
+  await page.setViewportSize({width:1280,height:800});
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
   await expect(notes).toHaveCount(5);
@@ -596,6 +597,10 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   }
   const standaloneNote = notes.filter({ has: page.locator('[data-lucide="message-square-text"]') });
+  const feedbackNote=notes.filter({has:page.locator('[data-lucide="circle-alert"]')}),activityNote=notes.filter({has:page.locator('[data-lucide="activity"]')});
+  expect(await standaloneNote.evaluate(node=>{const card=getComputedStyle(node),header=getComputedStyle(node.querySelector('.note-card__header')!),kind=getComputedStyle(node.querySelector('.note-card__kind')!),headerEnd=getComputedStyle(node.querySelector('.note-card__header-end')!);return{padding:card.padding,gap:card.rowGap,headerGap:header.gap,kindGap:kind.gap,headerEndGap:headerEnd.gap}})).toEqual({padding:'16px',gap:'8px',headerGap:'16px',kindGap:'4px',headerEndGap:'4px'});
+  expect(await activityNote.evaluate(node=>{const style=getComputedStyle(node);return{padding:style.padding,gap:style.rowGap}})).toEqual({padding:'8px 16px',gap:'4px'});
+  await feedbackNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-feedback-wide.png'});await activityNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-activity-wide.png'});await page.setViewportSize({width:430,height:760});expect(await notes.evaluateAll(items=>items.every(item=>item.scrollWidth<=item.clientWidth+1))).toBe(true);await feedbackNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-feedback-narrow.png'});await activityNote.screenshot({path:'/private/tmp/hs2-4y6sm9-note-card-activity-narrow.png'});await page.setViewportSize({width:1280,height:800});
   await standaloneNote.dblclick();
   const standaloneEditor = standaloneNote.getByRole('textbox', { name: 'Note body' });
   await standaloneEditor.fill('Persisted standalone note');

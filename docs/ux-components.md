@@ -938,6 +938,11 @@ icons; structural separators do not require icons.
   Shift-range selection, and coexist with inline and freeform replies. Hover/focus
   reveals an explicit Edit action in both inspector and reader, while
   the inspector toolbar provides the single Reader entry point from every inspector tab.
+  Its layout follows a 16px card inset, 8px region rhythm, and 4px connected-cluster
+  rhythm; the compact Activity variant uses 8px block / 16px inline insets. Rich
+  Markdown choices remain an app-specific zero-or-multi-selection surface rather than an
+  exclusive-choice `TabBar` or `Select`; control targets and indicators retain explicit
+  geometry (HS2-4Y6SM9).
 - `AIContentLabel` — **built** as the shared persistent attribution and limitations cue
   for AI-authored notes, conversation responses, and narration. The factual tool name
   and “may contain errors” text are included in the containing artifact's accessible
