@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
-import { demoCatalog, demoKind,demosUsing, findDemo, flattenCatalog,kerfCatalogSections } from './catalog';
+import { demoCatalog, demoKind,demosUsing, findDemo, flattenCatalog,kerfCatalogSections,usesCatalogGeometryOverlay } from './catalog';
 import { connectionDetailsAssessment,ConnectionDetailsDialogSettings,connectionDetailsScenario,resetConnectionDetailsDemo } from './connection-details-demo';
 import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
@@ -48,6 +48,12 @@ describe('UX demo catalog', () => {
     expect(ticketRow?.related?.filter(entry=>entry.group==='Used by').map(entry=>entry.id)).toEqual(['ticket-list','ticket-board-column']);
     expect(sections.find(section=>section.category==='Ticket inspector · Notes and activity')?.entries.map(entry=>entry.id)).toContain('note-card');
     expect(sections.find(section=>section.category==='Setup and settings')?.entries.find(entry=>entry.id==='welcome-screen')?.tags).toContain('Planned');
+  });
+
+  it('shows Kerf geometry for components but not composed layouts',()=>{
+    expect(usesCatalogGeometryOverlay('app-shell')).toBe(false);
+    expect(usesCatalogGeometryOverlay('tag-chip')).toBe(true);
+    expect(usesCatalogGeometryOverlay('unknown-future-component')).toBe(true);
   });
 
   it('publishes every implemented app-owned catalog surface with the Kerf consumer metadata contract',()=>{

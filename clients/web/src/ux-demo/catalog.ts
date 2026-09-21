@@ -154,6 +154,11 @@ export function demoKind(id:string):'component'|'composition'{
   return demoKinds.get(id)??'component';
 }
 
+/** Kerf geometry belongs to focused components, never to composed application layouts. */
+export function usesCatalogGeometryOverlay(id:string):boolean{
+  return demoKind(id)==='component';
+}
+
 const phaseLabel:Record<DemoPhase,string>={'feature-floor':'Feature floor',desktop:'Desktop',later:'Later'};
 
 function catalogEntry(item:DemoDefinition,modified:Readonly<Record<string,string>>):CatalogEntry{

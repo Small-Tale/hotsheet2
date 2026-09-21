@@ -22,7 +22,6 @@ import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
   FolderGit2,
-  Grid3X3,
   MessageSquareText,
   Terminal,
 } from 'lucide';
@@ -82,9 +81,9 @@ import {
 import {
   demoCatalog,
   type DemoDefinition,
-  demoKind,
   findDemo,
   kerfCatalogSections,
+  usesCatalogGeometryOverlay,
 } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
 import { ConnectionDetailsDialogDemo, ConnectionDetailsDialogSettings, connectionDetailsScenario, resetConnectionDetailsDemo } from './connection-details-demo';
@@ -273,7 +272,6 @@ const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
 const catalogTheme = signal<'light' | 'dark'>(localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light');
-const geometryOverlayEnabled = signal(localStorage.getItem('hotsheet.ux-demo.geometry-overlay') === 'true' || localStorage.getItem('hotsheet.ux-demo.alignment-debug') === 'true');
 const devReviewOn = signal(
   devReviewRequested(location.href, import.meta.env.DEV),
 );
@@ -522,12 +520,11 @@ function DemoApp() {
         active={selected.id}
         collapsed={catalogCollapsed.value}
         theme={catalogTheme.value}
-        geometryOverlay={geometryOverlayEnabled.value && demoKind(selected.id) === 'component'}
+        geometryOverlay={usesCatalogGeometryOverlay(selected.id)}
         content={<CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}>{demoContent(selected)}</CatalogExampleStack>}
         status={<span><strong>{selected.phase.replace('-', ' ')}</strong>{selected.implemented ? ' · Implemented' : ' · Planned'}{modified ? ` · Updated ${new Date(modified).toLocaleString()}` : ''}</span>}
         headerActions={<ToolbarControlGroup label="Demo tools">
           {import.meta.env.DEV ? <button type="button" data-action="toggle-dev-review" aria-pressed={String(devReviewOn.value)} title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}><LucideIcon icon={MessageSquareText} name="message-square-text"/><span>Review</span></button> : <></>}
-          <button type="button" data-action="toggle-geometry-overlay" aria-pressed={String(geometryOverlayEnabled.value)} title={`Geometry overlay ${geometryOverlayEnabled.value ? 'On' : 'Off'}`}><LucideIcon icon={Grid3X3} name="grid-3-x-3"/><span>Bounds</span></button>
           {hasSettings && !settingsOpen.value ? <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings"><span>Settings</span></button> : <></>}
         </ToolbarControlGroup>}
       />
@@ -697,11 +694,6 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
-});
-delegate(root, 'click', '[data-action="toggle-geometry-overlay"]', () => {
-  geometryOverlayEnabled.value = !geometryOverlayEnabled.value;
-  localStorage.setItem('hotsheet.ux-demo.geometry-overlay', String(geometryOverlayEnabled.value));
-  localStorage.removeItem('hotsheet.ux-demo.alignment-debug');
 });
 function commandEditorRowId(target: Element): string | undefined {
   return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
