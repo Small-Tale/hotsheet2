@@ -119,7 +119,9 @@ Supporting components:
 - `ConnectionDetailsDialog` — **demo built**: every compatible-skew, stale-source,
   old-server, old-client, and unavailable-metadata state using the shared `PanelHeader`
   and `ValueTable` presentation. Safely recoverable details dismiss through the native
-  popover light-dismiss behavior rather than a redundant Close action.
+  popover light-dismiss behavior rather than a redundant Close action. Its body uses the
+  canonical 24 px major-region rhythm; narrow metadata rows use 8 px insets and 4 px between
+  their connected key/value pair (HS2-4Y6SM9).
 - `PanelHeader` / `ValueTable` — **demo built**: shared divider-free panel/dialog/page
   icon/title/subtitle/action geometry and borderless static metadata cells with inset
   separators. `PanelHeader` (the `@kerfjs/ui` beta.6 consolidation of the former `DialogHeader`

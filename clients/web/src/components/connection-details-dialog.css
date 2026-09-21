@@ -1,11 +1,11 @@
 .connection-details-dialog { width: min(remify(672px), calc(100vw - remify(32px))); max-height: calc(100vh - remify(32px)); }
-.connection-details-dialog__body { display: grid; gap: var(--wa-space-l); padding: var(--wa-space-l); overflow: auto; }
+.connection-details-dialog__body { display: grid; gap: var(--kui-space-l); padding: var(--kui-space-l); overflow: auto; }
 .connection-details-dialog__guidance { margin: 0; line-height: 1.5; }
 .connection-details-dialog__metadata > div { grid-template-columns: minmax(remify(160px),auto) minmax(0,1fr); }
 .connection-details-dialog__metadata code { font-size: var(--wa-font-size-xs); }
-.connection-details-dialog h3 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-m); }
+.connection-details-dialog h3 { margin: 0 0 var(--kui-space-xs); font-size: var(--wa-font-size-m); }
 .connection-details-dialog[data-embedded="true"] { position: relative; inset: auto; display: block; margin: 0; }
 @media (max-width: remify(512px)) {
-  .connection-details-dialog .connection-details-dialog__metadata > div { padding-block: var(--wa-space-s); grid-template-columns: 1fr; gap: var(--wa-space-2xs); }
+  .connection-details-dialog .connection-details-dialog__metadata > div { padding-block: var(--kui-space-xs); grid-template-columns: 1fr; gap: var(--kui-space-2xs); }
   .connection-details-dialog .connection-details-dialog__metadata dd { justify-content: flex-start; text-align: left; }
 }

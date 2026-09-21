@@ -45,6 +45,9 @@ describe('ConnectionDetailsDialog', () => {
     const css=readFileSync(resolve(import.meta.dirname,'connection-details-dialog.css'),'utf8');
     expect(css).not.toMatch(/__metadata[^}]*border:/);
     expect(css).not.toContain('__footer');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/__body \{[^}]*gap: var\(--kui-space-l\);[^}]*padding: var\(--kui-space-l\)/);
+    expect(css).toMatch(/__metadata > div \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/);
   });
 
   it('supports an embedded deterministic demo without changing production dismissal',()=>{
