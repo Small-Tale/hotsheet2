@@ -2048,7 +2048,12 @@ Finder/File Explorer/file-manager wording. The server re-reads status and valida
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
 Value groups have no outer border, use text-aligned inset row separators, and retain a
-visible gap between repository identity and synchronization groups.
+visible gap between repository identity and synchronization groups. The master/detail
+surface uses 24px roomy pane and viewport insets, 16px between homogeneous value groups
+and for constrained pane insets, 8px inside empty/menu-row groups, and 4px for connected
+path metadata and menu framing. Shared adjacent `ListItem` view rows remain gapless below
+their 4px-separated `ListHeader`; fixed dialog, badge, row, and icon dimensions remain
+explicit geometry (HS2-4Y6SM9).
 The status snapshot contains counts and repository metadata rather than every detail
 row. Each file view and the commit view request an initial 50-row cursor page, then an
 intersection sentinel fetches further pages as the independently scrolling detail pane

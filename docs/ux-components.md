@@ -196,7 +196,11 @@ does not introduce polling or another network request.
     that reuses Code Review difftool/range presentation. The master views and detail
     files compose the shared `ListHeader` and `ListItem` primitives, and the complete
     dialog is represented as an embedded production component in `/ux-demo`
-    (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
+    (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4). Its roomy panes use 24px insets, constrained
+    panes and sibling value groups use 16px, menu rows and empty-state clusters use 8px,
+    and connected path/menu details use 4px. The shared view rows remain gapless below a
+    4px-separated `ListHeader`; the pointer-anchored file-action menu stays app-owned
+    because no catalog primitive owns that host-action positioning contract (HS2-4Y6SM9).
 - `RepositorySetup` — **production built**: initialize a project folder's Git repository and
   optionally connect its origin without staging, committing, or pushing project files. Its major
   surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message

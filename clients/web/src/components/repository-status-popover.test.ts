@@ -70,6 +70,8 @@ describe('RepositoryStatusPopover',()=>{
     expect(shared).toMatch(/\.dialog-surface \.kui-panel-header \{ border-bottom: 0; \}/);
   });
 
+  it('uses canonical master-detail, connected-list, and menu spacing while retaining geometry',()=>{const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');expect(css).not.toContain('--wa-space-');expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-l\)/);expect(css).toMatch(/__layout > aside \{[^}]*padding: var\(--kui-space-l\)/);expect(css).toMatch(/__values \+ \.repository-status-popover__values \{ margin-top: var\(--kui-space-m\)/);expect(css).toMatch(/nav \{ display: grid; gap: var\(--kui-space-none\)/);expect(css).toMatch(/nav > \.kui-list-header \{ margin-bottom: var\(--kui-space-2xs\)/);expect(css).toMatch(/__context-menu button \{[^}]*padding: 0 var\(--kui-space-m\);[^}]*grid-template-columns: remify\(16px\)[^}]*gap: var\(--kui-space-xs\)/);expect(css).toMatch(/__layout > aside, \.repository-status-popover__detail \{ padding: var\(--kui-space-m\)/)});
+
   it('uses the canonical Git status letter for every file change kind',()=>{
     expect(['added','copied','deleted','modified','renamed','type_changed','unmerged','untracked'].map(change=>repositoryFileStatusLetter(change as RepositoryFileChange))).toEqual(['A','C','D','M','R','T','U','?']);
   });
