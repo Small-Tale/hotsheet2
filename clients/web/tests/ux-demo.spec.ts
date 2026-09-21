@@ -1226,6 +1226,20 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 
+test('catalogs the Kerf FloatingToolbar used by terminal controls',async({page})=>{
+  await page.goto('/ux-demo?component=floating-toolbar');
+  const toolbar=page.getByRole('toolbar',{name:'Preview zoom controls'}),stage=page.locator('.floating-toolbar-demo');
+  await expect(toolbar).toHaveAttribute('data-component','floating-toolbar');
+  await expect(toolbar).toHaveAttribute('data-position','bottom-end');
+  await expect(toolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone','dark');
+  await expect(toolbar.getByRole('button',{name:'Zoom out'})).toBeEnabled();
+  await expect(toolbar.getByRole('button',{name:'Zoom in'})).toBeEnabled();
+  const insets=await toolbar.evaluate(node=>{const toolbarBounds=node.getBoundingClientRect(),stageBounds=node.parentElement!.getBoundingClientRect();return{right:stageBounds.right-toolbarBounds.right,bottom:stageBounds.bottom-toolbarBounds.bottom}});
+  expect(insets.right).toBeCloseTo(16,0);
+  expect(insets.bottom).toBeCloseTo(16,0);
+  await expect(stage).toBeVisible();
+});
+
 test('shows the reader text push state at exactly one and a half times normal size', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-reader');

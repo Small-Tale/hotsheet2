@@ -119,3 +119,5 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 @media (max-width: remify(768px)) { .project-tab-demo__surface { grid-template-columns: 1fr; } }
 .project-sidebar-demo__resize-handle svg { width: remify(18.4px); height: remify(18.4px); }
 @media (max-width: remify(960px)) { body { min-width: 0; } }
+.floating-toolbar-demo { position: relative; min-height: remify(192px); padding: var(--kui-space-m); box-sizing: border-box; border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
+.floating-toolbar-demo p { max-width: remify(480px); margin: 0; color: var(--wa-color-neutral-on-quiet); }

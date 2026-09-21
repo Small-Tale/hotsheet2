@@ -11,7 +11,7 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
-    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'toolbar', 'toolbar-control-group', 'ticket-list', 'ticket-inspector']),
+    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'toolbar', 'toolbar-control-group', 'floating-toolbar', 'ticket-list', 'ticket-inspector']),
     demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'drive-options-menu', 'list-item', 'list-header']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
@@ -91,7 +91,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'terminal', name: 'Drawer and terminals', demos: [
     demo('terminal-drawer', 'TerminalDrawer', 'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.', 'feature-floor', true, ['app-tab','list-item','list-header','ai-conversation']),
-    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive workspace grid for terminals, AI chats, and future cross-project tools.', 'feature-floor', true, ['fixed-aspect-terminal-card','list-item']),
+    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive workspace grid for terminals, AI chats, and future cross-project tools.', 'feature-floor', true, ['fixed-aspect-terminal-card','floating-toolbar','toolbar-control-group','list-item']),
     demo('terminal-operations-sidebar', 'TerminalOperationsSidebar', 'Per-project and aggregate completion and in-progress summaries beside the workspace grid.', 'feature-floor', true, ['project-summary','list-header','toolbar']),
     demo('terminal-ticket-rail', 'TerminalTicketRail', 'Compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail.', 'feature-floor', true, ['ticket-list','ticket-inspector','content-transition','workspace-header','quick-ticket-composer']),
     demo('fixed-aspect-terminal-card', 'FixedAspectTerminalCard', 'Shared 5:3 terminal viewport card in preview and magnified variants.', 'feature-floor', true),
@@ -107,6 +107,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.', 'feature-floor', true),
     demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
     demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),
+    demo('floating-toolbar', 'FloatingToolbar', 'Forced-dark controls floating over positioned content.', 'feature-floor', true, ['toolbar-control-group']),
     demo('list-item', 'ListItem', 'Aligned icon, label, trailing value, and selection geometry for list rows.', 'feature-floor', true),
     demo('list-header', 'ListHeader', 'Aligned section heading and optional action for list groups.', 'feature-floor', true),
     demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),

@@ -174,9 +174,10 @@ and identity-less legacy entries remain conservatively blocking.
   side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
   from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
   stay in sync (HS2-ZK51WP). The production root uses the dynamic viewport height rather than
-  iOS Safari's larger layout viewport, and bottom/right floating controls add the device safe-area
-  insets; the terminal-drawer restore and workspace-grid zoom controls therefore remain above the
-  browser's bottom chrome and home indicator as those appear or retract (HS2-43N9ZB). On mobile the
+  iOS Safari's larger layout viewport. The terminal-drawer restore and workspace-grid zoom controls
+  use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
+  insets so they remain above the browser's bottom chrome and home indicator as those appear or
+  retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the
   ticket workspace is also list-only: the column/board
   view does not fit a single narrow column, so the Columns view toggle (and its overflow entry)
   is hidden and a persisted board preference renders as a list without being overwritten, so it
@@ -1618,7 +1619,10 @@ Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximizat
 preserving the last manual height. Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
 left, then the grid). The rail deliberately omits global visibility/group controls and collapses
-to one floating restore button. Dedicated sessions use xterm's WebGL renderer by default on
+to one bottom-end Kerf floating toolbar containing the restore action. The same Kerf floating-toolbar
+composition owns the bottom-end zoom pair in both the global workspace grid and the drawer's Project
+grid, while the application continues to own visibility, actions, and safe-area-adjusted positioning
+(HS2-W3GPHW). Dedicated sessions use xterm's WebGL renderer by default on
 non-Apple engines, fall back when WebGL is unavailable, and deliberately use xterm's DOM
 renderer on Apple WebKit because recent Safari/iOS releases can create a WebGL context while
 painting a blank glyph layer. They refit only after a drawer resize gesture settles. While

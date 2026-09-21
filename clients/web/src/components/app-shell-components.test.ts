@@ -12,12 +12,12 @@ import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 
 describe('application shell components', () => {
-  it('uses canonical spacing for terminal-drawer motion and restore placement', () => {
+  it('uses the Kerf floating toolbar for canonical terminal-drawer motion and restore placement', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     const productionCss=readFileSync(new URL('../style.css',import.meta.url),'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/data-collapsed="true"[^}]*__content \{[^}]*translateY\(var\(--kui-space-l\)\)/);
-    expect(css).toMatch(/\.app-shell__terminal-drawer-restore \{[^}]*right: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-right\)\); bottom: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom\)\)/);
+    expect(css).toMatch(/\.app-shell__terminal-drawer-restore \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-right\)\); inset-block-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-bottom\)\)/);
     expect(productionCss).toMatch(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
   });
@@ -218,7 +218,7 @@ describe('application shell components', () => {
     const open=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never,terminalDrawerVisible:true,terminalDrawerSize:340}));
     expect(open).toContain('data-region-id="app-terminal-drawer"');expect(open).toContain('data-axis="vertical"');expect(open).toContain('data-edge="start"');expect(open).toContain('aria-valuenow="340"');expect(open.indexOf('data-region-id="app-terminal-drawer"')).toBeLessThan(open.indexOf('</main>'));
     const tall=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never,terminalDrawerVisible:true,terminalDrawerSize:700,terminalDrawerMax:760,terminalDrawerTransitioning:true}));expect(tall).toContain('aria-valuemax="760"');expect(tall).toContain('aria-valuenow="700"');expect(tall).toContain('data-transitioning="true"');
-    const collapsed=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never}));expect(collapsed).toContain('data-collapsed="true"');expect(collapsed).toContain('aria-label="Show terminal drawer"');
+    const collapsed=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never}));expect(collapsed).toContain('data-collapsed="true"');expect(collapsed).toContain('class="kui-floating-toolbar app-shell__terminal-drawer-restore"');expect(collapsed).toContain('data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Terminal drawer controls"');expect(collapsed).toContain('data-component="toolbar-control-group"');expect(collapsed).toContain('data-tone="dark"');expect(collapsed).toContain('aria-label="Show terminal drawer"');
   });
 
   it('keeps the ticket rail beside the terminal dashboard',()=>{

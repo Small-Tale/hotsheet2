@@ -27,9 +27,7 @@
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] { overflow: hidden; border-top: 0; }
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__content { opacity: 0; transform: translateY(var(--kui-space-l)); }
 .app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__handle { display: none; }
-.app-shell__terminal-drawer-restore { position: absolute; z-index: 4; right: calc(var(--kui-space-m) + var(--hotsheet-safe-area-right)); bottom: calc(var(--kui-space-m) + var(--hotsheet-safe-area-bottom)); display: grid; width: remify(40px); height: remify(40px); padding: 0; border: 0; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-neutral-fill-loud); box-shadow: var(--wa-shadow-m); cursor: pointer; place-items: center; }
-.app-shell__terminal-drawer-restore svg { width: remify(16px); height: remify(16px); }
-.app-shell__terminal-drawer-restore:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
+.app-shell__terminal-drawer-restore { inset-inline-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-right)); inset-block-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-bottom)); }
 .app-shell__main > .project-tab-bar { border-bottom: 0; background: var(--wa-color-surface-default); }
 .app-shell[data-mode="terminals"] .app-shell__main > .project-tab-bar { border-bottom: 1px solid var(--wa-color-surface-border); }
 .app-shell__main > .kui-toolbar .workspace-header { min-width: 0; align-items: center; }

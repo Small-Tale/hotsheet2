@@ -1,6 +1,8 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
+import '@kerfjs/ui/floating-toolbar.css';
 import './terminal-dashboard.css';
 
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -124,10 +126,10 @@ export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, g
     <div class="terminal-dashboard__content" data-terminal-grid-measure="true">
       {loading ? <div class="terminal-dashboard__empty" role="status">Loading workspace items…</div> : message ? <div class="terminal-dashboard__empty" role="status">{message}</div> : sessions.length+chats.length === 0 ? <div class="terminal-dashboard__empty"><strong>Nothing open yet</strong><span>Open a project terminal or AI chat to add it to this grid.</span></div> : grouping === 'flow' ? <Grid sessions={sessions} chats={chats} itemOrder={visibleGroups.length===1?visibleGroups[0].itemOrder:undefined} layout={layout} /> : visibleGroups.map(group => <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}><h2>{group.projectName}<span>{group.sessions.length+group.chats.length}</span></h2><Grid sessions={group.sessions} chats={group.chats} itemOrder={group.itemOrder} layout={layout} /></section>)}
     </div>
-    <div class="terminal-dashboard__zoom" role="group" aria-label="Workspace tile zoom">
+    <FloatingToolbar label="Workspace tile zoom" position="bottom-end" className="terminal-dashboard__zoom"><ToolbarControlGroup tone="dark">
       <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="out" disabled={layout.fit >= layout.max} aria-label={`Zoom out, fit more items ${layout.basis}`} title="Zoom out"><LucideIcon icon={Minus} name="minus" /></button>
       <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="in" disabled={layout.fit <= 1} aria-label={`Zoom in, fit fewer items ${layout.basis}`} title="Zoom in"><LucideIcon icon={Plus} name="plus" /></button>
-    </div>
+    </ToolbarControlGroup></FloatingToolbar>
     {magnified && <div class="terminal-dashboard__magnified" role="dialog" aria-modal="true" aria-label={`Magnified ${magnified.title ?? magnified.id}`} data-action="dismiss-magnified-terminal"><FixedAspectTerminalCard session={magnified} mode="magnified" /></div>}
     {contextMenu&&<div class="terminal-dashboard__context-menu" data-component="terminal-context-menu" role="menu" style={`left:${contextMenu.x}px;top:${contextMenu.y}px`} data-terminal-key={contextMenu.key}><wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={ExternalLink} name="external-link"/></span>Open</wa-dropdown-item><wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={EyeOff} name="eye-off"/></span>Hide Terminal</wa-dropdown-item></div>}
   </section>;

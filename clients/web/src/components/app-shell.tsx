@@ -1,5 +1,7 @@
+import '@kerfjs/ui/floating-toolbar.css';
 import './app-shell.css';
 
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -61,7 +63,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
         <section class="app-shell__workspace" data-key="app-shell-workspace" data-ticket-scroll-owner="workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
       {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={TERMINAL_DRAWER_MIN_SIZE} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
-      {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
+      {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<FloatingToolbar label="Terminal drawer controls" position="bottom-end" className="app-shell__terminal-drawer-restore"><ToolbarControlGroup single tone="dark"><button type="button" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button></ToolbarControlGroup></FloatingToolbar>}
     </main>
     {mobile && (sidebarVisible || inspectorVisible) && <div class="app-shell__scrim" data-action="dismiss-mobile-overlays" aria-hidden="true" />}
     {mode !== 'stats' && inspector && <ResizableRegion id="app-inspector" label={mode==='terminals'?'Ticket rail':'Ticket inspector'} size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}

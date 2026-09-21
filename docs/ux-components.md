@@ -362,6 +362,12 @@ does not introduce polling or another network request.
   ticket inspector. Trailing content is edge-aligned; when center is omitted, leading
   content owns the flexible space and trailing controls remain pinned right. Its
   bottom divider is an explicit option rather than consumer CSS.
+- `FloatingToolbar` — **demo built**: Kerf's accessible, forced-dark overlay toolbar for
+  small control clusters that remain over scrolling content without entering the top layer.
+  Hot Sheet uses its bottom-end variant for the collapsed terminal-drawer restore action and
+  for zoom controls in both the workspace dashboard and drawer Project grid. Dark
+  `ToolbarControlGroup` children own the control chrome; the consumers own visibility,
+  actions, and safe-area-adjusted positioning (HS2-W3GPHW).
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.
 - `PanelHeader` (page usage) — **demo built**: current view identity below ProjectTabBar,

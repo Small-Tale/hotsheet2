@@ -4,12 +4,14 @@ import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@kerfjs/ui/catalog.css';
+import '@kerfjs/ui/floating-toolbar.css';
 import '@kerfjs/ui/select/register';
 import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { Catalog, CatalogExampleStack } from '@kerfjs/ui/catalog';
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   clampRegionSize,
@@ -23,6 +25,8 @@ import {
   Activity,
   FolderGit2,
   MessageSquareText,
+  Minus,
+  Plus,
   Terminal,
 } from 'lucide';
 
@@ -367,6 +371,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;
+  if (item.id === 'floating-toolbar') return <section class="floating-toolbar-demo"><p>Floating controls remain available over scrolling content without joining the page toolbar.</p><FloatingToolbar label="Preview zoom controls" position="bottom-end"><ToolbarControlGroup tone="dark"><button type="button" aria-label="Zoom out"><LucideIcon icon={Minus} name="minus"/></button><button type="button" aria-label="Zoom in"><LucideIcon icon={Plus} name="plus"/></button></ToolbarControlGroup></FloatingToolbar></section>;
   if (item.id === 'dialog-header') return <DialogHeaderDemo />;
   if (item.id === 'value-table') return <ValueTableDemo />;
   if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
