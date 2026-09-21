@@ -201,6 +201,9 @@ does not introduce polling or another network request.
     and connected path/menu details use 4px. The shared view rows remain gapless below a
     4px-separated `ListHeader`; the pointer-anchored file-action menu stays app-owned
     because no catalog primitive owns that host-action positioning contract (HS2-4Y6SM9).
+    Its catalog-only example stack and fixture wrapper also opt into shrinking, keeping the
+    embedded dialog and both PanelHeader actions inside the detail pane at 1280px and in the
+    constrained layout without changing production popover sizing (HS2-MCHTAW).
 - `RepositorySetup` — **production built**: initialize a project folder's Git repository and
   optionally connect its origin without staging, committing, or pushing project files. Its major
   surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message

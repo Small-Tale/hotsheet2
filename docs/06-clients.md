@@ -2067,7 +2067,11 @@ surface uses 24px roomy pane and viewport insets, 16px between homogeneous value
 and for constrained pane insets, 8px inside empty/menu-row groups, and 4px for connected
 path metadata and menu framing. Shared adjacent `ListItem` view rows remain gapless below
 their 4px-separated `ListHeader`; fixed dialog, badge, row, and icon dimensions remain
-explicit geometry (HS2-4Y6SM9).
+explicit geometry (HS2-4Y6SM9). In `/ux-demo`, the example stack and repository-status
+fixture can shrink with the catalog detail pane, so the embedded dialog plus its Compare
+and Refresh header actions remain fully contained at both the 1280px catalog viewport and
+the existing constrained layout. This catalog-only containment does not alter the
+production popover's full-width or viewport-bounded geometry (HS2-MCHTAW).
 The status snapshot contains counts and repository metadata rather than every detail
 row. Each file view and the commit view request an initial 50-row cursor page, then an
 intersection sentinel fetches further pages as the independently scrolling detail pane

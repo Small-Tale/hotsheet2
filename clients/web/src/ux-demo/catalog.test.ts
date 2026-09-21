@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createDevApp } from '../dev-server';
 import { demoCatalog, demoKind,demosUsing, findDemo, flattenCatalog,kerfCatalogSections } from './catalog';
 import { connectionDetailsAssessment,ConnectionDetailsDialogSettings,connectionDetailsScenario,resetConnectionDetailsDemo } from './connection-details-demo';
-import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
+import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
@@ -166,6 +166,10 @@ describe('UX demo catalog', () => {
 
   it('offers and resets every repository-status headline scenario', () => {
     const settings=String(RepositoryStatusPopoverSettings());
+    const demo=String(RepositoryStatusPopoverDemo()),style=readFileSync(fileURLToPath(new URL('./style.css',import.meta.url)),'utf8');
+    expect(demo).toContain('class="repository-status-demo"');
+    expect(style).toMatch(/\.demo-catalog-examples \{ width: 100%; min-width: 0; \}/);
+    expect(style).toMatch(/\.repository-status-demo \{ width: 100%; min-width: 0; \}/);
     for(const scenario of ['clean','dirty','ahead','behind','diverged','conflicted','error'])expect(settings).toContain(`value="${scenario}"`);
     expect((['clean','dirty','ahead','behind','diverged','conflicted'] as const).map(scenario=>[scenario,repositoryStatusForScenario(scenario)])).toMatchObject([
       ['clean',{ahead:0,behind:0,conflicted:0,clean:true}],
