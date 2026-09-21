@@ -174,15 +174,19 @@ test('reopens dialog demos and keeps Feedback above the modal top layer',async({
   await page.screenshot({path:'/private/tmp/hs2-9a6ssk-dialog-feedback-narrow.png',fullPage:true});
 });
 
-test('uses canonical spacing in the HS1 migration dialog and banner (HS2-4Y6SM9)',async({page})=>{
+test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)',async({page})=>{
   await page.setViewportSize({width:1280,height:800});
   await page.goto('/ux-demo?component=hs1-migration-banner&dev-review=false');
-  const banner=page.locator('[data-component="hs1-migration-banner"]');
-  await expect(banner).toBeVisible();
-  expect(await banner.evaluate(node=>{const style=getComputedStyle(node),copy=getComputedStyle(node.querySelector('div')!),button=getComputedStyle(node.querySelector('button')!);return{padding:style.padding,gap:style.gap,copyGap:copy.gap,buttonPadding:[button.paddingLeft,button.paddingRight]}})).toEqual({padding:'8px 16px',gap:'16px',copyGap:'4px',buttonPadding:['8px','8px']});
-  await banner.screenshot({path:'/private/tmp/hs2-4y6sm9-hs1-banner-wide.png'});
+  const migration=page.locator('.hs1-migration-banner'),cleanup=page.locator('.hs1-cleanup-banner');
+  for(const [banner,tone] of [[migration,'info'],[cleanup,'success']] as const){await expect(banner).toBeVisible();await expect(banner).toHaveAttribute('data-component','state-banner');await expect(banner).toHaveAttribute('data-tone',tone);await expect(banner).toHaveAttribute('role','status');await expect(banner).toHaveAttribute('aria-live','polite');expect(await banner.evaluate(node=>{const style=getComputedStyle(node),copy=getComputedStyle(node.querySelector('.kui-state-banner__copy')!),button=getComputedStyle(node.querySelector('button')!);return{padding:style.padding,gap:style.gap,copyGap:copy.gap,buttonPadding:[button.paddingLeft,button.paddingRight]}})).toEqual({padding:'8px 16px',gap:'16px',copyGap:'4px',buttonPadding:['8px','8px']})}
+  await expect(cleanup.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
+  await page.locator('.dialog-layout-demo').screenshot({path:'/private/tmp/hs2-750wsy-hs1-state-banners-wide.png'});
   await page.setViewportSize({width:390,height:844});
-  await banner.screenshot({path:'/private/tmp/hs2-4y6sm9-hs1-banner-narrow.png'});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.locator('.dialog-layout-demo').screenshot({path:'/private/tmp/hs2-750wsy-hs1-state-banners-narrow.png'});
+});
+
+test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)',async({page})=>{
   await page.setViewportSize({width:1280,height:800});
   await page.goto('/ux-demo?component=hs1-migration-dialog&dev-review=false');
   const dialog=page.locator('[data-component="hs1-migration-dialog"]'),form=dialog.locator('.hs1-migration-dialog');

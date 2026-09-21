@@ -473,9 +473,12 @@ icons never shrink, and compact inspectors switch to icon-only labels.
 
 The HS1 conversion prompt and persistent migration/cleanup notices use the canonical
 24 px major-region, 16 px icon/column, 8 px field/action, and 4 px connected-copy
-rhythm. Notice surfaces use 8 px block by 16 px inline padding; their compact actions
-retain the established 28.8 px minimum height with 8 px inline padding. Migration of
-these notices to Kerf's shared `StateBanner` primitive is tracked by HS2-750WSY.
+rhythm. Both notices compose Kerf's shared `StateBanner` with polite status semantics
+and info/success tones. Their surfaces use 8 px block by 16 px inline padding, and
+their compact actions retain the established 28.8 px minimum height with 8 px inline
+padding. The cleanup notice passes one app-owned Dismiss/Delete action group to the
+primitive's single action slot, preserving responsive wrapping without duplicating the
+shared banner anatomy.
 
 ## 3. Ticket workspace
 

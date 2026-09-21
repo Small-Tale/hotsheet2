@@ -1,6 +1,7 @@
 import './hs1-migration.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
@@ -29,5 +30,5 @@ export function Hs1MigrationDialog({projectName,projectRoot,sourcePath,databaseP
   </wa-dialog>;
 }
 
-export function Hs1MigrationBanner({databasePath}:{databasePath:string}){return <section class="hs1-migration-banner" data-component="hs1-migration-banner" role="status"><LucideIcon icon={Database} name="database"/><div><strong>Hot Sheet 1 data is available to import</strong><span>{databasePath}</span></div><button type="button" data-action="open-hs1-migration">Import…</button></section>}
-export function Hs1CleanupBanner(){return <section class="hs1-cleanup-banner" data-component="hs1-cleanup-banner" role="status"><LucideIcon icon={Trash2} name="trash-2"/><div class="hs1-cleanup-banner__copy"><strong>Hot Sheet 1 import is safely backed up</strong><span>The old local Hot Sheet 1 files can now be removed.</span></div><div class="hs1-cleanup-banner__actions"><button type="button" data-action="dismiss-hs1-cleanup">Dismiss</button><button type="button" data-action="remove-hs1-data">Delete old files…</button></div></section>}
+export function Hs1MigrationBanner({databasePath}:{databasePath:string}){return <StateBanner title="Hot Sheet 1 data is available to import" detail={databasePath} tone="info" urgency="status" className="hs1-migration-banner" icon={<LucideIcon icon={Database} name="database"/>} action={<button type="button" data-action="open-hs1-migration">Import…</button>}/>}
+export function Hs1CleanupBanner(){return <StateBanner title="Hot Sheet 1 import is safely backed up" detail="The old local Hot Sheet 1 files can now be removed." tone="success" urgency="status" className="hs1-cleanup-banner" icon={<LucideIcon icon={Trash2} name="trash-2"/>} action={<div class="hs1-cleanup-banner__actions"><button type="button" data-action="dismiss-hs1-cleanup">Dismiss</button><button type="button" data-action="remove-hs1-data">Delete old files…</button></div>}/>}

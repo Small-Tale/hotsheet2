@@ -121,7 +121,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'setup', name: 'Setup and settings', demos: [
     demo('hs1-migration-dialog', 'Hs1MigrationDialog', 'Detected Hot Sheet 1 source details and destination-only import flow.', 'feature-floor', true, ['value-table']),
-    demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Non-blocking access to a dismissed Hot Sheet 1 import.', 'feature-floor', true),
+    demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Import and post-backup cleanup notices for Hot Sheet 1.', 'feature-floor', true),
     demo('keyboard-settings', 'KeyboardSettings', 'Grouped reference and rebinding of documented keyboard shortcuts.', 'feature-floor', true),
     demo('trash-settings', 'TrashSettings', 'Trash retention window and empty-trash entry point.', 'feature-floor', true),
     demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),
