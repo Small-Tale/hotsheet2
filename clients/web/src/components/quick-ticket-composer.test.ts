@@ -7,6 +7,11 @@ import { QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.quick-ticket-composer \{[^}]*padding: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-m\)/);
+    expect(css).toMatch(/__metadata \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/__details \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatch(/__attachment \{[^}]*padding: var\(--kui-space-2xs\) var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(remify\(928px\), calc\(100vw - remify\(32px\)\)\)/);
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px))');
     expect(css).toMatch(/@media \(max-width: remify\(608px\)\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);

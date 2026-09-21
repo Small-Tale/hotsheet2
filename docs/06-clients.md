@@ -1127,6 +1127,8 @@ and identity-less legacy entries remain conservatively blocking.
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
+  The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
+  and 4 px for connected labels and icon details (HS2-4Y6SM9).
   Its chosen height is a device-local preference. The live textarea is morph-protected so a
   controlled-value rerender cannot replace the browser-resized element, while
   cancellation/reopening and later new-ticket sessions restore the persisted height.
