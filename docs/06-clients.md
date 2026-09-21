@@ -1589,8 +1589,10 @@ Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximizat
 preserving the last manual height. Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
 left, then the grid). The rail deliberately omits global visibility/group controls and collapses
-to one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
-back when WebGL is unavailable, and refit only after a drawer resize gesture settles. While
+to one floating restore button. Dedicated sessions use xterm's WebGL renderer by default on
+non-Apple engines, fall back when WebGL is unavailable, and deliberately use xterm's DOM
+renderer on Apple WebKit because recent Safari/iOS releases can create a WebGL context while
+painting a blank glyph layer. They refit only after a drawer resize gesture settles. While
 the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
 intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
 during a slow drag.
@@ -1664,8 +1666,10 @@ drops any JSON frame carrying a malformed `resize` member instead of forwarding 
 text to the PTY, so a hidden or transitioning viewport cannot echo control JSON into the shell.
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
-Full-size dedicated drawer terminals use xterm's WebGL addon (with DOM fallback after load
-failure or context loss). The fixed 80×24 dashboard grid and magnified surfaces use xterm's
+Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
+fallback after load failure or context loss). Apple WebKit, including every iOS browser, uses
+the DOM renderer because WebGL context creation is not sufficient proof that Safari will paint
+the glyph layer. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
 DOM renderer because those surfaces are uniformly CSS-scaled; scaling a WebGL raster makes
 the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the

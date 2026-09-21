@@ -21,6 +21,14 @@ export const TERMINAL_PREVIEW_NATURAL_HEIGHT=768;
 export const TERMINAL_PREVIEW_SCROLLBACK=0;
 export const TERMINAL_MAGNIFIED_SCROLLBACK=1_000;
 export const TERMINAL_DEDICATED_SCROLLBACK=5_000;
+
+/** Apple WebKit's WebGL renderer has regressed to blank glyph layers in recent Safari
+ * releases, including iOS. All iOS browsers use WebKit, so keep dedicated terminals on
+ * xterm's DOM renderer there; desktop Chromium/Firefox can still use WebGL. */
+export function terminalShouldUseWebgl(userAgent:string):boolean {
+  const appleWebKit=/AppleWebKit/i.test(userAgent),nonAppleWebKitDesktop=/(?:Chrome|Chromium|Edg|OPR)\//i.test(userAgent);
+  return !appleWebKit||nonAppleWebKitDesktop;
+}
 // ANSI ESC is the external terminal protocol byte intentionally recognized here.
 // eslint-disable-next-line no-control-regex
 const ZSH_PROMPT_EOL_MARK=/^(?:\u001b\[(?:0|1)m)*\u001b\[7m%\u001b\[27m(?:\u001b\[(?:0|1|27)m)*(?:\r?\n)?/;

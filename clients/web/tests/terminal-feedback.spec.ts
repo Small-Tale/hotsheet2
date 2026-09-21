@@ -101,6 +101,19 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.screenshot({path:'/private/tmp/hs2-3zbqdg-mobile-terminal-grid.png',fullPage:true});
 });
 
+test('renders dedicated terminal glyphs through the DOM renderer on Mobile Safari (HS2-3ZBQDG)',async({browser})=>{
+  const context=await browser.newContext({colorScheme:'dark',deviceScaleFactor:2,isMobile:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Version/27.0 Safari/604.1',viewport:{width:390,height:844}}),page=await context.newPage();
+  await installTerminalFixture(page);await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Show terminal drawer'}).click();const drawer=page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button',{name:'New drawer item'}).click();await drawer.getByRole('menu',{name:'New drawer item'}).getByText('Default shell').click();
+  const dedicated=drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection','connected');await expect(dedicated).toHaveAttribute('data-renderer','dom');await expect(dedicated.locator('canvas')).toHaveCount(0);
+  await expect.poll(()=>dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
+  await dedicated.screenshot({path:'/private/tmp/hs2-3zbqdg-mobile-safari-terminal.png',scale:'css'});
+  await context.close();
+});
+
 // HS2-Z84F78: on a phone the magnified terminal keeps 80 columns but fills the available height
 // with M rows (M >> the desktop 24) and scales to fit width, instead of letterboxing a 5:3 80×24.
 test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F78)',async({page})=>{

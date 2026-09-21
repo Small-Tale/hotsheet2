@@ -33,6 +33,8 @@ When automation lands, remove the manual-only step and record it below.
    fills the screen (no 5:3 letterbox), shows a full 80 columns scaled to the phone width, and
    uses M rows to fill the height (many more than 24), and that a full-width TUI (e.g. `nano`,
    `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
+6. HS2-3ZBQDG — on current Mobile Safari, open a dedicated drawer terminal and confirm live
+   glyphs remain visible after attach, focus, typing, background/resume, and device rotation.
 
 ### Real-device mTLS enrollment
 

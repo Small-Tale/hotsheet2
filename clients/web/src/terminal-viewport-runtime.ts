@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 
 import { isMobileViewport } from './mobile-layout';
-import { parseTerminalSizeMessage,stripLeadingZshPromptEolMark,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_RESIZE_SETTLE_MS,terminalDedicatedGridSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalViewportClaimsSizingFocus,terminalViewportScale } from './terminal-viewport';
+import { parseTerminalSizeMessage,stripLeadingZshPromptEolMark,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_RESIZE_SETTLE_MS,terminalDedicatedGridSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalShouldUseWebgl,terminalViewportClaimsSizingFocus,terminalViewportScale } from './terminal-viewport';
 
 export function mountStaticTerminalViewportRuntime(element:HTMLElement,{output,autoFocus=false}:{output:string;autoFocus?:boolean}):()=>void {
   const scaledPreview=element.dataset.displayMode==='scaled-preview',background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';
@@ -29,7 +29,7 @@ export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId,a
   const terminal=new Terminal({...fixedDashboardGrid?{cols:TERMINAL_DASHBOARD_COLS,rows:TERMINAL_DASHBOARD_ROWS,lineHeight:TERMINAL_DASHBOARD_LINE_HEIGHT}:{},cursorBlink:!scaledPreview,disableStdin:scaledPreview,convertEol:false,scrollback,fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',fontSize:fixedDashboardGrid?TERMINAL_DASHBOARD_FONT_SIZE:12,theme:{background}}),fit=new FitAddon();
   terminal.loadAddon(fit);terminal.open(element);
   let webgl:WebglAddon|undefined;
-  if(element.classList.contains('terminal-viewport--dedicated'))try{webgl=new WebglAddon();terminal.loadAddon(webgl);element.dataset.renderer='webgl';webgl.onContextLoss(()=>{webgl?.dispose();webgl=undefined;element.dataset.renderer='dom'})}catch{element.dataset.renderer='dom'}else element.dataset.renderer='dom';
+  if(element.classList.contains('terminal-viewport--dedicated')&&terminalShouldUseWebgl(navigator.userAgent))try{webgl=new WebglAddon();terminal.loadAddon(webgl);element.dataset.renderer='webgl';webgl.onContextLoss(()=>{webgl?.dispose();webgl=undefined;element.dataset.renderer='dom'})}catch{element.dataset.renderer='dom'}else element.dataset.renderer='dom';
   let socket:WebSocket|undefined,reconnect:number|undefined,heartbeat:number|undefined,fitFrame:number|undefined,dashboardFrame:number|undefined,settleClaim:number|undefined,attempt=0,visible=false,disposed=false,focusRequested=autoFocus,initialReplay=true,serverSize:{cols:number;rows:number}|undefined;
   const focused=()=>terminalViewportClaimsSizingFocus(scaledPreview,fixedDashboardGrid,focusRequested,element.contains(document.activeElement));
   // On a phone-width viewport an interactive fixed-grid terminal (the magnified surface) keeps the
