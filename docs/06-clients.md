@@ -400,6 +400,10 @@ and identity-less legacy entries remain conservatively blocking.
   `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup and
   colocated styles. The application root retains reactive signals, API mutations, and
   delegated event wiring and passes typed render data into those surfaces (HS2-HTB5RR).
+  The remaining extracted project-open, terminal-rename, and notification-inspector
+  surfaces likewise own their stylesheets. `style.css` is reserved for document/app-shell,
+  empty/loading/toast, and shared pagination rules; a source test enforces that boundary
+  so component selectors cannot drift back into the global sheet (HS2-JH0112).
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global
