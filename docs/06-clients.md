@@ -680,7 +680,8 @@ and identity-less legacy entries remain conservatively blocking.
   submenu insets, including at the supported narrow width. The menu floats 8 px above its Drive
   control anchor and separates connected submenu groups by 4 px (HS2-4Y6SM9). Machine defaults, Drive overrides,
   and command overrides keep the catalog as the primary model chooser and place manual entry
-  behind an `Other…` action;
+  behind an `Other…` action. The machine-default settings surface uses 24 px between major regions,
+  16 px between provider/model/effort fields, and 8 px within its empty state (HS2-4Y6SM9);
   the focused entry dialog accepts an exact nonblank id, shows that custom id in the chooser only
   while it remains selected, and forgets it after a catalog selection. Live conversations retain
   their compact editable catalog-backed control. These paths keep detected models convenient
