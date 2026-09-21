@@ -23,6 +23,15 @@ describe('dev review tool', () => {
     expect(css.match(/\.hs-dev-review__dialog footer \{([^}]*)\}/)?.[1]).not.toContain('border-top');
   });
 
+  it('uses canonical spacing for the ticket dialog composition', async () => {
+    const css = await readFile(resolve(import.meta.dirname, 'dev-review.css'), 'utf8');
+    expect(css).not.toContain('--wa-space-');
+    expect(css).toMatch(/\.hs-dev-review__dialog-body \{[^}]*padding: var\(--kui-space-l\)[^}]*gap: var\(--kui-space-l\)/);
+    expect(css).toMatch(/\.hs-dev-review__dialog footer \{[^}]*padding: var\(--kui-space-s\) var\(--kui-space-l\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.hs-dev-review__evidence \{[^}]*gap: var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.hs-dev-review__dialog label \{[^}]*gap: var\(--kui-space-2xs\)/);
+  });
+
   it('coalesces bursty pointer geometry work into one animation-frame update', () => {
     let callback: FrameRequestCallback | undefined;
     const host = {

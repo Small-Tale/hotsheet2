@@ -24,6 +24,7 @@ const kerfSpacingMigratedComponents = [
   'ticket-board-column.css', 'ticket-close-dialog.css', 'ticket-field-conflict.css', 'ticket-inspector-skeleton.css', 'ticket-link-choice-dialog.css', 'ticket-list.css',
   'ticket-code-review.css', 'ticket-inspector-panel.css', 'ticket-inspector.css', 'ticket-row.css', 'ticket-tag-editor.css', 'trash-settings.css', 'view-navigation.css',
 ].map(file => resolve(sourceRoot, 'components', file));
+kerfSpacingMigratedComponents.push(resolve(sourceRoot, 'dev-review/dev-review.css'));
 
 function css(path: string): string {
   return readFileSync(path, 'utf8');

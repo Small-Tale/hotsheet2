@@ -333,6 +333,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
   await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(node=>{const style=(selector:string)=>getComputedStyle(node.querySelector(selector)!);return{body:[style('.hs-dev-review__dialog-body').padding,style('.hs-dev-review__dialog-body').gap],footer:[style('footer').padding,style('footer').gap],evidence:style('.hs-dev-review__evidence').gap,dropzone:style('.hs-dev-review__dropzone').padding,label:style('.hs-dev-review__notes').gap,textarea:style('textarea').padding,button:style('footer button').padding}})).toEqual({body:['24px','24px'],footer:['12px 24px','8px'],evidence:'16px',dropzone:'16px',label:'4px',textarea:'16px',button:'0px 16px'});
   await expect(dialog.locator('.kui-panel-header')).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
   expect(await dialog.evaluate(node => {
@@ -343,9 +344,11 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-wide.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-dev-review-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(dialog).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-dev-review-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   const capturedPixels = await dialog.getByRole('img', { name: 'Captured region 1 preview' }).evaluate(async image => {
     if (!(image as HTMLImageElement).complete) await new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); });

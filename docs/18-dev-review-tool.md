@@ -66,6 +66,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   control, a scroll-owning body, and a separated footer containing plain Cancel and
   primary Create Ticket actions. Its field spacing, focus treatment, typography, corner
   radii, and button sizing follow the same shared scale as ordinary Hot Sheet dialogs.
+  App-owned composition uses the Kerf spacing scale: 24 px body padding and section
+  separation, 16 px evidence/field padding, 12 px by 24 px footer padding, 8 px between
+  footer actions, and 4 px between a label and its control.
 - The dialog accepts additional files through both drag/drop and a native browse
   control. Captures and uploaded attachments each expose a hover/focus removal control;
   removing a capture also removes its source rectangle from the active session.
