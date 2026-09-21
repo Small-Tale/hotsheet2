@@ -3,22 +3,27 @@ import {describe,expect,it,vi} from 'vitest';
 
 import {animateTicketMotion,captureTicketMotion,TICKET_MOTION_LAYER,type TicketMotionSnapshot} from './ticket-motion';
 
-const rect=(left:number,top:number,width=100,height=50)=>({left,top,width,height} as DOMRect);
+const rect=(left:number,top:number,width=100,height=50)=>({left,top,width,height,right:left+width,bottom:top+height} as DOMRect);
 const pendingAnimation=()=>({finished:new Promise<void>(()=>undefined),cancel:vi.fn()}) as unknown as Animation;
 
 interface MockRow {container:HTMLElement;visual:HTMLElement;animate:ReturnType<typeof vi.fn>;document:Document}
 
-function mockDocument(){
+function mockDocument(drawerTop?:number){
   const children:HTMLElement[]=[];
+  const workspace={getBoundingClientRect:()=>rect(5,10,800,500)} as unknown as HTMLElement;
+  const drawer=drawerTop===undefined?null:({getBoundingClientRect:()=>rect(5,drawerTop,800,200)} as unknown as HTMLElement);
   const document={
     body:{append:vi.fn((node:HTMLElement)=>children.push(node))},
     head:{append:vi.fn()},
+    querySelector:vi.fn((selector:string)=>selector==='.app-shell__workspace'?workspace:selector==='[data-region-id="app-terminal-drawer"][data-collapsed="false"]'?drawer:null),
     querySelectorAll:vi.fn(()=>children),
-    createElement:vi.fn(()=>({dataset:{},textContent:'',remove:vi.fn()})),
+    createElement:vi.fn((tag:string)=>tag==='div'?motionLayer():({dataset:{},textContent:'',remove:vi.fn()})),
     defaultView:{CSS:{escape:(value:string)=>value},getComputedStyle:()=>({borderRadius:'10px'}),requestAnimationFrame:vi.fn(()=>1),cancelAnimationFrame:vi.fn()},
   } as unknown as Document;
   return document;
 }
+
+function motionLayer(){const layer={dataset:{} as DOMStringMap,style:{cssText:''},ariaHidden:'false',parentElement:null as HTMLElement|null,append:vi.fn((node:HTMLElement)=>{Object.defineProperty(node,'parentElement',{configurable:true,value:layer})}),remove:vi.fn(),getBoundingClientRect:()=>rect(5,10,800,500)};return layer as unknown as HTMLElement}
 
 function ghost(slug='HS2-A',document=mockDocument()){
   const visual={dataset:{ticketSlug:slug,component:'ticket-list-row'},style:{},removeAttribute:vi.fn(),childElementCount:0,textContent:'Ticket title'} as unknown as HTMLElement;
@@ -70,7 +75,7 @@ describe('ticket motion',()=>{
     const document=mockDocument(),previous=row('HS2-A','started',rect(10,20,180,72),undefined,document),current=row('HS2-A','completed',rect(210,80,220,88),undefined,document),overlay=ghost('HS2-A',document);
     (current.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;
     animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),false);
-    expect(current.container.style.visibility).toBe('hidden');expect(document.body.append).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.dataset.ticketMotionSlug).toBe('HS2-A');expect(overlay.style.cssText).toContain('width:220px');expect(overlay.style.cssText).toContain('height:88px');expect(overlay.style.cssText).toContain(`z-index:${TICKET_MOTION_LAYER}`);
+    const layer=(document.body.append as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as HTMLElement;expect(current.container.style.visibility).toBe('hidden');expect(layer.dataset.ticketMotionLayer).toBe('');expect(layer.style.cssText).toContain('overflow:hidden');expect(layer.style.cssText).toContain('width:800px');expect((layer.append as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.dataset.ticketMotionSlug).toBe('HS2-A');expect(overlay.style.width).toBe('220px');expect(overlay.style.height).toBe('88px');expect(overlay.style.left).toBe('205px');expect(overlay.style.top).toBe('70px');
     expect(overlay.animate).toHaveBeenCalledWith([{transform:'translate(-200px, -60px)',zIndex:TICKET_MOTION_LAYER},{transform:'translate(0, 0)',zIndex:TICKET_MOTION_LAYER}],expect.objectContaining({duration:240}));
     const clonedVisual=(overlay as unknown as {visual:HTMLElement}).visual;expect(clonedVisual.dataset.ticketSlug).toBeUndefined();expect(clonedVisual.dataset.component).toBeUndefined();expect(clonedVisual.style.borderRadius).toBe('10px');
   });
@@ -80,6 +85,10 @@ describe('ticket motion',()=>{
     (incoming.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;
     animateTicketMotion(snapshot([['HS2-A',previous,'not-started']]),root([incoming,retained]),false);
     expect(retained.animate).toHaveBeenCalledWith([{transform:'translate(0px, -71px)'},{transform:'translate(0, 0)'}],expect.objectContaining({delay:0,duration:240,fill:'backwards'}));expect(incoming.container.style.visibility).toBe('hidden');expect(overlay.dataset.ticketMotionGhost).toBe('incoming');expect(overlay.animate).toHaveBeenCalledWith([{opacity:0},{opacity:1}],expect.objectContaining({delay:240,duration:160,fill:'backwards'}));
+  });
+
+  it('clips ticket ghosts at the visible terminal drawer boundary',()=>{
+    const document=mockDocument(280),previous=row('HS2-A','started',rect(10,240,180,72),undefined,document),current=row('HS2-A','completed',rect(210,260,220,88),undefined,document),overlay=ghost('HS2-A',document);(current.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),false);const layer=(document.body.append as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as HTMLElement;expect(layer.style.cssText).toContain('top:10px');expect(layer.style.cssText).toContain('height:270px');expect(layer.style.cssText).toContain('overflow:hidden');
   });
 
   it('fades the first incoming row when the visible collection was empty',()=>{

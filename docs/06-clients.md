@@ -313,8 +313,11 @@ and identity-less legacy entries remain conservatively blocking.
   scroll restoration remains authoritative. A departing ticket fades
   out before only its source siblings close the gap. Overlay identity and temporary
   hiding survive reactive DOM morphs without duplicate cards. Visual-only ghosts
-  stay on the workspace layer below every modal/dialog backdrop, so opening a dialog
-  during a move cannot paint the moving card over the dialog. They expose
+  stay on a fixed layer clipped to the live ticket workspace and, while the bottom drawer
+  is open, to the drawer's top boundary; filtering or moving tickets therefore cannot paint
+  transition clones over terminal tabs or content (HS2-29T4D8). The layer remains below every
+  modal/dialog backdrop, so opening a dialog during a move cannot paint the moving card over
+  the dialog. Ghost layers are removed with their animations. They expose
   motion-specific identifiers rather than ticket-row roles, actions, or slugs,
   and isolate their visual text from document text queries, so ordinary ticket
   selectors, text search, and assistive technology continue to see one real row.

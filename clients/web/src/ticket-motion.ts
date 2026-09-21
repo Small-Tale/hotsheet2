@@ -78,7 +78,7 @@ function animateLayout(container:HTMLElement,y:number,delay:number){
 function fadeRemovedTicket(slug:string,previous:TicketMotionRow){
   if(hasGhost(previous.container.ownerDocument,'outgoing',slug))return;
   const ghost=previous.container.cloneNode(true) as HTMLElement;
-  prepareGhost(ghost,slug,'outgoing',previous.rect,previous.borderRadius);appendGhost(previous.container.ownerDocument,ghost);
+  prepareGhost(ghost,slug,'outgoing',previous.rect,previous.borderRadius);appendGhost(previous.container.ownerDocument,ghost,previous.rect);
   removeAfter(trackTicketAnimation(ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:FADE_DURATION,easing:'ease-in'})),ghost);
 }
 
@@ -86,18 +86,18 @@ function animateMovedTicket(current:TicketMotionRow,x:number,y:number){
   const slug=current.visual.dataset.ticketSlug??'';
   if(hasGhost(current.container.ownerDocument,'move',slug))return;
   const ghost=current.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(current.container,slug);
-  prepareGhost(ghost,slug,'move',current.rect,current.borderRadius);appendGhost(current.container.ownerDocument,ghost);
+  prepareGhost(ghost,slug,'move',current.rect,current.borderRadius);appendGhost(current.container.ownerDocument,ghost,current.rect);
   const animation=trackTicketAnimation(ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:TICKET_MOTION_LAYER},{transform:'translate(0, 0)',zIndex:TICKET_MOTION_LAYER}],{duration:LAYOUT_DURATION,easing:MOTION_EASING}));
-  animation.finished.finally(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility}).catch(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility});
+  animation.finished.finally(()=>{removeGhost(ghost);hideRule.remove();current.container.style.visibility=visibility}).catch(()=>{removeGhost(ghost);hideRule.remove();current.container.style.visibility=visibility});
 }
 
 function fadeIncomingTicket(slug:string,row:TicketMotionRow,delay:number){
   if(hasGhost(row.container.ownerDocument,'incoming',slug))return;
   const ghost=row.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(row.container,slug);
-  prepareGhost(ghost,slug,'incoming',row.rect,row.borderRadius);appendGhost(row.container.ownerDocument,ghost);
+  prepareGhost(ghost,slug,'incoming',row.rect,row.borderRadius);appendGhost(row.container.ownerDocument,ghost,row.rect);
   const stopTracking=trackTicketPosition(row.container.ownerDocument,ghost,slug);
   const animation=trackTicketAnimation(ghost.animate([{opacity:0},{opacity:1}],{delay,duration:FADE_DURATION,easing:'ease-out',fill:'backwards'}));
-  animation.finished.finally(()=>{stopTracking();ghost.remove();hideRule.remove();row.container.style.visibility=visibility}).catch(()=>{stopTracking();ghost.remove();hideRule.remove();row.container.style.visibility=visibility});
+  animation.finished.finally(()=>{stopTracking();removeGhost(ghost);hideRule.remove();row.container.style.visibility=visibility}).catch(()=>{stopTracking();removeGhost(ghost);hideRule.remove();row.container.style.visibility=visibility});
 }
 
 function hideRealTicket(container:HTMLElement,slug:string){
@@ -133,13 +133,17 @@ function trackTicketPosition(document:Document,ghost:HTMLElement,slug:string){
   const view=document.defaultView;
   if(!view?.requestAnimationFrame)return()=>undefined;
   let frame=0;
-  const update=()=>{const visual=[...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]')].find(candidate=>candidate.dataset.ticketSlug===slug),container=visual?.closest<HTMLElement>('[data-component="ticket-list-row-container"]');if(container){const rect=container.getBoundingClientRect();ghost.style.left=`${rect.left}px`;ghost.style.top=`${rect.top}px`;ghost.style.width=`${rect.width}px`;ghost.style.height=`${rect.height}px`}frame=view.requestAnimationFrame(update)};
+  const update=()=>{const visual=[...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]')].find(candidate=>candidate.dataset.ticketSlug===slug),container=visual?.closest<HTMLElement>('[data-component="ticket-list-row-container"]');if(container){placeGhost(ghost,container.getBoundingClientRect())}frame=view.requestAnimationFrame(update)};
   frame=view.requestAnimationFrame(update);return()=>{view.cancelAnimationFrame(frame)};
 }
 
-function appendGhost(document:Document,ghost:HTMLElement){
-  for(const existing of document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]'))if(existing.dataset.ticketMotionGhost===ghost.dataset.ticketMotionGhost&&existing.dataset.ticketMotionSlug===ghost.dataset.ticketMotionSlug)existing.remove();
-  document.body.append(ghost);
+function appendGhost(document:Document,ghost:HTMLElement,rect:DOMRect){
+  for(const existing of document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]'))if(existing.dataset.ticketMotionGhost===ghost.dataset.ticketMotionGhost&&existing.dataset.ticketMotionSlug===ghost.dataset.ticketMotionSlug)removeGhost(existing);
+  const workspace=document.querySelector<HTMLElement>('.app-shell__workspace');
+  if(!workspace){document.body.append(ghost);return}
+  const workspaceBounds=workspace.getBoundingClientRect(),drawer=document.querySelector<HTMLElement>('[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),drawerTop=drawer?.getBoundingClientRect().top??workspaceBounds.bottom,bounds={left:workspaceBounds.left,top:workspaceBounds.top,width:workspaceBounds.width,height:Math.max(0,Math.min(workspaceBounds.bottom,drawerTop)-workspaceBounds.top)},layer=document.createElement('div');layer.dataset.ticketMotionLayer='';layer.ariaHidden='true';layer.style.cssText=`position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;overflow:hidden;left:${bounds.left}px;top:${bounds.top}px;width:${bounds.width}px;height:${bounds.height}px`;layer.append(ghost);document.body.append(layer);placeGhost(ghost,rect);
 }
 
-function removeAfter(animation:Animation,element:HTMLElement){animation.finished.finally(()=>{element.remove()}).catch(()=>{element.remove()})}
+function placeGhost(ghost:HTMLElement,rect:DOMRect){const layer=ghost.parentElement?.dataset.ticketMotionLayer!==undefined?ghost.parentElement:undefined,bounds=layer?.getBoundingClientRect();ghost.style.position=bounds?'absolute':'fixed';ghost.style.left=`${rect.left-(bounds?.left??0)}px`;ghost.style.top=`${rect.top-(bounds?.top??0)}px`;ghost.style.width=`${rect.width}px`;ghost.style.height=`${rect.height}px`}
+function removeGhost(ghost:HTMLElement){const layer=ghost.parentElement?.dataset.ticketMotionLayer!==undefined?ghost.parentElement:undefined;ghost.remove();layer?.remove()}
+function removeAfter(animation:Animation,element:HTMLElement){animation.finished.finally(()=>{removeGhost(element)}).catch(()=>{removeGhost(element)})}
