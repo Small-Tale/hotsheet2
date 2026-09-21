@@ -3,53 +3,28 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@kerfjs/ui/catalog.css';
+import '@kerfjs/ui/select/register';
 import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
-import { ListHeader } from '@kerfjs/ui/list-header';
-import { ListItem } from '@kerfjs/ui/list-item';
+import { Catalog, CatalogExample, CatalogExampleStack } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   clampRegionSize,
   type ResizableRegionEdge,
   resizeRegionFromPointer,
 } from '@kerfjs/ui/resizable-region';
-import { Select } from '@kerfjs/ui/select';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
-  AppWindow,
-  Badge,
-  Bell,
-  BookOpen,
-  ChartNoAxesColumnIncreasing,
-  Columns3,
-  Command,
-  FilePenLine,
   FolderGit2,
-  GitBranch,
-  GitCommitHorizontal,
-  GitCompare,
-  type IconNode,
-  Info,
-  Kanban,
-  LayoutDashboard,
-  List,
-  ListPlus,
-  ListTree,
-  Menu,
+  Grid3X3,
   MessageSquareText,
-  PanelLeft,
-  PanelRight,
-  Paperclip,
-  Play,
-  Settings,
-  ShieldCheck,
-  Tags,
   Terminal,
-  Text,
-  Wrench,
 } from 'lucide';
 
 import type { CommandDefinition, CommandRun } from '../api';
@@ -106,10 +81,9 @@ import {
 } from './app-shell-demo';
 import {
   demoCatalog,
-  type DemoCategory,
   type DemoDefinition,
-  demosUsing,
   findDemo,
+  kerfCatalogSections,
 } from './catalog';
 import { ConnectionDetailsDialogDemo, ConnectionDetailsDialogSettings, connectionDetailsScenario, resetConnectionDetailsDemo } from './connection-details-demo';
 import {
@@ -296,6 +270,9 @@ const fromUrl = () =>
   new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
+const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
+const catalogTheme = signal<'light' | 'dark'>(localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light');
+const alignmentDebug = signal(localStorage.getItem('hotsheet.ux-demo.alignment-debug') === 'true');
 const devReviewOn = signal(
   devReviewRequested(location.href, import.meta.env.DEV),
 );
@@ -371,122 +348,6 @@ const usesCollectionState = () =>
     'app-shell',
   ].includes(selectedId.value);
 
-function demoLink(item: DemoDefinition) {
-  const selected = item.id === selectedId.value;
-  const icon = catalogIcon(item.id);
-  const modified = demoModified.value[item.id];
-  return (
-    <li>
-      <ListItem
-        className={
-          item.implemented
-            ? 'catalog-link'
-            : 'catalog-link catalog-link--planned'
-        }
-        label={item.name}
-        icon={<LucideIcon icon={icon.icon} name={icon.name} />}
-        trailing={
-          modified ? (
-            <small
-              title={`Last modified ${new Date(modified).toLocaleString()}`}
-            >
-              {relativeModified(modified)}
-            </small>
-          ) : undefined
-        }
-        action="select-demo"
-        itemId={item.id}
-        selected={selected}
-      />
-    </li>
-  );
-}
-
-function relativeModified(value: string): string {
-  const elapsed = Date.now() - new Date(value).getTime();
-  if (elapsed < 60_000) return 'Now';
-  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m`;
-  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h`;
-  if (elapsed < 604_800_000) return `${Math.floor(elapsed / 86_400_000)}d`;
-  return new Date(value).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function catalogIcon(id: string): { icon: IconNode; name: string } {
-  const exact: Record<string, { icon: IconNode; name: string }> = {
-    'app-shell': { icon: AppWindow, name: 'app-window' },
-    'project-sidebar': { icon: PanelLeft, name: 'panel-left' },
-    'project-summary': {
-      icon: ChartNoAxesColumnIncreasing,
-      name: 'chart-no-axes-column-increasing',
-    },
-    'repository-summary': { icon: GitBranch, name: 'git-branch' },
-    'repository-status-popover': { icon: FolderGit2, name: 'folder-git-2' },
-    'change-evidence-dialog': { icon: GitCompare, name: 'git-compare' },
-    'connection-details-dialog': { icon: Wrench, name: 'wrench' },
-    'settings-navigation': { icon: Settings, name: 'settings' },
-    'notification-navigation': { icon: Bell, name: 'bell' },
-    'view-navigation': { icon: ListTree, name: 'list-tree' },
-    'command-navigation': { icon: Command, name: 'command' },
-    'command-settings-editor': { icon: Command, name: 'command' },
-    'drive-control': { icon: Play, name: 'play' },
-    'workspace-header': { icon: LayoutDashboard, name: 'layout-dashboard' },
-    'page-header': { icon: Text, name: 'text' },
-    'project-tab': { icon: FolderGit2, name: 'folder-git-2' },
-    'project-tabs': { icon: Columns3, name: 'columns-3' },
-    'app-tab': { icon: AppWindow, name: 'app-window' },
-    'terminal-drawer': { icon: Terminal, name: 'terminal' },
-    'quick-ticket-composer': { icon: ListPlus, name: 'list-plus' },
-    'ticket-list': { icon: List, name: 'list' },
-    'ticket-row': { icon: Menu, name: 'menu' },
-    'ticket-board': { icon: Kanban, name: 'kanban' },
-    'ticket-board-column': { icon: Columns3, name: 'columns-3' },
-    'ticket-inspector': { icon: PanelRight, name: 'panel-right' },
-    'ticket-inspector-skeleton': { icon: PanelRight, name: 'panel-right' },
-    'ticket-info-panel': { icon: Info, name: 'info' },
-    'ticket-timeline': { icon: Activity, name: 'activity' },
-    'ticket-code-review': { icon: GitCommitHorizontal, name: 'git-commit-horizontal' },
-    'ticket-attachments': { icon: Paperclip, name: 'paperclip' },
-    'ticket-reader': { icon: BookOpen, name: 'book-open' },
-    'markdown-editor': { icon: FilePenLine, name: 'file-pen-line' },
-    'note-card': { icon: MessageSquareText, name: 'message-square-text' },
-    'tag-chip': { icon: Tags, name: 'tags' },
-    'status-badge': { icon: Badge, name: 'badge' },
-    'terminal-dashboard': { icon: Terminal, name: 'terminal' },
-    'settings-window': { icon: Settings, name: 'settings' },
-    'permission-request': { icon: ShieldCheck, name: 'shield-check' },
-    'notification-center': { icon: Bell, name: 'bell' },
-    'dialog-header': { icon: AppWindow, name: 'app-window' },
-    'value-table': { icon: Menu, name: 'menu' },
-  };
-  return (
-    exact[id] ??
-    (id.includes('command')
-      ? { icon: Command, name: 'command' }
-      : id.includes('attachment')
-        ? { icon: Paperclip, name: 'paperclip' }
-        : id.includes('note')
-          ? { icon: MessageSquareText, name: 'message-square-text' }
-          : { icon: Wrench, name: 'wrench' })
-  );
-}
-
-function demoNavigation(category: DemoCategory) {
-  return (
-    <section class="catalog-group">
-      <ListHeader label={category.name} />
-      {category.demos && <ul>{category.demos.map(demoLink)}</ul>}
-      {category.children?.map((child) => (
-        <section class="catalog-subgroup">
-          <ListHeader label={child.name} />
-          <ul>{child.demos?.map(demoLink)}</ul>
-        </section>
-      ))}
-    </section>
-  );
-}
 
 const commandRunDialogDemoCommand: CommandDefinition = { id: 'run-checks', title: 'Run checks', kind: 'program', program: 'npm', args: ['run', 'check'], group: 'Quality' };
 const commandRunDialogDemoRun: CommandRun = { id: 'run-42', command_id: 'run-checks', state: 'completed', exit_code: 0, output: [
@@ -629,37 +490,6 @@ function demoContent(item: DemoDefinition) {
   );
 }
 
-function DemoRelationships({ item }: { item: DemoDefinition }) {
-  const uses = (item.uses ?? [])
-    .map(findDemo)
-    .filter((demo): demo is DemoDefinition => Boolean(demo));
-  const usedBy = demosUsing(item.id);
-  if (uses.length === 0 && usedBy.length === 0) return null;
-  const choice = (demo: DemoDefinition, group: string) => {
-    const icon = catalogIcon(demo.id);
-    return {
-      value: demo.id,
-      label: demo.name,
-      icon: icon.icon,
-      iconName: icon.name,
-      group,
-    };
-  };
-  const choices = [
-    ...usedBy.map((demo) => choice(demo, 'Used by')),
-    ...uses.map((demo) => choice(demo, 'Uses')),
-  ];
-  return (
-    <Select
-      className="demo-relationships"
-      name="related-component"
-      value=""
-      label="Related components"
-      placeholderText="Choose a related component"
-      choices={choices}
-    />
-  );
-}
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
@@ -686,45 +516,24 @@ function DemoApp() {
     selected.id === 'content-transition' ||
     selected.id === 'permission-request' ||
     selected.id === 'ai-conversation';
+  const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : '', alignmentDebug.value ? 'demo-shell--alignment-debug' : ''].filter(Boolean).join(' '), modified = demoModified.value[selected.id];
   return (
-    <main
-      class={
-        settingsOpen.value
-          ? 'demo-shell demo-shell--settings-open'
-          : 'demo-shell'
-      }
-    >
-      <aside class="demo-master" aria-label="Component catalog">
-        <header>
-          <p class="eyebrow">Hot Sheet</p>
-          <h1>UX components</h1>
-          <p>Production components with deterministic development support.</p>
-          {import.meta.env.DEV && (
-            <button
-              type="button"
-              class="demo-master__review-toggle"
-              data-action="toggle-dev-review"
-              aria-pressed={String(devReviewOn.value)}
-            >
-              Dev Review {devReviewOn.value ? 'On' : 'Off'}
-            </button>
-          )}
-        </header>
-        <nav>{demoCatalog.map(demoNavigation)}</nav>
-      </aside>
-      <article class="demo-detail">
-        <header class="demo-detail__header">
-          <div>
-            <p class="eyebrow">{selected.phase.replace('-', ' ')}</p>
-            <h1>{selected.name}</h1>
-            <p>{selected.description}</p>
-          </div>
-        </header>
-        {demoContent(selected)}
-        <footer class="demo-detail__footer">
-          <DemoRelationships item={selected} />
-        </footer>
-      </article>
+    <>
+      <Catalog
+        className={shellClass}
+        brand={{ title: 'UX components', subtitle: 'Hot Sheet · deterministic production components' }}
+        sections={kerfCatalogSections(demoCatalog, demoModified.value)}
+        active={selected.id}
+        collapsed={catalogCollapsed.value}
+        theme={catalogTheme.value}
+        content={<CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}><CatalogExample>{demoContent(selected)}</CatalogExample></CatalogExampleStack>}
+        status={<span><strong>{selected.phase.replace('-', ' ')}</strong>{selected.implemented ? ' · Implemented' : ' · Planned'}{modified ? ` · Updated ${new Date(modified).toLocaleString()}` : ''}</span>}
+        headerActions={<ToolbarControlGroup label="Demo tools">
+          {import.meta.env.DEV ? <button type="button" data-action="toggle-dev-review" aria-pressed={String(devReviewOn.value)} title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}><LucideIcon icon={MessageSquareText} name="message-square-text"/><span>Review</span></button> : <></>}
+          <button type="button" data-action="toggle-alignment-debug" aria-pressed={String(alignmentDebug.value)} title={`Alignment guides ${alignmentDebug.value ? 'On' : 'Off'}`}><LucideIcon icon={Grid3X3} name="grid-3-x-3"/><span>Align</span></button>
+          {hasSettings && !settingsOpen.value ? <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings"><span>Settings</span></button> : <></>}
+        </ToolbarControlGroup>}
+      />
       {settingsOpen.value && (
         <aside
           class="settings-inspector"
@@ -764,15 +573,6 @@ function DemoApp() {
           )}
         </aside>
       )}
-      {hasSettings && !settingsOpen.value && (
-        <wa-button
-          class="settings-toggle"
-          data-action="toggle-settings"
-          aria-expanded={settingsOpen.value ? 'true' : 'false'}
-        >
-          {settingsOpen.value ? 'Close settings' : 'Settings'}
-        </wa-button>
-      )}
       {contextMenu.value && (
         <TicketRowContextMenu
           x={contextMenu.value.x}
@@ -796,12 +596,30 @@ function DemoApp() {
       {tabContextMenu.value && (
         <ProjectTabContextMenu {...tabContextMenu.value} />
       )}
-    </main>
+    </>
   );
 }
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
+const applyCatalogTheme = () => {
+  document.documentElement.classList.toggle('wa-dark', catalogTheme.value === 'dark');
+  document.documentElement.dataset.theme = catalogTheme.value;
+};
+applyCatalogTheme();
 mount(root, DemoApp);
+wireCatalog(root, {
+  onSelect: id => { selectDemo(id, false); },
+  onToggleSidebar: () => {
+    catalogCollapsed.value = !catalogCollapsed.value;
+    localStorage.setItem('hotsheet.ux-demo.catalog-collapsed', String(catalogCollapsed.value));
+  },
+  onToggleTheme: () => {
+    catalogTheme.value = catalogTheme.value === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('hotsheet.ux-demo.theme', catalogTheme.value);
+    applyCatalogTheme();
+  },
+  urlParam: 'component',
+});
 // CommandRunDialog is a standalone native <dialog> (hidden until showModal), so open it after the
 // demo mounts/selects the same way the app does — unlike the wa-dialog demos that render inline (HS2-Z0CTHN).
 function showCommandRunDialogDemo(): void {
@@ -874,21 +692,15 @@ function selectDemo(id: string, push = true): void {
   }
 }
 
-delegate(root, 'click', '[data-demo-id]', (event, target) => {
-  event.preventDefault();
-  selectDemo((target as HTMLElement).dataset.demoId!);
-});
-delegate(root, 'change', '[name="related-component"]', (_event, target) => {
-  selectDemo((target as FormControl).value);
-});
-delegate(root, 'click', '[data-action="select-demo"]', (_event, target) => {
-  selectDemo((target as HTMLElement).dataset.itemId!);
-});
 delegate(root, 'click', '[data-action="toggle-settings"]', () => {
   settingsOpen.value = !settingsOpen.value;
 });
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
+});
+delegate(root, 'click', '[data-action="toggle-alignment-debug"]', () => {
+  alignmentDebug.value = !alignmentDebug.value;
+  localStorage.setItem('hotsheet.ux-demo.alignment-debug', String(alignmentDebug.value));
 });
 function commandEditorRowId(target: Element): string | undefined {
   return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;

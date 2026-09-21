@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
-import { demoCatalog, demosUsing, findDemo, flattenCatalog } from './catalog';
+import { demoCatalog, demosUsing, findDemo, flattenCatalog,kerfCatalogSections } from './catalog';
 import { connectionDetailsAssessment,ConnectionDetailsDialogSettings,connectionDetailsScenario,resetConnectionDetailsDemo } from './connection-details-demo';
 import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
@@ -34,6 +34,16 @@ describe('UX demo catalog', () => {
     expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header','value-table']);
     expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
+  });
+
+  it('maps nested categories and relationship metadata into the flat kerf catalog contract',()=>{
+    const sections=kerfCatalogSections(demoCatalog,{'ticket-row':'2026-09-21T00:00:00Z'}),ticketList=sections.find(section=>section.category==='Ticket workspace · List'),ticketRow=ticketList?.entries.find(entry=>entry.id==='ticket-row');
+    expect(ticketList?.entries.map(entry=>entry.id)).toEqual(['quick-ticket-composer','ticket-list','ticket-row']);
+    expect(ticketRow?.tags).toEqual(expect.arrayContaining(['Feature floor']));
+    expect(ticketRow?.related?.filter(entry=>entry.group==='Uses').map(entry=>entry.id)).toEqual(['status-badge','tag-chip']);
+    expect(ticketRow?.related?.filter(entry=>entry.group==='Used by').map(entry=>entry.id)).toEqual(['ticket-list','ticket-board-column']);
+    expect(sections.find(section=>section.category==='Ticket inspector · Notes and activity')?.entries.map(entry=>entry.id)).toContain('note-card');
+    expect(sections.find(section=>section.category==='Setup and settings')?.entries.find(entry=>entry.id==='welcome-screen')?.tags).toContain('Planned');
   });
 
   // Every production component module must be represented in the UX-demo catalog (by matching

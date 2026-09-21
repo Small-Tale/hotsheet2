@@ -144,7 +144,9 @@ and identity-less legacy entries remain conservatively blocking.
 
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before
   adding its Tauri host. A `/ux-demo` route renders the real production components
-  against deterministic mock service adapters for isolated and composed UX review.
+  against deterministic mock service adapters for isolated and composed UX review. Its
+  shell uses `@kerfjs/ui`'s `Catalog` and `wireCatalog`, with URL-addressable selection,
+  native responsive navigation/relationships/theme controls, and app-owned review tools.
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 

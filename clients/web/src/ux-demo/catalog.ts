@@ -1,3 +1,5 @@
+import type {CatalogEntry,CatalogSection} from '@kerfjs/ui/catalog';
+
 export type DemoPhase = 'feature-floor' | 'desktop' | 'later';
 export interface DemoDefinition { id: string; name: string; description: string; phase: DemoPhase; implemented?: boolean; uses?: string[] }
 export interface DemoCategory { id: string; name: string; children?: DemoCategory[]; demos?: DemoDefinition[] }
@@ -142,4 +144,39 @@ export function findDemo(id: string): DemoDefinition | undefined {
 
 export function demosUsing(id: string): DemoDefinition[] {
   return flattenCatalog().filter(item => item.uses?.includes(id));
+}
+
+const phaseLabel:Record<DemoPhase,string>={'feature-floor':'Feature floor',desktop:'Desktop',later:'Later'};
+
+function catalogEntry(item:DemoDefinition,modified:Readonly<Record<string,string>>):CatalogEntry{
+  const uses=(item.uses??[]).map(findDemo).filter((demo):demo is DemoDefinition=>Boolean(demo));
+  const usedBy=demosUsing(item.id),changed=modified[item.id];
+  return{
+    id:item.id,
+    name:item.name,
+    description:item.description,
+    tags:[phaseLabel[item.phase],...(item.implemented?[]:['Planned']),...(changed?[relativeModified(changed)]:[])],
+    related:[...usedBy.map(demo=>({id:demo.id,name:demo.name,group:'Used by'})),...uses.map(demo=>({id:demo.id,name:demo.name,group:'Uses'}))],
+  };
+}
+
+function relativeModified(value:string):string{
+  const elapsed=Date.now()-new Date(value).getTime();
+  if(elapsed<60_000)return'Now';
+  if(elapsed<3_600_000)return`${Math.floor(elapsed/60_000)}m`;
+  if(elapsed<86_400_000)return`${Math.floor(elapsed/3_600_000)}h`;
+  if(elapsed<604_800_000)return`${Math.floor(elapsed/86_400_000)}d`;
+  return new Date(value).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+}
+
+/** Flatten nested Hot Sheet categories into Kerf's flat section contract while retaining the path. */
+export function kerfCatalogSections(categories:readonly DemoCategory[]=demoCatalog,modified:Readonly<Record<string,string>>={}):CatalogSection[]{
+  const sections:CatalogSection[]=[];
+  const visit=(category:DemoCategory,parents:readonly string[])=>{
+    const path=[...parents,category.name];
+    if(category.demos?.length)sections.push({category:path.join(' · '),entries:category.demos.map(item=>catalogEntry(item,modified))});
+    for(const child of category.children??[])visit(child,path);
+  };
+  for(const category of categories)visit(category,[]);
+  return sections;
 }

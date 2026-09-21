@@ -1288,25 +1288,23 @@ These remain in the component architecture but are not initial-client blockers:
 `/ux-demo` is a development route in the real web client, not a separate throwaway
 component implementation. Its Hono route is registered only for Vite `serve`, whose
 host is fixed to loopback; it is absent from the production build. The initial shell
-provides the categorized master/detail catalog, URL-addressable selection, planned
-component states, and an optional non-modal, manually closed settings inspector that
-keeps the demo visible during live adjustment. At wide desktop widths the inspector
-occupies a dedicated grid column and shrinks the detail surface; at narrower widths it
-overlays the content to preserve usable demo space. One viewport-anchored toggle stays
-in the same location and changes between “Settings” and “Close settings”; opening the
-inspector must not introduce a second control or a moving pointer target. It should
-also keep stateful Web Awesome control properties synchronized when a demo reset
-restores its canonical mock state. The remaining catalog review-tooling package is
+uses `@kerfjs/ui/catalog`: `Catalog` owns its responsive sidebar, titled detail canvas,
+footer/status surface, related-component menu, theme control, and collapse control,
+while `wireCatalog` synchronizes the selected entry with `?component=`. The nested Hot
+Sheet inventory is flattened into path-labelled Kerf sections; phase, implementation,
+and dependency metadata remain visible as tags and native related menus. The app retains
+ownership of the selected entry and persisted collapsed/theme state, its development-only
+Dev Review and alignment-guide toggles, and an optional manually closed settings inspector
+that keeps the demo visible during live adjustment. The settings action lives with the
+other catalog-header tools; while the inspector is open, its Close settings action stays
+viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
+reset restores its canonical mock state. The remaining catalog review-tooling package is
 tracked by HS2-89692E. It should grow to provide:
 
-Catalog groups reset native list margins so their shared `ListHeader` and `ListItem`
-rows begin on the same outer edge; hierarchy is already clear from the headers and
-does not receive an additional list indent.
-Implemented entries use component-specific Lucide icons instead of one generic glyph.
-Their trailing value is a dependency-aware last-modified time: changes to a demo,
-recursively imported component/style dependencies, or global catalog code make the
-demo current again. Planned entries remain visually muted and omit that value. A
-development-only sidebar toggle enables or disables Dev Review without editing the URL.
+Implemented entries' tags include a dependency-aware last-modified time: changes to a demo, recursively
+imported component/style dependencies, or global catalog code make the demo current again.
+Planned entries retain an explicit Planned tag. A development-only header toggle enables
+or disables Dev Review without coupling that state to component selection.
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios
