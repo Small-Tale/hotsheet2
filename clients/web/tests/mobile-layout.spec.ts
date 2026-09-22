@@ -439,3 +439,51 @@ test('resizing from mobile back to desktop restores the side-by-side layout (HS2
   // Desktop default has the sidebar visible in-flow.
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
 });
+
+test('keeps reopened inspector content within the viewport across desktop and mobile transitions (HS2-5JKNGS)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openDemoProject(page);
+  await page.locator('[data-ticket-slug="HS2-M1"]').click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]'),
+    content = inspector.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  // Crossing into mobile intentionally closes desktop panels. Reopen through the public
+  // control before measuring: a still-present closing panel is not an open overlay.
+  for (const width of [940, 390, 1023, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(shell).toHaveAttribute('data-mobile', String(width < 1024));
+    if (width < 1024 && (await inspector.getAttribute('data-collapsed')) === 'true')
+      await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await expect
+      .poll(() =>
+        content.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.left >= -1 && rect.right <= innerWidth + 1 && rect.width > 250;
+        }),
+      )
+      .toBe(true);
+    const notes = content.locator('[data-component="ticket-notes"]');
+    await notes.scrollIntoViewIfNeeded();
+    await expect(notes.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
+    await expect(notes.locator('.ticket-notes__empty')).toBeInViewport();
+    if (width === 940 || width === 390)
+      await page.screenshot({ path: `/private/tmp/hs2-5jkngs-inspector-${width}-settled.png`, animations: 'disabled' });
+    if (width < 1024) {
+      await content.getByRole('button', { name: 'Hide inspector', exact: true }).click();
+      await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+      await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+      await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+      await expect
+        .poll(() => content.evaluate((node) => node.getBoundingClientRect().right <= innerWidth + 1))
+        .toBe(true);
+    }
+  }
+  await content
+    .locator('[data-component="ticket-notes"]')
+    .screenshot({ path: '/private/tmp/hs2-5jkngs-inspector-desktop-restored.png', animations: 'disabled' });
+});

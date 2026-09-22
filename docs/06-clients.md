@@ -187,7 +187,10 @@ and identity-less legacy entries remain conservatively blocking.
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
   the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP). The
   left/right sidebar keyboard shortcuts use the same mutually exclusive mobile overlays without
-  changing the persisted desktop sidebar preferences (HS2-KN79XP). The horizontal project tab strip
+  changing the persisted desktop sidebar preferences (HS2-KN79XP). Crossing from desktop into mobile closes the desktop panels;
+  reopening the inspector positions it fully within the viewport, including at 940px.
+  Resize checks measure the settled open overlay, since a closing panel remains in the
+  DOM during its exit animation (HS2-5JKNGS). The horizontal project tab strip
   and the page-header view title also do not fit a narrow column, so on
   mobile the project tabs are replaced with a project Select (the dashboard mode switcher and
   Add-project action remain) and the view title is replaced with a view Select that switches ticket
