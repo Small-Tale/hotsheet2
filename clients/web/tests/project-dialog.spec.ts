@@ -1,5 +1,64 @@
 import { expect, test } from '@playwright/test';
 
+for (const systemTheme of ['light', 'dark'] as const) {
+  test(`explicit catalog themes override the ${systemTheme} system preference (HS2-0DD4XQ)`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ colorScheme: systemTheme });
+    await page.goto('/ux-demo?component=project-dialog&dev-review=false');
+    const root = page.locator('html');
+    const dialog = page.locator('[data-remote-project-dialog]');
+    const stage = page.getByRole('region', { name: 'Project dialog variants' });
+    const palette = () =>
+      dialog.evaluate((element) => ({
+        surface: getComputedStyle(element.shadowRoot!.querySelector('dialog')!).backgroundColor,
+        foreground: getComputedStyle(element.querySelector('[data-component="list-item"]')!).color,
+        canvas: getComputedStyle(document.documentElement).backgroundColor,
+      }));
+    const switchTheme = async (theme: 'light' | 'dark') => {
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(dialog).toHaveJSProperty('open', false);
+      await page.getByRole('button', { name: `Use ${theme} theme`, exact: true }).click();
+      await expect(root).toHaveCSS('color-scheme', theme);
+      await stage.getByRole('button', { name: 'Remote projects', exact: true }).click();
+      await expect(dialog).toHaveJSProperty('open', true);
+    };
+    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(root).toHaveCSS('color-scheme', 'light');
+    const light = await palette();
+    await page.screenshot({
+      path: testInfo.outputPath(`catalog-light-system-${systemTheme}-wide.png`),
+      animations: 'disabled',
+    });
+    await switchTheme('dark');
+    const dark = await palette();
+    expect(dark.surface).not.toBe(light.surface);
+    expect(dark.foreground).not.toBe(light.foreground);
+    expect(dark.canvas).not.toBe(light.canvas);
+    await page.emulateMedia({ colorScheme: systemTheme === 'light' ? 'dark' : 'light' });
+    await expect.poll(palette).toEqual(dark);
+    await page.emulateMedia({ colorScheme: systemTheme });
+    await page.reload();
+    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(root).toHaveCSS('color-scheme', 'dark');
+    await expect.poll(palette).toEqual(dark);
+    await page.screenshot({
+      path: testInfo.outputPath(`catalog-dark-system-${systemTheme}-wide.png`),
+      animations: 'disabled',
+    });
+    await switchTheme('light');
+    await expect.poll(palette).toEqual(light);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hotsheet.ux-demo.theme'))).toBe('light');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(palette).toEqual(light);
+    await page.screenshot({
+      path: testInfo.outputPath(`catalog-light-system-${systemTheme}-narrow.png`),
+      animations: 'disabled',
+    });
+  });
+}
+
 test('demonstrates project chooser states and opens again after empty, error, and selection (HS2-XX5Y2X)', async ({
   page,
 }) => {

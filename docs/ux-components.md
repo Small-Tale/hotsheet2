@@ -950,6 +950,10 @@ success/warning/danger, spacing, radius, focus, shadow, light/dark, and Web Awes
 theme contracts. The local file defines `--hs-*` only for Hot Sheet domain concepts
 that Kerf cannot name: ticket-state rails, priority colors, terminal background,
 reader scaling, and the shell-divider alias.
+At this shared document boundary, an explicit root `data-theme` selects a single
+`color-scheme`, overriding the library foundation's system preference without replacing
+its palette. Catalog light/dark selection therefore controls components independently of
+the operating-system preference and survives reloads (HS2-0DD4XQ).
 The production shell, UX-demo chrome, and local Dev Review overlay all consume this
 same contract. Raw product palette values are defined only in
 `hot-sheet-tokens.css`; component, demo, and development-tool styles select semantic

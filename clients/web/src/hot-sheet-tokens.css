@@ -1,4 +1,11 @@
 /* Product-only semantic tokens. Generic palette and Web Awesome theming come from @kerfjs/ui. */
+/* An explicit app-owned theme takes precedence over Kerf's system-preference foundation. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
 :root {
   /* Kerf's canonical spacing scale (HS2-4Y6SM9). We author component spacing against these
      semantic steps instead of raw remify()/--wa-space-*. Kerf defines them in its foundation.css,
