@@ -2,6 +2,13 @@ import { expect, test } from '@playwright/test';
 
 test('imports an HS1 project, then offers cleanup only after remote backup', async ({ page }) => {
   test.setTimeout(60_000);
+  let releaseImport!: () => void, releaseRemote!: () => void;
+  const importGate = new Promise<void>((resolve) => {
+      releaseImport = resolve;
+    }),
+    remoteGate = new Promise<void>((resolve) => {
+      releaseRemote = resolve;
+    });
   let imported = false,
     remote = false,
     deleted = false,
@@ -42,6 +49,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
       });
     if (path === '/__hotsheet/projects/migrate-hs1' && request.method() === 'POST') {
       expect(request.postDataJSON()).toEqual({ root: '/work/legacy', location: '/work/legacy.hs2' });
+      await importGate;
       imported = true;
       return route.fulfill({
         status: 201,
@@ -66,6 +74,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
         },
       });
     if (path === '/__hotsheet/projects/setup-git-remote' && request.method() === 'POST') {
+      await remoteGate;
       remote = true;
       return route.fulfill({ json: { connected: true } });
     }
@@ -131,14 +140,21 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '/private/tmp/hs2-pwyts8-hs1-import-narrow.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Import project' }).click();
+  await expect(dialog.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
+  await expect(dialog.getByRole('status')).toContainText('copying attachments');
+  releaseImport();
   await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', true);
   await expect(page.locator('.app-toast')).toContainText('Imported 27 tickets and 4 attachments');
   expect(providerRequests).toBeGreaterThanOrEqual(2);
   await page.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/legacy.hs2.git');
   await page.getByRole('button', { name: 'Connect & push' }).click();
-  expect(remote).toBe(true);
+  const remoteProgress = page.locator('.ticket-source-setup__remote-progress');
+  await expect(remoteProgress.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
+  await expect(remoteProgress).toContainText('Large repositories can take several minutes.');
+  releaseRemote();
   const banner = page.locator('.hs1-cleanup-banner');
   await expect(banner).toBeVisible();
+  expect(remote).toBe(true);
   await expect(banner).toHaveAttribute('data-component', 'state-banner');
   await expect(banner).toHaveAttribute('data-tone', 'success');
   await expect(banner).toHaveAttribute('role', 'status');

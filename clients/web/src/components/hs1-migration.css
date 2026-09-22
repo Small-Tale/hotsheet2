@@ -29,7 +29,12 @@
   font-size: var(--wa-font-size-s);
 }
 .hs1-migration-dialog__progress {
+  display: grid;
   color: var(--wa-color-brand-on-quiet);
+  gap: var(--kui-space-xs);
+}
+.hs1-migration-dialog__progress p {
+  margin: 0;
 }
 .hs1-migration-dialog__error {
   color: var(--wa-color-danger-on-quiet);

@@ -47,8 +47,11 @@
 > remembered for the detected source, with a non-blocking banner left available to
 > reopen it. The bridge runs
 > the bundled one-shot migrator, links the resulting source, carries applicable
-> settings forward, and idempotently configures detected AI tools. Once the imported
-> repository has a remote, a banner offers explicit removal of live HS1 artifacts
+> settings forward, and idempotently configures detected AI tools. Both the import and
+> first remote push show an indeterminate progress bar with stage-specific copy; the
+> subprocesses do not currently expose trustworthy byte/item totals, so the UI never
+> invents a percentage. Once the imported repository has a remote, a banner offers
+> explicit removal of live HS1 artifacts
 > while preserving every backup and the HS2 store link. (The `pglite-migrate` fetch
 > for a newer-than-bundle datadir remains outside offline CI because it downloads an
 > engine — HS2-82.)
@@ -198,13 +201,16 @@ may not have open at once):
    source and database paths plus the detected PostgreSQL version. Choosing Not now
    suppresses later automatic modal presentation for that checkout/source identity;
    a project banner keeps an explicit Import action available.
-2. On confirm, Hot Sheet **runs the bundled migrator against this one project**,
-   streaming progress to the UI. (The migrator is a separate bundled executable —
-   §7.2 — the server just spawns it; it does not live in the core.)
+2. On confirm, Hot Sheet **runs the bundled migrator against this one project** and
+   keeps an indeterminate progress bar plus stage-specific status visible until the
+   operation settles. (The migrator is a separate bundled executable — §7.2 — the
+   server just spawns it; it does not live in the core.)
 3. On success it shows a summary (N tickets, M attachments), links the new source,
    and leaves the old `.hotsheet/` data in place. A durable receipt in the new store
    distinguishes a completed import from an unrelated HS2 repository.
-4. Only after an `origin` remote exists does the project show its cleanup banner.
+4. The first remote connection/push likewise keeps an indeterminate progress bar and
+   an explicit warning that large histories may take several minutes. Only after an
+   `origin` remote exists does the project show its cleanup banner.
    Cleanup requires confirmation and refuses to start while a registered HS1 channel
    process owned by this checkout is still live, because that process can recreate its
    database after removal. Project-tagged entries owned by another checkout are ignored;

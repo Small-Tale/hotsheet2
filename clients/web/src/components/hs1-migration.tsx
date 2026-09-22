@@ -1,4 +1,5 @@
 import './hs1-migration.css';
+import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -82,9 +83,10 @@ export function Hs1MigrationDialog({
           </wa-button>
         </div>
         {busy && (
-          <p class="hs1-migration-dialog__progress" role="status">
-            Importing the project and configuring detected AI tools…
-          </p>
+          <div class="hs1-migration-dialog__progress" role="status">
+            <wa-progress-bar indeterminate label="Importing Hot Sheet 1 project"></wa-progress-bar>
+            <p>Exporting and importing tickets, copying attachments, and configuring detected AI tools…</p>
+          </div>
         )}
         {error && (
           <p class="hs1-migration-dialog__error" role="alert">

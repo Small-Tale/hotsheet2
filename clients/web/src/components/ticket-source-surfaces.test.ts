@@ -56,6 +56,9 @@ describe('ticket source surfaces', () => {
     );
     expect(remote).toContain('Back up this ticket repository');
     expect(remote).toContain('Connecting…');
+    expect(remote).toContain('wa-progress-bar indeterminate');
+    expect(remote).toContain('label="Connecting and pushing ticket repository"');
+    expect(remote).toContain('Large repositories can take several minutes.');
     expect(remote).toContain('Remote failed');
     expect(providerName('jira')).toBe('Jira Cloud');
   });

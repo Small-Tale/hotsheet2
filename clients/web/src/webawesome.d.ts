@@ -31,6 +31,9 @@ type SvgFilterPrimitive = KerfBaseAttrs & {
   mode?: AttrLike;
   values?: AttrLike;
 };
+type WaProgressBar = WaBase & {
+  indeterminate?: AttrLike<boolean>;
+};
 declare module 'kerfjs/jsx-runtime' {
   namespace JSX {
     interface IntrinsicElements {
@@ -46,6 +49,7 @@ declare module 'kerfjs/jsx-runtime' {
       'wa-dropdown-item': WaBase;
       'wa-divider': WaBase;
       'wa-skeleton': WaBase & { effect?: AttrLike };
+      'wa-progress-bar': WaProgressBar;
       feGaussianBlur: SvgFilterPrimitive;
       feColorMatrix: SvgFilterPrimitive;
       feBlend: SvgFilterPrimitive;

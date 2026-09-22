@@ -38,6 +38,23 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('PostgreSQL');
     expect(markup).not.toContain('provider');
   });
+  it('shows honest indeterminate progress for the multi-stage import', () => {
+    const markup = String(
+      Hs1MigrationDialog({
+        projectName: 'Demo',
+        projectRoot: '/work/demo',
+        sourcePath: '/work/demo/.hotsheet',
+        databasePath: '/work/demo/.hotsheet/db',
+        defaultStore: '/work/demo.hs2',
+        open: true,
+        busy: true,
+      }),
+    );
+    expect(markup).toContain('wa-progress-bar indeterminate');
+    expect(markup).toContain('label="Importing Hot Sheet 1 project"');
+    expect(markup).toContain('copying attachments');
+    expect(markup).toContain('disabled');
+  });
   it('keeps a dismissed import available from a polite informational StateBanner', () => {
     const markup = String(Hs1MigrationBanner({ databasePath: '/work/demo/.hotsheet/db' }));
     expect(markup).toContain('data-component="state-banner"');

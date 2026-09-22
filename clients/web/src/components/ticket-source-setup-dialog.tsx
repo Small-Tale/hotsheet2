@@ -1,4 +1,5 @@
 import './ticket-source-setup-dialog.css';
+import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -186,6 +187,12 @@ export function TicketSourceSetupDialog({
           </a>
         </div>
       </div>
+      {remoteBusy && (
+        <div class="ticket-source-setup__remote-progress" role="status">
+          <wa-progress-bar indeterminate label="Connecting and pushing ticket repository"></wa-progress-bar>
+          <p>Connecting the remote and uploading the ticket history. Large repositories can take several minutes.</p>
+        </div>
+      )}
       {remoteError && (
         <p class="ticket-source-setup__error" role="alert">
           {remoteError}

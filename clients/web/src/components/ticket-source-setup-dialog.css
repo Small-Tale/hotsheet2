@@ -151,6 +151,15 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   display: grid;
   gap: var(--wa-space-m);
 }
+.ticket-source-setup__remote-progress {
+  display: grid;
+  color: var(--wa-color-brand-on-quiet);
+  font-size: var(--wa-font-size-s);
+  gap: var(--kui-space-xs);
+}
+.ticket-source-setup__remote-progress p {
+  margin: 0;
+}
 .ticket-source-setup__remote-help {
   color: var(--wa-color-text-link);
   font-size: var(--wa-font-size-xs);
