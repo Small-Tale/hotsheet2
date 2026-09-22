@@ -916,9 +916,9 @@
       "id": "saved-view-dialog",
       "name": "SavedViewDialog",
       "kind": "component",
-      "purpose": "Create or rename a saved ticket view from the current query.",
+      "purpose": "Create or edit a saved ticket view with a full-width responsive query editor.",
       "useWhen": [
-        "Hot Sheet needs create or rename a saved ticket view from the current query."
+        "Hot Sheet needs create or edit a saved ticket view with a full-width responsive query editor."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific SavedViewDialog behavior."

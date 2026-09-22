@@ -1,9 +1,17 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { tokenFromRaw } from '../inline-search';
 import { SavedViewDeleteDialog, SavedViewDialog } from './saved-view-dialog';
 
 describe('SavedViewDialog', () => {
+  it('owns the full query width independently of the collapsed workspace toolbar', () => {
+    const css = readFileSync(new URL('./saved-view-dialog.css', import.meta.url), 'utf8');
+    expect(css).toMatch(
+      /\.saved-view-dialog__query > \.saved-view-dialog__query-field\s*\{[^}]*width: 100%;[^}]*min-width: 0;/,
+    );
+  });
   it('collects a shared view name in the standard tokenized query editor', () => {
     const markup = String(
       SavedViewDialog({

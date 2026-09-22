@@ -763,7 +763,8 @@ and identity-less legacy entries remain conservatively blocking.
   state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
   and disables a second Drive activation while that turn is busy; interruption remains in the
   selected chat when the connection advertises it. The Views add action opens a compact
-  create dialog for a readable name and any ordinary search expression. Saved views live in
+  create dialog for a readable name and any ordinary search expression. The query editor fills
+  the dialog content width on desktop and mobile, independently of the collapsed toolbar search. Saved views live in
   the code project's shared settings, appear in both the project sidebar and terminal ticket
   rail, and apply their query through the same inline text/token search pipeline. Their
   `custom:<id>` selection restores per project, follows replayable `views_updated` events,

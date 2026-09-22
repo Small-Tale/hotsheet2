@@ -26,8 +26,9 @@
 .saved-view-dialog__query > span sup {
   color: var(--wa-color-danger-on-quiet);
 }
-.saved-view-dialog__query-field {
+.saved-view-dialog__query > .saved-view-dialog__query-field {
   width: 100%;
+  min-width: 0;
   font-weight: var(--wa-font-weight-normal);
 }
 .saved-view-dialog__query-field .kui-token-search__editor {

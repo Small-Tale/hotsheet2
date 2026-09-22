@@ -113,6 +113,25 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(dialog.getByRole('textbox', { name: 'View name' })).toBeVisible();
   await dialog.getByRole('textbox', { name: 'View name' }).fill('Needs docs');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(async () => query.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(120);
+    await expect
+      .poll(async () =>
+        dialog.locator('.saved-view-dialog__query-field').evaluate((element) => {
+          const parent = element.parentElement!;
+          return Math.abs(element.getBoundingClientRect().width - parent.getBoundingClientRect().width);
+        }),
+      )
+      .toBeLessThan(2);
+    await query.fill('tag:docs ');
+    await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+    await page.screenshot({ path: `/private/tmp/hs2-y5hmrt-query-${width}.png` });
+    await dialog.getByRole('button', { name: 'Clear search query' }).click();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await query.fill('tag:docs ');
   await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
   await page.waitForTimeout(250);

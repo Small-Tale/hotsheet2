@@ -374,7 +374,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'saved-view-dialog',
             'SavedViewDialog',
-            'Create or rename a saved ticket view from the current query.',
+            'Create or edit a saved ticket view with a full-width responsive query editor.',
             'feature-floor',
             true,
           ),
