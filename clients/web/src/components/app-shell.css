@@ -4,7 +4,8 @@
   min-width: remify(1024px);
   height: min(remify(736px), calc(100vh - remify(128px)));
   min-height: remify(600px);
-  overflow: hidden;
+  /* Clip offscreen overlays without allowing focus to pan this non-scrolling shell. */
+  overflow: clip;
   border: 1px solid var(--wa-color-surface-border);
   border-radius: remify(13.6px);
   background: var(--wa-color-surface-default);
@@ -14,7 +15,7 @@
    every ticket row. Animating that width relayouts the whole list per frame (HS2-4KZBTT:
    "very choppy when there are too many tickets"), so the width change is instant — one reflow,
    not sixty. The fixed-width content still slides (transform only, composited off the main
-   thread, and clipped by .app-shell's overflow:hidden), so the collapse stays animated without
+   thread, and clipped by .app-shell's overflow:clip), so the collapse stays animated without
    touching layout. The pointer-drag resize path stays un-animated via the data-resizing-region guard. */
 .app-shell > .kui-resizable-region[data-region-id='app-sidebar'] {
   border-right: 1px solid var(--wa-color-surface-border);

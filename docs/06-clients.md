@@ -174,7 +174,10 @@ and identity-less legacy entries remain conservatively blocking.
   standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
   side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
   from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
-  stay in sync (HS2-ZK51WP). The production root uses the dynamic viewport height rather than
+  stay in sync (HS2-ZK51WP). The shell clips offscreen panels without becoming a scroll
+  container: opening, clearing, and typing in search must not pan the whole workspace, including
+  across desktop/mobile resize. The workspace and inspector keep independent scrolling, and
+  overlay controls remain accessible (HS2-JBTPNR). The production root uses the dynamic viewport height rather than
   iOS Safari's larger layout viewport. The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or

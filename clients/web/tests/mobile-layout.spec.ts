@@ -48,7 +48,7 @@ const ticket = (slug: string, status: string) => ({
   claim_count: 0,
 });
 
-async function openDemoProject(page: import('@playwright/test').Page, withTerminal = false) {
+async function openDemoProject(page: import('@playwright/test').Page, withTerminal = false, ticketCount = 1) {
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -89,16 +89,16 @@ async function openDemoProject(page: import('@playwright/test').Page, withTermin
     if (path.endsWith('/tickets'))
       return route.fulfill({
         json: {
-          items: [ticket('HS2-M1', 'started')],
+          items: Array.from({ length: ticketCount }, (_, index) => ticket(`HS2-M${index + 1}`, 'started')),
           counts: {
-            total: 1,
-            queued: 1,
+            total: ticketCount,
+            queued: ticketCount,
             backlog: 0,
             archive: 0,
-            open: 1,
+            open: ticketCount,
             up_next: 0,
             active: 0,
-            started: 1,
+            started: ticketCount,
             completed_today: 0,
             completion_trend: [0, 0, 0, 0, 0, 0, 0],
           },
@@ -128,6 +128,7 @@ async function openDemoProject(page: import('@playwright/test').Page, withTermin
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
 }
 
@@ -486,4 +487,109 @@ test('keeps reopened inspector content within the viewport across desktop and mo
   await content
     .locator('[data-component="ticket-notes"]')
     .screenshot({ path: '/private/tmp/hs2-5jkngs-inspector-desktop-restored.png', animations: 'disabled' });
+});
+
+for (const initialWidth of [390, 1280]) {
+  test(`keeps the mobile shell stationary through search focus, clear, typing and resize from ${initialWidth}px (HS2-JBTPNR)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: initialWidth, height: 844 });
+    await openDemoProject(page);
+    const shell = page.locator('[data-component="app-shell"]'),
+      editor = page.getByRole('searchbox', { name: 'Search tickets' }),
+      field = page.locator('[data-token-search-id="workspace-search"]'),
+      group = page.locator('.workspace-header__search-group').filter({ has: field });
+    const expectContained = async (mobile: boolean) => {
+      await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
+      await expect
+        .poll(() =>
+          editor.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.left >= 0 && rect.right <= innerWidth;
+          }),
+        )
+        .toBe(true);
+      if (mobile) {
+        const [shellBox, mainBox] = await Promise.all([
+          shell.boundingBox(),
+          page.locator('.app-shell__main').boundingBox(),
+        ]);
+        expect(mainBox!.x).toBeCloseTo(shellBox!.x, 0);
+        expect(mainBox!.width).toBeCloseTo(shellBox!.width, 0);
+      }
+    };
+    for (const width of [initialWidth, 390, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(shell).toHaveAttribute('data-mobile', String(width < 1024));
+      await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
+      await expect(editor).toBeFocused();
+      await expectContained(width < 1024);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await editor.fill('has:attachment ');
+        await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+        await page.keyboard.type('continued');
+        await expect(editor).toBeFocused();
+        await expect(editor).toHaveText('continued');
+        await expectContained(width < 1024);
+      }
+      await expect(page.getByText('Searching tickets', { exact: true })).toHaveCount(0);
+      await page.screenshot({
+        path: `/private/tmp/hs2-jbtpnr-search-${initialWidth}-to-${width}.png`,
+        animations: 'disabled',
+      });
+      await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+      await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+      await expect(group).toHaveAttribute('data-expanded', 'false');
+    }
+  });
+}
+
+test('preserves child scrolling and usable mobile overlays after search focus (HS2-JBTPNR)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await openDemoProject(page, false, 30);
+  const shell = page.locator('[data-component="app-shell"]'),
+    workspace = page.locator('.app-shell__workspace'),
+    scrim = page.locator('.app-shell__scrim');
+  await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search tickets' }).fill('continued');
+  await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+  await workspace.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBeGreaterThan(100);
+  await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  const sidebar = page.locator('.project-sidebar');
+  await expect
+    .poll(() =>
+      sidebar.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.left >= -1 && rect.right <= innerWidth;
+      }),
+    )
+    .toBe(true);
+  await expect(sidebar.getByRole('button', { name: /^Queue / })).toBeInViewport();
+  await page.screenshot({ path: '/private/tmp/hs2-jbtpnr-sidebar-mobile.png', animations: 'disabled' });
+  await scrim.click({ position: { x: 380, y: 300 } });
+  await workspace.hover();
+  await page.mouse.wheel(0, -3000);
+  await page.locator('[data-ticket-slug="HS2-M1"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]'),
+    body = inspector.locator('.ticket-inspector__content');
+  await expect
+    .poll(() =>
+      inspector.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.left >= -1 && rect.right <= innerWidth + 1;
+      }),
+    )
+    .toBe(true);
+  await body.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await expect(inspector.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
+  await page.screenshot({ path: '/private/tmp/hs2-jbtpnr-inspector-mobile.png', animations: 'disabled' });
+  await inspector.getByRole('button', { name: 'Hide inspector', exact: true }).click();
+  await expect(scrim).toHaveCount(0);
+  await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
 });

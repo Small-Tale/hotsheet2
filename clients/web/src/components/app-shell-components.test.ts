@@ -34,6 +34,13 @@ describe('application shell components', () => {
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
   });
 
+  it('clips the shell without making it a focus-scroll owner while preserving workspace scrolling (HS2-JBTPNR)', () => {
+    const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.app-shell \{[^}]*overflow: clip;/);
+    expect(css).toMatch(/\.app-shell__workspace \{[^}]*overflow: auto;/);
+    expect(css).toMatch(/\.app-shell__workspace \{[^}]*overflow-anchor: none;/);
+  });
+
   it('defines the supported application floor as 1024 by 600 CSS pixels', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
