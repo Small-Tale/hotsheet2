@@ -8300,7 +8300,9 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   ).toBe(true);
 });
 
-test('offers a visible Add note action before the first note exists', async ({ page }) => {
+test('aligns the empty Notes text and preserves Add note before the first note exists (HS2-D4VEE8)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await mockProject(page);
   await page.route('**/tickets/01', (route) =>
@@ -8314,15 +8316,48 @@ test('offers a visible Add note action before the first note exists', async ({ p
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('[data-component="ticket-inspector"]');
   const add = inspector.locator('.ticket-notes__add');
+  const expectEmptyNotes = async (surface: Locator, name: string) => {
+    const notes = surface.locator('[data-component="ticket-notes"]');
+    await notes.scrollIntoViewIfNeeded();
+    await expect(notes.locator('[data-component="list-inset-text"]')).toHaveClass(/kui-list-inset-text--horizontal/);
+    await expect(notes.locator('.ticket-notes__empty')).toHaveText('No notes added.');
+    const geometry = await notes.evaluate((node) => {
+      const label = node.querySelector('h2')!.getBoundingClientRect(),
+        empty = node.querySelector('.ticket-notes__empty')!.getBoundingClientRect(),
+        inset = getComputedStyle(node.querySelector('[data-component="list-inset-text"]')!);
+      return { textInset: empty.left - label.left, paddingBlock: [inset.paddingTop, inset.paddingBottom] };
+    });
+    expect(geometry.textInset).toBeCloseTo(0, 1);
+    expect(geometry.paddingBlock).toEqual(['0px', '0px']);
+    const clip = await notes.evaluate((node) => {
+      const notes = node.getBoundingClientRect(),
+        inspector = node.closest('[data-component="ticket-inspector"]')!.getBoundingClientRect();
+      return { x: inspector.left, y: notes.top, width: inspector.width, height: notes.height };
+    });
+    await page.screenshot({ path: `/private/tmp/hs2-d4vee8-empty-notes-${name}.png`, clip });
+  };
   await expect(add).toBeVisible();
   await expect(add).toHaveText(/Add note/);
+  await expectEmptyNotes(inspector, 'wide');
   await page.screenshot({ path: '/private/tmp/hs2-yn3x2j-empty-notes-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 940, height: 844 });
+  await page.setViewportSize({ width: 1024, height: 844 });
   await expect(add).toBeVisible();
+  await expectEmptyNotes(inspector, 'narrow');
   await page.screenshot({ path: '/private/tmp/hs2-yn3x2j-empty-notes-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 844 });
   await add.click();
   await expect(inspector.getByRole('textbox', { name: 'New note' })).toBeFocused();
+  await expect(inspector.locator('.ticket-notes__empty-inset')).toHaveCount(0);
+  await inspector.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(inspector.getByRole('textbox', { name: 'New note' })).toHaveCount(0);
+  await expectEmptyNotes(inspector, 'after-cancel');
+  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectEmptyNotes(reader, 'reader-mobile');
+  await reader.getByRole('button', { name: 'Add note', exact: true }).last().click();
+  await expect(reader.getByRole('textbox', { name: 'New note' })).toBeFocused();
+  await expect(reader.locator('.ticket-notes__empty-inset')).toHaveCount(0);
 });
 
 test('aligns the right inspector on shared menu primitives and its shared content gutter', async ({ page }) => {

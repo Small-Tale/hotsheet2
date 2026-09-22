@@ -12,7 +12,11 @@
   padding: remify(11.2px) remify(8px);
   border-radius: remify(9.6px);
 }
+.ticket-notes .ticket-notes__empty-inset {
+  margin-inline: var(--kui-layout-inline-margin, var(--kui-space-xs));
+}
 .ticket-notes__empty {
+  margin: 0;
   color: var(--wa-color-neutral-on-quiet) !important;
   font-style: italic;
 }

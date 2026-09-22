@@ -1,6 +1,8 @@
+import '@kerfjs/ui/list-inset-text.css';
 import './ticket-notes.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Plus } from 'lucide';
@@ -77,7 +79,11 @@ export function TicketNotes({
           ))}
         </div>
       ) : (
-        !composing && <p class="ticket-notes__empty">No notes added.</p>
+        !composing && (
+          <ListInsetText horizontalOnly className="ticket-notes__empty-inset">
+            <p class="ticket-notes__empty">No notes added.</p>
+          </ListInsetText>
+        )
       )}
       {composing && <NoteComposer value={composerDraft} />}
       {canAdd && !composing && (

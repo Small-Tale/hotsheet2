@@ -1038,6 +1038,10 @@ icons; structural separators do not require icons.
 
 ### 4.5 Notes and activity — feature floor
 
+- The empty Notes message uses `ListInsetText` with horizontal-only geometry: its
+  text aligns with the Notes heading and bordered content, while the owning section
+  supplies the outer inset. It remains visible for read-only tickets and yields to the
+  note composer or actual notes without adding vertical padding (HS2-D4VEE8).
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed,
   feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,

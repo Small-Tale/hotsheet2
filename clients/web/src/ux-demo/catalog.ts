@@ -257,7 +257,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'ticket-info-panel',
             'TicketInfoPanel',
-            'Ticket metadata and details with compact headings, inset status controls, tags, notes, and provenance.',
+            'Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.',
             'feature-floor',
             true,
             [
