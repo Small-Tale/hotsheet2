@@ -485,7 +485,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'notification-center',
         'NotificationCenter',
-        'Pending permission requests and newest-first decision history.',
+        'Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.',
         'feature-floor',
         true,
         ['permission-request'],

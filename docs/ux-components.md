@@ -1205,7 +1205,9 @@ capability-aware sections when their underlying features and data contracts land
 - `ToastRegion` and `Toast`
 - `NotificationBell`
 - `NotificationCenter` — pending requests followed by newest-first resolution history;
-  externally resolved requests remain visible with a neutral outcome message
+  externally resolved requests remain visible with a neutral outcome message. The canonical
+  12px card gap applies within each group and between pending requests and history
+  (HS2-D38KZF)
 - `AttentionBadge`
 - `NativeNotificationRouter`
 - `NotificationPreferences`

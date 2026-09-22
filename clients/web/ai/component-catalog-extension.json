@@ -1180,9 +1180,9 @@
       "id": "notification-center",
       "name": "NotificationCenter",
       "kind": "component",
-      "purpose": "Pending permission requests and newest-first decision history.",
+      "purpose": "Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.",
       "useWhen": [
-        "Hot Sheet needs pending permission requests and newest-first decision history."
+        "Hot Sheet needs pending permission requests and newest-first decision history with consistent 12px card spacing across both groups."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NotificationCenter behavior."

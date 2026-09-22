@@ -138,6 +138,17 @@ describe('permission presentation components', () => {
     );
   });
 
+  it('uses the same canonical card gap within and between pending/history groups (HS2-D38KZF)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'notification-center.css'), 'utf8');
+    expect(css).toMatch(/\.notification-center \{[^}]*display: grid;[^}]*gap: var\(--kui-space-s\);/);
+    expect(css).toMatch(/\.notification-center__items \{[^}]*display: grid;[^}]*gap: var\(--kui-space-s\);/);
+    expect(css).not.toContain('notification-center__section');
+    expect(css).not.toContain('notification-center__header');
+    const markup = String(NotificationCenter({ pending: [pending], history: [history] }));
+    expect(markup.match(/class="notification-center__items"/g)).toHaveLength(2);
+    expect(markup.indexOf('data-state="pending"')).toBeLessThan(markup.indexOf('data-state="external"'));
+  });
+
   it('renders explicit empty states', () => {
     const markup = String(NotificationCenter({ pending: [], history: [], title: 'Pending' }));
     expect(markup).toContain('No requests need your attention.');

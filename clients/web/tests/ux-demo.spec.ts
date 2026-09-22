@@ -5251,3 +5251,26 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 2 conversation exports.');
   });
 }
+
+test('keeps equal notification card gaps across pending and history groups (HS2-D38KZF)', async ({ page }) => {
+  await page.goto('/ux-demo?component=notification-center&dev-review=false');
+  const center = page.locator('[data-component="notification-center"]'),
+    cards = center.locator('[data-component="permission-request-card"]');
+  for (const width of [1280, 560]) {
+    await page.setViewportSize({ width, height: 1200 });
+    await expect(cards).toHaveCount(3);
+    const geometry = await cards.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const rect = node.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom };
+      }),
+    );
+    expect(geometry[1].top - geometry[0].bottom).toBeCloseTo(12, 1);
+    expect(geometry[2].top - geometry[1].bottom).toBeCloseTo(12, 1);
+    await expect(center).toHaveCSS('gap', '12px');
+    await center.screenshot({
+      path: `/private/tmp/hs2-d38kzf-notification-spacing-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+});
