@@ -12,6 +12,3 @@
 .dialog-surface::backdrop {
   background: var(--wa-color-overlay-modal);
 }
-.dialog-surface .kui-panel-header {
-  border-bottom: 0;
-}

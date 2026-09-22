@@ -1,6 +1,9 @@
+import '../components/heading.css';
+
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { clampRegionSize, ResizableRegion } from '@kerfjs/ui/resizable-region';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { signal } from 'kerfjs';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
@@ -363,11 +366,20 @@ export function AppShellDemo() {
           ) : undefined
         }
         pageHeader={
-          <PanelHeader
-            titleId="app-shell-demo-page-title"
-            title={projectSettings ? 'Project Settings' : viewName}
-            actions={!globalMode && !projectSettings ? <QuickTicketLauncher /> : undefined}
-          />
+          <div class="app-heading" data-component="heading" data-has-icon="false">
+            <Toolbar
+              dividerSides=""
+              leading={
+                <ToolbarText
+                  text={projectSettings ? 'Project Settings' : viewName}
+                  id="app-shell-demo-page-title"
+                  size="xlarge"
+                  headingLevel={1}
+                />
+              }
+              trailing={!globalMode && !projectSettings ? <QuickTicketLauncher /> : undefined}
+            />
+          </div>
         }
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}

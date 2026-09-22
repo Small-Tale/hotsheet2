@@ -1,7 +1,10 @@
+import '../components/heading.css';
 import '../components/native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { signal } from 'kerfjs';
 import { AppWindow, ServerCog } from 'lucide';
@@ -11,24 +14,40 @@ import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog 
 export function DialogHeaderDemo() {
   return (
     <section class="dialog-layout-demo dialog-surface">
-      <PanelHeader
-        title="Dialog title"
-        titleId="dialog-header-demo-title"
-        summary="A concise explanation of the current dialog state."
-        icon={<LucideIcon icon={ServerCog} name="server-cog" />}
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon">
+                <LucideIcon className="app-heading__symbol" icon={ServerCog} name="server-cog" />
+              </ToolbarControlGroup>
+              <ToolbarText text="Dialog title" id="dialog-header-demo-title" size="xlarge" />
+            </>
+          }
+        />
+        <p class="app-heading__summary">A concise explanation of the current dialog state.</p>
+      </div>
     </section>
   );
 }
 export function ValueTableDemo() {
   return (
     <section class="dialog-layout-demo dialog-surface">
-      <PanelHeader
-        title="Value table"
-        titleId="value-table-demo-title"
-        summary="Static metadata uses inset separators and aligned values."
-        icon={<LucideIcon icon={AppWindow} name="app-window" />}
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon">
+                <LucideIcon className="app-heading__symbol" icon={AppWindow} name="app-window" />
+              </ToolbarControlGroup>
+              <ToolbarText text="Value table" id="value-table-demo-title" size="xlarge" />
+            </>
+          }
+        />
+        <p class="app-heading__summary">Static metadata uses inset separators and aligned values.</p>
+      </div>
       <div class="dialog-layout-demo__body">
         <ValueTable label="Example metadata">
           <div>

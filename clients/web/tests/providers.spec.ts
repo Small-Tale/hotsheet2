@@ -5958,7 +5958,7 @@ test('keeps a persistently failed project remembered without obscuring a success
     'data-attention',
     'false',
   );
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Queue' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
 });
 
 test('suppresses interaction-bound render bursts but reports a storm that persists afterward', async ({ page }) => {
@@ -7489,7 +7489,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     },
   });
   await expect(page.getByRole('button', { name: /Ticket errors/ })).toHaveCount(0);
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Queue' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(corrupt).toHaveCount(0);
 
   await page.getByText('Use real project tickets').click();
@@ -11029,7 +11029,7 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Queue' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);
@@ -11473,7 +11473,7 @@ test('searches indexed ticket details and notes without discarding the full proj
   await expect.poll(() => searchRequests).toContain('QQRY00');
   await page.waitForTimeout(250);
   const settledRequests = searchRequests.length;
-  await page.locator('.kui-panel-header__title', { hasText: 'Search results' }).click();
+  await page.locator('.kui-toolbar-text', { hasText: 'Search results' }).click();
   await page.waitForTimeout(250);
   expect(searchRequests).toHaveLength(settledRequests);
   await page.screenshot({ path: '/private/tmp/hs2-pdze14-search-blur-no-request.png', fullPage: true });
@@ -12276,7 +12276,7 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await page.getByRole('button', { name: 'Empty Trash' }).click();
   await page.locator('[data-component="empty-trash-dialog"]').getByRole('button', { name: 'Empty Trash' }).click();
   await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Queue' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Trash/ })).toHaveCount(0);
   await expect(page.locator('[data-component="not-working-dialog"]')).toHaveCount(0);
   await expect(page.getByText('Loading Queue')).toBeVisible();

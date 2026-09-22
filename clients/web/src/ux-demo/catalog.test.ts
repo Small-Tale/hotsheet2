@@ -144,6 +144,7 @@ describe('UX demo catalog', () => {
       'terminal-dashboard',
       'toolbar',
       'floating-toolbar',
+      'dialog-header',
     ]);
     expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);

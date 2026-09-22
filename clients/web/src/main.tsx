@@ -1,3 +1,4 @@
+import './components/heading.css';
 import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
@@ -6,11 +7,11 @@ import './hot-sheet-tokens.css';
 import './style.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
 import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
 
@@ -7404,7 +7405,16 @@ function renderMainShell() {
         tabs={tabs}
         mode="project"
         header={<WorkspaceIdentity projectName={restoreFailure.name} />}
-        pageHeader={<PanelHeader title="Project unavailable" titleId="workspace-page-title" />}
+        pageHeader={
+          <div class="app-heading" data-component="heading" data-has-icon="false">
+            <Toolbar
+              dividerSides=""
+              leading={
+                <ToolbarText text="Project unavailable" id="workspace-page-title" size="xlarge" headingLevel={1} />
+              }
+            />
+          </div>
+        }
         workspace={<ProjectRestoreError {...restoreFailure} />}
         inspectorVisible={false}
         overlay={popup}
@@ -7434,25 +7444,34 @@ function renderMainShell() {
     ...customViewsFor(current.id).map((view) => ({ value: customTicketViewId(view.id), label: view.name })),
   ];
   const desktopPageHeader = (
-    <PanelHeader
-      titleId="workspace-page-title"
-      title={
-        viewMode.value === 'notifications'
-          ? notificationViewTitle(notificationView.value)
-          : viewMode.value === 'settings'
-            ? settingsCategoryTitle(settingsCategory())
-            : customTicketViewKey(selectedView.value)
-              ? ticketViewTitle(selectedView.value)
-              : searchQuery.value.trim() || searchTokens.value.length
-                ? 'Search results'
-                : ticketViewTitle(selectedView.value)
-      }
-      actions={
-        !['settings', 'notifications'].includes(viewMode.value)
-          ? ticketViewAction(selectedView.value, canCreate)
-          : undefined
-      }
-    />
+    <div class="app-heading" data-component="heading" data-has-icon="false">
+      <Toolbar
+        dividerSides=""
+        leading={
+          <ToolbarText
+            text={
+              viewMode.value === 'notifications'
+                ? notificationViewTitle(notificationView.value)
+                : viewMode.value === 'settings'
+                  ? settingsCategoryTitle(settingsCategory())
+                  : customTicketViewKey(selectedView.value)
+                    ? ticketViewTitle(selectedView.value)
+                    : searchQuery.value.trim() || searchTokens.value.length
+                      ? 'Search results'
+                      : ticketViewTitle(selectedView.value)
+            }
+            id="workspace-page-title"
+            size="xlarge"
+            headingLevel={1}
+          />
+        }
+        trailing={
+          !['settings', 'notifications'].includes(viewMode.value)
+            ? ticketViewAction(selectedView.value, canCreate)
+            : undefined
+        }
+      />
+    </div>
   );
   const pageHeader =
     viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value) ? (

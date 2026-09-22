@@ -858,6 +858,9 @@ and identity-less legacy entries remain conservatively blocking.
   its separate scope, suggestions, result rows, and saved-view handoff were removed because
   they duplicated the ordinary inline search flow without a distinct navigation role. Exact
   cross-project ticket references continue through the compact link-resolution chooser.
+  Page and dialog titles compose a divider-free Kerf Toolbar with extra-large ToolbarText;
+  page titles expose a level-one heading and dialog hosts retain their title/summary naming
+  relationships. Supporting copy belongs to the application below the toolbar.
   Ticket readers are persistent Web Awesome dialogs opened through the native modal lifecycle,
   so focus is trapped by the platform, Escape closes only the top reader after nested controls,
   backdrop clicks do not dismiss it, and focus returns to the live opener or workspace fallback.

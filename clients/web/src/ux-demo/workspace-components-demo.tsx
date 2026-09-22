@@ -1,4 +1,7 @@
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import '../components/heading.css';
+
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
@@ -308,16 +311,25 @@ export function WorkspaceHeaderDemo() {
         sortDirection={workspaceSortDirection.value}
         notificationCount={workspaceDemoNotifications.value.pending.length}
       />
-      <PanelHeader
-        titleId="workspace-demo-page-title"
-        title={
-          workspaceMode.value === 'settings'
-            ? 'Project Settings'
-            : workspaceMode.value === 'notifications'
-              ? 'Notifications'
-              : 'Queue'
-        }
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="false">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <ToolbarText
+              text={
+                workspaceMode.value === 'settings'
+                  ? 'Project Settings'
+                  : workspaceMode.value === 'notifications'
+                    ? 'Notifications'
+                    : 'Queue'
+              }
+              id="workspace-demo-page-title"
+              size="xlarge"
+              headingLevel={1}
+            />
+          }
+        />
+      </div>
       <div class="workspace-component-demo__content">
         <WorkspaceContent />
       </div>
@@ -331,7 +343,12 @@ export function WorkspaceHeaderDemo() {
 export function PageHeaderDemo() {
   return (
     <section class="workspace-component-demo" aria-label="PageHeader demo">
-      <PanelHeader titleId="page-header-demo-title" title="Queue" />
+      <div class="app-heading" data-component="heading" data-has-icon="false">
+        <Toolbar
+          dividerSides=""
+          leading={<ToolbarText text="Queue" id="page-header-demo-title" size="xlarge" headingLevel={1} />}
+        />
+      </div>
       <p class="component-stage__event">View identity remains separate from project-level controls.</p>
     </section>
   );

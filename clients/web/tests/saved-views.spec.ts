@@ -178,7 +178,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   });
   await dialog.getByRole('button', { name: 'Create View' }).click();
   await expect(page.getByRole('button', { name: 'Needs docs', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Needs docs' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Needs docs' })).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
@@ -210,7 +210,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
     'aria-current',
     'page',
   );
-  await expect(page.locator('.kui-panel-header__title', { hasText: 'Documentation' })).toBeVisible();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Documentation' })).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toHaveCount(0);
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Documentation', query: 'tag:client' }]);

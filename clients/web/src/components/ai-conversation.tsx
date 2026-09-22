@@ -1,3 +1,4 @@
+import './heading.css';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
@@ -5,8 +6,9 @@ import './ai-conversation.css';
 import './native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   Activity,
@@ -492,13 +494,21 @@ export function AIConversation({
       without-header
       with-footer={!readOnly}
     >
-      <PanelHeader
-        title={`${tool} conversation`}
-        titleId="ai-conversation-title"
-        summary={summary}
-        icon={<LucideIcon icon={Bot} name="bot" />}
-        actions={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon">
+                <LucideIcon className="app-heading__symbol" icon={Bot} name="bot" />
+              </ToolbarControlGroup>
+              <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" />
+            </>
+          }
+          trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
+        />
+        <p class="app-heading__summary">{summary}</p>
+      </div>
       {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
       {savedNotice}
       {sessionControls}

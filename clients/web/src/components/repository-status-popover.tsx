@@ -1,11 +1,13 @@
+import './heading.css';
 import './repository-status-popover.css';
 import './native-popover-dialog.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import {
   ArrowDown,
@@ -177,33 +179,47 @@ export function RepositoryStatusPopover({
       role="dialog"
       aria-labelledby="repository-status-title"
     >
-      <PanelHeader
-        title={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
-        titleId="repository-status-title"
-        summary={
-          recoveryStep === 'initialize'
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
+                <LucideIcon
+                  className="app-heading__symbol"
+                  icon={
+                    state === 'clean'
+                      ? CircleCheck
+                      : state === 'error' || state === 'conflicted'
+                        ? TriangleAlert
+                        : GitBranch
+                  }
+                  name={
+                    state === 'clean'
+                      ? 'circle-check'
+                      : state === 'error' || state === 'conflicted'
+                        ? 'triangle-alert'
+                        : 'git-branch'
+                  }
+                />
+              </ToolbarControlGroup>
+              <ToolbarText
+                text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
+                id="repository-status-title"
+                size="xlarge"
+              />
+            </>
+          }
+          trailing={<ToolbarControlGroup label="Repository actions">{actions}</ToolbarControlGroup>}
+        />
+        <p class="app-heading__summary">
+          {recoveryStep === 'initialize'
             ? 'Initialize Git here to enable repository status'
             : recoveryStep === 'remote'
               ? 'Git is ready; add an origin remote or skip for now'
-              : stateCopy[state]
-        }
-        iconClassName="repository-status-popover__icon"
-        icon={
-          <LucideIcon
-            icon={
-              state === 'clean' ? CircleCheck : state === 'error' || state === 'conflicted' ? TriangleAlert : GitBranch
-            }
-            name={
-              state === 'clean'
-                ? 'circle-check'
-                : state === 'error' || state === 'conflicted'
-                  ? 'triangle-alert'
-                  : 'git-branch'
-            }
-          />
-        }
-        actions={<ToolbarControlGroup label="Repository actions">{actions}</ToolbarControlGroup>}
-      />
+              : stateCopy[state]}
+        </p>
+      </div>
       {recoveryStep && <RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError} />}
       {status && !recoveryStep && (
         <div class="repository-status-popover__layout">
@@ -410,13 +426,20 @@ export function ChangeEvidenceDialog({
       role="dialog"
       aria-labelledby="change-evidence-title"
     >
-      <PanelHeader
-        title="Change evidence"
-        titleId="change-evidence-title"
-        summary="Files changed across the ticket's complete commit range"
-        iconClassName="repository-status-popover__icon"
-        icon={<LucideIcon icon={GitCompare} name="git-compare" />}
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
+                <LucideIcon className="app-heading__symbol" icon={GitCompare} name="git-compare" />
+              </ToolbarControlGroup>
+              <ToolbarText text="Change evidence" id="change-evidence-title" size="xlarge" />
+            </>
+          }
+        />
+        <p class="app-heading__summary">Files changed across the ticket's complete commit range</p>
+      </div>
       <div class="repository-status-popover__layout change-evidence-dialog__layout">
         <aside>
           <nav aria-label="Change evidence views">

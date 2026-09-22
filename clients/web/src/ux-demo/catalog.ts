@@ -132,7 +132,14 @@ export const demoCatalog: DemoCategory[] = [
         true,
         ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board', 'notification-center'],
       ),
-      demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
+      demo(
+        'page-header',
+        'PageHeader',
+        'Page heading composed from Toolbar and extra-large ToolbarText below project tabs.',
+        'feature-floor',
+        true,
+        ['toolbar', 'toolbar-text'],
+      ),
       demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, [
         'app-tab',
       ]),
@@ -643,9 +650,10 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'dialog-header',
         'DialogHeader',
-        'Shared icon, title, subtitle, actions, and divider geometry for dialogs.',
+        'Dialog heading composed from Toolbar, ToolbarText, grouped controls, and app-owned supporting copy.',
         'feature-floor',
         true,
+        ['toolbar', 'toolbar-text', 'toolbar-control-group'],
       ),
       demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.', 'feature-floor', true),
       demo(

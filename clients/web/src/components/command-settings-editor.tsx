@@ -1,3 +1,4 @@
+import './heading.css';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
@@ -5,7 +6,9 @@ import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { Bot, FolderPlus, GripVertical, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
@@ -418,27 +421,35 @@ export function CommandSettingsEditor({
       >
         {editing && editingIcon ? (
           <>
-            <PanelHeader
-              title="Edit command"
-              titleId="command-editor-title"
-              summary="Changes save automatically."
-              icon={
-                <span
-                  class="command-settings-editor__dialog-icon"
-                  data-transparent={
-                    resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR ? 'true' : undefined
-                  }
-                  style={commandIconStyle(editing)}
-                >
-                  <LucideIcon icon={editingIcon.icon} name={editingIcon.name} />
-                </span>
-              }
-              actions={
-                <button type="button" class="command-settings-editor__dialog-done" data-action="close-command-editor">
-                  Done
-                </button>
-              }
-            />
+            <div class="app-heading" data-component="heading" data-has-icon="true">
+              <Toolbar
+                dividerSides=""
+                leading={
+                  <>
+                    <ToolbarControlGroup single className="app-heading__icon">
+                      <span
+                        class="command-settings-editor__dialog-icon"
+                        data-transparent={
+                          resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR ? 'true' : undefined
+                        }
+                        style={commandIconStyle(editing)}
+                      >
+                        <LucideIcon icon={editingIcon.icon} name={editingIcon.name} />
+                      </span>
+                    </ToolbarControlGroup>
+                    <ToolbarText text="Edit command" id="command-editor-title" size="xlarge" />
+                  </>
+                }
+                trailing={
+                  <ToolbarControlGroup label="Command actions" appearance="borderless" single>
+                    <button type="button" data-action="close-command-editor">
+                      Done
+                    </button>
+                  </ToolbarControlGroup>
+                }
+              />
+              <p class="app-heading__summary">Changes save automatically.</p>
+            </div>
             <div class="command-settings-editor__dialog-body">
               <CommandDetailFields
                 command={editing}

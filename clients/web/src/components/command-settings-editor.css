@@ -23,7 +23,7 @@
   flex: 0 0 auto;
   gap: var(--kui-space-2xs);
 }
-.command-settings-editor button {
+.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)) {
   display: inline-flex;
   min-height: remify(36px);
   padding: 0 var(--kui-space-xs);
@@ -37,14 +37,14 @@
   cursor: pointer;
   font: inherit;
 }
-.command-settings-editor button:hover {
+.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)):hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
-.command-settings-editor button:disabled {
+.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)):disabled {
   opacity: 0.45;
   cursor: default;
 }
-.command-settings-editor button svg {
+.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)) svg {
   width: remify(16px);
   height: remify(16px);
 }
@@ -273,16 +273,6 @@
 .command-settings-editor__dialog-icon svg {
   width: remify(16px);
   height: remify(16px);
-}
-.command-settings-editor__dialog-done {
-  min-height: remify(32px);
-  color: var(--wa-color-brand-on-loud);
-  border-color: transparent;
-  background: var(--wa-color-brand-fill-loud);
-}
-.command-settings-editor__dialog-done:hover {
-  background: var(--wa-color-brand-fill-loud);
-  filter: brightness(1.05);
 }
 .command-settings-editor__dialog-body {
   min-height: 0;

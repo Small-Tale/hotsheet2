@@ -120,7 +120,7 @@ Supporting components:
   incompatible-server, and authentication variants with state-specific Lucide icons,
   live-region semantics, details, and relevant recovery actions.
 - `ConnectionDetailsDialog` — **demo built**: every compatible-skew, stale-source,
-  old-server, old-client, and unavailable-metadata state using the shared `PanelHeader`
+  old-server, old-client, and unavailable-metadata state using the shared Toolbar heading
   and `ValueTable` presentation. Safely recoverable details dismiss through the native
   popover light-dismiss behavior rather than a redundant Close action. Its body uses the
   canonical 24 px major-region rhythm; narrow metadata rows use 8 px insets and 4 px between
@@ -132,15 +132,16 @@ Supporting components:
   shared padding and character-wrapped full paths in a width-constrained scrollable list.
   The interactive demo covers local/recovery/busy and remote populated/loading/empty/error
   transitions, reopening, and keyboard selection (HS2-XX5Y2X).
-- `PanelHeader` / `ValueTable` — **demo built**: shared divider-free panel/dialog/page
-  icon/title/subtitle/action geometry and borderless static metadata cells with inset
-  separators. `PanelHeader` (the `@kerfjs/ui` beta.6 consolidation of the former `DialogHeader`
-  and `PageHeader`) renders a real top `Toolbar` whose leading zone holds an optional icon
-  control group plus the extra-large `ToolbarText` title, and whose trailing zone takes the
-  caller's `actions` directly, with the optional summary as a sibling below the toolbar.
-  Because PanelHeader no longer wraps/labels the actions itself, consumers that need a named
-  action group pass their own labeled `ToolbarControlGroup` as `actions`; the framework-neutral Dev Review
-  overlay copies this exact anatomy since it cannot import the component (HS2-M4X0WS).
+- Dialog/page heading compositions and `ValueTable` — **demo built**: direct divider-free
+  `Toolbar` rows put an optional icon `ToolbarControlGroup` and extra-large `ToolbarText`
+  in the leading zone, with named grouped controls in the trailing zone. Supporting copy
+  is app-owned content below the toolbar; host `aria-labelledby`/`aria-describedby` point
+  to the retained title and summary ids. `heading.css` owns only the icon tone and summary
+  alignment, while Kerf owns row/control geometry. The framework-neutral Dev Review
+  overlay emits the same Toolbar/ToolbarText anatomy and imports its canonical styles.
+  `ValueTable` supplies borderless metadata cells with inset separators. These compositions
+  use APIs available in beta.24 and do not depend on the removed upstream heading wrapper
+  (HS2-AGDJ6E).
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.
@@ -213,7 +214,7 @@ does not introduce polling or another network request.
     4px-separated `ListHeader`; the pointer-anchored file-action menu stays app-owned
     because no catalog primitive owns that host-action positioning contract (HS2-4Y6SM9).
     Its catalog-only example stack and fixture wrapper also opt into shrinking, keeping the
-    embedded dialog and both PanelHeader actions inside the detail pane at 1280px and in the
+    embedded dialog and both heading toolbar actions inside the detail pane at 1280px and in the
     constrained layout without changing production popover sizing (HS2-MCHTAW).
 - `RepositorySetup` — **production built**: initialize a project folder's Git repository and
   optionally connect its origin without staging, committing, or pushing project files. Its major
@@ -398,11 +399,11 @@ without network requests (HS2-Y70MJY).
   actions, and safe-area-adjusted positioning (HS2-W3GPHW).
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.
-- `PanelHeader` (page usage) — **demo built**: current view identity below ProjectTabBar,
-  separate from the project-level toolbar above it. Page headings now use the same
-  `PanelHeader` as dialogs (the former `PageHeader` was merged into it in `@kerfjs/ui` beta.6);
-  the view title renders as an extra-large `ToolbarText` and the view action goes in the
-  trailing zone. Note: the title is not a heading element (tracked upstream as KF-CDY0D9).
+- Page heading — **demo built**: current view identity below ProjectTabBar stays separate
+  from project-level controls. A divider-free `Toolbar` holds extra-large `ToolbarText`
+  with `headingLevel={1}` and the stable page-title id; view actions stay in its trailing
+  zone. Dialog titles instead retain their host naming relationships without adding a
+  document heading landmark.
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
@@ -418,7 +419,7 @@ without network requests (HS2-Y70MJY).
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
 
 These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `AppTab`,
-`ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `PanelHeader`,
+`ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `Toolbar`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.

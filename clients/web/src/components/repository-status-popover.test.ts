@@ -77,7 +77,7 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('data-state="uninitialized"');
     expect(markup).toContain('data-setup-step="initialize"');
     expect(markup).toMatch(
-      /kui-panel-header__title[^>]*id="repository-status-title"[^>]*><span class="kui-toolbar-text__text">This folder is not a Git repository</,
+      /kui-toolbar-text[^>]*id="repository-status-title"[^>]*><span class="kui-toolbar-text__text">This folder is not a Git repository</,
     );
     expect(markup).not.toContain('>Repository Status<');
     expect(markup).toContain('data-action="initialize-repository"');
@@ -123,10 +123,10 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('repository-status-popover__path');
     expect(markup).toContain('data-action="refresh-repository-status"');
     const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8'),
-      shared = readFileSync(resolve(import.meta.dirname, 'native-popover-dialog.css'), 'utf8');
+      shared = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
     expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
     expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
-    expect(shared).toMatchSource(/\.dialog-surface \.kui-panel-header \{ border-bottom: 0; \}/);
+    expect(shared).toContain('dividerSides=""');
   });
 
   it('uses canonical master-detail, connected-list, and menu spacing while retaining geometry', () => {

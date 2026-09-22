@@ -476,7 +476,7 @@ test('represents the shared repository-status composition in the UX catalog', as
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
     await expect(dialog).toHaveAttribute('data-state', state);
-    await expect(dialog.locator('.kui-panel-header__summary')).toHaveText(copy);
+    await expect(dialog.locator('.app-heading__summary')).toHaveText(copy);
     await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1);
   }
   await inspector.getByRole('button', { name: 'Reset' }).click();
@@ -614,7 +614,7 @@ test('represents every server-build details state with shared dialog geometry', 
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=connection-details-dialog');
   const dialog = page.locator('[data-component="connection-details-dialog"]'),
-    header = dialog.locator('[data-component="panel-header"]');
+    header = dialog.locator('[data-component="heading"]');
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
   await expect(header).toBeVisible();
@@ -1209,7 +1209,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
     textarea: '16px',
     button: '0px 16px',
   });
-  await expect(dialog.locator('.kui-panel-header')).toHaveCSS('border-bottom-width', '0px');
+  await expect(dialog.locator('.app-heading')).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
   expect(
     await dialog.evaluate((node) => {
@@ -2313,7 +2313,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
     await expect(demo.locator('[data-component="ticket-board"]')).toHaveCount(mode === 'Columns' ? 1 : 0);
   }
   await expect(notifications).toHaveAttribute('aria-pressed', 'true');
-  await expect(demo.locator('.kui-panel-header__title')).toHaveText('Notifications');
+  await expect(demo.locator('.kui-toolbar-text')).toHaveText('Notifications');
   await expect(pending).toHaveCount(2);
   await expect(read.getByRole('button', { name: 'Always Allow' })).toHaveCount(0);
   await expect(command.getByRole('button', { name: 'Always Allow' })).toBeEnabled();
@@ -2641,7 +2641,7 @@ test('shows repository comparison as a shared pressed toolbar control', async ({
   await expect(compare).toHaveCSS('color', 'rgb(255, 255, 255)');
   await dialog.screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-wide.png' });
   await dialog
-    .locator('[data-component="panel-header"]')
+    .locator('[data-component="heading"]')
     .screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-header.png' });
   await page.addStyleTag({
     content:
@@ -3847,13 +3847,13 @@ test('keeps workspace spacing and the new-ticket action in the page header', asy
   const shell = page.locator('[data-component="app-shell"]'),
     workArea = shell.locator('.app-shell__work-area'),
     workspace = shell.locator('.app-shell__workspace'),
-    header = shell.locator('[data-component="panel-header"]');
+    header = shell.locator('[data-component="heading"]');
   await expect(workArea).toHaveAttribute('data-has-composer', 'false');
   expect(
     await shell.evaluate((node) => {
       const workspace = node.querySelector<HTMLElement>('.app-shell__workspace')!,
-        header = node.querySelector<HTMLElement>('[data-component="panel-header"]')!,
-        title = header.querySelector('.kui-panel-header__title')!,
+        header = node.querySelector<HTMLElement>('[data-component="heading"]')!,
+        title = header.querySelector('.kui-toolbar-text')!,
         launcher = header.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,
         tabs = node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,
         content = node.querySelector<HTMLElement>('.ticket-inspector__content')!;
@@ -3875,7 +3875,7 @@ test('keeps workspace spacing and the new-ticket action in the page header', asy
     tabsToContent: 8,
   });
   const centers = await header.evaluate((node) => {
-    const title = node.querySelector('.kui-panel-header__title')!.getBoundingClientRect(),
+    const title = node.querySelector('.kui-toolbar-text')!.getBoundingClientRect(),
       button = node.querySelector('button')!.getBoundingClientRect();
     return Math.abs(title.y + title.height / 2 - (button.y + button.height / 2));
   });
@@ -4408,7 +4408,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     const identity = toolbarNode.querySelector('[data-component="workspace-identity"]')!.getBoundingClientRect();
     const controls = toolbarNode.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
-    const pageHeader = node.querySelector('.kui-panel-header')!.getBoundingClientRect();
+    const pageHeader = node.querySelector('.app-heading')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
     return {
       shellTop: shellRect.top,
@@ -5177,6 +5177,9 @@ test('edits custom command color and icon in the command settings editor', async
     'aria-pressed',
     'true',
   );
+  const done = page.getByRole('button', { name: 'Done', exact: true });
+  await expect(done).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  await expect(done).toHaveCSS('height', '40px');
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-color-icon.png' });
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => dialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);

@@ -264,10 +264,10 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
   box-sizing: border-box;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
-.hs-dev-review__dialog .kui-panel-header {
+.hs-dev-review__dialog .app-heading {
   min-height: remify(78.4px);
 }
-.hs-dev-review__dialog .kui-panel-header__summary {
+.hs-dev-review__dialog .app-heading__summary {
   font-size: var(--wa-font-size-xs);
 }
 .hs-dev-review__close {

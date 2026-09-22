@@ -1,8 +1,11 @@
+import './heading.css';
 import './connection-details-dialog.css';
 import './native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PanelHeader } from '@kerfjs/ui/panel-header';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ServerCog } from 'lucide';
 
@@ -61,13 +64,22 @@ export function ConnectionDetailsDialog({
       aria-labelledby="connection-details-title"
       aria-describedby="connection-details-summary"
     >
-      <PanelHeader
-        title="Server build details"
-        titleId="connection-details-title"
-        summary={summary}
-        summaryId="connection-details-summary"
-        icon={<LucideIcon icon={ServerCog} name="server-cog" />}
-      />
+      <div class="app-heading" data-component="heading" data-has-icon="true">
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single className="app-heading__icon">
+                <LucideIcon className="app-heading__symbol" icon={ServerCog} name="server-cog" />
+              </ToolbarControlGroup>
+              <ToolbarText text="Server build details" id="connection-details-title" size="xlarge" />
+            </>
+          }
+        />
+        <p class="app-heading__summary" id="connection-details-summary">
+          {summary}
+        </p>
+      </div>
       <div class="connection-details-dialog__body">
         <ValueTable className="connection-details-dialog__metadata" label="Client and server build metadata">
           <div>

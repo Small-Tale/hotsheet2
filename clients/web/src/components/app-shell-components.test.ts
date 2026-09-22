@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 
-import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { clampRegionSize, ResizableRegion, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -447,7 +448,10 @@ describe('application shell components', () => {
         sidebar: 'side' as never,
         header: 'head' as never,
         headerActions: 'actions' as never,
-        pageHeader: PanelHeader({ title: 'All Tickets', titleId: 'all-tickets-title' }),
+        pageHeader: Toolbar({
+          dividerSides: '',
+          leading: ToolbarText({ text: 'All Tickets', id: 'all-tickets-title', size: 'xlarge', headingLevel: 1 }),
+        }),
         composer: 'compose' as never,
         workspace: 'work' as never,
         inspector: 'inspect' as never,
@@ -470,14 +474,14 @@ describe('application shell components', () => {
     expect(markup).toContain('data-ticket-scroll-owner="workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
-    expect(markup).toContain('data-component="panel-header"');
+    expect(markup).toContain('role="heading" aria-level="1"');
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
     expect(markup).toContain('data-component="toolbar"');
     expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
     expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="tab-bar"'));
-    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('data-component="panel-header"'));
+    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('id="all-tickets-title"'));
     const globalMarkup = String(
       AppShell({
         mode: 'stats',

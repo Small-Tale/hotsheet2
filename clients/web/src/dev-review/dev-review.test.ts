@@ -42,12 +42,9 @@ const submission = {
 describe('dev review tool', () => {
   it('keeps the ticket dialog header and footer visually continuous with its body', async () => {
     const css = await readFile(resolve(import.meta.dirname, 'dev-review.css'), 'utf8');
-    const sharedDialogCss = await readFile(
-      resolve(import.meta.dirname, '../components/native-popover-dialog.css'),
-      'utf8',
-    );
-    expect(sharedDialogCss).toMatchSource(/\.dialog-surface .kui-panel-header \{ border-bottom: 0; \}/);
-    expect(css.match(/\.hs-dev-review__dialog .kui-panel-header \{([^}]*)\}/)?.[1]).not.toContain('border-bottom');
+    const sharedDialogCss = await readFile(resolve(import.meta.dirname, '../components/heading.css'), 'utf8');
+    expect(sharedDialogCss).not.toContain('border-bottom');
+    expect(css.match(/\.hs-dev-review__dialog .app-heading \{([^}]*)\}/)?.[1]).not.toContain('border-bottom');
     expect(css.match(/\.hs-dev-review__dialog footer \{([^}]*)\}/)?.[1]).not.toContain('border-top');
   });
 

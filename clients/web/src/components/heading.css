@@ -1,0 +1,35 @@
+/* Toolbar owns heading-row geometry. Hot Sheet owns icon tone and supporting copy. */
+.app-heading {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 0;
+}
+.app-heading__icon.kui-toolbar-control-group {
+  --kui-toolbar-control-background: var(--kui-color-brand-fill-quiet);
+  --kui-toolbar-control-border: var(--kui-color-brand-fill-quiet);
+  color: var(--kui-color-brand-on-quiet);
+  justify-content: center;
+}
+.app-heading__symbol {
+  width: remify(22px);
+  height: remify(22px);
+}
+.app-heading__summary {
+  min-width: 0;
+  margin: 0;
+  padding-inline-start: var(--app-heading-title-inset);
+  overflow: hidden;
+  color: var(--kui-color-text-quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-heading[data-has-icon='false'] {
+  --app-heading-title-inset: calc(var(--kui-toolbar-gap, remify(8px)) + var(--kui-layout-item-padding, remify(8px)));
+}
+.app-heading[data-has-icon='true'] {
+  --app-heading-title-inset: calc(
+    var(--kui-toolbar-gap, remify(8px)) + var(--kui-toolbar-group-size, calc(2px + remify(42px))) +
+      var(--kui-toolbar-gap, remify(8px)) + var(--kui-layout-item-padding, remify(8px))
+  );
+}

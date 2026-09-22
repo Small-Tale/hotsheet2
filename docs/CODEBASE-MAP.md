@@ -386,3 +386,7 @@ Migration progress producer entry points: `crates/hotsheet-cli/src/migration_pro
 holds native advisory locks until its stdin closes. `POST /__hotsheet/projects/migration-jobs`
 returns 202; `GET ?root=...&after=...` is a blocking revision watch. Legacy synchronous
 migration and backup routes retain their existing response contracts.
+
+Heading compositions use `clients/web/src/components/heading.css` for app-owned icon tone
+and supporting-copy alignment; the page, dialog, and Dev Review owners compose canonical
+Kerf Toolbar/ToolbarText primitives directly (HS2-AGDJ6E).
