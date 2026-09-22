@@ -189,9 +189,15 @@ in `interactions/dom.ts`.
 pre-extraction baseline. Callback tests exercise external state replacement, repeated
 native dismissal, range anchors, and long-press suppression; production browser
 flows remain the end-to-end behavior contract. Changing registrations intentionally
-requires reviewing the inventory alongside those behavior tests. Splitting
-`openProject` and parallelizing remembered-project startup remain the separate
-HS2-V9ZVW0 scope.
+requires reviewing the inventory alongside those behavior tests.
+
+`project-startup.ts` owns transport preparation and the remembered-open coordinator
+(HS2-V9ZVW0). Each initial/retry pass fetches concurrently without owning application
+signals; `main.tsx` registers successful projects serially, then activates/restores one
+selected project. Explicit project opens reuse the same fetch and registration boundaries.
+The startup unit matrix controls completion ordering and retry transitions, and the
+production-browser suite checks request overlap, active-only loading, saved drafts,
+onboarding, failure identities, and empty/refilled sessions.
 
 ## 12.7 Testing strategy
 

@@ -31,6 +31,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
+    src/project-startup.ts   #   Concurrent remembered-project preparation, bounded parallel retry, ordered registration, and single activation
+    tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and mixed terminal/AI Workspace grid state
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor, shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main

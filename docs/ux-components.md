@@ -1356,8 +1356,8 @@ Each individual project layers the aligned aggregate trend as wider neutral-gray
 brand-blue bars; the aggregate row itself remains the only green chart and has no redundant layer.
 The aligned-series aggregation and explicit chart-domain contract are reusable for future
 cross-project statistics. During remembered-project startup, the AppShell and terminal drawer remain
-unmounted behind one stable restoration status until tickets, terminals, and the bounded retry pass
-are ready, then healthy tabs and red error tabs appear together without a mixed intermediate layout.
+unmounted behind one stable restoration status until the active project's tickets, visible terminal
+resources, and the bounded retry pass are ready, then healthy tabs and red error tabs appear together without a mixed intermediate layout.
 Selecting an error tab uses the shared `EmptyState` primitive for exact failure context, recovery
 guidance, and retry without pretending the unavailable checkout has live sidebar or inspector data.
 

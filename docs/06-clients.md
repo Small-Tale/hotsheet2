@@ -517,7 +517,19 @@ and identity-less legacy entries remain conservatively blocking.
   server conservatively discovers a valid sibling `<checkout>.hs2` git ticket store,
   hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
-  failed remembered projects receive one bounded retry after the initial restore pass.
+  remembered roots are deduplicated and their project-open/metadata requests run concurrently.
+  Failed opens receive one bounded parallel retry; successful projects are then registered
+  serially in remembered order. Only the remembered active project loads its ticket list,
+  commands, views, and workspace session before the shell is revealed. Other project tabs
+  load those resources when selected (including selection after closing the active tab).
+  If the remembered active root remains unavailable, its error tab stays selected; if no
+  remembered active root matches, the last successful project is selected. A visible
+  aggregate terminal workspace still restores its projects' terminal and AI-chat resources.
+  Entering Workspace grid or cross-project statistics loads missing inactive ticket summaries
+  in the background without activating those projects or loading their commands and views.
+  Startup never persists a partial session over a saved draft. Onboarding for an inactive
+  restored project waits until activation, and setup/migration dialogs take precedence over
+  reopening the saved composer while retaining its draft.
   A project that remains unavailable stays in the tab bar with a red title and error icon;
   selecting it presents the exact failure, known stale-server context, its remembered root,
   likely recovery steps, and an in-place retry action. Failed tabs are not draggable or
@@ -1673,8 +1685,8 @@ viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the proj
 bottom drawer over that same viewport boundary.
 
 When a launch restores remembered projects, the client holds a single project-restoration
-surface until every available project's tickets and terminals have settled and every failed
-project has completed its bounded retry. It then reveals the complete healthy and error-tab
+surface until parallel project registration, the active project's tickets and workspace session,
+visible terminal resources, and each failed project's bounded retry have settled. It then reveals the complete healthy and error-tab
 set in one render boundary and restores the remembered active healthy or failed tab. A refresh
 therefore never exposes a partially restored board beside terminal content from a different
 stage of startup.

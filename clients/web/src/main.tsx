@@ -308,6 +308,7 @@ import {
   sidebarDriveConnectionId,
 } from './project-drive';
 import { projectSettingsValue, updateProjectSettingsValue } from './project-settings-state';
+import { openProjectFetch, type ProjectOpenResult, restoreRememberedProjects } from './project-startup';
 import { createProjectTabRefreshCoordinator } from './project-tab-refresh';
 import { appendUniqueTicketRows } from './project-ticket-refresh';
 import { loadProjectTicketRefresh, type ProjectTicketRefresh } from './project-ticket-refresh';
@@ -422,7 +423,6 @@ import {
   hs1MigrationPromptDismissed,
   loadDraftFiles,
   loadProjectWorkspaceSession,
-  reconcileRememberedProjectRoots,
   saveActiveProjectRoot,
   saveDraftFile,
   saveProjectWorkspaceSession,
@@ -1338,7 +1338,12 @@ async function refreshTerminalDashboard() {
   const results: Array<TerminalDashboardGroup | undefined> = await Promise.all(
     openProjects.map(async (current) => {
       try {
-        const infos = await new Api(current.apiPath).terminals(),
+        const [infos] = await Promise.all([
+            new Api(current.apiPath).terminals(),
+            ...(current.id !== selectedProjectId.value && !Object.hasOwn(driveConnectionsByProject.value, current.id)
+              ? [refreshDriveConnections(current, true)]
+              : []),
+          ]),
           owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
           sessions = owned.map((session, index) => ({
             ...session,
@@ -1787,7 +1792,7 @@ function disposeProjectTicketReaders(ids: readonly string[]) {
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();selectedProjectId.value=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
+function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
 function projectCloseResources(projectId: string): ProjectCloseResource[] {
   const terminals = (terminalGroups.value.find((group) => group.projectId === projectId)?.sessions ?? [])
     .filter((session) => session.alive)
@@ -2008,6 +2013,10 @@ function setShellMode(mode: ProjectTabBarMode) {
     terminalRailDirection.value = 'forward';
   }
   shellMode.value = mode;
+  if (mode === 'terminals' || mode === 'stats')
+    for (const current of projects.value)
+      if (current.id !== selectedProjectId.value && !Object.hasOwn(ticketRowsByProject.value, current.id))
+        void projectTabRefresh.request(current);
   magnifiedTerminalKey.value = undefined;
   terminalContextMenu.value = undefined;
   if (mode === 'terminals') {
@@ -2109,6 +2118,7 @@ function draftScope(kind: 'composer' | 'not-working', projectId = selectedProjec
   return `${kind}:${projectId}`;
 }
 function persistProjectSessionNow() {
+  if (initialProjectRestorePending.value) return;
   if (selectedProjectRestoreRoot.value) {
     saveActiveProjectRoot(localStorage, selectedProjectRestoreRoot.value);
     return;
@@ -2155,7 +2165,7 @@ function persistProjectSessionNow() {
 }
 function cacheActiveProjectProjection() {
   const id = selectedProjectId.value;
-  if (!id) return;
+  if (!id || !projects.value.some((item) => item.id === id)) return;
   ticketRowsByProject.value = { ...ticketRowsByProject.value, [id]: tickets.value };
   ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [id]: ticketNextCursor.value };
   projectProjectionById.value = {
@@ -2182,6 +2192,8 @@ async function refreshActivatedProject(
     await afterBrowserPaint();
     if (generation !== projectActivationGeneration || project()?.id !== current.id) return;
   }
+  const firstActivation = projectsPendingActivation.has(current.id);
+  if (firstActivation) presentOpenedProjectSetup(current);
   const category = settingsCategory(),
     settingsRefresh =
       category === 'sources'
@@ -2201,6 +2213,7 @@ async function refreshActivatedProject(
     refreshCustomViews(current),
     settingsRefresh,
     aiRefresh,
+    ...(firstActivation ? [refreshDriveConnections(current, true)] : []),
     ...(includeTerminals ? [refreshTerminalDashboard()] : []),
   ]);
   if (generation !== projectActivationGeneration || project()?.id !== current.id) return;
@@ -2231,7 +2244,11 @@ async function restoreProjectSession(current: Project, generation = projectActiv
     active = () => generation === projectActivationGeneration && project()?.id === current.id;
   if (!stored || !active()) return;
   const run = ++projectSessionRestoreRun,
-    restoreComposerOpen = stored.composer.open && initialProjectRestoreComplete;
+    restoreComposerOpen =
+      stored.composer.open &&
+      initialProjectRestoreComplete &&
+      !ticketSourceSetupProject.value &&
+      !hs1MigrationProject.value;
   restoringProjectSession = true;
   try {
     // If the user opened the new-ticket composer during this activation's async refresh window, leave it
@@ -3628,7 +3645,7 @@ async function refreshCustomViews(current = project()) {
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function refreshDriveConnections(current=project(),restoreDrawerTabs=false){if(!current)return;if(aiConfigurationProjectId!==current.id)void refreshAiConfiguration(current);try{const client=new Api(current.apiPath),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
+async function refreshDriveConnections(current=project(),restoreDrawerTabs=false){if(!current)return;if(project()?.id===current.id&&aiConfigurationProjectId!==current.id)void refreshAiConfiguration(current);try{const client=new Api(current.apiPath),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
 async function refreshAiConfiguration(current = project(), refresh = false) {
   if (!current) return;
   aiSettingsLoading.value = true;
@@ -4862,9 +4879,123 @@ function retainProjectRestoreFailure(root: string, message: string, recoveryPid?
   const failure: ProjectRestoreFailure = { root, name: rememberedProjectName(root), error: message, recoveryPid, busy };
   projectRestoreFailures.value = [...projectRestoreFailures.value.filter((item) => item.root !== root), failure];
 }
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function openProject(root:string,ticketStore?:string,remember=true,reportError=true,retainFailure=false){loading.value=true;unhealthyServerRecovery.value=undefined;if(reportError)error.value='';try{const response=await fetch('/__hotsheet/projects/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({root,ticketStore})});const value=await response.json() as Project&{error?:string;recovery?:UnhealthyServerRecovery};if(!response.ok){unhealthyServerRecovery.value=value.recovery;throw new Error(value.error||'Could not open project.')}projectRestoreFailures.value=projectRestoreFailures.value.filter(item=>item.root!==root);if(selectedProjectRestoreRoot.value===root)selectedProjectRestoreRoot.value='';projects.value=replaceTabInPlace(projects.value,item=>item.id,value);hideVerifiedByProject.value={...hideVerifiedByProject.value,[value.id]:localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`)==='true'};permissionAutomationByProject.value={...permissionAutomationByProject.value,[value.id]:loadPermissionAutomation(value.id)};if(selectedProjectId.value!==value.id){if(!activateOpenProject(value.id))throw new Error('Could not activate the opened project.')}else{selectedProjectId.value=value.id;saveActiveProjectRoot(localStorage,value.root);terminalDrawerSelected.value=localStorage.getItem(`hotsheet.project.${value.id}.terminal-drawer-selection`)||'grid'}if(remember)localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));await migrationJobs.join(value.root).then(job=>{if(!job){migrationJobsByRoot.value=Object.fromEntries(Object.entries(migrationJobsByRoot.value).filter(([root])=>root!==value.root))}}).catch(()=>undefined);const migrationTarget=value.needsHs1Migration&&!migrationJobsByRoot.value[value.root]&&!hs1MigrationPromptDismissed(localStorage,value.id,hs1SourceIdentity(value))?value:undefined,setupTarget=value.needsTicketSetup&&!value.needsHs1Migration?value:undefined,openingDialog=document.querySelector<HTMLElement>('[data-project-dialog]'),waitForProjectDialog=Boolean((migrationTarget||setupTarget)&&(openingDialog as Control|null)?.open);ticketSourceSetupNavigation.value='none';createdGitTicketStore.value='';ticketSourceRemoteError.value='';hs1MigrationError.value='';const presentSetup=()=>{hs1MigrationProject.value=migrationTarget;ticketSourceSetupProject.value=setupTarget};if(waitForProjectDialog)openingDialog!.addEventListener('wa-after-hide',presentSetup,{once:true});projectDialogOpen.value=false;if(!waitForProjectDialog)presentSetup();else{hs1MigrationProject.value=undefined;ticketSourceSetupProject.value=undefined}ticketSourceSetupError.value='';const descriptors=await new Api(value.apiPath).providers().catch(()=>[]),selected=descriptors.find(item=>item.default)??descriptors[0];defaultProviders.value={...defaultProviders.value,[value.id]:selected?{name:selected.display_name,capabilities:selected.capabilities}:undefined};providerCapabilities.value={...providerCapabilities.value,...Object.fromEntries(descriptors.map(item=>[item.connection_id,item.capabilities]))};startPermissionUpdates();syncProjectChangeStreams();await Promise.all([refreshProject(),refreshCommands(value),refreshCustomViews(value),refreshDriveConnections(value,true),...(terminalDrawerVisible.value?[refreshTerminalDashboard()]:[])]);await restoreProjectSession(value);const restored=customViewFor(selectedView.value,value.id);if(restored)applyCustomViewQuery(restored);else if(customTicketViewKey(selectedView.value))selectedView.value='all';if(terminalDrawerVisible.value)observeTerminalDrawer();return true}catch(reason){const message=reason instanceof Error?reason.message:String(reason);if(retainFailure)retainProjectRestoreFailure(root,message,unhealthyServerRecovery.value?.expected.pid);if(reportError)error.value=message;return false}finally{loading.value=false}}
+const projectsPendingActivation = new Set<string>();
+async function wireOpenedProject(root: string, opened: Extract<ProjectOpenResult, { ok: true }>) {
+  const { project: value, providers: descriptors } = opened;
+  projectRestoreFailures.value = projectRestoreFailures.value.filter((item) => item.root !== root);
+  if (selectedProjectRestoreRoot.value === root) selectedProjectRestoreRoot.value = '';
+  projects.value = replaceTabInPlace(projects.value, (item) => item.id, value);
+  hideVerifiedByProject.value = {
+    ...hideVerifiedByProject.value,
+    [value.id]: localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`) === 'true',
+  };
+  permissionAutomationByProject.value = {
+    ...permissionAutomationByProject.value,
+    [value.id]: loadPermissionAutomation(value.id),
+  };
+  const selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+  defaultProviders.value = {
+    ...defaultProviders.value,
+    [value.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+  };
+  providerCapabilities.value = {
+    ...providerCapabilities.value,
+    ...Object.fromEntries(descriptors.map((item) => [item.connection_id, item.capabilities])),
+  };
+  projectsPendingActivation.add(value.id);
+  // Join the durable migration snapshot before deciding whether activation should present onboarding.
+  await migrationJobs
+    .join(value.root)
+    .then((job) => {
+      if (!job)
+        migrationJobsByRoot.value = Object.fromEntries(
+          Object.entries(migrationJobsByRoot.value).filter(([root]) => root !== value.root),
+        );
+    })
+    .catch(() => undefined);
+}
+function presentOpenedProjectSetup(value: Project) {
+  projectsPendingActivation.delete(value.id);
+  const migrationTarget =
+      value.needsHs1Migration &&
+      !migrationJobsByRoot.value[value.root] &&
+      !hs1MigrationPromptDismissed(localStorage, value.id, hs1SourceIdentity(value))
+        ? value
+        : undefined,
+    setupTarget = value.needsTicketSetup && !value.needsHs1Migration ? value : undefined,
+    openingDialog = document.querySelector<Control>('[data-project-dialog]'),
+    waitForProjectDialog = Boolean((migrationTarget || setupTarget) && openingDialog?.open);
+  ticketSourceSetupNavigation.value = 'none';
+  createdGitTicketStore.value = '';
+  ticketSourceRemoteError.value = '';
+  hs1MigrationError.value = '';
+  const presentSetup = () => {
+    if (project()?.id !== value.id) return;
+    hs1MigrationProject.value = migrationTarget;
+    ticketSourceSetupProject.value = setupTarget;
+  };
+  if (waitForProjectDialog) openingDialog!.addEventListener('wa-after-hide', presentSetup, { once: true });
+  projectDialogOpen.value = false;
+  if (!waitForProjectDialog) presentSetup();
+  else {
+    hs1MigrationProject.value = undefined;
+    ticketSourceSetupProject.value = undefined;
+  }
+  ticketSourceSetupError.value = '';
+}
+async function activateOpenedProject(value: Project) {
+  if (selectedProjectId.value !== value.id) {
+    if (!activateOpenProject(value.id)) throw new Error('Could not activate the opened project.');
+  } else {
+    saveActiveProjectRoot(localStorage, value.root);
+    terminalDrawerSelected.value =
+      localStorage.getItem(`hotsheet.project.${value.id}.terminal-drawer-selection`) || 'grid';
+  }
+  presentOpenedProjectSetup(value);
+  await Promise.all([
+    refreshProject(),
+    refreshCommands(value),
+    refreshCustomViews(value),
+    refreshDriveConnections(value, true),
+    ...(terminalDrawerVisible.value ? [refreshTerminalDashboard()] : []),
+  ]);
+  await restoreProjectSession(value);
+  const restored = customViewFor(selectedView.value, value.id);
+  if (restored) applyCustomViewQuery(restored);
+  else if (customTicketViewKey(selectedView.value)) selectedView.value = 'all';
+  if (terminalDrawerVisible.value) observeTerminalDrawer();
+}
+async function openProject(
+  root: string,
+  ticketStore?: string,
+  remember = true,
+  reportError = true,
+  retainFailure = false,
+) {
+  loading.value = true;
+  unhealthyServerRecovery.value = undefined;
+  if (reportError) error.value = '';
+  try {
+    const opened = await openProjectFetch(root, ticketStore);
+    if (!opened.ok) {
+      unhealthyServerRecovery.value = opened.recovery;
+      throw new Error(opened.error);
+    }
+    await wireOpenedProject(root, opened);
+    if (remember) localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
+    startPermissionUpdates();
+    syncProjectChangeStreams();
+    await activateOpenedProject(opened.project);
+    return true;
+  } catch (reason) {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    if (retainFailure) retainProjectRestoreFailure(root, message, unhealthyServerRecovery.value?.expected.pid);
+    if (reportError) error.value = message;
+    return false;
+  } finally {
+    loading.value = false;
+  }
+}
 async function retryProjectRestore(root: string) {
   const failure = projectRestoreFailures.value.find((item) => item.root === root);
   if (!failure || failure.busy) return;
@@ -8584,26 +8715,21 @@ document.addEventListener('visibilitychange', () => {
 const rememberedActiveRoot = activeProjectRoot(localStorage);
 void (async () => {
   try {
-    for (const root of rememberedRoots) await openProject(root, undefined, false, false, true);
-    const restoration = reconcileRememberedProjectRoots(
-      rememberedRoots,
-      projects.value.map((item) => item.root),
-    );
-    if (restoration.failed.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      for (const root of restoration.failed) await openProject(root, undefined, false, false, true);
-    }
-    const rememberedActive = projects.value.find((item) => item.root === rememberedActiveRoot);
-    if (rememberedActive && rememberedActive.id !== selectedProjectId.value) {
-      const activated = activateOpenProject(rememberedActive.id);
-      if (activated) {
-        await restoreProjectSession(activated.project, activated.generation);
-        if (aiConfigurationProjectId !== activated.project.id) void refreshAiConfiguration(activated.project);
-      }
-    } else if (projectRestoreFailures.value.some((item) => item.root === rememberedActiveRoot))
-      selectedProjectRestoreRoot.value = rememberedActiveRoot;
-    else if (!projects.value.length && projectRestoreFailures.value.length)
-      selectedProjectRestoreRoot.value = projectRestoreFailures.value[0].root;
+    await restoreRememberedProjects({
+      roots: rememberedRoots,
+      activeRoot: rememberedActiveRoot,
+      fetch: (root) => openProjectFetch(root),
+      wire: wireOpenedProject,
+      retainFailure: (root, failure) => {
+        retainProjectRestoreFailure(root, failure.error, failure.recovery?.expected.pid);
+      },
+      activate: activateOpenedProject,
+      selectFailure: (root) => {
+        selectedProjectRestoreRoot.value = root;
+      },
+    });
+    startPermissionUpdates();
+    syncProjectChangeStreams();
   } finally {
     initialProjectRestoreComplete = true;
     initialProjectRestorePending.value = false;
