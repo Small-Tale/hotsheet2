@@ -63,10 +63,14 @@ with their canonical shared workflows; refresh replaces a stale Hot Sheet adapte
 preserving unrelated user-authored skills and instruction content. Instruction blocks and
 skills carry numeric workflow-version markers. Before refreshing either artifact, setup
 re-reads both installed targets and compares each marker with its bundled counterpart. If
-either installed half is newer, setup preserves both as one workflow
-bundle while continuing merge-safe MCP and hook maintenance. This prevents a stale,
-long-running server or CLI from producing a mixed or downgraded workflow. Unversioned and
-older managed artifacts still upgrade normally. Bundled skill versions are checked against
+either installed half is newer, setup preserves both as one workflow bundle while
+continuing merge-safe MCP and hook maintenance. An equal-version installed half is also
+preserved when its bytes differ from the bundled representation: equal versions identify
+one semantic generation, but do not prove that a project-specific adapter or formatting
+variant is owned by the current writer. Semantic bundled changes therefore require a
+version bump. This prevents a stale or same-generation long-running server or CLI from
+producing a mixed, downgraded, or de-customized workflow. Unversioned and older managed
+artifacts still upgrade normally. Bundled skill versions are checked against
 the current shared adapters, and Windows detection honors command wrappers from `PATHEXT`,
 so freshness does not silently skip npm-installed tools or replace a newer workflow with an
 older bundle.

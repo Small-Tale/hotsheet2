@@ -143,9 +143,9 @@ fn setup_plugins(
                 targets: bad.join(", "),
             });
         }
-        let preserve_newer_workflow = installed_workflow_is_newer(project_dir, &p);
+        let preserve_installed_workflow = installed_workflow_requires_preservation(project_dir, &p);
         let mut wrote = Vec::new();
-        if !preserve_newer_workflow {
+        if !preserve_installed_workflow {
             wrote.push(write_instructions(project_dir, &p)?);
             if let Some(skill) = write_skill(project_dir, &p)? {
                 wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
@@ -175,27 +175,58 @@ fn marked_version(contents: &str, prefix: &str) -> Option<u64> {
     })
 }
 
-fn installed_workflow_is_newer(project: &Path, plugin: &Plugin) -> bool {
+fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
     let bundled_instruction_version =
         marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
     let instructions =
         std::fs::read_to_string(project.join(&plugin.manifest.instructions.target)).ok();
     let begin = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
     let end = format!("<!-- END hotsheet:{} -->", plugin.id());
-    let instruction_version = instructions.as_deref().and_then(|contents| {
+    let bundled_instruction_block =
+        format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
+    let installed_instruction_block = instructions.as_deref().and_then(|contents| {
         let start = contents.find(&begin)?;
         let finish = contents[start..].find(&end)? + start + end.len();
-        marked_version(&contents[start..finish], INSTRUCTIONS_VERSION_PREFIX)
+        Some(&contents[start..finish])
     });
-    if instruction_version.is_some_and(|version| version > bundled_instruction_version) {
+    if installed_instruction_block.is_some_and(|installed| {
+        marked_artifact_requires_preservation(
+            installed,
+            &bundled_instruction_block,
+            bundled_instruction_version,
+            INSTRUCTIONS_VERSION_PREFIX,
+        )
+    }) {
         return true;
     }
     plugin.skill().is_some_and(|(target, bundled)| {
         let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
         std::fs::read_to_string(project.join(target))
             .ok()
-            .and_then(|contents| marked_version(&contents, SKILL_VERSION_PREFIX))
-            .is_some_and(|version| version > bundled_version)
+            .is_some_and(|installed| {
+                marked_artifact_requires_preservation(
+                    &installed,
+                    bundled,
+                    bundled_version,
+                    SKILL_VERSION_PREFIX,
+                )
+            })
+    })
+}
+
+/// A strictly newer marker belongs to a newer writer. An equal marker with different
+/// bytes belongs to a same-generation variant or an intentional project customization.
+/// In either case this writer cannot prove ownership of the installed representation and
+/// must leave it alone. Older and unversioned artifacts remain eligible for migration.
+fn marked_artifact_requires_preservation(
+    installed: &str,
+    bundled: &str,
+    bundled_version: u64,
+    version_prefix: &str,
+) -> bool {
+    marked_version(installed, version_prefix).is_some_and(|installed_version| {
+        installed_version > bundled_version
+            || (installed_version == bundled_version && installed != bundled)
     })
 }
 
@@ -829,6 +860,52 @@ args = ["--path", "{store}"]
                 instructions
             );
             assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
+        }
+    }
+
+    #[test]
+    fn either_divergent_equal_version_artifact_protects_the_installed_workflow() {
+        let store = tempfile::tempdir().unwrap();
+        let plugins = tempfile::tempdir().unwrap();
+        fixture_plugin_version(plugins.path(), "bundled instructions\n", 8);
+
+        for customized_artifact in ["instructions", "skill"] {
+            let project = tempfile::tempdir().unwrap();
+            let instructions = format!(
+                "<!-- BEGIN hotsheet:fixture -->\n<!-- hotsheet-instructions-version: 8 -->\n{}\n<!-- END hotsheet:fixture -->\n",
+                if customized_artifact == "instructions" {
+                    "project-specific instructions"
+                } else {
+                    "bundled instructions"
+                }
+            );
+            let skill = format!(
+                "<!-- hotsheet-skill-version: 8 -->\n{}\n",
+                if customized_artifact == "skill" {
+                    "project-specific skill"
+                } else {
+                    "current skill"
+                }
+            );
+            std::fs::write(project.path().join("AGENTS.md"), &instructions).unwrap();
+            let skill_path = project.path().join(".fixture/skills/hotsheet/SKILL.md");
+            std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
+            std::fs::write(&skill_path, &skill).unwrap();
+
+            let report = refresh_setup_in(
+                store.path(),
+                project.path(),
+                Some(&HashSet::from(["fixture".to_string()])),
+                &[plugins.path().to_path_buf()],
+            )
+            .unwrap();
+
+            assert_eq!(
+                std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap(),
+                instructions
+            );
+            assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
+            assert_eq!(report[0].wrote, [".fixture/mcp.json"]);
         }
     }
 
