@@ -852,11 +852,13 @@ and identity-less legacy entries remain conservatively blocking.
   state instead of continuously exposing the opaque session id. Plugin-provided model and effort
   choices carry visible labels, and user-authored Markdown keeps loud-surface contrast throughout
   its nested content.
-  Its full-width composer keeps the send action attached
-  to the input at wide and narrow sizes. In the bottom drawer, the embedded conversation is a
-  height-bounded column: header, session controls, and composer remain fixed while the transcript
-  alone takes the remaining height and scrolls, so a long conversation cannot push the input below
-  the drawer viewport. Retrying preserves the earlier transcript and activity
+  Its full-width composer floats above the message stream as one rounded, elevated surface:
+  the auto-growing textarea has no separate border, a small inner toolbar carries the keyboard
+  hint and round Lucide up-arrow send action, and the transcript reserves enough bottom padding
+  that its latest message remains readable above the overlay at wide and narrow sizes. In the
+  bottom drawer, the embedded conversation remains height-bounded and the transcript alone
+  scrolls, so a long conversation cannot push the floating input below the drawer viewport.
+  Retrying preserves the earlier transcript and activity
   while clearing the stale failure. A launch failure is presented as a contained alert and keeps
   the underlying Codex daemon diagnostic, so failures such as an invalid control-socket path are
   actionable instead of collapsing to an unexplained exit status. Opening a populated transcript

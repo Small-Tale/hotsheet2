@@ -1,4 +1,5 @@
 .ai-conversation::part(dialog) {
+  position: relative;
   width: min(remify(768px), calc(100vw - remify(32px)));
   height: min(remify(608px), calc(100vh - remify(48px)));
 }
@@ -9,11 +10,17 @@
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 .ai-conversation::part(footer) {
+  position: absolute;
+  z-index: 2;
   display: block;
   padding: 0;
   border: 0;
+  background: transparent;
+  inset-inline: remify(16px);
+  bottom: remify(16px);
 }
 .ai-conversation--embedded {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
@@ -26,7 +33,6 @@
   flex: none;
 }
 .ai-conversation--embedded > .ai-conversation__transcript {
-  padding-block: 0;
   flex: 1 1 0;
 }
 .ai-conversation__embedded-header {
@@ -161,6 +167,9 @@
   box-sizing: border-box;
   flex-direction: column;
   gap: remify(12.8px);
+}
+.ai-conversation[data-read-only='false'] .ai-conversation__transcript {
+  padding-bottom: remify(176px);
 }
 .ai-conversation__selection {
   position: sticky;
@@ -431,13 +440,23 @@
 }
 .ai-conversation__composer {
   display: grid;
-  width: 100%;
-  padding: var(--wa-space-s);
+  width: auto;
+  padding: remify(6px);
   box-sizing: border-box;
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--wa-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-l);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+  gap: var(--wa-space-3xs);
+}
+.ai-conversation--embedded > .ai-conversation__composer {
+  position: absolute;
+  z-index: 2;
+  inset-inline: remify(16px);
+  bottom: remify(16px);
+}
+.ai-conversation__composer:focus-within {
+  border-color: var(--wa-color-brand-border-normal);
 }
 .ai-conversation__composer label {
   display: grid;
@@ -457,30 +476,49 @@
   font-size: var(--wa-font-size-xs);
 }
 .ai-conversation__composer textarea {
+  field-sizing: content;
   min-width: 0;
+  min-height: remify(44px);
   max-height: remify(144px);
-  padding: var(--wa-space-xs) var(--wa-space-s);
-  resize: vertical;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
+  padding: var(--wa-space-xs);
+  resize: none;
+  border: 0;
+  background: transparent;
   color: var(--wa-color-text-normal);
   font: inherit;
   line-height: var(--wa-line-height-normal);
 }
 .ai-conversation__composer textarea:focus {
-  border-color: var(--wa-color-focus);
+  outline: none;
+}
+.ai-conversation__composer-toolbar {
+  display: flex;
+  min-height: remify(32px);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wa-space-xs);
+}
+.ai-conversation__send {
+  display: grid;
+  width: remify(32px);
+  height: remify(32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-neutral-fill-loud);
+  cursor: pointer;
+  place-items: center;
+}
+.ai-conversation__send:hover {
+  opacity: 0.85;
+}
+.ai-conversation__send:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: var(--wa-focus-ring-offset);
 }
-.ai-conversation__composer wa-button::part(base) {
-  width: remify(44px);
-  height: remify(44px);
-  min-height: remify(44px);
-  padding: 0;
-  border-radius: var(--wa-border-radius-m);
-}
-.ai-conversation__composer wa-button[disabled]::part(base) {
+.ai-conversation__send:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .ai-conversation__composer svg {
@@ -491,6 +529,14 @@
   .ai-conversation::part(dialog) {
     width: calc(100vw - remify(16px));
     height: calc(100vh - remify(16px));
+  }
+  .ai-conversation::part(footer) {
+    inset-inline: remify(8px);
+    bottom: remify(8px);
+  }
+  .ai-conversation--embedded > .ai-conversation__composer {
+    inset-inline: remify(8px);
+    bottom: remify(8px);
   }
   .ai-conversation__foreground {
     padding: remify(60px) remify(8.8px) remify(8.8px);

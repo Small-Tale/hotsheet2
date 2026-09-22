@@ -10,6 +10,7 @@ import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   Activity,
+  ArrowUp,
   Bot,
   Brain,
   ChevronDown,
@@ -19,7 +20,6 @@ import {
   Image,
   MessageSquare,
   Paperclip,
-  Send,
   Square,
   X,
 } from 'lucide';
@@ -425,22 +425,24 @@ export function AIConversation({
           name="conversation-draft"
           aria-label={`Message ${tool}`}
           placeholder={`Message ${tool}…`}
-          rows={2}
+          rows={1}
           disabled={busy}
         >
           {draft}
         </textarea>
-        <small>Enter to send · Shift+Enter for a new line</small>
       </label>
-      <wa-button
-        appearance="accent"
-        type="submit"
-        disabled={busy || !draft.trim()}
-        aria-label={`Send message to ${tool}`}
-        title={busy ? `${tool} is still working` : `Send message to ${tool}`}
-      >
-        <LucideIcon icon={Send} name="send" />
-      </wa-button>
+      <div class="ai-conversation__composer-toolbar">
+        <small>Enter to send · Shift+Enter for a new line</small>
+        <button
+          class="ai-conversation__send"
+          type="submit"
+          disabled={busy || !draft.trim()}
+          aria-label={`Send message to ${tool}`}
+          title={busy ? `${tool} is still working` : `Send message to ${tool}`}
+        >
+          <LucideIcon icon={ArrowUp} name="arrow-up" />
+        </button>
+      </div>
     </form>
   );
   if (presentation === 'embedded')

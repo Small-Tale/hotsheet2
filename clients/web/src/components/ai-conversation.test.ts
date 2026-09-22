@@ -69,7 +69,8 @@ describe('AIConversation', () => {
     // The DialogHeader groups the conversation actions under a localized label (HS2-M4X0WS).
     expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Codex conversation actions"/);
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');
-    expect(markup).toContain('appearance="accent"');
+    expect(markup).toContain('class="ai-conversation__send"');
+    expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).toContain('Codex is working');
     expect(markup).not.toContain('Session session-1');
   });
@@ -240,17 +241,24 @@ describe('AIConversation', () => {
     expect(markup).toContain('ai-conversation--embedded');
     expect(markup).toContain('Conversation transcript');
     expect(markup).toContain('send-conversation-turn');
+    expect(markup).toContain('class="ai-conversation__composer-toolbar"');
+    expect(markup).toContain('class="ai-conversation__send"');
+    expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).not.toContain('wa-dialog');
   });
-  it('keeps the embedded composer fixed while the transcript owns bounded scrolling', () => {
+  it('floats one bordered growing composer over a padded scrolling transcript', () => {
     expect(css).toMatch(
       /\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: hidden[^}]*flex-direction: column/,
     );
-    expect(css).toMatchSource(/\.ai-conversation--embedded > :not\(\.ai-conversation__transcript\) \{ flex: none; \}/);
+    expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*flex: 1 1 0/);
+    expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/);
     expect(css).toMatch(
-      /\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*padding-block: 0[^}]*flex: 1 1 0/,
+      /\.ai-conversation\[data-read-only='false'\] \.ai-conversation__transcript \{[^}]*padding-bottom: remify\(176px\)/,
     );
-    expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*box-sizing: border-box/);
+    expect(css).toMatch(/\.ai-conversation__composer \{[^}]*border: 1px solid[^}]*box-shadow:/);
+    expect(css).toMatch(
+      /\.ai-conversation__composer textarea \{[^}]*field-sizing: content[^}]*max-height: remify\(144px\)[^}]*border: 0/,
+    );
   });
   it('offers exports for completed transcripts and makes partial saved transcripts read-only', () => {
     const message = {

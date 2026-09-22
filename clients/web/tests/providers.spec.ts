@@ -3112,6 +3112,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
         transcriptBottom: transcriptBox.bottom,
         composerTop: composerBox.top,
         composerBottom: composerBox.bottom,
+        lastMessageBottom: transcript.lastElementChild?.getBoundingClientRect().bottom ?? transcriptBox.top,
         transcriptScrollable: transcript.scrollHeight > transcript.clientHeight,
         composerVisible: composerBox.top >= root.top && composerBox.bottom <= root.bottom + 1,
       };
@@ -3119,13 +3120,18 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await expect.poll(geometry).toMatchObject({ transcriptScrollable: true, composerVisible: true });
   let measured = await geometry();
   expect(measured.rootBottom).toBeLessThanOrEqual(measured.drawerBottom + 1);
-  expect(measured.transcriptBottom).toBeLessThanOrEqual(measured.composerTop + 1);
+  expect(measured.transcriptBottom).toBeGreaterThanOrEqual(measured.composerBottom - 1);
+  expect(measured.lastMessageBottom).toBeLessThanOrEqual(measured.composerTop);
+  const compactHeight = (await composer.boundingBox())!.height;
+  await composer.fill('First line\nSecond line\nThird line\nFourth line');
+  await expect.poll(async () => (await composer.boundingBox())!.height).toBeGreaterThan(compactHeight);
+  await expect(conversation.locator('.ai-conversation__send [data-lucide="arrow-up"]')).toBeVisible();
   await conversation.screenshot({ path: '/private/tmp/hs2-1rvp5m-chat-composer-wide-after.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect.poll(geometry).toMatchObject({ transcriptScrollable: true, composerVisible: true });
   measured = await geometry();
   expect(measured.rootBottom).toBeLessThanOrEqual(measured.drawerBottom + 1);
-  expect(measured.transcriptBottom).toBeLessThanOrEqual(measured.composerTop + 1);
+  expect(measured.transcriptBottom).toBeGreaterThanOrEqual(measured.composerBottom - 1);
   await composer.fill('Composer remains usable after the narrow transition.');
   await expect(composer).toBeFocused();
   await conversation.screenshot({ path: '/private/tmp/hs2-1rvp5m-chat-composer-narrow-after.png' });
