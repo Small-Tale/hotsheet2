@@ -246,7 +246,10 @@ and identity-less legacy entries remain conservatively blocking.
   and removes it before returning the conventional signal exit status. After Vite starts,
   shutdown first waits for the child to exit and then removes the private snapshot before
   the launcher itself exits; every path removes its signal listeners and prevents concurrent
-  Vite writes from racing snapshot cleanup.
+  Vite writes from racing snapshot cleanup. Stable-dev browser checks allow the snapshot
+  copy a bounded 30-second readiness window under full-suite I/O load, fail immediately if
+  the launcher exits, and include its captured output in timeout and early-exit diagnostics
+  (HS2-2D5CXN).
 
 - **Startup delivery budget.** Vite development intentionally serves the source module
   graph as separate requests: a cold local profile on 2026-09-03 loaded 175 scripts
