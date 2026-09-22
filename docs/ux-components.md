@@ -355,8 +355,13 @@ and routes `data-segment-value` through the existing `set-view-mode` action; leg
 explicitly provides equal-width rounded List/Notifications choices. `listOnly` removes
 Columns from the ordinary toolbar and overflow for mobile. The WorkspaceHeader,
 TerminalTicketRail, and ToolbarControlGroup demos exercise these compositions
-(HS2-F29QAT). The WorkspaceHeader demo's existing Notifications content/controller gap
-is tracked separately in HS2-Y70MJY.
+(HS2-F29QAT). The connected WorkspaceHeader demo also uses the shared `PermissionInbox`
+model with two local pending requests and an initial history entry. Notifications renders
+`NotificationCenter`; its badge derives from the same pending snapshot. Allow, Always Allow
+(where supported), and Deny move requests into history. Ignore dismisses prompt attention while
+retaining the pending request, matching production. Reset notifications restores the fixture;
+counts and decisions persist across List, Columns, Settings, and Notifications transitions
+without network requests (HS2-Y70MJY).
 
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
@@ -367,7 +372,7 @@ is tracked separately in HS2-Y70MJY.
   radius even after the outline expands beyond the 44px group (HS2-M1DF1D). It toggles
   ascending/descending direction when reselected. Status follows workflow order, ascending
   priority runs from low through urgent, and list/column views remember independent sort
-  settings. The demo connects those controls to its list/column/settings workspace. When its owning
+  settings. The demo connects those controls to its list/column/settings/notifications workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
   switcher yield only at otherwise unusable widths. Every yielded action is relocated into a
   keyboard- and touch-operable overflow menu with the same selected and disabled state, including

@@ -274,6 +274,7 @@ import {
   composerUpNext,
   createDemoTicket,
   focusWorkspaceSearch,
+  ignoreWorkspaceDemoPermission,
   inspectorCategory,
   inspectorOpen,
   inspectorPriority,
@@ -285,6 +286,8 @@ import {
   inspectorTitleEditing,
   PageHeaderDemo,
   QuickTicketComposerDemo,
+  resetWorkspaceDemoNotifications,
+  resolveWorkspaceDemoPermission,
   TerminalTicketRailDemo,
   TicketInspectorDemo,
   TicketInspectorSkeletonDemo,
@@ -1704,6 +1707,18 @@ delegate(root, 'change', '[data-settings="permission-request"] [name]', (_event,
       break;
   }
 });
+delegate(root, 'click', '.workspace-component-demo [data-action="resolve-permission"]', (_event, target) => {
+  const { requestKey, decision, scope } = (target as HTMLElement).dataset;
+  if (!requestKey || (decision !== 'allow' && decision !== 'deny') || (scope !== 'once' && scope !== 'always')) return;
+  resolveWorkspaceDemoPermission(requestKey, decision, scope);
+});
+delegate(root, 'click', '.workspace-component-demo [data-action="ignore-permission"]', (_event, target) => {
+  const key = (target as HTMLElement).dataset.requestKey;
+  if (key) ignoreWorkspaceDemoPermission(key);
+});
+delegate(root, 'click', '[data-action="reset-workspace-notifications"]', () => {
+  resetWorkspaceDemoNotifications();
+});
 delegate(root, 'click', '[data-action="cancel-permission-automation"]', (event) => {
   event.stopImmediatePropagation();
   stopPermissionRequestDemoAutomation(root);
@@ -1778,7 +1793,7 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
     workspaceSearchQuery.value = '';
   }
   recordCollectionEvent(
-    `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`,
+    `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
   );
 });
 delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
@@ -1830,7 +1845,7 @@ delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
       workspaceSearchQuery.value = '';
     }
     recordCollectionEvent(
-      `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`,
+      `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
     );
     return;
   }

@@ -262,9 +262,9 @@
       "id": "workspace-header",
       "name": "WorkspaceHeader",
       "kind": "composition",
-      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.",
+      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.",
       "useWhen": [
-        "Hot Sheet needs project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search."
+        "Hot Sheet needs project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific WorkspaceHeader behavior."

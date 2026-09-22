@@ -21,6 +21,7 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import {
   editingNoteId,
@@ -78,6 +79,63 @@ export const inspectorCodeReview: CodeReview = {
   ],
 };
 let demoSequence = 1;
+
+let workspaceDemoInbox = createWorkspaceDemoInbox();
+export const workspaceDemoNotifications = signal({
+  pending: workspaceDemoInbox.pending(),
+  history: workspaceDemoInbox.history(),
+});
+
+function projectWorkspaceDemoNotifications(): void {
+  workspaceDemoNotifications.value = {
+    pending: workspaceDemoInbox.pending(),
+    history: workspaceDemoInbox.history(),
+  };
+}
+
+function createWorkspaceDemoInbox(now = Date.now()): PermissionInbox {
+  const inbox = new PermissionInbox();
+  inbox.reconcile(
+    { id: 'workspace-demo', name: 'Hot Sheet 2', root: '/demo/hotsheet2', apiPath: '/demo' },
+    [
+      { id: 1, connection: 'demo-worker', tool: 'Read', action: 'docs/06-clients.md' },
+      { id: 2, connection: 'demo-worker', tool: 'Bash', action: 'npm run test:unit', always_allow_supported: true },
+      { id: 3, connection: 'demo-worker', tool: 'Edit', action: 'docs/ux-components.md' },
+    ],
+    [{ id: 'demo-worker', tool: 'Codex', project: 'workspace-demo', role: 'worker', busy: true }],
+    now,
+  );
+  inbox.resolve('workspace-demo:3', 'allow', 'once', false, now);
+  return inbox;
+}
+
+/** Restore the local notification fixture without sending permission responses to an agent. */
+export function resetWorkspaceDemoNotifications(now = Date.now()): void {
+  workspaceDemoInbox = createWorkspaceDemoInbox(now);
+  projectWorkspaceDemoNotifications();
+  collectionEvent.value = 'Demo notifications reset: 2 pending requests.';
+}
+
+export function resolveWorkspaceDemoPermission(
+  key: string,
+  decision: PermissionDecision,
+  scope: PermissionScope,
+): boolean {
+  const request = workspaceDemoInbox.pending().find((item) => item.key === key);
+  if (!request || (scope === 'always' && !request.always_allow_supported)) return false;
+  if (!workspaceDemoInbox.resolve(key, decision, scope)) return false;
+  projectWorkspaceDemoNotifications();
+  collectionEvent.value = `${decision === 'allow' ? 'Allowed' : 'Denied'} ${request.tool} request${scope === 'always' ? ' for this kind of request' : ' once'}.`;
+  return true;
+}
+
+export function ignoreWorkspaceDemoPermission(key: string): boolean {
+  if (!workspaceDemoInbox.pending().some((item) => item.key === key)) return false;
+  workspaceDemoInbox.ignore(key);
+  projectWorkspaceDemoNotifications();
+  collectionEvent.value = 'Demo prompt ignored; the request remains pending in Notifications until answered.';
+  return true;
+}
 
 export function workspaceDemoSelection() {
   const selected = collectionTickets.value.filter((ticket) => ticket.selected);
@@ -210,6 +268,13 @@ export function createDemoTicket(): boolean {
 }
 
 function WorkspaceContent() {
+  if (workspaceMode.value === 'notifications')
+    return (
+      <>
+        <NotificationCenter {...workspaceDemoNotifications.value} />
+        <wa-button data-action="reset-workspace-notifications">Reset notifications</wa-button>
+      </>
+    );
   const tickets = filteredWorkspaceTickets();
   if (workspaceMode.value === 'settings')
     return (
@@ -241,11 +306,17 @@ export function WorkspaceHeaderDemo() {
         searchHelpOpen={workspaceSearchHelpOpen.value}
         sort={workspaceSort.value}
         sortDirection={workspaceSortDirection.value}
-        notificationCount={7}
+        notificationCount={workspaceDemoNotifications.value.pending.length}
       />
       <PanelHeader
         titleId="workspace-demo-page-title"
-        title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'}
+        title={
+          workspaceMode.value === 'settings'
+            ? 'Project Settings'
+            : workspaceMode.value === 'notifications'
+              ? 'Notifications'
+              : 'Queue'
+        }
       />
       <div class="workspace-component-demo__content">
         <WorkspaceContent />

@@ -127,10 +127,10 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'workspace-header',
         'WorkspaceHeader',
-        'Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.',
+        'Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.',
         'feature-floor',
         true,
-        ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board'],
+        ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board', 'notification-center'],
       ),
       demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
       demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, [

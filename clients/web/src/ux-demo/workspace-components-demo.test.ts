@@ -15,9 +15,13 @@ import {
   createDemoTicket,
   filteredWorkspaceTickets,
   focusWorkspaceSearch,
+  ignoreWorkspaceDemoPermission,
+  resetWorkspaceDemoNotifications,
+  resolveWorkspaceDemoPermission,
   TerminalTicketRailDemo,
   toggleWorkspaceDemoUpNext,
   workspaceColumns,
+  workspaceDemoNotifications,
   workspaceDemoSelection,
   WorkspaceHeaderDemo,
   workspaceMode,
@@ -31,6 +35,7 @@ import {
 describe('connected workspace demo state', () => {
   beforeEach(() => {
     resetTicketCollections();
+    resetWorkspaceDemoNotifications();
     workspaceMode.value = 'list';
     workspaceSearchQuery.value = '';
     workspaceSearchOpen.value = false;
@@ -72,6 +77,47 @@ describe('connected workspace demo state', () => {
     select([eligible[1].slug]);
     toggleWorkspaceDemoUpNext();
     expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('all');
+  });
+
+  it('projects a shared notification count and content through every mode, resolution, empty queue, and reset (HS2-Y70MJY)', () => {
+    resetWorkspaceDemoNotifications(Date.now() - 1000);
+    for (const mode of ['list', 'notifications', 'board', 'settings', 'notifications'] as const) {
+      workspaceMode.value = mode;
+      const markup = String(WorkspaceHeaderDemo());
+      expect(markup).toContain('Notifications view, 2 pending');
+      expect(markup.includes('data-component="notification-center"')).toBe(mode === 'notifications');
+      expect(markup.includes('data-component="ticket-board"')).toBe(mode === 'board');
+      expect(markup.includes('aria-label="Project settings"')).toBe(mode === 'settings');
+      expect(markup.includes('aria-label="Workspace tickets"')).toBe(mode === 'list');
+    }
+    expect(ignoreWorkspaceDemoPermission('workspace-demo:1')).toBe(true);
+    expect(workspaceDemoNotifications.value.pending[0].ignored).toBe(true);
+    expect(workspaceDemoNotifications.value.pending).toHaveLength(2);
+    expect(resolveWorkspaceDemoPermission('workspace-demo:1', 'allow', 'always')).toBe(false);
+    expect(resolveWorkspaceDemoPermission('missing', 'allow', 'once')).toBe(false);
+    expect(ignoreWorkspaceDemoPermission('missing')).toBe(false);
+    expect(resolveWorkspaceDemoPermission('workspace-demo:1', 'allow', 'once')).toBe(true);
+    expect(workspaceDemoNotifications.value.history[0]).toMatchObject({
+      key: 'workspace-demo:1',
+      decision: 'allow',
+      scope: 'once',
+    });
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 1 pending');
+    expect(resolveWorkspaceDemoPermission('workspace-demo:1', 'deny', 'once')).toBe(false);
+    expect(resolveWorkspaceDemoPermission('workspace-demo:2', 'deny', 'once')).toBe(true);
+    expect(workspaceDemoNotifications.value.pending).toHaveLength(0);
+    expect(workspaceDemoNotifications.value.history).toHaveLength(3);
+    expect(String(WorkspaceHeaderDemo())).not.toContain(' pending');
+    expect(String(WorkspaceHeaderDemo())).not.toContain('data-action="resolve-permission"');
+    workspaceMode.value = 'list';
+    resetWorkspaceDemoNotifications();
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 2 pending');
+    workspaceMode.value = 'notifications';
+    expect(workspaceDemoNotifications.value.history).toHaveLength(1);
+    expect(workspaceDemoNotifications.value.pending.every((item) => !item.ignored)).toBe(true);
+    expect(resolveWorkspaceDemoPermission('workspace-demo:2', 'allow', 'always')).toBe(true);
+    expect(String(WorkspaceHeaderDemo())).toContain('allowed this kind of request');
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 1 pending');
   });
 
   it('filters across identity, title, and tags and preserves board totals', () => {

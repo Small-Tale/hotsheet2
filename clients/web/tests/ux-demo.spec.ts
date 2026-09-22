@@ -2111,7 +2111,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
     quietIconColor = await idleViewIcon.evaluate((node) => getComputedStyle(node).color);
   expect(await sortIcon.evaluate((node) => getComputedStyle(node).color)).toBe(quietIconColor);
   const notificationBadge = header.locator('.view-mode-switcher__badge');
-  await expect(notificationBadge).toHaveText('7');
+  await expect(notificationBadge).toHaveText('2');
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
   await expect(notificationBadge).toHaveCSS('padding', '1px 5px');
   await expect(notificationBadge).toHaveCSS('background-color', 'rgb(255, 204, 0)');
@@ -2280,6 +2280,75 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-narrow.png', fullPage: true });
+});
+
+test('connects WorkspaceHeader notifications, actions, reset and badge count across modes (HS2-Y70MJY)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1200 });
+  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  const demo = page.getByRole('region', { name: 'WorkspaceHeader demo', exact: true }),
+    notifications = demo.getByRole('button', { name: /^Notifications view/ }),
+    center = demo.locator('[data-component="notification-center"]'),
+    pending = center.locator('[data-component="permission-request-card"][data-state="pending"]'),
+    read = center.locator('[data-request-key="workspace-demo:1"][data-component="permission-request-card"]'),
+    command = center.locator('[data-request-key="workspace-demo:2"][data-component="permission-request-card"]');
+  for (const mode of ['Notifications', 'Columns', 'Settings', 'List', 'Notifications']) {
+    await demo.getByRole('button', { name: new RegExp(`^${mode} view`) }).click();
+    await expect(notifications).toHaveAccessibleName('Notifications view, 2 pending');
+    await expect(notifications.locator('.view-mode-switcher__badge')).toHaveText('2');
+    await expect(center).toHaveCount(mode === 'Notifications' ? 1 : 0);
+    await expect(demo.locator('[data-component="ticket-board"]')).toHaveCount(mode === 'Columns' ? 1 : 0);
+  }
+  await expect(notifications).toHaveAttribute('aria-pressed', 'true');
+  await expect(demo.locator('.kui-panel-header__title')).toHaveText('Notifications');
+  await expect(pending).toHaveCount(2);
+  await expect(read.getByRole('button', { name: 'Always Allow' })).toHaveCount(0);
+  await expect(command.getByRole('button', { name: 'Always Allow' })).toBeEnabled();
+  await demo.screenshot({ path: '/private/tmp/hs2-y70mjy-notifications-wide.png', animations: 'disabled' });
+  await read.getByRole('button', { name: 'Ignore', exact: true }).click();
+  await expect(
+    demo.getByText('Demo prompt ignored; the request remains pending in Notifications until answered.'),
+  ).toBeVisible();
+  await expect(pending).toHaveCount(2);
+  await read.getByRole('button', { name: 'Allow', exact: true }).click();
+  await expect(read).toHaveAttribute('data-state', 'allow');
+  await expect(read.locator('[data-lucide="check"]')).toBeVisible();
+  await expect(read.getByRole('button')).toHaveCount(0);
+  await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
+  await command.getByRole('button', { name: 'Deny', exact: true }).click();
+  await expect(command).toHaveAttribute('data-state', 'deny');
+  await expect(command.locator('[data-lucide="x"]')).toBeVisible();
+  await expect(pending).toHaveCount(0);
+  await expect(notifications).toHaveAccessibleName('Notifications view');
+  await expect(notifications.locator('.view-mode-switcher__badge')).toHaveCount(0);
+  await demo.getByRole('button', { name: 'List view', exact: true }).click();
+  await expect(demo.getByRole('listbox', { name: 'Workspace tickets' })).toBeVisible();
+  await notifications.click();
+  await expect(pending).toHaveCount(0);
+  await demo.getByRole('button', { name: 'Reset notifications', exact: true }).click();
+  await expect(pending).toHaveCount(2);
+  await expect(center.locator('[data-resolved="true"]')).toHaveCount(1);
+  await expect(notifications).toHaveAccessibleName('Notifications view, 2 pending');
+  await page.setViewportSize({ width: 560, height: 844 });
+  await demo.screenshot({ path: '/private/tmp/hs2-y70mjy-notifications-narrow.png', animations: 'disabled' });
+  await command.getByRole('button', { name: 'Always Allow', exact: true }).click();
+  await expect(command).toHaveAttribute('data-state', 'allow');
+  await expect(command.getByText('allowed this kind of request', { exact: true })).toBeVisible();
+  await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
+  await read.getByRole('button', { name: 'Deny', exact: true }).click();
+  await expect(pending).toHaveCount(0);
+  await expect(center.locator('[data-resolved="true"]')).toHaveCount(3);
+  await expect(notifications.locator('.view-mode-switcher__badge')).toHaveCount(0);
+  await demo.screenshot({ path: '/private/tmp/hs2-y70mjy-history-narrow.png', animations: 'disabled' });
+  await demo.getByRole('button', { name: 'Reset notifications', exact: true }).click();
+  await expect(pending).toHaveCount(2);
+  await command.getByRole('button', { name: 'Allow Once', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(command).toHaveAttribute('data-state', 'allow');
+  await expect(command.getByText('allowed permission', { exact: true })).toBeVisible();
+  await expect(command.getByText('allowed this kind of request', { exact: true })).toHaveCount(0);
+  await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
 });
 
 test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }) => {

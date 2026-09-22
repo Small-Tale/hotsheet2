@@ -135,6 +135,7 @@ describe('UX demo catalog', () => {
       'page-header',
       'ticket-list',
       'ticket-board',
+      'notification-center',
     ]);
     expect(demosUsing('toolbar-control-group').map((entry) => entry.id)).toEqual([
       'app-shell',
