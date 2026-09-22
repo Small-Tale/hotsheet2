@@ -3997,7 +3997,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await assertDrivePinned();
 });
 
-test('exercises the application-shell component slice and responsive composition', async ({ page }) => {
+test('catalogs project-tab states, progress, activity, and responsive geometry', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
@@ -4108,7 +4108,10 @@ test('exercises the application-shell component slice and responsive composition
   await page
     .locator('.project-tab-demo__surface')
     .screenshot({ path: '/private/tmp/hs2-9b7z7j-project-tab-segments-narrow.png' });
+});
 
+test('catalogs shared application tabs and terminal-drawer tabs', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/ux-demo?component=app-tab');
   const sharedTabs = page.locator('[data-component$="-tab"]');
   await expect(sharedTabs).toHaveCount(2);
@@ -4139,7 +4142,10 @@ test('exercises the application-shell component slice and responsive composition
   await terminalDrawer
     .locator('.terminal-drawer__rail')
     .screenshot({ path: '/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png' });
+});
 
+test('operates the project tab bar across pointer, keyboard, and responsive states', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('.project-tab-bar');
@@ -4322,7 +4328,10 @@ test('exercises the application-shell component slice and responsive composition
   await tabBar.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-launcher.png' });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(tabBar.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
+});
 
+test('operates resizable-region keyboard and collapse transitions', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/ux-demo?component=resizable-region');
   const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
   const vertical = page.getByRole('separator', { name: 'Resize Example drawer' });
@@ -4343,7 +4352,10 @@ test('exercises the application-shell component slice and responsive composition
   await expect(horizontal).toHaveAttribute('aria-valuemin', '0');
   await page.getByRole('button', { name: 'Restore horizontal region' }).click();
   await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
+});
 
+test('renders and reconnects the connection-state banner variants', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/ux-demo?component=connection-state-banner');
   const banners = page.locator('[data-component="state-banner"]');
   await expect(banners).toHaveCount(5);
@@ -4356,7 +4368,10 @@ test('exercises the application-shell component slice and responsive composition
   await page.screenshot({ path: '/private/tmp/hs2-hygwcm-shared-state-banners-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Reconnect' }).click();
   await expect(page.getByText('Connection retry requested.')).toBeVisible();
+});
 
+test('exercises the application-shell responsive composition', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
