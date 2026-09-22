@@ -1522,6 +1522,7 @@ delegate(root, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
     handle,
     pendingSize: startSize,
   };
+  region.dataset.resizing = 'true';
   document.body.dataset.resizingRegion = axis;
 });
 delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
@@ -1614,6 +1615,7 @@ window.addEventListener('pointerup', () => {
   if (!regionResizeDrag) return;
   const drag = regionResizeDrag;
   if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
+  delete drag.region.dataset.resizing;
   setRegionSize(drag.id, drag.pendingSize);
   shellEvent.value = `Region resized to ${drag.pendingSize} pixels.`;
   regionResizeDrag = undefined;

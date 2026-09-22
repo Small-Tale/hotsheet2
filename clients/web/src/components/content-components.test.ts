@@ -23,7 +23,9 @@ describe('content components', () => {
     expect(markup).toContain('No notes added.');
     expect(markup).toContain('class="kui-list-inset-text kui-list-inset-text--horizontal ticket-notes__empty-inset"');
     expect(markup).toContain('class="kui-list-item ticket-notes__add"');
-    expect(markup).toContain('<span class="kui-list-item__label">Add note</span>');
+    expect(markup).toContain(
+      '<span class="kui-list-item__label"><span class="kui-list-item__primary-label">Add note</span></span>',
+    );
     const composing = String(TicketNotes({ notes: [], composing: true }));
     expect(composing).toContain('data-component="note-composer"');
     expect(composing).not.toContain('ticket-notes__empty-inset');

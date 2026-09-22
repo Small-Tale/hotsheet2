@@ -70,7 +70,8 @@ screen-level CSS must not replace it with a smaller minimum.
 Sidebar and inspector splitters are keyboard/pointer adjustable, remain present until
 the user explicitly collapses them, and never auto-hide at viewport breakpoints. Sidebar
 regions never resize below 250px. Production pointer drags update splitter geometry once per animation frame and
-commit a single render when released; pointer and keyboard sizes persist locally across
+commit a single render when released; the active region carries Kerf's `data-resizing`
+state so its content motion is suppressed without application CSS. Pointer and keyboard sizes persist locally across
 reloads. Both sidebars animate between visible and collapsed states; their restore
 controls live at the matching leading/trailing edges of the center-column toolbar,
 never in ProjectTabBar. Start-edge inspector resizing correctly mirrors end-edge sidebar resizing. Composed
@@ -86,9 +87,12 @@ right; both regions remain explicitly hideable and restorable. It owns the top-l
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
-The bottom drawer's compositor-only collapse travels one canonical 24 px step, while
-its 40 px restore action remains 16 px from the shell's trailing and bottom edges
-(HS2-4Y6SM9).
+AppShell configures the shared `ResizableRegion` policies directly: side panels use
+`separator`, `collapseMotion="slide"`, and responsive inline/overlay `presentation`;
+the bottom drawer uses `collapseMotion="fade-slide"`, popup-aware `contentOverflow`,
+and a safe-area-aware `restoreControl` at `restorePosition="bottom-end"`. Magnified
+terminal mode suppresses side-panel separators through the typed policy instead of
+descendant CSS. The app still owns the signals and persistence (HS2-4Y6SM9).
 The composer wrapper owns equal top and bottom inset around the creation surface. When
 it is present, the scrolling workspace removes its own top padding so list and board
 presentations receive one gap rather than two; composer-free settings, Archive, and
@@ -1250,7 +1254,8 @@ notification model.
 
 The shipped terminal drawer is a center-column-only vertical `ResizableRegion` with a
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
-persisted 228 px-to-workspace-boundary height, and a floating restore button when collapsed. The
+persisted 228 px-to-workspace-boundary height, Kerf-managed fade/slide collapse, popup
+overflow, and a safe-area-positioned floating restore button when collapsed. The
 splitter resists below 228 px and treats a continued 48 px overshoot as an intentional collapse.
 The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar groups and
 terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the

@@ -13,7 +13,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
     // Real Kerf tab bar with four disabled placeholder tabs and Info selected.
     expect(markup.match(/data-component="app-tab"/g)).toHaveLength(4);
-    expect(markup).toContain('data-tab-id="info" data-selected="true" data-placeholder="true"');
+    expect(markup).toMatch(/data-tab-id="info"[^>]*data-selected="true"[^>]*data-placeholder="true"/);
     expect(markup).toContain('role="tab" aria-selected="true"');
     // Real section headers/controls are drawn (labels are chrome, not per-ticket values).
     for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes']) {

@@ -84,7 +84,6 @@ describe('shared client theme', () => {
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map((match) => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map((match) => match[1]);
     const required = [
-      '--hs-shell-divider',
       '--hs-terminal-background',
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
@@ -150,7 +149,6 @@ describe('shared client theme', () => {
       '--hs-ticket-state-needs-review: #cb30e0',
     ])
       expect(source).toContain(declaration);
-    expect(source).toContain('--hs-shell-divider: var(--wa-color-neutral-border-normal)');
     expect(source).not.toMatch(/--wa-[\w-]+\s*:/);
   });
 

@@ -23,13 +23,15 @@ import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 
 describe('application shell components', () => {
-  it('uses the Kerf floating toolbar for canonical terminal-drawer motion and restore placement', () => {
+  it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatchSource(/data-collapsed="true"[^}]*__content \{[^}]*translateY\(var\(--kui-space-l\)\)/);
+    expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
+    expect(css).not.toContain('data-transitioning');
+    expect(css).toContainSource('.app-shell__terminal-drawer-restore.kui-floating-toolbar { position: static; }');
     expect(css).toMatchSource(
-      /\.app-shell__terminal-drawer-restore\.kui-floating-toolbar\[data-position="bottom-end"\] \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-right\)\); inset-block-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-bottom\)\)/,
+      /\.app-shell \{ --kui-safe-area-inline-end: var\(--hotsheet-safe-area-right\); --kui-safe-area-block-end: var\(--hotsheet-safe-area-bottom\);/,
     );
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
@@ -96,15 +98,7 @@ describe('application shell components', () => {
     expect(css).toContainSource(
       '.app-shell__work-area:has(.terminal-dashboard__magnified)::after { border-color: transparent; transition: none; }',
     );
-    expect(css).toContainSource(
-      '.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-sidebar"]::after { display: none; }',
-    );
-    expect(css).toContainSource(
-      '.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region:is([data-region-id="app-sidebar"], [data-region-id="app-inspector"]) { --kui-resizable-region-separator-color: transparent; }',
-    );
-    expect(css).toContainSource(
-      '.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id="app-inspector"] { border-left-color: transparent; }',
-    );
+    expect(css).not.toContain('--kui-resizable-region-separator-color');
   });
   it('keeps inspector-sidebar tabs icon-only independently of the reader width', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
@@ -357,6 +351,9 @@ describe('application shell components', () => {
     expect(open).toContain('data-region-id="app-terminal-drawer"');
     expect(open).toContain('data-axis="vertical"');
     expect(open).toContain('data-edge="start"');
+    expect(open).toContain('data-collapse-motion="fade-slide"');
+    expect(open).toContain('data-content-overflow="clip"');
+    expect(open).toContain('data-presentation="inline"');
     expect(open).toContain('aria-valuenow="340"');
     expect(open.indexOf('data-region-id="app-terminal-drawer"')).toBeLessThan(open.indexOf('</main>'));
     const tall = String(
@@ -385,6 +382,8 @@ describe('application shell components', () => {
       }),
     );
     expect(collapsed).toContain('data-collapsed="true"');
+    expect(collapsed).toContain('data-region-restore="app-terminal-drawer"');
+    expect(collapsed).toContain('data-position="bottom-end"');
     expect(collapsed).toContain('class="kui-floating-toolbar app-shell__terminal-drawer-restore"');
     expect(collapsed).toContain(
       'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Terminal drawer controls"',
@@ -393,6 +392,34 @@ describe('application shell components', () => {
     expect(collapsed).toContain('data-tone="default"');
     expect(collapsed).not.toContain('data-tone="dark"');
     expect(collapsed).toContain('aria-label="Show terminal drawer"');
+    const popup = String(
+      AppShell({
+        tabs: [],
+        header: 'head' as never,
+        workspace: 'work' as never,
+        terminalDrawer: 'drawer' as never,
+        terminalDrawerVisible: true,
+        terminalDrawerContentOverflow: 'visible',
+      }),
+    );
+    expect(popup).toContain('data-content-overflow="visible"');
+  });
+
+  it('projects responsive side-panel and separator policies through ResizableRegion', () => {
+    const markup = String(
+      AppShell({
+        tabs: [],
+        sidebar: 'side' as never,
+        header: 'head' as never,
+        workspace: 'work' as never,
+        inspector: 'inspect' as never,
+        mobile: true,
+        sidePanelSeparator: 'hidden',
+      }),
+    );
+    expect(markup.match(/data-presentation="overlay"/g)).toHaveLength(2);
+    expect(markup.match(/data-separator="hidden"/g)).toHaveLength(2);
+    expect(markup.match(/data-collapse-motion="slide"/g)).toHaveLength(2);
   });
 
   it('keeps the ticket rail beside the terminal dashboard', () => {

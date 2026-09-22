@@ -7395,6 +7395,7 @@ function renderMainShell() {
         }
         inspectorVisible={viewportMobile.value ? mobileOverlay.value.inspector : inspectorVisible.value}
         inspectorSize={inspectorSize.value}
+        sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
         overlay={popup}
       />
     );
@@ -7571,6 +7572,8 @@ function renderMainShell() {
       terminalDrawerSize={appRegionSize('app-terminal-drawer')}
       terminalDrawerMax={terminalDrawerMax.value}
       terminalDrawerTransitioning={terminalDrawerTransitioning.value}
+      sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
+      terminalDrawerContentOverflow={terminalDrawerCreateMenuOpen.value ? 'visible' : 'clip'}
       inspector={
         viewMode.value === 'notifications' ? (
           <NotificationInspector />

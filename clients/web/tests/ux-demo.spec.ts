@@ -1214,7 +1214,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   expect(
     await dialog.evaluate((node) => {
       const probe = document.createElement('span');
-      probe.style.background = 'var(--hs-shell-divider)';
+      probe.style.background = 'var(--wa-color-surface-border)';
       document.body.append(probe);
       const result = {
         border: getComputedStyle(node).borderColor,
@@ -2313,7 +2313,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
     await expect(demo.locator('[data-component="ticket-board"]')).toHaveCount(mode === 'Columns' ? 1 : 0);
   }
   await expect(notifications).toHaveAttribute('aria-pressed', 'true');
-  await expect(demo.locator('.kui-toolbar-text')).toHaveText('Notifications');
+  await expect(demo.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible();
   await expect(pending).toHaveCount(2);
   await expect(read.getByRole('button', { name: 'Always Allow' })).toHaveCount(0);
   await expect(command.getByRole('button', { name: 'Always Allow' })).toBeEnabled();
@@ -4345,6 +4345,8 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
 test('operates resizable-region keyboard and collapse transitions', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=resizable-region');
+  const horizontalRegion = page.locator('[data-region-id="resize-demo-horizontal"]');
+  const horizontalHandle = horizontalRegion.locator('.kui-resizable-region__handle');
   const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
   const vertical = page.getByRole('separator', { name: 'Resize Example drawer' });
   await expect(horizontal).toHaveAttribute('aria-orientation', 'vertical');
@@ -4360,10 +4362,12 @@ test('operates resizable-region keyboard and collapse transitions', async ({ pag
   await expect(horizontal).toHaveCSS('cursor', 'col-resize');
   await expect(vertical).toHaveCSS('cursor', 'row-resize');
   await page.getByRole('button', { name: 'Collapse horizontal region' }).click();
-  await expect(horizontal).toHaveAttribute('aria-valuenow', '0');
-  await expect(horizontal).toHaveAttribute('aria-valuemin', '0');
+  await expect(horizontal).toHaveCount(0);
+  await expect(horizontalHandle).toHaveAttribute('aria-valuenow', '0');
+  await expect(horizontalHandle).toHaveAttribute('aria-valuemin', '0');
+  await expect(horizontalHandle).toHaveAttribute('aria-hidden', 'true');
   await page.getByRole('button', { name: 'Restore horizontal region' }).click();
-  await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
+  await expect(page.getByRole('separator', { name: 'Resize Example sidebar' })).toHaveAttribute('aria-valuenow', '250');
 });
 
 test('renders and reconnects the connection-state banner variants', async ({ page }) => {
@@ -4516,11 +4520,13 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await page.mouse.down();
   // While dragging, the resize guard suppresses even the content transform transition.
+  await expect(inspectorRegion).toHaveAttribute('data-resizing', 'true');
   await expect(inspectorRegion.locator('.kui-resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
   await expect(shell.locator('[data-resize-stability="same-node"]')).toHaveCount(1);
   await page.mouse.up();
   // After the drag ends the content transition returns, but the region width stays un-animated.
+  await expect(inspectorRegion).not.toHaveAttribute('data-resizing');
   await expect(inspectorRegion.locator('.kui-resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
@@ -4596,16 +4602,13 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     'data-collapsed',
     'false',
   );
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
-    'border-right-width',
-    '1px',
-  );
-  const sidebarSeparator = await shell
-    .locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')
-    .evaluate((node) => ({
-      width: getComputedStyle(node, '::after').width,
-      background: getComputedStyle(node, '::after').backgroundColor,
-    }));
+  await expect(
+    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]'),
+  ).toHaveAttribute('data-separator', 'auto');
+  const sidebarSeparator = await sidebarHandle.evaluate((node) => ({
+    width: getComputedStyle(node, '::before').width,
+    background: getComputedStyle(node, '::before').backgroundColor,
+  }));
   expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(209, 209, 214)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
@@ -4811,11 +4814,13 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   expect(
     await sidebarRegion.evaluate((node) => {
       const probe = document.createElement('span');
-      probe.style.background = 'var(--hs-shell-divider)';
-      document.body.append(probe);
+      probe.style.background = 'var(--kui-resizable-region-separator-color)';
+      node.append(probe);
+      const handle = node.querySelector('.kui-resizable-region__handle')!;
       const result = {
-        divider: getComputedStyle(node, '::after').backgroundColor,
-        dividerMatches: getComputedStyle(node, '::after').backgroundColor === getComputedStyle(probe).backgroundColor,
+        divider: getComputedStyle(handle, '::before').backgroundColor,
+        dividerMatches:
+          getComputedStyle(handle, '::before').backgroundColor === getComputedStyle(probe).backgroundColor,
       };
       probe.remove();
       return result;

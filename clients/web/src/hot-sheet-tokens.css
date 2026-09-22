@@ -20,7 +20,6 @@
   --kui-space-m: var(--wa-space-m, 1rem);
   --kui-space-l: var(--wa-space-l, 1.5rem);
   --kui-space-xl: var(--wa-space-xl, 2rem);
-  --hs-shell-divider: var(--wa-color-neutral-border-normal);
   --hs-ticket-state-needs-review: #cb30e0;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
   /* Text/icon color for content on the always-yellow up-next fill; stays dark in every theme (HS2-TF43Y0). */

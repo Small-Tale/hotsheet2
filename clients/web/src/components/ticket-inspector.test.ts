@@ -35,11 +35,14 @@ describe('TicketInspector', () => {
     for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
       const markup = String(TicketInspector({ ...base, activeTab: tab }));
       expect(markup).toContain('HS2-TEST');
-      expect(markup).toContain(
-        'data-component="tab-bar" data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST" data-tab-activation="automatic" aria-label="Ticket inspector sections"',
-      );
-      expect(markup).toContain(
-        `data-inspector-tab="${tab}" class="kui-app-tab ticket-inspector__tab" data-component="app-tab" data-tab-id="${tab}" data-selected="true"`,
+      expect(markup).toContain('data-component="tab-bar"');
+      expect(markup).toContain('data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST"');
+      expect(markup).toContain('data-tab-activation="automatic"');
+      expect(markup).toContain('aria-label="Ticket inspector sections"');
+      expect(markup).toMatch(
+        new RegExp(
+          `data-inspector-tab="${tab}"[^>]*data-component="app-tab"[^>]*data-tab-id="${tab}"[^>]*data-selected="true"`,
+        ),
       );
       expect(markup).toContain(
         `role="tab" aria-selected="true" data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,

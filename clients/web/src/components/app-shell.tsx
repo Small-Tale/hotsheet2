@@ -3,7 +3,11 @@ import './app-shell.css';
 
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ResizableRegion } from '@kerfjs/ui/resizable-region';
+import {
+  ResizableRegion,
+  type ResizableRegionContentOverflow,
+  type ResizableRegionSeparator,
+} from '@kerfjs/ui/resizable-region';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -39,6 +43,8 @@ export interface AppShellProps {
   terminalDrawerSize?: number;
   terminalDrawerMax?: number;
   terminalDrawerTransitioning?: boolean;
+  sidePanelSeparator?: ResizableRegionSeparator;
+  terminalDrawerContentOverflow?: ResizableRegionContentOverflow;
 }
 
 export function AppShell({
@@ -64,6 +70,8 @@ export function AppShell({
   terminalDrawerSize = 320,
   terminalDrawerMax = 520,
   terminalDrawerTransitioning = false,
+  sidePanelSeparator = 'auto',
+  terminalDrawerContentOverflow = 'clip',
 }: AppShellProps) {
   return (
     <section
@@ -81,6 +89,9 @@ export function AppShell({
           min={250}
           max={360}
           collapsed={!sidebarVisible}
+          separator={sidePanelSeparator}
+          collapseMotion="slide"
+          presentation={mobile ? 'overlay' : 'inline'}
         >
           {sidebar}
         </ResizableRegion>
@@ -160,27 +171,34 @@ export function AppShell({
             edge="start"
             collapsed={!terminalDrawerVisible}
             transitioning={terminalDrawerTransitioning}
+            separator="auto"
+            collapseMotion="fade-slide"
+            contentOverflow={terminalDrawerContentOverflow}
+            presentation="inline"
+            restoreControl={
+              !terminalDrawerTransitioning ? (
+                <FloatingToolbar
+                  label="Terminal drawer controls"
+                  position="bottom-end"
+                  className="app-shell__terminal-drawer-restore"
+                >
+                  <ToolbarControlGroup single>
+                    <button
+                      type="button"
+                      data-action="toggle-terminal-drawer"
+                      aria-label="Show terminal drawer"
+                      title="Show terminal drawer"
+                    >
+                      <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
+                    </button>
+                  </ToolbarControlGroup>
+                </FloatingToolbar>
+              ) : undefined
+            }
+            restorePosition="bottom-end"
           >
             {terminalDrawer}
           </ResizableRegion>
-        )}
-        {mode === 'project' && terminalDrawer && !terminalDrawerVisible && !terminalDrawerTransitioning && (
-          <FloatingToolbar
-            label="Terminal drawer controls"
-            position="bottom-end"
-            className="app-shell__terminal-drawer-restore"
-          >
-            <ToolbarControlGroup single>
-              <button
-                type="button"
-                data-action="toggle-terminal-drawer"
-                aria-label="Show terminal drawer"
-                title="Show terminal drawer"
-              >
-                <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
-              </button>
-            </ToolbarControlGroup>
-          </FloatingToolbar>
         )}
       </main>
       {mobile && (sidebarVisible || inspectorVisible) && (
@@ -195,6 +213,9 @@ export function AppShell({
           max={520}
           edge="start"
           collapsed={!inspectorVisible}
+          separator={sidePanelSeparator}
+          collapseMotion="slide"
+          presentation={mobile ? 'overlay' : 'inline'}
         >
           {inspector}
         </ResizableRegion>

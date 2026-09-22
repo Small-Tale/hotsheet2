@@ -201,6 +201,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       region,
       handle,
     };
+    region.dataset.resizing = 'true';
     document.body.dataset.resizingRegion = axis;
   });
   delegate(document.body, 'keydown', '[data-kui-resize-handle]', (event, target) => {
@@ -253,6 +254,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     if (!drag) return;
     if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
     dependencies.appRegionResizeDrag = undefined;
+    delete drag.region.dataset.resizing;
     delete document.body.dataset.resizingRegion;
     setAppRegionSize(drag.id, drag.pendingSize);
     if (drag.id === 'app-terminal-drawer' && drag.collapseRequested) {

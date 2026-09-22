@@ -2379,7 +2379,9 @@ for (const theme of ['light', 'dark'] as const) {
     await expectMode(segments, 'list');
     await expect(segments).toHaveAttribute('data-layout', 'content');
     await expect(segments).toHaveAttribute('data-shape', 'pill');
-    await segments.getByRole('button', { name: 'List view' }).focus();
+    const listMode = segments.getByRole('button', { name: 'List view' });
+    await listMode.click();
+    await expect(listMode).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(segments.getByRole('button', { name: 'Columns view' })).toBeFocused();
     await page.keyboard.press('Enter');
@@ -3201,7 +3203,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
-  const drawer = page.locator('[data-component="terminal-drawer"]'),
+  const region = page.locator('[data-component="resizable-region"][data-region-id="app-terminal-drawer"]'),
+    drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New drawer item' });
   const createStyle = await create.evaluate((node) => {
     const style = getComputedStyle(node);
@@ -3211,6 +3214,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   expect(createStyle.borderRadius).toBe('999px');
   expect(createStyle.height).toBe('32px');
   await create.click();
+  await expect(region).toHaveAttribute('data-content-overflow', 'visible');
   const menu = drawer.getByRole('menu', { name: 'New drawer item' });
   await expect(menu.getByText('Default shell')).toBeVisible();
   await expect(menu.getByText('AI shell')).toBeVisible();
@@ -3238,6 +3242,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await menu.getByText('AI chat').click({ modifiers: ['Alt'] });
+  await expect(region).toHaveAttribute('data-content-overflow', 'clip');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Claude chat' })).toHaveAttribute('aria-selected', 'true');
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
@@ -4450,7 +4455,9 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await page.screenshot({ path: '/private/tmp/hs2-terminal-drawer-restored.png', fullPage: true });
 });
 
-test('animates drawer visibility without animating manual resize', async ({ page }) => {
+test('snaps the drawer track while compositing visibility motion and suppressing motion during resize', async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
@@ -4460,15 +4467,17 @@ test('animates drawer visibility without animating manual resize', async ({ page
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const region = page.locator('section[data-region-id="app-terminal-drawer"]'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
-    handle = page.getByRole('separator', { name: 'Resize Terminal drawer' });
+    handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+    content = region.locator('.kui-resizable-region__content');
   await expect(region).toHaveAttribute('data-transitioning', 'true');
-  expect(await region.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.2s');
+  await expect(region).toHaveCSS('transition-duration', '0s');
+  expect(await content.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.2s');
   await expect(region).toHaveAttribute('data-transitioning', 'false');
   await handle.focus();
   await page.keyboard.press('ArrowUp');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
   await expect(region).toHaveAttribute('data-transitioning', 'false');
-  expect(await region.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe('0s');
+  await expect(region).toHaveCSS('transition-duration', '0s');
   await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
   await expect(region).toHaveAttribute('data-transitioning', 'true');
   await expect(region).toHaveAttribute('data-collapsed', 'true');
@@ -5563,8 +5572,11 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
     .toBe(true);
   await page.mouse.move(dragPoint.x, dragPoint.y);
   await page.mouse.down();
+  await expect(sidebar).toHaveAttribute('data-resizing', 'true');
+  await expect(sidebar.locator('.kui-resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(dragPoint.x + 32, dragPoint.y);
   await page.mouse.up();
+  await expect(sidebar).not.toHaveAttribute('data-resizing');
   await expect.poll(() => sidebar.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialSidebar + 32);
   await inspectorHandle.press('ArrowLeft');
   await expect.poll(() => inspector.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialInspector + 16);

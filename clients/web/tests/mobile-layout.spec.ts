@@ -174,6 +174,8 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   // Single column: both overlays start closed and the scrim is absent.
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await expect(sidebar).toHaveAttribute('data-presentation', 'overlay');
+  await expect(inspector).toHaveAttribute('data-presentation', 'overlay');
   await expect(scrim).toHaveCount(0);
 
   // Open the project sidebar as an overlay.
@@ -182,6 +184,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(scrim).toBeVisible();
   // The sidebar overlays the main column rather than sitting beside it.
   await expect(sidebar).toHaveCSS('position', 'absolute');
+  await expect(sidebar.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
 
   await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-sidebar-overlay.png', fullPage: true });
 
@@ -197,6 +200,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toBeVisible();
+  await expect(inspector.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
   await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-inspector-overlay.png', fullPage: true });
 
   // Dismiss via the scrim strip the right inspector does not cover.

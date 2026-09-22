@@ -174,7 +174,10 @@ and identity-less legacy entries remain conservatively blocking.
   standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
   side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
   from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
-  stay in sync (HS2-ZK51WP). The shell clips offscreen panels without becoming a scroll
+  stay in sync (HS2-ZK51WP). AppShell expresses that switch through Kerf
+  `ResizableRegion.presentation` rather than reimplementing overlay geometry; the same
+  component policy owns its hidden resize handle, width cap, shadow, and collapsed hit testing.
+  The shell clips offscreen panels without becoming a scroll
   container: opening, clearing, and typing in search must not pan the whole workspace, including
   across desktop/mobile resize. The workspace and inspector keep independent scrolling, and
   overlay controls remain accessible (HS2-JBTPNR). The production root uses the dynamic viewport height rather than
@@ -1716,8 +1719,9 @@ sidebar and ticket inspector at full height. It belongs to ticket views only: th
 Notifications and Settings views hide the drawer entirely — neither the drawer nor its
 "Show terminal drawer" restore affordance appears while either is open — and the user's
 open/closed drawer preference is preserved so it returns unchanged on the next ticket view
-(HS2-EQEJC7). The compositor-only collapse travels one canonical 24 px step, and the 40 px
-restore action stays 16 px from the shell's trailing and bottom edges (HS2-4Y6SM9). Its compact rail switches between the decorated
+(HS2-EQEJC7). Kerf's `fade-slide` collapse snaps the drawer track in one reflow while moving
+and fading its fixed-size content on the compositor. Its 40 px restore action uses the
+region's safe-area-aware bottom-end placement (HS2-4Y6SM9). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
 the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to

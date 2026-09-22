@@ -1,4 +1,6 @@
 .app-shell {
+  --kui-safe-area-inline-end: var(--hotsheet-safe-area-right);
+  --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom);
   display: flex;
   width: 100%;
   min-width: remify(1024px);
@@ -11,42 +13,8 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
-/* Collapsing/expanding a region changes its flex width, which reflows .app-shell__main and
-   every ticket row. Animating that width relayouts the whole list per frame (HS2-4KZBTT:
-   "very choppy when there are too many tickets"), so the width change is instant — one reflow,
-   not sixty. The fixed-width content still slides (transform only, composited off the main
-   thread, and clipped by .app-shell's overflow:clip), so the collapse stays animated without
-   touching layout. The pointer-drag resize path stays un-animated via the data-resizing-region guard. */
-.app-shell > .kui-resizable-region[data-region-id='app-sidebar'] {
-  border-right: 1px solid var(--wa-color-surface-border);
+.app-shell > .kui-resizable-region {
   background: var(--wa-color-surface-default);
-}
-.app-shell > .kui-resizable-region[data-region-id='app-sidebar']::after {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  right: -1px;
-  bottom: 0;
-  width: 1px;
-  background: var(--hs-shell-divider);
-  content: '';
-  pointer-events: none;
-}
-.app-shell > .kui-resizable-region[data-region-id='app-sidebar'][data-collapsed='true']::after {
-  display: none;
-}
-.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id='app-sidebar']::after {
-  display: none;
-}
-.app-shell:has(.terminal-dashboard__magnified)
-  > .kui-resizable-region:is([data-region-id='app-sidebar'], [data-region-id='app-inspector']) {
-  --kui-resizable-region-separator-color: transparent;
-}
-.app-shell > .kui-resizable-region[data-collapsed='true'] {
-  border-right-width: 0;
-}
-.app-shell > .kui-resizable-region[data-collapsed='true'] .kui-resizable-region__handle {
-  display: none;
 }
 .app-shell > .kui-resizable-region .project-sidebar,
 .app-shell > .kui-resizable-region .terminal-operations-sidebar,
@@ -57,14 +25,6 @@
   border-radius: 0;
   box-shadow: none;
 }
-.app-shell > .kui-resizable-region[data-region-id='app-sidebar'] .kui-resizable-region__content {
-  width: var(--kui-resizable-region-expanded-size);
-  min-width: var(--kui-resizable-region-expanded-size);
-  transition: transform 0.2s ease;
-}
-.app-shell > .kui-resizable-region[data-region-id='app-sidebar'][data-collapsed='true'] .kui-resizable-region__content {
-  transform: translateX(-100%);
-}
 .app-shell__main {
   position: relative;
   display: flex;
@@ -73,53 +33,11 @@
   flex: 1;
   flex-direction: column;
 }
-.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'] {
-  border-top: 1px solid var(--wa-color-surface-border);
+.app-shell__main > .kui-resizable-region {
   background: var(--wa-color-surface-default);
 }
-.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer']:has(.terminal-drawer__create-menu) {
-  z-index: 5;
-}
-.app-shell__main
-  > .kui-resizable-region[data-region-id='app-terminal-drawer']:has(.terminal-drawer__create-menu)
-  .kui-resizable-region__content {
-  overflow: visible;
-}
-.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-transitioning='true'] {
-  overflow: hidden;
-  transition:
-    height 0.2s ease,
-    flex-basis 0.2s ease;
-}
-.app-shell__main
-  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-transitioning='true']
-  .kui-resizable-region__content {
-  transition:
-    opacity 0.16s ease,
-    transform 0.2s ease;
-}
-.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'] .kui-resizable-region__content {
-  height: var(--kui-resizable-region-expanded-size);
-  min-height: var(--kui-resizable-region-expanded-size);
-}
-.app-shell__main > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true'] {
-  overflow: hidden;
-  border-top: 0;
-}
-.app-shell__main
-  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true']
-  .kui-resizable-region__content {
-  opacity: 0;
-  transform: translateY(var(--kui-space-l));
-}
-.app-shell__main
-  > .kui-resizable-region[data-region-id='app-terminal-drawer'][data-collapsed='true']
-  .kui-resizable-region__handle {
-  display: none;
-}
-.app-shell__terminal-drawer-restore.kui-floating-toolbar[data-position='bottom-end'] {
-  inset-inline-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-right));
-  inset-block-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-bottom));
+.app-shell__terminal-drawer-restore.kui-floating-toolbar {
+  position: static;
 }
 .app-shell__main > .project-tab-bar {
   border-bottom: 0;
@@ -156,10 +74,6 @@
 }
 .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded='true']) .workspace-header {
   align-items: start;
-}
-body[data-resizing-region] .app-shell > .kui-resizable-region,
-body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content {
-  transition: none;
 }
 .app-shell__work-area {
   position: relative;
@@ -227,26 +141,6 @@ body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-reg
   padding: remify(16px) 0 0;
   overflow: hidden;
 }
-.app-shell > .kui-resizable-region[data-region-id='app-inspector'] {
-  border-left: 1px solid var(--wa-color-surface-border);
-  background: var(--wa-color-surface-default);
-}
-.app-shell:has(.terminal-dashboard__magnified) > .kui-resizable-region[data-region-id='app-inspector'] {
-  border-left-color: transparent;
-}
-.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .kui-resizable-region__content {
-  width: var(--kui-resizable-region-expanded-size);
-  min-width: var(--kui-resizable-region-expanded-size);
-  transition: transform 0.2s ease;
-}
-.app-shell > .kui-resizable-region[data-region-id='app-inspector'][data-collapsed='true'] {
-  border-left-width: 0;
-}
-.app-shell
-  > .kui-resizable-region[data-region-id='app-inspector'][data-collapsed='true']
-  .kui-resizable-region__content {
-  transform: translateX(100%);
-}
 .app-shell > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
   width: 100%;
   height: 100%;
@@ -305,43 +199,11 @@ body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-reg
 .app-shell__work-area[data-has-composer='true'] > .app-shell__workspace {
   padding-top: 0;
 }
-/* Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the shell drops its
-   1024px min-width and the two sidebars stop taking horizontal space: they become absolute
-   overlays on top of the single main column, sliding in with the same translateX transform the
-   desktop collapse already uses. Only one is ever open at a time (enforced by the caller), and a
-   click-away scrim dismisses whichever is open. The overlay panels anchor to .app-shell, so it
-   becomes the positioning context here. */
+/* Mobile side panels use ResizableRegion's overlay presentation. The shell remains
+   their positioning context, while Hot Sheet owns the click-away scrim. */
 .app-shell[data-mobile='true'] {
   position: relative;
   min-width: 0;
-}
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'],
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] {
-  position: absolute;
-  z-index: 41;
-  top: 0;
-  bottom: 0;
-}
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] {
-  left: 0;
-}
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] {
-  right: 0;
-}
-/* A collapsed (off-screen) overlay must not intercept taps meant for the main column underneath. */
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-collapsed='true'] {
-  pointer-events: none;
-}
-/* Cap the overlay width so a click-away scrim strip always remains, even on a ~390px phone where
-   the 352px inspector would otherwise cover the whole width. */
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] .kui-resizable-region__content,
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .kui-resizable-region__content {
-  max-width: 85vw;
-  box-shadow: var(--wa-shadow-l);
-}
-/* Resize handles are meaningless for overlays that no longer share horizontal space. */
-.app-shell[data-mobile='true'] > .kui-resizable-region .kui-resizable-region__handle {
-  display: none;
 }
 /* Viewport-fixed so it reliably covers the whole shell regardless of the app-shell's flex/containing
    block; .app-shell is not a stacking context (position:relative + z-index:auto), so the z-index:41
@@ -354,10 +216,4 @@ body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-reg
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 44%, transparent);
   cursor: pointer;
   inset: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .app-shell .kui-resizable-region,
-  .app-shell .kui-resizable-region .kui-resizable-region__content {
-    transition: none !important;
-  }
 }

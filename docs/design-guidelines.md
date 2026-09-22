@@ -179,8 +179,9 @@ Web Awesome controls ≥ 20 px (prefer 28 px) hit targets (HS2-DKZG9S, HS2-A2A9G
 
 **Hot Sheet application.** Web: `--wa-color-*` tokens are the semantic model;
 `--hs-*` aliases stay limited to domain states the library cannot name
-(`--hs-ticket-state-needs-review`, `--hs-ticket-state-up-next`, `--hs-shell-divider`)
-and each must gain a dark value (HS2-DKZG9S). One brand fill (`--wa-color-brand-fill-loud`)
+(`--hs-ticket-state-needs-review`, `--hs-ticket-state-up-next`), and each must gain a
+dark value (HS2-DKZG9S). Generic shell separators come from Kerf's panel policies.
+One brand fill (`--wa-color-brand-fill-loud`)
 is the only accent; do not tint multiple controls. Under Tauri on macOS, consider
 following the OS accent color through a single accent token (design choice, not a
 HIG requirement). Native: `Color(nsColor:)` semantic colors only; ticket-state colors

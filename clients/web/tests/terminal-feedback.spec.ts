@@ -331,8 +331,8 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
     border: getComputedStyle(element, '::after').borderColor,
   }));
   expect(focusPresentation).toEqual({ outline: 'rgba(0, 0, 0, 0)', border: 'rgba(0, 0, 0, 0)' });
-  expect(await sidebar.evaluate((element) => getComputedStyle(element, '::after').display)).toBe('none');
-  await expect(inspector).toHaveCSS('border-left-color', 'rgba(0, 0, 0, 0)');
+  await expect(sidebar).toHaveAttribute('data-separator', 'hidden');
+  await expect(inspector).toHaveAttribute('data-separator', 'hidden');
   for (const handle of [sidebarHandle, inspectorHandle])
     expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
       'rgba(0, 0, 0, 0)',
@@ -340,8 +340,8 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
   await page.screenshot({ path: '/private/tmp/hs2-fxj64w-magnified-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 650 });
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
-  expect(await sidebar.evaluate((element) => getComputedStyle(element, '::after').display)).toBe('none');
-  await expect(inspector).toHaveCSS('border-left-color', 'rgba(0, 0, 0, 0)');
+  await expect(sidebar).toHaveAttribute('data-separator', 'hidden');
+  await expect(inspector).toHaveAttribute('data-separator', 'hidden');
   for (const handle of [sidebarHandle, inspectorHandle])
     expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
       'rgba(0, 0, 0, 0)',
