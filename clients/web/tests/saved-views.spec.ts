@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 const project = {
   id: 'saved-views',
@@ -38,7 +38,7 @@ const rows = [
   },
 ];
 
-test('creates, renames, deletes, and shares a custom ticket view', async ({ page }) => {
+async function mockSavedViews(page: Page) {
   let views: Array<{ id: string; name: string; query: string }> = [];
   await page.route('**/*', (route) => {
     const request = route.request(),
@@ -104,6 +104,43 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
       });
     return route.continue();
   });
+  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', () => undefined);
+  return () => views;
+}
+
+async function holdAnimationFrames(page: Page) {
+  return page.evaluateHandle(() => {
+    const original = window.requestAnimationFrame.bind(window),
+      originalCancel = window.cancelAnimationFrame.bind(window),
+      pending = new Map<number, FrameRequestCallback>();
+    let next = -1;
+    window.requestAnimationFrame = (callback) => {
+      const id = next--;
+      pending.set(id, callback);
+      return id;
+    };
+    window.cancelAnimationFrame = (id) => {
+      if (id < 0) pending.delete(id);
+      else originalCancel(id);
+    };
+    return {
+      advance() {
+        const callbacks = [...pending.values()];
+        pending.clear();
+        for (const callback of callbacks) callback(performance.now());
+      },
+      restore() {
+        window.requestAnimationFrame = original;
+        window.cancelAnimationFrame = originalCancel;
+        for (const callback of pending.values()) original(callback);
+        pending.clear();
+      },
+    };
+  });
+}
+
+test('creates, renames, deletes, and shares a custom ticket view', async ({ page }) => {
+  const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -144,7 +181,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.locator('.kui-panel-header__title', { hasText: 'Needs docs' })).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
-  expect(views).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
+  expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
   await expect(page.getByRole('button', { name: 'More actions for Needs docs' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Rename Needs docs' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Delete Needs docs' })).toHaveCount(0);
@@ -176,7 +213,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.locator('.kui-panel-header__title', { hasText: 'Documentation' })).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toHaveCount(0);
-  expect(views).toEqual([{ id: 'needs-docs', name: 'Documentation', query: 'tag:client' }]);
+  expect(views()).toEqual([{ id: 'needs-docs', name: 'Documentation', query: 'tag:client' }]);
   const savedRow = page.locator('[data-saved-view-id="custom:needs-docs"]');
   await page.setViewportSize({ width: 720, height: 760 });
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
@@ -197,5 +234,149 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.getByRole('button', { name: /Documentation/ })).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Search tickets' })).toBeVisible();
-  expect(views).toEqual([]);
+  expect(views()).toEqual([]);
+});
+
+test('keeps immediate saved-view query replacement focused when opening frames resume (HS2-N7XTP4)', async ({
+  page,
+}) => {
+  await mockSavedViews(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const frames = await holdAnimationFrames(page);
+  try {
+    await page.getByRole('button', { name: 'Add view', exact: true }).click();
+    const dialog = page.locator('[data-component="saved-view-dialog"]'),
+      name = dialog.getByRole('textbox', { name: 'View name' }),
+      query = dialog.getByRole('searchbox', { name: 'Search query' });
+    await expect(query).toBeVisible();
+    // Allow the native dialog's initial autofocus. Later application opening work
+    // must not reclaim focus between selecting the query and inserting replacement text.
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(name).toBeFocused();
+    await query.selectText();
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(query).toBeFocused();
+    await page.keyboard.insertText('before is:active after ');
+    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+      'data-token-value',
+      'is:active',
+    );
+    await expect(query.locator('[data-token-search-text]')).toHaveText(['before ', ' after ']);
+    await expect(name).toHaveValue('');
+    await name.fill('Immediate query');
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue('Immediate query');
+    await frames.evaluate((clock) => {
+      clock.restore();
+    });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(query).toBeInViewport();
+      await page.screenshot({ path: `/private/tmp/hs2-n7xtp4-immediate-query-${width}.png`, animations: 'disabled' });
+    }
+  } finally {
+    await frames.evaluate((clock) => {
+      clock.restore();
+    });
+    await frames.dispose();
+  }
+});
+
+test('keeps saved-view cancel and reopen authoritative across delayed frames and keyboard input (HS2-N7XTP4)', async ({
+  page,
+}) => {
+  await mockSavedViews(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const frames = await holdAnimationFrames(page);
+  try {
+    const add = page.getByRole('button', { name: 'Add view', exact: true }),
+      dialog = page.locator('[data-component="saved-view-dialog"]'),
+      name = dialog.getByRole('textbox', { name: 'View name' }),
+      query = dialog.getByRole('searchbox', { name: 'Search query' });
+    await add.click();
+    await expect(query).toBeVisible();
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(name).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(query).toBeFocused();
+    await page.keyboard.insertText('discarded is:active query ');
+    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+      'data-token-value',
+      'is:active',
+    );
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).not.toHaveAttribute('open', '');
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(dialog).not.toHaveAttribute('open', '');
+    await expect(query).toBeHidden();
+    await add.focus();
+    await page.keyboard.press('Enter');
+    await expect(query).toBeVisible();
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue('');
+    await expect(query).toHaveText('');
+    await page.keyboard.press('Tab');
+    await expect(query).toBeFocused();
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await page.keyboard.insertText('tag:docs ');
+    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+      'data-token-value',
+      'tag:docs',
+    );
+    await expect(name).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toHaveAttribute('open', '');
+    await frames.evaluate((clock) => {
+      clock.advance();
+    });
+    await expect(query).toBeHidden();
+    await frames.evaluate((clock) => {
+      clock.restore();
+    });
+    await add.click();
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue('');
+    await expect(query).toHaveText('');
+    await query.fill('refilled is:active after ');
+    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+      'data-token-value',
+      'is:active',
+    );
+    await expect(name).toHaveValue('');
+  } finally {
+    await frames.evaluate((clock) => {
+      clock.restore();
+    });
+    await frames.dispose();
+  }
 });

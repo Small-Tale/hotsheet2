@@ -5908,12 +5908,6 @@ async function submitNotWorking(){const target=notWorkingTarget.value;if(!target
 
 function showSavedViewDialog() {
   savedViewDialogOpen.value = true;
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      document.querySelector<Control>('[data-component="saved-view-dialog"]')?.show?.();
-      document.querySelector<Control>('[name="saved-view-name"]')?.focus();
-    }),
-  );
 }
 function setSavedViewQuery(value: string) {
   const parsed = consumeSearchTokens(value, true);

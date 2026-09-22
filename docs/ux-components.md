@@ -757,7 +757,10 @@ with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
   text at the same caret position for editing by button or double-click.
 
 Saved views are created and managed from the Views section rather than from a separate
-search overlay.
+search overlay. The controlled open state and native dialog autofocus own initial name
+focus; delayed application work must not redirect immediate query typing or reopen a
+cancelled dialog. Query token editing retains its independent caret restoration. The
+separate dirty name live-value reset gap on reopen is tracked by HS2-ZQNW62.
 
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 `ViewEditor` without replacing the basic search components.

@@ -58,6 +58,28 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('data-action="edit-saved-view-query-token"');
   });
 
+  it('retains one native name autofocus target through opening, edits, busy, close, rename, and reset', () => {
+    for (const state of [
+      { open: false, name: '', query: '' },
+      { open: true, name: '', query: '' },
+      { open: true, name: '', query: 'before after', queryTokens: [tokenFromRaw('is:active')!] },
+      { open: true, name: 'Draft', query: 'before after', busy: true },
+      { open: true, name: 'Draft', query: 'before after', error: 'Try another name.' },
+      { open: false, name: 'Draft', query: 'before after' },
+      { open: true, mode: 'rename' as const, name: 'Shared view', query: 'tag:docs' },
+      { open: false, name: '', query: '' },
+      { open: true, name: '', query: '' },
+    ]) {
+      const markup = String(SavedViewDialog(state));
+      expect(markup.match(/autofocus/g)).toHaveLength(1);
+      expect(markup).toMatch(/<wa-input[^>]*name="saved-view-name"[^>]*autofocus/);
+      const host = markup.slice(0, markup.indexOf('>') + 1);
+      expect(/\sopen(?:[\s=>])/.test(host)).toBe(state.open);
+      expect(markup).toContain(`value="${state.name}"`);
+      expect(markup).toContain('data-token-search-editor="saved-view-query"');
+    }
+  });
+
   it('confirms shared deletion without implying tickets are removed', () => {
     const markup = String(SavedViewDeleteDialog({ open: true, name: 'Needs docs' }));
     expect(markup).toContain('data-component="saved-view-delete-dialog"');

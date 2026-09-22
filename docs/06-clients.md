@@ -847,6 +847,9 @@ and identity-less legacy entries remain conservatively blocking.
   capture phase and rejects events whose composed path belongs to an editable control or open
   dialog. It therefore resolves the original target before another action can synchronously morph
   that node, so submitting AI chat or closing a modal cannot queue a latent Create View dialog.
+  Saved-view opening uses the controlled dialog open state and native name autofocus. No delayed
+  application callback may reclaim focus after the user selects the query or reopen a cancelled
+  dialog. Query token caret restoration remains independent of the opening lifecycle.
 
   Search has one primary surface: the project toolbar. The former global search overlay and
   its separate scope, suggestions, result rows, and saved-view handoff were removed because
