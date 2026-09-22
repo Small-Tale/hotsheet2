@@ -393,7 +393,7 @@ function demoContent(item: DemoDefinition) {
       <section class="floating-toolbar-demo">
         <p>Floating controls remain available over scrolling content without joining the page toolbar.</p>
         <FloatingToolbar label="Preview zoom controls" position="bottom-end">
-          <ToolbarControlGroup tone="dark">
+          <ToolbarControlGroup>
             <button type="button" aria-label="Zoom out">
               <LucideIcon icon={Minus} name="minus" />
             </button>

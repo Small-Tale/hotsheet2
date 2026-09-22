@@ -170,7 +170,7 @@ export function AppShell({
             position="bottom-end"
             className="app-shell__terminal-drawer-restore"
           >
-            <ToolbarControlGroup single tone="dark">
+            <ToolbarControlGroup single>
               <button
                 type="button"
                 data-action="toggle-terminal-drawer"

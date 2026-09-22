@@ -2013,7 +2013,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(zoomToolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(zoomToolbar).toHaveAttribute('data-position', 'bottom-end');
-  await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'default');
   await expect(operations).toBeVisible();
   await expect(operations.getByText('demo', { exact: true })).toBeVisible();
   await expect(operations.locator('[data-component="project-summary"]')).toHaveCount(1);
@@ -2223,7 +2223,21 @@ test('preserves column view after visiting the terminal dashboard (HS2-BH8ZVD)',
   await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restore (HS2-W3GPHW)', async ({ page }) => {
+test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restore (HS2-W3GPHW)', async ({
+  page,
+}, testInfo) => {
+  const expectDarkChildren = async (toolbar: Locator, name: string) => {
+    const group = toolbar.locator('[data-component="toolbar-control-group"]');
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await expect(group).toHaveCSS('color-scheme', 'dark');
+      await expect(group).toHaveCSS('background-color', 'rgb(58, 58, 60)');
+      await expect(group).toHaveCSS('color', 'rgb(174, 174, 178)');
+      await expect(group.locator('button').first()).toHaveCSS('color', 'rgb(174, 174, 178)');
+      await toolbar.screenshot({ path: testInfo.outputPath(`floating-${name}-${theme}.png`) });
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+  };
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
@@ -2235,7 +2249,11 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
     workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(workspaceZoom).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(workspaceZoom).toHaveAttribute('data-position', 'bottom-end');
-  await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]')).toHaveAttribute(
+    'data-tone',
+    'default',
+  );
+  await expectDarkChildren(workspaceZoom, 'workspace-zoom');
   await workspaceZoom.getByRole('button', { name: /Zoom in/ }).click();
   await expect(workspace).toHaveAttribute('data-fit', '3');
   await page.screenshot({ path: '/private/tmp/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
@@ -2247,7 +2265,8 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await page.getByRole('tab', { name: /demo/ }).click();
   const restore = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
   await expect(restore).toHaveAttribute('data-component', 'floating-toolbar');
-  await expect(restore.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  await expect(restore.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'default');
+  await expectDarkChildren(restore, 'drawer-restore');
   await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(restore).toBeVisible();
@@ -2259,6 +2278,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   const drawerGrid = drawer.getByRole('region', { name: 'Workspace grid' }),
     drawerZoom = drawerGrid.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(drawerZoom).toHaveAttribute('data-component', 'floating-toolbar');
+  await expectDarkChildren(drawerZoom, 'drawer-zoom');
   await drawerZoom.getByRole('button', { name: /Zoom in/ }).click();
   await expect(drawerGrid).toHaveAttribute('data-fit', '1');
   await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });

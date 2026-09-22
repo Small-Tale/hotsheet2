@@ -59,7 +59,8 @@ describe('TerminalDashboard', () => {
       'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Workspace tile zoom"',
     );
     expect(markup).toContain('data-component="toolbar-control-group"');
-    expect(markup).toContain('data-tone="dark"');
+    expect(markup).toContain('data-tone="default"');
+    expect(markup).not.toContain('data-tone="dark"');
     expect(markup).toContain('data-action="zoom-terminal-grid"');
     for (const action of ['magnify-terminal', 'dedicate-terminal'])
       expect(markup).not.toContain(`data-action="${action}"`);

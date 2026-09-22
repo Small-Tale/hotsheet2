@@ -382,7 +382,8 @@ describe('application shell components', () => {
       'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Terminal drawer controls"',
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
-    expect(collapsed).toContain('data-tone="dark"');
+    expect(collapsed).toContain('data-tone="default"');
+    expect(collapsed).not.toContain('data-tone="dark"');
     expect(collapsed).toContain('aria-label="Show terminal drawer"');
   });
 

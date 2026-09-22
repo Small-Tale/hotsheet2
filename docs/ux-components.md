@@ -368,8 +368,11 @@ does not introduce polling or another network request.
 - `FloatingToolbar` — **demo built**: Kerf's accessible, forced-dark overlay toolbar for
   small control clusters that remain over scrolling content without entering the top layer.
   Hot Sheet uses its bottom-end variant for the collapsed terminal-drawer restore action and
-  for zoom controls in both the workspace dashboard and drawer Project grid. Dark
-  `ToolbarControlGroup` children own the control chrome; the consumers own visibility,
+  for zoom controls in both the workspace dashboard and drawer Project grid.
+  `ToolbarControlGroup` children inherit the toolbar's dark color scheme with their default
+  tone, keeping dark surfaces and light icons in both page themes. Applying the group's
+  inverse `dark` tone would invert that already-dark scheme back to a light surface
+  (HS2-HW02QG). The children own the control chrome; consumers own visibility,
   actions, and safe-area-adjusted positioning (HS2-W3GPHW).
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.

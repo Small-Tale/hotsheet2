@@ -2296,13 +2296,15 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 
-test('catalogs the Kerf FloatingToolbar used by terminal controls', async ({ page }) => {
-  await page.goto('/ux-demo?component=floating-toolbar');
+test('catalogs forced-dark FloatingToolbar children across page themes (HS2-HW02QG)', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=floating-toolbar&dev-review=false');
   const toolbar = page.getByRole('toolbar', { name: 'Preview zoom controls' }),
     stage = page.locator('.floating-toolbar-demo');
   await expect(toolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(toolbar).toHaveAttribute('data-position', 'bottom-end');
-  await expect(toolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  const group = toolbar.locator('[data-component="toolbar-control-group"]');
+  await expect(group).toHaveAttribute('data-tone', 'default');
   await expect(toolbar.getByRole('button', { name: 'Zoom out' })).toBeEnabled();
   await expect(toolbar.getByRole('button', { name: 'Zoom in' })).toBeEnabled();
   const insets = await toolbar.evaluate((node) => {
@@ -2313,6 +2315,28 @@ test('catalogs the Kerf FloatingToolbar used by terminal controls', async ({ pag
   expect(insets.right).toBeCloseTo(16, 0);
   expect(insets.bottom).toBeCloseTo(16, 0);
   await expect(stage).toBeVisible();
+  for (const theme of ['light', 'dark', 'light'] as const) {
+    if (theme === 'dark') await page.getByRole('button', { name: 'Use dark theme', exact: true }).click();
+    else if ((await page.locator('html').getAttribute('data-theme')) === 'dark')
+      await page.getByRole('button', { name: 'Use light theme', exact: true }).click();
+    await expect(group).toHaveCSS('color-scheme', 'dark');
+    await expect(group).toHaveCSS('background-color', 'rgb(58, 58, 60)');
+    await expect(group).toHaveCSS('color', 'rgb(174, 174, 178)');
+    const zoom = toolbar.getByRole('button', { name: 'Zoom in' });
+    await zoom.hover();
+    await expect(zoom).toHaveCSS('background-color', 'rgb(28, 28, 30)');
+    await toolbar.getByRole('button', { name: 'Zoom out' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(zoom).toBeFocused();
+    await expect(zoom).not.toHaveCSS('outline-style', 'none');
+    await page.mouse.move(0, 0);
+    await stage.screenshot({ path: testInfo.outputPath(`floating-toolbar-${theme}-wide.png`) });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(group).toHaveCSS('background-color', 'rgb(58, 58, 60)');
+  await toolbar.scrollIntoViewIfNeeded();
+  await expect(toolbar).toBeInViewport();
+  await stage.screenshot({ path: testInfo.outputPath('floating-toolbar-light-narrow.png') });
 });
 
 test('shows the reader text push state at exactly one and a half times normal size', async ({ page }) => {

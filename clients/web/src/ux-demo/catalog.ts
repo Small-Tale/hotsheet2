@@ -591,7 +591,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'floating-toolbar',
         'FloatingToolbar',
-        'Forced-dark controls floating over positioned content.',
+        'Forced-dark controls floating over positioned content; child groups inherit the dark scheme without an inverse tone.',
         'feature-floor',
         true,
         ['toolbar-control-group'],

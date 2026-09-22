@@ -429,7 +429,7 @@ export function TerminalDashboard({
         )}
       </div>
       <FloatingToolbar label="Workspace tile zoom" position="bottom-end" className="terminal-dashboard__zoom">
-        <ToolbarControlGroup tone="dark">
+        <ToolbarControlGroup>
           <button
             type="button"
             data-action="zoom-terminal-grid"
