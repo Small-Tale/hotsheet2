@@ -128,7 +128,10 @@ Supporting components:
 - `ProjectDialog` — **demo built**: local folder/store inputs and remote server-known
   checkout choices retain native Web Awesome dialog/input/button behavior while the
   app-owned composition uses 16 px dialog spacing, 8 px field/action clusters, and 4 px
-  connected remote-row text/list spacing with 16 px inline row insets (HS2-4Y6SM9).
+  connected remote-row text/list spacing. Remote choices use multiline ListItem rows with
+  shared padding and character-wrapped full paths in a width-constrained scrollable list.
+  The interactive demo covers local/recovery/busy and remote populated/loading/empty/error
+  transitions, reopening, and keyboard selection (HS2-XX5Y2X).
 - `PanelHeader` / `ValueTable` — **demo built**: shared divider-free panel/dialog/page
   icon/title/subtitle/action geometry and borderless static metadata cells with inset
   separators. `PanelHeader` (the `@kerfjs/ui` beta.6 consolidation of the former `DialogHeader`

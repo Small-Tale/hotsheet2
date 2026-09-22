@@ -392,6 +392,7 @@ export const demoCatalog: DemoCategory[] = [
             'Open a local checkout or choose a checkout already known to a remote server.',
             'feature-floor',
             true,
+            ['list-item'],
           ),
           demo(
             'project-close-dialog',

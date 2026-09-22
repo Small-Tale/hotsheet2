@@ -1387,10 +1387,20 @@ test('remote clients pick from the server open-projects list instead of the file
   page,
 }) => {
   await mockProject(page);
+  const longRoot = `/work/projects/${'long-project-folder-without-spaces-'.repeat(5)}best-in-manila`;
   await page.route('**/__hotsheet/checkouts', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
-          json: [{ id: 'demo-checkout', root: '/work/demo', alias: 'demo', stores: ['/work/demo.hs2'] }],
+          json: [
+            { id: 'demo-checkout', root: '/work/demo', alias: 'demo', stores: ['/work/demo.hs2'] },
+            { id: 'long-checkout', root: longRoot, alias: 'best-in-manila', stores: [] },
+            ...['code-a', 'code-b', 'domotion', 'hotsheet2', 'karwan', 'kerf', 'procurement'].map((name) => ({
+              id: name,
+              root: `/work/projects/${name}`,
+              alias: name,
+              stores: [],
+            })),
+          ],
         })
       : route.fallback(),
   );
@@ -1401,14 +1411,57 @@ test('remote clients pick from the server open-projects list instead of the file
   await expect(remote).toHaveJSProperty('open', true);
   await expect(remote.locator('.project-dialog__error')).toHaveCount(0);
   await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', false);
-  const item = remote.locator('[data-action="open-remote-checkout"]');
+  const item = remote.locator('[data-action="open-remote-checkout"]').first();
   await expect(item).toBeVisible();
   await expect(item).toContainText('demo');
   await expect(item).toContainText('/work/demo');
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-vfncxg-remote-project-dialog.png' });
-  await item.click();
+  await expect(item).toHaveAttribute('data-component', 'list-item');
+  await expect
+    .poll(() =>
+      remote.evaluate(
+        (element) =>
+          element.shadowRoot
+            ?.querySelector('dialog')
+            ?.getAnimations()
+            .filter((animation) => animation.playState === 'running').length ?? -1,
+      ),
+    )
+    .toBe(0);
+  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longPath = remote.locator('.remote-project-dialog__path').nth(1);
+  await expect(longPath).toHaveText(longRoot);
+  const geometry = await remote.evaluate((node) => {
+    const list = node.querySelector<HTMLElement>('.remote-project-dialog__list')!;
+    const path = node.querySelectorAll<HTMLElement>('.remote-project-dialog__path')[1];
+    const pathStyle = getComputedStyle(path);
+    return {
+      listWidth: list.clientWidth,
+      listScrollWidth: list.scrollWidth,
+      pathHeight: path.getBoundingClientRect().height,
+      pathLineHeight: parseFloat(pathStyle.lineHeight),
+      wordBreak: pathStyle.wordBreak,
+      rowsFit: [...list.querySelectorAll('button')].every((button) => {
+        const row = button.getBoundingClientRect();
+        const bounds = list.getBoundingClientRect();
+        return row.x >= bounds.x && row.right <= bounds.right && row.width >= bounds.width - 20;
+      }),
+    };
+  });
+  expect(geometry.listScrollWidth).toBeLessThanOrEqual(geometry.listWidth);
+  expect(geometry.pathHeight).toBeGreaterThan(geometry.pathLineHeight * 2);
+  expect(geometry.wordBreak).toBe('break-all');
+  expect(geometry.rowsFit).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-mobile.png' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(remote.locator('dialog')).toHaveCSS('background-color', 'rgb(44, 44, 46)');
+  await expect(item).toHaveCSS('color', 'rgb(245, 245, 247)');
+  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-mobile-dark-production.png' });
+  await item.focus();
+  await item.press('Enter');
   await expect(remote).toHaveJSProperty('open', false);
+  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
+  await page.setViewportSize({ width: 1100, height: 760 });
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
 });
 

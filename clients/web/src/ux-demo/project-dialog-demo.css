@@ -1,0 +1,14 @@
+.project-dialog-demo {
+  display: grid;
+  width: min(remify(640px), 100%);
+  margin: auto;
+  gap: var(--kui-space-m);
+}
+.project-dialog-demo__variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--kui-space-xs);
+}
+.project-dialog-demo > p {
+  margin: 0;
+}

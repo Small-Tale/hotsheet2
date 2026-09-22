@@ -1,5 +1,6 @@
 import './project-dialog.css';
 
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Ellipsis } from 'lucide';
 
@@ -125,20 +126,23 @@ export function RemoteProjectDialog({
             No projects are open on the server yet. Open one from the device running Hot Sheet first.
           </p>
         ) : (
-          <ul class="remote-project-dialog__list" role="list">
+          <ul class="remote-project-dialog__list" aria-label="Open projects" role="list">
             {checkouts.map((checkout) => (
               <li>
-                <button
-                  type="button"
-                  class="remote-project-dialog__item"
-                  data-action="open-remote-checkout"
-                  data-checkout-root={checkout.root}
-                >
-                  <span class="remote-project-dialog__name">
-                    {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
-                  </span>
-                  <small class="remote-project-dialog__path">{checkout.root}</small>
-                </button>
+                <ListItem
+                  action="open-remote-checkout"
+                  itemId={checkout.id}
+                  multiline
+                  rootAttributes={{ 'data-checkout-root': checkout.root }}
+                  label={
+                    <span class="remote-project-dialog__copy">
+                      <span class="remote-project-dialog__name">
+                        {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
+                      </span>
+                      <small class="remote-project-dialog__path">{checkout.root}</small>
+                    </span>
+                  }
+                />
               </li>
             ))}
           </ul>

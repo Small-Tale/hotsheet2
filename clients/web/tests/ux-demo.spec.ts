@@ -141,7 +141,7 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
 
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
   await page.goto('/ux-demo?component=project-dialog');
-  await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', true);
+  await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', false);
   await expect(page.locator('[data-remote-project-dialog]')).toContainText('/work/demo');
   await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-project-dialogs.png', fullPage: true });
 
@@ -172,8 +172,8 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
       pathGap: style('.project-dialog__path').gap,
       footerGap: style('.project-dialog footer').gap,
       listGap: style('.remote-project-dialog__list').gap,
-      itemGap: style('.remote-project-dialog__item').gap,
-      itemPadding: style('.remote-project-dialog__item').padding,
+      itemGap: style('.remote-project-dialog__copy').gap,
+      itemPadding: style('.remote-project-dialog__list .kui-list-item').padding,
     };
   });
   expect(spacing).toEqual({
@@ -182,7 +182,7 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
     footerGap: '8px',
     listGap: '4px',
     itemGap: '4px',
-    itemPadding: '8px 16px',
+    itemPadding: '8px',
   });
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-dialog-remote-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });

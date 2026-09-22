@@ -31,7 +31,6 @@ import { ConversationExportDialog } from '../components/conversation-export-dial
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { ProjectCloseDialog } from '../components/project-close-dialog';
-import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
@@ -151,6 +150,7 @@ import {
   startPermissionRequestDemoCountdown,
   stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
+import { ProjectDialogDemo, wireProjectDialogDemo } from './project-dialog-demo';
 import {
   addCommandEditorGroup,
   addCommandEditorSetting,
@@ -501,16 +501,7 @@ function demoContent(item: DemoDefinition) {
         }}
       />
     );
-  if (item.id === 'project-dialog')
-    return (
-      <section class="dialog-demo-stack" aria-label="Project dialog variants">
-        <ProjectDialog open root="/work/hotsheet2" error="" />
-        <RemoteProjectDialog
-          open
-          checkouts={[{ id: 'demo', root: '/work/demo', alias: 'Demo', stores: ['/work/demo.hs2'] }]}
-        />
-      </section>
-    );
+  if (item.id === 'project-dialog') return <ProjectDialogDemo />;
   if (item.id === 'conversation-export-dialog')
     return (
       <ConversationExportDialog
@@ -959,6 +950,7 @@ const applyCatalogTheme = () => {
 };
 applyCatalogTheme();
 mount(root, DemoApp);
+wireProjectDialogDemo(root);
 wireTokenSearchFields(root, {
   collapsible: { signals: { 'workspace-search': workspaceSearchOpen } },
   onEdit: ({ id, editor }) => {
