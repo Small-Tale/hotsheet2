@@ -171,8 +171,9 @@ rest of `target`.
 
 ### 12.6.3 Web interaction ownership
 
-The web client keeps application state, rendering, bootstrap, and project loading in
-`clients/web/src/main.tsx`. Twelve modules under `src/interactions/` own the existing
+The web client keeps bootstrap, project activation and cache publication, ticket mutation,
+search/composer orchestration, and root rendering in `clients/web/src/main.tsx`.
+Twelve modules under `src/interactions/` own the existing
 project lifecycle, repository, navigation/tabs, terminals, ticket selection, saved
 views, commands/AI, notifications/links, search/composer, attachments/gallery,
 inspector/editor, and shell/global handler groups (HS2-YWF98M).
@@ -203,6 +204,42 @@ selected project. Explicit project opens reuse the same fetch and registration b
 The startup unit matrix controls completion ordering and retry transitions, and the
 production-browser suite checks request overlap, active-only loading, saved drafts,
 onboarding, failure identities, and empty/refilled sessions.
+
+### 12.6.4 Web feature state and presentation owners
+
+Eight factories under `clients/web/src/features/` own cohesive state/controllers and
+render projections extracted from the root (HS2-DHYGXJ):
+
+- `commands.tsx`: project command drafts, selection anchors, autosave, icon search,
+  and command-dialog composition.
+- `repository.tsx`: repository status, detail pagination/generation, file selection,
+  observer lifetime, review state, and repository/evidence surfaces.
+- `permissions.tsx`: the permission inbox, history, decision rollback, polling,
+  countdown, and popup projection.
+- `gallery.tsx`: media selection, gestures, playback, measurement, annotation sessions,
+  and gallery/menu composition.
+- `conversation-archive.tsx`: message-range selection, copy, export, and saved-chat opening.
+- `ai-configuration.tsx`: project AI configuration, tool/model/effort selection,
+  provider changes, and manual-model lifecycle.
+- `terminal-viewports.ts`: DOM mount identity, intersection observation, progressive
+  setup/teardown, and focus-request consumption.
+- `terminal-presentation.tsx`: live workspace, drawer, and conversation surface props.
+
+Factories have explicit typed ports and no import-time listeners, observers, polling,
+or imports of `main.tsx`. Main creates each owner before mount or startup can use it,
+passes signals rather than value snapshots, and retains cross-feature actions as
+callbacks. Mutable plain state crosses ports through getters/setters; each timer,
+generation, observer, or gesture binding has one owner. Presentation functions run
+inside the root render so their original `.value` dependencies and `.peek()` reads
+retain their behavior. The twelve interaction registrations remain in the same order.
+
+The refactor does not change the feature contracts. Controller unit tests cover
+project replacement with delayed old responses, optimistic failure rollback,
+selection/reset/refill, model/effort propagation, export cancellation, gallery reset,
+and stale viewport candidates. The full production browser suite remains the parity
+gate; an additional wide/narrow command workflow crosses edit, autosave, run, cancel,
+navigation, and a second edit. The pre-existing export cancel/reopen async-identity
+gap is tracked separately in HS2-1S33A9.
 
 ## 12.7 Testing strategy
 

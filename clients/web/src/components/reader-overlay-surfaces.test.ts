@@ -84,6 +84,12 @@ describe('reader and overlay composition surfaces', () => {
     expect(source).not.toMatch(
       /function (Reader|ReaderLayers|VisiblePermissionPopup|AIConversationSurface|RepositoryStatusSurface|ChangeEvidenceSurface|TicketContextMenu|AttachmentMenuSurface|Gallery|CommandDialog|ConnectionDetailsSurface|CompatibilityBanner|AppTabMenuSurface|NotWorkingSurface)\(/,
     );
+    const owners = [
+      source,
+      ...['repository', 'gallery', 'terminal-presentation'].map((name) =>
+        readFileSync(new URL(`../features/${name}.tsx`, import.meta.url), 'utf8'),
+      ),
+    ].join('\n');
     for (const surface of [
       'ReaderLayersSurface',
       'AIConversationSurface',
@@ -91,6 +97,6 @@ describe('reader and overlay composition surfaces', () => {
       'GallerySurface',
       'AppTabMenuSurface',
     ])
-      expect(source).toContain(surface);
+      expect(owners).toContain(surface);
   });
 });

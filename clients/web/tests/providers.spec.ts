@@ -15731,3 +15731,48 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await server.stop();
   }
 });
+
+test('preserves feature-controller command editing and run-dialog parity across wide and narrow shells (HS2-DHYGXJ)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  const editor = page.locator('[data-component="command-settings-editor"]');
+  const openEditor = async () => {
+    const row = editor.locator('.command-settings-editor__row').first();
+    await row.locator('.command-settings-editor__row-menu-trigger').click();
+    await row.locator('[data-action="edit-command-setting"]').click();
+  };
+  const dialog = page.locator('#command-editor-dialog');
+  await openEditor();
+  await dialog.getByLabel('Button label').fill('Feature parity');
+  await dialog.getByRole('textbox', { name: 'Program' }).fill('/usr/bin/true');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await expect(editor).toContainText('Feature parity');
+  await page.screenshot({ path: '/private/tmp/hs2-dhygxj-command-settings-wide.png', animations: 'disabled' });
+  await page.getByLabel('List view').click();
+  await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Feature parity', exact: true }).click();
+  await page.getByRole('button', { name: 'Running Feature parity' }).click();
+  const stop = page.locator('[data-component="command-cancellation-dialog"]');
+  await expect(stop).toBeVisible();
+  await stop.getByRole('button', { name: 'Stop command' }).click();
+  await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toHaveAttribute('title', /cancelled/);
+  await page.getByLabel('Settings view').click();
+  await expect(editor).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+  await openEditor();
+  await expect(dialog.getByLabel('Button label')).toHaveValue('Feature parity');
+  await dialog.getByLabel('Button label').fill('After return');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await expect(editor).toContainText('After return');
+  await page.screenshot({ path: '/private/tmp/hs2-dhygxj-command-settings-narrow.png', animations: 'disabled' });
+});

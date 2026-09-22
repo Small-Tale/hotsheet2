@@ -1,8 +1,8 @@
-import './components/heading.css';
-import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@kerfjs/ui/webawesome.css';
+import './components/heading.css';
 import './hot-sheet-tokens.css';
 import './style.css';
 
@@ -26,31 +26,26 @@ import {
   applyConversationActivity,
   applyConversationEvent,
   beginConversationTurn,
-  type ConversationMessage,
   type ConversationState,
   conversationUsage,
   EMPTY_CONVERSATION,
 } from './ai-conversation';
 import {
   type AiToolDefaults,
-  type AiToolDescriptor,
   Api,
   type AttachmentMetadata,
   type Capabilities,
   type Checkout,
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
-  type CodeReview,
   type CommandDefinition,
   type CommandRun,
   type CorruptTicket,
   type CustomView,
   type DuplicateBacklink,
   type FullTicket,
-  type MediaAnnotation,
   type PollResponse,
   type ProviderConnection,
-  type RepositoryFile,
   type RepositoryStatus,
   revealCorruptTicketFile,
   type TicketCloseReason,
@@ -67,13 +62,7 @@ import {
 } from './app-region-resize';
 import { describeUnreadableAttachments, screenAttachmentFiles } from './attachment-files';
 import { attachmentRoundNumbers, attachmentUploadBatchId } from './attachment-grouping';
-import {
-  type AttachmentReferenceContext,
-  attachmentReferences,
-  attachmentReferenceUrl,
-  isGalleryMediaAttachment,
-  isVideoAttachment,
-} from './attachment-references';
+import { type AttachmentReferenceContext, isVideoAttachment } from './attachment-references';
 import {
   applyBoardColumnFetch,
   boardColumnHasMore,
@@ -84,31 +73,18 @@ import {
   nextBoardColumnFetch,
 } from './board-pagination';
 import { isRemoteClient } from './client-origin';
-import { type CommandDropTarget, emptyExtraGroups, reorderCommandsMultiple } from './command-order';
-import { AIConversation } from './components/ai-conversation';
 import { AppEmptyState, ProjectRestoreState } from './components/app-empty-state';
 import { AppError } from './components/app-error';
-import {
-  attachmentGalleryAnnotationVisible,
-  type AttachmentGalleryGeometry,
-  type AttachmentGalleryImage,
-  attachmentGalleryShiftUrl,
-  type AttachmentGallerySwipeGesture,
-  releaseAttachmentGalleryVideo,
-} from './components/attachment-gallery';
 import { BulkTicketDialog, type BulkTicketDialogState } from './components/bulk-ticket-dialog';
-import { commandIconNeedsCatalog } from './components/command-icon';
-import { COMMAND_EDITOR_DIALOG_ID } from './components/command-settings-editor';
-import { ConversationExportDialog, type ConversationExportDialogState } from './components/conversation-export-dialog';
+import { ConversationExportDialog } from './components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from './components/corrupt-ticket-row';
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './components/hs1-migration';
 import { MainShell } from './components/main-shell';
-import { ManualModelDialog, type ManualModelDialogState } from './components/manual-model-dialog';
+import { ManualModelDialog } from './components/manual-model-dialog';
 import type { MarkdownEditorMode } from './components/markdown-editor';
 import { NotificationCenter } from './components/notification-center';
 import { NotificationInspector } from './components/notification-inspector';
 import { type NotificationView, notificationViewTitle } from './components/notification-navigation';
-import { updatePermissionCountdownText } from './components/permission-request-card';
 import {
   ProjectCloseDialog,
   type ProjectCloseDialogState,
@@ -133,35 +109,22 @@ import {
   showQuickTicketComposer,
 } from './components/quick-ticket-composer';
 import {
-  AIConversationSurface,
   AppTabMenuSurface,
   AttachmentContextMenuSurface,
-  ChangeEvidenceSurface,
-  CommandDialogSurface,
   CompatibilityBannerSurface,
   ConnectionDetailsSurface,
-  GallerySurface,
   NotWorkingSurface,
-  PermissionPopupSurface,
   ReaderLayersSurface,
   ReaderLayerSurface,
-  RepositoryStatusSurface,
   TicketContextMenuSurface,
   type TicketContextMenuSurfaceProps,
 } from './components/reader-overlay-surfaces';
-import type { RepositorySetupStep } from './components/repository-setup';
-import {
-  type ChangeEvidenceView,
-  type RepositoryFileMenu,
-  type RepositoryStatusView,
-} from './components/repository-status-popover';
 import { SavedViewDeleteDialog, SavedViewDialog } from './components/saved-view-dialog';
 import { ServerBusyBars, ServerBusyMessage } from './components/server-busy-bars';
 import { type SettingsCategory, settingsCategoryTitle } from './components/settings-navigation';
 import { SettingsWorkspace } from './components/settings-workspace';
 import type { TicketStatus } from './components/status-badge';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from './components/terminal-dashboard';
-import { type TerminalDrawerChatTab, type TerminalDrawerProps } from './components/terminal-drawer';
 import { TerminalRenameDialog } from './components/terminal-rename-dialog';
 import {
   TerminalVisibilityDialog,
@@ -169,7 +132,6 @@ import {
   type TerminalVisibilityNamePrompt,
 } from './components/terminal-visibility-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from './components/ticket-close-dialog';
-import { type CodeReviewComparison } from './components/ticket-code-review';
 import type { TicketEmptyStateProps } from './components/ticket-empty-state';
 import { type InspectorTab, type TicketInspectorProps } from './components/ticket-inspector';
 import { TicketInspectorSkeleton } from './components/ticket-inspector-skeleton';
@@ -183,7 +145,6 @@ import { TicketSourceSetupDialog } from './components/ticket-source-setup-dialog
 import { SavedViewContextMenu, type SavedViewContextMenuState } from './components/view-navigation';
 import {
   GlobalWorkspaceSurface,
-  type GlobalWorkspaceSurfaceProps,
   ProjectTerminalDrawerSurface,
   SidebarSurface,
   type SidebarSurfaceProps,
@@ -202,20 +163,6 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from './components/workspace-header';
-import {
-  buildConversationExportRequest,
-  conversationExportAssets,
-  type ConversationExportDestination,
-  type ConversationExportDraft,
-  type ConversationExportOpenResult,
-  type ConversationExportScope,
-  conversationExportScopeAfterMessagePick,
-  type ConversationExportWriteResult,
-  conversationTranscriptMarkdown,
-  defaultConversationExportDraft,
-  selectedConversationMessages,
-  suggestedConversationExportName,
-} from './conversation-export';
 import { loadConversationStates, saveConversationStates } from './conversation-persistence';
 import { syncConversationScroll } from './conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from './custom-ai-command';
@@ -229,6 +176,14 @@ import {
   orderedDrawerTabIds,
   saveDrawerTabOrder,
 } from './drawer-tab-order';
+import { createAiConfigurationController } from './features/ai-configuration';
+import { createCommandsController } from './features/commands';
+import { createConversationArchiveController } from './features/conversation-archive';
+import { createGalleryController } from './features/gallery';
+import { createPermissionsController } from './features/permissions';
+import { createRepositoryController } from './features/repository';
+import { createTerminalPresentation } from './features/terminal-presentation';
+import { createTerminalViewportsController } from './features/terminal-viewports';
 import { fullTicketFeedbackNeeded, presentedNoteKind } from './feedback-needed';
 import { type InlineFeedbackReply } from './feedback-replies';
 import {
@@ -259,45 +214,27 @@ import { wireShellAndGlobalInteractions } from './interactions/shell-and-global'
 import { wireTerminalInteractions } from './interactions/terminals';
 import { wireTicketSelectionInteractions } from './interactions/ticket-selection';
 import type {
-  AttachmentMenu,
   Control,
   DetailsFinishTask,
   NotWorkingTarget,
   PendingEvidence,
   Project,
-  RepositoryDetailState,
   UnhealthyServerRecovery,
 } from './interactions/types';
 import { wireViewAndSavedViewInteractions } from './interactions/views-and-saved-views';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from './keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from './local-ticket-changes';
-import { loadLucideCatalog } from './lucide-catalog';
 import { MigrationJobClient } from './migration-job-client';
 import { type MigrationJob, migrationPercent, migrationPhaseLabel } from './migration-progress';
 import { isMobileViewport, MOBILE_OVERLAYS_CLOSED, type MobileOverlayState } from './mobile-layout';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from './new-ticket-attachments';
 import { submitNotWorkingReport } from './not-working-workflow';
 import { mergeRetainedCreatedRows, PendingCreatedTickets } from './pending-created-tickets';
-import {
-  DEFAULT_PERMISSION_AUTOMATION,
-  formatPermissionCountdown,
-  parsePermissionAutomation,
-  parsePermissionHistory,
-  parsePermissionResolution,
-  PERMISSION_DELAYS,
-  type PermissionAutomation,
-  permissionBelongsToProject,
-  type PermissionDecision,
-  PermissionInbox,
-  type PermissionItem,
-  type PermissionScope,
-  VisiblePermissionTimer,
-} from './permission-notifications';
+import { parsePermissionResolution, PERMISSION_DELAYS } from './permission-notifications';
 import { priorityFromWire } from './priority-wire';
 import { afterBrowserPaint } from './project-activation';
 import { containsRepositoryChange, containsTicketChange, startProjectChangeStream } from './project-change-poll';
 import {
-  compatibleAiEffort,
   type DrawerAIChat,
   prepareProjectConversation,
   projectChatConnectionId,
@@ -308,11 +245,9 @@ import {
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from './project-drive';
-import { projectSettingsValue, updateProjectSettingsValue } from './project-settings-state';
 import { openProjectFetch, type ProjectOpenResult, restoreRememberedProjects } from './project-startup';
 import { createProjectTabRefreshCoordinator } from './project-tab-refresh';
-import { appendUniqueTicketRows } from './project-ticket-refresh';
-import { loadProjectTicketRefresh, type ProjectTicketRefresh } from './project-ticket-refresh';
+import { appendUniqueTicketRows, loadProjectTicketRefresh, type ProjectTicketRefresh } from './project-ticket-refresh';
 import { createRefreshBarrier } from './refresh-barrier';
 import { createRenderMetrics } from './render-metrics';
 import { customViewNameAvailable, uniqueCustomViewId } from './saved-views';
@@ -320,15 +255,8 @@ import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from './serv
 import { applyRememberedTabOrder, replaceTabInPlace } from './tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from './terminal-grid-layout';
 import { defaultTerminalName, parseTerminalNames, terminalNameKey } from './terminal-names';
-import { ProgressiveTerminalWorkQueue } from './terminal-progressive-work';
 import { terminalDrawerActivation, terminalProjectOwner } from './terminal-project-scope';
-import { TERMINAL_DRAWER_RESIZE_END_EVENT } from './terminal-viewport';
-import {
-  mountTerminalViewport,
-  terminalBrowserWebSocketUrl,
-  type TerminalFocusRequest,
-  terminalViewportShouldAutoFocus,
-} from './terminal-viewport';
+import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from './terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
   hideNewTerminalInNamedGroups,
@@ -501,10 +429,7 @@ const projects = signal<Project[]>([]),
   tickets = signal<WireTicketRow[]>([]),
   ticketRowsByProject = signal<Record<string, WireTicketRow[]>>({}),
   corruptTickets = signal<CorruptTicket[]>([]),
-  selectedTicket = signal<FullTicket | null>(null),
-  repository = signal<RepositoryStatus | null>(null),
-  repositoryError = signal(''),
-  repositoryRefreshing = signal(false);
+  selectedTicket = signal<FullTicket | null>(null);
 const ticketCountsByProject = signal<Record<string, CheckoutTicketCounts>>({});
 // The server-authoritative 7-day completion trend and today's completion count, retained per project so a
 // local mutation (which drops the exact counts snapshot) does not force the sidebar graph to be re-derived
@@ -626,31 +551,34 @@ const ticketSourceSetupNavigation = signal<'none' | 'push' | 'pop'>('none'),
   createdGitTicketStore = signal(''),
   ticketSourceRemoteBusy = signal(false),
   ticketSourceRemoteError = signal('');
-const repositoryView = signal<RepositoryStatusView>('unstaged'),
-  repositoryFileMenu = signal<RepositoryFileMenu | undefined>(undefined),
-  repositorySelectedFiles = signal<string[]>([]);
-const repositorySetupStep = signal<RepositorySetupStep | undefined>(undefined),
-  repositorySetupBusy = signal(false),
-  repositorySetupError = signal('');
-let repositoryFileSelectionAnchor: string | undefined;
-const changeEvidenceView = signal<ChangeEvidenceView>('docs');
-// Which surface owns the change-evidence popover: a ticket-reader frame id when launched from inside
-// the modal reader (so it renders as a reader descendant and stays interactive, not inert beneath the
-// modal top layer — HS2-6EV2ES / HS2-EZ10RS), or undefined for the non-modal inspector (app root).
-const changeEvidenceReader = signal<string | undefined>(undefined);
-const repositoryComparison = signal<CodeReviewComparison>({ active: false, side: 'a' }),
-  expandedCodeReviewCommits = signal<string[]>([]);
-
-const repositoryDetail = signal<RepositoryDetailState>({
-  view: 'unstaged',
-  files: [],
-  commits: [],
-  loading: false,
-  loaded: false,
-  error: '',
-});
-let repositoryDetailGeneration = 0,
-  repositoryPaginationObserver: IntersectionObserver | undefined;
+const repositoryController = createRepositoryController({ project: () => project(), selectedTicket, showToast });
+const {
+  repository,
+  repositoryError,
+  repositoryView,
+  repositoryFileMenu,
+  repositorySelectedFiles,
+  repositorySetupStep,
+  repositorySetupError,
+  changeEvidenceView,
+  changeEvidenceReader,
+  repositoryComparison,
+  expandedCodeReviewCommits,
+  repositoryDetail,
+  codeReview,
+  codeReviewLoading,
+  codeReviewMessage,
+  refreshRepositoryStatus,
+  initializeRepository,
+  connectRepositoryRemote,
+  skipRepositoryRemote,
+  loadRepositoryDetail,
+  syncRepositoryPaginationObserver,
+  refreshCodeReview,
+  repositoryStatusSurface,
+  changeEvidenceSurfaceProps,
+  changeEvidenceSurface,
+} = repositoryController;
 const ticketScrollMemory = new TicketScrollMemory();
 const shellMode = signal<ProjectTabBarMode>('project'),
   statsProjectId = signal<string | undefined>(undefined);
@@ -700,20 +628,17 @@ let terminalDashboardGeneration = 0,
   terminalCreateChain: Promise<unknown> = Promise.resolve();
 let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
 let pendingTerminalFocus: TerminalFocusRequest | undefined;
-const terminalViewportMounts = new Map<HTMLElement, () => void>();
-const terminalViewportCandidates = new Set<HTMLElement>();
-const terminalViewportObservationTargets = new Map<HTMLElement, HTMLElement>();
-const terminalViewportCandidatesByTarget = new Map<HTMLElement, HTMLElement>();
-let terminalViewportObserver: IntersectionObserver | undefined;
-const terminalViewportWork = new ProgressiveTerminalWorkQueue<HTMLElement>({
-  mountsPerTurn: 2,
-  disposalsPerTurn: 2,
-  schedule: (work) => requestAnimationFrame(() => window.setTimeout(work, 0)),
-  mount: (element) => {
-    mountTerminalViewportElement(element);
+const { syncTerminalViewportMounts } = createTerminalViewportsController({
+  projects,
+  get pendingTerminalFocus() {
+    return pendingTerminalFocus;
   },
-  dispose: (work) => {
-    work();
+  set pendingTerminalFocus(value) {
+    pendingTerminalFocus = value;
+  },
+  openTicketReference(element, slug, projectId, preferredProject) {
+    ticketLinkReturnFocus = element;
+    void selectLinkedTicket(slug, projectId, preferredProject);
   },
 });
 const corruptRecovery = signal<Record<string, CorruptTicketRecoveryState>>({});
@@ -883,55 +808,48 @@ const readerReturnFocus = new Map<string, HTMLElement>();
 const readerClosing = new Set<string>(),
   readerApprovedClose = new Set<string>();
 let ticketLinkReturnFocus: HTMLElement | undefined;
-const attachmentGalleryUrl = signal<string | undefined>(undefined);
-const attachmentGalleryGeometry = signal<AttachmentGalleryGeometry>({
-    naturalWidth: 0,
-    naturalHeight: 0,
-    availableWidth: 0,
-    availableHeight: 0,
-  }),
-  attachmentGalleryScale = signal<number | undefined>(undefined);
-const attachmentGalleryMarkup = signal(false),
-  attachmentGalleryDrawMode = signal(false),
-  attachmentGalleryAnnotations = signal<MediaAnnotation[]>([]),
-  attachmentGallerySelectedAnnotation = signal<string | undefined>(undefined),
-  attachmentGalleryPlayhead = signal(0),
-  attachmentGalleryDuration = signal(0),
-  attachmentGalleryPlaying = signal(false),
-  attachmentGalleryVolume = signal(1),
-  attachmentGalleryMuted = signal(false),
-  attachmentGalleryVolumeOpen = signal(false);
-let attachmentAnnotationGesture:
-  | {
-      kind: 'draw' | 'move' | 'resize';
-      pointerId: number;
-      startX: number;
-      startY: number;
-      surface: DOMRect;
-      annotation: MediaAnnotation;
-      handle?: string;
-    }
-  | undefined;
-let attachmentRangeGesture:
-  { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
-let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
-let attachmentAnnotationSession:
-  { projectId: string; ticketId: string; attachmentId: string; before: MediaAnnotation[] } | undefined;
-let attachmentAnnotationSave = Promise.resolve();
+const galleryController = createGalleryController({
+  project: () => project(),
+  selectedTicket,
+  api: () => api(),
+  attachmentContext,
+  showToast,
+  error,
+});
+const {
+  attachmentGalleryUrl,
+  attachmentGalleryGeometry,
+  attachmentGalleryScale,
+  attachmentGalleryMarkup,
+  attachmentGalleryDrawMode,
+  attachmentGalleryAnnotations,
+  attachmentGallerySelectedAnnotation,
+  attachmentGalleryPlayhead,
+  attachmentGalleryDuration,
+  attachmentGalleryPlaying,
+  attachmentGalleryVolume,
+  attachmentGalleryMuted,
+  attachmentGalleryVolumeOpen,
+  attachmentMenu,
+  galleryImages,
+  gallerySurface,
+  stopGallerySvgClock,
+  updateGalleryPlaybackPresentation,
+  gallerySvgClock,
+  activeAttachmentGalleryVideo,
+  resetAttachmentGallery,
+  syncAttachmentGalleryMeasurement,
+  attachmentMenuSurfaceProps,
+  beginGalleryAnnotationSession,
+  finishGalleryAnnotationSession,
+  shiftGallery,
+} = galleryController;
 let draggedGroupedAttachmentId: string | undefined;
-let attachmentGallerySvgFrame: number | undefined, attachmentGallerySvgPreviousFrame: number | undefined;
-let attachmentGalleryLivePlayhead = 0,
-  attachmentGalleryLiveVolume = 1;
-let attachmentGalleryObserver: ResizeObserver | undefined;
-
-const attachmentMenu = signal<AttachmentMenu | undefined>(undefined);
 const readerDetailsMode = signal<MarkdownEditorMode>('preview'),
   readerDetailsDraft = signal('');
 let readerDetailsEditGeneration = 0;
 const attachmentMessage = signal('');
-const codeReview = signal<CodeReview | undefined>(undefined),
-  codeReviewLoading = signal(false),
-  codeReviewMessage = signal('');
+
 const editingNoteId = signal<string | undefined>(undefined),
   noteDraft = signal('');
 const readerEditingNoteId = signal<string | undefined>(undefined),
@@ -959,42 +877,116 @@ let detailsDraftBase = '',
 const providerCapabilities = signal<Record<string, Capabilities>>({});
 const defaultProviders = signal<Record<string, { name: string; capabilities: Capabilities } | undefined>>({});
 const hideVerifiedByProject = signal<Record<string, boolean>>({});
-const commandDefinitions = signal<CommandDefinition[]>([]),
-  commandRuns = signal<CommandRun[]>([]),
-  commandGroupExpanded = signal(storedWorkspacePreferences.commandGroupExpanded),
-  commandGroupsCollapsed = signal(storedWorkspacePreferences.commandGroupsCollapsed),
-  commandDialogId = signal<string | undefined>(undefined),
-  commandStopConfirmation = signal(false),
-  commandSettingsEditingId = signal<string | undefined>(undefined),
-  commandSettingsDraftsByProject = signal<Record<string, string>>({}),
-  commandSettingsMessagesByProject = signal<Record<string, string>>({}),
-  commandSettingsSelectedByProject = signal<Record<string, string[]>>({}),
-  commandSettingsExtraGroupsByProject = signal<Record<string, string[]>>({}),
-  commandIconSearch = signal('');
-let commandSelectionAnchor: string | undefined;
-// Lazily load the full Lucide catalog once a project's commands reference an icon outside the
-// bundled popular set, so the sidebar can render those custom icons without a picker being opened.
-effect(() => {
-  if (commandDefinitions.value.some((command) => commandIconNeedsCatalog(command.icon))) void loadLucideCatalog();
-});
+const {
+  commandDefinitions,
+  commandRuns,
+  commandGroupExpanded,
+  commandGroupsCollapsed,
+  commandDialogId,
+  commandStopConfirmation,
+  commandSettingsEditingId,
+  commandSettingsDraftsByProject,
+  commandSettingsMessagesByProject,
+  commandSettingsSelectedByProject,
+  commandSettingsExtraGroupsByProject,
+  commandIconSearch,
+  commandSettingsMessage,
+  setCommandSettingsDraft,
+  setCommandSettingsMessage,
+  commandSettingsDefinitions,
+  commandSelection,
+  selectCommandSetting,
+  selectCommandRow,
+  updateCommandSetting,
+  updateCommandAiSelection,
+  addCommandSetting,
+  deleteCommandSetting,
+  commandSettingsExtraGroups,
+  reorderCommandSettings,
+  addCommandGroup,
+  deleteCommandGroup,
+  commandRunFor,
+  showCommandDialog,
+  commandIcon,
+  commandDialogSurface,
+} = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences });
 const driveConnectionsByProject = signal<Record<string, ToolConnection[]>>({}),
   drivePendingByProject = signal<Record<string, boolean>>({});
-const aiTools = signal<AiToolDescriptor[]>([]),
-  aiDefaults = signal<AiToolDefaults>({ tool: 'codex' }),
-  aiSettingsLoading = signal(false),
-  aiSettingsMessage = signal(''),
-  driveOptionsOpen = signal(false),
-  driveOverridesByProject = signal<Record<string, Partial<AiToolDefaults>>>({}),
-  manualModelDialog = signal<ManualModelDialogState | undefined>(undefined);
-let manualModelDialogShown = false;
-let aiConfigurationProjectId = '';
+
 const conversationStates = signal<Record<string, ConversationState>>(loadConversationStates(localStorage)),
   conversationDrafts = signal<Record<string, string>>({}),
   conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
   conversationConnectionId = signal<string | undefined>(undefined),
   conversationOpen = signal(false);
-const conversationSelectionScopes = signal<Record<string, ConversationExportScope | undefined>>({});
-const conversationExportDialog = signal<ConversationExportDialogState | undefined>(undefined);
+
+const aiConfigurationController = createAiConfigurationController({
+  selectedProjectId,
+  project: () => project(),
+  conversationConnectionId,
+  conversationSelections,
+  terminalDrawerChatsByProject,
+  driveConnectionsByProject,
+  conversationStates,
+  conversationOpen,
+  createDrawerAIChat,
+  showToast,
+  beginConversation,
+  updateConversation,
+  error,
+  commandSettingsDefinitions,
+  commandSettingsEditingId,
+});
+const {
+  aiTools,
+  aiDefaults,
+  aiSettingsLoading,
+  aiSettingsMessage,
+  driveOptionsOpen,
+  driveOverridesByProject,
+  manualModelDialog,
+  aiToolLabel,
+  normalizedAiSelection,
+  effectiveCommandAiSelection,
+  effectiveDriveSelection,
+  selectDriveModel,
+  selectDefaultModel,
+  selectConversationModel,
+  selectConversationEffort,
+  selectConversationProvider,
+  openManualModel,
+  restoreCommandEditorAfterManualModel,
+  aiLaunchConfiguration,
+  refreshAiConfiguration,
+  saveAiDefaults,
+  conversationAiSelection,
+} = aiConfigurationController;
+const {
+  conversationExportDialog,
+  conversationSelectedMessages,
+  pickConversationMessage,
+  clearConversationSelection,
+  copyConversationSelection,
+  updateConversationExportDraft,
+  openConversationExport,
+  finishConversationExport,
+  openSavedConversation,
+} = createConversationArchiveController({
+  project: () => project(),
+  conversationConnectionId,
+  conversationStates,
+  driveConnectionsByProject,
+  terminalDrawerChatsByProject,
+  conversationAiSelection,
+  aiToolLabel,
+  showToast,
+  error,
+  terminalDrawerCreateMenuOpen,
+  terminalVisibility,
+  persistTerminalVisibility,
+  replaceConversationStates,
+  selectDrawerItem,
+  setTerminalDrawerVisible,
+});
 let commandLongPressTimer: number | undefined,
   commandLongPressFired = false;
 let appRegionResizeDrag:
@@ -1011,31 +1003,26 @@ let appRegionResizeDrag:
       frame?: number;
     }
   | undefined;
-function loadPermissionHistory() {
-  try {
-    return parsePermissionHistory(JSON.parse(localStorage.getItem('hotsheet.permission-history') || '[]'));
-  } catch {
-    return [];
-  }
-}
-function loadPermissionAutomation(projectId: string) {
-  try {
-    return parsePermissionAutomation(
-      JSON.parse(localStorage.getItem(`hotsheet.project.${projectId}.permission-automation`) || 'null'),
-    );
-  } catch {
-    return DEFAULT_PERMISSION_AUTOMATION;
-  }
-}
-const storedPermissionHistory = loadPermissionHistory();
-const permissionRevision = signal(0),
-  permissionInbox = new PermissionInbox(storedPermissionHistory),
-  permissionTimer = new VisiblePermissionTimer();
-const permissionAutomationByProject = signal<Record<string, PermissionAutomation>>({});
-const permissionResolutionErrors = signal<Record<string, string>>({});
-let permissionPolling = false,
-  permissionTimerInterval: number | undefined,
-  permissionCountdown: { key: string; remainingMs: number } | undefined;
+const permissionsController = createPermissionsController({ projects, selectedProjectId });
+const {
+  loadPermissionAutomation,
+  permissionRevision,
+  permissionInbox,
+  permissionTimer,
+  permissionAutomationByProject,
+  pendingPermissions,
+  permissionHistory,
+  projectPendingPermissions,
+  projectPermissionHistory,
+  permissionCount,
+  permissionAutomation,
+  persistPermissionHistory,
+  refreshPermissions,
+  startPermissionUpdates,
+  resolvePermission,
+  updatePermissionTimer,
+  permissionPopupSurface,
+} = permissionsController;
 let projectActivationGeneration = 0,
   projectRefreshGeneration = 0,
   ticketCollectionGeneration = 0,
@@ -1055,85 +1042,8 @@ const currentRememberedProjectRoots = () => [
   ...new Set([...projects.value.map((item) => item.root), ...projectRestoreFailures.value.map((item) => item.root)]),
 ];
 const settingsCategory = () => selectedSettingsCategory.value;
-const commandSettingsDraft = (projectId = selectedProjectId.value) =>
-  projectSettingsValue(
-    commandSettingsDraftsByProject.value,
-    projectId,
-    JSON.stringify(commandDefinitions.value, null, 2),
-  );
-const commandSettingsMessage = (projectId = selectedProjectId.value) =>
-  projectSettingsValue(commandSettingsMessagesByProject.value, projectId, '');
 function setSettingsCategory(_projectId: string, category: SettingsCategory) {
   selectedSettingsCategory.value = category;
-}
-function setCommandSettingsDraft(projectId: string, draft: string) {
-  commandSettingsDraftsByProject.value = updateProjectSettingsValue(
-    commandSettingsDraftsByProject.value,
-    projectId,
-    draft,
-  );
-}
-function setCommandSettingsMessage(projectId: string, message: string) {
-  commandSettingsMessagesByProject.value = updateProjectSettingsValue(
-    commandSettingsMessagesByProject.value,
-    projectId,
-    message,
-  );
-}
-function isCommandSettingsDefinition(value: unknown): value is CommandDefinition {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof value.id === 'string' &&
-    'title' in value &&
-    typeof value.title === 'string'
-  );
-}
-function commandSettingsDefinitions(projectId = selectedProjectId.value): CommandDefinition[] {
-  try {
-    const parsed: unknown = JSON.parse(commandSettingsDraft(projectId));
-    if (!Array.isArray(parsed)) return commandDefinitions.value;
-    const entries: unknown[] = parsed;
-    return entries.filter(isCommandSettingsDefinition);
-  } catch {
-    return commandDefinitions.value;
-  }
-}
-function setCommandSettingsDefinitions(projectId: string, definitions: CommandDefinition[]) {
-  setCommandSettingsDraft(projectId, JSON.stringify(definitions, null, 2));
-  setCommandSettingsMessage(projectId, '');
-}
-function commandSelection(projectId = selectedProjectId.value): string[] {
-  return commandSettingsSelectedByProject.value[projectId] ?? [];
-}
-function setCommandSelection(projectId: string, ids: readonly string[]) {
-  commandSettingsSelectedByProject.value = { ...commandSettingsSelectedByProject.value, [projectId]: [...ids] };
-}
-function selectCommandSetting(projectId: string, id: string | undefined) {
-  setCommandSelection(projectId, id ? [id] : []);
-  commandSelectionAnchor = id;
-}
-/** Apply a click on a command row to the multi-selection, honoring toggle (Cmd/Ctrl) and range (Shift) intent. */
-function selectCommandRow(projectId: string, id: string, intent: { toggle?: boolean; range?: boolean }) {
-  const ordered = commandSettingsDefinitions(projectId).map((command) => command.id),
-    current = commandSelection(projectId);
-  if (intent.range && commandSelectionAnchor) {
-    const from = ordered.indexOf(commandSelectionAnchor),
-      to = ordered.indexOf(id);
-    if (from >= 0 && to >= 0) {
-      const [lo, hi] = from < to ? [from, to] : [to, from];
-      setCommandSelection(projectId, ordered.slice(lo, hi + 1));
-      return;
-    }
-  }
-  if (intent.toggle) {
-    const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-    setCommandSelection(projectId, next);
-    commandSelectionAnchor = id;
-    return;
-  }
-  selectCommandSetting(projectId, id);
 }
 const hideVerifiedColumn = () => hideVerifiedByProject.value[selectedProjectId.value] ?? false;
 // prettier-ignore
@@ -1154,20 +1064,6 @@ const canStageNewTicketAttachments = () => {
   return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
 };
 const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
-const pendingPermissions = () => permissionInbox.pending();
-const permissionHistory = () => permissionInbox.history();
-const projectPendingPermissions = (projectId = selectedProjectId.value) =>
-  pendingPermissions().filter((item) => item.projectId === projectId);
-const projectPermissionHistory = (projectId = selectedProjectId.value) =>
-  permissionHistory().filter((item) => item.projectId === projectId);
-const visiblePermission = () => permissionInbox.visible();
-const permissionCount = (projectId?: string) =>
-  pendingPermissions().filter((item) => !projectId || item.projectId === projectId).length;
-const permissionAutomation = (projectId: string) =>
-  permissionAutomationByProject.value[projectId] ?? DEFAULT_PERMISSION_AUTOMATION;
-const persistPermissionHistory = () => {
-  localStorage.setItem('hotsheet.permission-history', JSON.stringify(permissionInbox.history()));
-};
 const api = () => new Api(project()?.apiPath ?? '');
 const customViewsFor = (projectId = selectedProjectId.value) => customViewsByProject.value[projectId] ?? [];
 function customViewFor(view: TicketView, projectId = selectedProjectId.value) {
@@ -1477,245 +1373,6 @@ async function createShellCommandTerminal(command: CommandDefinition, current: P
     }
   });
 }
-function aiToolLabel(tool: string) {
-  return (
-    aiTools.value.find((item) => item.id === tool)?.display_name ?? `${tool.slice(0, 1).toUpperCase()}${tool.slice(1)}`
-  );
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function normalizedAiSelection(value:Partial<AiToolDefaults>={}):AiToolDefaults{const tool=value.tool??aiDefaults.value.tool??aiTools.value[0]?.id??'codex',descriptor=aiTools.value.find(item=>item.id===tool),model=value.model??(tool===aiDefaults.value.tool?aiDefaults.value.model:undefined)??descriptor?.default_model??descriptor?.models[0]?.id,modelDescriptor=descriptor?.models.find(item=>item.id===model),efforts=modelDescriptor?.effort_levels??[],requestedEffort=value.effort??(tool===aiDefaults.value.tool&&model===aiDefaults.value.model?aiDefaults.value.effort:undefined)??descriptor?.default_effort,effort=requestedEffort&&efforts.includes(requestedEffort)?requestedEffort:efforts.at(0);return{tool,...(model?{model}:{}),...(effort?{effort}:{})}}
-function effectiveCommandAiSelection(command: CommandDefinition): AiToolDefaults {
-  return normalizedAiSelection({
-    tool: command.tool ?? aiDefaults.value.tool,
-    model: command.model ?? (!command.tool ? aiDefaults.value.model : undefined),
-    effort: command.effort ?? (!command.tool && !command.model ? aiDefaults.value.effort : undefined),
-  });
-}
-function effectiveDriveSelection(projectId = selectedProjectId.value) {
-  return normalizedAiSelection(driveOverridesByProject.value[projectId]);
-}
-function selectDriveModel(model: string) {
-  const current = project();
-  if (!current || !model) return;
-  const active = effectiveDriveSelection(current.id),
-    descriptor = aiTools.value.find((item) => item.id === active.tool),
-    effort = descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
-  driveOverridesByProject.value = {
-    ...driveOverridesByProject.value,
-    [current.id]: { tool: active.tool, model, ...(effort ? { effort } : {}) },
-  };
-}
-function selectDefaultModel(model: string) {
-  if (!model) return;
-  const descriptor = aiTools.value.find((item) => item.id === aiDefaults.value.tool),
-    effort = descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
-  void saveAiDefaults({ tool: aiDefaults.value.tool, model, ...(effort ? { effort } : {}) });
-}
-function selectConversationModel(model: string) {
-  const current = project(),
-    connectionId = conversationConnectionId.value;
-  if (!current || !connectionId || !model) return;
-  const selection = conversationAiSelection(connectionId),
-    effort = selection.descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
-  conversationSelections.value = {
-    ...conversationSelections.value,
-    [connectionId]: { model, ...(effort ? { effort } : {}) },
-  };
-  terminalDrawerChatsByProject.value = {
-    ...terminalDrawerChatsByProject.value,
-    [current.id]: (terminalDrawerChatsByProject.value[current.id] ?? []).map((item) =>
-      item.connectionId === connectionId ? { ...item, model, effort } : item,
-    ),
-  };
-  driveConnectionsByProject.value = {
-    ...driveConnectionsByProject.value,
-    [current.id]: (driveConnectionsByProject.value[current.id] ?? []).map((item) =>
-      item.id === connectionId ? { ...item, model, effort } : item,
-    ),
-  };
-}
-function selectConversationEffort(effort: string) {
-  const current = project(),
-    connectionId = conversationConnectionId.value;
-  if (!current || !connectionId || !effort) return;
-  conversationSelections.value = {
-    ...conversationSelections.value,
-    [connectionId]: {
-      ...conversationSelections.value[connectionId],
-      model: conversationAiSelection(connectionId).model,
-      effort,
-    },
-  };
-  terminalDrawerChatsByProject.value = {
-    ...terminalDrawerChatsByProject.value,
-    [current.id]: (terminalDrawerChatsByProject.value[current.id] ?? []).map((item) =>
-      item.connectionId === connectionId ? { ...item, effort } : item,
-    ),
-  };
-  driveConnectionsByProject.value = {
-    ...driveConnectionsByProject.value,
-    [current.id]: (driveConnectionsByProject.value[current.id] ?? []).map((item) =>
-      item.id === connectionId ? { ...item, effort } : item,
-    ),
-  };
-}
-function aiToolOptions() {
-  return aiTools.value.map((descriptor) => ({ id: descriptor.id, label: descriptor.display_name }));
-}
-/**
- * Change the provider (tool) of the active chat and re-seed the new provider's session with the prior
- * transcript as one read-only context turn, then continue live (HS2-PRBGRB). No earlier turn is
- * re-executed: the transcript is handed over as context text framed so the new provider does not act
- * on it. Providers keep separate sessions, so this opens a fresh chat for the target provider.
- */
-async function selectConversationProvider(providerId: string) {
-  const current = project(),
-    connectionId = conversationConnectionId.value;
-  if (!current || !connectionId || !providerId) return;
-  const from = conversationAiSelection(connectionId);
-  if (providerId === from.tool) return;
-  const descriptor = aiTools.value.find((item) => item.id === providerId);
-  if (!descriptor) return;
-  const state = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION,
-    hasHistory = state.messages.length > 0;
-  const transcript = hasHistory
-    ? conversationTranscriptMarkdown(
-        { conversationId: connectionId, tool: aiToolLabel(from.tool) },
-        state.messages,
-        state.activity,
-      )
-    : '';
-  const selection = normalizedAiSelection({ tool: providerId });
-  conversationOpen.value = false;
-  const tab = await createDrawerAIChat(selection);
-  if (!tab || project()?.id !== current.id) return;
-  const newConnectionId = tab.connectionId;
-  if (!hasHistory) {
-    showToast(`Switched this chat to ${aiToolLabel(providerId)}.`);
-    return;
-  }
-  const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === newConnectionId);
-  if (!connection?.actions?.includes('send_turn')) {
-    showToast(`Switched to ${aiToolLabel(providerId)}; it could not accept the transcript.`);
-    return;
-  }
-  const seed = `Here is a transcript of my earlier conversation with ${aiToolLabel(from.tool)}, provided for context only. Please read it so you have the full history, but do not take any actions based on it yet — wait for my next message.\n\n${transcript}`;
-  const turnSelection = {
-    ...(descriptor.actions?.includes('change_model') && selection.model ? { model: selection.model } : {}),
-    ...(descriptor.actions?.includes('change_effort') && selection.effort ? { effort: selection.effort } : {}),
-  };
-  beginConversation(newConnectionId, seed);
-  requestAnimationFrame(() => {
-    syncConversationScroll(document, true);
-  });
-  try {
-    const updated = await new Api(current.apiPath).sendToolTurn(
-      newConnectionId,
-      seed,
-      connection.session_id,
-      turnSelection,
-    );
-    if (project()?.id === current.id)
-      driveConnectionsByProject.value = {
-        ...driveConnectionsByProject.value,
-        [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-          .filter((item) => item.id !== updated.id)
-          .concat(updated),
-      };
-    showToast(`Re-seeded ${aiToolLabel(providerId)} with the ${aiToolLabel(from.tool)} transcript.`);
-  } catch (reason) {
-    const message = reason instanceof Error ? reason.message : String(reason);
-    updateConversation(newConnectionId, (value) => ({
-      ...value,
-      activeAssistantId: undefined,
-      progress: undefined,
-      error: message,
-      messages: value.messages.map((item) =>
-        item.id === value.activeAssistantId
-          ? {
-              ...item,
-              status: 'failed',
-              content: item.content || 'The transcript could not be sent to the new provider.',
-            }
-          : item,
-      ),
-    }));
-  }
-}
-function openManualModel(target: 'settings' | 'drive' | 'conversation' | 'command', commandId?: string) {
-  const connectionId = conversationConnectionId.value;
-  const command = commandId ? commandSettingsDefinitions().find((item) => item.id === commandId) : undefined,
-    selection =
-      target === 'drive'
-        ? effectiveDriveSelection()
-        : target === 'conversation' && connectionId
-          ? conversationAiSelection(connectionId)
-          : target === 'command' && command
-            ? effectiveCommandAiSelection(command)
-            : aiDefaults.value,
-    descriptor = aiTools.value.find((item) => item.id === selection.tool),
-    custom =
-      selection.model && !descriptor?.models.some((model) => model.id === selection.model) ? selection.model : '';
-  // The conversation model popup is a native wa-dropdown (no signal); close the open one so it
-  // does not stay open behind — and after — the modal manual-model dialog (HS2-0W8QD9).
-  if (target === 'conversation')
-    document.querySelectorAll<Control>('.ai-conversation__model-menu[open]').forEach((menu) => menu.hide?.());
-  else if (target === 'command')
-    document
-      .querySelectorAll<Control>('.command-settings-editor__ai-selection wa-dropdown[open]')
-      .forEach((menu) => menu.hide?.());
-  manualModelDialogShown = false;
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  manualModelDialog.value={target,providerName:descriptor?.display_name??selection.tool??'this provider',value:custom??'',...(commandId?{commandId}:{})};
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      const dialog = document.querySelector<Control>('[data-component="manual-model-dialog"]');
-      dialog?.show?.();
-      dialog?.querySelector<Control>('[name="manual-model"]')?.focus();
-    }),
-  );
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function restoreCommandEditorAfterManualModel(state:ManualModelDialogState|undefined){if(state?.target!=='command'||!state.commandId)return;commandSettingsEditingId.value=state.commandId;requestAnimationFrame(()=>requestAnimationFrame(()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control)?.showPopover?.()}))}
-function aiLaunchConfiguration(kind: 'ai-shell' | 'ai-chat', customize: boolean) {
-  const current = project(),
-    base = effectiveDriveSelection(current?.id);
-  if (!current || !customize) return base;
-  const provider = window.prompt('AI provider', base.tool);
-  if (provider === null) return;
-  const descriptor = aiTools.value.find(
-    (item) =>
-      item.id.toLowerCase() === provider.trim().toLowerCase() ||
-      item.display_name.toLowerCase() === provider.trim().toLowerCase(),
-  );
-  if (!descriptor) {
-    error.value = `Unknown AI provider: ${provider}`;
-    return;
-  }
-  const initial = normalizedAiSelection({ tool: descriptor.id }),
-    model = window.prompt('Model (leave blank for provider default)', initial.model ?? ''),
-    selectedModel = descriptor.models.find((item) => item.id === model?.trim()),
-    effort = selectedModel?.effort_levels?.length
-      ? window.prompt('Effort level (leave blank for provider default)', initial.effort ?? '')
-      : '';
-  const selection = normalizedAiSelection({
-      tool: descriptor.id,
-      model: model?.trim() || undefined,
-      effort: effort?.trim() || undefined,
-    }),
-    detail = {
-      projectId: current.id,
-      kind,
-      provider: selection.tool,
-      model: selection.model,
-      effort: selection.effort,
-    };
-  document.dispatchEvent(new CustomEvent('hotsheet-ai-launch-configuration', { detail }));
-  return selection;
-}
 async function createDrawerAIChat(selection: AiToolDefaults, options: { connectionId?: string; drive?: boolean } = {}) {
   const current = project();
   if (!current) return;
@@ -1922,87 +1579,6 @@ async function closeTerminalIds(ids: readonly string[]) {
 function closeDrawerAIChat(id: string) {
   void closeDrawerTabIds([id]);
 }
-function mountTerminalViewportElement(element: HTMLElement) {
-  if (!element.isConnected || terminalViewportMounts.has(element)) return;
-  stopObservingTerminalViewport(element);
-  const projectId = element.dataset.projectId,
-    terminalId = element.dataset.terminalId,
-    current = projects.value.find((item) => item.id === projectId);
-  if (!current || !terminalId) return;
-  const interactive = element.dataset.displayMode === 'interactive',
-    autoFocus =
-      interactive &&
-      (element.closest('.terminal-dashboard__magnified') !== null ||
-        terminalViewportShouldAutoFocus(pendingTerminalFocus, current.id, terminalId));
-  terminalViewportMounts.set(
-    element,
-    mountTerminalViewport(element, {
-      url: terminalBrowserWebSocketUrl(current.apiPath, terminalId),
-      autoFocus,
-      onTicketReference: interactive
-        ? (reference) => {
-            const parsed = parseTicketLinkReference(reference);
-            if (!parsed) return;
-            ticketLinkReturnFocus = element;
-            void selectLinkedTicket(parsed.slug, parsed.projectId, current.id);
-          }
-        : undefined,
-    }),
-  );
-  if (autoFocus) pendingTerminalFocus = undefined;
-}
-function stopObservingTerminalViewport(element: HTMLElement) {
-  const target = terminalViewportObservationTargets.get(element);
-  if (target) {
-    terminalViewportObserver?.unobserve(target);
-    terminalViewportCandidatesByTarget.delete(target);
-  }
-  terminalViewportObservationTargets.delete(element);
-  terminalViewportCandidates.delete(element);
-}
-function ensureTerminalViewportObserver() {
-  if (terminalViewportObserver || typeof IntersectionObserver === 'undefined') return terminalViewportObserver;
-  terminalViewportObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const element = terminalViewportCandidatesByTarget.get(entry.target as HTMLElement);
-        if (!element) continue;
-        if (entry.isIntersecting) terminalViewportWork.enqueueMount(element);
-        else terminalViewportWork.cancelMount(element);
-      }
-    },
-    { rootMargin: '160px' },
-  );
-  return terminalViewportObserver;
-}
-function syncTerminalViewportMounts() {
-  const elements = new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));
-  for (const [element, dispose] of terminalViewportMounts)
-    if (!elements.has(element)) {
-      terminalViewportMounts.delete(element);
-      terminalViewportWork.enqueueDisposal(dispose);
-    }
-  for (const element of terminalViewportCandidates)
-    if (!elements.has(element)) {
-      terminalViewportWork.cancelMount(element);
-      stopObservingTerminalViewport(element);
-    }
-  for (const element of elements) {
-    if (terminalViewportMounts.has(element) || terminalViewportCandidates.has(element)) continue;
-    if (element.dataset.mountPolicy !== 'visible-progressive') {
-      mountTerminalViewportElement(element);
-      continue;
-    }
-    terminalViewportCandidates.add(element);
-    const observer = ensureTerminalViewportObserver(),
-      target = element.closest<HTMLElement>('[data-component="terminal-tile"]') ?? element;
-    if (observer) {
-      terminalViewportObservationTargets.set(element, target);
-      terminalViewportCandidatesByTarget.set(target, element);
-      observer.observe(target);
-    } else terminalViewportWork.enqueueMount(element);
-  }
-}
 function setShellMode(mode: ProjectTabBarMode) {
   if (terminalPreviewClickTimer !== undefined) {
     window.clearTimeout(terminalPreviewClickTimer);
@@ -2205,7 +1781,7 @@ async function refreshActivatedProject(
             ? refreshTrashSettings(current)
             : Promise.resolve(),
     aiRefresh =
-      category === 'ai' || aiConfigurationProjectId !== current.id
+      category === 'ai' || aiConfigurationController.aiConfigurationProjectId !== current.id
         ? refreshAiConfiguration(current)
         : Promise.resolve();
   await Promise.all([
@@ -3328,132 +2904,6 @@ const projectTabRefresh = createProjectTabRefreshCoordinator<Project, ProjectTic
     scheduleClaimLeaseExpiry();
   },
 });
-async function refreshRepositoryStatus() {
-  const current = project();
-  if (!current || repositoryRefreshing.value) return;
-  repositoryRefreshing.value = true;
-  try {
-    const status = await new Api(current.apiPath).repositoryStatus(current.id);
-    if (project()?.id === current.id) {
-      repository.value = status;
-      repositoryError.value = '';
-      repositorySetupError.value = '';
-      if (status.initialized === false) repositorySetupStep.value = 'initialize';
-      else if (repositorySetupStep.value !== 'remote') repositorySetupStep.value = undefined;
-      if (status.initialized !== false && document.querySelector('#repository-status-popover:popover-open'))
-        void loadRepositoryDetail(repositoryView.value, true);
-    }
-  } catch (reason) {
-    if (project()?.id === current.id) {
-      repository.value = null;
-      repositoryError.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  } finally {
-    if (project()?.id === current.id) repositoryRefreshing.value = false;
-  }
-}
-async function initializeRepository() {
-  const current = project();
-  if (!current || repositorySetupBusy.value) return;
-  repositorySetupBusy.value = true;
-  repositorySetupError.value = '';
-  try {
-    const status = await new Api(current.apiPath).initializeRepository(current.id);
-    if (project()?.id !== current.id) return;
-    repository.value = status;
-    repositoryError.value = '';
-    repositorySetupStep.value = 'remote';
-  } catch (reason) {
-    if (project()?.id === current.id)
-      repositorySetupError.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    if (project()?.id === current.id) repositorySetupBusy.value = false;
-  }
-}
-async function connectRepositoryRemote(form: HTMLFormElement) {
-  const current = project();
-  if (!current || repositorySetupBusy.value) return;
-  const remote = (form.elements.namedItem('repository-remote') as HTMLInputElement | null)?.value.trim() ?? '';
-  if (!remote) {
-    repositorySetupError.value = 'Enter a remote URL.';
-    return;
-  }
-  repositorySetupBusy.value = true;
-  repositorySetupError.value = '';
-  try {
-    const status = await new Api(current.apiPath).configureRepositoryRemote(current.id, remote);
-    if (project()?.id !== current.id) return;
-    repository.value = status;
-    repositoryError.value = '';
-    repositorySetupStep.value = undefined;
-    showToast('Origin remote added.');
-    void loadRepositoryDetail(repositoryView.value, true);
-  } catch (reason) {
-    if (project()?.id === current.id)
-      repositorySetupError.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    if (project()?.id === current.id) repositorySetupBusy.value = false;
-  }
-}
-function skipRepositoryRemote() {
-  repositorySetupStep.value = undefined;
-  repositorySetupError.value = '';
-  showToast('Git initialized without a remote.');
-  void loadRepositoryDetail(repositoryView.value, true);
-}
-async function loadRepositoryDetail(view: RepositoryStatusView, reset = false) {
-  const current = project(),
-    previous = repositoryDetail.value;
-  if (!current) return;
-  if (!reset && previous.view === view && (previous.loading || (previous.loaded && previous.nextCursor === undefined)))
-    return;
-  const generation = ++repositoryDetailGeneration,
-    cursor = !reset && previous.view === view ? (previous.nextCursor ?? 0) : 0,
-    base =
-      !reset && previous.view === view
-        ? previous
-        : { view, files: [], commits: [], loading: false, loaded: false, error: '' };
-  repositoryDetail.value = { ...base, view, loading: true, error: '' };
-  try {
-    const page =
-      view === 'commits'
-        ? await new Api(current.apiPath).repositoryCommits(current.id, cursor)
-        : await new Api(current.apiPath).repositoryFiles(current.id, view, cursor);
-    if (generation !== repositoryDetailGeneration || project()?.id !== current.id) return;
-    repositoryDetail.value = {
-      view,
-      files: view === 'commits' ? base.files : [...base.files, ...(page.items as RepositoryFile[])],
-      commits: view === 'commits' ? [...base.commits, ...(page.items as CodeReview['commits'])] : base.commits,
-      nextCursor: page.next_cursor ?? undefined,
-      loading: false,
-      loaded: true,
-      error: '',
-    };
-  } catch (reason) {
-    if (generation !== repositoryDetailGeneration || project()?.id !== current.id) return;
-    repositoryDetail.value = {
-      ...base,
-      view,
-      loading: false,
-      loaded: true,
-      error: reason instanceof Error ? reason.message : String(reason),
-    };
-  }
-}
-function syncRepositoryPaginationObserver() {
-  repositoryPaginationObserver?.disconnect();
-  const root = document.querySelector('.repository-status-popover__detail'),
-    sentinel = document.querySelector('[data-repository-pagination-sentinel="true"]');
-  repositoryPaginationObserver = undefined;
-  if (!root || !sentinel || repositoryDetail.value.loading) return;
-  repositoryPaginationObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadRepositoryDetail(repositoryDetail.value.view);
-    },
-    { root, rootMargin: '0px 0px 120px' },
-  );
-  repositoryPaginationObserver.observe(sentinel);
-}
 function setCorruptRecovery(key: string, value: CorruptTicketRecoveryState) {
   corruptRecovery.value = { ...corruptRecovery.value, [key]: value };
 }
@@ -3466,168 +2916,6 @@ async function queueCorruptTicketRepair(key:string){const current=project(),tick
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
 async function refreshCommands(current=project()){const generation=++commandRefreshGeneration;if(!current)return;const active=()=>generation===commandRefreshGeneration&&project()?.id===current.id;try{const client=new Api(current.apiPath),previous=JSON.stringify(commandDefinitions.value,null,2),[definitions,runs]=await Promise.all([client.commands(),client.commandRuns()]);if(!active())return;commandDefinitions.value=definitions;commandRuns.value=runs;const projection=projectProjectionById.value[current.id];projectProjectionById.value={...projectProjectionById.value,[current.id]:{corruptTickets:projection?.corruptTickets??corruptTickets.value,repository:projection?.repository??repository.value,repositoryError:projection?.repositoryError??repositoryError.value,commandDefinitions:definitions,commandRuns:runs}};const draft=commandSettingsDraftsByProject.value[current.id];if(viewMode.value!=='settings'||draft===undefined||draft===previous)setCommandSettingsDraft(current.id,JSON.stringify(definitions,null,2));setCommandSettingsMessage(current.id,'')}catch(reason){if(active())setCommandSettingsMessage(current.id,reason instanceof Error?reason.message:String(reason))}}
-function updateCommandSetting(projectId: string, id: string, field: string, value: string) {
-  const definitions = commandSettingsDefinitions(projectId),
-    next = definitions.map((command) => {
-      if (command.id !== id) return command;
-      const updated: CommandDefinition = { ...command };
-      if (field === 'args') updated.args = value.split('\n').filter((argument) => argument.length > 0);
-      else if (field === 'kind') {
-        updated.kind = value as NonNullable<CommandDefinition['kind']>;
-        if (value === 'program') {
-          delete updated.command;
-          delete updated.prompt;
-          delete updated.tool;
-          delete updated.model;
-          delete updated.effort;
-        } else if (value === 'shell') {
-          delete updated.program;
-          delete updated.args;
-          delete updated.prompt;
-          delete updated.tool;
-          delete updated.model;
-          delete updated.effort;
-        } else {
-          delete updated.program;
-          delete updated.args;
-          delete updated.command;
-        }
-      } else if (field === 'id' || field === 'title') updated[field] = value;
-      else if (
-        [
-          'program',
-          'group',
-          'cwd',
-          'confirmation',
-          'command',
-          'prompt',
-          'tool',
-          'model',
-          'effort',
-          'color',
-          'icon',
-        ].includes(field)
-      )
-        (updated as unknown as Record<string, unknown>)[field] = value || undefined;
-      return updated;
-    });
-  setCommandSettingsDefinitions(projectId, next);
-  if (field === 'id') {
-    selectCommandSetting(projectId, value);
-    if (commandSettingsEditingId.value === id) commandSettingsEditingId.value = value;
-  }
-  scheduleCommandAutosave(projectId);
-}
-function updateCommandAiSelection(
-  projectId: string,
-  id: string,
-  selection: Partial<Pick<CommandDefinition, 'tool' | 'model' | 'effort'>>,
-) {
-  const next = commandSettingsDefinitions(projectId).map((command) => {
-    if (command.id !== id) return command;
-    const updated = { ...command };
-    if (selection.tool) updated.tool = selection.tool;
-    else delete updated.tool;
-    if (selection.model) updated.model = selection.model;
-    else delete updated.model;
-    if (selection.effort) updated.effort = selection.effort;
-    else delete updated.effort;
-    return updated;
-  });
-  setCommandSettingsDefinitions(projectId, next);
-  scheduleCommandAutosave(projectId);
-}
-function addCommandSetting(projectId: string) {
-  const existing = new Set(commandSettingsDefinitions(projectId).map((command) => command.id));
-  let index = 1,
-    id = 'command-1';
-  while (existing.has(id)) id = `command-${++index}`;
-  setCommandSettingsDefinitions(projectId, [
-    ...commandSettingsDefinitions(projectId),
-    { id, title: 'New command', kind: 'shell', command: '' },
-  ]);
-  selectCommandSetting(projectId, id);
-  scheduleCommandAutosave(projectId);
-  return id;
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function deleteCommandSetting(projectId:string,id:string){const definitions=commandSettingsDefinitions(projectId),index=definitions.findIndex(command=>command.id===id),next=definitions.filter(command=>command.id!==id);setCommandSettingsDefinitions(projectId,next);selectCommandSetting(projectId,next[Math.min(Math.max(index,0),next.length-1)]?.id);scheduleCommandAutosave(projectId);if(commandSettingsEditingId.value===id){commandSettingsEditingId.value=undefined;(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.()}}
-function commandSettingsExtraGroups(projectId = selectedProjectId.value) {
-  return commandSettingsExtraGroupsByProject.value[projectId] ?? [];
-}
-function setCommandSettingsExtraGroups(projectId: string, groups: string[]) {
-  commandSettingsExtraGroupsByProject.value = { ...commandSettingsExtraGroupsByProject.value, [projectId]: groups };
-}
-function reorderCommandSettings(projectId: string, sourceIds: readonly string[], target: CommandDropTarget) {
-  const next = reorderCommandsMultiple(commandSettingsDefinitions(projectId), sourceIds, target);
-  setCommandSettingsDefinitions(projectId, next);
-  setCommandSettingsExtraGroups(projectId, emptyExtraGroups(next, commandSettingsExtraGroups(projectId)));
-  scheduleCommandAutosave(projectId);
-}
-function addCommandGroup(projectId: string) {
-  const name = window.prompt('New group name')?.trim();
-  if (!name) return;
-  const existing = new Set([
-    ...commandSettingsDefinitions(projectId)
-      .map((command) => command.group?.trim())
-      .filter(Boolean),
-    ...commandSettingsExtraGroups(projectId),
-  ]);
-  if (existing.has(name)) {
-    setCommandSettingsMessage(projectId, `A group named "${name}" already exists.`);
-    return;
-  }
-  setCommandSettingsExtraGroups(projectId, [...commandSettingsExtraGroups(projectId), name]);
-}
-function deleteCommandGroup(projectId: string, group: string) {
-  setCommandSettingsExtraGroups(
-    projectId,
-    commandSettingsExtraGroups(projectId).filter((item) => item !== group),
-  );
-}
-let commandAutosaveTimer: ReturnType<typeof setTimeout> | undefined;
-function scheduleCommandAutosave(projectId: string) {
-  if (commandAutosaveTimer) clearTimeout(commandAutosaveTimer);
-  commandAutosaveTimer = setTimeout(() => {
-    commandAutosaveTimer = undefined;
-    void saveCommandSettings(projectId);
-  }, 600);
-}
-async function saveCommandSettings(projectId: string) {
-  const current = projects.value.find((item) => item.id === projectId);
-  if (!current) return;
-  const definitions = commandSettingsDefinitions(projectId),
-    validation = commandSettingsValidation(definitions);
-  if (validation) {
-    setCommandSettingsMessage(projectId, validation);
-    return;
-  }
-  setCommandSettingsMessage(projectId, 'Saving…');
-  try {
-    const saved = await new Api(current.apiPath).saveCommands(definitions);
-    if (!projects.value.some((item) => item.id === projectId)) return;
-    if (selectedProjectId.value === projectId) commandDefinitions.value = saved;
-    setCommandSettingsMessage(projectId, 'Saved.');
-  } catch (reason) {
-    setCommandSettingsMessage(projectId, reason instanceof Error ? reason.message : String(reason));
-  }
-}
-function commandSettingsValidation(definitions: CommandDefinition[]): string | undefined {
-  const ids = new Set<string>();
-  for (const [index, command] of definitions.entries()) {
-    const label = command.title.trim() || `Command ${index + 1}`;
-    if (!command.id.trim()) return `${label} needs an identifier.`;
-    if (ids.has(command.id)) return `Command identifiers must be unique: ${command.id}.`;
-    ids.add(command.id);
-    if (!command.title.trim()) return `${command.id} needs a button label.`;
-    const type = command.kind ?? 'program';
-    if (type === 'program' && !command.program?.trim()) return `${label} needs a program.`;
-    if (type === 'shell' && !command.command?.trim()) return `${label} needs a shell command.`;
-    if (type === 'ai' && !command.prompt?.trim()) return `${label} needs an AI prompt.`;
-  }
-  return undefined;
-}
 async function refreshCustomViews(current = project()) {
   if (!current) return;
   try {
@@ -3646,44 +2934,7 @@ async function refreshCustomViews(current = project()) {
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function refreshDriveConnections(current=project(),restoreDrawerTabs=false){if(!current)return;if(project()?.id===current.id&&aiConfigurationProjectId!==current.id)void refreshAiConfiguration(current);try{const client=new Api(current.apiPath),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
-async function refreshAiConfiguration(current = project(), refresh = false) {
-  if (!current) return;
-  aiSettingsLoading.value = true;
-  try {
-    const client = new Api(current.apiPath),
-      tools = await client.aiTools(refresh),
-      defaults = await client.aiSettings();
-    if (project()?.id !== current.id) return;
-    aiTools.value = tools;
-    aiDefaults.value = defaults;
-    aiConfigurationProjectId = current.id;
-    aiSettingsMessage.value = '';
-  } catch (reason) {
-    aiConfigurationProjectId = '';
-    if (project()?.id === current.id)
-      aiSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    if (project()?.id === current.id) aiSettingsLoading.value = false;
-  }
-}
-async function saveAiDefaults(value: AiToolDefaults) {
-  const current = project();
-  if (!current) return;
-  aiSettingsLoading.value = true;
-  aiSettingsMessage.value = 'Saving…';
-  try {
-    const saved = await new Api(current.apiPath).saveAiSettings(value);
-    if (project()?.id !== current.id) return;
-    aiDefaults.value = saved;
-    aiSettingsMessage.value = 'Saved locally.';
-  } catch (reason) {
-    if (project()?.id === current.id)
-      aiSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    if (project()?.id === current.id) aiSettingsLoading.value = false;
-  }
-}
+async function refreshDriveConnections(current=project(),restoreDrawerTabs=false){if(!current)return;if(project()?.id===current.id&&aiConfigurationController.aiConfigurationProjectId!==current.id)void refreshAiConfiguration(current);try{const client=new Api(current.apiPath),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
 function replaceConversationStates(states: Record<string, ConversationState>) {
   conversationStates.value = states;
   try {
@@ -3704,177 +2955,6 @@ function updateConversation(connectionId: string, update: (state: ConversationSt
 function conversationForActivity(current:Project,tool:string,session?:string){const conversations=conversationStates.peek(),connections=(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.tool.toLowerCase()===tool.toLowerCase()&&conversations[item.id]);return connections.find(item=>session&&(item.session_id===session||item.id===session))??(connections.length===1?connections[0]:undefined)}
 function beginConversation(connectionId: string, content: string) {
   updateConversation(connectionId, (state) => beginConversationTurn(state, crypto.randomUUID(), content));
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function conversationAiSelection(connectionId:string){const current=project(),connection=current?(driveConnectionsByProject.value[current.id]??[]).find(item=>item.id===connectionId):undefined,chat=current?(terminalDrawerChatsByProject.value[current.id]??[]).find(item=>item.connectionId===connectionId):undefined,override=conversationSelections.value[connectionId],tool=chat?.tool??connection?.tool??aiDefaults.value.tool,descriptor=aiTools.value.find(item=>item.id===tool),model=override?.model??chat?.model??connection?.model??descriptor?.default_model,modelDescriptor=descriptor?.models.find(item=>item.id===model),efforts=modelDescriptor?.effort_levels??[],effort=compatibleAiEffort(efforts,override?.effort,chat?.effort,connection?.effort,descriptor?.default_effort);return{tool,descriptor,model,effort,efforts}}
-function conversationSelectedMessages(connectionId: string, messages: readonly ConversationMessage[]) {
-  const scope = conversationSelectionScopes.value[connectionId];
-  return scope?.kind === 'range' ? [...selectedConversationMessages(messages, scope)] : [];
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-function pickConversationMessage(connectionId:string,messageId:string){const messages=conversationStates.peek()[connectionId]?.messages??[],scope=conversationSelectionScopes.value[connectionId]??{kind:'all' as const},next=conversationExportScopeAfterMessagePick(messages,scope,messageId);conversationSelectionScopes.value={...conversationSelectionScopes.value,[connectionId]:next}}
-function clearConversationSelection(connectionId: string) {
-  conversationSelectionScopes.value = Object.fromEntries(
-    Object.entries(conversationSelectionScopes.value).filter(([id]) => id !== connectionId),
-  );
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function copyConversationSelection(connectionId:string){const messages=conversationSelectedMessages(connectionId,conversationStates.peek()[connectionId]?.messages??[]);if(!messages.length)return;const tool=aiToolLabel(conversationAiSelection(connectionId).tool);try{await navigator.clipboard.writeText(conversationTranscriptMarkdown({conversationId:connectionId,tool},messages));showToast(`${messages.length} selected message${messages.length===1?'':'s'} copied to clipboard.`)}catch(reason){error.value=`Copy failed: ${reason instanceof Error?reason.message:String(reason)}`}}
-function updateConversationExportDraft(update: (draft: ConversationExportDraft) => ConversationExportDraft) {
-  const state = conversationExportDialog.value;
-  if (state) conversationExportDialog.value = { ...state, draft: update(state.draft), error: '' };
-}
-function openConversationExport() {
-  const current = project(),
-    connectionId = conversationConnectionId.value;
-  if (!current || !connectionId) return;
-  const state = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION;
-  if (!state.messages.length) return;
-  const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),
-    chat = (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId),
-    selection = conversationAiSelection(connectionId),
-    tool = chat?.tool ?? connection?.tool ?? selection.tool,
-    scope = conversationSelectionScopes.value[connectionId],
-    selectedRange =
-      scope?.kind === 'range' && selectedConversationMessages(state.messages, scope).length ? scope : undefined,
-    draft = { ...defaultConversationExportDraft(), ...(selectedRange ? { scope: selectedRange } : {}) };
-  conversationExportDialog.value = {
-    source: {
-      conversationId: chat?.sourceConversationId ?? connectionId,
-      tool,
-      projectId: current.id,
-      sessionId: chat?.sourceSessionId ?? connection?.session_id,
-      model: selection.model,
-      effort: selection.effort,
-      resumable: !chat?.readOnly,
-    },
-    messages: [...state.messages],
-    activity: [...(state.activity ?? [])],
-    draft,
-    summaryAvailable: true,
-    step: selectedRange ? 1 : 2,
-    navigation: 'none',
-    selectedRange,
-  };
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function pickConversationExportDestination(){const state=conversationExportDialog.value;if(!state||state.busy)return;conversationExportDialog.value={...state,busy:true,error:''};try{const response=await fetch('/__hotsheet/conversation-exports/destination',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({suggestedName:suggestedConversationExportName(state.source.tool)})}),result=await response.json() as {destination?:ConversationExportDestination;error?:string};if(!response.ok)throw new Error(result.error??'Could not choose a conversation export destination.');if(conversationExportDialog.value){if(!result.destination){conversationExportDialog.value={...state,busy:false};return}conversationExportDialog.value={...state,busy:false,draft:{...state.draft,destination:result.destination,writeMode:'create'},error:''}}}catch(reason){if(conversationExportDialog.value)conversationExportDialog.value={...state,busy:false,error:reason instanceof Error?reason.message:String(reason)}}}
-async function saveConversationExport() {
-  const state = conversationExportDialog.value;
-  if (!state || state.busy) return;
-  try {
-    const request = buildConversationExportRequest(state.source, state.messages, state.draft),
-      messages = [...selectedConversationMessages(state.messages, state.draft.scope)];
-    conversationExportDialog.value = { ...state, busy: true, error: '' };
-    const assets = await conversationExportAssets(state.messages, state.draft),
-      response = await fetch('/__hotsheet/conversation-exports/write', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ request, messages, activity: state.activity ?? [], assets }),
-      }),
-      result = (await response.json()) as ConversationExportWriteResult & { error?: string };
-    if (!response.ok) throw new Error(result.error ?? 'Could not save the conversation.');
-    conversationExportDialog.value = undefined;
-    showToast(`Saved conversation revision ${result.manifest.revision}.`);
-  } catch (reason) {
-    if (conversationExportDialog.value)
-      conversationExportDialog.value = {
-        ...conversationExportDialog.value,
-        busy: false,
-        error: reason instanceof Error ? reason.message : String(reason),
-      };
-  }
-}
-async function finishConversationExport() {
-  const state = conversationExportDialog.value;
-  if (!state || state.busy) return;
-  if (!state.draft.destination) {
-    await pickConversationExportDestination();
-    const selected = conversationExportDialog.value;
-    if (!selected?.draft.destination || selected.draft.destination.existing) return;
-  }
-  await saveConversationExport();
-}
-async function openSavedConversation() {
-  const current = project();
-  if (!current) return;
-  terminalDrawerCreateMenuOpen.value = false;
-  try {
-    const response = await fetch('/__hotsheet/conversation-exports/open', { method: 'POST' }),
-      result = (await response.json()) as { conversation?: ConversationExportOpenResult; error?: string };
-    if (!response.ok) throw new Error(result.error ?? 'Could not open the saved conversation.');
-    if (!result.conversation) return;
-    const saved = result.conversation,
-      source = saved.manifest.source,
-      reopen = saved.manifest.reopen,
-      canResume = Boolean(
-        reopen.resumesOriginalSession && reopen.sessionId && (!source.projectId || source.projectId === current.id),
-      );
-    let connectionId = `hotsheet-saved-chat-${crypto.randomUUID()}`,
-      readOnly = true,
-      localOnly = true,
-      resumeError = '';
-    if (canResume) {
-      try {
-        const created = await new Api(current.apiPath).createToolConnection({
-          tool: source.tool,
-          checkout: current.id,
-          connection_id: connectionId,
-          session_id: reopen.sessionId,
-          model: source.model,
-          effort: source.effort,
-        });
-        connectionId = created.id;
-        localOnly = false;
-        driveConnectionsByProject.value = {
-          ...driveConnectionsByProject.value,
-          [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-            .filter((item) => item.id !== created.id)
-            .concat(created),
-        };
-        readOnly = !created.actions?.includes('send_turn');
-      } catch (reason) {
-        resumeError = reason instanceof Error ? reason.message : String(reason);
-      }
-    }
-    const tab: DrawerAIChat = {
-      id: `ai-chat:${connectionId}`,
-      connectionId,
-      tool: source.tool,
-      name: `${aiToolLabel(source.tool)} saved chat`,
-      model: source.model,
-      effort: source.effort,
-      readOnly,
-      localOnly,
-      savedSource: saved.displayPath,
-      sourceConversationId: source.conversationId,
-      sourceSessionId: source.sessionId,
-    };
-    terminalDrawerChatsByProject.value = {
-      ...terminalDrawerChatsByProject.value,
-      [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
-    };
-    persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
-    replaceConversationStates({
-      ...conversationStates.peek(),
-      [connectionId]: { messages: saved.messages, activity: saved.activity },
-    });
-    selectDrawerItem(tab.id);
-    setTerminalDrawerVisible(true);
-    showToast(
-      readOnly
-        ? resumeError
-          ? `Opened read-only; resume failed: ${resumeError}`
-          : 'Opened saved conversation read-only.'
-        : 'Opened saved conversation; you can continue it.',
-    );
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
-  }
 }
 async function toggleSidebarDrive() {
   const current = project();
@@ -4012,24 +3092,6 @@ async function refreshTrashSettings(current = project()) {
       };
   }
 }
-async function refreshCodeReview() {
-  const current = project(),
-    ticket = selectedTicket.value;
-  if (!current || !ticket) return;
-  codeReviewLoading.value = true;
-  codeReviewMessage.value = '';
-  try {
-    const review = await new Api(current.apiPath).codeReview(current.id, ticket.id);
-    if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) codeReview.value = review;
-  } catch (reason) {
-    if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
-      codeReview.value = undefined;
-      codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  } finally {
-    if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) codeReviewLoading.value = false;
-  }
-}
 const openSelect = () => [...document.querySelectorAll<Control>('wa-select')].find((node) => node.open);
 const localTicketMutationBarrier = createRefreshBarrier();
 function beginLocalTicketMutation() {
@@ -4130,66 +3192,6 @@ function syncProjectChangeStreams() {
       });
       projectChangeStreams.set(current.id, stop);
     }
-}
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function refreshPermissions(){if(permissionPolling)return;permissionPolling=true;try{let changed=false;await Promise.all(projects.value.map(async current=>{const client=new Api(current.apiPath);const [requests,connections]=await Promise.all([client.permissions(),client.activeToolConnections().catch(()=>[])]),owned=requests.filter(request=>permissionBelongsToProject(request,connections,projects.value,current.id));changed=permissionInbox.reconcile(current,owned,connections)||changed}));if(changed){updatePermissionTimer();permissionRevision.value+=1;persistPermissionHistory()}}catch{/* individual server disconnects remain represented by their last known requests */}finally{permissionPolling=false}}
-function startPermissionUpdates() {
-  if (permissionTimerInterval === undefined) permissionTimerInterval = window.setInterval(updatePermissionTimer, 1_000);
-  void refreshPermissions();
-}
-async function resolvePermission(
-  item: PermissionItem,
-  decision: PermissionDecision,
-  scope: PermissionScope,
-  automatic = false,
-) {
-  const finishTiming = beginInteractionTiming('permission-decision', { project: item.projectId }),
-    owning = projects.value.find((value) => value.id === item.projectId);
-  if (!owning) return;
-  permissionResolutionErrors.value = Object.fromEntries(
-    Object.entries(permissionResolutionErrors.value).filter(([key]) => key !== item.key),
-  );
-  if (!permissionInbox.resolve(item.key, decision, scope, automatic)) return;
-  persistPermissionHistory();
-  permissionTimer.remove(item.key);
-  updatePermissionTimer();
-  permissionRevision.value += 1;
-  finishTiming();
-  try {
-    await new Api(owning.apiPath).resolvePermission(item.id, decision, scope);
-  } catch (reason) {
-    permissionInbox.restore(item);
-    persistPermissionHistory();
-    permissionResolutionErrors.value = {
-      ...permissionResolutionErrors.value,
-      [item.key]:
-        reason instanceof Error && reason.message.includes('404')
-          ? 'This request changed before Hot Sheet could answer it. Review it and try again.'
-          : `Could not send the permission decision. ${reason instanceof Error ? reason.message : String(reason)}`,
-    };
-    updatePermissionTimer();
-    permissionRevision.value += 1;
-    if (reason instanceof Error && reason.message.includes('404')) await refreshPermissions();
-  }
-}
-function updatePermissionTimer() {
-  const item = visiblePermission();
-  if (!item) {
-    permissionTimer.hide();
-    permissionCountdown = undefined;
-    return;
-  }
-  const setting = permissionAutomation(item.projectId);
-  if (setting.action === 'off') {
-    permissionTimer.hide();
-    permissionCountdown = undefined;
-    return;
-  }
-  const remaining = permissionTimer.tick(item.key, setting.delayMs);
-  permissionCountdown = remaining === undefined ? undefined : { key: item.key, remainingMs: remaining };
-  if (remaining !== undefined) updatePermissionCountdownText(document, item.key, formatPermissionCountdown(remaining));
-  if (remaining === 0) void resolvePermission(item, setting.action, 'once', true);
 }
 async function applyTicketPatch(slug: string, patch: TicketPatch) {
   const current = project(),
@@ -5347,42 +4349,6 @@ function duplicateTargetFor(ticket:FullTicket){if(!ticket.duplicate_of)return un
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
 async function resolveDuplicateTargetFor(ticket:FullTicket){const value=ticket.duplicate_of;if(!value||resolvedDuplicateTargets.value[value])return;const target=await resolveDuplicateReferenceTarget(value,projects.value,(item,id)=>new Api((item as Project).apiPath).checkoutTicket(item.id,id).then(result=>result.ticket)).catch(()=>undefined);if(target)resolvedDuplicateTargets.value={...resolvedDuplicateTargets.value,[value]:target}}
-function galleryImages(ticket = selectedTicket.value): AttachmentGalleryImage[] {
-  const current = project();
-  if (!ticket || !current) return [];
-  const context = attachmentContext(ticket)!,
-    images: AttachmentGalleryImage[] = ticket.attachments
-      .filter((item) => isGalleryMediaAttachment(item.filename))
-      .map((item) => ({
-        id: item.id,
-        name: item.filename,
-        url: api().checkoutAttachmentUrl(current.id, ticket.id, item.id),
-        thumbnailUrl: isVideoAttachment(item.filename)
-          ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.id, item.id)
-          : undefined,
-        aliases: [attachmentReferenceUrl(context, { filename: item.filename })],
-        ticket: ticket.slug,
-        attachmentId: item.id,
-      })),
-    seen = new Set(images.map((image) => `${ticket.slug}\0${image.name}`));
-  for (const note of ticket.notes)
-    for (const reference of attachmentReferences(note.text, context)) {
-      if (!isGalleryMediaAttachment(reference.filename)) continue;
-      const referencedTicket = reference.ticket ?? ticket.slug,
-        key = `${referencedTicket}\0${reference.filename}`,
-        url = attachmentReferenceUrl(context, reference);
-      if (!seen.has(key)) {
-        seen.add(key);
-        images.push({
-          id: `${referencedTicket}:${reference.filename}`,
-          name: reference.filename,
-          url,
-          ticket: referencedTicket,
-        });
-      }
-    }
-  return images;
-}
 async function uploadAttachmentWithPoster(
   client: Api,
   current: Project,
@@ -6106,29 +5072,6 @@ async function deleteSavedView() {
     if (project()?.id === current.id) savedViewDeleteBusy.value = false;
   }
 }
-function commandRunFor(commandId: string) {
-  return commandRuns.value.find((run) => run.command_id === commandId);
-}
-function showCommandDialog() {
-  queueMicrotask(() => {
-    const dialog = document.querySelector<HTMLDialogElement>(
-      '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
-    );
-    if (dialog && !dialog.open) dialog.showModal();
-  });
-}
-function commandIcon(command: CommandDefinition): string {
-  return (
-    command.icon ??
-    (command.kind === 'ai' ||
-    command.program?.includes('hotsheet') ||
-    command.args?.some((value) => value.includes('trigger'))
-      ? 'send'
-      : command.id.includes('test') || command.title.toLowerCase().includes('test')
-        ? 'test'
-        : 'build')
-  );
-}
 async function queueAiCommand(command: CommandDefinition, current: Project) {
   if (!(defaultProvider()?.capabilities.create ?? true)) {
     error.value = 'The default ticket source does not support ticket creation.';
@@ -6818,123 +5761,43 @@ function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
     },
   };
 }
-function workspaceTerminalGroups(): TerminalDashboardGroup[] {
-  const conversations = conversationStates.peek();
-  return terminalGroups.value.map((group) => {
-    const connections = driveConnectionsByProject.value[group.projectId] ?? [],
-      chats = (terminalDrawerChatsByProject.value[group.projectId] ?? []).map((chat) => {
-        const connection = connections.find((item) => item.id === chat.connectionId),
-          state = conversations[chat.connectionId] ?? EMPTY_CONVERSATION;
-        return {
-          id: chat.id,
-          projectId: group.projectId,
-          projectName: group.projectName,
-          name: chat.name,
-          tool: aiToolLabel(chat.tool),
-          busy: connection?.busy ?? false,
-          summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
-        };
-      });
-    return { ...group, chats, itemOrder: drawerTabOrder(group.projectId) };
+const { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface } =
+  createTerminalPresentation({
+    projects,
+    project,
+    shellMode,
+    statsProjectId,
+    canGiveFeedback: () => Boolean(selectedTicket.value && canAddNotes()),
+    terminals: {
+      terminalGroups,
+      drawerTabOrder,
+      terminalDashboardSize,
+      terminalFitAcross,
+      terminalFitHigh,
+      magnifiedTerminalKey,
+      terminalHiddenKeys,
+      terminalDashboardLoading,
+      terminalDashboardMessage,
+      terminalContextMenu,
+      terminalDrawerBounds,
+      terminalDrawerFitAcross,
+      terminalDrawerFitHigh,
+      terminalDrawerSelected,
+      terminalDrawerMaximized,
+      terminalDrawerCreateMenuOpen,
+    },
+    conversations: {
+      conversationStates,
+      driveConnectionsByProject,
+      terminalDrawerChatsByProject,
+      conversationDrafts,
+      conversationOpen,
+      conversationConnectionId,
+      conversationSelectedMessages,
+    },
+    ai: aiConfigurationController,
+    permissions: permissionsController,
   });
-}
-function globalWorkspaceSurfaceProps(): GlobalWorkspaceSurfaceProps {
-  if (shellMode.value === 'terminals') {
-    const groups = workspaceTerminalGroups();
-    return {
-      kind: 'terminals',
-      dashboard: {
-        groups,
-        width: terminalDashboardSize.value.width,
-        height: terminalDashboardSize.value.height,
-        fitAcross: terminalFitAcross.value,
-        fitHigh: terminalFitHigh.value,
-        grouping: 'flow',
-        magnifiedKey: magnifiedTerminalKey.value,
-        hiddenKeys: terminalHiddenKeys(TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
-        loading: terminalDashboardLoading.value,
-        message: terminalDashboardMessage.value,
-        contextMenu: terminalContextMenu.value,
-      },
-    };
-  }
-  const statsProject = projects.value.find((item) => item.id === statsProjectId.value);
-  return { kind: 'stats', projectName: statsProject?.name };
-}
-function projectTerminalDrawerProps(): TerminalDrawerProps | undefined {
-  const current = project();
-  if (!current) return;
-  const conversations = conversationStates.peek(),
-    group = terminalGroups.value.find((item) => item.projectId === current.id),
-    chatTabs: TerminalDrawerChatTab[] = (terminalDrawerChatsByProject.value[current.id] ?? []).map((chat) => {
-      const connection = (driveConnectionsByProject.value[current.id] ?? []).find(
-          (item) => item.id === chat.connectionId,
-        ),
-        state = conversations[chat.connectionId] ?? EMPTY_CONVERSATION,
-        selection = conversationAiSelection(chat.connectionId),
-        descriptor = selection.descriptor,
-        tool = aiToolLabel(chat.tool),
-        selectedMessageIds = conversationSelectedMessages(chat.connectionId, state.messages).map(
-          (message) => message.id,
-        );
-      return {
-        id: chat.id,
-        name: chat.name,
-        tool,
-        busy: connection?.busy ?? false,
-        summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
-        content: (
-          <AIConversation
-            open
-            presentation="embedded"
-            tool={tool}
-            sessionId={connection?.session_id ?? chat.sourceSessionId}
-            selectionId={chat.connectionId}
-            selectedMessageIds={selectedMessageIds}
-            messages={state.messages}
-            draft={conversationDrafts.value[chat.connectionId] ?? ''}
-            busy={connection?.busy ?? false}
-            progress={state.progress}
-            interruptible={Boolean(connection?.actions?.includes('interrupt'))}
-            permissions={pendingPermissions().filter(
-              (item) => item.projectId === current.id && item.connection === chat.connectionId,
-            )}
-            activity={state.activity}
-            totalUsage={conversationUsage(state)}
-            error={state.error ?? connection?.last_error}
-            providerId={chat.tool}
-            providers={aiToolOptions()}
-            canChangeProvider={!chat.readOnly && aiTools.value.length > 1}
-            model={selection.model}
-            effort={selection.effort}
-            models={descriptor?.models}
-            efforts={selection.efforts}
-            canChangeModel={descriptor?.actions?.includes('change_model')}
-            canChangeEffort={descriptor?.actions?.includes('change_effort')}
-            readOnly={chat.readOnly}
-            savedSource={chat.savedSource}
-          />
-        ),
-      };
-    });
-  return {
-    projectId: current.id,
-    projectName: current.name,
-    sessions: group?.sessions ?? [],
-    chatTabs,
-    tabOrder: drawerTabOrder(current.id),
-    width: terminalDrawerBounds.value.width,
-    height: terminalDrawerBounds.value.height,
-    fitAcross: terminalDrawerFitAcross.value,
-    fitHigh: terminalDrawerFitHigh.value,
-    selectedId: terminalDrawerSelected.value,
-    magnifiedKey: magnifiedTerminalKey.value,
-    loading: terminalDashboardLoading.value,
-    message: terminalDashboardMessage.value,
-    maximized: terminalDrawerMaximized.value,
-    createMenuOpen: terminalDrawerCreateMenuOpen.value,
-  };
-}
 function ticketViewTitle(view: TicketView) {
   return view === 'archive'
     ? 'Archive'
@@ -6962,114 +5825,6 @@ function ticketViewAction(view: TicketView, canCreate: boolean, label?: string) 
   ) : canCreate ? (
     <QuickTicketLauncher attachmentsEnabled={canStageNewTicketAttachments()} label={label} />
   ) : undefined;
-}
-function permissionPopupSurface() {
-  const permission = visiblePermission();
-  if (!permission) return undefined;
-  const automation = permissionAutomation(permission.projectId),
-    countdown =
-      permissionCountdown?.key === permission.key
-        ? formatPermissionCountdown(permissionCountdown.remainingMs)
-        : undefined,
-    error = permissionResolutionErrors.value[permission.key];
-  return (
-    <PermissionPopupSurface
-      popup={{
-        item: permission,
-        state: error ? 'failed' : 'pending',
-        error,
-        countdown,
-        countdownAction: automation.action === 'off' ? undefined : automation.action,
-      }}
-    />
-  );
-}
-function aiConversationSurface() {
-  if (!conversationOpen.value) return null;
-  const current = project(),
-    connectionId = conversationConnectionId.value;
-  if (!current || !connectionId) return null;
-  const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId);
-  if (!connection) return null;
-  const state = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION,
-    selection = conversationAiSelection(connectionId),
-    descriptor = selection.descriptor;
-  return (
-    <AIConversationSurface
-      conversation={{
-        open: true,
-        tool: aiToolLabel(connection.tool),
-        sessionId: connection.session_id,
-        selectionId: connectionId,
-        selectedMessageIds: conversationSelectedMessages(connectionId, state.messages).map((message) => message.id),
-        messages: state.messages,
-        draft: conversationDrafts.value[connectionId] ?? '',
-        busy: connection.busy,
-        progress: state.progress,
-        interruptible: Boolean(connection.actions?.includes('interrupt')),
-        permissions: pendingPermissions().filter(
-          (item) => item.projectId === current.id && item.connection === connectionId,
-        ),
-        activity: state.activity,
-        totalUsage: conversationUsage(state),
-        error: state.error ?? connection.last_error,
-        feedbackAvailable: Boolean(selectedTicket.value && canAddNotes()),
-        foreground: permissionPopupSurface(),
-        providerId: connection.tool,
-        providers: aiToolOptions(),
-        canChangeProvider: aiTools.value.length > 1,
-        model: selection.model,
-        effort: selection.effort,
-        models: descriptor?.models,
-        efforts: selection.efforts,
-        canChangeModel: descriptor?.actions?.includes('change_model'),
-        canChangeEffort: descriptor?.actions?.includes('change_effort'),
-      }}
-    />
-  );
-}
-function repositoryStatusSurface() {
-  const detail = repositoryDetail.value;
-  return (
-    <RepositoryStatusSurface
-      repository={
-        project()
-          ? {
-              status: repository.value,
-              error: repositoryError.value,
-              initialized: repository.value?.initialized !== false,
-              setupStep: repositorySetupStep.value,
-              setupBusy: repositorySetupBusy.value,
-              setupError: repositorySetupError.value,
-              refreshing: repositoryRefreshing.value,
-              view: repositoryView.value,
-              fileMenu: repositoryFileMenu.value,
-              selectedFiles: repositorySelectedFiles.value,
-              comparison: repositoryComparison.value,
-              expandedCommits: expandedCodeReviewCommits.value,
-              detailFiles: detail.view === repositoryView.value ? detail.files : [],
-              detailCommits: detail.view === repositoryView.value ? detail.commits : [],
-              detailLoading: detail.view === repositoryView.value && detail.loading,
-              detailError: detail.view === repositoryView.value ? detail.error : '',
-              detailHasMore: detail.view === repositoryView.value && detail.nextCursor !== undefined,
-            }
-          : undefined
-      }
-    />
-  );
-}
-function changeEvidenceSurfaceProps(readerScope?: string): Parameters<typeof ChangeEvidenceSurface>[0]['evidence'] {
-  if (changeEvidenceReader.value !== readerScope) return;
-  return {
-    review: codeReview.value,
-    view: changeEvidenceView.value,
-    fileMenu: repositoryFileMenu.value,
-    selectedFiles: repositorySelectedFiles.value,
-    platform: repository.value?.platform,
-  };
-}
-function changeEvidenceSurface(readerScope?: string) {
-  return <ChangeEvidenceSurface evidence={changeEvidenceSurfaceProps(readerScope)} />;
 }
 function ticketContextMenuSurface() {
   const menu = ticketContextMenu.value;
@@ -7108,196 +5863,7 @@ function ticketContextMenuSurface() {
   }
   return <TicketContextMenuSurface menu={props} closeDialog={ticketCloseDialog.value} />;
 }
-function commandDialogSurface() {
-  const id = commandDialogId.value,
-    command = commandDefinitions.value.find((item) => item.id === id),
-    run = id ? commandRunFor(id) : undefined;
-  return <CommandDialogSurface command={command} run={run} confirmStop={commandStopConfirmation.value} />;
-}
-function gallerySurface() {
-  const active = attachmentGalleryUrl.value,
-    images = galleryImages(),
-    image = active ? images.find((item) => item.url === active || item.aliases?.includes(active)) : undefined;
-  return (
-    <GallerySurface
-      gallery={
-        active
-          ? {
-              images,
-              activeUrl: active,
-              geometry: attachmentGalleryGeometry.value,
-              selectedScale: attachmentGalleryScale.value,
-              annotations: attachmentGalleryAnnotations.value,
-              markup: attachmentGalleryMarkup.value,
-              drawMode: attachmentGalleryDrawMode.value,
-              selectedAnnotation: attachmentGallerySelectedAnnotation.value,
-              playheadMs: attachmentGalleryLivePlayhead,
-              durationMs: attachmentGalleryDuration.value,
-              playing: attachmentGalleryPlaying.value,
-              volume: attachmentGalleryVolume.value,
-              muted: attachmentGalleryMuted.value,
-              volumeOpen: attachmentGalleryVolumeOpen.value,
-              annotationEnabled: Boolean(image?.attachmentId),
-            }
-          : undefined
-      }
-      menu={attachmentMenuSurfaceProps({ insideGallery: true })}
-    />
-  );
-}
-function stopGallerySvgClock() {
-  if (attachmentGallerySvgFrame !== undefined) cancelAnimationFrame(attachmentGallerySvgFrame);
-  attachmentGallerySvgFrame = undefined;
-  attachmentGallerySvgPreviousFrame = undefined;
-}
-function galleryTimeLabel(milliseconds: number) {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-}
-function updateGalleryPlaybackPresentation(milliseconds: number) {
-  const next = Math.max(0, Math.min(attachmentGalleryDuration.value, Math.round(milliseconds)));
-  attachmentGalleryLivePlayhead = next;
-  const gallery = document.querySelector<HTMLElement>('[data-component="attachment-gallery"]');
-  if (!gallery) return;
-  const slider = gallery.querySelector<HTMLInputElement>('input[name="gallery-playhead"]');
-  if (slider && slider.value !== String(next)) slider.value = String(next);
-  const current = gallery.querySelector<HTMLElement>('[data-gallery-current-time="true"]');
-  if (current) current.textContent = galleryTimeLabel(next);
-  for (const annotation of gallery.querySelectorAll<HTMLElement>(
-    '.attachment-gallery__annotation[data-annotation-start]',
-  )) {
-    const start = Number(annotation.dataset.annotationStart),
-      end = Number(annotation.dataset.annotationEnd ?? annotation.dataset.annotationStart);
-    annotation.hidden = !attachmentGalleryAnnotationVisible(
-      { id: 'presentation', x: 0, y: 0, width: 0, height: 0, start_ms: start, end_ms: end, text: '' },
-      next,
-      attachmentGalleryDuration.value,
-    );
-  }
-}
-function gallerySvgClock(timestamp: number) {
-  if (!attachmentGalleryPlaying.value || !attachmentGalleryDuration.value) {
-    stopGallerySvgClock();
-    return;
-  }
-  const elapsed = attachmentGallerySvgPreviousFrame === undefined ? 0 : timestamp - attachmentGallerySvgPreviousFrame;
-  attachmentGallerySvgPreviousFrame = timestamp;
-  updateGalleryPlaybackPresentation((attachmentGalleryLivePlayhead + elapsed) % attachmentGalleryDuration.value);
-  attachmentGallerySvgFrame = requestAnimationFrame(gallerySvgClock);
-}
-const svgDurationMilliseconds = (value: string) => {
-  const match = value.trim().match(/^(\d+(?:\.\d+)?)(ms|s)$/);
-  return match ? Number(match[1]) * (match[2] === 's' ? 1000 : 1) : 0;
-};
-async function detectAnimatedGallerySvg(url: string) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok || attachmentGalleryUrl.value !== url) return;
-    const document = new DOMParser().parseFromString(await response.text(), 'image/svg+xml'),
-      animations = [...document.querySelectorAll('animate, animateMotion, animateTransform, set')],
-      duration = Math.max(0, ...animations.map((node) => svgDurationMilliseconds(node.getAttribute('dur') ?? '')));
-    if (!animations.length || attachmentGalleryUrl.value !== url) return;
-    attachmentGalleryDuration.value = duration || 5000;
-    attachmentGalleryPlaying.value = true;
-    attachmentGallerySvgFrame = requestAnimationFrame(gallerySvgClock);
-  } catch {
-    /* the image remains viewable even if animation metadata cannot be inspected */
-  }
-}
-function activeAttachmentGalleryVideo(target?: EventTarget | null) {
-  const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
-  return video && (!target || target === video) ? video : undefined;
-}
-function disposeAttachmentGalleryVideo() {
-  const video = activeAttachmentGalleryVideo();
-  if (video) releaseAttachmentGalleryVideo(video);
-}
-function resetAttachmentGallery(url?: string) {
-  finishGalleryAnnotationSession();
-  stopGallerySvgClock();
-  disposeAttachmentGalleryVideo();
-  attachmentGalleryObserver?.disconnect();
-  attachmentGalleryObserver = undefined;
-  const image = url ? galleryImages().find((item) => item.url === url || item.aliases?.includes(url)) : undefined,
-    attachment = selectedTicket.value?.attachments.find((item) => item.id === image?.attachmentId);
-  batch(() => {
-    attachmentGalleryUrl.value = url;
-    attachmentGalleryScale.value = undefined;
-    attachmentGalleryGeometry.value = { naturalWidth: 0, naturalHeight: 0, availableWidth: 0, availableHeight: 0 };
-    attachmentMenu.value = undefined;
-    attachmentGalleryMarkup.value = false;
-    attachmentGalleryDrawMode.value = false;
-    attachmentGallerySelectedAnnotation.value = undefined;
-    attachmentGalleryPlayhead.value = 0;
-    attachmentGalleryDuration.value = 0;
-    attachmentGalleryPlaying.value = false;
-    attachmentGalleryVolume.value = 1;
-    attachmentGalleryMuted.value = false;
-    attachmentGalleryVolumeOpen.value = false;
-    attachmentGalleryAnnotations.value = attachment?.annotations?.map((item) => ({ ...item })) ?? [];
-  });
-  attachmentGalleryLivePlayhead = 0;
-  attachmentGalleryLiveVolume = 1;
-  attachmentAnnotationGesture = undefined;
-  attachmentRangeGesture = undefined;
-  attachmentSwipeGesture = undefined;
-  if (image?.name.toLowerCase().endsWith('.svg')) void detectAnimatedGallerySvg(url!);
-}
-function syncAttachmentGalleryMeasurement() {
-  attachmentGalleryObserver?.disconnect();
-  attachmentGalleryObserver = undefined;
-  const gallery = document.querySelector<HTMLDialogElement>('dialog[data-component="attachment-gallery"]');
-  if (gallery && !gallery.open) gallery.showModal();
-  const stage = document.querySelector<HTMLElement>('[data-gallery-zoom-stage="true"]'),
-    media = document.querySelector<HTMLImageElement | HTMLVideoElement>('[data-gallery-media="true"]');
-  if (!stage || !media) return;
-  const update = () => {
-    const canvas = stage.firstElementChild instanceof HTMLElement ? stage.firstElementChild : undefined,
-      style = canvas ? getComputedStyle(canvas) : undefined,
-      horizontal =
-        (Number.parseFloat(style?.paddingLeft ?? '0') || 0) + (Number.parseFloat(style?.paddingRight ?? '0') || 0),
-      vertical =
-        (Number.parseFloat(style?.paddingTop ?? '0') || 0) + (Number.parseFloat(style?.paddingBottom ?? '0') || 0),
-      naturalWidth = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth,
-      naturalHeight = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight,
-      next = {
-        naturalWidth,
-        naturalHeight,
-        availableWidth: Math.max(1, stage.clientWidth - horizontal),
-        availableHeight: Math.max(1, stage.clientHeight - vertical),
-      },
-      previous = attachmentGalleryGeometry.value;
-    if (
-      Object.keys(next).some(
-        (key) => next[key as keyof AttachmentGalleryGeometry] !== previous[key as keyof AttachmentGalleryGeometry],
-      )
-    )
-      attachmentGalleryGeometry.value = next;
-  };
-  update();
-  attachmentGalleryObserver = new ResizeObserver(update);
-  attachmentGalleryObserver.observe(stage);
-}
-// The menu renders inside whichever surface owns the trigger. When it was opened from within the
-// modal ticket reader (menu.reader = that reader's frame id) it must render as a descendant of that
-// dialog, or the reader's modality leaves it inert and painted beneath (HS2-EZ10RS); otherwise it
-// renders at the app root (the side inspector or the media gallery).
-function attachmentMenuSurfaceProps({
-  insideGallery = false,
-  readerScope,
-}: { insideGallery?: boolean; readerScope?: string } = {}): Parameters<typeof AttachmentContextMenuSurface>[0]['menu'] {
-  const menu = attachmentMenu.value;
-  if (!menu) return;
-  if (readerScope !== undefined) {
-    if (menu.reader !== readerScope) return;
-  } else if (menu.reader || Boolean(attachmentGalleryUrl.value) !== insideGallery) return;
-  const reveal = /Mac/i.test(navigator.userAgent)
-    ? 'Show in Finder'
-    : /Win/i.test(navigator.userAgent)
-      ? 'Show in File Explorer'
-      : 'Show in file manager';
-  return { x: menu.x, y: menu.y, kind: menu.kind, revealLabel: reveal };
-}
+
 function terminalOperationsSurfaceProps(): TerminalOperationsSurfaceProps {
   return {
     projects: projects.value.map((item) => {
@@ -7916,50 +6482,6 @@ function schedulePointerDetailsFinish() {
   if (pointerDetailsTimer !== undefined) window.clearTimeout(pointerDetailsTimer);
   pointerDetailsTimer = window.setTimeout(completePointerDetailsFinish, 0);
 }
-function activeGalleryAttachment() {
-  const active = attachmentGalleryUrl.value,
-    image = active ? galleryImages().find((item) => item.url === active || item.aliases?.includes(active)) : undefined;
-  return selectedTicket.value?.attachments.find((item) => item.id === image?.attachmentId);
-}
-function beginGalleryAnnotationSession() {
-  const current = project(),
-    ticket = selectedTicket.value,
-    attachment = activeGalleryAttachment();
-  if (!current || !ticket || !attachment) return;
-  attachmentAnnotationSession = {
-    projectId: current.id,
-    ticketId: ticket.id,
-    attachmentId: attachment.id,
-    before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
-  };
-}
-function finishGalleryAnnotationSession() {
-  const session = attachmentAnnotationSession;
-  if (!session) return;
-  attachmentAnnotationSession = undefined;
-  const annotations = attachmentGalleryAnnotations.value.map((item) => ({ ...item }));
-  if (JSON.stringify(session.before) === JSON.stringify(annotations)) return;
-  attachmentAnnotationSave = attachmentAnnotationSave.then(async () => {
-    try {
-      const result = await api().updateCheckoutAttachmentAnnotations(
-        session.projectId,
-        session.ticketId,
-        session.attachmentId,
-        annotations,
-      );
-      if (selectedTicket.value?.id === session.ticketId) selectedTicket.value = result.ticket;
-      showToast('Annotations saved.');
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  });
-}
-function shiftGallery(delta: number) {
-  const active = attachmentGalleryUrl.value;
-  if (!active) return;
-  const url = attachmentGalleryShiftUrl(galleryImages(), active, delta);
-  if (url) resetAttachmentGallery(url);
-}
 function activeTicketSurface(): ParentNode {
   return (readerOpen.value ? document.querySelector('[data-component="ticket-reader"]') : null) ?? document;
 }
@@ -8005,10 +6527,10 @@ wireRepositoryInteractions({
   repositoryFileMenu,
   repositorySelectedFiles,
   get repositoryFileSelectionAnchor() {
-    return repositoryFileSelectionAnchor;
+    return repositoryController.repositoryFileSelectionAnchor;
   },
   set repositoryFileSelectionAnchor(value) {
-    repositoryFileSelectionAnchor = value;
+    repositoryController.repositoryFileSelectionAnchor = value;
   },
   repositoryComparison,
   expandedCodeReviewCommits,
@@ -8321,10 +6843,10 @@ wireCommandAndAiInteractions({
   selectDefaultModel,
   restoreCommandEditorAfterManualModel,
   get manualModelDialogShown() {
-    return manualModelDialogShown;
+    return aiConfigurationController.manualModelDialogShown;
   },
   set manualModelDialogShown(value) {
-    manualModelDialogShown = value;
+    aiConfigurationController.manualModelDialogShown = value;
   },
   aiDefaults,
   ticketSourceSetupProject,
@@ -8345,10 +6867,10 @@ wireNotificationAndLinkInteractions({
   project,
   permissionTimer,
   get permissionCountdown() {
-    return permissionCountdown;
+    return permissionsController.permissionCountdown;
   },
   set permissionCountdown(value) {
-    permissionCountdown = value;
+    permissionsController.permissionCountdown = value;
   },
   permissionAutomationByProject,
   updatePermissionTimer,
@@ -8463,52 +6985,52 @@ wireAttachmentAndGalleryInteractions({
   updateGalleryPlaybackPresentation,
   attachmentGalleryPlayhead,
   get attachmentRangeGesture() {
-    return attachmentRangeGesture;
+    return galleryController.attachmentRangeGesture;
   },
   set attachmentRangeGesture(value) {
-    attachmentRangeGesture = value;
+    galleryController.attachmentRangeGesture = value;
   },
   get attachmentAnnotationGesture() {
-    return attachmentAnnotationGesture;
+    return galleryController.attachmentAnnotationGesture;
   },
   set attachmentAnnotationGesture(value) {
-    attachmentAnnotationGesture = value;
+    galleryController.attachmentAnnotationGesture = value;
   },
   get attachmentGalleryLivePlayhead() {
-    return attachmentGalleryLivePlayhead;
+    return galleryController.attachmentGalleryLivePlayhead;
   },
   set attachmentGalleryLivePlayhead(value) {
-    attachmentGalleryLivePlayhead = value;
+    galleryController.attachmentGalleryLivePlayhead = value;
   },
   attachmentGalleryPlaying,
   get attachmentGallerySvgPreviousFrame() {
-    return attachmentGallerySvgPreviousFrame;
+    return galleryController.attachmentGallerySvgPreviousFrame;
   },
   set attachmentGallerySvgPreviousFrame(value) {
-    attachmentGallerySvgPreviousFrame = value;
+    galleryController.attachmentGallerySvgPreviousFrame = value;
   },
   get attachmentGallerySvgFrame() {
-    return attachmentGallerySvgFrame;
+    return galleryController.attachmentGallerySvgFrame;
   },
   set attachmentGallerySvgFrame(value) {
-    attachmentGallerySvgFrame = value;
+    galleryController.attachmentGallerySvgFrame = value;
   },
   gallerySvgClock,
   stopGallerySvgClock,
   attachmentGalleryVolumeOpen,
   get attachmentGalleryLiveVolume() {
-    return attachmentGalleryLiveVolume;
+    return galleryController.attachmentGalleryLiveVolume;
   },
   set attachmentGalleryLiveVolume(value) {
-    attachmentGalleryLiveVolume = value;
+    galleryController.attachmentGalleryLiveVolume = value;
   },
   attachmentGalleryMuted,
   attachmentGalleryVolume,
   get attachmentSwipeGesture() {
-    return attachmentSwipeGesture;
+    return galleryController.attachmentSwipeGesture;
   },
   set attachmentSwipeGesture(value) {
-    attachmentSwipeGesture = value;
+    galleryController.attachmentSwipeGesture = value;
   },
   canUseAttachments,
 });
