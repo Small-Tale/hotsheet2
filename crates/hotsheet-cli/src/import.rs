@@ -227,6 +227,24 @@ pub struct ImportSummary {
 /// Attachment `stored_path`s are resolved relative to `base_dir` (the export JSON's
 /// directory, where the migrator staged the files) and copied into the store.
 pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<ImportSummary> {
+    import_with_progress(store, export, base_dir, &mut |_| {})
+}
+
+/// Import with measured phase-local ticket and attachment-item progress.
+pub fn import_with_progress(
+    store: &FsStore,
+    export: &ExportFile,
+    base_dir: &Path,
+    observe: crate::migration_progress::ProgressObserver<'_>,
+) -> Result<ImportSummary> {
+    use crate::migration_progress::MigrationProgress;
+    let total = export.tickets.len() as u64;
+    observe(MigrationProgress::measured(
+        "import_tickets",
+        0,
+        total,
+        "tickets",
+    ));
     let prefix = store.metadata()?.ticket_prefix;
 
     let already: HashSet<Ulid> = store.list_tickets()?.into_iter().map(|t| t.id).collect();
@@ -249,7 +267,7 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
 
     // Pass 2 — build + write.
     let mut summary = ImportSummary::default();
-    for (src, id) in export.tickets.iter().zip(&ids) {
+    for (index, (src, id)) in export.tickets.iter().zip(&ids).enumerate() {
         let pending = PendingImport::read(store, id)?;
         if let Some(pending) = &pending
             && pending.attachments != src.attachments
@@ -261,6 +279,12 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
         if already.contains(id) {
             summary.skipped += 1;
             if pending.is_none() {
+                observe(MigrationProgress::measured(
+                    "import_tickets",
+                    index as u64 + 1,
+                    total,
+                    "tickets",
+                ));
                 continue;
             }
         }
@@ -281,11 +305,18 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
             store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
             summary.written += 1;
         }
-        summary.attachments += copy_attachments(store, base_dir, id, &mut pending)?;
+        summary.attachments += copy_attachments(store, base_dir, id, &mut pending, observe)?;
         if !src.attachments.is_empty() {
             PendingImport::remove(store, id)?;
         }
+        observe(MigrationProgress::measured(
+            "import_tickets",
+            index as u64 + 1,
+            total,
+            "tickets",
+        ));
     }
+    observe(MigrationProgress::phase("import_settings"));
     import_settings(store, export)?;
     Ok(summary)
 }
@@ -643,9 +674,26 @@ fn copy_attachments(
     base_dir: &Path,
     id: &Ulid,
     pending: &mut PendingImport,
+    observe: crate::migration_progress::ProgressObserver<'_>,
 ) -> Result<usize> {
+    use crate::migration_progress::MigrationProgress;
     let mut n = 0;
-    for att in &pending.attachments {
+    let total = pending.attachments.len() as u64;
+    observe(MigrationProgress::measured(
+        "import_attachments",
+        0,
+        total,
+        "attachments",
+    ));
+    for (index, att) in pending.attachments.iter().enumerate() {
+        let mut advance = || {
+            observe(MigrationProgress::measured(
+                "import_attachments",
+                index as u64 + 1,
+                total,
+                "attachments",
+            ))
+        };
         let attachment_id = attachment_id(id, att);
         let ticket = store.read_ticket(id)?;
         let existing = ticket
@@ -655,6 +703,7 @@ fn copy_attachments(
         if existing.is_none() && pending.completed.contains(&attachment_id) {
             // The copy was verified before this identity disappeared: respect the
             // user's later deletion, including while another copy remains pending.
+            advance();
             continue;
         }
         if existing.is_some() {
@@ -663,6 +712,7 @@ fn copy_attachments(
                     if pending.completed.insert(attachment_id) {
                         pending.write(store, id)?;
                     }
+                    advance();
                     continue;
                 }
                 Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -673,6 +723,7 @@ fn copy_attachments(
         pending.completed.insert(attachment_id);
         pending.write(store, id)?;
         n += 1;
+        advance();
     }
     // Leave the checkpoint in place on any verification failure. A later retry
     // must never mistake an incomplete ticket for an entirely imported one.
@@ -917,6 +968,66 @@ mod tests {
             })
             .collect();
         export
+    }
+
+    #[test]
+    fn progress_counts_verified_items_without_reporting_failed_or_skipped_copies_as_new() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let export = attachment_export();
+        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        let mut events = Vec::new();
+        assert!(
+            import_with_progress(&store, &export, staging.path(), &mut |event| events
+                .push(event))
+            .is_err()
+        );
+        let copied: Vec<_> = events
+            .iter()
+            .filter(|event| event.phase == "import_attachments")
+            .map(|event| (event.completed, event.total))
+            .collect();
+        assert_eq!(copied, vec![(Some(0), Some(2)), (Some(1), Some(2))]);
+        assert!(!events.iter().any(|event| event.phase == "import_settings"));
+        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        events.clear();
+        let summary = import_with_progress(&store, &export, staging.path(), &mut |event| {
+            events.push(event)
+        })
+        .unwrap();
+        assert_eq!(summary.attachments, 1);
+        assert!(
+            events
+                .iter()
+                .any(|event| event.phase == "import_attachments"
+                    && event.completed == Some(2)
+                    && event.total == Some(2))
+        );
+        events.clear();
+        let summary = import_with_progress(&store, &export, staging.path(), &mut |event| {
+            events.push(event)
+        })
+        .unwrap();
+        assert_eq!(summary.attachments, 0);
+        assert!(
+            events
+                .iter()
+                .any(|event| event.phase == "import_tickets" && event.completed == Some(1))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.phase == "import_attachments")
+        );
+        let mut empty = export;
+        empty.tickets.clear();
+        events.clear();
+        import_with_progress(&store, &empty, staging.path(), &mut |event| {
+            events.push(event)
+        })
+        .unwrap();
+        assert_eq!(events[0].completed, Some(0));
+        assert_eq!(events[0].total, Some(0));
     }
 
     #[test]

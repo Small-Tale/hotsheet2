@@ -23,6 +23,11 @@
 /** The export-file version the Rust importer understands (`docs/07`). */
 export const EXPORT_VERSION = 1;
 
+function reportWarning(observe, warning) {
+  console.warn(warning);
+  observe({ version: 1, phase: 'warning', warning });
+}
+
 /** Ticket columns we read, in output order. Absent columns are skipped (older
  * schemas lack some), so the SELECT never references a column that isn't there. */
 const TICKET_COLUMNS = [
@@ -49,7 +54,8 @@ const TICKET_COLUMNS = [
  * @param {{query: (sql: string, params?: unknown[]) => Promise<{rows: any[]}>}} db
  * @param {{name?: string|null, ticketPrefix?: string|null}} project
  */
-export async function exportFromDb(db, project = {}, settings = {}) {
+export async function exportFromDb(db, project = {}, settings = {}, observe = () => {}) {
+  observe({ version: 1, phase: 'read_database' });
   const present = new Set(
     (
       await db.query(
@@ -81,7 +87,7 @@ export async function exportFromDb(db, project = {}, settings = {}) {
       }
     }
   } catch (err) {
-    console.warn(`warning: could not read ticket_blocked_by (${err.message}); dependency edges not exported`);
+    reportWarning(observe, `warning: could not read ticket_blocked_by (${err.message}); dependency edges not exported`);
   }
 
   // Promoted attachments (draft_id IS NULL, or no draft_id column on old schemas).
@@ -112,32 +118,37 @@ export async function exportFromDb(db, project = {}, settings = {}) {
       }
     }
   } catch (err) {
-    console.warn(`warning: could not read attachments (${err.message}); attachments not exported`);
+    reportWarning(observe, `warning: could not read attachments (${err.message}); attachments not exported`);
   }
 
-  const tickets = ticketRows.map((r) => ({
-    ticket_number: r.ticket_number ?? null,
-    title: r.title ?? '',
-    details: r.details ?? null,
-    category: r.category ?? null,
-    priority: r.priority ?? null,
-    // A soft-deleted ticket migrates as status `deleted` (docs/07 §7.4).
-    status: r.deleted_at ? 'deleted' : (r.status ?? null),
-    up_next: Boolean(r.up_next),
-    tags: asArray(r.tags),
-    notes: asArray(r.notes).map((n) => ({
-      id: n.id ?? null,
-      text: n.text ?? '',
-      created_at: iso(n.created_at),
-    })),
-    blocked_by: blockedBy.get(r.ticket_number) ?? [],
-    attachments: attByTicket.get(r.ticket_number) ?? [],
-    created_at: iso(r.created_at),
-    updated_at: iso(r.updated_at),
-    completed_at: iso(r.completed_at),
-    verified_at: iso(r.verified_at),
-    deleted_at: iso(r.deleted_at),
-  }));
+  observe({ version: 1, phase: 'export_tickets', completed: 0, total: ticketRows.length, unit: 'tickets' });
+  const tickets = ticketRows.map((r, index) => {
+    const ticket = {
+      ticket_number: r.ticket_number ?? null,
+      title: r.title ?? '',
+      details: r.details ?? null,
+      category: r.category ?? null,
+      priority: r.priority ?? null,
+      // A soft-deleted ticket migrates as status `deleted` (docs/07 §7.4).
+      status: r.deleted_at ? 'deleted' : (r.status ?? null),
+      up_next: Boolean(r.up_next),
+      tags: asArray(r.tags),
+      notes: asArray(r.notes).map((n) => ({
+        id: n.id ?? null,
+        text: n.text ?? '',
+        created_at: iso(n.created_at),
+      })),
+      blocked_by: blockedBy.get(r.ticket_number) ?? [],
+      attachments: attByTicket.get(r.ticket_number) ?? [],
+      created_at: iso(r.created_at),
+      updated_at: iso(r.updated_at),
+      completed_at: iso(r.completed_at),
+      verified_at: iso(r.verified_at),
+      deleted_at: iso(r.deleted_at),
+    };
+    observe({ version: 1, phase: 'export_tickets', completed: index + 1, total: ticketRows.length, unit: 'tickets' });
+    return ticket;
+  });
 
   return {
     exportVersion: EXPORT_VERSION,
@@ -157,7 +168,7 @@ export async function exportFromDb(db, project = {}, settings = {}) {
  * its Postgres major, at whichever database holds the tables. Read-only w.r.t. the
  * source. Returns the export object.
  */
-export async function exportDatadir(hotsheetDir, outPath) {
+export async function exportDatadir(hotsheetDir, outPath, observe = () => {}) {
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
@@ -175,7 +186,7 @@ export async function exportDatadir(hotsheetDir, outPath) {
         sourceRoot: path.resolve(hotsheetDir, '..'),
       };
     } catch (err) {
-      console.warn(`warning: could not read settings.json (${err.message})`);
+      reportWarning(observe, `warning: could not read settings.json (${err.message})`);
     }
   }
 
@@ -191,21 +202,23 @@ export async function exportDatadir(hotsheetDir, outPath) {
         settings.custom_commands = resolveCustomCommands(settings.custom_commands, local.custom_commands);
       }
     } catch (err) {
-      console.warn(`warning: could not read settings.local.json (${err.message})`);
+      reportWarning(observe, `warning: could not read settings.local.json (${err.message})`);
     }
   }
 
   const work = fs.mkdtempSync(join(os.tmpdir(), 'hs1-export-'));
-  fs.cpSync(join(hotsheetDir, 'db'), work, { recursive: true });
   try {
+    copyDatabase(fs, path, join(hotsheetDir, 'db'), work, observe);
+    observe({ version: 1, phase: 'open_database' });
     const { db, database } = await openCluster(work);
     if (database !== 'postgres') {
-      console.log(`(reading from the '${database}' database — cluster predates PGLite 0.4.0)`);
+      console.error(`(reading from the '${database}' database — cluster predates PGLite 0.4.0)`);
     }
     try {
-      const exportObj = await exportFromDb(db, project, settings);
+      const exportObj = await exportFromDb(db, project, settings, observe);
       if (outPath) {
-        stageAttachments(fs, path, hotsheetDir, outPath, exportObj);
+        stageAttachments(fs, path, hotsheetDir, outPath, exportObj, observe);
+        observe({ version: 1, phase: 'write_export' });
         fs.writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);
       }
       return exportObj;
@@ -316,35 +329,73 @@ export function resolveCustomCommands(sharedValue, localValue) {
 /**
  * Copy each ticket's attachment files next to the export JSON and rewrite their
  * `stored_path` to that staged, JSON-relative location, so the importer can find and
- * copy them into the store. Files that can't be found on disk are dropped with a
- * warning. `exportObj` is mutated in place.
+ * copy them into the store. Missing referenced files fail before export mutation.
+ * `exportObj` is mutated in place only after complete source discovery.
  */
-function stageAttachments(fs, path, hotsheetDir, outPath, exportObj) {
+export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, observe = () => {}) {
   const outDir = path.dirname(outPath);
-  let idx = 0;
-  let staged = 0;
-  let missing = 0;
-  for (const t of exportObj.tickets) {
-    const kept = [];
-    for (const att of t.attachments ?? []) {
-      const src = resolveAttachmentSource(fs, path, hotsheetDir, att.stored_path);
-      if (!src) {
-        missing += 1;
-        continue;
+  const plan = [];
+  // Discover the complete source set before mutating the export. Missing payloads
+  // must not disappear from evidence and accidentally authorize source cleanup.
+  for (const ticket of exportObj.tickets) {
+    for (const attachment of ticket.attachments ?? []) {
+      const src = resolveAttachmentSource(fs, path, hotsheetDir, attachment.stored_path);
+      if (!src || !fs.statSync(src).isFile()) {
+        throw new Error(
+          `Referenced HS1 attachment is missing: ${attachment.stored_path}. Restore the source payload before importing; no completion or cleanup proof was recorded.`,
+        );
       }
-      const name = path.basename(att.original_filename || att.stored_path);
-      const rel = path.join('attachments', String(idx), name);
-      const dest = path.join(outDir, rel);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(src, dest);
-      kept.push({ original_filename: att.original_filename ?? name, stored_path: rel });
-      idx += 1;
-      staged += 1;
+      plan.push({ attachment, src, size: fs.statSync(src).size });
     }
-    t.attachments = kept;
   }
-  if (staged) console.log(`Staged ${staged} attachment file(s) beside ${path.basename(outPath)}`);
-  if (missing) console.warn(`warning: ${missing} attachment file(s) not found on disk; skipped`);
+  let completed = 0;
+  let total = plan.reduce((sum, entry) => sum + entry.size, 0);
+  observe({ version: 1, phase: 'stage_attachments', completed, total, unit: 'bytes' });
+  for (const [index, { attachment, src, size }] of plan.entries()) {
+    const name = path.basename(attachment.original_filename || attachment.stored_path);
+    const rel = path.join('attachments', String(index), name);
+    const dest = path.join(outDir, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    const copied = fs.statSync(dest).size;
+    total += copied - size;
+    completed += copied;
+    attachment.original_filename ??= name;
+    attachment.stored_path = rel;
+    observe({ version: 1, phase: 'stage_attachments', completed, total, unit: 'bytes' });
+  }
+  if (plan.length) console.error(`Staged ${plan.length} attachment file(s) beside ${path.basename(outPath)}`);
+}
+
+/** Inventory then copy the database without opening or modifying its source. Byte
+ * counters advance at successful file boundaries; symlinks retain cpSync semantics. */
+export function copyDatabase(fs, path, source, destination, observe = () => {}) {
+  observe({ version: 1, phase: 'discover_database' });
+  const entries = [];
+  const visit = (relative) => {
+    const from = path.join(source, relative);
+    const info = fs.lstatSync(from);
+    entries.push({ relative, info });
+    if (info.isDirectory()) for (const name of fs.readdirSync(from).sort()) visit(path.join(relative, name));
+  };
+  visit('');
+  let completed = 0;
+  let total = entries.reduce((sum, entry) => sum + (entry.info.isFile() ? entry.info.size : 0), 0);
+  observe({ version: 1, phase: 'copy_database', completed, total, unit: 'bytes' });
+  for (const { relative, info } of entries) {
+    const from = path.join(source, relative),
+      to = path.join(destination, relative);
+    if (info.isDirectory()) fs.mkdirSync(to, { recursive: true, mode: info.mode });
+    else {
+      fs.cpSync(from, to);
+      if (info.isFile()) {
+        const copied = fs.statSync(to).size;
+        total += copied - info.size;
+        completed += copied;
+        observe({ version: 1, phase: 'copy_database', completed, total, unit: 'bytes' });
+      }
+    }
+  }
 }
 
 /**
@@ -476,8 +527,30 @@ async function main(argv) {
     process.exitCode = 2;
     return;
   }
-  const exportObj = await exportDatadir(hotsheetDir, outPath);
-  console.log(`Wrote ${exportObj.tickets.length} ticket(s) to ${outPath}`);
+  const machine = args.includes('--progress-json');
+  let previousPhase = '',
+    previousTime = 0;
+  const observe = (event) => {
+    if (!machine) return;
+    const now = Date.now();
+    if (
+      event.phase !== previousPhase ||
+      event.completed === event.total ||
+      event.warning ||
+      now - previousTime >= 100
+    ) {
+      process.stdout.write(`${JSON.stringify(event)}\n`);
+      previousPhase = event.phase;
+      previousTime = now;
+    }
+  };
+  try {
+    const exportObj = await exportDatadir(hotsheetDir, outPath, observe);
+    console.error(`Wrote ${exportObj.tickets.length} ticket(s) to ${outPath}`);
+  } catch (error) {
+    if (machine) process.stdout.write(`${JSON.stringify({ version: 1, phase: 'failed', error: error.message })}\n`);
+    throw error;
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

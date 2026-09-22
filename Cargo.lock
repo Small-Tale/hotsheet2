@@ -771,6 +771,7 @@ dependencies = [
  "hotsheet-plugins",
  "hotsheet-ticketing",
  "hotsheet-tls",
+ "libc",
  "predicates",
  "rpassword",
  "serde",
@@ -781,6 +782,7 @@ dependencies = [
  "toml",
  "ulid",
  "ureq",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

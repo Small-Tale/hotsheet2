@@ -107,3 +107,17 @@
     transform: rotate(-90deg);
   }
 }
+
+.project-tab__operation {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  color: var(--wa-color-brand-on-quiet);
+}
+.project-tab__operation small {
+  font-size: var(--wa-font-size-3xs);
+}
+.project-tab__operation[data-state='failed'],
+.project-tab__operation[data-state='interrupted'] {
+  color: var(--wa-color-warning-on-quiet);
+}

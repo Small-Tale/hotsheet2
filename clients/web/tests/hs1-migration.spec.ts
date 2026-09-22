@@ -1,13 +1,15 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import type { MigrationJob, MigrationProgress } from '../src/migration-progress';
+
 async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs1') {
-  let releaseImport!: () => void, releaseRemote!: () => void;
-  const importGate = new Promise<void>((resolve) => {
-      releaseImport = resolve;
-    }),
-    remoteGate = new Promise<void>((resolve) => {
-      releaseRemote = resolve;
-    });
+  let job: MigrationJob | undefined;
+  const listeners = new Set<() => void>();
+  const publish = () => {
+    if (job) job.revision++;
+    for (const listener of listeners) listener();
+    listeners.clear();
+  };
   const state = {
     imported: initialState === 'imported',
     remote: initialState === 'imported',
@@ -20,6 +22,56 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/other' } });
+    if (path === '/__hotsheet/projects/open' && request.postDataJSON().root === '/work/other')
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: 'other',
+          root: '/work/other',
+          name: 'Other project',
+          stores: ['/work/other.hs2'],
+          apiPath: '/__hotsheet/project-api/other',
+          needsTicketSetup: false,
+        },
+      });
+    if (path === '/__hotsheet/projects/migration-jobs') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as {
+          kind: 'import' | 'backup';
+          location: string;
+          remote?: string;
+          retryAttempt?: string;
+        };
+        expect(input.location).toBe('/work/legacy.hs2');
+        if (!job || job.status !== 'running')
+          job = {
+            id: 'legacy-job',
+            attempt: `attempt-${(job?.revision ?? 0) + 1}`,
+            revision: (job?.revision ?? 0) + 1,
+            projectId: 'legacy',
+            root: '/work/legacy',
+            store: input.location,
+            kind: input.kind,
+            remote: input.remote,
+            sourceIdentity: 'legacy-db',
+            ownerPid: 1,
+            updatedAt: '',
+            status: 'running',
+            warnings: [],
+            progress: {
+              version: 1,
+              phase: input.kind === 'import' ? 'copy_database' : 'push_start',
+              ...(input.kind === 'import' ? { completed: 5, total: 10, unit: 'bytes' } : {}),
+            },
+          };
+        return route.fulfill({ status: 202, json: job });
+      }
+      if (url.searchParams.get('root') !== '/work/legacy') return route.fulfill({ json: {} });
+      if (job?.status === 'running' && Number(url.searchParams.get('after')) >= job.revision)
+        await new Promise<void>((resolve) => listeners.add(resolve));
+      return route.fulfill({ json: { job } }).catch(() => {});
+    }
     if (path === '/__hotsheet/projects/open')
       return route.fulfill({
         status: 201,
@@ -33,9 +85,8 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
               needsTicketSetup: false,
               needsHs1Migration: false,
               hs1ImportCompleted: true,
-              hs1CleanupEligible: state.remote,
-              hs1DatabasePath: '/work/legacy/.hotsheet/db',
-              hs1PostgresVersion: '17',
+              hs1CleanupEligible: state.remote && !state.deleted,
+              ...(state.deleted ? {} : { hs1DatabasePath: '/work/legacy/.hotsheet/db', hs1PostgresVersion: '17' }),
             }
           : {
               id: 'legacy',
@@ -51,21 +102,6 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
               hs1PostgresVersion: '17',
             },
       });
-    if (path === '/__hotsheet/projects/migrate-hs1' && request.method() === 'POST') {
-      expect(request.postDataJSON()).toEqual({ root: '/work/legacy', location: '/work/legacy.hs2' });
-      await importGate;
-      state.imported = true;
-      return route.fulfill({
-        status: 201,
-        json: {
-          ticketStore: '/work/legacy.hs2',
-          connectionId: 'git-import',
-          tickets: 27,
-          attachments: 4,
-          toolsConfigured: true,
-        },
-      });
-    }
     if (path.includes('/sources/') && request.method() === 'PUT')
       return route.fulfill({
         json: {
@@ -77,11 +113,6 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
           default_source: 'git-import',
         },
       });
-    if (path === '/__hotsheet/projects/setup-git-remote' && request.method() === 'POST') {
-      await remoteGate;
-      state.remote = true;
-      return route.fulfill({ json: { connected: true } });
-    }
     if (path === '/__hotsheet/projects/legacy/hs1-data' && request.method() === 'DELETE') {
       state.deleted = true;
       return route.fulfill({ json: { removed: ['db', 'attachments', 'settings.json'] } });
@@ -138,7 +169,44 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
     }
     return route.continue();
   });
-  return { state, releaseImport, releaseRemote };
+  return {
+    state,
+    advance: (progress: MigrationProgress) => {
+      if (job) job.progress = progress;
+      publish();
+    },
+    failImport: () => {
+      if (job) {
+        job.status = 'failed';
+        job.error = 'The destination is full. Free disk space and retry.';
+      }
+      publish();
+    },
+    releaseImport: () => {
+      state.imported = true;
+      if (job) {
+        job.status = 'succeeded';
+        job.progress = { version: 1, phase: 'complete' };
+        job.result = {
+          ticketStore: '/work/legacy.hs2',
+          connectionId: 'git-import',
+          tickets: 27,
+          attachments: 4,
+          toolsConfigured: true,
+          stores: ['/work/legacy.hs2'],
+        };
+      }
+      publish();
+    },
+    releaseRemote: () => {
+      state.remote = true;
+      if (job) {
+        job.status = 'succeeded';
+        job.progress = { version: 1, phase: 'complete' };
+      }
+      publish();
+    },
+  };
 }
 
 async function reloadRestoredProject(page: Page) {
@@ -152,7 +220,7 @@ async function reloadRestoredProject(page: Page) {
 
 test('imports an HS1 project, then offers cleanup only after remote backup', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
-  const { state, releaseImport, releaseRemote } = await mockHs1Project(page);
+  const { state, releaseImport, releaseRemote, advance, failImport } = await mockHs1Project(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -169,20 +237,46 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('hs1-import-narrow.png'), fullPage: true, animations: 'disabled' });
   await dialog.getByRole('button', { name: 'Import project' }).click();
-  await expect(dialog.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
-  await expect(dialog.getByRole('status')).toContainText('copying attachments');
+  await expect(dialog).toHaveCount(0);
+  const jobBanner = page.locator('[data-component="hs1-job-banner"]');
+  await expect(jobBanner).toContainText('Copying database');
+  await expect(jobBanner.locator('wa-progress-bar')).toHaveJSProperty('value', 50);
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-measured-narrow.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  advance({ version: 1, phase: 'open_database' });
+  await expect(jobBanner.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-unknown-wide.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
   releaseImport();
+  await expect(jobBanner).toContainText('27 tickets imported');
+  await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', false);
+  await jobBanner.getByRole('button', { name: 'Connect backup…' }).click();
   await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', true);
-  await expect(page.locator('.app-toast')).toContainText('Imported 27 tickets and 4 attachments');
   expect(state.providerRequests).toBeGreaterThanOrEqual(2);
   const banner = page.locator('.hs1-cleanup-banner');
   await expect(banner).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/legacy.hs2.git');
   await page.getByRole('button', { name: 'Connect & push' }).click();
-  const remoteProgress = page.locator('.ticket-source-setup__remote-progress');
-  await expect(remoteProgress.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
-  await expect(remoteProgress).toContainText('Large repositories can take several minutes.');
+  await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', false);
+  await expect(jobBanner).toContainText('Connecting backup');
+  await expect(jobBanner.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
   await expect(banner).toHaveCount(0);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(jobBanner).toContainText('Connecting backup');
+  await expect(banner).toHaveCount(0);
+  failImport();
+  await expect(jobBanner).toContainText('Backup needs attention');
+  await jobBanner.getByRole('button', { name: 'Change backup…' }).click();
+  await page.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/corrected.hs2.git');
+  await page.getByRole('button', { name: 'Connect & push' }).click();
+  await expect(jobBanner).toContainText('Connecting backup');
   releaseRemote();
   await expect(banner).toBeVisible();
   expect(state.remote).toBe(true);
@@ -191,6 +285,34 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect(banner).toHaveAttribute('role', 'status');
   await expect(banner).toHaveAttribute('aria-live', 'polite');
   await expect(banner).toContainText('safely backed up');
+  state.remote = false;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-project-id="legacy"]')).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  await expect(jobBanner).toContainText('Backup needs attention');
+  await expect(jobBanner).toHaveAttribute('data-status', 'succeeded');
+  await expect(jobBanner.getByRole('button', { name: 'Change backup…' })).toBeVisible();
+  await jobBanner.screenshot({
+    path: testInfo.outputPath('hs1-backup-reverification-wide.png'),
+    animations: 'disabled',
+  });
+  await expect(page.locator('.project-tab__operation')).toHaveAttribute(
+    'aria-label',
+    'Legacy project: Migration needs attention',
+  );
+  await page.setViewportSize({ width: 520, height: 720 });
+  await expect(page.locator('.project-tab-bar__operation')).toContainText('Attention');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-backup-reverification-narrow.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await jobBanner.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(jobBanner).toContainText('Connecting backup');
+  await expect(banner).toHaveCount(0);
+  releaseRemote();
+  await expect(banner).toBeVisible();
   await expect(banner.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
   await page.setViewportSize({ width: 2048, height: 900 });
   await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-wide.png'), animations: 'disabled' });
@@ -201,6 +323,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await banner.getByRole('button', { name: 'Delete old files…' }).click();
   await expect(banner).toHaveCount(0);
   expect(state.deleted).toBe(true);
+  await expect(jobBanner).toHaveCount(0);
   await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Removed 3 old Hot Sheet 1 items');
   await page.setViewportSize({ width: 2048, height: 1280 });
@@ -211,6 +334,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   });
   await reloadRestoredProject(page);
   await expect(banner).toHaveCount(0);
+  await expect(jobBanner).toHaveCount(0);
 });
 
 // Persistence has its own scenario so unrelated module navigations do not consume the import/
@@ -235,4 +359,71 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   await reloadRestoredProject(page);
   await expect(banner).toBeVisible();
   expect(state.deleted).toBe(false);
+});
+
+test('keeps background import failure and retry owned by its project across navigation and reload', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const controls = await mockHs1Project(page);
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-component="hs1-migration-dialog"]').getByRole('button', { name: 'Import project' }).click();
+  await expect(page.locator('[data-component="hs1-job-banner"]')).toContainText('Copying database');
+  await page.getByRole('button', { name: 'Add project', exact: true }).click();
+  await expect(page.locator('[data-project-id="other"]')).toHaveAttribute('data-selected', 'true');
+  await expect(page.locator('[data-component="hs1-job-banner"]')).toHaveCount(0);
+  await expect(page.locator('[data-project-id="legacy"] .project-tab__operation')).toBeVisible();
+  controls.failImport();
+  await expect(page.locator('[data-project-id="legacy"] .project-tab__operation')).toHaveAttribute(
+    'data-state',
+    'failed',
+  );
+  await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', false);
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-other-project-wide.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-project-id="legacy"]')).toBeVisible();
+  await page.locator('[data-project-id="legacy"]').click();
+  const banner = page.locator('[data-component="hs1-job-banner"]');
+  await expect(banner).toContainText('destination is full');
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-retry-wide.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 520, height: 720 });
+  await banner.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(banner).toContainText('/work/legacy.hs2');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-retry-details-narrow.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await banner.getByRole('button', { name: 'Details', exact: true }).click();
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await banner.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(banner).toHaveAttribute('data-status', 'running');
+  await page.locator('[data-project-id="other"]').click();
+  controls.releaseImport();
+  await expect(page.locator('[data-project-id="legacy"] .project-tab__operation')).toHaveAttribute(
+    'data-state',
+    'succeeded',
+  );
+  await expect(page.locator('[data-project-id="other"]')).toHaveAttribute('data-selected', 'true');
+  await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', false);
+  await page.locator('[data-project-id="legacy"]').click();
+  await expect(banner).toContainText('27 tickets imported');
+  await expect(page.locator('.hs1-cleanup-banner')).toHaveCount(0);
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-background-import-success-wide.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
 });

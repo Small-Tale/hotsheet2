@@ -6,7 +6,7 @@ import { ValueTable } from '@kerfjs/ui/value-table';
 import { signal } from 'kerfjs';
 import { AppWindow, ServerCog } from 'lucide';
 
-import { Hs1CleanupBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
+import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 
 export function DialogHeaderDemo() {
   return (
@@ -82,6 +82,46 @@ export function Hs1MigrationBannerDemo() {
   return (
     <section class="dialog-layout-demo dialog-surface">
       <Hs1MigrationBanner databasePath="/work/demo/.hotsheet/db" />
+      {(['measured', 'unknown', 'failed', 'succeeded', 'backup-unverified'] as const).map((state) => (
+        <Hs1JobBanner
+          details
+          backupVerified={state !== 'backup-unverified'}
+          job={{
+            id: 'demo-migration',
+            attempt: state,
+            revision: 1,
+            projectId: 'demo',
+            root: '/work/demo',
+            sourceIdentity: '/work/demo/.hotsheet/db',
+            store: '/work/demo.hs2',
+            kind: state === 'backup-unverified' ? 'backup' : 'import',
+            ownerPid: 0,
+            updatedAt: '',
+            warnings: [],
+            status:
+              state === 'failed'
+                ? 'failed'
+                : state === 'succeeded' || state === 'backup-unverified'
+                  ? 'succeeded'
+                  : 'running',
+            progress:
+              state === 'measured'
+                ? { version: 1, phase: 'copy_database', completed: 5242880, total: 10485760, unit: 'bytes' }
+                : { version: 1, phase: 'open_database' },
+            error: state === 'failed' ? 'The repository could not be written. Free disk space, then retry.' : undefined,
+            result:
+              state === 'succeeded'
+                ? {
+                    ticketStore: '/work/demo.hs2',
+                    connectionId: 'git-demo',
+                    tickets: 12,
+                    attachments: 4,
+                    toolsConfigured: true,
+                  }
+                : undefined,
+          }}
+        />
+      ))}
       <Hs1CleanupBanner />
     </section>
   );

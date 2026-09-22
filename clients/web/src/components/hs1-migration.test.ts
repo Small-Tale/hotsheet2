@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { Hs1CleanupBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './hs1-migration';
+import type { MigrationJob } from '../migration-progress';
+import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './hs1-migration';
 
 describe('HS1 migration presentation', () => {
   it('uses canonical dialog spacing and StateBanner customization tokens', () => {
@@ -75,4 +76,49 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('data-action="remove-hs1-data"');
     expect(markup).toContain('data-action="dismiss-hs1-cleanup"');
   });
+});
+
+it('transitions measured, unknown, failed and warned success with explicit owner actions', () => {
+  const job: MigrationJob = {
+    id: 'job',
+    attempt: 'attempt',
+    revision: 1,
+    projectId: 'project',
+    root: '/project',
+    store: '/store',
+    sourceIdentity: 'db',
+    kind: 'import',
+    status: 'running',
+    progress: { version: 1, phase: 'copy_database', completed: 3, total: 4, unit: 'bytes' },
+    warnings: [],
+    ownerPid: 1,
+    updatedAt: '',
+  };
+  let markup = String(Hs1JobBanner({ job }));
+  expect(markup).toContain('value="75"');
+  expect(markup).toContain('3 B of 4 B');
+  expect(markup).not.toContain('retry-migration-job');
+  markup = String(Hs1JobBanner({ job: { ...job, progress: { version: 1, phase: 'open_database' } } }));
+  expect(markup).toContain('indeterminate');
+  markup = String(
+    Hs1JobBanner({ job: { ...job, status: 'failed', error: 'Disk full' }, details: true, connectionError: 'Offline' }),
+  );
+  expect(markup).toContain('Disk full');
+  expect(markup).toContain('retry-migration-job');
+  expect(markup).toContain('reconnect-migration-job');
+  expect(markup).not.toContain('wa-progress-bar');
+  markup = String(
+    Hs1JobBanner({ job: { ...job, status: 'succeeded', warnings: ['Tool setup needs attention'] }, details: true }),
+  );
+  expect(markup).toContain('Tool setup needs attention');
+  expect(markup).toContain('retry-migration-job');
+  expect(markup).toContain('backup-migration-job');
+  expect(markup).not.toContain('remove-hs1-data');
+  markup = String(Hs1JobBanner({ job: { ...job, kind: 'backup', status: 'succeeded' }, backupVerified: false }));
+  expect(markup).toContain('data-status="succeeded"'); // History remains truthful.
+  expect(markup).toContain('Backup needs attention');
+  expect(markup).toContain('no longer matches');
+  expect(markup).toContain('retry-migration-job');
+  expect(markup).toContain('Change backup');
+  expect(markup).not.toContain('remove-hs1-data');
 });

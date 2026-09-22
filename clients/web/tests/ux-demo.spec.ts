@@ -3932,7 +3932,25 @@ test('exercises the application-shell component slice and responsive composition
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
-  await expect(tabStates).toHaveCount(11);
+  await expect(tabStates).toHaveCount(15);
+  const measured = tabStates.filter({ hasText: 'Copying database' });
+  await expect(measured.locator('.project-tab__operation')).toHaveAttribute(
+    'aria-label',
+    'Copying database, 50 percent',
+  );
+  await expect(measured.locator('.project-tab__operation')).toContainText('50%');
+  await expect(measured.locator('.project-tab__work-count')).toHaveText('3');
+  await expect(tabStates.filter({ hasText: 'Opening database' }).locator('.project-tab__operation')).not.toContainText(
+    '%',
+  );
+  await expect(tabStates.filter({ hasText: 'Import failed' }).locator('.project-tab__operation')).toHaveAttribute(
+    'data-state',
+    'failed',
+  );
+  await expect(tabStates.filter({ hasText: 'Imported' }).locator('.project-tab__operation')).toHaveAttribute(
+    'data-state',
+    'succeeded',
+  );
   const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
   await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
   const standaloneLabelCenterOffset = async () =>

@@ -676,7 +676,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'hs1-migration-banner',
         'Hs1MigrationBanner',
-        'Import and post-backup cleanup notices for Hot Sheet 1.',
+        'Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.',
         'feature-floor',
         true,
       ),

@@ -6,6 +6,8 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
+import { migrationCounter, type MigrationJob, migrationPercent, migrationPhaseLabel } from '../migration-progress';
+
 export interface Hs1MigrationDialogProps {
   projectName: string;
   projectRoot: string;
@@ -143,5 +145,96 @@ export function Hs1CleanupBanner() {
         </div>
       }
     />
+  );
+}
+
+export function Hs1JobBanner({
+  job,
+  details = false,
+  connectionError,
+  backupVerified = true,
+}: {
+  job: MigrationJob;
+  details?: boolean;
+  connectionError?: string;
+  backupVerified?: boolean;
+}) {
+  const running = job.status === 'running',
+    backupUnverified = job.kind === 'backup' && job.status === 'succeeded' && !backupVerified,
+    failed = job.status === 'failed' || job.status === 'interrupted' || backupUnverified,
+    percent = migrationPercent(job.progress),
+    phase = migrationPhaseLabel(job.progress),
+    title = failed
+      ? `${job.kind === 'import' ? 'Import' : 'Backup'} needs attention`
+      : running
+        ? phase
+        : job.kind === 'backup'
+          ? 'Hot Sheet 1 backup complete'
+          : 'Hot Sheet 1 import complete';
+  return (
+    <div class="hs1-job" data-component="hs1-job-banner" data-status={job.status} data-attempt={job.attempt}>
+      <StateBanner
+        title={title}
+        detail={
+          failed
+            ? backupUnverified
+              ? 'The saved backup no longer matches this repository. Retry verification or choose its current remote.'
+              : job.error
+            : running
+              ? migrationCounter(job.progress) || 'Working in the background. Other projects remain available.'
+              : job.kind === 'backup'
+                ? 'Backup finished. Refresh project status before removing the old files.'
+                : `${job.result?.tickets ?? 0} tickets imported. Connect a backup before removing the old files.`
+        }
+        tone={failed ? 'warning' : running ? 'info' : 'success'}
+        urgency="status"
+        icon={<LucideIcon icon={ArchiveRestore} name="archive-restore" />}
+        action={
+          <div class="hs1-cleanup-banner__actions">
+            <button type="button" data-action="migration-job-details" aria-expanded={String(details)}>
+              Details
+            </button>
+            {(failed || (!running && job.warnings.length > 0)) && (
+              <button type="button" data-action="retry-migration-job">
+                Retry
+              </button>
+            )}
+            {!running && ((!failed && job.kind === 'import') || (failed && job.kind === 'backup')) && (
+              <button type="button" data-action="backup-migration-job">
+                {job.kind === 'backup' ? 'Change backup…' : 'Connect backup…'}
+              </button>
+            )}
+          </div>
+        }
+      />
+      {running && (
+        <wa-progress-bar
+          class="hs1-job__progress"
+          label={`${phase} progress`}
+          value={String(percent ?? 0)}
+          indeterminate={percent === undefined && job.progress.total !== 0}
+        ></wa-progress-bar>
+      )}
+      {connectionError && (
+        <p class="hs1-job__connection">
+          {connectionError}{' '}
+          <button type="button" data-action="reconnect-migration-job">
+            Reconnect
+          </button>
+        </p>
+      )}
+      {details && (
+        <div class="hs1-job__details">
+          <p>
+            {job.kind === 'import' ? 'Import destination' : 'Backup repository'}: <code>{job.store}</code>
+          </p>
+          <p>Progress describes the current phase. Completion includes verification and project setup.</p>
+          {job.error && <p>{job.error}</p>}
+          {job.warnings.map((warning) => (
+            <p>{warning}</p>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

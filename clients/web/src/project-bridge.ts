@@ -16,6 +16,8 @@ import {
   recordHs1Backup,
   requireHs1Backup,
 } from './hs1-backup';
+import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
+import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
 
 export interface ProjectSession {
   id: string;
@@ -330,6 +332,7 @@ export async function migrateHs1Project(
   rootInput: string,
   locationInput?: string,
   runner: ProcessRunner = runProcess,
+  observe?: (progress: MigrationProgress) => void | Promise<void>,
 ): Promise<Hs1MigrationResult> {
   const root = await realpath(rootInput.trim());
   if (!(await exists(resolve(root, HS1_MARKER))))
@@ -343,10 +346,33 @@ export async function migrateHs1Project(
     );
   if (!(await exists(exporter))) throw new Error(`Hot Sheet 1 exporter is not available at ${exporter}.`);
   await requireCurrentSetupCli(undefined, runner);
-  const output = await runner(binary, hs1MigrationArgs(root, ticketStore, exporter), developmentRepositoryRoot());
-  const match = output.match(/Imported (\d+) ticket\(s\) \((\d+) attachment file\(s\)\), skipped (\d+)/),
-    tickets = match ? Number(match[1]) + Number(match[3]) : 0,
+  let tickets: number, attachments: number;
+  if (observe) {
+    let result: { tickets: number; attachments: number } | undefined;
+    await runMigrationProcess(
+      binary,
+      [...hs1MigrationArgs(root, ticketStore, exporter), '--progress-json'],
+      developmentRepositoryRoot(),
+      (line) => {
+        const event = parseMigrationProgress(line);
+        void observe(event);
+        if (event.result) result = event.result;
+      },
+      false,
+      async (childPid) => {
+        await observe({ version: 1, phase: 'export_start', childPid });
+      },
+    );
+    if (!result) throw new Error('The migrator exited without its verified completion result.');
+    tickets = result.tickets;
+    attachments = result.attachments;
+  } else {
+    const output = await runner(binary, hs1MigrationArgs(root, ticketStore, exporter), developmentRepositoryRoot());
+    const match = output.match(/Imported (\d+) ticket\(s\) \((\d+) attachment file\(s\)\), skipped (\d+)/);
+    tickets = match ? Number(match[1]) + Number(match[3]) : 0;
     attachments = match ? Number(match[2]) : 0;
+  }
+  await observe?.({ version: 1, phase: 'configure_tools' });
   let toolsConfigured = true;
   try {
     await runner(
@@ -354,8 +380,13 @@ export async function migrateHs1Project(
       ['-C', ticketStore, 'setup', '--detect', '--project', root],
       developmentRepositoryRoot(),
     );
-  } catch {
+  } catch (error) {
     toolsConfigured = false;
+    await observe?.({
+      version: 1,
+      phase: 'configure_tools',
+      warning: `AI-tool setup needs attention: ${error instanceof Error ? error.message : String(error)}`,
+    });
   }
   const canonicalStore = await realpath(ticketStore);
   for (const session of sessions.values()) {
@@ -579,6 +610,7 @@ export async function connectGitTicketStoreRemote(
   remoteInput: string,
   runner: GitRunner = runGitCommand,
   git: BackupGit = backupGit,
+  observe?: (progress: MigrationProgress) => void | Promise<void>,
 ): Promise<void> {
   const remote = remoteInput.trim();
   if (!remote || remote.startsWith('-') || /[\r\n]/.test(remote)) throw new Error('Enter a valid Git remote URL.');
@@ -600,7 +632,24 @@ export async function connectGitTicketStoreRemote(
     }
   }
   try {
-    await runner('git', ['-C', store, 'push', '-u', 'origin', 'HEAD']);
+    if (observe) {
+      await observe({ version: 1, phase: 'push_start' });
+      await runMigrationProcess(
+        'git',
+        ['-C', store, 'push', '--progress', '-u', 'origin', 'HEAD'],
+        developmentRepositoryRoot(),
+        (line) => {
+          const progress = parseGitProgress(line);
+          if (progress) void observe(progress);
+          if (/Writing objects:.*done\./.test(line)) void observe({ version: 1, phase: 'remote_acceptance' });
+        },
+        true,
+        async (childPid) => {
+          await observe({ version: 1, phase: 'push_start', childPid });
+        },
+      );
+    } else await runner('git', ['-C', store, 'push', '-u', 'origin', 'HEAD']);
+    await observe?.({ version: 1, phase: 'verify_backup' });
     if (completion) await recordHs1Backup(store, completion, git);
   } catch (error) {
     // A failed first push must remain retryable from the setup screen. Roll back only
@@ -613,6 +662,24 @@ export async function connectGitTicketStoreRemote(
 
 export function gitTicketStoreConnectionId(path: string): string {
   return createHash('sha256').update(path).digest('hex').slice(0, 16);
+}
+
+/** Preserve the destination written by CLI linking across browser reloads. */
+export async function linkedTicketStore(root: string): Promise<string | undefined> {
+  for (const name of ['.hotsheet2/store', '.hotsheet/store']) {
+    const linked = (
+      await readFile(resolve(root, name), 'utf8').catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+        throw error;
+      })
+    ).trim();
+    if (!linked) continue;
+    const store = await realpath(resolve(root, linked));
+    if (!(await exists(resolve(store, 'hotsheet-store.json'))))
+      throw new Error('The linked ticket repository is unavailable or is not a Hot Sheet store.');
+    return store;
+  }
+  return undefined;
 }
 
 export async function suggestedTicketStore(root: string): Promise<string | undefined> {
@@ -851,7 +918,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
-    : await suggestedTicketStore(root);
+    : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));
   if (ticketStore) await refreshLocalProjectSetup(root, ticketStore);
   const plan = projectServerPlan(await bootstrapStore(), root, ticketStore);
   let instance = await ensureServer(plan.serverStore),
@@ -1025,4 +1092,56 @@ export function authenticatedTerminalWebSocketUrl(origin: string, terminalId: st
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.searchParams.set('secret', secret);
   return url.toString();
+}
+
+/** Completion belongs to the captured project even if its browser tab disappears. */
+export async function runHs1MigrationJob(
+  job: MigrationJob,
+  observe: (event: MigrationProgress) => void | Promise<void>,
+): Promise<MigrationResult | undefined> {
+  const ownedRunner: ProcessRunner = async (command, args, cwd) => {
+    let output = '';
+    await runMigrationProcess(
+      command,
+      args,
+      cwd,
+      (line) => {
+        output = `${output}${line}\n`;
+        if (output.length > 16 * 1024 * 1024) throw new Error('Migration command output exceeds 16 MB.');
+      },
+      false,
+      async (childPid) => {
+        await observe({ version: 1, phase: 'process_owner', childPid });
+      },
+    );
+    return output;
+  };
+  const target = sessions.get(job.projectId);
+  if (!target || target.root !== job.root) throw new Error('Reopen the owning project before retrying migration.');
+  if (job.kind === 'backup') {
+    if (target.ticketStore !== job.store || !job.remote)
+      throw new Error('The backup repository no longer belongs to this project.');
+    await connectGitTicketStoreRemote(
+      job.store,
+      job.remote,
+      async (command, args) => {
+        await ownedRunner(command, args, job.root);
+      },
+      async (store, args) => (await ownedRunner('git', ['-C', store, ...args], job.root)).trim(),
+      observe,
+    );
+    return undefined;
+  }
+  const result = await migrateHs1Project(job.root, job.store, ownedRunner, observe);
+  await observe({ version: 1, phase: 'register_source' });
+  const checkout = await serverRequest<Checkout>(
+    target,
+    `/checkouts/${encodeURIComponent(job.projectId)}/sources/${encodeURIComponent(result.connectionId)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ provider: 'git', locator: result.ticketStore, make_default: true }),
+    },
+  );
+  await ownedRunner(toolBinary(), ['link', result.ticketStore], job.root);
+  return { ...result, stores: checkout.stores };
 }

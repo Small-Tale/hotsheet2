@@ -7,6 +7,8 @@ import type { Checkout } from './api';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
+import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
+import type { MigrationStart } from './migration-progress';
 import {
   chooseLocalFolder,
   connectGitTicketStoreRemote,
@@ -34,6 +36,7 @@ export function createDevApp(
   removeHs1: (project: string) => Promise<string[]> = removeImportedHs1Data,
   recover: (value: UnhealthyServerRecovery) => Promise<unknown> = recoverUnhealthyServer,
   listCheckouts: () => Promise<Checkout[]> = listServerCheckouts,
+  jobs: MigrationJobApi = migrationJobApi,
 ): Hono {
   const app = new Hono();
   const conversationExports = createConversationExportBridge(chooseFolder);
@@ -155,6 +158,28 @@ export function createDevApp(
         { error: error instanceof Error ? error.message : 'Could not import the Hot Sheet 1 project.' },
         400,
       );
+    }
+  });
+  app.post('/__hotsheet/projects/migration-jobs', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json(await jobs.start(await context.req.json<MigrationStart>()), 202);
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : String(error) }, 409);
+    }
+  });
+  app.get('/__hotsheet/projects/migration-jobs', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      const root = context.req.query('root'),
+        rawAfter = context.req.query('after');
+      if (!root || (rawAfter !== undefined && (!Number.isSafeInteger(Number(rawAfter)) || Number(rawAfter) < 0)))
+        throw new Error('A project root and valid revision are required.');
+      return context.json({
+        job: await jobs.watch(root, rawAfter === undefined ? undefined : Number(rawAfter), context.req.raw.signal),
+      });
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : String(error) }, 400);
     }
   });
   app.delete('/__hotsheet/projects/:project/hs1-data', async (context) => {

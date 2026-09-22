@@ -15,6 +15,7 @@ pub mod external_launch;
 pub mod import;
 mod import_completion;
 pub mod import_recovery;
+pub mod migration_progress;
 pub use import_completion::verify_backup as verify_hs1_backup;
 // Launch-safety machinery lives in the shared `hotsheet-aitools` crate (so the server can
 // reuse it too, HS2-1TY7GC); re-exported here to keep the `hotsheet_cli::launch_safety` path.
@@ -26,13 +27,14 @@ pub mod workloop;
 
 pub use setup::{SetupReport, run_setup};
 
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
-use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import};
+use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import_with_progress};
 
 /// The per-machine link file a code repo drops to point at its **standalone** ticket store
 /// (`docs/02` §2.8, HS2-5CXKZ0). Gitignored — the store path is absolute + machine-local.
@@ -199,6 +201,15 @@ fn ensure_gitignored(dir: &Path, entry: &str) -> Result<()> {
 /// first import). Prints progress + warnings and commits; returns the summary so the
 /// caller can phrase the final line.
 pub fn run_import(store_path: &Path, export_file: &Path, prefix: &str) -> Result<ImportSummary> {
+    run_import_with_progress(store_path, export_file, prefix, &mut |_| {})
+}
+
+pub fn run_import_with_progress(
+    store_path: &Path,
+    export_file: &Path,
+    prefix: &str,
+    observe: migration_progress::ProgressObserver<'_>,
+) -> Result<ImportSummary> {
     let text = std::fs::read_to_string(export_file)
         .with_context(|| format!("reading export {}", export_file.display()))?;
     let export: ExportFile = serde_json::from_str(&text)
@@ -212,7 +223,7 @@ pub fn run_import(store_path: &Path, export_file: &Path, prefix: &str) -> Result
         );
     }
     if let Some(name) = &export.project.name {
-        println!("Importing project '{name}'…");
+        eprintln!("Importing project '{name}'…");
     }
 
     // Create the store on first import, preferring the export's own prefix.
@@ -228,7 +239,10 @@ pub fn run_import(store_path: &Path, export_file: &Path, prefix: &str) -> Result
     };
 
     let base_dir = export_file.parent().unwrap_or_else(|| Path::new("."));
-    let summary = import(&store, &export, base_dir)?;
+    let summary = import_with_progress(&store, &export, base_dir, observe)?;
+    observe(migration_progress::MigrationProgress::phase(
+        "commit_import",
+    ));
     // A retry may only repair attachments or remove a verified copy checkpoint.
     // The helper is a no-op when a completed re-import has no staged changes.
     git_commit_all(
@@ -246,6 +260,17 @@ pub fn run_migrate(
     prefix: &str,
     migrator: Option<PathBuf>,
 ) -> Result<ImportSummary> {
+    run_migrate_with_progress(store_path, hotsheet_dir, prefix, migrator, &mut |_| {})
+}
+
+pub fn run_migrate_with_progress(
+    store_path: &Path,
+    hotsheet_dir: &Path,
+    prefix: &str,
+    migrator: Option<PathBuf>,
+    observe: migration_progress::ProgressObserver<'_>,
+) -> Result<ImportSummary> {
+    use migration_progress::MigrationProgress;
     let export_mjs = resolve_migrator(migrator)?;
     import_completion::invalidate(store_path)?;
 
@@ -256,25 +281,43 @@ pub fn run_migrate(
         .tempdir()?;
     let export_json = staging.path().join("hotsheet-export.json");
 
-    println!("Exporting {} …", hotsheet_dir.display());
-    let status = Command::new("node")
+    eprintln!("Exporting {} …", hotsheet_dir.display());
+    observe(MigrationProgress::phase("export_start"));
+    let mut child = Command::new("node")
         .arg(&export_mjs)
         .arg(hotsheet_dir)
         .arg("--out")
         .arg(&export_json)
-        .status()
+        .arg("--progress-json")
+        .stdout(Stdio::piped())
+        .spawn()
         .with_context(|| {
             format!(
                 "running the migrator ({}) — is Node installed?",
                 export_mjs.display()
             )
         })?;
+    // The exporter flushes NDJSON records as work completes. Read incrementally;
+    // diagnostics stay on stderr and never become authoritative result counts.
+    let output = child
+        .stdout
+        .take()
+        .context("exporter stdout was not piped")?;
+    for line in BufReader::new(output).lines() {
+        let line = line?;
+        match serde_json::from_str::<MigrationProgress>(&line) {
+            Ok(event) if event.version == 1 => observe(event),
+            _ => eprintln!("{line}"),
+        }
+    }
+    let status = child.wait()?;
     if !status.success() {
         bail!("migrator export failed ({status})");
     }
 
-    let result = run_import(store_path, &export_json, prefix);
+    let result = run_import_with_progress(store_path, &export_json, prefix, observe);
     if let Ok(summary) = &result {
+        observe(MigrationProgress::phase("verify_import"));
         import_completion::verify_export(store_path, &export_json)?;
         let source = hotsheet_dir
             .parent()
@@ -291,6 +334,7 @@ pub fn run_migrate(
             store_path.join(HS1_IMPORT_RECEIPT),
             serde_json::to_string_pretty(&receipt)? + "\n",
         )?;
+        observe(MigrationProgress::phase("commit_receipt"));
         git_commit_all(store_path, "Record completed Hot Sheet 1 import");
         import_completion::record(store_path, &source)?;
     }
@@ -424,9 +468,20 @@ pub fn git_commit_all(path: &Path, message: &str) {
 }
 
 fn run_git(path: &Path, args: &[&str]) {
-    match Command::new("git").current_dir(path).args(args).status() {
-        Ok(status) if status.success() => {}
-        Ok(status) => eprintln!("warning: git {} exited with {status}", args.join(" ")),
+    match Command::new("git").current_dir(path).args(args).output() {
+        Ok(output) => {
+            // Hooks may write to stdout even for quiet Git commands. Preserve all
+            // diagnostics on stderr so machine migration stdout stays valid NDJSON.
+            eprint!("{}", String::from_utf8_lossy(&output.stdout));
+            eprint!("{}", String::from_utf8_lossy(&output.stderr));
+            if !output.status.success() {
+                eprintln!(
+                    "warning: git {} exited with {}",
+                    args.join(" "),
+                    output.status
+                );
+            }
+        }
         Err(err) => eprintln!("warning: could not run git {}: {err}", args.join(" ")),
     }
 }

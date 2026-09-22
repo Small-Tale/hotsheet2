@@ -3,7 +3,7 @@ import './project-tab.css';
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
+import { ArchiveRestore, Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
 
 export type ProjectTabLocation = 'local' | 'remote';
 
@@ -21,6 +21,7 @@ export interface ProjectTabProps {
   notificationCount?: number;
   upNextCount?: number;
   activeTicketCount?: number;
+  operation?: { label: string; state: 'running' | 'failed' | 'succeeded' | 'interrupted'; percent?: number };
 }
 
 export function projectTabUpNextLabel(count: number): string {
@@ -75,6 +76,7 @@ export function ProjectTab({
   notificationCount = 0,
   upNextCount = 0,
   activeTicketCount = 0,
+  operation,
 }: ProjectTabProps) {
   const normalizedUpNextCount = Math.max(0, Math.trunc(upNextCount)),
     normalizedActiveTicketCount = Math.max(0, Math.trunc(activeTicketCount));
@@ -139,7 +141,24 @@ export function ProjectTab({
       closeAction="close-project-tab"
       closeIcon={<LucideIcon icon={X} name="x" />}
       leading={location === 'remote' ? <LucideIcon icon={Cloud} name="cloud" /> : undefined}
-      trailing={trailing}
+      trailing={
+        operation ? (
+          <span class="project-tab__indicators">
+            <span
+              class="project-tab__operation"
+              data-state={operation.state}
+              aria-label={operation.label}
+              title={operation.label}
+            >
+              <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+              {operation.percent !== undefined && <small aria-hidden="true">{Math.floor(operation.percent)}%</small>}
+            </span>
+            {trailing}
+          </span>
+        ) : (
+          trailing
+        )
+      }
       rootAttributes={{
         'data-tab-kind': 'project',
         'data-project-id': id,

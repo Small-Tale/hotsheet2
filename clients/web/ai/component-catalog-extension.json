@@ -1456,9 +1456,9 @@
       "id": "hs1-migration-banner",
       "name": "Hs1MigrationBanner",
       "kind": "component",
-      "purpose": "Import and post-backup cleanup notices for Hot Sheet 1.",
+      "purpose": "Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.",
       "useWhen": [
-        "Hot Sheet needs import and post-backup cleanup notices for Hot Sheet 1."
+        "Hot Sheet needs project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific Hs1MigrationBanner behavior."

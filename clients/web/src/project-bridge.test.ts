@@ -17,6 +17,7 @@ import {
   folderChooserCommand,
   hs1ChannelSlug,
   hs1MigrationArgs,
+  linkedTicketStore,
   listServerCheckouts,
   localStoreInitArgs,
   preserveHs1Entry,
@@ -37,6 +38,29 @@ import {
   storeNeedsServerUpgrade,
   superviseServer,
 } from './project-bridge';
+
+describe('linked migration destination', () => {
+  it('prefers the current durable link, supports legacy links, and fails closed for a broken selected store', async () => {
+    const root = await realpath(await mkdtemp(resolve(tmpdir(), 'linked-migration-')));
+    try {
+      expect(await linkedTicketStore(root)).toBeUndefined();
+      await mkdir(resolve(root, '.hotsheet2'));
+      await mkdir(resolve(root, '.hotsheet'));
+      for (const store of ['custom.hs2', 'legacy.hs2']) {
+        await mkdir(resolve(root, store));
+        await writeFile(resolve(root, store, 'hotsheet-store.json'), '{}');
+      }
+      await writeFile(resolve(root, '.hotsheet/store'), `${root}/legacy.hs2\n`);
+      expect(await linkedTicketStore(root)).toBe(resolve(root, 'legacy.hs2'));
+      await writeFile(resolve(root, '.hotsheet2/store'), `${root}/custom.hs2\n`);
+      expect(await linkedTicketStore(root)).toBe(resolve(root, 'custom.hs2'));
+      await rm(resolve(root, 'custom.hs2/hotsheet-store.json'));
+      await expect(linkedTicketStore(root)).rejects.toThrow(/linked ticket repository/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('projectSessionRegistry', () => {
   it('shares project sessions across separately evaluated Vite module graphs', async () => {

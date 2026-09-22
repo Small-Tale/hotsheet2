@@ -47,10 +47,10 @@
 > remembered for the detected source, with a non-blocking banner left available to
 > reopen it. The bridge runs
 > the bundled one-shot migrator, links the resulting source, carries applicable
-> settings forward, and idempotently configures detected AI tools. Both the import and
-> first remote push show an indeterminate progress bar with stage-specific copy; the
-> subprocesses do not currently expose trustworthy byte/item totals, so the UI never
-> invents a percentage. Once the imported repository has a remote, a banner offers
+> settings forward, and idempotently configures detected AI tools. Import and first
+> backup run as durable, project-owned background jobs with measured phase progress
+> when the producer has real totals; unknown phases remain indeterminate
+> (HS2-SF9ZZG). Only a verified backup enables the banner offering
 > explicit removal of live HS1 artifacts
 > while preserving every backup and the HS2 store link. (The `pglite-migrate` fetch
 > for a newer-than-bundle datadir remains outside offline CI because it downloads an
@@ -273,10 +273,12 @@ may not have open at once):
    source and database paths plus the detected PostgreSQL version. Choosing Not now
    suppresses later automatic modal presentation for that checkout/source identity;
    a project banner keeps an explicit Import action available.
-2. On confirm, Hot Sheet **runs the bundled migrator against this one project** and
-   keeps an indeterminate progress bar plus stage-specific status visible until the
-   operation settles. (The migrator is a separate bundled executable — §7.2 — the
-   server just spawns it; it does not live in the core.)
+2. On confirm, Hot Sheet **runs the bundled migrator against this one project**.
+   The bridge accepts the job with HTTP 202, then the dialog closes into a persistent
+   project banner and tab indicator. Other projects remain usable. Measured bars
+   describe the current phase; opening a database, committing, configuring tools, and
+   waiting for remote acceptance remain indeterminate. The migrator remains a separate
+   bundled executable (§7.2), spawned by the bridge rather than embedded in the core.
 3. On success it shows a summary (N tickets, M attachments), links the new source,
    and leaves the old `.hotsheet/` data in place. The migrator verifies that its
    receipt, every ticket, and every referenced attachment payload are included in a
@@ -289,8 +291,9 @@ may not have open at once):
    source project in Git-local `hotsheet-hs1-import-completed.json`. A new migration
    attempt invalidates earlier import and backup proof before exporting. Older receipts
    without this proof require a repeat import before cleanup can become available.
-4. The first remote connection/push likewise keeps an indeterminate progress bar and
-   an explicit warning that large histories may take several minutes. Only a successful
+4. The first remote connection/push is another project-owned background job. Git
+   reports object counts and, when available, bytes sent and transfer rate. These are
+   phase-local measurements, without an invented overall or byte-total percentage. Only a successful
    push followed by verification that the remote branch contains the intended import
    revision records `hotsheet-hs1-backup.json` in Git-local metadata. This proof binds
    the source project, import revision, origin URL, branch, and observed remote revision.
@@ -311,6 +314,53 @@ may not have open at once):
    for that checkout and detected HS1 source identity across refreshes. Successful
    cleanup records the same dismissal so a stale or concurrently recreated marker does
    not make the banner recur.
+
+### Background ownership and progress protocol
+
+`POST /__hotsheet/projects/migration-jobs` accepts canonical project, source, destination,
+operation kind, and optional remote/retry attempt. Repeated starts rejoin the current
+attempt; conflicting writers fail explicitly. Native advisory locks serialize the
+canonical project and destination across bridge processes. The process-owned registry
+persists atomic snapshots under `${HOTSHEET_HOME:-~/.hotsheet2}/migration-jobs`
+(`HOTSHEET_MIGRATION_JOBS` overrides that directory). Lock files stay in place; their
+existence alone is never treated as ownership.
+
+`GET` on the same route returns a snapshot for `root`; `after=<revision>` blocks until
+change or a 25-second idle timeout. Subscribers may disconnect without cancelling the
+job. There is no fixed-interval state polling. Reload/reopen joins the saved attempt,
+and stale revisions cannot overwrite a retry. Invalid/version-skewed or immediate idle
+watch responses stop watching with an explicit Reconnect action rather than looping.
+The stable project id, attempt id, and increasing revision keep background completion
+from changing the currently selected project's data or dialogs.
+
+Before launching actual work, a child gate waits for its PID checkpoint to be durable.
+The bridge owns the process group, including termination on malformed progress. A
+bridge restart reports unfinished work as interrupted; Retry refuses to launch while
+the checkpointed child is alive. Retry resumes the existing idempotent import and
+attachment checkpoints. Terminal success is persisted before watchers see it. A
+persistence error becomes a failure, never a premature success announcement.
+Source registration, checkout linking, tool setup, and backup validation belong to
+the captured server job, so closing a tab cannot skip finalization. Tool-setup warnings
+remain available in Details and expose Retry; completed import stays separate from
+verified backup and source cleanup. A failed backup offers Retry for its captured remote
+or Change backup to correct a URL before a new attempt. A successful historical backup
+whose proof no longer matches the current repository offers the same recovery actions
+while the old source remains; deleting the old source removes that prompt. Completion
+refresh and later project reloads retain the linked custom ticket-store destination.
+
+`hotsheet-migrate ... --progress-json` and the exporter's matching option emit version-1
+NDJSON with `phase`, optional measured `completed`/`total`/`unit`, warnings, and a typed
+final result/error. Human diagnostics and Git-hook output stay on stderr. Actual
+producer boundaries are database bytes after each successful file copy, exported and
+imported ticket items, staged attachment bytes, and verified/copied attachment items
+within each ticket. Empty phases report 0 of 0; a phase reaching 100 percent does not
+mean the whole job succeeded. Unknown engine/download and Git denominators stay unknown.
+
+A referenced HS1 attachment that is missing or not a readable file **fails export**
+before a portable manifest can discard its identity (HS2-FBVNJ6). It records no new
+completion or cleanup proof. Restore the original payload or use a complete portable
+export with the explicit reviewed recovery procedure above; source omissions are never
+silently approved. Database copying and export leave the original source bytes intact.
 
 The migration prompt uses Kerf's canonical spacing scale: it separates major regions by
 24 px, its icon/copy pair by 16 px, and fields/actions by 8 px, with a 4 px connected

@@ -5,7 +5,7 @@ import './project-tab-bar.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
-import { ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
+import { ArchiveRestore, ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 
@@ -70,7 +70,29 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project',
             value={active.id}
             ariaLabel="Project"
             choices={tabs.map((tab) => ({ value: tab.id, label: tab.name }))}
-            renderSelected={(choice) => <span>{choice.label}</span>}
+            renderSelected={(choice) => (
+              <span class="project-tab-bar__selected-project">
+                {choice.label}
+                {active.operation && (
+                  <span
+                    class="project-tab-bar__operation"
+                    aria-label={active.operation.label}
+                    title={active.operation.label}
+                  >
+                    <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+                    <small>
+                      {active.operation.percent !== undefined
+                        ? `${Math.floor(active.operation.percent)}%`
+                        : active.operation.state === 'running'
+                          ? 'Working'
+                          : active.operation.state === 'succeeded'
+                            ? 'Backup'
+                            : 'Attention'}
+                    </small>
+                  </span>
+                )}
+              </span>
+            )}
           />
         ) : (
           <span class="project-tab-bar__select-empty" aria-hidden="true" />

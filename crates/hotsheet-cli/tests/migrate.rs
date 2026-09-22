@@ -251,3 +251,47 @@ fn repeated_migration_rejects_failed_commits_and_invalidates_cleanup_proof() {
         .success();
     assert!(proof.is_file());
 }
+
+#[cfg(unix)]
+#[test]
+fn machine_progress_keeps_hook_output_on_stderr_and_returns_typed_results() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("project/.hotsheet");
+    let store = root.path().join("tickets.hs2");
+    std::fs::create_dir_all(&source).unwrap();
+    let exporter = fake_exporter(root.path());
+    migration_command(&source, &store, &exporter)
+        .assert()
+        .success();
+    let hook = store.join(".git/hooks/pre-commit");
+    std::fs::write(&hook, "#!/bin/sh\necho HUMAN-HOOK-OUTPUT\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let content = std::fs::read_to_string(&exporter)
+        .unwrap()
+        .replace("HS-1", "HS-2");
+    std::fs::write(&exporter, content).unwrap();
+    let output = migration_command(&source, &store, &exporter)
+        .arg("--progress-json")
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let records: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(records.iter().all(|record| record["version"] == 1));
+    assert!(
+        records
+            .iter()
+            .any(|record| record["phase"] == "import_tickets" && record["completed"] == 1)
+    );
+    assert_eq!(records.last().unwrap()["result"]["tickets"], 1);
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("HUMAN-HOOK-OUTPUT")
+    );
+}

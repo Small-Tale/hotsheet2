@@ -119,7 +119,7 @@ import { commandIconNeedsCatalog } from './components/command-icon';
 import { COMMAND_EDITOR_DIALOG_ID } from './components/command-settings-editor';
 import { ConversationExportDialog, type ConversationExportDialogState } from './components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from './components/corrupt-ticket-row';
-import { Hs1CleanupBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './components/hs1-migration';
+import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './components/hs1-migration';
 import { MainShell } from './components/main-shell';
 import { ManualModelDialog, type ManualModelDialogState } from './components/manual-model-dialog';
 import type { MarkdownEditorMode } from './components/markdown-editor';
@@ -294,6 +294,8 @@ import {
 } from './keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from './local-ticket-changes';
 import { loadLucideCatalog } from './lucide-catalog';
+import { MigrationJobClient } from './migration-job-client';
+import { type MigrationJob, migrationPercent, migrationPhaseLabel } from './migration-progress';
 import {
   closeMobileOverlay,
   isMobileViewport,
@@ -644,6 +646,51 @@ const customViewsByProject = signal<Record<string, CustomView[]>>({}),
 const hs1MigrationProject = signal<Project | undefined>(undefined),
   hs1MigrationBusy = signal(false),
   hs1MigrationError = signal('');
+const migrationJobsByRoot = signal<Partial<Record<string, MigrationJob>>>({}),
+  migrationConnectionErrors = signal<Record<string, string>>({}),
+  migrationJobDetails = signal<Record<string, boolean>>({});
+const migrationJobs = new MigrationJobClient(
+  (job) => {
+    migrationJobsByRoot.value = { ...migrationJobsByRoot.value, [job.root]: job };
+    migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [job.root]: '' };
+    if (job.status === 'running')
+      projects.value = projects.value.map((item) =>
+        item.root === job.root ? { ...item, hs1CleanupEligible: false } : item,
+      );
+  },
+  async (job) => {
+    const target = projects.value.find((item) => item.root === job.root);
+    if (!target) return;
+    // Replayed terminal jobs are history; current receipts/origin determine eligibility.
+    const response = await fetch('/__hotsheet/projects/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ root: target.root }),
+    });
+    const current = (await response.json()) as Project & { error?: string };
+    if (!response.ok) throw new Error(current.error ?? 'Could not refresh the completed migration.');
+    if (migrationJobsByRoot.value[job.root]?.attempt !== job.attempt) return;
+    migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [job.root]: '' };
+    projects.value = projects.value.map((item) => (item.root === target.root ? { ...item, ...current } : item));
+    if (job.kind === 'import') {
+      const descriptors = await new Api(target.apiPath).providers(),
+        selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+      if (migrationJobsByRoot.value[job.root]?.attempt !== job.attempt) return;
+      defaultProviders.value = {
+        ...defaultProviders.value,
+        [target.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+      };
+      providerCapabilities.value = {
+        ...providerCapabilities.value,
+        ...Object.fromEntries(descriptors.map((item) => [item.connection_id, item.capabilities])),
+      };
+      await projectTabRefresh.request(target);
+    }
+  },
+  (root, message) => {
+    migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [root]: message };
+  },
+);
 const ticketSourceSetupProject = signal<Project | undefined>(undefined),
   ticketSourceSetupError = signal('');
 const providerConnections = signal<ProviderConnection[]>([]),
@@ -4932,7 +4979,7 @@ function retainProjectRestoreFailure(root: string, message: string, recoveryPid?
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function openProject(root:string,ticketStore?:string,remember=true,reportError=true,retainFailure=false){loading.value=true;unhealthyServerRecovery.value=undefined;if(reportError)error.value='';try{const response=await fetch('/__hotsheet/projects/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({root,ticketStore})});const value=await response.json() as Project&{error?:string;recovery?:UnhealthyServerRecovery};if(!response.ok){unhealthyServerRecovery.value=value.recovery;throw new Error(value.error||'Could not open project.')}projectRestoreFailures.value=projectRestoreFailures.value.filter(item=>item.root!==root);if(selectedProjectRestoreRoot.value===root)selectedProjectRestoreRoot.value='';projects.value=replaceTabInPlace(projects.value,item=>item.id,value);hideVerifiedByProject.value={...hideVerifiedByProject.value,[value.id]:localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`)==='true'};permissionAutomationByProject.value={...permissionAutomationByProject.value,[value.id]:loadPermissionAutomation(value.id)};if(selectedProjectId.value!==value.id){if(!activateOpenProject(value.id))throw new Error('Could not activate the opened project.')}else{selectedProjectId.value=value.id;saveActiveProjectRoot(localStorage,value.root);terminalDrawerSelected.value=localStorage.getItem(`hotsheet.project.${value.id}.terminal-drawer-selection`)||'grid'}if(remember)localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));const migrationTarget=value.needsHs1Migration&&!hs1MigrationPromptDismissed(localStorage,value.id,hs1SourceIdentity(value))?value:undefined,setupTarget=value.needsTicketSetup&&!value.needsHs1Migration?value:undefined,openingDialog=document.querySelector<HTMLElement>('[data-project-dialog]'),waitForProjectDialog=Boolean((migrationTarget||setupTarget)&&(openingDialog as Control|null)?.open);ticketSourceSetupNavigation.value='none';createdGitTicketStore.value='';ticketSourceRemoteError.value='';hs1MigrationError.value='';const presentSetup=()=>{hs1MigrationProject.value=migrationTarget;ticketSourceSetupProject.value=setupTarget};if(waitForProjectDialog)openingDialog!.addEventListener('wa-after-hide',presentSetup,{once:true});projectDialogOpen.value=false;if(!waitForProjectDialog)presentSetup();else{hs1MigrationProject.value=undefined;ticketSourceSetupProject.value=undefined}ticketSourceSetupError.value='';const descriptors=await new Api(value.apiPath).providers().catch(()=>[]),selected=descriptors.find(item=>item.default)??descriptors[0];defaultProviders.value={...defaultProviders.value,[value.id]:selected?{name:selected.display_name,capabilities:selected.capabilities}:undefined};providerCapabilities.value={...providerCapabilities.value,...Object.fromEntries(descriptors.map(item=>[item.connection_id,item.capabilities]))};startPermissionUpdates();syncProjectChangeStreams();await Promise.all([refreshProject(),refreshCommands(value),refreshCustomViews(value),refreshDriveConnections(value,true),...(terminalDrawerVisible.value?[refreshTerminalDashboard()]:[])]);await restoreProjectSession(value);const restored=customViewFor(selectedView.value,value.id);if(restored)applyCustomViewQuery(restored);else if(customTicketViewKey(selectedView.value))selectedView.value='all';if(terminalDrawerVisible.value)observeTerminalDrawer();return true}catch(reason){const message=reason instanceof Error?reason.message:String(reason);if(retainFailure)retainProjectRestoreFailure(root,message,unhealthyServerRecovery.value?.expected.pid);if(reportError)error.value=message;return false}finally{loading.value=false}}
+async function openProject(root:string,ticketStore?:string,remember=true,reportError=true,retainFailure=false){loading.value=true;unhealthyServerRecovery.value=undefined;if(reportError)error.value='';try{const response=await fetch('/__hotsheet/projects/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({root,ticketStore})});const value=await response.json() as Project&{error?:string;recovery?:UnhealthyServerRecovery};if(!response.ok){unhealthyServerRecovery.value=value.recovery;throw new Error(value.error||'Could not open project.')}projectRestoreFailures.value=projectRestoreFailures.value.filter(item=>item.root!==root);if(selectedProjectRestoreRoot.value===root)selectedProjectRestoreRoot.value='';projects.value=replaceTabInPlace(projects.value,item=>item.id,value);hideVerifiedByProject.value={...hideVerifiedByProject.value,[value.id]:localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`)==='true'};permissionAutomationByProject.value={...permissionAutomationByProject.value,[value.id]:loadPermissionAutomation(value.id)};if(selectedProjectId.value!==value.id){if(!activateOpenProject(value.id))throw new Error('Could not activate the opened project.')}else{selectedProjectId.value=value.id;saveActiveProjectRoot(localStorage,value.root);terminalDrawerSelected.value=localStorage.getItem(`hotsheet.project.${value.id}.terminal-drawer-selection`)||'grid'}if(remember)localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));await migrationJobs.join(value.root).then(job=>{if(!job){migrationJobsByRoot.value=Object.fromEntries(Object.entries(migrationJobsByRoot.value).filter(([root])=>root!==value.root))}}).catch(()=>undefined);const migrationTarget=value.needsHs1Migration&&!migrationJobsByRoot.value[value.root]&&!hs1MigrationPromptDismissed(localStorage,value.id,hs1SourceIdentity(value))?value:undefined,setupTarget=value.needsTicketSetup&&!value.needsHs1Migration?value:undefined,openingDialog=document.querySelector<HTMLElement>('[data-project-dialog]'),waitForProjectDialog=Boolean((migrationTarget||setupTarget)&&(openingDialog as Control|null)?.open);ticketSourceSetupNavigation.value='none';createdGitTicketStore.value='';ticketSourceRemoteError.value='';hs1MigrationError.value='';const presentSetup=()=>{hs1MigrationProject.value=migrationTarget;ticketSourceSetupProject.value=setupTarget};if(waitForProjectDialog)openingDialog!.addEventListener('wa-after-hide',presentSetup,{once:true});projectDialogOpen.value=false;if(!waitForProjectDialog)presentSetup();else{hs1MigrationProject.value=undefined;ticketSourceSetupProject.value=undefined}ticketSourceSetupError.value='';const descriptors=await new Api(value.apiPath).providers().catch(()=>[]),selected=descriptors.find(item=>item.default)??descriptors[0];defaultProviders.value={...defaultProviders.value,[value.id]:selected?{name:selected.display_name,capabilities:selected.capabilities}:undefined};providerCapabilities.value={...providerCapabilities.value,...Object.fromEntries(descriptors.map(item=>[item.connection_id,item.capabilities]))};startPermissionUpdates();syncProjectChangeStreams();await Promise.all([refreshProject(),refreshCommands(value),refreshCustomViews(value),refreshDriveConnections(value,true),...(terminalDrawerVisible.value?[refreshTerminalDashboard()]:[])]);await restoreProjectSession(value);const restored=customViewFor(selectedView.value,value.id);if(restored)applyCustomViewQuery(restored);else if(customTicketViewKey(selectedView.value))selectedView.value='all';if(terminalDrawerVisible.value)observeTerminalDrawer();return true}catch(reason){const message=reason instanceof Error?reason.message:String(reason);if(retainFailure)retainProjectRestoreFailure(root,message,unhealthyServerRecovery.value?.expected.pid);if(reportError)error.value=message;return false}finally{loading.value=false}}
 async function retryProjectRestore(root: string) {
   const failure = projectRestoreFailures.value.find((item) => item.root === root);
   if (!failure || failure.busy) return;
@@ -4973,9 +5020,21 @@ async function chooseHs1TicketStore() {
   const input = document.querySelector<Control>('[name="hs1-ticket-store"]');
   if (input && chosen.path) input.value = chosen.path;
 }
-// prettier-ignore
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function importHs1Project(form:HTMLFormElement){const target=hs1MigrationProject.value,location=form.querySelector<Control>('[name="hs1-ticket-store"]')?.value.trim();if(!target||!location||hs1MigrationBusy.value)return;hs1MigrationBusy.value=true;hs1MigrationError.value='';try{const response=await fetch('/__hotsheet/projects/migrate-hs1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({root:target.root,location})}),result=await response.json() as {ticketStore?:string;connectionId?:string;tickets?:number;attachments?:number;toolsConfigured?:boolean;error?:string};if(!response.ok||!result.ticketStore||!result.connectionId)throw new Error(result.error??'Could not import the Hot Sheet 1 project.');const client=new Api(target.apiPath),checkout=await client.addCheckoutSource(target.id,{id:result.connectionId,provider:'git',locator:result.ticketStore,name:'Imported Hot Sheet 1 tickets',default:true,settings:{}},true),descriptors=await client.providers(),selected=descriptors.find(item=>item.connection_id===result.connectionId)??descriptors.find(item=>item.default)??descriptors[0],updated={...target,stores:checkout.stores,needsTicketSetup:false,needsHs1Migration:false,hs1ImportCompleted:true};defaultProviders.value={...defaultProviders.value,[target.id]:selected?{name:selected.display_name,capabilities:selected.capabilities}:undefined};providerCapabilities.value={...providerCapabilities.value,...Object.fromEntries(descriptors.map(item=>[item.connection_id,item.capabilities]))};projects.value=projects.value.map(item=>item.id===target.id?updated:item);hs1MigrationProject.value=undefined;ticketSourceSetupProject.value=updated;createdGitTicketStore.value=result.ticketStore;ticketSourceSetupNavigation.value='push';showToast(`Imported ${result.tickets??0} tickets and ${result.attachments??0} attachments.${result.toolsConfigured===false?' AI-tool setup needs attention.':''}`);await refreshProject()}catch(reason){hs1MigrationError.value=reason instanceof Error?reason.message:String(reason)}finally{hs1MigrationBusy.value=false}}
+async function importHs1Project(form: HTMLFormElement) {
+  const target = hs1MigrationProject.value,
+    location = form.querySelector<Control>('[name="hs1-ticket-store"]')?.value.trim();
+  if (!target || !location || hs1MigrationBusy.value) return;
+  hs1MigrationBusy.value = true;
+  hs1MigrationError.value = '';
+  try {
+    await migrationJobs.start({ projectId: target.id, root: target.root, location, kind: 'import' });
+    if (hs1MigrationProject.value?.id === target.id) hs1MigrationProject.value = undefined;
+  } catch (reason) {
+    hs1MigrationError.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    hs1MigrationBusy.value = false;
+  }
+}
 async function removeOldHs1Data() {
   const current = project();
   if (
@@ -4992,7 +5051,16 @@ async function removeOldHs1Data() {
     if (!response.ok) throw new Error(result.error ?? 'Could not remove the old Hot Sheet 1 files.');
     dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));
     projects.value = projects.value.map((item) =>
-      item.id === current.id ? { ...item, hs1CleanupEligible: false, needsHs1Migration: false } : item,
+      item.id === current.id
+        ? {
+            ...item,
+            hs1CleanupEligible: false,
+            needsHs1Migration: false,
+            hs1DatabasePath: undefined,
+            hs1SourcePath: undefined,
+            hs1PostgresVersion: undefined,
+          }
+        : item,
     );
     showToast(
       `Removed ${result.removed?.length ?? 0} old Hot Sheet 1 item${result.removed?.length === 1 ? '' : 's'}; backups were kept.`,
@@ -5005,12 +5073,21 @@ async function removeOldHs1Data() {
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
 async function createProjectGitSource(custom=false){const target=ticketSourceSetupProject.value;if(!target)return;ticketSourceSetupError.value='';loading.value=true;try{let location:string|undefined;if(custom){const choice=await fetch('/__hotsheet/folders/choose',{method:'POST'}),chosen=await choice.json() as {path?:string;error?:string};if(!choice.ok)throw new Error(chosen.error??'Could not choose a ticket repository folder.');if(!chosen.path)return;location=chosen.path}const response=await fetch('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({root:target.root,location})}),result=await response.json() as {ticketStore?:string;connectionId?:string;error?:string};if(!response.ok||!result.ticketStore||!result.connectionId)throw new Error(result.error??'Could not create the git ticket store.');const client=new Api(target.apiPath),checkout=await client.addCheckoutSource(target.id,{id:result.connectionId,provider:'git',locator:result.ticketStore,name:'Hot Sheet git',default:Boolean(target.needsTicketSetup),settings:{}},Boolean(target.needsTicketSetup)),updated={...target,stores:checkout.stores,needsTicketSetup:false};projects.value=projects.value.map(item=>item.id===target.id?updated:item);ticketSourceSetupProject.value=updated;createdGitTicketStore.value=result.ticketStore;ticketSourceSetupNavigation.value='push';requestAnimationFrame(()=>document.querySelector<HTMLElement>('[name="ticket-store-remote"]')?.focus());const descriptors=await client.providers(),selected=descriptors.find(item=>item.default)??descriptors[0];defaultProviders.value={...defaultProviders.value,[target.id]:selected?{name:selected.display_name,capabilities:selected.capabilities}:undefined};providerCapabilities.value={...providerCapabilities.value,...Object.fromEntries(descriptors.map(item=>[item.connection_id,item.capabilities]))};await refreshProject()}catch(reason){ticketSourceSetupError.value=reason instanceof Error?reason.message:String(reason)}finally{loading.value=false}}
 async function connectCreatedGitRemote(form: HTMLFormElement) {
-  const store = createdGitTicketStore.value,
+  const target = ticketSourceSetupProject.value,
+    store = createdGitTicketStore.value,
     remote = form.querySelector<Control>('[name="ticket-store-remote"]')?.value.trim();
-  if (!store || !remote || ticketSourceRemoteBusy.value) return;
+  if (!target || !store || !remote || ticketSourceRemoteBusy.value) return;
   ticketSourceRemoteBusy.value = true;
   ticketSourceRemoteError.value = '';
   try {
+    if (target.hs1ImportCompleted) {
+      await migrationJobs.start({ projectId: target.id, root: target.root, location: store, kind: 'backup', remote });
+      if (ticketSourceSetupProject.value?.id === target.id) {
+        ticketSourceSetupProject.value = undefined;
+        createdGitTicketStore.value = '';
+      }
+      return;
+    }
     const response = await fetch('/__hotsheet/projects/setup-git-remote', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -5018,11 +5095,6 @@ async function connectCreatedGitRemote(form: HTMLFormElement) {
       }),
       result = (await response.json()) as { connected?: boolean; error?: string };
     if (!response.ok || !result.connected) throw new Error(result.error ?? 'Could not connect the Git remote.');
-    const target = ticketSourceSetupProject.value;
-    if (target?.hs1ImportCompleted)
-      projects.value = projects.value.map((item) =>
-        item.id === target.id ? { ...item, hs1CleanupEligible: true } : item,
-      );
     showToast('Ticket repository connected and backed up.');
     ticketSourceSetupProject.value = undefined;
     createdGitTicketStore.value = '';
@@ -7237,11 +7309,22 @@ function renderMainShell() {
   const current = project(),
     restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value);
   if (!current && !restoreFailure) return <AppEmptyState />;
-  const popup = conversationOpen.value ? undefined : permissionPopupSurface();
+  const popup = conversationOpen.value ? undefined : permissionPopupSurface(),
+    currentJob = current && migrationJobsByRoot.value[current.root],
+    currentBackupUnverified = Boolean(
+      currentJob?.kind === 'backup' &&
+      currentJob.status === 'succeeded' &&
+      current?.hs1DatabasePath &&
+      !current.hs1CleanupEligible,
+    );
   void projectTabClaimClock.value;
   const tabs = [
     ...projects.value.map((item) => {
-      const counts = projectTicketCounts(item.id);
+      const counts = projectTicketCounts(item.id),
+        job = migrationJobsByRoot.value[item.root],
+        backupUnverified = Boolean(
+          job?.kind === 'backup' && job.status === 'succeeded' && item.hs1DatabasePath && !item.hs1CleanupEligible,
+        );
       return {
         id: item.id,
         name: item.name,
@@ -7250,6 +7333,14 @@ function renderMainShell() {
         notificationCount: permissionCount(item.id),
         upNextCount: counts.up_next,
         activeTicketCount: counts.active,
+        operation:
+          job && (!(job.kind === 'backup' && job.status === 'succeeded') || backupUnverified)
+            ? {
+                label: `${item.name}: ${job.status === 'running' ? migrationPhaseLabel(job.progress) : job.status === 'succeeded' && !backupUnverified ? 'Import complete; backup needed' : 'Migration needs attention'}`,
+                state: backupUnverified ? ('failed' as const) : job.status,
+                percent: job.status === 'running' ? migrationPercent(job.progress) : undefined,
+              }
+            : undefined,
       };
     }),
     ...projectRestoreFailures.value.map((item) => ({
@@ -7410,7 +7501,21 @@ function renderMainShell() {
       banner={
         <>
           <CompatibilityBannerSurface assessment={current.compatibility} />
-          {current.needsHs1Migration && hs1MigrationProject.value?.id !== current.id && (
+          {currentJob &&
+            !(
+              currentJob.kind === 'backup' &&
+              currentJob.status === 'succeeded' &&
+              !currentBackupUnverified &&
+              !migrationConnectionErrors.value[current.root]
+            ) && (
+              <Hs1JobBanner
+                job={currentJob}
+                backupVerified={!currentBackupUnverified}
+                details={migrationJobDetails.value[current.root]}
+                connectionError={migrationConnectionErrors.value[current.root]}
+              />
+            )}
+          {current.needsHs1Migration && !currentJob && hs1MigrationProject.value?.id !== current.id && (
             <Hs1MigrationBanner databasePath={current.hs1DatabasePath ?? `${current.root}/.hotsheet/db`} />
           )}{' '}
           {current.hs1CleanupEligible &&
@@ -7883,6 +7988,45 @@ function wireProjectLifecycleInteractions() {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => document.querySelector<Control>('[data-component="hs1-migration-dialog"]')?.show?.()),
     );
+  });
+  delegate(document.body, 'click', '[data-action="migration-job-details"]', () => {
+    const root = project()?.root;
+    if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: !migrationJobDetails.value[root] };
+  });
+  delegate(document.body, 'click', '[data-action="reconnect-migration-job"]', () => {
+    const root = project()?.root;
+    if (root)
+      void migrationJobs.join(root).catch((reason: unknown) => {
+        migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [root]: String(reason) };
+      });
+  });
+  delegate(document.body, 'click', '[data-action="retry-migration-job"]', () => {
+    const target = project(),
+      job = target && migrationJobsByRoot.value[target.root];
+    if (target && job)
+      void migrationJobs
+        .start({
+          projectId: target.id,
+          root: target.root,
+          location: job.store,
+          kind: job.kind,
+          remote: job.remote,
+          retryAttempt: job.attempt,
+        })
+        .catch((reason: unknown) => {
+          migrationConnectionErrors.value = {
+            ...migrationConnectionErrors.value,
+            [target.root]: reason instanceof Error ? reason.message : String(reason),
+          };
+        });
+  });
+  delegate(document.body, 'click', '[data-action="backup-migration-job"]', () => {
+    const target = project(),
+      job = target && migrationJobsByRoot.value[target.root];
+    if (!target || !job || job.status === 'running' || (job.kind === 'import' && job.status !== 'succeeded')) return;
+    ticketSourceSetupProject.value = target;
+    createdGitTicketStore.value = job.store;
+    ticketSourceSetupNavigation.value = 'push';
   });
   delegate(document.body, 'click', '[data-action="remove-hs1-data"]', () => {
     void removeOldHs1Data();

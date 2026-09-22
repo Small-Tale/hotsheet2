@@ -19,3 +19,12 @@ New stores receive an initial committed schema baseline before this screen is sh
 the first push never depends on a later ticket mutation creating `HEAD`.
 
 Jira is an issue provider rather than a Git host. Connect Jira from **Settings → Ticket sources** when Jira itself should own the tickets; use a Git remote only for Hot Sheet Git ticket repositories.
+
+For an imported HS1 repository, the first backup runs in a project-owned background
+job. The setup dialog closes after acceptance; the banner and project tab show Git's
+reported object counts and byte/rate values where available. Other projects remain
+usable, and reload restores the running or failed attempt. Waiting for the remote and
+verifying the intended import revision remain indeterminate phases. Retry retains
+its owning store and remote; failure still removes only an origin created by that
+attempt. Successful push is followed by authoritative backup verification before the
+old-source cleanup action becomes available. See [migration ownership and progress](07-migration.md#background-ownership-and-progress-protocol).

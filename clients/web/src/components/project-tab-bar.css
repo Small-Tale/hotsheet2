@@ -124,3 +124,15 @@
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 1px;
 }
+
+.project-tab-bar__selected-project,
+.project-tab-bar__operation {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  min-width: 0;
+}
+.project-tab-bar__operation {
+  flex-shrink: 0;
+  font-size: var(--wa-font-size-xs);
+}
