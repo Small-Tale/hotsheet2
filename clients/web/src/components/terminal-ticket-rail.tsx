@@ -54,7 +54,7 @@ export function TerminalTicketRail({
     <section class="terminal-ticket-rail__root" aria-label="Project tickets">
       <Toolbar
         className="terminal-ticket-rail__project"
-        divider={false}
+        dividerSides=""
         leading={
           <Select
             name="terminal-rail-project"
@@ -78,8 +78,10 @@ export function TerminalTicketRail({
         }
       />
       <div class="terminal-ticket-rail__controls">{controls}</div>
-      <Toolbar className="terminal-ticket-rail__heading" divider={false} leading={heading} trailing={action} />
-      <SunkenPanel className="terminal-ticket-rail__content">{content}</SunkenPanel>
+      <Toolbar className="terminal-ticket-rail__heading" dividerSides="" leading={heading} trailing={action} />
+      <SunkenPanel className="terminal-ticket-rail__content" shape="square">
+        {content}
+      </SunkenPanel>
     </section>
   );
   return (

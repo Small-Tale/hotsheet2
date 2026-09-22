@@ -9,10 +9,6 @@
 .command-navigation__group > .kui-list-header {
   min-height: remify(23.2px);
 }
-.command-navigation__items {
-  display: grid;
-  gap: remify(4.8px);
-}
 /* The command color is applied through kerf's own --kui-list-item-* tokens (set inline) so it
    wins regardless of CSS bundle order; kerf's transparent default previously overrode a plain
    background here at equal specificity (HS2-YVYA8H). */

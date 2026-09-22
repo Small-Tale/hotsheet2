@@ -253,7 +253,7 @@ export function TicketInspector({
     >
       <header class="ticket-inspector__header">
         <Toolbar
-          divider={false}
+          dividerSides=""
           {...(slugCentered ? { center: slugButton } : { leading: slugButton })}
           trailing={actions}
         />

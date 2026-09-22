@@ -87,7 +87,7 @@ export function AppShell({
       )}
       <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
         <Toolbar
-          divider={false}
+          dividerSides=""
           leading={
             <>
               {mode !== 'stats' && sidebar && !sidebarVisible && (

@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -32,7 +33,7 @@ export function NotificationNavigation({
 }) {
   const header = collapseControl ? (
     <Toolbar
-      divider={false}
+      dividerSides=""
       trailing={
         <ToolbarControlGroup appearance="borderless" single>
           <button
@@ -58,23 +59,25 @@ export function NotificationNavigation({
       <section>
         <ListHeader label="Notifications" />
         <nav aria-label="Notification views">
-          {views.map((item) => (
-            <ListItem
-              action="select-notification-view"
-              itemId={item.id}
-              selected={selected === item.id}
-              icon={<LucideIcon icon={item.icon} name={item.iconName} />}
-              label={item.label}
-              trailing={
-                <small
-                  class="kui-list-item__count"
-                  data-attention={String(item.id === 'pending' && counts.pending > 0)}
-                >
-                  {counts[item.id]}
-                </small>
-              }
-            />
-          ))}
+          <List gap="0.125rem">
+            {views.map((item) => (
+              <ListItem
+                action="select-notification-view"
+                itemId={item.id}
+                selected={selected === item.id}
+                icon={<LucideIcon icon={item.icon} name={item.iconName} />}
+                label={item.label}
+                trailing={
+                  <small
+                    class="kui-list-item__count"
+                    data-attention={String(item.id === 'pending' && counts.pending > 0)}
+                  >
+                    {counts[item.id]}
+                  </small>
+                }
+              />
+            ))}
+          </List>
         </nav>
       </section>
     </Pane>

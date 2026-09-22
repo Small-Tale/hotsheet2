@@ -9,7 +9,7 @@ export function TicketInspectorPlaceholder({ selectionCount }: { selectionCount:
   return (
     <aside class="ticket-inspector-placeholder" aria-label="Ticket inspector">
       <Toolbar
-        divider={false}
+        dividerSides=""
         trailing={
           <ToolbarControlGroup appearance="borderless" single>
             <button

@@ -34,7 +34,6 @@
   color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-provider-settings__connections {
-  display: grid;
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);

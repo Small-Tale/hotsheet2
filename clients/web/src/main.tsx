@@ -7357,7 +7357,7 @@ function renderMainShell() {
     viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value) ? (
       <Toolbar
         className="app-shell__mobile-view-header"
-        divider={false}
+        dividerSides=""
         leading={
           <Select
             className="app-shell__mobile-view"
@@ -9935,9 +9935,6 @@ function wireSearchAndComposerInteractions() {
       searchHelpOpen.value = false;
     });
     scheduleTicketSearch();
-    queueMicrotask(() => {
-      tokenSearchFields.open('workspace-search');
-    });
   });
   delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
     const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);

@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './terminal-operations-sidebar.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Pane } from '@kerfjs/ui/pane';
@@ -35,7 +36,7 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
   const chartMaximum = aggregate ? chartDomainMaximum(aggregate.trend) : undefined;
   const header = (
     <Toolbar
-      divider={false}
+      dividerSides=""
       trailing={
         <ToolbarControlGroup appearance="borderless" single>
           <button
@@ -58,20 +59,22 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
       header={header}
       contentClassName="terminal-operations-sidebar__groups"
     >
-      {groups.map((group) => (
-        <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
-          <ListHeader label={group.name} />
-          <ProjectSummary
-            completedToday={group.completedToday}
-            inProgress={group.inProgress}
-            trend={group.trend}
-            projectId={group.id}
-            chartTone={group.id === 'all' ? 'success' : 'brand'}
-            chartMaximum={chartMaximum}
-            backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
-          />
-        </section>
-      ))}
+      <List gap="var(--kui-space-m)">
+        {groups.map((group) => (
+          <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
+            <ListHeader label={group.name} />
+            <ProjectSummary
+              completedToday={group.completedToday}
+              inProgress={group.inProgress}
+              trend={group.trend}
+              projectId={group.id}
+              chartTone={group.id === 'all' ? 'success' : 'brand'}
+              chartMaximum={chartMaximum}
+              backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
+            />
+          </section>
+        ))}
+      </List>
     </Pane>
   );
 }

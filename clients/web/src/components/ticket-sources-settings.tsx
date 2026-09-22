@@ -1,5 +1,6 @@
 import './ticket-sources-settings.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Cable, ChevronRight } from 'lucide';
@@ -40,7 +41,7 @@ export function TicketSourcesSettings({
           </div>
         ))}
         {providerConnections.length > 0 && (
-          <div class="ticket-provider-settings__connections">
+          <List className="ticket-provider-settings__connections">
             {providerConnections.map((connection) => (
               <ListItem
                 action="edit-provider-connection"
@@ -62,7 +63,7 @@ export function TicketSourcesSettings({
                 }
               />
             ))}
-          </div>
+          </List>
         )}
       </section>
       {error && !setupOpen && (

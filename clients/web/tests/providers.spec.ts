@@ -4491,7 +4491,10 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
   const restoreToolbar = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
   await expect(restoreToolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(restoreToolbar).toHaveAttribute('data-position', 'bottom-end');
-  await expect(restoreToolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'dark');
+  const restoreGroup = restoreToolbar.locator('[data-component="toolbar-control-group"]');
+  await expect(restoreGroup).toHaveAttribute('data-tone', 'default');
+  await expect(restoreGroup).toHaveCSS('color-scheme', 'dark');
+  await expect(restoreGroup).toHaveCSS('background-color', 'rgb(58, 58, 60)');
   const insets = () =>
     restoreToolbar.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -5442,7 +5445,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await page.waitForTimeout(75);
   await expect(region).toBeVisible();
   await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();
-  await expect(region.locator('.ticket-inspector-placeholder > .kui-toolbar')).toHaveAttribute('data-divider', 'false');
+  await expect(region.locator('.ticket-inspector-placeholder > .kui-toolbar')).not.toHaveAttribute('divider-sides');
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
@@ -5512,20 +5515,23 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
   const placeholder = page.locator('.ticket-inspector-placeholder'),
     toolbar = placeholder.locator(':scope > .kui-toolbar');
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
-  await expect(toolbar).toHaveAttribute('data-divider', 'false');
-  await expect(toolbar).toHaveCSS('box-shadow', 'none');
+  await expect(toolbar).not.toHaveAttribute('divider-sides');
+  await expect(toolbar).toHaveCSS('box-shadow', /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/);
   await page.screenshot({ path: '/private/tmp/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(
     page.locator('[data-component="ticket-inspector"] .ticket-inspector__header > .kui-toolbar'),
-  ).toHaveAttribute('data-divider', 'false');
+  ).not.toHaveAttribute('divider-sides');
   await page.getByRole('button', { name: /Notifications view/ }).click();
   const notificationToolbar = page
     .getByRole('complementary', { name: 'Notification inspector' })
     .locator(':scope > .kui-toolbar');
-  await expect(notificationToolbar).toHaveAttribute('data-divider', 'false');
+  await expect(notificationToolbar).not.toHaveAttribute('divider-sides');
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(notificationToolbar).toHaveCSS('box-shadow', 'none');
+  await expect(notificationToolbar).toHaveCSS(
+    'box-shadow',
+    /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
+  );
   await page.screenshot({ path: '/private/tmp/hs2-f3nk91-right-sidebar-floor.png', fullPage: true });
 });
 
@@ -6761,8 +6767,8 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   rail(side.x + side.width - chatBox.x - chatBox.width);
   rail(side.x + side.width - hideBox.x - hideBox.width);
   rail(side.x + side.width - viewActionBox.x - viewActionBox.width);
-  // A 24px icon inset within its row, with a small gap before the label.
-  expect(iconBox.width).toBeCloseTo(24, 0);
+  // Beta.24 owns the 18px icon slot, with the same content inset and label gap.
+  expect(iconBox.width).toBeCloseTo(18, 0);
   expect(iconBox.x - rowBox.x).toBeGreaterThanOrEqual(8);
   expect(iconBox.x - rowBox.x).toBeLessThanOrEqual(10);
   expect(labelBox.x - iconBox.x - iconBox.width).toBeGreaterThanOrEqual(7);
@@ -7208,8 +7214,11 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await expect(page.locator('.project-sidebar')).toHaveCount(0);
   await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
-  await expect(placeholderToolbar).toHaveAttribute('data-divider', 'false');
-  await expect(placeholderToolbar).toHaveCSS('box-shadow', 'none');
+  await expect(placeholderToolbar).not.toHaveAttribute('divider-sides');
+  await expect(placeholderToolbar).toHaveCSS(
+    'box-shadow',
+    /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
+  );
   await navigation.getByRole('button', { name: 'Commands', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
   await expect(page.locator('[data-component="command-settings-editor"]')).toBeVisible();
@@ -7227,7 +7236,10 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await page.screenshot({ path: '/private/tmp/hs2-wsmx7c-settings-sidebar-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByRole('region', { name: 'Column view settings' })).toBeVisible();
-  await expect(placeholderToolbar).toHaveCSS('box-shadow', 'none');
+  await expect(placeholderToolbar).toHaveCSS(
+    'box-shadow',
+    /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
+  );
   await page.screenshot({ path: '/private/tmp/hs2-wsmx7c-settings-sidebar-floor.png', fullPage: true });
   await page.getByLabel('List view').click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
@@ -11389,6 +11401,57 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   await page.screenshot({ path: '/private/tmp/hs2-a5v801-terminal-history-setting-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 700 });
   await page.screenshot({ path: '/private/tmp/hs2-a5v801-terminal-history-setting-narrow.png', fullPage: true });
+});
+
+test('keeps managed workspace search open and focused through repeated controlled clears (HS2-M4BNX5)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const field = page.locator('[data-token-search-id="workspace-search"]'),
+    editor = page.getByRole('searchbox', { name: 'Search tickets' }),
+    group = page.locator('.workspace-header__search-group').filter({ has: field });
+  for (const [width, name] of [
+    [1280, 'wide'],
+    [390, 'mobile'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await editor.fill('has:attachment ');
+      await expect(
+        field.locator('[data-component="token-search-token"][data-token-value="has:attachment"]'),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+      await page.keyboard.type('continued');
+      await expect(editor).toBeFocused();
+      await expect(editor).toHaveText('continued');
+      await expect(field.locator('[data-component="token-search-token"]')).toHaveCount(0);
+      await expect(group).toHaveAttribute('data-expanded', 'true');
+    }
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+    await expect(editor).toBeVisible();
+    await page.screenshot({
+      path: `/private/tmp/hs2-m4bnx5-context-${name}.png`,
+      fullPage: true,
+      animations: 'disabled',
+    });
+    await group.screenshot({ path: `/private/tmp/hs2-m4bnx5-adopted-clear-${name}.png`, animations: 'disabled' });
+    await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+    await expect(editor).toBeFocused();
+    await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+  }
 });
 
 test('searches indexed ticket details and notes without discarding the full project list', async ({ page }) => {

@@ -27,7 +27,7 @@ export function ToolbarDemo() {
       />
       <Toolbar
         label="Toolbar without divider"
-        divider={false}
+        dividerSides=""
         center={<ToolbarText text="HS2-C1TY0F" size="small" />}
       />
     </section>

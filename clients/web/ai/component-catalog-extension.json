@@ -171,9 +171,9 @@
       "id": "command-navigation",
       "name": "CommandNavigation",
       "kind": "component",
-      "purpose": "Grouped colored project command actions.",
+      "purpose": "Grouped colored project command actions arranged by Kerf List.",
       "useWhen": [
-        "Hot Sheet needs grouped colored project command actions."
+        "Hot Sheet needs grouped colored project command actions arranged by Kerf List."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific CommandNavigation behavior."
@@ -375,9 +375,9 @@
       "id": "settings-navigation",
       "name": "SettingsNavigation",
       "kind": "component",
-      "purpose": "Grouped settings categories in an unpadded sidebar pane.",
+      "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
       "useWhen": [
-        "Hot Sheet needs grouped settings categories in an unpadded sidebar pane."
+        "Hot Sheet needs grouped settings categories arranged by Kerf List in an unpadded sidebar pane."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific SettingsNavigation behavior."
@@ -397,9 +397,9 @@
       "id": "notification-navigation",
       "name": "NotificationNavigation",
       "kind": "component",
-      "purpose": "Notification views with attention counts in an unpadded sidebar pane.",
+      "purpose": "Notification views with attention counts arranged by Kerf List in an unpadded sidebar pane.",
       "useWhen": [
-        "Hot Sheet needs notification views with attention counts in an unpadded sidebar pane."
+        "Hot Sheet needs notification views with attention counts arranged by Kerf List in an unpadded sidebar pane."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NotificationNavigation behavior."
@@ -1522,9 +1522,9 @@
       "id": "ticket-sources-settings",
       "name": "TicketSourcesSettings",
       "kind": "component",
-      "purpose": "Connected git and external ticket-source inventory.",
+      "purpose": "Connected git and external ticket-source inventory with Kerf List connection rows.",
       "useWhen": [
-        "Hot Sheet needs connected git and external ticket-source inventory."
+        "Hot Sheet needs connected git and external ticket-source inventory with Kerf List connection rows."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."

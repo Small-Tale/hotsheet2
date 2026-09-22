@@ -152,6 +152,9 @@ describe('permission presentation components', () => {
     );
     expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('class="kui-list-header__label">Notifications</h2>');
+    expect(markup).toContain('<nav aria-label="Notification views">');
+    expect(markup).toContain('data-component="list"');
+    expect(markup).not.toContain('divider-sides');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
     expect(markup.match(/class="kui-list-item__count"/g)).toHaveLength(3);
     expect(markup).toContain('class="kui-list-item__count" data-attention="true">2</small>');

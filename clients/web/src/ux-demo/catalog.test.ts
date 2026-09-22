@@ -103,6 +103,7 @@ describe('UX demo catalog', () => {
       'select',
       'toolbar',
       'floating-toolbar',
+      'list',
       'list-item',
       'list-header',
       'toolbar-control-group',

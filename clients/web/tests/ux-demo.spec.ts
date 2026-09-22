@@ -2,6 +2,76 @@ import { expect, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
+test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const [component, label, count] of [
+      ['settings-navigation', 'Project Settings', 7],
+      ['notification-navigation', 'Notification views', 3],
+    ] as const) {
+      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      const navigation = page.getByRole('navigation', { name: label, exact: true }),
+        list = navigation.locator(':scope > [data-component="list"]'),
+        rows = list.getByRole('button');
+      await expect(rows).toHaveCount(count);
+      await expect(list).toHaveCSS('display', 'flex');
+      await expect(list).toHaveCSS('flex-direction', 'column');
+      await expect(list).toHaveCSS('gap', '2px');
+      await expect(list).toHaveCSS('overflow-y', 'visible');
+      const pane = navigation.locator('xpath=ancestor::aside');
+      await expect(pane.locator('.kui-pane__content')).toHaveCSS('overflow-y', 'auto');
+      await expect(pane.locator('.kui-toolbar')).not.toHaveAttribute('divider-sides');
+      await rows.first().focus();
+      await page.keyboard.press('Tab');
+      await expect(rows.nth(1)).toBeFocused();
+      const geometry = await rows.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const row = button.getBoundingClientRect(),
+            icon = button.querySelector('.kui-list-item__icon svg')!.getBoundingClientRect();
+          return {
+            left: row.left,
+            right: row.right,
+            iconWidth: icon.width,
+            iconOffset: Math.abs(icon.y + icon.height / 2 - (row.y + row.height / 2)),
+          };
+        }),
+      );
+      for (const row of geometry) {
+        expect(row.left).toBeGreaterThanOrEqual(0);
+        expect(row.right).toBeLessThanOrEqual(width);
+        expect(row.iconWidth).toBe(18);
+        expect(row.iconOffset).toBeLessThanOrEqual(1);
+      }
+      await pane.screenshot({ path: `/private/tmp/hs2-zmn977-${component}-${width}.png` });
+    }
+  }
+});
+
+test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=list&dev-review=false');
+    const examples = page.getByRole('region', { name: 'List layout variants', exact: true }),
+      lists = examples.locator('[data-component="list"]'),
+      scroller = lists.nth(2);
+    await expect(lists).toHaveCount(3);
+    await expect(lists.nth(0)).toHaveCSS('gap', '0px');
+    await expect(lists.nth(1)).toHaveCSS('gap', '8px');
+    await expect(scroller).toHaveCSS('gap', '12px');
+    await expect(scroller).toHaveAttribute('divider-sides', 'trbl');
+    await expect(scroller).toHaveCSS('overflow-y', 'auto');
+    const geometry = await scroller.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+      return { height: node.clientHeight, scrollHeight: node.scrollHeight, scrollTop: node.scrollTop };
+    });
+    expect(geometry.height).toBe(192);
+    expect(geometry.scrollHeight).toBeGreaterThan(geometry.height);
+    expect(geometry.scrollTop).toBeGreaterThan(0);
+    await examples.screenshot({ path: `/private/tmp/hs2-zmn977-list-demo-${width}.png` });
+  }
+});
+
 test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)', async ({ page }) => {
   await page.goto('/ux-demo?dev-review=false');
   const catalog = page.getByRole('navigation', { name: 'UX components components' });
@@ -71,18 +141,32 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
   await catalog.getByRole('button', { name: /AppTab/ }).click();
-  await expect.poll(() => page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
-  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-bounds-wide.png', fullPage: true });
+  const borders = page.locator('.kui-catalog__geometry-border'),
+    bounds = page.locator('.kui-catalog__geometry-bound');
+  await expect(borders).toHaveCount(2);
+  await expect(bounds).toHaveCount(0);
+  for (const border of await borders.all()) {
+    for (const side of ['top', 'right', 'bottom', 'left'])
+      await expect(border).toHaveCSS(`border-${side}-width`, '1px');
+  }
+  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-wide.png', fullPage: true });
+  await catalog.locator('[data-item-id="list"]').click();
+  await expect(page.getByRole('region', { name: 'List layout variants', exact: true })).toBeVisible();
+  await expect.poll(() => bounds.count()).toBeGreaterThan(0);
+  await expect(borders).toHaveCount(0);
   await catalog.getByRole('button', { name: /ValueTable/ }).click();
   await expect(page.getByRole('heading', { name: 'ValueTable', exact: true })).toBeVisible();
   await expect.poll(() => page.locator('.kui-catalog__geometry-margin').count()).toBeGreaterThan(0);
   await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-margins-wide.png', fullPage: true });
   await catalog.getByRole('button', { name: /AppShell/ }).click();
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'false');
-  await expect(page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-margin')).toHaveCount(0);
+  await expect(
+    page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-border, .kui-catalog__geometry-margin'),
+  ).toHaveCount(0);
   await catalog.getByRole('button', { name: /AppTab/ }).click();
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  await expect.poll(() => page.locator('.kui-catalog__geometry-bound').count()).toBeGreaterThan(0);
+  await expect(borders).toHaveCount(2);
+  await expect(bounds).toHaveCount(0);
   const theme = page.getByRole('button', { name: 'Use dark theme' });
   await theme.click();
   await expect(page.locator('html')).toHaveClass(/wa-dark/);
@@ -90,7 +174,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await page.setViewportSize({ width: 760, height: 800 });
   await page.getByRole('button', { name: 'Collapse UX components catalog' }).click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-bounds-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-narrow.png', fullPage: true });
 });
 
 test('reveals deep-linked and newly selected catalog entries without moving focus', async ({ page }) => {
@@ -4237,7 +4321,10 @@ test('exercises the application-shell component slice and responsive composition
     'data-has-center',
     'false',
   );
-  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS('box-shadow', 'none');
+  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS(
+    'box-shadow',
+    /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
+  );
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);

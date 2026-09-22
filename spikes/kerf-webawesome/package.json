@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@awesome.me/webawesome": "3.11.0",
-    "kerfjs": "5.0.0-beta.23"
+    "kerfjs": "5.0.0-beta.24"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -18,7 +18,7 @@
     "@types/node": "22.17.2",
     "eslint": "^10.9.1",
     "eslint-plugin-import-x": "^4.17.1",
-    "eslint-plugin-kerfjs": "^4.4.1",
+    "eslint-plugin-kerfjs": "5.0.0-beta.24",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-tsdoc": "^0.5.2",
     "typescript": "5.9.2",

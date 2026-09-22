@@ -65,7 +65,7 @@ export function TicketCodeReview({
       data-component="ticket-code-review"
     >
       <section>
-        <Toolbar className="ticket-code-review__header" divider={false} leading={heading} />
+        <Toolbar className="ticket-code-review__header" dividerSides="" leading={heading} />
         {loading && <p role="status">{loadingMessage}</p>}
         {!loading && review && review.commits.length === 0 && (
           <div class="ticket-code-review__empty">

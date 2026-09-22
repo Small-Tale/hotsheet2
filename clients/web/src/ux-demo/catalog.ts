@@ -97,9 +97,10 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'command-navigation',
         'CommandNavigation',
-        'Grouped colored project command actions.',
+        'Grouped colored project command actions arranged by Kerf List.',
         'feature-floor',
         true,
+        ['list', 'list-header', 'list-item'],
       ),
       demo(
         'command-settings-editor',
@@ -163,18 +164,18 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'settings-navigation',
         'SettingsNavigation',
-        'Grouped settings categories in an unpadded sidebar pane.',
+        'Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.',
         'feature-floor',
         true,
-        ['list-item', 'toolbar'],
+        ['list', 'list-item', 'toolbar'],
       ),
       demo(
         'notification-navigation',
         'NotificationNavigation',
-        'Notification views with attention counts in an unpadded sidebar pane.',
+        'Notification views with attention counts arranged by Kerf List in an unpadded sidebar pane.',
         'feature-floor',
         true,
-        ['list-item', 'toolbar'],
+        ['list', 'list-item', 'toolbar'],
       ),
     ],
   },
@@ -517,7 +518,7 @@ export const demoCatalog: DemoCategory[] = [
         'Per-project and aggregate completion and in-progress summaries beside the workspace grid.',
         'feature-floor',
         true,
-        ['project-summary', 'list-header', 'toolbar'],
+        ['project-summary', 'list', 'list-header', 'toolbar'],
       ),
       demo(
         'terminal-ticket-rail',
@@ -605,6 +606,13 @@ export const demoCatalog: DemoCategory[] = [
         ['toolbar-control-group'],
       ),
       demo(
+        'list',
+        'List',
+        'Vertical row layout with no gap, standard gap, and bounded scrolling with custom gap and edge dividers.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'list-item',
         'ListItem',
         'Aligned icon, label, trailing value, and selection geometry for list rows.',
@@ -690,10 +698,10 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'ticket-sources-settings',
         'TicketSourcesSettings',
-        'Connected git and external ticket-source inventory.',
+        'Connected git and external ticket-source inventory with Kerf List connection rows.',
         'feature-floor',
         true,
-        ['list-item'],
+        ['list', 'list-item'],
       ),
       demo(
         'settings-workspace',

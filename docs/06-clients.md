@@ -691,7 +691,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client and its Kerf/Web Awesome spike pin `kerfjs` and `@kerfjs/ui` in
-  lockstep at 5.0.0-beta.23. The client follows that release's stricter component
+  lockstep at 5.0.0-beta.24. The client follows that release's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
   instead of passing partial optional action props. The browser test runtime is kept at
@@ -699,13 +699,30 @@ and identity-less legacy entries remain conservatively blocking.
   one compatible installation. Token-search input state is consumed through beta 22's
   `wireTokenSearchFields.onEdit` callback in both the application and UX catalog rather
   than through a second competing delegated input listener (HS2-HJ585K).
+  Managed token search owns clear-action focus across controlled editor replacement:
+  clearing chips keeps the current editor open for immediate continued typing, while
+  subsequently focusing another control collapses an empty search normally. The app
+  no longer queues its own reopen after clear (HS2-M4BNX5).
 
   Shared Kerf layout primitives own common shell geometry. Project, settings,
   notification, and terminal-operations sidebars use `Pane` for their
   header/content/footer structure; settings and notification groups use `ListHeader`
   instead of local heading imitations; and the terminal ticket rail uses `SunkenPanel`
-  for its lowered content surface. Product CSS is limited to placement and the token
-  overrides those components deliberately expose.
+  for its lowered content surface, with its explicit square shape at the rail edges.
+  Beta.24's `List` owns vertical row layout in settings and notification navigation,
+  command groups, connected provider rows, ticket-note cards, and terminal operations
+  summaries. It supplies their gap without adding semantic list roles, padding, or
+  another scroll owner:
+  named navigation landmarks and existing pane/workspace scrolling remain intact.
+  Semantic `ul`/`li` and ticket `listbox` collections retain their native structure.
+  Toolbars select physical divider edges through `dividerSides` (empty for none).
+  ListItem's upstream 18px icon geometry and managed token-search focus/disposal
+  fixes come from the package. The optional StateBanner badge needs no additional
+  consumer mapping because existing banners have no separate badge content.
+  Product CSS is limited to placement and the tokens those components expose
+  (HS2-ZMN977). The web client and spike also pin the beta.24 ESLint plugin,
+  retaining the existing recommended rules while adopting its safe, explicit-only
+  bundled assistant-configuration update behavior.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries

@@ -160,10 +160,11 @@ and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
 All project-sidebar content follows two explicit rails: full-row highlight layers are
-inset 10px from each sidebar edge, while visible text and icon slots begin another 10px
-inside that layer. Transparent idle rows retain the same highlight geometry. Menu icons
-occupy a 24px slot, labels follow after 10px, and standalone toolbar/footer icons retain
-a 44px highlight target even when its background is hidden (HS2-2P8N8D).
+inset 8px from each sidebar edge, while visible text and icon slots use an 8px content
+inset inside that layer. Transparent idle rows retain the same highlight geometry.
+With Kerf beta.24, menu icons occupy an 18px slot and labels follow after 8px.
+Standalone toolbar/footer icons retain a 44px highlight target even when their
+background is hidden (HS2-2P8N8D).
 Immediately above Drive, a centered `M open, N up next` summary is derived from the
 already-loaded project tickets. Open is the active-work axis (exactly Not Started +
 Started; Backlog is excluded), while Up Next counts only workflow-open
@@ -1545,3 +1546,17 @@ The first review should settle these before visual polish:
   narrower widths.
 - Whether the terminal drawer is part of the initial feature-floor demo or the first
   follow-on desktop slice.
+
+### Kerf beta.24 layout adoption
+
+Settings and notification navigation, command rows, connected provider rows,
+ticket-note cards, and terminal operations summaries use the package `List` for
+vertical layout and explicit gaps. Their existing navigation landmarks, actions, and
+pane/workspace scroll owners remain unchanged. `List` adds no list semantics;
+semantic `ul`/`li` collections and ticket listboxes retain their existing structure.
+The terminal rail uses the public `SunkenPanel` square shape, and divider-free
+toolbars use `dividerSides=""`. These compositions are exercised in their existing UX
+demos and production flows.
+
+The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
+examples using the package component unchanged, including explicit edge dividers.

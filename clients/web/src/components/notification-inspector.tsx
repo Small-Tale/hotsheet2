@@ -9,7 +9,7 @@ export function NotificationInspector() {
   return (
     <aside class="notification-inspector-empty" aria-label="Notification inspector">
       <Toolbar
-        divider={false}
+        dividerSides=""
         trailing={
           <ToolbarControlGroup appearance="borderless" single>
             <button

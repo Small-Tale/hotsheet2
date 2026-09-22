@@ -21,7 +21,3 @@
   padding-block: remify(8px);
   gap: var(--kui-space-m);
 }
-.settings-navigation nav {
-  display: grid;
-  gap: remify(2px);
-}

@@ -133,6 +133,7 @@ import {
   openHs1MigrationDialogDemo,
   ValueTableDemo,
 } from './dialog-layout-demo';
+import { ListDemo } from './list-demo';
 import { ListHeaderDemo } from './list-header-demo';
 import { ListItemDemo } from './list-item-demo';
 import {
@@ -422,6 +423,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
+  if (item.id === 'list') return <ListDemo />;
   if (item.id === 'list-item') return <ListItemDemo />;
   if (item.id === 'list-header') return <ListHeaderDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;

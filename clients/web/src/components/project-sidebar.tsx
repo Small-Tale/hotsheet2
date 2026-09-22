@@ -56,7 +56,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     `${props.driveTool.slice(0, 1).toUpperCase()}${props.driveTool.slice(1)}`;
   const header = props.collapseControl ? (
     <Toolbar
-      divider={false}
+      dividerSides=""
       trailing={
         <ToolbarControlGroup appearance="borderless" single>
           <button

@@ -1,6 +1,7 @@
 import '@kerfjs/ui/list-inset-text.css';
 import './ticket-notes.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -62,7 +63,7 @@ export function TicketNotes({
         />
       )}
       {notes.length > 0 ? (
-        <div class="ticket-notes__list">
+        <List className="ticket-notes__list" gap="0.55rem">
           {notes.map((note) => (
             <NoteCard
               {...note}
@@ -77,7 +78,7 @@ export function TicketNotes({
               attachmentContext={attachmentContext}
             />
           ))}
-        </div>
+        </List>
       ) : (
         !composing && (
           <ListInsetText horizontalOnly className="ticket-notes__empty-inset">

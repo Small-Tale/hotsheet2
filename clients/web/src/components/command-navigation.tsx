@@ -1,5 +1,6 @@
 import './command-navigation.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -103,7 +104,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                 />
               )}
               {groupExpanded && (
-                <div class="command-navigation__items">
+                <List className="command-navigation__items" gap="0.3rem">
                   {items.map((command) => {
                     const { icon, name } = resolveCommandIcon(command.icon),
                       type =
@@ -145,7 +146,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                       />
                     );
                   })}
-                </div>
+                </List>
               )}
             </div>
           );

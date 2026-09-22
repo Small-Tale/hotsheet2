@@ -89,7 +89,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
     >
       <header class="ticket-inspector__header">
         <Toolbar
-          divider={false}
+          dividerSides=""
           center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width="5.5rem" height="1rem" />}
           trailing={actions}
         />

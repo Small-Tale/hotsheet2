@@ -320,7 +320,7 @@ export function AttachmentGallery({
     >
       <Toolbar
         className="attachment-gallery__toolbar"
-        divider={false}
+        dividerSides=""
         leading={<ToolbarText className="attachment-gallery__filename" text={image.name} />}
         trailing={
           <>

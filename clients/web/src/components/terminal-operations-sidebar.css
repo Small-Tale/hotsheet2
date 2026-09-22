@@ -16,9 +16,6 @@
   padding: var(--kui-space-xs);
   overflow: auto;
 }
-.terminal-operations-sidebar__group + .terminal-operations-sidebar__group {
-  margin-top: var(--kui-space-m);
-}
 .terminal-operations-sidebar__group[data-project-id='all'] {
   padding-bottom: var(--kui-space-m);
   border-bottom: 1px solid var(--wa-color-surface-border);

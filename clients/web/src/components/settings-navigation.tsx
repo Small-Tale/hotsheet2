@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -62,21 +63,23 @@ export function SettingsNavigation({
     <section>
       <ListHeader label={heading} />
       <nav aria-label={heading}>
-        {items.map((item) => (
-          <ListItem
-            action="select-settings-category"
-            itemId={item.id}
-            selected={selected === item.id}
-            icon={<LucideIcon icon={item.icon} name={item.iconName} />}
-            label={item.label}
-          />
-        ))}
+        <List gap="0.125rem">
+          {items.map((item) => (
+            <ListItem
+              action="select-settings-category"
+              itemId={item.id}
+              selected={selected === item.id}
+              icon={<LucideIcon icon={item.icon} name={item.iconName} />}
+              label={item.label}
+            />
+          ))}
+        </List>
       </nav>
     </section>
   );
   const header = collapseControl ? (
     <Toolbar
-      divider={false}
+      dividerSides=""
       trailing={
         <ToolbarControlGroup appearance="borderless" single>
           <button
