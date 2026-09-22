@@ -85,7 +85,7 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-maximized="false"');
     expect(markup).toContain('data-component="tab-bar"');
     expect(markup).toContain('data-tab-bar-id="terminal-drawer"');
-    expect(markup).toContain('data-tab-activation="automatic"');
+    expect(markup).toContain('data-tab-activation="manual"');
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');

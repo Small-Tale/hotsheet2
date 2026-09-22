@@ -387,9 +387,10 @@ describe('ProjectSidebar component slice', () => {
         collapseControl: true,
       }),
     );
-    expect(markup).toContain('class="project-sidebar kui-pane"');
-    expect(markup).toContain('class="project-sidebar__content kui-pane__content"');
-    expect(markup).toContain('class="project-sidebar__footer kui-pane__footer"');
+    expect(markup).toContain('class="kui-pane project-sidebar"');
+    expect(markup).toContain('data-component="pane"');
+    expect(markup).toContain('class="kui-pane__content kui-content project-sidebar__content"');
+    expect(markup).toContain('class="kui-pane__footer project-sidebar__footer"');
     const css = readFileSync(new URL('./project-sidebar.css', import.meta.url), 'utf8');
     // The pane shell owns only card chrome — no padding and no zeroed inline margin.
     const shell = css.match(/\.project-sidebar \{([^}]*)\}/)?.[1] ?? '';
@@ -400,8 +401,8 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.project-sidebar__footer \{[^}]*padding: var\(--kui-space-xs\)/);
     // The collapse toolbar aligns its lone control to the gutter with flex, not the old negative-margin hack.
-    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \{[^}]*justify-content: flex-end/);
-    expect(css).not.toMatch(/\.project-sidebar > \.kui-toolbar \{[^}]*margin:/);
+    expect(css).toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/);
+    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
   });
 
   it('omits the command section when the project has no commands', () => {

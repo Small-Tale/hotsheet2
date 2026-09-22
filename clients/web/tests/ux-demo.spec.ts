@@ -3569,7 +3569,7 @@ test('keeps workspace spacing and the new-ticket action in the page header', asy
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
   await page.goto('/ux-demo?component=project-sidebar');
-  const sidebar = page.locator('[data-component="project-sidebar"]');
+  const sidebar = page.locator('.project-sidebar');
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 active');
   for (const component of [
@@ -4010,7 +4010,6 @@ test('exercises the application-shell component slice and responsive composition
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
   for (const component of [
-    'project-sidebar',
     'state-banner',
     'workspace-identity',
     'workspace-controls',
@@ -4019,6 +4018,7 @@ test('exercises the application-shell component slice and responsive composition
     'ticket-inspector',
   ])
     await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  await expect(shell.locator('.project-sidebar[data-component="pane"]')).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();
@@ -4066,7 +4066,7 @@ test('exercises the application-shell component slice and responsive composition
   ).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
-  await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(shell.locator('.project-sidebar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await shell.getByRole('button', { name: /New ticket/ }).click();
   const shellComposer = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
@@ -4209,7 +4209,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showSidebar.click();
-  await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
+  await expect(shell.locator('.project-sidebar')).toBeVisible();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
     'data-collapsed',
     'false',
@@ -4277,7 +4277,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await shell.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
-  await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
+  await expect(shell.locator('.project-sidebar')).toHaveCount(0);
   await expect(shell.getByRole('complementary', { name: 'Terminal operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
@@ -4294,7 +4294,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.getByRole('region', { name: 'Cross-project stats workspace' })).toBeVisible();
   await shell.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
-  await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
+  await expect(shell.locator('.project-sidebar')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toBeVisible();
   await shell.locator('[data-component="project-summary"]').click();

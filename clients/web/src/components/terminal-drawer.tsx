@@ -141,7 +141,9 @@ export function TerminalDrawer({
           id={TERMINAL_DRAWER_TAB_BAR_ID}
           label="Terminal drawer views"
           className="terminal-drawer__views"
-          activation="automatic"
+          // Terminal selection replaces the controlled tab nodes and changes a live work surface.
+          // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
+          activation="manual"
           trailing={
             <>
               <div class="terminal-drawer__create-wrap">

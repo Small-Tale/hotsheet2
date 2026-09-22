@@ -11,23 +11,15 @@
   box-shadow: var(--wa-shadow-l);
 }
 /* Flex layout so a lone collapse control aligns to the 8px gutter (HS2-V0ZH69). */
-.settings-navigation > .kui-toolbar {
+.settings-navigation > .kui-pane__header > .kui-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 .settings-navigation__content {
-  grid-row: 2;
   overflow: auto;
   padding-block: remify(8px);
-}
-.settings-navigation__heading {
-  margin: remify(16px) remify(8px) remify(4px);
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  gap: var(--kui-space-m);
 }
 .settings-navigation nav {
   display: grid;

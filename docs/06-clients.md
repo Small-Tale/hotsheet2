@@ -662,7 +662,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client and its Kerf/Web Awesome spike pin `kerfjs` and `@kerfjs/ui` in
-  lockstep at 5.0.0-beta.22. The client follows that release's stricter component
+  lockstep at 5.0.0-beta.23. The client follows that release's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
   instead of passing partial optional action props. The browser test runtime is kept at
@@ -670,6 +670,12 @@ and identity-less legacy entries remain conservatively blocking.
   one compatible installation. Token-search input state is consumed through beta 22's
   `wireTokenSearchFields.onEdit` callback in both the application and UX catalog rather
   than through a second competing delegated input listener (HS2-HJ585K).
+
+  Shared Kerf layout primitives own common shell geometry. Project, settings, and
+  notification sidebars use `Pane` for their header/content/footer structure; settings
+  and notification groups use `ListHeader` instead of local heading imitations; and the
+  terminal ticket rail uses `SunkenPanel` for its lowered content surface. Product CSS
+  is limited to placement and the token overrides those components deliberately expose.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
@@ -1633,9 +1639,9 @@ Human-readable defaults replace generated
 ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
 identity. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
-`TabBar`/`AppTab` composition and one `wireTabBars` delegation: the project strip uses manual
-activation because changing projects loads data, while the inexpensive drawer strip uses
-automatic activation so Left/Right/Home/End both focus and select the destination. Project order is stored with the
+`TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
+Left/Right/Home/End move focus without replacing the focused controlled tab node, and
+Enter/Space explicitly selects the project or live drawer surface. Project order is stored with the
 open-project roots and restored without changing the remembered active project. Each
 project's mixed drawer order is stored device-locally and remains stable across refresh and
 drawer reopen. Holding Option/Alt when opening the menu changes the directional action to the

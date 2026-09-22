@@ -13,11 +13,11 @@ import {
 describe('workspace composition surfaces', () => {
   it('owns settings, notification, and project sidebar routing', () => {
     expect(String(SidebarSurface({ kind: 'settings', selected: 'sources' }))).toContain(
-      'data-component="settings-navigation"',
+      'class="kui-pane settings-navigation"',
     );
     expect(
       String(SidebarSurface({ kind: 'notifications', selected: 'day', counts: { pending: 1, day: 2, week: 3 } })),
-    ).toContain('data-component="notification-navigation"');
+    ).toContain('aria-label="Notification views"');
   });
 
   it('owns workspace list, board-independent settings, and notification routing', () => {

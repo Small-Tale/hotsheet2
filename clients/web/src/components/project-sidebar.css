@@ -13,13 +13,12 @@
 }
 /* Flex layout so a lone collapse control aligns to the 8px gutter; kerf's Toolbar grid
    renders three cells and pushes a single trailing control ~16px in (HS2-V0ZH69). */
-.project-sidebar > .kui-toolbar {
+.project-sidebar > .kui-pane__header > .kui-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 .project-sidebar__content {
-  grid-row: 2;
   display: grid;
   align-content: start;
   row-gap: var(--kui-space-m);
@@ -31,7 +30,6 @@
   margin-inline: var(--kui-space-xs);
 }
 .project-sidebar__footer {
-  grid-row: 3;
   display: grid;
   padding: var(--kui-space-xs);
   row-gap: var(--kui-space-xs);

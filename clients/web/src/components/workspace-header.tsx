@@ -406,6 +406,7 @@ export function WorkspaceControls({
               aria-label="Search syntax help"
               aria-expanded={String(searchHelpOpen)}
               title="Search syntax help"
+              data-token-search-keep-open
             >
               <LucideIcon icon={CircleHelp} name="circle-help" />
             </button>

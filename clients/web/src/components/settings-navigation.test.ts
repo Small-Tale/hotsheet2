@@ -6,6 +6,7 @@ describe('SettingsNavigation', () => {
   it('renders every available category and exposes the current one', () => {
     const markup = String(SettingsNavigation({ selected: 'permissions', collapseControl: true }));
     expect(markup).toContain('aria-label="Settings categories"');
+    expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('data-item-id="sources"');
     expect(markup).toContain('data-item-id="ai"');
     expect(markup).toContain('data-item-id="commands"');
@@ -17,8 +18,8 @@ describe('SettingsNavigation', () => {
     for (const icon of ['database', 'bot', 'terminal-square', 'archive-restore', 'shield-check', 'columns-3'])
       expect(markup).toContain(`data-lucide="${icon}"`);
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
-    expect(markup).toContain('>Project Settings</p>');
-    expect(markup).toContain('>App Settings</p>');
+    expect(markup).toContain('class="kui-list-header__label">Project Settings</h2>');
+    expect(markup).toContain('class="kui-list-header__label">App Settings</h2>');
     expect(markup).toContain('data-item-id="general"');
     expect(markup).toContain('data-item-id="keyboard"');
     expect(markup).toContain('data-lucide="keyboard"');

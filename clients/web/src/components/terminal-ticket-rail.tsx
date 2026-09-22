@@ -2,6 +2,7 @@ import './terminal-ticket-rail.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
+import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -78,7 +79,7 @@ export function TerminalTicketRail({
       />
       <div class="terminal-ticket-rail__controls">{controls}</div>
       <Toolbar className="terminal-ticket-rail__heading" divider={false} leading={heading} trailing={action} />
-      <div class="terminal-ticket-rail__content">{content}</div>
+      <SunkenPanel className="terminal-ticket-rail__content">{content}</SunkenPanel>
     </section>
   );
   return (

@@ -128,10 +128,9 @@
   padding-inline: remify(12.8px);
 }
 .terminal-ticket-rail__content {
+  --kui-sunken-panel-radius: 0;
   min-height: 0;
-  padding: var(--kui-space-xs);
   overflow: auto;
-  background: var(--wa-color-surface-lowered);
   flex: 1;
 }
 .terminal-ticket-rail__content .notification-center {

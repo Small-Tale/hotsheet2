@@ -150,6 +150,8 @@ describe('permission presentation components', () => {
     const markup = String(
       NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }),
     );
+    expect(markup).toContain('data-component="pane"');
+    expect(markup).toContain('class="kui-list-header__label">Notifications</h2>');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
     expect(markup.match(/class="kui-list-item__count"/g)).toHaveLength(3);
     expect(markup).toContain('class="kui-list-item__count" data-attention="true">2</small>');

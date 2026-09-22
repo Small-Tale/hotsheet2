@@ -28,6 +28,8 @@ describe('TerminalTicketRail', () => {
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
+    expect(markup).toContain('class="kui-sunken-panel terminal-ticket-rail__content"');
+    expect(markup).toContain('data-component="sunken-panel"');
     expect(markup).toContain('data-active-side="a"');
     expect(markup.match(/<wa-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
       'kui-select--fit-menu',
@@ -66,7 +68,7 @@ describe('TerminalTicketRail', () => {
       /__controls \{ padding:var\(--kui-space-2xs\) var\(--kui-space-xs\) var\(--kui-space-xs\)/,
     );
     expect(css).toMatchSource(/__heading \{[^}]*padding:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/__content \{[^}]*padding:var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/__content \{[^}]*--kui-sunken-panel-radius:0/);
     expect(css).toMatch(/translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/);
     expect(css).toMatchSource(/__project \{ min-height:remify\(52px\)/);
     expect(css).toMatchSource(/__heading \{ min-height:remify\(60px\)/);

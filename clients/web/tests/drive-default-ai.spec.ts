@@ -173,14 +173,12 @@ test('the Drive control reflects each project default AI on boot restore and tab
     alphaTab = page.getByRole('tab', { name: /Alpha/ });
   await expect(bravoTab).toBeVisible();
   await expect(alphaTab).toBeVisible();
-  const drive = page.locator(
-    '[data-component="project-sidebar"] [data-component="drive-control"] [data-action="toggle-drive"]',
-  );
+  const drive = page.locator('.project-sidebar [data-component="drive-control"] [data-action="toggle-drive"]');
   // Boot restore: active project is Bravo (Claude) — never visited settings.
   await expect(drive).toHaveAccessibleName('Drive with Claude');
   if (process.env.HS2_BECC2T_SHOT)
     await page
-      .locator('[data-component="project-sidebar"] [data-component="drive-control"]')
+      .locator('.project-sidebar [data-component="drive-control"]')
       .screenshot({ path: process.env.HS2_BECC2T_SHOT });
   // Tab switch to Alpha must re-resolve to that project's default (Codex).
   await alphaTab.click();

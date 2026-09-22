@@ -152,7 +152,7 @@ test('never renders one project sidebar with another project statistics', async 
     node.value = value;
   }, '/work/hotsheet2');
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const summary = page.locator('[data-component="project-sidebar"] [data-component="project-summary"]'),
+  const summary = page.locator('.project-sidebar [data-component="project-summary"]'),
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
@@ -294,7 +294,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     },
   });
   await expect.poll(() => Boolean(staleTickets)).toBe(true);
-  const summary = page.locator('[data-component="project-sidebar"] [data-component="project-summary"]');
+  const summary = page.locator('.project-sidebar [data-component="project-summary"]');
   await page.getByRole('tab', { name: 'hotsheet2' }).click();
   await expect(summary).toHaveAccessibleName('Open project statistics: 3 completed today, 7 in progress');
   await page.getByRole('tab', { name: 'other' }).click();
@@ -413,7 +413,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const summary = page.locator('[data-component="project-sidebar"] [data-component="project-summary"]'),
+  const summary = page.locator('.project-sidebar [data-component="project-summary"]'),
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
