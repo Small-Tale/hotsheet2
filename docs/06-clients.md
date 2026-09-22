@@ -1760,7 +1760,9 @@ legacy numbers, and explicit `@project-id/SLUG` references. Activation uses the 
 terminal project as the preference for an unqualified match, then opens the existing stacked
 ticket reader or its not-found/ambiguity feedback. The provider reads xterm's parsed buffer
 and ranges rather than terminal DOM or HTML, so ANSI styling, wrapped rows, WebGL rendering,
-selection, focus, and normal input remain intact. Scaled dashboard previews deliberately do
+selection, focus, and normal input remain intact. Dragging to select text within a ticket
+reference does not activate the link or reopen a dismissed reader; after clearing the
+selection, ordinary clicks activate references again (HS2-H6ZXNM). Scaled dashboard previews deliberately do
 not register the provider. Magnified desktop terminals fit their real xterm font metrics to
 the fixed frame and apply a uniform measured residual physical scale, keeping glyph proportions,
 pointer hit-testing, selection, and a flush frame edge aligned with the visible 80×24 cells

@@ -65,12 +65,18 @@ export function terminalTicketLinksForBufferLine(
 }
 
 export function registerTerminalTicketLinkProvider(
-  terminal: Pick<Terminal, 'buffer' | 'cols' | 'registerLinkProvider'>,
+  terminal: Pick<Terminal, 'buffer' | 'cols' | 'hasSelection' | 'registerLinkProvider'>,
   activate: (reference: string) => void,
 ): IDisposable {
   const provider: ILinkProvider = {
     provideLinks: (line, callback) => {
-      callback(terminalTicketLinksForBufferLine(terminal.buffer.active, terminal.cols, line, activate));
+      callback(
+        terminalTicketLinksForBufferLine(terminal.buffer.active, terminal.cols, line, (reference) => {
+          // xterm can activate a link on mouseup after a drag within its range. Selection
+          // belongs to the terminal; it must not reopen a reader the user just dismissed.
+          if (!terminal.hasSelection()) activate(reference);
+        }),
+      );
     },
   };
   return terminal.registerLinkProvider(provider);

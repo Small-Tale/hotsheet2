@@ -351,7 +351,7 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
 
 test('opens ticket references from interactive terminals without linking scaled previews (HS2-2DW829)', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 820 });
   await installTerminalFixture(page, false, true);
   await page.goto('/');
@@ -388,6 +388,7 @@ test('opens ticket references from interactive terminals without linking scaled 
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-EXACT in Terminal feedback' });
   await expect(reader).toContainText('Opened HS2-EXACT from the terminal.');
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await expect(reader).toHaveCount(0);
   await remount();
   await clickTerminalReference(page, viewport, 'HS2-MISSING');
   await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
@@ -397,20 +398,33 @@ test('opens ticket references from interactive terminals without linking scaled 
   await expect(choice).toHaveJSProperty('open', true);
   await expect(choice.getByRole('button').filter({ hasText: 'Shared terminal destination' })).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await expect(choice).toHaveCount(0);
   await remount();
   await clickTerminalReference(page, viewport, '@terminal-feedback/HS2-QUALIFIED');
   reader = page.getByRole('dialog', { name: 'Read and edit HS2-QUALIFIED in Terminal feedback' });
   await expect(reader).toContainText('Opened HS2-QUALIFIED from the terminal.');
-  await page.screenshot({ path: '/private/tmp/hs2-2dw829-terminal-ticket-reader-wide.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('terminal-ticket-reader-wide.png'), fullPage: true });
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await expect(reader).toHaveCount(0);
   const selectableRow = (await viewport.locator('.xterm-rows > div').nth(2).boundingBox())!;
-  await page.mouse.move(selectableRow.x + 4, selectableRow.y + selectableRow.height / 2);
+  const cellWidth = selectableRow.width / 80;
+  await page.mouse.move(selectableRow.x - 4, selectableRow.y - 4);
+  await page.mouse.move(selectableRow.x + cellWidth * 22.5, selectableRow.y + selectableRow.height / 2);
+  await expect(viewport.locator('.xterm-screen')).toHaveCSS('cursor', 'pointer');
   await page.mouse.down();
-  await page.mouse.move(selectableRow.x + selectableRow.width / 3, selectableRow.y + selectableRow.height / 2, {
+  await page.mouse.move(selectableRow.x + cellWidth * 28.5, selectableRow.y + selectableRow.height / 2, {
     steps: 5,
   });
   await page.mouse.up();
-  await expect(viewport.locator('.xterm-selection')).toHaveCount(1);
+  await expect(viewport.locator('.xterm-selection > div').first()).toBeVisible();
+  await expect(page.locator('[data-component="ticket-reader"]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('terminal-ticket-selection-wide.png'), fullPage: true });
+  await viewport.click({ position: { x: 20, y: 80 } });
+  await expect(viewport.locator('.xterm-selection > div')).toHaveCount(0);
+  await clickTerminalReference(page, viewport, '@terminal-feedback/HS2-QUALIFIED', true);
+  await expect(reader).toContainText('Opened HS2-QUALIFIED from the terminal.');
+  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await expect(reader).toHaveCount(0);
   await viewport.click({ position: { x: 20, y: 80 } });
   await page.keyboard.type('echo link-input');
   await expect
@@ -428,7 +442,7 @@ test('opens ticket references from interactive terminals without linking scaled 
     .toContain('echo link-input');
   await page.setViewportSize({ width: 1024, height: 650 });
   await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
-  await page.screenshot({ path: '/private/tmp/hs2-2dw829-interactive-terminal-narrow.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('interactive-terminal-narrow.png'), fullPage: true });
 });
 
 test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicated row contained', async ({ page }) => {

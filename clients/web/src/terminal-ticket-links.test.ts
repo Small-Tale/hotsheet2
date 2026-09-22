@@ -51,15 +51,17 @@ describe('terminal ticket links', () => {
     ]);
   });
 
-  it('activates the exact reference and disposes the registered xterm provider', () => {
+  it('activates exact references, ignores selection drags, and resumes after selection clears', () => {
     const active = buffer([{ text: 'open HS2-ABC123' }], 24);
     const activate = vi.fn(),
       dispose = vi.fn();
     let provider: ILinkProvider | undefined;
+    let selected = false;
     const registration = registerTerminalTicketLinkProvider(
       {
         buffer: { active } as never,
         cols: 24,
+        hasSelection: () => selected,
         registerLinkProvider: (next) => {
           provider = next;
           return { dispose };
@@ -74,6 +76,12 @@ describe('terminal ticket links', () => {
     expect(links).toHaveLength(1);
     (links as ReturnType<typeof terminalTicketLinksForBufferLine>)?.[0]?.activate({} as MouseEvent, 'HS2-ABC123');
     expect(activate).toHaveBeenCalledWith('HS2-ABC123');
+    selected = true;
+    (links as ReturnType<typeof terminalTicketLinksForBufferLine>)?.[0]?.activate({} as MouseEvent, 'HS2-ABC123');
+    expect(activate).toHaveBeenCalledTimes(1);
+    selected = false;
+    (links as ReturnType<typeof terminalTicketLinksForBufferLine>)?.[0]?.activate({} as MouseEvent, 'HS2-ABC123');
+    expect(activate).toHaveBeenCalledTimes(2);
     registration.dispose();
     expect(dispose).toHaveBeenCalledOnce();
   });
