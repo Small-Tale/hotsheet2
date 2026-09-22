@@ -121,6 +121,12 @@
   overflow: auto;
   flex: 1;
 }
+.terminal-ticket-rail__content > .ticket-list {
+  /* SunkenPanel is a flex column. Keep the ticket collection at its natural
+     height so this application-owned surface receives the overflow instead of
+     shrinking TicketList and clipping its rows (HS2-8J0378). */
+  flex: none;
+}
 .terminal-ticket-rail__content .notification-center {
   padding: 0;
 }

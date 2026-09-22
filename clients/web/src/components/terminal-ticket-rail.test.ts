@@ -83,4 +83,9 @@ describe('TerminalTicketRail', () => {
     expect(heading).toContain('Ticket…');
     expect(heading).not.toContain('kui-toolbar-control-group');
   });
+  it('keeps the ticket collection intrinsic so the rail surface owns vertical scrolling', () => {
+    const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
+    expect(css).toMatchSource(/__content \{[^}]*overflow:auto[^}]*flex:1/);
+    expect(css).toMatchSource(/__content > \.ticket-list \{[^}]*flex:none/);
+  });
 });

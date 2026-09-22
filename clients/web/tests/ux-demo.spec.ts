@@ -784,6 +784,18 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   expect(geometry.headingBorderBottom).toBe('1px');
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
+  const scroller = rail.locator('.terminal-ticket-rail__content'),
+    rows = rail.locator('[data-component="ticket-list-row"]'),
+    lastRow = rows.last();
+  await expect.poll(() => scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await scroller.hover();
+  await page.mouse.wheel(0, 1_000);
+  await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await expect(lastRow).toBeInViewport();
+  await page.screenshot({ path: '/private/tmp/hs2-8j0378-terminal-ticket-rail-scrolled.png' });
+  await scroller.evaluate((node) => {
+    node.scrollTop = 0;
+  });
   await rail.screenshot({ path: '/private/tmp/hs2-r292m4-terminal-ticket-rail-wide.png' });
   await project.click();
   const longProject = project.locator('wa-option[value="docs"]');

@@ -1586,7 +1586,9 @@ and restored from the dashboard toolbar. That rail reuses the selected project's
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
 launcher; board and settings modes are deliberately absent. Its view heading ends with the same
 quiet separator used at the top of ticket collections, clearly dividing the white header from the
-lowered scrolling ticket surface. The launcher retains the shared blue pill presentation used by
+lowered scrolling ticket surface. The ticket collection keeps its intrinsic height inside that
+surface so the rail remains the vertical scroll owner and every row stays reachable even when the
+collection exceeds the viewport (HS2-8J0378). The launcher retains the shared blue pill presentation used by
 list and column views but shortens its rail label to `Ticket…` so it stays on one line. The
 rectangular list/notification
 segmented control owns its full first row, while sort, selection actions, and the compact search
