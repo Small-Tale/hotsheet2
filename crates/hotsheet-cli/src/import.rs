@@ -600,7 +600,7 @@ fn stable_hash(value: &str) -> u64 {
 /// Stable, time-sortable import identity: the timestamp comes from the HS1 creation
 /// time and the random portion is a deterministic hash of project + source ticket.
 /// This provides repeat-import safety without leaking an HS1 identifier into HS2.
-fn import_id(project: &ProjectInfo, ticket: &ExportTicket, index: usize) -> Ulid {
+pub(crate) fn import_id(project: &ProjectInfo, ticket: &ExportTicket, index: usize) -> Ulid {
     let source = format!(
         "hotsheet1\0{}\0{}\0{}",
         project.name.as_deref().unwrap_or(""),
@@ -628,6 +628,15 @@ fn import_id(project: &ProjectInfo, ticket: &ExportTicket, index: usize) -> Ulid
     Ulid::from_parts(timestamp_ms, random)
 }
 
+/// Use the same stable identity for copying and completed-import verification.
+pub(crate) fn attachment_id(id: &Ulid, attachment: &ExportAttachment) -> Ulid {
+    attachment
+        .id
+        .as_deref()
+        .and_then(|value| Ulid::from_string(value).ok())
+        .unwrap_or_else(|| FsStore::legacy_attachment_id(id, &attachment.stored_path))
+}
+
 /// Copy a ticket's staged attachment files into `attachments/<new-ulid>/`.
 fn copy_attachments(
     store: &FsStore,
@@ -637,11 +646,7 @@ fn copy_attachments(
 ) -> Result<usize> {
     let mut n = 0;
     for att in &pending.attachments {
-        let attachment_id = att
-            .id
-            .as_deref()
-            .and_then(|value| Ulid::from_string(value).ok())
-            .unwrap_or_else(|| FsStore::legacy_attachment_id(id, &att.stored_path));
+        let attachment_id = attachment_id(id, att);
         let ticket = store.read_ticket(id)?;
         let existing = ticket
             .attachments

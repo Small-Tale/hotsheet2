@@ -16,7 +16,11 @@ use clap::Parser;
 )]
 struct Cli {
     /// The old project's `.hotsheet` directory.
-    hotsheet_dir: PathBuf,
+    #[arg(required_unless_present = "verify_backup")]
+    hotsheet_dir: Option<PathBuf>,
+    /// Verify a manually pushed origin and record cleanup eligibility, without importing.
+    #[arg(long, conflicts_with = "hotsheet_dir")]
+    verify_backup: bool,
     /// Destination store directory (created if it isn't one yet).
     #[arg(short = 'C', long = "path", default_value = ".")]
     path: PathBuf,
@@ -30,8 +34,15 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let summary =
-        hotsheet_cli::run_migrate(&cli.path, &cli.hotsheet_dir, &cli.prefix, cli.migrator)?;
+    if cli.verify_backup {
+        let revision = hotsheet_cli::verify_hs1_backup(&cli.path)?;
+        println!("Verified Hot Sheet 1 backup for import {revision}.");
+        return Ok(());
+    }
+    let source = cli
+        .hotsheet_dir
+        .expect("clap requires the HS1 source for migration");
+    let summary = hotsheet_cli::run_migrate(&cli.path, &source, &cli.prefix, cli.migrator)?;
     println!(
         "Imported {} ticket(s) ({} attachment file(s)), skipped {} already present.",
         summary.written, summary.attachments, summary.skipped

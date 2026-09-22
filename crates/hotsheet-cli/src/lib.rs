@@ -13,6 +13,8 @@
 
 pub mod external_launch;
 pub mod import;
+mod import_completion;
+pub use import_completion::verify_backup as verify_hs1_backup;
 // Launch-safety machinery lives in the shared `hotsheet-aitools` crate (so the server can
 // reuse it too, HS2-1TY7GC); re-exported here to keep the `hotsheet_cli::launch_safety` path.
 pub use hotsheet_aitools::launch_safety;
@@ -244,12 +246,14 @@ pub fn run_migrate(
     migrator: Option<PathBuf>,
 ) -> Result<ImportSummary> {
     let export_mjs = resolve_migrator(migrator)?;
+    import_completion::invalidate(store_path)?;
 
     // A private temp dir for the export JSON + staged attachments. The exporter only
     // ever opens a COPY of the source database (read-only).
-    let staging = std::env::temp_dir().join(format!("hotsheet-migrate-{}", std::process::id()));
-    std::fs::create_dir_all(&staging)?;
-    let export_json = staging.join("hotsheet-export.json");
+    let staging = tempfile::Builder::new()
+        .prefix("hotsheet-migrate-")
+        .tempdir()?;
+    let export_json = staging.path().join("hotsheet-export.json");
 
     println!("Exporting {} …", hotsheet_dir.display());
     let status = Command::new("node")
@@ -270,6 +274,7 @@ pub fn run_migrate(
 
     let result = run_import(store_path, &export_json, prefix);
     if let Ok(summary) = &result {
+        import_completion::verify_export(store_path, &export_json)?;
         let source = hotsheet_dir
             .parent()
             .unwrap_or(hotsheet_dir)
@@ -286,8 +291,8 @@ pub fn run_migrate(
             serde_json::to_string_pretty(&receipt)? + "\n",
         )?;
         git_commit_all(store_path, "Record completed Hot Sheet 1 import");
+        import_completion::record(store_path, &source)?;
     }
-    let _ = std::fs::remove_dir_all(&staging);
     result
 }
 

@@ -6,6 +6,16 @@ import { basename, dirname, resolve } from 'node:path';
 
 import type { Checkout } from './api';
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
+import {
+  type BackupGit,
+  backupGit,
+  hasCompletedHs1Import,
+  hasHs1Backup,
+  invalidateHs1Backup,
+  readImportCompletion,
+  recordHs1Backup,
+  requireHs1Backup,
+} from './hs1-backup';
 
 export interface ProjectSession {
   id: string;
@@ -38,6 +48,7 @@ interface SessionTarget {
   secret: string;
   root?: string;
   serverStore?: string;
+  ticketStore?: string;
 }
 interface CorruptDiagnostic {
   path: string;
@@ -187,8 +198,7 @@ function migratorScript() {
   return process.env.HOTSHEET_MIGRATOR || resolve(developmentRepositoryRoot(), 'migrator/src/export.mjs');
 }
 
-const HS1_MARKER = '.hotsheet/db/PG_VERSION',
-  HS1_RECEIPT = 'hotsheet-hs1-import.json';
+const HS1_MARKER = '.hotsheet/db/PG_VERSION';
 const HS1_CLEANUP_ENTRIES = new Set([
   '.db-content-marker.json',
   '.db-created-empty.json',
@@ -229,29 +239,6 @@ async function isHs2SettingsFile(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function receiptMatchesProject(store: string | undefined, root: string): Promise<boolean> {
-  if (!store) return false;
-  try {
-    const receipt = JSON.parse(await readFile(resolve(store, HS1_RECEIPT), 'utf8')) as { sourceProject?: string };
-    return receipt.sourceProject === root;
-  } catch {
-    return false;
-  }
-}
-
-async function hasGitRemote(store: string | undefined): Promise<boolean> {
-  if (!store) return false;
-  return new Promise((resolveResult) => {
-    const child = spawn('git', ['-C', store, 'remote', 'get-url', 'origin'], { stdio: 'ignore' });
-    child.once('error', () => {
-      resolveResult(false);
-    });
-    child.once('close', (code) => {
-      resolveResult(code === 0);
-    });
-  });
 }
 
 export interface Hs1MigrationResult {
@@ -371,6 +358,9 @@ export async function migrateHs1Project(
     toolsConfigured = false;
   }
   const canonicalStore = await realpath(ticketStore);
+  for (const session of sessions.values()) {
+    if (session.root === root) session.ticketStore = canonicalStore;
+  }
   return {
     ticketStore: canonicalStore,
     connectionId: gitTicketStoreConnectionId(canonicalStore),
@@ -457,8 +447,10 @@ export async function removeHs1LiveData(directory: string, probe: ProcessProbe =
 }
 
 export async function removeImportedHs1Data(projectId: string): Promise<string[]> {
-  const root = sessions.get(projectId)?.root;
-  if (!root) throw new Error('Project session is not open.');
+  const session = sessions.get(projectId),
+    root = session?.root;
+  if (!root || !session.ticketStore) throw new Error('Project session has no imported ticket store.');
+  await requireHs1Backup(session.ticketStore, root);
   return removeHs1LiveData(resolve(root, '.hotsheet'));
 }
 
@@ -586,23 +578,35 @@ export async function connectGitTicketStoreRemote(
   storeInput: string,
   remoteInput: string,
   runner: GitRunner = runGitCommand,
+  git: BackupGit = backupGit,
 ): Promise<void> {
-  const store = await realpath(storeInput.trim()),
-    remote = remoteInput.trim();
+  const remote = remoteInput.trim();
   if (!remote || remote.startsWith('-') || /[\r\n]/.test(remote)) throw new Error('Enter a valid Git remote URL.');
+  const store = await realpath(storeInput.trim());
   if (!(await exists(resolve(store, 'hotsheet-store.json'))))
     throw new Error('The ticket repository is no longer available.');
-  try {
-    await runner('git', ['-C', store, 'remote', 'add', 'origin', remote]);
-  } catch (error) {
-    throw describeGitRemoteFailure(error, 'add');
+  const completion = await readImportCompletion(store, git),
+    existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
+  let added = false;
+  if (existing && existing !== remote)
+    throw describeGitRemoteFailure(new Error('remote origin already exists.'), 'add');
+  if (completion) await invalidateHs1Backup(store, git);
+  if (!existing) {
+    try {
+      await runner('git', ['-C', store, 'remote', 'add', 'origin', remote]);
+      added = true;
+    } catch (error) {
+      throw describeGitRemoteFailure(error, 'add');
+    }
   }
   try {
     await runner('git', ['-C', store, 'push', '-u', 'origin', 'HEAD']);
+    if (completion) await recordHs1Backup(store, completion, git);
   } catch (error) {
     // A failed first push must remain retryable from the setup screen. Roll back only
     // the origin this operation just added; never leave a half-configured repository.
-    await runner('git', ['-C', store, 'remote', 'remove', 'origin']).catch(() => undefined);
+    if (added && (await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined)) === remote)
+      await runner('git', ['-C', store, 'remote', 'remove', 'origin']).catch(() => undefined);
     throw describeGitRemoteFailure(error, 'push');
   }
 }
@@ -872,14 +876,14 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     method: 'POST',
     body: JSON.stringify(plan.openBody),
   });
-  sessions.set(opened.checkout.id, target);
   const activeStore = ticketStore ?? opened.checkout.stores[0],
     hs1SourcePath = resolve(root, '.hotsheet'),
     hs1DatabasePath = resolve(root, '.hotsheet/db'),
     hs1MarkerPath = resolve(root, HS1_MARKER),
     hs1DataPresent = await exists(hs1MarkerPath),
-    imported = await receiptMatchesProject(activeStore, root),
+    imported = await hasCompletedHs1Import(activeStore, root),
     hs1PostgresVersion = hs1DataPresent ? (await readFile(hs1MarkerPath, 'utf8').catch(() => '')).trim() : '';
+  sessions.set(opened.checkout.id, { ...target, ticketStore: activeStore });
   return {
     id: opened.checkout.id,
     root: opened.checkout.root,
@@ -890,7 +894,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     needsTicketSetup: opened.checkout.sources.length === 0,
     needsHs1Migration: hs1DataPresent && !imported,
     hs1ImportCompleted: imported,
-    hs1CleanupEligible: hs1DataPresent && imported && (await hasGitRemote(activeStore)),
+    hs1CleanupEligible: hs1DataPresent && imported && (await hasHs1Backup(activeStore, root)),
     ...(hs1DataPresent ? { hs1SourcePath, hs1DatabasePath, hs1PostgresVersion } : {}),
   };
 }

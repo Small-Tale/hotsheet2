@@ -211,8 +211,8 @@ Per the ticket, migration is offered automatically with a confirmation — **per
 project**, when that project is opened (not a batch over all projects, which a user
 may not have open at once):
 
-1. On opening a directory that has a `.hotsheet/db/` cluster without a matching
-   import receipt in its active HS2 store, Hot
+1. On opening a directory that has a `.hotsheet/db/` cluster without matching
+   verified import-completion evidence in its active HS2 store, Hot
    Sheet detects a **migratable HS1 project** and prompts: _"This project has Hot
    Sheet 1 data. Convert it to the new git-based format?"_ The prompt names the exact
    source and database paths plus the detected PostgreSQL version. Choosing Not now
@@ -223,11 +223,28 @@ may not have open at once):
    operation settles. (The migrator is a separate bundled executable — §7.2 — the
    server just spawns it; it does not live in the core.)
 3. On success it shows a summary (N tickets, M attachments), links the new source,
-   and leaves the old `.hotsheet/` data in place. A durable receipt in the new store
-   distinguishes a completed import from an unrelated HS2 repository.
+   and leaves the old `.hotsheet/` data in place. The migrator verifies that its
+   receipt, every ticket, and every referenced attachment payload are included in a
+   clean Git revision, with no unfinished attachment checkpoint. Even ignored payloads
+   must be present in that revision. It also checks every attachment expected by the
+   actual export, so a legacy partial import with missing metadata cannot gain proof
+   merely because its ticket already exists. Missing exported attachments refuse
+   completion without recreating intentional deletions; selected legacy recovery is
+   tracked in HS2-94EB35. It then atomically records that exact revision and
+   source project in Git-local `hotsheet-hs1-import-completed.json`. A new migration
+   attempt invalidates earlier import and backup proof before exporting. Older receipts
+   without this proof require a repeat import before cleanup can become available.
 4. The first remote connection/push likewise keeps an indeterminate progress bar and
-   an explicit warning that large histories may take several minutes. Only after an
-   `origin` remote exists does the project show its cleanup banner.
+   an explicit warning that large histories may take several minutes. Only a successful
+   push followed by verification that the remote branch contains the intended import
+   revision records `hotsheet-hs1-backup.json` in Git-local metadata. This proof binds
+   the source project, import revision, origin URL, branch, and observed remote revision.
+   Reopening uses this local proof and current local Git state without contacting the
+   network; origin existence alone never enables cleanup. The destructive DELETE
+   endpoint independently rechecks the proof, clean state, origin URL, and current
+   remote ancestry before removing any source data. An unavailable, stale, or replaced
+   backup refuses deletion. A matching existing origin can be retried; failed setup
+   removes only the origin added by that attempt, provided its URL has not changed.
    Cleanup requires confirmation and refuses to start while a registered HS1 channel
    process owned by this checkout is still live, because that process can recreate its
    database after removal. Project-tagged entries owned by another checkout are ignored;
@@ -265,7 +282,15 @@ migrator/src/export.mjs …` + `hotsheet import …`, which remain available sep
 Re-running the standalone migrator is a clean success: deterministic tickets and the
 completed-import receipt remain unchanged, no extra Git commit is created, and a clean
 index does not emit a failure-shaped `git commit` warning. Staging, index inspection,
-and real commit failures still retain the migrator's best-effort warning.
+and real commit failures retain their diagnostic warning and the standalone migrator
+fails if the intended import cannot be proven fully committed; it records no completion
+or cleanup proof. After fixing the commit failure, rerun migration.
+
+For headless backup, push the imported ticket store normally, then run
+`hotsheet-migrate -C <ticket-store> --verify-backup`. This verifies the recorded import
+revision against the current origin branch and writes the same backup proof consumed
+by the client and cleanup endpoint, without opening HS1 or rerunning export. A changed
+origin, old remote revision, dirty store, or unfinished import fails verification.
 
 ## 7.4 What is and isn't migrated
 

@@ -299,6 +299,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   atomically replaces this checkpoint before ticket publication and after each copy;
   retry preserves current user edits and completed deletions. Successful verification
   removes it and the final import commit includes the removal. See [07](07-migration.md).
+- **Verified HS1 backup:** Git-local `hotsheet-hs1-import-completed.json` version 1
+  records `sourceProject` and the exact committed `revision` after strict ticket/payload
+  inclusion checks (`crates/hotsheet-cli/src/import_completion.rs`). Git-local
+  `hotsheet-hs1-backup.json` adds `remote`, `ref`, and `remoteRevision` after verified
+  push ancestry. `clients/web/src/hs1-backup.ts` validates this same proof for offline
+  reopen presentation and a fresh remote check at DELETE. The headless entry point is
+  `hotsheet-migrate -C <store> --verify-backup`; proof paths use `git rev-parse --git-path`
+  and work with ordinary repositories and Git worktrees.
 
 ## Build / test
 

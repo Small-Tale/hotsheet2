@@ -548,47 +548,45 @@ describe('Git ticket-store remote setup', () => {
     ).rejects.toThrow('fatal: preserved details');
   });
   it('adds origin and performs the first push with argument arrays', async () => {
-    const calls: Array<[string, string[]]> = [],
+    const store = await realpath(await mkdtemp(resolve(tmpdir(), 'hotsheet-remote-'))),
+      calls: Array<[string, string[]]> = [],
       runner = async (command: string, args: string[]) => {
         calls.push([command, args]);
       };
-    await connectGitTicketStoreRemote(
-      '/Users/westphal/Documents/hotsheet2.hs2',
-      'git@github.com:Small-Tale/tickets.git',
-      runner,
-    );
-    expect(calls).toEqual([
-      [
-        'git',
-        [
-          '-C',
-          '/Users/westphal/Documents/hotsheet2.hs2',
-          'remote',
-          'add',
-          'origin',
-          'git@github.com:Small-Tale/tickets.git',
-        ],
-      ],
-      ['git', ['-C', '/Users/westphal/Documents/hotsheet2.hs2', 'push', '-u', 'origin', 'HEAD']],
-    ]);
+    try {
+      await writeFile(resolve(store, 'hotsheet-store.json'), '{}');
+      await connectGitTicketStoreRemote(store, 'git@example.com:team/tickets.git', runner, async () => {
+        throw new Error('No origin');
+      });
+      expect(calls).toEqual([
+        ['git', ['-C', store, 'remote', 'add', 'origin', 'git@example.com:team/tickets.git']],
+        ['git', ['-C', store, 'push', '-u', 'origin', 'HEAD']],
+      ]);
+    } finally {
+      await rm(store, { recursive: true, force: true });
+    }
   });
   it('removes the just-added origin and preserves unknown push diagnostics for a retry', async () => {
-    const calls: Array<[string, string[]]> = [],
-      runner = async (command: string, args: string[]) => {
-        calls.push([command, args]);
-        if (args.includes('push')) throw new Error('remote helper reported an unfamiliar failure');
-      };
-    await expect(
-      connectGitTicketStoreRemote(
-        '/Users/westphal/Documents/hotsheet2.hs2',
-        'git@example.com:team/tickets.git',
-        runner,
-      ),
-    ).rejects.toThrow(/could not push.*Git details: remote helper reported an unfamiliar failure/i);
-    expect(calls.at(-1)).toEqual([
-      'git',
-      ['-C', '/Users/westphal/Documents/hotsheet2.hs2', 'remote', 'remove', 'origin'],
-    ]);
+    const store = await realpath(await mkdtemp(resolve(tmpdir(), 'hotsheet-remote-'))),
+      calls: Array<[string, string[]]> = [];
+    let origin: string | undefined;
+    const runner = async (command: string, args: string[]) => {
+      calls.push([command, args]);
+      if (args.includes('add')) origin = 'git@example.com:team/tickets.git';
+      if (args.includes('push')) throw new Error('remote helper reported an unfamiliar failure');
+    };
+    try {
+      await writeFile(resolve(store, 'hotsheet-store.json'), '{}');
+      await expect(
+        connectGitTicketStoreRemote(store, 'git@example.com:team/tickets.git', runner, async () => {
+          if (!origin) throw new Error('No origin');
+          return origin;
+        }),
+      ).rejects.toThrow(/could not push.*Git details: remote helper reported an unfamiliar failure/i);
+      expect(calls.at(-1)).toEqual(['git', ['-C', store, 'remote', 'remove', 'origin']]);
+    } finally {
+      await rm(store, { recursive: true, force: true });
+    }
   });
   it('turns common remote failures into next steps without hiding Git stderr', () => {
     expect(describeGitRemoteFailure(new Error('error: remote origin already exists.'), 'add').message).toMatch(
