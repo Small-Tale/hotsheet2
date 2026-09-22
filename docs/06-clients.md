@@ -485,7 +485,12 @@ and identity-less legacy entries remain conservatively blocking.
   row expose stable Kerf `data-key` identities. Status changes and other ticket mutations
   therefore morph the existing scroll owners instead of replacing them; list position and
   every independent column position survive moves between statuses (apart from the browser's
-  normal one-pixel scroll anchoring correction).
+  normal one-pixel scroll anchoring correction). During the current app session, the main
+  workspace also remembers positions separately for every project, mode, and view
+  (HS2-PDYXYJ). Switching back restores the list, independent board columns, or terminal
+  grid after loading and progressive rendering. A new combination starts at the top;
+  changed contents clamp the saved position to the available scroll range. Inspector
+  and drawer scrolling remain independent of this workspace memory.
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated

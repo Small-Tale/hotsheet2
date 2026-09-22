@@ -14336,6 +14336,182 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await page.screenshot({ path: '/private/tmp/hs2-swc9e4-bottom-edge-context-menu.png', fullPage: true });
 });
 
+test('remembers scroll per project, mode and view through delayed loading and shrinking contents (HS2-PDYXYJ)', async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const makeRows = (prefix: string) =>
+    Array.from({ length: 280 }, (_, index) => ({
+      ...row,
+      id: `${prefix}-${index}`,
+      native_id: `${prefix}-${index}`,
+      qualified_id: `git-local:${prefix}-${index}`,
+      slug: `HS2-${prefix}${String(index).padStart(4, '0')}`,
+      title: `${prefix === 'A' ? 'Demo' : 'Other'} scroll ticket ${String(index).padStart(3, '0')}`,
+      status: index >= 160 ? 'backlog' : index % 2 ? 'started' : 'not_started',
+      up_next: false,
+    }));
+  let demoRows = makeRows('A');
+  const otherRows = makeRows('B');
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page, true, false, 0, 0, 0, false, 12);
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route(/\/tickets(?:\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const url = new URL(route.request().url()),
+      rows = url.pathname.includes('/other-checkout/') ? otherRows : demoRows,
+      backlog = rows.filter((item) => item.status === 'backlog'),
+      queue = rows.filter((item) => item.status !== 'backlog'),
+      filtered = url.searchParams.get('status') === 'backlog' ? backlog : queue,
+      offset = Number(url.searchParams.get('cursor') ?? 0),
+      size = Number(url.searchParams.get('page_size') ?? 200),
+      items = filtered.slice(offset, offset + size);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return route.fulfill({
+      json: {
+        items,
+        counts: {
+          total: rows.length,
+          queued: queue.length,
+          backlog: backlog.length,
+          archive: 0,
+          trash: 0,
+          open: queue.length,
+          up_next: 0,
+          active: 0,
+          started: queue.filter((item) => item.status === 'started').length,
+          completed_today: 0,
+        },
+        ...(offset + size < filtered.length ? { next_cursor: String(offset + size) } : {}),
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1400, height: 760 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const workspace = page.locator('.app-shell__workspace'),
+    tickets = workspace.locator('[data-component="ticket-list-row"]'),
+    scroll = () => workspace.evaluate((node) => node.scrollTop),
+    setScroll = (top: number) =>
+      workspace.evaluate((node, value) => {
+        node.scrollTop = value;
+        return node.scrollTop;
+      }, top),
+    selectView = (view: string) => page.locator(`[data-action="select-view"][data-item-id="${view}"]`).click();
+  await expect(tickets).toHaveCount(160);
+  const queueTop = await setScroll(4500);
+  expect(queueTop).toBe(4500);
+  await selectView('backlog');
+  await expect(tickets).toHaveCount(120);
+  await expect.poll(scroll).toBe(0);
+  const backlogTop = await setScroll(2100);
+  await selectView('all');
+  await expect(tickets).toHaveCount(160);
+  await expect.poll(scroll).toBe(queueTop);
+  await page.getByLabel('Columns view').click();
+  const columns = workspace.locator('.ticket-board-column__tickets');
+  await expect(columns).toHaveCount(4);
+  await expect.poll(scroll).toBe(0);
+  await columns.evaluateAll((nodes) => {
+    nodes.forEach((node, index) => {
+      node.scrollTop = 250 + index * 180;
+    });
+  });
+  const boardPositions = await columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop));
+  expect(boardPositions.slice(0, 2)).toEqual([250, 430]);
+  await page.getByLabel('List view').click();
+  await expect.poll(scroll).toBe(queueTop);
+  await page.getByRole('button', { name: 'Add project' }).click();
+  await expect(tickets).toHaveCount(160);
+  await expect(tickets.first()).toContainText('Other scroll ticket');
+  await expect.poll(scroll).toBe(0);
+  const otherTop = await setScroll(1200);
+  await page.getByRole('tab', { name: 'demo', exact: true }).click();
+  await expect(tickets.first()).toContainText('Demo scroll ticket');
+  await expect.poll(scroll).toBe(queueTop);
+  await page.screenshot({
+    path: '/private/tmp/hs2-pdyxyj-project-list-restored.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await selectView('backlog');
+  await expect(tickets).toHaveCount(120);
+  await expect.poll(scroll).toBe(backlogTop);
+  await selectView('all');
+  await page.getByLabel('Columns view').click();
+  await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
+  await page.screenshot({
+    path: '/private/tmp/hs2-pdyxyj-board-columns-restored.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(columns).toHaveCount(0);
+  await expect(tickets).toHaveCount(160);
+  await expect.poll(scroll).toBe(queueTop);
+  await page.screenshot({
+    path: '/private/tmp/hs2-pdyxyj-mobile-list-restored.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1400, height: 760 });
+  await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
+  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  await page.getByLabel('List view').click();
+  await expect.poll(scroll).toBe(otherTop);
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const grid = workspace.locator('[data-ticket-scroll-owner="terminal-grid"]');
+  await expect(grid).toBeVisible();
+  const gridTop = await grid.evaluate((node) => {
+    node.scrollTop = 250;
+    return node.scrollTop;
+  });
+  expect(gridTop).toBe(250);
+  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  await expect.poll(scroll).toBe(otherTop);
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect.poll(() => grid.evaluate((node) => node.scrollTop)).toBe(gridTop);
+  await page.screenshot({
+    path: '/private/tmp/hs2-pdyxyj-terminal-grid-restored.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  // Change the inactive project's contents, then revisit the saved list destination.
+  demoRows = demoRows.filter((item) => item.status === 'backlog').concat(demoRows.slice(0, 20));
+  await page.getByRole('tab', { name: 'demo', exact: true }).click();
+  await page.getByLabel('List view').click();
+  await expect(tickets).toHaveCount(20);
+  await expect
+    .poll(() => workspace.evaluate((node) => node.scrollTop === Math.max(0, node.scrollHeight - node.clientHeight)))
+    .toBe(true);
+  const clamped = await scroll();
+  expect(clamped).toBeLessThan(queueTop);
+  expect(clamped).toBeGreaterThan(0);
+  await page.screenshot({
+    path: '/private/tmp/hs2-pdyxyj-shrunken-list-clamped.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await selectView('backlog');
+  await expect(tickets).toHaveCount(120);
+  await expect.poll(scroll).toBe(backlogTop);
+  await selectView('all');
+  await expect(tickets).toHaveCount(20);
+  await expect.poll(scroll).toBe(clamped);
+});
+
 test('preserves list and every board-column scroll position across ticket mutations (HS2-CEBNAJ)', async ({ page }) => {
   const statuses = ['not_started', 'started', 'completed', 'verified'] as const,
     items = Array.from({ length: 120 }, (_, index) => ({

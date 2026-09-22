@@ -435,7 +435,7 @@ import {
   type TicketReaderFrame,
   updateTicketReaderFrame,
 } from './ticket-reader-stack';
-import { captureTicketScrollState, restoreTicketScrollState } from './ticket-scroll-state';
+import { TicketScrollMemory } from './ticket-scroll-state';
 import { ticketTimelineEntries } from './ticket-timeline-data';
 import { copiedTicketPlacement } from './ticket-transfer';
 import {
@@ -684,7 +684,7 @@ const repositoryDetail = signal<RepositoryDetailState>({
 });
 let repositoryDetailGeneration = 0,
   repositoryPaginationObserver: IntersectionObserver | undefined;
-let pendingTicketScrollState: ReturnType<typeof captureTicketScrollState> | undefined;
+const ticketScrollMemory = new TicketScrollMemory();
 const shellMode = signal<ProjectTabBarMode>('project'),
   statsProjectId = signal<string | undefined>(undefined);
 const terminalRailScreen = signal<'root' | 'ticket'>('root'),
@@ -7458,6 +7458,17 @@ function renderMainShell() {
 const appRoot = document.querySelector<HTMLElement>('#app')!;
 const renderMetrics = import.meta.env.DEV ? createRenderMetrics(appRoot) : undefined;
 const activeTicketCollectionKey = () => `${selectedProjectId.value}:${selectedView.value}`;
+const ticketScrollRoot = () => appRoot.querySelector<HTMLElement>('.app-shell__workspace') ?? appRoot;
+const ticketScrollScope = () => ({
+  project: selectedProjectId.value,
+  mode: `${shellMode.value}:${viewMode.value === 'board' && viewportMobile.value ? 'list' : viewMode.value}`,
+  view:
+    viewMode.value === 'notifications'
+      ? notificationView.value
+      : viewMode.value === 'settings'
+        ? settingsCategory()
+        : selectedView.value,
+});
 let renderedTicketCollectionKey = activeTicketCollectionKey();
 let initialProjectRestoreComplete = false;
 if (renderMetrics)
@@ -7467,8 +7478,7 @@ mount(appRoot, () => {
   void permissionRevision.value;
   if (conversationOpen.value || terminalDrawerVisible.value || shellMode.value === 'terminals')
     void conversationStates.value;
-  pendingTicketScrollState ??= captureTicketScrollState();
-  const ticketScrollState = pendingTicketScrollState,
+  const ticketScrollGeneration = ticketScrollMemory.beforeRender(ticketScrollScope(), ticketScrollRoot()),
     nextTicketCollectionKey = activeTicketCollectionKey(),
     progressiveRenderPass = skipNextTicketMotion,
     canAnimateTickets = !progressiveRenderPass && nextTicketCollectionKey === renderedTicketCollectionKey,
@@ -7491,10 +7501,19 @@ mount(appRoot, () => {
     uiStabilityDiagnostics.recordRender(renderMetrics.snapshot(), suppression);
   }
   queueMicrotask(() => {
-    if (pendingTicketScrollState === ticketScrollState) {
-      restoreTicketScrollState(ticketScrollState);
-      pendingTicketScrollState = undefined;
-    }
+    const ticketCollectionPending =
+      shellMode.value === 'project' &&
+      (viewMode.value === 'list' || viewMode.value === 'board') &&
+      (ticketCollectionState.value?.status === 'loading' ||
+        (workspaceSearchActive() && searchMatchKeys.value === undefined));
+    ticketScrollMemory.afterRender(
+      ticketScrollGeneration,
+      ticketScrollRoot(),
+      !loading.value &&
+        !ticketCollectionPending &&
+        !ticketRenderScheduled &&
+        (shellMode.value !== 'terminals' || !terminalDashboardLoading.value),
+    );
     animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
     syncTerminalViewportMounts();
     syncRepositoryPaginationObserver();

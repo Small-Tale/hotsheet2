@@ -1227,9 +1227,9 @@
       "id": "terminal-dashboard",
       "name": "TerminalDashboard",
       "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals, AI chats, and future cross-project tools.",
+      "purpose": "Responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools.",
       "useWhen": [
-        "Hot Sheet needs responsive workspace grid for terminals, AI chats, and future cross-project tools."
+        "Hot Sheet needs responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."

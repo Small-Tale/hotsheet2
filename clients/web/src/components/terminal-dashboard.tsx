@@ -395,7 +395,11 @@ export function TerminalDashboard({
       data-fit={String(layout.fit)}
       aria-label="Workspace grid"
     >
-      <div class="terminal-dashboard__content" data-terminal-grid-measure="true">
+      <div
+        class="terminal-dashboard__content"
+        data-terminal-grid-measure="true"
+        data-ticket-scroll-owner="terminal-grid"
+      >
         {loading ? (
           <div class="terminal-dashboard__empty" role="status">
             Loading workspace items…
