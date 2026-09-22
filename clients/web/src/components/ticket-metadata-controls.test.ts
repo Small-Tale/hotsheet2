@@ -84,7 +84,9 @@ describe('ticket metadata controls and inspector panels', () => {
       TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }),
     );
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/data-component="list-header"/g)).toHaveLength(3);
+    expect(info.match(/data-component="list-header"/g)).toHaveLength(4);
+    expect(info).toContain('<h2 class="kui-list-header__label">Status</h2>');
+    expect(info).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     expect(info).toContain('name="inspector-category" label="Category"');
     expect(info).toContain('name="inspector-priority" label="Priority"');
     expect(info).toContain('<h2 class="kui-list-header__label">Details</h2>');
@@ -103,6 +105,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('data-status="deleted"');
     expect(deleted).toContain('data-lucide="trash-2"');
     expect(deleted).toContain('Deleted');
+    expect(deleted).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain(
       '<h2 class="kui-list-header__label" aria-label="Notes, 0 notes">Notes</h2><span class="kui-list-header__count" aria-hidden="true">0</span>',
@@ -123,7 +126,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');
     expect(blocked).toContain('Waiting');
-    expect(blocked.match(/data-component="list-header"/g)).toHaveLength(4);
+    expect(blocked.match(/data-component="list-header"/g)).toHaveLength(5);
     expect(info).toContain('data-component="ticket-notes"');
     const readOnly = String(
       TicketInfoPanel({
@@ -139,6 +142,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(readOnly).toContain('<h2 class="kui-list-header__label">Tags</h2>');
     expect(readOnly).not.toContain('data-action="open-ticket-tag-popover"');
     expect(readOnly).not.toContain('data-action="add-ticket-note"');
+    expect(readOnly).toContain('aria-label="Status, Started"');
+    expect(readOnly).toMatch(/name="inspector-status"[^>]*disabled/);
     const timeline = String(
       TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }),
     );

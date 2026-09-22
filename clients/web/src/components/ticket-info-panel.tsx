@@ -1,7 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@kerfjs/ui/list-inset-control.css';
 import './ticket-inspector-panel.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleAlert, Plus } from 'lucide';
@@ -90,15 +92,17 @@ export function TicketInfoPanel({
         <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
         <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
         <div class="ticket-inspector__status-field">
-          <span>Status</span>
-          <span class="ticket-inspector__status-line">
-            {status === 'deleted' ? (
-              <StatusBadge status="deleted" />
-            ) : (
-              <TicketStatusMenu value={status} disabled={!canUpdate} />
-            )}
-            {blockedReason && <BlockedBadge />}
-          </span>
+          <ListHeader label="Status" />
+          <ListInsetControl className="ticket-inspector__status-line">
+            <>
+              {status === 'deleted' ? (
+                <StatusBadge status="deleted" />
+              ) : (
+                <TicketStatusMenu value={status} disabled={!canUpdate} />
+              )}
+              {blockedReason && <BlockedBadge />}
+            </>
+          </ListInsetControl>
         </div>
       </section>
       <section class="ticket-inspector__section ticket-inspector__blocked-section">

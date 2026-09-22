@@ -1,4 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@kerfjs/ui/list-inset-control.css';
 import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 import './ticket-inspector-panel.css';
@@ -6,6 +7,7 @@ import './ticket-inspector-skeleton.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Skeleton } from '@kerfjs/ui/skeleton';
@@ -115,10 +117,10 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
           <TicketCategorySelect name="inspector-category" value="" placeholder />
           <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
           <div class="ticket-inspector__status-field">
-            <span>Status</span>
-            <span class="ticket-inspector__status-line">
+            <ListHeader label="Status" />
+            <ListInsetControl className="ticket-inspector__status-line">
               <TicketStatusMenu value="not_started" placeholder />
-            </span>
+            </ListInsetControl>
           </div>
         </section>
         <section class="ticket-inspector__section">

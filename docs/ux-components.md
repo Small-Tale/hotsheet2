@@ -799,6 +799,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   provenance. The passive Details heading keeps ListHeader's inline inset while using
   Category's compact label geometry and `0.5em` gap above the field. Preview,
   editing, read-only, reader, and loading states share that spacing (HS2-S6S709).
+  Status uses the same compact `ListHeader` treatment and places its existing status
+  picker and optional Blocked badge in `ListInsetControl`. The metadata section owns
+  the outer inset, so the control row adds no border or padding around the badges;
+  their edges align with the Category field, while their own styling and read-only
+  behavior remain intact (HS2-AHADNK).
   Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.

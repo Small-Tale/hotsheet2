@@ -28,7 +28,6 @@
   :where(
     .ticket-inspector__section-header,
     .ticket-inspector__provenance,
-    .ticket-inspector__status-field,
     .ticket-inspector__tags,
     .ticket-code-review__empty
   ),
@@ -101,19 +100,24 @@
   min-height: remify(48px);
   cursor: text;
 }
-/* Details labels a field, so use the same compact label-to-control gap as Category. Keep the
+/* Details and Status label fields, so use the same compact label-to-control gap as Category. Keep the
    ListHeader's inline border/padding ownership without its navigation-row height. */
+.ticket-inspector__content .ticket-inspector__status-field,
 .ticket-inspector__content .ticket-inspector__details-section {
   gap: calc(var(--kui-font-xs) * 0.5);
 }
+.ticket-inspector__status-field > .kui-list-header,
+.ticket-inspector__status-field .kui-list-header__title,
 .ticket-inspector__details-section > .kui-list-header,
 .ticket-inspector__details-section .kui-list-header__title {
   min-height: 0;
 }
+.ticket-inspector__status-field .kui-list-header__title,
 .ticket-inspector__details-section .kui-list-header__title {
   padding-block: 0;
   border-block: 0;
 }
+.ticket-inspector__status-field .kui-list-header__label,
 .ticket-inspector__details-section .kui-list-header__label {
   line-height: var(--wa-line-height-condensed);
 }
@@ -213,19 +217,10 @@
 .ticket-inspector__metadata > .ticket-inspector__status-field {
   display: grid;
   grid-column: 1 / -1;
-  justify-items: start;
-  gap: var(--kui-space-2xs);
-}
-.ticket-inspector__metadata > .ticket-inspector__status-field > span {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 650;
 }
 .ticket-inspector__status-line {
-  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--kui-space-2xs);
 }
 .ticket-inspector__tags {
   display: flex;

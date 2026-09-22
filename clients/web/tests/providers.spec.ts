@@ -245,6 +245,15 @@ async function resolvedColor(locator: Locator, value: string) {
   }, value);
 }
 
+async function captureInspectorStatus(surface: Locator, path: string) {
+  const clip = await surface.locator('.ticket-inspector__status-field').evaluate((node) => {
+    const field = node.getBoundingClientRect(),
+      inspector = node.closest('[data-component="ticket-inspector"]')!.getBoundingClientRect();
+    return { x: inspector.left, y: field.top - 8, width: inspector.width, height: field.height + 16 };
+  });
+  await surface.page().screenshot({ path, clip });
+}
+
 async function mockProject(
   page: import('@playwright/test').Page,
   canUpdate = true,
@@ -7961,6 +7970,82 @@ test('projects a newly created ticket within one frame without a collection refr
   ).toEqual([]);
 });
 
+test('aligns Status controls without duplicating badge insets and preserves selection (HS2-AHADNK)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const patches = await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+    status = inspector.locator('wa-select[name="inspector-status"]'),
+    badge = status.locator('.kui-select__custom-selected [data-component="status-badge"]');
+  const expectStatusGeometry = async (surface: Locator) => {
+    const field = surface.locator('.ticket-inspector__status-field');
+    await expect(field.getByRole('heading', { name: 'Status' })).toHaveCSS('text-transform', 'uppercase');
+    await expect(field.locator('.kui-list-inset-control')).toHaveCount(1);
+    await expect(async () => {
+      const geometry = await surface.evaluate((node) => {
+        const category = node.querySelector('wa-select[name="inspector-category"]')!,
+          control = category.shadowRoot!.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
+          categoryLabelNode = category.shadowRoot!.querySelector('[part~="form-control-label"]')!,
+          categoryLabel = categoryLabelNode.getBoundingClientRect(),
+          statusField = node.querySelector('.ticket-inspector__status-field')!,
+          label = statusField.querySelector('h2')!.getBoundingClientRect(),
+          row = statusField.querySelector('.kui-list-inset-control')!,
+          rowStyle = getComputedStyle(row),
+          selected = row.querySelector('[data-component="status-badge"]')!.getBoundingClientRect();
+        return {
+          badgeInset: selected.left - control.left,
+          labelInset:
+            label.left - categoryLabel.left - Number.parseFloat(getComputedStyle(categoryLabelNode).paddingLeft),
+          fieldGap: row.getBoundingClientRect().top - label.bottom,
+          categoryGap: control.top - categoryLabel.bottom,
+          rowPadding: rowStyle.padding,
+          rowBorder: rowStyle.borderWidth,
+        };
+      });
+      expect(geometry.badgeInset).toBeCloseTo(0, 1);
+      expect(geometry.labelInset).toBeCloseTo(0, 1);
+      expect(geometry.fieldGap).toBeCloseTo(geometry.categoryGap, 1);
+      expect(geometry.rowPadding).toBe('0px');
+      expect(geometry.rowBorder).toBe('0px');
+    }).toPass({ timeout: 5_000 });
+  };
+  for (const [value, label, icon, fill] of [
+    ['not_started', 'Not started', 'circle', 'neutral-fill-normal'],
+    ['completed', 'Completed', 'circle-check', 'success-fill-quiet'],
+    ['started', 'Started', 'clock', 'warning-fill-normal'],
+  ] as const) {
+    await status.click();
+    await status.locator(`wa-option[value="${value}"]`).click();
+    await expect.poll(() => patches.some((patch) => patch.status === value)).toBe(true);
+    await expect(status).toHaveJSProperty('value', value);
+    await expect(status).toHaveAttribute('aria-label', `Change status, ${label}`);
+    await expect(badge).toHaveAttribute('data-status', value);
+    await expect(badge).toHaveText(label);
+    await expect(badge.locator(`[data-lucide="${icon}"]`)).toBeVisible();
+    await expect(badge.locator('svg')).toHaveCount(1);
+    await expect(badge).toHaveCSS('background-color', await resolvedColor(badge, `var(--wa-color-${fill})`));
+    await expectStatusGeometry(inspector);
+    if (value === 'not_started') await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-wide.png');
+  }
+  await inspector.getByRole('button', { name: 'Block ticket' }).click();
+  await inspector.getByRole('textbox', { name: 'Blocked reason' }).fill('Waiting for review');
+  await inspector.getByRole('textbox', { name: 'Blocked reason' }).blur();
+  await expect(inspector.locator('.ticket-inspector__status-line [data-component="blocked-badge"]')).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await expectStatusGeometry(inspector);
+  await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-blocked-narrow.png');
+  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectStatusGeometry(reader);
+  await captureInspectorStatus(reader, '/private/tmp/hs2-ahadnk-status-reader-mobile.png');
+});
+
 test('matches Details label spacing to Category before and after editing (HS2-S6S709)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
@@ -8171,7 +8256,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   const inspector = page.locator('[data-component="ticket-inspector"]'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
   await expect(info).toBeVisible();
-  await expect(info.locator('[data-component="list-header"]')).toHaveCount(3);
+  await expect(info.locator('[data-component="list-header"]')).toHaveCount(4);
   await expect(info.locator('[data-component="list-item"]')).toHaveCount(2);
   await expect(info.locator('.ticket-inspector__details-section [data-component="list-header"]')).toHaveText('Details');
   const notesHeader = info.locator('[data-component="ticket-notes"] [data-component="list-header"]'),
@@ -8274,6 +8359,14 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await expect(inspector.locator('[data-component="tag-chip"]')).not.toHaveAttribute('with-remove', '');
   await expect(inspector.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Delete note' })).toHaveCount(0);
+  const statusField = inspector.locator('.ticket-inspector__status-field'),
+    status = statusField.locator('wa-select[name="inspector-status"]');
+  await expect(statusField.getByRole('heading', { name: 'Status' })).toBeVisible();
+  await expect(statusField.locator('.kui-list-inset-control')).toHaveCount(1);
+  await expect(status).toHaveJSProperty('disabled', true);
+  await expect(status).toHaveAttribute('aria-label', 'Status, Started');
+  await expect(status.locator('.kui-select__custom-selected [data-lucide="clock"]')).toBeVisible();
+  await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
 });
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows', async ({ page }) => {
