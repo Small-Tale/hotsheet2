@@ -144,6 +144,120 @@ fn summary_aggregates_navigation_counts_without_loading_rows() {
 }
 
 #[test]
+fn duplicate_backlinks_follow_retarget_reopen_delete_and_refill() {
+    let (_dir, store, ix) = seeded();
+    let target = "01ARZ3NDEKTSV4RRFFQ69G5FB1";
+    let qualified = format!("@project/source:{target}");
+    let other = format!("@other/source:{target}");
+    let mut ticket = store
+        .read_ticket(&ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"))
+        .unwrap();
+    let save = |ticket: &Ticket| ix.upsert(ticket, "ticket.md", "hash").unwrap();
+    assert!(
+        ix.duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+    ticket.close_reason = Some(hotsheet_model::CloseReason::Duplicate);
+    ticket.duplicate_of = Some(qualified.clone());
+    save(&ticket);
+    save(&ticket);
+    assert_eq!(ix.duplicate_backlinks(&qualified, target).unwrap().len(), 1);
+    assert!(ix.duplicate_backlinks(&other, target).unwrap().is_empty());
+    ticket.duplicate_of = Some(other.clone());
+    ticket.title = "Retargeted and renamed".into();
+    save(&ticket);
+    assert!(
+        ix.duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        ix.duplicate_backlinks(&other, target).unwrap()[0].title,
+        ticket.title
+    );
+    ticket.duplicate_of = Some(target.into());
+    save(&ticket);
+    assert_eq!(ix.duplicate_backlinks(&qualified, target).unwrap().len(), 1);
+    assert_eq!(ix.duplicate_backlinks(&other, target).unwrap().len(), 1);
+    ticket.close_reason = None;
+    save(&ticket);
+    assert!(
+        ix.duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+    ticket.close_reason = Some(hotsheet_model::CloseReason::Duplicate);
+    save(&ticket);
+    ix.delete(&ticket.id).unwrap();
+    assert!(
+        ix.duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+    save(&ticket);
+    assert_eq!(
+        ix.duplicate_backlinks(&qualified, target).unwrap()[0].id,
+        ticket.id.to_string()
+    );
+
+    let plan: String = ix.conn.query_row(
+        "EXPLAIN QUERY PLAN SELECT id, slug, title FROM tickets WHERE store_id=?1 AND close_reason='duplicate' AND duplicate_of IN (?2,?3)",
+        params![ix.store_id, qualified, target], |row| row.get(3),
+    ).unwrap();
+    assert!(plan.contains("idx_tickets_duplicate_target"), "{plan}");
+}
+
+#[test]
+fn duplicate_backlinks_reconcile_external_changes_and_restore_after_schema_upgrade() {
+    let (_dir, store, _) = seeded();
+    let db_dir = tempfile::tempdir().unwrap();
+    let db = db_dir.path().join("backlinks.sqlite");
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let target = "01ARZ3NDEKTSV4RRFFQ69G5FB1";
+    let qualified = format!("@project/source:{target}");
+    let ix = Index::open_reconciled(&db, &store).unwrap();
+    assert!(
+        ix.duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+    ops::close(
+        &store,
+        &id,
+        Timestamp::new("2026-09-22T00:00:00Z"),
+        hotsheet_model::CloseReason::Duplicate,
+        Some(qualified.clone()),
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+    assert_eq!(ix.duplicate_backlinks(&qualified, target).unwrap().len(), 1);
+    ix.conn
+        .execute(
+            "UPDATE index_meta SET value='14' WHERE key='schema_version'",
+            [],
+        )
+        .unwrap();
+    drop(ix);
+    let restored = Index::open_reconciled(&db, &store).unwrap();
+    assert_eq!(
+        restored
+            .duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .len(),
+        1
+    );
+    std::fs::remove_file(store.ticket_path(&id)).unwrap();
+    restored.reconcile(&store).unwrap();
+    assert!(
+        restored
+            .duplicate_backlinks(&qualified, target)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn trash_is_counted_and_queried_separately_from_archive() {
     let (_d, store, _) = seeded();
     let now = Timestamp::new("2026-08-20T00:00:00Z");

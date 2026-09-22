@@ -108,11 +108,22 @@ impl StoreInfo {
 #[derive(Clone, Default)]
 pub struct StoreHost {
     stores: Arc<Mutex<HashMap<String, StoreEntry>>>,
+    initializing: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl StoreHost {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Serialize cold initialization of one source without locking unrelated stores.
+    pub fn initialization_lock(&self, id: &str) -> Arc<Mutex<()>> {
+        self.initializing
+            .lock()
+            .unwrap()
+            .entry(id.to_string())
+            .or_default()
+            .clone()
     }
 
     /// Register (or replace) a served store, returning its URL id.

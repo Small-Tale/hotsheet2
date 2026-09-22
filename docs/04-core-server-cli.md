@@ -101,6 +101,21 @@ tools accept the same optional `checkout` target (and `store` for ambiguous crea
 both HTTP and serverless modes. Every checkout-qualified list, full-ticket read, and
 mutation response resolves standing auto-context from that checkout's project settings;
 one ticket store shared by several checkouts never supplies an implicit project identity.
+Detail reads retain the ticket fetched during source resolution, including external-provider
+payloads and historical connection aliases; they do not fetch it again after finding its
+owner. Synchronous resolution runs on the blocking pool. Duplicate backlinks use each Git
+store's maintained reverse index for the exact qualified target plus historical bare-ULID
+references. A remembered but unhosted source is indexed and watched once on first use, with
+source-specific initialization coordination; no global registry lock spans its disk scan.
+Only indexed matches are read to validate current source content, so a retained healthy
+cache row does not expose a now-corrupt, removed, or retargeted backlink.
+Writes update the reverse index immediately, while CLI/Git changes use the existing watcher
+and restart reconciliation. Missing checkout directories and absent store metadata are
+skipped, and inaccessible sources remain reported. External providers retain a live-query
+fallback until the provider-native reverse lookup tracked by HS2-A0PDBP exists (HS2-Y7W3Z4).
+Terminal-open preparation also runs on the blocking pool, including plugin setup and
+model/effort discovery; a slow catalog lock or discovery subprocess cannot occupy an
+async worker needed by another client's detail read.
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.
 Browser collection reads opt into a bounded envelope with `page_size=1..500` and resume
 with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and SQL-backed

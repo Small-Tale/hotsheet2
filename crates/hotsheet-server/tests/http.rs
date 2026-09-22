@@ -3552,6 +3552,8 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
 #[tokio::test]
 async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     let (source_dir, st) = state();
+    let _watch = hotsheet_server::spawn_watcher(st.clone()).unwrap();
+    let mut external_updates = st.subscribe();
     let target_dir = tempfile::tempdir().unwrap();
     let target_store = FsStore::init(target_dir.path(), &StoreMetadata::new("TG")).unwrap();
     let source_checkout = tempfile::tempdir().unwrap();
@@ -3976,6 +3978,16 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
         hotsheet_model::CloseReason::Duplicate,
         Some(target["native_id"].as_str().unwrap().to_string()),
     )
+    .unwrap();
+    // External writes are reflected by the production watcher, not a reader-side scan.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if external_updates.recv().await.unwrap().id == legacy_id.to_string() {
+                break;
+            }
+        }
+    })
+    .await
     .unwrap();
     let inaccessible_checkout = tempfile::tempdir().unwrap();
     let inaccessible_store = inaccessible_checkout.path().join("broken.hs2");
@@ -8084,6 +8096,71 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
             .is_empty(),
         "direct provider operations must not mirror into the git store"
     );
+}
+
+#[tokio::test]
+async fn checkout_detail_fetches_each_provider_ticket_once_including_source_aliases() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_dir = tempfile::tempdir().unwrap();
+    let path = registry_dir.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&path);
+    let registered = registry
+        .register_sources(
+            checkout.path(),
+            Some("remote"),
+            None,
+            vec![hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: "github-old".into(),
+                provider: "github".into(),
+                locator: "acme/repo".into(),
+            }],
+            Some("github-old".into()),
+        )
+        .unwrap();
+    registry
+        .rename_source(&registered.id, "github-old", "github-main")
+        .unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            (0..3)
+                .flat_map(|_| {
+                    [
+                        github_response(200, github_issue(11, "resolved once")),
+                        github_response(200, serde_json::json!([])),
+                    ]
+                })
+                .collect(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let router = app(st
+        .with_checkout_registry(path)
+        .with_ticket_provider(Arc::new(provider)));
+    for (index, id) in ["11", "github-main:11", "github-old:11"].iter().enumerate() {
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{}/tickets/{id}", registered.id),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let ticket = body_json(response).await;
+        assert_eq!(ticket["title"], "resolved once");
+        assert_eq!(ticket["store"], "github-main");
+        assert_eq!(
+            transport.responses.lock().unwrap().len(),
+            2 * (2 - index),
+            "a detail read fetched its ticket more than once"
+        );
+    }
 }
 
 #[tokio::test]

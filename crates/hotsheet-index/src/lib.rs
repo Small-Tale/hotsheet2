@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 14;
+const SCHEMA_VERSION: i64 = 15;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -49,6 +49,8 @@ CREATE TABLE tickets (
   UNIQUE(store_id, id)
 );
 CREATE INDEX idx_tickets_status ON tickets(store_id, status);
+CREATE INDEX idx_tickets_duplicate_target ON tickets(store_id, duplicate_of)
+  WHERE close_reason = 'duplicate';
 CREATE TABLE tags (store_id TEXT, ticket_id TEXT, tag TEXT);
 CREATE INDEX idx_tags ON tags(store_id, tag);
 CREATE TABLE assignees (store_id TEXT, ticket_id TEXT, assignee TEXT);
@@ -82,6 +84,14 @@ pub enum IndexError {
 /// list is identical whichever path produced it.
 pub use hotsheet_ticketing::TicketRow;
 
+/// The small projection needed to display a reverse duplicate link.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateBacklinkRow {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+}
+
 /// Constant-memory checkout summary computed directly by SQLite.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TicketSummary {
@@ -107,6 +117,33 @@ pub struct Index {
 }
 
 impl Index {
+    /// Look up exact qualified references and historical bare-native references without
+    /// loading unrelated tickets. Normal upsert/delete/reconcile maintains this index.
+    pub fn duplicate_backlinks(
+        &self,
+        qualified_target: &str,
+        native_target: &str,
+    ) -> Result<Vec<DuplicateBacklinkRow>, IndexError> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, slug, title FROM tickets
+             WHERE store_id = ?1 AND close_reason = 'duplicate'
+               AND duplicate_of IN (?2, ?3)
+             ORDER BY slug, id",
+        )?;
+        Ok(statement
+            .query_map(
+                params![self.store_id, qualified_target, native_target],
+                |row| {
+                    Ok(DuplicateBacklinkRow {
+                        id: row.get(0)?,
+                        slug: row.get(1)?,
+                        title: row.get(2)?,
+                    })
+                },
+            )?
+            .collect::<Result<_, _>>()?)
+    }
+
     /// Aggregate the counts needed by checkout navigation without loading ticket rows.
     pub fn summary(&self, now: &str, day_starts: &[String]) -> Result<TicketSummary, IndexError> {
         let today = day_starts

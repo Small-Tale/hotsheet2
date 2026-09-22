@@ -52,6 +52,9 @@ use hotsheet_ticketing::{
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
+
+#[cfg(test)]
+mod request_performance_tests;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use time::OffsetDateTime;
@@ -636,6 +639,8 @@ impl AppState {
             .metadata()
             .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
         let id = multistore::store_url_id(&store);
+        let initialization = self.host.initialization_lock(&id);
+        let _initializing = initialization.lock().unwrap();
         if self.host.contains(&id) {
             return Ok(false);
         }
@@ -4194,32 +4199,101 @@ async fn create_checkout_ticket(
         Json(contextualize_api_ticket(ticket, &settings)?),
     ))
 }
+/// Resolve ownership and retain the fetched payload. A successful qualified reference
+/// reads its checkout/source once; an unqualified reference reads each candidate once
+/// while preserving ambiguity detection (including remote providers).
+fn resolve_checkout_ticket(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+) -> Result<
+    (
+        hotsheet_ticketing::checkouts::Checkout,
+        hotsheet_ticketing::checkouts::TicketSource,
+        ResolvedTicket,
+    ),
+    ApiError,
+> {
+    if let Some((connection_id, native_id)) = id.split_once(':') {
+        match state
+            .checkout_registry
+            .resolve_source(reference, connection_id)
+        {
+            Ok((checkout, source)) => {
+                let ticket = read_checkout_ticket_source(state, &source, native_id, true)?
+                    .ok_or_else(|| ApiError::not_found(id))?;
+                return Ok((checkout, source, ticket));
+            }
+            Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {}
+            Err(error) => return Err(ApiError::new(StatusCode::CONFLICT, error.to_string())),
+        }
+    }
+    let (checkout, _) = checkout_settings(state, reference)?;
+    let mut found = None;
+    for source in &checkout.sources {
+        if let Some(ticket) = read_checkout_ticket_source(state, source, id, false)? {
+            if found.is_some() {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    format!(
+                        "ticket {id} is ambiguous across checkout sources; use its qualified id"
+                    ),
+                ));
+            }
+            found = Some((source.clone(), ticket));
+        }
+    }
+    let (source, ticket) = found.ok_or_else(|| ApiError::not_found(id))?;
+    Ok((checkout, source, ticket))
+}
+
+fn read_checkout_ticket_source(
+    state: &AppState,
+    source: &hotsheet_ticketing::checkouts::TicketSource,
+    id: &str,
+    required: bool,
+) -> Result<Option<ResolvedTicket>, ApiError> {
+    if source.provider == "git" {
+        let Some(entry) = state.host.get(&source.connection_id) else {
+            return if required {
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "checkout links an unhosted git source",
+                ))
+            } else {
+                Ok(None)
+            };
+        };
+        let Some(ticket) = ops::resolve(&entry.store, id)? else {
+            return Ok(None);
+        };
+        let store = multistore::store_url_id(&entry.store);
+        return Ok(Some(ResolvedTicket {
+            ticket: ApiTicket::from_provider(&ticket, &store, None),
+            store,
+        }));
+    }
+    match provider_for(state, &source.connection_id)?.get(id) {
+        Ok(ticket) => Ok(Some(ResolvedTicket {
+            store: source.connection_id.clone(),
+            ticket,
+        })),
+        Err(hotsheet_ticketing::ProviderError::NotFound { .. }) => Ok(None),
+        Err(error) => Err(provider_transfer_error(error)),
+    }
+}
+
 async fn get_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
-    let (_, settings) = checkout_settings(&state, &reference)?;
-    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
-    if source.provider != "git" {
-        let ticket = provider_for(&state, &source.connection_id)?
-            .get(&native_id)
-            .map_err(provider_transfer_error)?;
-        return Ok(Json(ResolvedTicket {
-            store: source.connection_id,
-            ticket: contextualize_api_ticket(ticket, &settings)?,
-        }));
-    }
-    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
-        ApiError::new(
-            StatusCode::CONFLICT,
-            "checkout links an unhosted git source",
-        )
-    })?;
-    let ticket = ops::resolve(&entry.store, &native_id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    Ok(Json(ResolvedTicket {
-        store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket_with_settings(&entry, &ticket, &settings)?,
-    }))
+    tokio::task::spawn_blocking(move || {
+        let (checkout, _, mut resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
+        resolved.ticket = contextualize_api_ticket(resolved.ticket, &checkout.settings())?;
+        Ok(Json(resolved))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 #[derive(Debug, Serialize)]
@@ -4257,125 +4331,160 @@ async fn get_checkout_ticket_duplicate_backlinks(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<DuplicateBacklinkResponse>, ApiError> {
-    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
-    let target = resolve_project_ticket_ref(
-        &state,
-        ProjectTicketRef {
-            project_id: reference,
-            connection_id: source.connection_id,
-            native_id,
-        },
-    )?;
-    let checkouts = state
-        .checkout_registry
-        .list()
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-    // The scan below opens and fully lists every ticket store of every registered checkout
-    // (O(all tickets in all projects)). Run it on the blocking pool so this per-ticket-open
-    // request cannot starve tokio workers or stall unrelated concurrent clients. HS2-S66BZZ.
-    let scan_state = state.clone();
-    let (backlinks, inaccessible_projects) = tokio::task::spawn_blocking(move || {
-        let state = scan_state;
-        let mut backlinks = Vec::new();
-        let mut inaccessible_projects = Vec::new();
-        for checkout in checkouts {
-            // A remembered checkout may outlive a temporary or deleted working directory.
-            // It cannot contain a usable backlink while absent, and presenting it as a
-            // transient source failure makes every ticket show a permanent warning.
-            if !FsPath::new(&checkout.root).is_dir() {
-                continue;
-            }
-            let mut inaccessible = false;
-            for source in &checkout.sources {
-                let tickets = if source.provider == "git" {
-                    // A directory can be recreated after a remembered temporary checkout is
-                    // deleted (for example by an old setup tool) without recreating its HS2
-                    // ticket store. A locator without HS2 metadata is no longer a searchable
-                    // source, not a transient lookup failure that should warn on every ticket.
-                    if !FsPath::new(&source.locator)
-                        .join(STORE_METADATA_FILE)
-                        .is_file()
-                    {
-                        continue;
-                    }
-                    match FsStore::open(&source.locator).and_then(|store| {
-                        store.metadata()?;
-                        store.list_tickets_resilient()
-                    }) {
-                        Ok(listing) => listing
-                            .tickets
-                            .iter()
-                            .map(|ticket| {
-                                ApiTicket::from_provider(ticket, &source.connection_id, None)
-                            })
-                            .collect(),
-                        Err(_) => {
-                            inaccessible = true;
+    let (backlinks, inaccessible_projects) =
+        tokio::task::spawn_blocking(move || {
+            let (checkout, source, resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
+            let target = ProjectTicketRef {
+                project_id: checkout.id,
+                connection_id: source.connection_id,
+                native_id: resolved.ticket.native_id,
+            };
+            let checkouts = state.checkout_registry.list().map_err(|error| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            })?;
+            // Cold sources build an index once on this blocking worker; warm sources query
+            // maintained reverse indexes. No host-registry lock spans indexing or file I/O.
+            let mut backlinks = Vec::new();
+            let mut inaccessible_projects = Vec::new();
+            for checkout in checkouts {
+                // A remembered checkout may outlive a temporary or deleted working directory.
+                // It cannot contain a usable backlink while absent, and presenting it as a
+                // transient source failure makes every ticket show a permanent warning.
+                if !FsPath::new(&checkout.root).is_dir() {
+                    continue;
+                }
+                let mut inaccessible = false;
+                for source in &checkout.sources {
+                    let tickets =
+                        if source.provider == "git" {
+                            // A directory can be recreated after a remembered temporary checkout is
+                            // deleted (for example by an old setup tool) without recreating its HS2
+                            // ticket store. A locator without HS2 metadata is no longer a searchable
+                            // source, not a transient lookup failure that should warn on every ticket.
+                            if !FsPath::new(&source.locator)
+                                .join(STORE_METADATA_FILE)
+                                .is_file()
+                            {
+                                continue;
+                            }
+                            let indexed =
+                        (|| -> Result<Vec<hotsheet_index::DuplicateBacklinkRow>, ApiError> {
+                            let store = FsStore::open(&source.locator)?;
+                            state.host_store(store.clone())?;
+                            let entry = state
+                                .host
+                                .get(&multistore::store_url_id(&store))
+                                .ok_or_else(|| ApiError::not_found(&source.connection_id))?;
+                            let rows = entry.index.lock().map_err(|error| {
+                                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                            })?.duplicate_backlinks(&target.qualified(), &target.native_id)?;
+                            // A watcher retains the last healthy index row for corrupt files.
+                            // Validate only indexed matches, outside the index lock, to retain
+                            // the old resilient scan's omission of corrupt or removed sources.
+                            Ok(rows.into_iter().filter_map(|mut row| {
+                                let id = Ulid::from_string(&row.id).ok()?;
+                                let ticket = entry.store.read_ticket(&id).ok()?;
+                                if ticket.close_reason != Some(CloseReason::Duplicate)
+                                    || !ticket.duplicate_of.as_deref().is_some_and(|reference|
+                                        duplicate_reference_matches(reference, &target)) {
+                                    return None;
+                                }
+                                row.slug = ticket.slug;
+                                row.title = ticket.title;
+                                Some(row)
+                            }).collect())
+                        })();
+                            match indexed {
+                                Ok(rows) => {
+                                    for row in rows {
+                                        let source_reference = ProjectTicketRef {
+                                            project_id: checkout.id.clone(),
+                                            connection_id: source.connection_id.clone(),
+                                            native_id: row.id.clone(),
+                                        };
+                                        backlinks.push(DuplicateBacklink {
+                                            reference: source_reference.qualified(),
+                                            project_id: checkout.id.clone(),
+                                            project_name: checkout.alias.clone(),
+                                            connection_id: source.connection_id.clone(),
+                                            qualified_id: format!(
+                                                "{}:{}",
+                                                source.connection_id, row.id
+                                            ),
+                                            native_id: row.id,
+                                            slug: row.slug,
+                                            title: row.title,
+                                        });
+                                    }
+                                    continue;
+                                }
+                                Err(_) => {
+                                    inaccessible = true;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            match provider_for(&state, &source.connection_id).and_then(|provider| {
+                                provider
+                                    .query(&TicketQuery::default())
+                                    .map_err(provider_transfer_error)
+                            }) {
+                                Ok(tickets) => tickets,
+                                Err(_) => {
+                                    inaccessible = true;
+                                    continue;
+                                }
+                            }
+                        };
+                    for ticket in tickets {
+                        let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
+                            continue;
+                        };
+                        if ticket.close_reason != Some(CloseReason::Duplicate)
+                            || !duplicate_reference_matches(duplicate_of, &target)
+                        {
                             continue;
                         }
+                        let source_reference = ProjectTicketRef {
+                            project_id: checkout.id.clone(),
+                            connection_id: ticket.connection_id.clone(),
+                            native_id: ticket.native_id.clone(),
+                        };
+                        backlinks.push(DuplicateBacklink {
+                            reference: source_reference.qualified(),
+                            project_id: checkout.id.clone(),
+                            project_name: checkout.alias.clone(),
+                            connection_id: ticket.connection_id,
+                            native_id: ticket.native_id,
+                            qualified_id: ticket.qualified_id,
+                            slug: ticket.slug,
+                            title: ticket.title,
+                        });
                     }
-                } else {
-                    match provider_for(&state, &source.connection_id).and_then(|provider| {
-                        provider
-                            .query(&TicketQuery::default())
-                            .map_err(provider_transfer_error)
-                    }) {
-                        Ok(tickets) => tickets,
-                        Err(_) => {
-                            inaccessible = true;
-                            continue;
-                        }
-                    }
-                };
-                for ticket in tickets {
-                    let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
-                        continue;
-                    };
-                    if ticket.close_reason != Some(CloseReason::Duplicate)
-                        || !duplicate_reference_matches(duplicate_of, &target)
-                    {
-                        continue;
-                    }
-                    let source_reference = ProjectTicketRef {
-                        project_id: checkout.id.clone(),
-                        connection_id: ticket.connection_id.clone(),
-                        native_id: ticket.native_id.clone(),
-                    };
-                    backlinks.push(DuplicateBacklink {
-                        reference: source_reference.qualified(),
-                        project_id: checkout.id.clone(),
-                        project_name: checkout.alias.clone(),
-                        connection_id: ticket.connection_id,
-                        native_id: ticket.native_id,
-                        qualified_id: ticket.qualified_id,
-                        slug: ticket.slug,
-                        title: ticket.title,
+                }
+                if inaccessible {
+                    inaccessible_projects.push(DuplicateBacklinkProject {
+                        project_id: checkout.id,
+                        project_name: checkout.alias,
                     });
                 }
             }
-            if inaccessible {
-                inaccessible_projects.push(DuplicateBacklinkProject {
-                    project_id: checkout.id,
-                    project_name: checkout.alias,
-                });
-            }
-        }
-        backlinks.sort_by(|left, right| {
-            left.project_name
-                .cmp(&right.project_name)
-                .then(left.slug.cmp(&right.slug))
-                .then(left.reference.cmp(&right.reference))
-        });
-        backlinks.dedup_by(|left, right| left.reference == right.reference);
-        inaccessible_projects.sort_by(|left, right| {
-            left.project_name
-                .cmp(&right.project_name)
-                .then(left.project_id.cmp(&right.project_id))
-        });
-        (backlinks, inaccessible_projects)
-    })
-    .await
-    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+            backlinks.sort_by(|left, right| {
+                left.project_name
+                    .cmp(&right.project_name)
+                    .then(left.slug.cmp(&right.slug))
+                    .then(left.reference.cmp(&right.reference))
+            });
+            backlinks.dedup_by(|left, right| left.reference == right.reference);
+            inaccessible_projects.sort_by(|left, right| {
+                left.project_name
+                    .cmp(&right.project_name)
+                    .then(left.project_id.cmp(&right.project_id))
+            });
+            Ok::<_, ApiError>((backlinks, inaccessible_projects))
+        })
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     Ok(Json(DuplicateBacklinkResponse {
         backlinks,
         inaccessible_projects,
@@ -6800,7 +6909,15 @@ async fn open_terminal(
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.clone().unwrap_or_else(|| Ulid::new().to_string());
-    let launch = terminal_launch(&state, &req, &id)?;
+    let launch_state = state.clone();
+    let launch_id = id.clone();
+    // Setup and model discovery may launch subprocesses or wait for a shared catalog
+    // lock. Keep the entire synchronous preparation off Tokio workers (HS2-Y7W3Z4).
+    let (launch, req) = tokio::task::spawn_blocking(move || {
+        terminal_launch(&launch_state, &req, &launch_id).map(|launch| (launch, req))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let kind = if req.connect.is_some() {
         hotsheet_terminals::TerminalKind::Ai
     } else {

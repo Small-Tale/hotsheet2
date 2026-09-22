@@ -101,7 +101,7 @@ CREATE TABLE tickets (
   status        TEXT,                 -- not_started|started|completed|verified|backlog|archive|deleted|moved
   moved_to_store TEXT,                -- set only on a 'moved' tombstone (§2.13) → redirect target
   close_reason  TEXT,                 -- completed|not_planned|duplicate|obsolete (§2.6a); NULL = open
-  duplicate_of  TEXT,                 -- ticket ULID when close_reason='duplicate' (resolved globally)
+  duplicate_of  TEXT,                 -- qualified project/source/native ref, or a legacy bare ULID
   closed_at     TEXT,
   up_next       INTEGER NOT NULL DEFAULT 0,
   tags_json     TEXT NOT NULL DEFAULT '[]',
@@ -114,6 +114,8 @@ CREATE TABLE tickets (
   PRIMARY KEY (store_id, id)          -- full identity is store + ULID (§2.2.1); lets a moved
 );                                    --   tombstone in store A coexist with the live copy in store B
 
+CREATE INDEX idx_tickets_duplicate_target ON tickets(store_id, duplicate_of)
+  WHERE close_reason = 'duplicate';
 CREATE TABLE tags       (store_id TEXT, ticket_id TEXT, tag TEXT);           -- denormalized for fast tag facets
 CREATE TABLE blocked_by (store_id TEXT, ticket_id TEXT, blocks_on_id TEXT);  -- flat dependency edges (blocks_on_id is a ULID, resolved to its live instance)
 CREATE TABLE assignees  (store_id TEXT, ticket_id TEXT, person TEXT);        -- denormalized assignees (git email) for "assigned to me" + query-builder facets
@@ -131,6 +133,12 @@ CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);   -- schema version,
 Tags and notes are indexed into concatenated FTS columns so one query covers ticket
 identity, visible metadata, Markdown details, and note bodies; the authoritative values
 remain in the ticket file.
+
+Reverse duplicate lookup returns only source id, slug, and title for matching targets. The
+partial index is maintained by the existing upsert/delete operations, so retargeting,
+reopening, title changes, purging, external edits, and schema-rebuild recovery do not need
+a second cache or a reader-side ticket walk. Schema version 15 rebuilds older disposable
+indexes to add this lookup (HS2-Y7W3Z4).
 
 ## 3.4 Incremental reindex
 
