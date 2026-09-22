@@ -10,6 +10,8 @@ import {
   type WorkspaceSort,
   type WorkspaceSortDirection,
   workspaceSortTrigger,
+  type WorkspaceUpNextState,
+  workspaceUpNextState,
 } from './workspace-header';
 
 describe('WorkspaceHeader', () => {
@@ -220,20 +222,60 @@ describe('WorkspaceHeader', () => {
 
   it('enables selected-ticket actions and reflects the shared Up Next state', () => {
     const empty = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
-    expect(empty).toMatch(/<wa-button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
-    expect(empty).toMatch(/<wa-button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
+    expect(empty).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
+    expect(empty).toMatch(/<button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
     const selected = String(
       WorkspaceHeader({
         projectName: 'Hot Sheet 2',
         mode: 'list',
         selectedTicketCount: 2,
-        selectedTicketsUpNext: true,
+        selectedTicketsUpNext: 'all',
         selectedTicketsUpNextEligible: true,
       }),
     );
     expect(selected).toMatch(/data-action="toggle-selected-up-next"[^>]*aria-pressed="true"/);
     expect(selected).not.toMatch(/data-action="toggle-selected-up-next"[^>]*disabled/);
     expect(selected).not.toMatch(/data-action="open-selected-ticket-actions"[^>]*disabled/);
+  });
+
+  it.each([
+    [[], 'none'],
+    [[false], 'none'],
+    [[true], 'all'],
+    [[false, true], 'mixed'],
+    [[true, true], 'all'],
+    [[false, false], 'none'],
+  ] satisfies Array<[boolean[], WorkspaceUpNextState]>)('projects Up Next selection %j as %s', (values, state) => {
+    expect(workspaceUpNextState(values)).toBe(state);
+    const markup = String(
+      WorkspaceHeader({
+        projectName: 'Demo',
+        mode: 'list',
+        selectedTicketCount: values.length,
+        selectedTicketsUpNext: state,
+        selectedTicketsUpNextEligible: values.length > 0,
+      }),
+    );
+    expect(markup).toContain(`aria-pressed="${state === 'mixed' ? 'mixed' : String(state === 'all')}"`);
+    expect(markup.match(new RegExp(`data-up-next-state="${state}"`, 'g'))).toHaveLength(2);
+    expect(markup.match(/workspace-header__up-next-fill/g) ?? []).toHaveLength(state === 'mixed' ? 2 : 0);
+    const utility = markup.slice(
+      markup.indexOf('workspace-header__utility-group'),
+      markup.indexOf('workspace-header__search-group'),
+    );
+    expect(utility).not.toContain('wa-button');
+    expect(utility.match(/<button /g)).toHaveLength(2);
+  });
+
+  it.each([
+    { selectedTicketsUpNextEligible: false, selectedTicketsMutable: true },
+    { selectedTicketsUpNextEligible: true, selectedTicketsMutable: false },
+  ])('preserves eligibility and provider capability guards: %j', (guards) => {
+    const markup = String(WorkspaceHeader({ projectName: 'Demo', mode: 'list', selectedTicketCount: 1, ...guards }));
+    expect(markup).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
+    expect(markup).toMatch(
+      /<wa-dropdown-item[^>]*disabled[^>]*data-workspace-overflow-action="toggle-selected-up-next"/,
+    );
   });
 
   it('omits every project control for global shell modes', () => {
@@ -252,13 +294,13 @@ describe('WorkspaceHeader', () => {
         sortDirection: 'descending',
         notificationCount: 7,
         selectedTicketCount: 2,
-        selectedTicketsUpNext: true,
+        selectedTicketsUpNext: 'all',
         selectedTicketsUpNextEligible: true,
       }),
     );
     expect(markup).toContain('aria-label="More workspace controls"');
     expect(markup).toMatch(
-      /workspace-header__overflow-utility" type="checkbox" checked data-workspace-overflow-action="toggle-selected-up-next"/,
+      /workspace-header__overflow-utility" aria-label="Toggle Up Next: all selected tickets are Up Next" data-workspace-overflow-action="toggle-selected-up-next"/,
     );
     expect(markup).toContain(
       'workspace-header__overflow-utility" data-workspace-overflow-action="open-selected-ticket-actions"',

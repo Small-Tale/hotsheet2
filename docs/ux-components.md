@@ -384,10 +384,11 @@ does not introduce polling or another network request.
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
-  hover; controls in multi-item groups receive individual 32px highlights inside
-  the 40px shell. Slotted Lucide icons share explicit sizing, block layout, and
+  hover; ordinary controls are native buttons with the package-owned 40px circular
+  hover/focus geometry. Web Awesome buttons are reserved for package-specific features
+  such as popup triggers. Slotted Lucide icons share explicit sizing, block layout, and
   vertical centering across native and Web Awesome buttons. Its borderless appearance
-  keeps identical 40px geometry and hover highlights while omitting the idle border
+  keeps identical 44px group geometry and 40px button highlights while omitting the idle border
   and background; sidebar visibility and inspector ticket-action groups use it. Its
   orthogonal dark tone provides a shared inverse surface, exact `#353536` border, icon, and hover palette
   for overlay toolbars. Opt-in push buttons retain native `aria-pressed` semantics while
@@ -654,6 +655,19 @@ remain discoverable, avoid editable-field conflicts, and receive unit plus brows
 coverage.
 
 ### 3.4 Search and filtering — feature floor
+
+WorkspaceHeader and the workspace-grid ticket rail project selection into native
+Up Next and More actions buttons. The Up Next icon is an empty full-outline star
+when none are queued, a yellow half-filled full-outline star for a mixed selection,
+and a yellow filled star when all are queued. Its `aria-pressed` value is respectively
+`false`, `mixed`, or `true`; selection does not add a persistent background behind
+the star. Hover and keyboard focus retain the canonical circular button treatment.
+The narrow overflow action presents the same icon state and names the selection state
+for assistive technology. Clicking none/mixed adds all eligible selected tickets;
+clicking all removes them. Empty selections, Completed/Verified and other ineligible
+statuses, and providers without update capability remain disabled (HS2-WP15AF).
+The connected header and rail demos derive this state from the selected fixture tickets
+and exercise the same selection replacement and none/mixed/all toggle transitions.
 
 The inline search and active-filter surface is built under HS2-383D6K; the later custom
 query-builder/editor is tracked separately by HS2-G7FWSS. Advanced constraints belong in

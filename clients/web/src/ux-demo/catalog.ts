@@ -119,7 +119,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'workspace-header',
         'WorkspaceHeader',
-        'Project identity, display modes, sorting, settings, and search.',
+        'Project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.',
         'feature-floor',
         true,
         ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board'],
@@ -614,7 +614,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'toolbar-control-group',
         'ToolbarControlGroup',
-        'Consistent rounded grouping for toolbar controls.',
+        'Consistent rounded grouping for native toolbar buttons and Web Awesome popup triggers.',
         'feature-floor',
         true,
       ),

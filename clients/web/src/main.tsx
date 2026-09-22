@@ -231,6 +231,7 @@ import {
   WorkspaceIdentity,
   type WorkspaceSort,
   type WorkspaceSortDirection,
+  workspaceUpNextState,
   type WorkspaceViewMode,
 } from './components/workspace-header';
 import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from './context-menu-position';
@@ -6707,7 +6708,7 @@ function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
           sortDirection={sortDirection.value}
           notificationCount={pending.length}
           selectedTicketCount={selection.length}
-          selectedTicketsUpNext={selection.length > 0 && selection.every((ticket) => ticket.up_next)}
+          selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
           selectedTicketsUpNextEligible={
             selection.length > 0 &&
             selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')
@@ -7385,7 +7386,7 @@ function renderMainShell() {
           sortDirection={sortDirection.value}
           notificationCount={permissionCount(current.id)}
           selectedTicketCount={selection.length}
-          selectedTicketsUpNext={selection.length > 0 && selection.every((ticket) => ticket.up_next)}
+          selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
           selectedTicketsUpNextEligible={
             selection.length > 0 &&
             selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')

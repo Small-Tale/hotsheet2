@@ -283,6 +283,7 @@ import {
   TerminalTicketRailDemo,
   TicketInspectorDemo,
   TicketInspectorSkeletonDemo,
+  toggleWorkspaceDemoUpNext,
   WorkspaceHeaderDemo,
   workspaceMode,
   workspaceSearchHelpOpen,
@@ -349,7 +350,14 @@ let regionResizeDrag:
   | undefined;
 let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () =>
-  ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
+  [
+    'ticket-list',
+    'ticket-board',
+    'workspace-header',
+    'terminal-ticket-rail',
+    'quick-ticket-composer',
+    'app-shell',
+  ].includes(selectedId.value);
 
 const commandRunDialogDemoCommand: CommandDefinition = {
   id: 'run-checks',
@@ -1724,6 +1732,22 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
   if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
 });
 wireWorkspaceOverflowKeyboard(root);
+function openSelectedDemoTicketActions(target: Element): void {
+  const selected = collectionTickets.value.find((ticket) => ticket.selected);
+  if (!selected) return;
+  const rect = target.getBoundingClientRect();
+  contextMenu.value = {
+    ...viewportSafeContextMenuPosition(rect.right - 232, rect.bottom, innerWidth, innerHeight, {
+      width: 232,
+      height: 382,
+    }),
+    ticketSlug: selected.slug,
+  };
+}
+delegate(root, 'click', '[data-action="toggle-selected-up-next"]', toggleWorkspaceDemoUpNext);
+delegate(root, 'click', '[data-action="open-selected-ticket-actions"]', (_event, target) => {
+  openSelectedDemoTicketActions(target);
+});
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
   if (workspaceMode.value === 'settings') {
@@ -1763,6 +1787,14 @@ delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, t
 delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
   const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
   const action = item.dataset.workspaceOverflowAction;
+  if (action === 'toggle-selected-up-next') {
+    toggleWorkspaceDemoUpNext();
+    return;
+  }
+  if (action === 'open-selected-ticket-actions') {
+    openSelectedDemoTicketActions(item);
+    return;
+  }
   if (action === 'open-workspace-search') {
     workspaceSearchOpen.value = true;
     queueMicrotask(() => focusWorkspaceSearch(root));

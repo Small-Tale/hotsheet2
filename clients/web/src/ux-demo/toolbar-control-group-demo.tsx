@@ -50,20 +50,20 @@ export function ToolbarControlGroupDemo() {
       <div>
         <h2>Button group</h2>
         <ToolbarControlGroup label="View actions">
-          <wa-button appearance="plain" aria-label="Favorite view">
+          <button type="button" aria-label="Favorite view">
             <LucideIcon icon={Star} name="star" />
-          </wa-button>
-          <wa-button appearance="plain" aria-label="More actions">
+          </button>
+          <button type="button" aria-label="More actions">
             <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-          </wa-button>
+          </button>
         </ToolbarControlGroup>
       </div>
       <div>
         <h2>Single button</h2>
         <ToolbarControlGroup single>
-          <wa-button appearance="plain" aria-label="Pin view">
+          <button type="button" aria-label="Pin view">
             <LucideIcon icon={Pin} name="pin" />
-          </wa-button>
+          </button>
         </ToolbarControlGroup>
       </div>
       <div>

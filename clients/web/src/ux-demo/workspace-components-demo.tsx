@@ -18,6 +18,7 @@ import {
   WorkspaceHeader,
   type WorkspaceSort,
   type WorkspaceSortDirection,
+  workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
@@ -78,6 +79,24 @@ export const inspectorCodeReview: CodeReview = {
 };
 let demoSequence = 1;
 
+export function workspaceDemoSelection() {
+  const selected = collectionTickets.value.filter((ticket) => ticket.selected);
+  return {
+    selectedTicketCount: selected.length,
+    selectedTicketsUpNext: workspaceUpNextState(selected.map((ticket) => Boolean(ticket.upNext))),
+    selectedTicketsUpNextEligible:
+      selected.length > 0 && selected.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started'),
+  };
+}
+
+export function toggleWorkspaceDemoUpNext(): void {
+  const selection = workspaceDemoSelection();
+  if (!selection.selectedTicketsUpNextEligible) return;
+  const upNext = selection.selectedTicketsUpNext !== 'all';
+  collectionTickets.value = collectionTickets.value.map((ticket) => (ticket.selected ? { ...ticket, upNext } : ticket));
+  collectionEvent.value = `${selection.selectedTicketCount} selected tickets ${upNext ? 'added to' : 'removed from'} Up Next`;
+}
+
 export function focusWorkspaceSearch(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
   if (!input) return false;
@@ -103,6 +122,7 @@ export function TerminalTicketRailDemo() {
         selectedViewId="all"
         controls={
           <WorkspaceControls
+            {...workspaceDemoSelection()}
             mode={mode}
             listOnly
             searchOpen={workspaceSearchOpen.value}
@@ -213,6 +233,7 @@ export function WorkspaceHeaderDemo() {
   return (
     <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
       <WorkspaceHeader
+        {...workspaceDemoSelection()}
         projectName="Hot Sheet 2"
         mode={workspaceMode.value}
         searchOpen={workspaceSearchOpen.value}

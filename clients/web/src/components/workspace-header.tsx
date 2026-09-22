@@ -35,6 +35,20 @@ import { type InlineSearchToken, toTokenSearchToken } from '../inline-search';
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
+export type WorkspaceUpNextState = 'none' | 'mixed' | 'all';
+
+export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNextState {
+  return values.some(Boolean) ? (values.every(Boolean) ? 'all' : 'mixed') : 'none';
+}
+
+function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
+  return (
+    <span class="workspace-header__up-next-icon" data-up-next-state={state} aria-hidden="true">
+      <LucideIcon icon={Star} name="star" />
+      {state === 'mixed' && <LucideIcon icon={Star} name="star" className="workspace-header__up-next-fill" />}
+    </span>
+  );
+}
 
 export interface WorkspaceHeaderProps {
   projectName: string;
@@ -50,7 +64,7 @@ export interface WorkspaceHeaderProps {
   controlsVisible?: boolean;
   notificationCount?: number;
   selectedTicketCount?: number;
-  selectedTicketsUpNext?: boolean;
+  selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
   selectedTicketsMutable?: boolean;
   /** Mobile: board/column view does not fit a single column, so hide the Columns toggle and its
@@ -203,7 +217,7 @@ function WorkspaceOverflowControls({
   sortDirection: WorkspaceSortDirection;
   visibleSortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }>;
   notificationCount: number;
-  selectedTicketsUpNext: boolean;
+  selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
   listOnly?: boolean;
 }) {
@@ -227,13 +241,12 @@ function WorkspaceOverflowControls({
       </wa-button>
       <wa-dropdown-item
         class="workspace-header__overflow-utility"
-        type="checkbox"
-        checked={selectedTicketsUpNext}
+        aria-label={`Toggle Up Next: ${selectedTicketsUpNext === 'mixed' ? 'some' : selectedTicketsUpNext} selected tickets are Up Next`}
         disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
         data-workspace-overflow-action="toggle-selected-up-next"
       >
         <span slot="icon">
-          <LucideIcon icon={Star} name="star" />
+          <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
         </span>
         Toggle Up Next
       </wa-dropdown-item>
@@ -315,7 +328,7 @@ export function WorkspaceControls({
   sortDirection = defaultWorkspaceSortDirection(sort),
   notificationCount = 0,
   selectedTicketCount = 0,
-  selectedTicketsUpNext = false,
+  selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
   listOnly = false,
@@ -363,25 +376,26 @@ export function WorkspaceControls({
         />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
-        <wa-button
-          appearance="plain"
+        <button
+          type="button"
+          class="workspace-header__up-next-button"
           disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
           data-action="toggle-selected-up-next"
           aria-label="Toggle Up Next for selected tickets"
-          aria-pressed={String(selectedTicketsUpNext)}
+          aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
           title="Toggle Up Next for selected tickets"
         >
-          <LucideIcon icon={Star} name="star" />
-        </wa-button>
-        <wa-button
-          appearance="plain"
+          <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
+        </button>
+        <button
+          type="button"
           disabled={ticketActionsDisabled}
           data-action="open-selected-ticket-actions"
           aria-label="More actions for selected tickets"
           title="More actions for selected tickets"
         >
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-        </wa-button>
+        </button>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         <TokenSearchField
@@ -552,7 +566,7 @@ export function WorkspaceHeader({
   controlsVisible = true,
   notificationCount = 0,
   selectedTicketCount = 0,
-  selectedTicketsUpNext = false,
+  selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
   listOnly = false,

@@ -12751,7 +12751,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     star = page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }),
-    starHost = page.locator('wa-button[data-action="toggle-selected-up-next"]'),
+    starHost = page.locator('button[data-action="toggle-selected-up-next"]'),
     more = page.getByRole('button', { name: 'More actions for selected tickets' }),
     menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(star).toBeDisabled();
@@ -12777,6 +12777,152 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await expect(page.getByText('Select a ticket to see and edit its details')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-czmm6x-hidden-selection-cleared.png', fullPage: true });
 });
+
+for (const surface of ['workspace', 'rail'] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`projects native tri-state toolbar stars through ${surface} in ${theme} (HS2-WP15AF)`, async ({ page }) => {
+      await page.setViewportSize({ width: 1728, height: 971 });
+      await page.emulateMedia({ colorScheme: theme });
+      await installFakeTerminalSockets(page, true);
+      await mockProject(page);
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open project' }).click();
+      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
+      else await page.getByRole('button', { name: 'Columns view', exact: true }).click();
+      const rail = page.locator('[data-component="terminal-ticket-rail"]');
+      const controls = surface === 'rail' ? rail : page.locator('.app-shell__main > .kui-toolbar');
+      const star = controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
+      const icon = star.locator('.workspace-header__up-next-icon');
+      const select = async (slug: string, toggle = false, single = true) => {
+        await page
+          .locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`)
+          .click({ modifiers: toggle ? ['Meta'] : [] });
+        if (surface === 'rail' && single) {
+          await expect(rail).toHaveAttribute('data-screen', 'ticket');
+          await rail.getByRole('button', { name: 'Back to ticket list' }).click();
+          await expect(rail).toHaveAttribute('data-screen', 'root');
+        }
+      };
+      const expectState = async (state: 'none' | 'mixed' | 'all') => {
+        await expect(star).toHaveAttribute('aria-pressed', state === 'mixed' ? 'mixed' : String(state === 'all'));
+        await expect(icon).toHaveAttribute('data-up-next-state', state);
+        await expect(icon.locator('svg')).toHaveCount(state === 'mixed' ? 2 : 1);
+        await expect(icon.locator('svg').first()).toHaveCSS(
+          'fill',
+          state === 'all' ? await icon.evaluate((node) => getComputedStyle(node).color) : 'none',
+        );
+        if (state === 'mixed') {
+          await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
+            'clip-path',
+            'inset(0px 50% 0px 0px)',
+          );
+          await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
+            'fill',
+            await icon.evaluate((node) => getComputedStyle(node).color),
+          );
+        }
+        if (state !== 'none') await expect(icon).toHaveCSS('color', 'rgb(255, 204, 0)');
+      };
+      await expect(star).toBeDisabled();
+      await expect(controls.locator('.workspace-header__utility-group wa-button')).toHaveCount(0);
+      await select('HS2-DEMO01');
+      await expectState('all');
+      await star.click();
+      await expectState('none');
+      await star.click();
+      await expectState('all');
+      await page.mouse.move(0, 0);
+      await star.evaluate((node) => {
+        (node as HTMLButtonElement).blur();
+      });
+      await expect(star).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(star).toHaveCSS('box-shadow', 'none');
+      const shape = await star.evaluate((node) => ({
+        width: node.getBoundingClientRect().width,
+        height: node.getBoundingClientRect().height,
+        radius: parseFloat(getComputedStyle(node).borderRadius),
+      }));
+      expect(shape.width).toBe(shape.height);
+      expect(shape.radius).toBeGreaterThanOrEqual(shape.width / 2);
+      await page.screenshot({ path: `/private/tmp/hs2-wp15af-${surface}-${theme}-all.png`, animations: 'disabled' });
+      await select('HS2-START02', true, false);
+      await expectState('mixed');
+      if (surface === 'rail')
+        await rail.locator('.terminal-ticket-rail__content').evaluate((node) => {
+          node.scrollTop = 0;
+        });
+      await controls.screenshot({
+        path: `/private/tmp/hs2-wp15af-${surface}-${theme}-mixed.png`,
+        animations: 'disabled',
+      });
+      await page.setViewportSize({ width: surface === 'workspace' ? 390 : 1024, height: 844 });
+      if (surface === 'workspace') {
+        const overflow = controls.locator('.workspace-header__overflow');
+        await overflow.getByRole('button', { name: 'More workspace controls' }).click();
+        const item = overflow.locator('[data-workspace-overflow-action="toggle-selected-up-next"]');
+        await expect(item).toHaveAccessibleName('Toggle Up Next: some selected tickets are Up Next');
+        await expect(item.locator('.workspace-header__up-next-icon')).toHaveAttribute('data-up-next-state', 'mixed');
+        await page.screenshot({
+          path: `/private/tmp/hs2-wp15af-${surface}-${theme}-narrow.png`,
+          animations: 'disabled',
+        });
+        await item.click();
+      } else {
+        await rail.screenshot({
+          path: `/private/tmp/hs2-wp15af-${surface}-${theme}-narrow.png`,
+          animations: 'disabled',
+        });
+        await star.click();
+      }
+      await page.setViewportSize({ width: 1728, height: 971 });
+      await expectState('all');
+      await star.click();
+      await expectState('none');
+      await select('HS2-START02');
+      await expectState('none');
+      await star.focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Shift+Tab');
+      await expect(star).toBeFocused();
+      await expect(star).not.toHaveCSS('outline-style', 'none');
+      await page.keyboard.press('Space');
+      await expectState('all');
+      await select('HS2-DONE01');
+      await expect(star).toBeDisabled();
+      await expectState('none');
+      await page.screenshot({
+        path: `/private/tmp/hs2-wp15af-${surface}-${theme}-completed-disabled.png`,
+        animations: 'disabled',
+      });
+      await select('HS2-VERIFY01');
+      await expect(star).toBeDisabled();
+      await select('HS2-DEMO01');
+      await expect(star).toBeEnabled();
+      await star.click();
+      await expectState('all');
+      await select('HS2-DEMO01', true, false);
+      await expect(star).toBeDisabled();
+      await expectState('none');
+    });
+  }
+  test(`preserves provider-disabled toolbar stars in ${surface} (HS2-WP15AF)`, async ({ page }) => {
+    await page.setViewportSize({ width: 1728, height: 971 });
+    await installFakeTerminalSockets(page, true);
+    await mockProject(page, false);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+    if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
+    const controls =
+      surface === 'rail'
+        ? page.locator('[data-component="terminal-ticket-rail"]')
+        : page.locator('.app-shell__main > .kui-toolbar');
+    await expect(controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' })).toBeDisabled();
+    await expect(controls.getByRole('button', { name: 'More actions for selected tickets' })).toBeDisabled();
+  });
+}
 
 test('keeps every responsive-hidden workspace command keyboard and pointer accessible', async ({ page }) => {
   const patches = await mockProject(page);

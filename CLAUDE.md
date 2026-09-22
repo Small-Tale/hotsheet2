@@ -125,6 +125,12 @@ an app-owned reusable visual component or composition changes, update its UX-dem
 and run `npm run catalog:sync` from `clients/web`; CI/lint checks that the generated
 extension remains current.
 
+Use native `<button type="button">` controls for ordinary actions inside Kerf
+`ToolbarControlGroup`. The group owns their sizing, border, padding, and hover/focus
+geometry; do not add Web Awesome button hosts or recreate that chrome in consumer CSS.
+Reserve `wa-button` in a group for an actual Web Awesome-specific feature, such as a
+dropdown popup trigger, as documented by the installed component catalog.
+
 UX demos may replace production data sources and external side effects with deterministic
 fixtures, but they must not be the sole owners of component interaction behavior. When a
 component is composed into the real app, inventory every rendered action/event from that

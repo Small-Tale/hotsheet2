@@ -648,6 +648,12 @@ and identity-less legacy entries remain conservatively blocking.
   replacing the compact workspace search. The overlay is available from the toolbar and
   the platform Search shortcut (`Command-K`/`Control-K`).
 
+  The workspace and grid-rail selection toolbar uses native group
+  buttons and an empty, yellow half-filled, or yellow filled Up Next star for none,
+  some, or all selected tickets queued, with matching false/mixed/true pressed state.
+  None/mixed toggles add the eligible selection; all toggles remove it. Completed,
+  Verified, other ineligible statuses, empty selections, and provider-disabled
+  selections remain disabled. Narrow overflow retains the same star state (HS2-WP15AF).
   Empty ticket collections use the shared `TicketEmptyState` adapter in both list
   and board modes. A project with no tickets invites its first ticket, a populated
   project's empty view names that view, an in-flight search reports that it is still

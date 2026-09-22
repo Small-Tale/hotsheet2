@@ -778,6 +778,42 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   await rail.screenshot({ path: '/private/tmp/hs2-r292m4-terminal-ticket-rail-narrow.png' });
 });
 
+for (const component of ['workspace-header', 'terminal-ticket-rail']) {
+  test(`projects selected Up Next state through the ${component} demo (HS2-WP15AF)`, async ({ page }) => {
+    await page.setViewportSize({ width: 1728, height: 971 });
+    await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+    const demo =
+      component === 'workspace-header'
+        ? page.getByRole('region', { name: 'WorkspaceHeader demo' })
+        : page.locator('[data-component="terminal-ticket-rail"]');
+    const star = demo.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
+    await expect(star).toBeDisabled();
+    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await demo
+      .locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-JN3X4W"]')
+      .click({ modifiers: ['Meta'] });
+    await expect(star).toHaveAttribute('aria-pressed', 'mixed');
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await demo.getByRole('button', { name: 'More actions for selected tickets' }).click();
+    await expect(page.getByRole('menu', { name: 'Ticket actions' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-K00QPZ"]').click();
+    await expect(star).toBeDisabled();
+    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await demo
+      .locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]')
+      .click({ modifiers: ['Meta'] });
+    await expect(star).toBeDisabled();
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+  });
+}
+
 test('keeps the ticket rail search bordered across focus, blur, collapse, and refill (HS2-TNSD4K)', async ({
   page,
 }) => {
@@ -2268,19 +2304,17 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     return button ? getComputedStyle(button).backgroundColor : null;
   });
   expect(popupBackground).toBe('rgba(0, 0, 0, 0)');
-  const groupedButton = demo.locator('wa-button[aria-label="Favorite view"]').first();
+  const groupedButton = demo.locator('button[aria-label="Favorite view"]').first();
   await groupedButton.hover();
+  await expect(groupedButton).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const groupedGeometry = await groupedButton.evaluate((node) => {
-    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
-    if (!button) return null;
-    return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
+    return { height: node.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
   });
-  expect(groupedGeometry).toEqual({ height: 40, background: 'rgba(0, 0, 0, 0)' });
+  expect(groupedGeometry).toEqual({ height: 40, background: 'rgb(255, 255, 255)' });
   const iconAlignment = await groupedButton.evaluate((node) => {
-    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
     const icon = node.querySelector<HTMLElement>('[data-lucide]');
-    if (!button || !icon) return null;
-    const buttonBox = button.getBoundingClientRect();
+    if (!icon) return null;
+    const buttonBox = node.getBoundingClientRect();
     const iconBox = icon.getBoundingClientRect();
     return Math.abs(buttonBox.top + buttonBox.height / 2 - (iconBox.top + iconBox.height / 2));
   });

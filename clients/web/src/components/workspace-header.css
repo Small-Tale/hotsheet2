@@ -69,18 +69,41 @@
   padding: 0;
   border-radius: var(--wa-border-radius-pill);
 }
-/* A selected wa-button must paint its 32px pill base, like hover does; kerf's aria-pressed rule
-   targets the larger square host, which overflows the control group's pill border (HS2-0D1HYG). */
-.workspace-header__actions .kui-toolbar-control-group[data-single='false'] > wa-button[aria-pressed='true'] {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
+/* The star carries selection state; native group buttons retain canonical hover/focus chrome. */
+.workspace-header__up-next-button {
+  --kui-toolbar-control-selected-border: transparent;
+  --kui-toolbar-control-selected-color: inherit;
+  --kui-toolbar-control-selected-background: transparent;
+  --kui-toolbar-control-selected-shadow: none;
 }
-.workspace-header__actions wa-button[aria-pressed='true']::part(base) {
-  border-color: var(--kui-toolbar-control-selected-border);
-  color: var(--kui-toolbar-control-selected-color);
-  background: var(--kui-toolbar-control-selected-background);
-  box-shadow: var(--kui-toolbar-control-selected-shadow);
+.workspace-header__up-next-button:hover:not(:disabled) {
+  --kui-toolbar-control-selected-border: var(--kui-toolbar-control-border);
+  --kui-toolbar-control-selected-background: var(--kui-toolbar-control-hover-background);
+}
+.workspace-header__utility-group > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  --kui-toolbar-control-hover-background: transparent;
+  --kui-toolbar-control-border: transparent;
+}
+.workspace-header__up-next-icon {
+  position: relative;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+}
+.workspace-header__up-next-icon[data-up-next-state='mixed'],
+.workspace-header__up-next-icon[data-up-next-state='all'] {
+  color: var(--hs-ticket-state-up-next);
+}
+.workspace-header__up-next-icon[data-up-next-state='all'] svg,
+.workspace-header__up-next-fill {
+  fill: currentColor;
+}
+.workspace-header__up-next-fill {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 50% 0 0);
 }
 .workspace-header__actions wa-button.workspace-header__text-action::part(base),
 wa-button.workspace-header__text-action::part(base) {

@@ -262,9 +262,9 @@
       "id": "workspace-header",
       "name": "WorkspaceHeader",
       "kind": "composition",
-      "purpose": "Project identity, display modes, sorting, settings, and search.",
+      "purpose": "Project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.",
       "useWhen": [
-        "Hot Sheet needs project identity, display modes, sorting, settings, and search."
+        "Hot Sheet needs project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific WorkspaceHeader behavior."

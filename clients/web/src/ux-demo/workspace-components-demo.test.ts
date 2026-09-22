@@ -16,7 +16,10 @@ import {
   filteredWorkspaceTickets,
   focusWorkspaceSearch,
   TerminalTicketRailDemo,
+  toggleWorkspaceDemoUpNext,
   workspaceColumns,
+  workspaceDemoSelection,
+  WorkspaceHeaderDemo,
   workspaceMode,
   workspaceSearchHelpOpen,
   workspaceSearchOpen,
@@ -38,6 +41,37 @@ describe('connected workspace demo state', () => {
     composerDetails.value = '';
     composerCategory.value = 'task';
     composerUpNext.value = false;
+  });
+
+  it('projects selection replacement and mixed/all/none Up Next transitions through both workspace demos', () => {
+    const select = (slugs: string[]) => {
+      collectionTickets.value = collectionTickets.value.map((ticket) => ({
+        ...ticket,
+        selected: slugs.includes(ticket.slug),
+      }));
+    };
+    const eligible = collectionTickets.value.filter((ticket) => ticket.status === 'started').slice(0, 2);
+    collectionTickets.value = collectionTickets.value.map((ticket) => ({
+      ...ticket,
+      upNext: ticket.slug === eligible[0].slug,
+    }));
+    select(eligible.map((ticket) => ticket.slug));
+    expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('mixed');
+    for (const demo of [WorkspaceHeaderDemo, TerminalTicketRailDemo])
+      expect(String(demo())).toContain('aria-pressed="mixed"');
+    toggleWorkspaceDemoUpNext();
+    expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('all');
+    toggleWorkspaceDemoUpNext();
+    expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('none');
+    select([collectionTickets.value.find((ticket) => ticket.status === 'completed')!.slug]);
+    expect(workspaceDemoSelection().selectedTicketsUpNextEligible).toBe(false);
+    toggleWorkspaceDemoUpNext();
+    expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('none');
+    select([]);
+    expect(workspaceDemoSelection().selectedTicketCount).toBe(0);
+    select([eligible[1].slug]);
+    toggleWorkspaceDemoUpNext();
+    expect(workspaceDemoSelection().selectedTicketsUpNext).toBe('all');
   });
 
   it('filters across identity, title, and tags and preserves board totals', () => {
