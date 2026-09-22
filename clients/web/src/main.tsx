@@ -5908,6 +5908,11 @@ async function submitNotWorking(){const target=notWorkingTarget.value;if(!target
 
 function showSavedViewDialog() {
   savedViewDialogOpen.value = true;
+  const name = document.querySelector<Control>('[name="saved-view-name"]');
+  // wa-input keeps a dirty live value independently from its value/defaultValue
+  // attribute. Programmatic Create/Edit transitions own both directions of this
+  // controlled field, so synchronize the property before native autofocus runs.
+  if (name && name.value !== savedViewName.value) name.value = savedViewName.value;
 }
 function setSavedViewQuery(value: string) {
   const parsed = consumeSearchTokens(value, true);

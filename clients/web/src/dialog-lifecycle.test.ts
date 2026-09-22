@@ -59,12 +59,14 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).toMatch(/function activateOpenProject\([^\n]*resetTicketComposer\(false\)/);
   });
 
-  it('leaves saved-view opening focus to native autofocus instead of a delayed app callback', () => {
+  it('synchronously resets the saved-view live name before leaving opening focus to native autofocus', () => {
     const opening = source.slice(
       source.indexOf('function showSavedViewDialog()'),
       source.indexOf('function setSavedViewQuery('),
     );
     expect(opening).toContainSource('savedViewDialogOpen.value=true');
+    expect(opening).toContainSource('document.querySelector<Control>(\'[name="saved-view-name"]\')');
+    expect(opening).toContainSource('if(name&&name.value!==savedViewName.value)name.value=savedViewName.value');
     expect(opening).not.toMatch(/requestAnimationFrame|setTimeout|\.show\(|\.focus\(/);
     const component = readFileSync(new URL('./components/saved-view-dialog.tsx', import.meta.url), 'utf8');
     expect(component).toMatch(/name="saved-view-name"[\s\S]*?autofocus/);

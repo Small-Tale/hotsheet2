@@ -759,8 +759,10 @@ with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
 Saved views are created and managed from the Views section rather than from a separate
 search overlay. The controlled open state and native dialog autofocus own initial name
 focus; delayed application work must not redirect immediate query typing or reopen a
-cancelled dialog. Query token editing retains its independent caret restoration. The
-separate dirty name live-value reset gap on reopen is tracked by HS2-ZQNW62.
+cancelled dialog. Programmatic Create/Edit transitions also synchronize the name's live
+Web Awesome value before native autofocus, so dirty values cannot survive reopen while
+ordinary input continues updating controlled state (HS2-ZQNW62). Query token editing
+retains its independent caret restoration.
 
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 `ViewEditor` without replacing the basic search components.

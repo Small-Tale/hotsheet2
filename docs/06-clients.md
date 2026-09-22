@@ -849,7 +849,10 @@ and identity-less legacy entries remain conservatively blocking.
   that node, so submitting AI chat or closing a modal cannot queue a latent Create View dialog.
   Saved-view opening uses the controlled dialog open state and native name autofocus. No delayed
   application callback may reclaim focus after the user selects the query or reopen a cancelled
-  dialog. Query token caret restoration remains independent of the opening lifecycle.
+  dialog. Create and Edit transitions synchronously project their initial name into the live
+  Web Awesome input property as well as rendered state, so a dirty name from an earlier opening
+  cannot survive cancel/reopen or create/rename/create sequences (HS2-ZQNW62). Query token caret
+  restoration remains independent of the opening lifecycle.
 
   Search has one primary surface: the project toolbar. The former global search overlay and
   its separate scope, suggestions, result rows, and saved-view handoff were removed because

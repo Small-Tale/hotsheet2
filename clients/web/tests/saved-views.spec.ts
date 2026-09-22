@@ -214,6 +214,11 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toHaveCount(0);
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Documentation', query: 'tag:client' }]);
+  await page.getByRole('button', { name: 'Add view', exact: true }).click();
+  await expect(dialog).toHaveAttribute('data-mode', 'create');
+  await expect(dialog.getByRole('textbox', { name: 'View name' })).toHaveValue('');
+  await dialog.getByRole('textbox', { name: 'View name' }).fill('Fresh create');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   const savedRow = page.locator('[data-saved-view-id="custom:needs-docs"]');
   await page.setViewportSize({ width: 720, height: 760 });
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
@@ -314,6 +319,8 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
       clock.advance();
     });
     await expect(name).toBeFocused();
+    await page.keyboard.insertText('Discarded name');
+    await expect(name).toHaveValue('Discarded name');
     await page.keyboard.press('Tab');
     await expect(query).toBeFocused();
     await page.keyboard.insertText('discarded is:active query ');
@@ -367,12 +374,21 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
     await expect(name).toBeFocused();
     await expect(name).toHaveValue('');
     await expect(query).toHaveText('');
+    await page.keyboard.insertText('Refilled name');
+    await expect(name).toHaveValue('Refilled name');
+    await page.keyboard.press('Tab');
+    await expect(query).toBeFocused();
     await query.fill('refilled is:active after ');
     await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
       'data-token-value',
       'is:active',
     );
-    await expect(name).toHaveValue('');
+    await expect(name).toHaveValue('Refilled name');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(name).toBeInViewport();
+      await page.screenshot({ path: `/private/tmp/hs2-zqnw62-name-reset-${width}.png`, animations: 'disabled' });
+    }
   } finally {
     await frames.evaluate((clock) => {
       clock.restore();
