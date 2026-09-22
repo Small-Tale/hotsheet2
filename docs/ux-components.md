@@ -1308,12 +1308,21 @@ right-click. These actions must never spawn a
 second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dialog, Select,
 ListHeader, and ListItem vocabulary. Adding prompts for the name before creation; pill tabs
 select groups and named-tab context menus rename or delete them, while Default has no context
-menu. Each row toggles one terminal and Hide all / Show all act on the selected group. An
+menu. Rows include both terminals and AI chats with their existing stable visibility keys.
+A Web Awesome native multi-select, styled with Kerf's public Select class, filters Shell
+Terminals, AI Terminals, and AI Chat. Kerf's current Select API is single-valued, so this
+composition uses the native multiple contract and one controlled array/property bridge;
+the static native control is a morph-skipped island so its open popup and focus survive
+list updates. Select All / Deselect All keep the popup open; Hide listed / Show listed
+change only matching rows, with disabled bulk actions for an empty filter. Reopening resets
+all supported types, while named-group changes retain the filter. Web Browsers remains
+disabled pending HS2-7VS6SF. Creation kind is immutable server/broker metadata, with shell
+fallback for legacy payloads (HS2-SE3RVM). An
 adjacent compact label Select switches immediately, while an eye badge reports the active
 group's hidden count. The project drawer always shows its local terminals and exposes no
 visibility controls. Its UX demo initially presents an explicit Manage Workspace Visibility button;
 the dialog opens only after activation and can be dismissed and reopened repeatedly.
-New terminals appear in Default and begin hidden in named groups. Visibility and grouping
+New terminals and AI chats appear in Default and begin hidden in named groups. Visibility and grouping
 changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,
 attention, and selection survive layout and scale changes. Magnification promotes the terminal

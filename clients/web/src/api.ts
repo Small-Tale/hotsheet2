@@ -346,6 +346,8 @@ export interface ToolSession {
 }
 export interface TerminalInfo {
   id: string;
+  /** Creation kind; older servers omit it and are treated as shell terminals. */
+  kind?: 'shell' | 'ai';
   alive: boolean;
   busy: boolean;
   cwd?: string;

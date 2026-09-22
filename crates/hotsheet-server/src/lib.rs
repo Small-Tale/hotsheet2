@@ -6730,6 +6730,8 @@ async fn put_checkout_trash_settings(
 #[derive(Serialize)]
 struct TerminalInfo {
     id: String,
+    /// Immutable creation kind; never inferred from terminal output or command names.
+    kind: hotsheet_terminals::TerminalKind,
     /// The PTY is still running.
     alive: bool,
     /// Inferred busy (a tool is actively working) vs idle.
@@ -6754,6 +6756,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
     let osc = term.term_state();
     TerminalInfo {
         id: id.to_string(),
+        kind: term.kind(),
         alive: term.is_alive(),
         busy: term.activity() == hotsheet_terminals::Activity::Busy,
         cwd: osc.cwd,
@@ -6766,6 +6769,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
 fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
     TerminalInfo {
         id: bi.id,
+        kind: bi.kind,
         alive: bi.alive,
         busy: bi.busy,
         cwd: bi.cwd,
@@ -6797,6 +6801,11 @@ async fn open_terminal(
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.clone().unwrap_or_else(|| Ulid::new().to_string());
     let launch = terminal_launch(&state, &req, &id)?;
+    let kind = if req.connect.is_some() {
+        hotsheet_terminals::TerminalKind::Ai
+    } else {
+        hotsheet_terminals::TerminalKind::Shell
+    };
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -6810,6 +6819,7 @@ async fn open_terminal(
         let resp = tb
             .call(hotsheet_terminals::BrokerRequest::Open {
                 id: id.clone(),
+                kind,
                 command: launch.command,
                 args: launch.args,
                 cwd: req.cwd,
@@ -6833,6 +6843,7 @@ async fn open_terminal(
 
     let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
     let spec = hotsheet_terminals::TermSpec {
+        kind,
         command: launch.command,
         args: launch.args,
         cwd: Some(

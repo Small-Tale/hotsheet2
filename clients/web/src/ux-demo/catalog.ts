@@ -537,7 +537,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-visibility-dialog',
         'TerminalVisibilityDialog',
-        'Named visibility groups and per-terminal inclusion.',
+        'Named visibility groups, persistent shell/AI/chat visibility, and a native multi-select type filter.',
         'feature-floor',
         true,
         ['list-item'],

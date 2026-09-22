@@ -2,6 +2,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { signal } from 'kerfjs';
 import { Eye } from 'lucide';
 
+import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import {
   TerminalVisibilityDialog,
   TerminalVisibilityNameDialog,
@@ -16,15 +17,20 @@ import {
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
   setTerminalVisibleInGroup,
+  TERMINAL_VISIBILITY_TYPES,
+  terminalVisibilityItems,
+  type TerminalVisibilityType,
 } from '../terminal-visibility';
 
-export const terminalVisibilityDemoGroups = [
+export const terminalVisibilityDemoGroups: TerminalDashboardGroup[] = [
   {
     projectId: 'demo',
     projectName: 'Demo project',
+    chats: [{ id: 'ai-chat:demo', projectId: 'demo', projectName: 'Demo project', name: 'Codex chat', tool: 'Codex' }],
     sessions: [
       {
         id: 'ai',
+        kind: 'ai',
         projectId: 'demo',
         projectName: 'Demo project',
         title: 'AI',
@@ -53,6 +59,7 @@ export const terminalVisibilityDemoState = signal(
     false,
   ),
 );
+export const terminalVisibilityDemoTypes = signal<readonly TerminalVisibilityType[]>(TERMINAL_VISIBILITY_TYPES);
 export const terminalVisibilityDemoOpen = signal(false),
   terminalVisibilityDemoContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
   terminalVisibilityDemoNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
@@ -68,6 +75,7 @@ export function TerminalVisibilityDialogDemo() {
         state={terminalVisibilityDemoState.value}
         scope="dashboard"
         groups={terminalVisibilityDemoGroups}
+        types={terminalVisibilityDemoTypes.value}
         contextMenu={terminalVisibilityDemoContextMenu.value}
       />
       <TerminalVisibilityNameDialog prompt={terminalVisibilityDemoNamePrompt.value} />
@@ -75,6 +83,7 @@ export function TerminalVisibilityDialogDemo() {
   );
 }
 export function showTerminalVisibilityDemo() {
+  terminalVisibilityDemoTypes.value = TERMINAL_VISIBILITY_TYPES;
   terminalVisibilityDemoOpen.value = true;
 }
 export function closeTerminalVisibilityDemo() {
@@ -144,8 +153,8 @@ export function setAllTerminalVisibilityDemo(visible: boolean) {
   terminalVisibilityDemoState.value = setAllTerminalsVisibleInGroup(
     terminalVisibilityDemoState.value,
     active().id,
-    terminalVisibilityDemoGroups.flatMap((group) =>
-      group.sessions.map((session) => `${session.projectId}:${session.id}`),
+    terminalVisibilityItems(terminalVisibilityDemoGroups, 'dashboard', terminalVisibilityDemoTypes.value).flatMap(
+      (group) => group.items.map((item) => item.key),
     ),
     visible,
   );

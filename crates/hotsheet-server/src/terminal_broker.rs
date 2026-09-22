@@ -269,6 +269,7 @@ mod tests {
         for id in ["one", "two"] {
             client
                 .request(&BrokerRequest::Open {
+                    kind: hotsheet_terminals::TerminalKind::Shell,
                     id: id.into(),
                     command: "cat".into(),
                     args: vec![],

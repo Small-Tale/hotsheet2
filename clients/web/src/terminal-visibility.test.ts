@@ -12,6 +12,9 @@ import {
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
   setTerminalVisibleInGroup,
+  TERMINAL_VISIBILITY_TYPES,
+  terminalVisibilityItems,
+  terminalVisibilityTypes,
 } from './terminal-visibility';
 
 describe('terminal visibility groups', () => {
@@ -56,5 +59,79 @@ describe('terminal visibility groups', () => {
     );
     expect(state.groups.find((group) => group.id === 'default')?.hiddenKeys).toEqual([]);
     expect(state.groups.find((group) => group.id === 'focus')?.hiddenKeys).toEqual(['p:new']);
+  });
+});
+
+describe('workspace visibility type filtering', () => {
+  const groups = [
+    {
+      projectId: 'one',
+      projectName: 'One',
+      sessions: [
+        {
+          id: 'shell',
+          projectId: 'one',
+          projectName: 'One',
+          title: 'Codex-looking shell',
+          alive: true,
+          busy: true,
+          scrollback: '',
+          link: 'https://ai.example',
+        },
+        {
+          id: 'agent',
+          projectId: 'one',
+          projectName: 'One',
+          kind: 'ai' as const,
+          title: 'Plain terminal',
+          alive: false,
+          busy: false,
+          scrollback: '',
+        },
+      ],
+      chats: [{ id: 'ai-chat:session', projectId: 'one', projectName: 'One', name: 'Agent chat', tool: 'Codex' }],
+    },
+    {
+      projectId: 'two',
+      projectName: 'Two',
+      sessions: [],
+      chats: [{ id: 'ai-chat:session', projectId: 'two', projectName: 'Two', name: 'Other chat', tool: 'Claude' }],
+    },
+  ];
+  const keys = (types: readonly string[], scope = 'dashboard') =>
+    terminalVisibilityItems(groups, scope, terminalVisibilityTypes(types)).flatMap((group) =>
+      group.items.map((item) => item.key),
+    );
+
+  it('normalizes special actions, duplicates and unsupported future types', () => {
+    expect(terminalVisibilityTypes(['ai', 'ai', 'browser', 'unknown'])).toEqual(['ai']);
+    expect(terminalVisibilityTypes(['ai', 'deselect-all'])).toEqual([]);
+    expect(terminalVisibilityTypes(['select-all'])).toEqual(TERMINAL_VISIBILITY_TYPES);
+    expect(terminalVisibilityTypes([])).toEqual([]);
+  });
+
+  it('covers every type subset, including chat-only projects and legacy shell metadata', () => {
+    const byType = { shell: ['one:shell'], ai: ['one:agent'], chat: ['one:ai-chat:session', 'two:ai-chat:session'] };
+    for (let mask = 0; mask < 8; mask++) {
+      const types = TERMINAL_VISIBILITY_TYPES.filter((_, index) => mask & (1 << index));
+      expect(keys(types)).toEqual(types.flatMap((type) => byType[type]));
+    }
+    expect(keys(['chat'], 'project:two')).toEqual(['two:ai-chat:session']);
+    expect(keys(['shell'], 'project:two')).toEqual([]);
+    expect(keys(['ai'], 'project:missing')).toEqual([]);
+  });
+
+  it('limits bulk edits to listed keys through empty, refill, scope and group transitions', () => {
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'focus').state;
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['chat'], 'project:one'), false);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys([]), true);
+    expect(state.groups[1].hiddenKeys).toEqual(['one:ai-chat:session']);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['shell']), false);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['chat']), true);
+    expect(state.groups[1].hiddenKeys).toEqual(['one:shell']);
+    expect(state.groups[0].hiddenKeys).toEqual([]);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['select-all']), true);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['ai']), false);
+    expect(state.groups[1].hiddenKeys).toEqual(['one:agent']);
   });
 });

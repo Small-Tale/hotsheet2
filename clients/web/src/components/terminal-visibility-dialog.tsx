@@ -1,15 +1,25 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@awesome.me/webawesome/dist/components/select/select.js';
+import '@awesome.me/webawesome/dist/components/option/option.js';
+import '@awesome.me/webawesome/dist/components/divider/divider.js';
+import '@kerfjs/ui/select.css';
 import './terminal-visibility-dialog.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide';
+import { CheckCheck, Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2, X } from 'lucide';
 
-import { DEFAULT_TERMINAL_VISIBILITY_GROUP_ID, type TerminalVisibilityState } from '../terminal-visibility';
+import {
+  DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
+  TERMINAL_VISIBILITY_TYPES,
+  terminalVisibilityItems,
+  type TerminalVisibilityState,
+  type TerminalVisibilityType,
+} from '../terminal-visibility';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
 export interface TerminalVisibilityDialogProps {
@@ -17,6 +27,7 @@ export interface TerminalVisibilityDialogProps {
   state: TerminalVisibilityState;
   scope: string;
   groups: TerminalDashboardGroup[];
+  types?: readonly TerminalVisibilityType[];
   contextMenu?: { id: string; x: number; y: number };
 }
 
@@ -55,11 +66,17 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   );
 }
 
-export function TerminalVisibilityDialog({ open, state, scope, groups, contextMenu }: TerminalVisibilityDialogProps) {
+export function TerminalVisibilityDialog({
+  open,
+  state,
+  scope,
+  groups,
+  types = TERMINAL_VISIBILITY_TYPES,
+  contextMenu,
+}: TerminalVisibilityDialogProps) {
   const activeId = state.activeByScope[scope] ?? DEFAULT_TERMINAL_VISIBILITY_GROUP_ID;
   const active = state.groups.find((group) => group.id === activeId) ?? state.groups[0];
-  const projectId = scope.startsWith('project:') ? scope.slice('project:'.length) : undefined;
-  const visibleGroups = projectId ? groups.filter((group) => group.projectId === projectId) : groups;
+  const visibleGroups = terminalVisibilityItems(groups, scope, types);
   const hidden = new Set(active.hiddenKeys);
 
   return (
@@ -94,26 +111,76 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
             </button>
           </div>
         </div>
+        <div class="terminal-visibility-dialog__filter" data-selected-types={types.join(',')}>
+          <wa-select
+            class="kui-select"
+            data-terminal-type-filter
+            data-morph-skip
+            name="terminal-visibility-types"
+            label="Item types"
+            placeholder="No types selected"
+            multiple
+            max-options-visible={3}
+          >
+            <wa-option value="shell">
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={Terminal} name="terminal" />
+              </span>
+              Shell Terminals
+            </wa-option>
+            <wa-option value="ai">
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={Sparkles} name="sparkles" />
+              </span>
+              AI Terminals
+            </wa-option>
+            <wa-option value="chat">
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={MessageSquare} name="message-square" />
+              </span>
+              AI Chat
+            </wa-option>
+            <wa-option value="browser" disabled>
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={Globe} name="globe" />
+              </span>
+              Web Browsers
+            </wa-option>
+            <wa-divider></wa-divider>
+            <wa-option value="select-all">
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={CheckCheck} name="check-check" />
+              </span>
+              Select All
+            </wa-option>
+            <wa-option value="deselect-all">
+              <span slot="start" class="kui-select__icon">
+                <LucideIcon icon={X} name="x" />
+              </span>
+              Deselect All
+            </wa-option>
+          </wa-select>
+        </div>
         <div class="terminal-visibility-dialog__body">
           {visibleGroups.length === 0 ? (
-            <p>No terminals are available.</p>
+            <p>No workspace items match the selected types.</p>
           ) : (
             visibleGroups.map((group) => (
               <section class="terminal-visibility-dialog__project" data-key={group.projectId}>
                 <ListHeader label={group.projectName} />
                 <div class="terminal-visibility-dialog__rows">
-                  {group.sessions.map((session) => {
-                    const key = `${session.projectId}:${session.id}`,
-                      visible = !hidden.has(key);
+                  {group.items.map((item) => {
+                    const { key, label } = item;
+                    const visible = !hidden.has(key);
                     return (
                       <ListItem
                         className="terminal-visibility-dialog__row"
                         action="toggle-terminal-visibility"
                         itemId={key}
-                        accessibleLabel={`${visible ? 'Hide' : 'Show'} ${session.title ?? session.id}`}
+                        accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
                         state={visible ? 'visible' : 'hidden'}
                         icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
-                        label={session.title ?? session.id}
+                        label={label}
                         trailing={
                           <span class="terminal-visibility-dialog__row-state">{visible ? 'Visible' : 'Hidden'}</span>
                         }
@@ -126,11 +193,21 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
           )}
         </div>
         <footer class="terminal-visibility-dialog__footer">
-          <wa-button appearance="plain" type="button" data-action="hide-all-terminals-in-group">
-            Hide all
+          <wa-button
+            appearance="plain"
+            type="button"
+            data-action="hide-all-terminals-in-group"
+            disabled={visibleGroups.length === 0}
+          >
+            Hide listed
           </wa-button>
-          <wa-button appearance="plain" type="button" data-action="show-all-terminals-in-group">
-            Show all
+          <wa-button
+            appearance="plain"
+            type="button"
+            data-action="show-all-terminals-in-group"
+            disabled={visibleGroups.length === 0}
+          >
+            Show listed
           </wa-button>
         </footer>
         {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (

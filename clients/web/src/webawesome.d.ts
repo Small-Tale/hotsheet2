@@ -39,7 +39,7 @@ declare module 'kerfjs/jsx-runtime' {
     interface IntrinsicElements {
       'wa-button': WaBase;
       'wa-input': WaBase;
-      'wa-select': WaBase;
+      'wa-select': WaBase & { multiple?: AttrLike<boolean>; 'max-options-visible'?: AttrLike<number> };
       'wa-option': WaBase;
       'wa-checkbox': WaBase;
       'wa-dialog': WaBase;

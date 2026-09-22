@@ -31,4 +31,4 @@ pub use env::scrub_env;
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
 pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
-pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal};
+pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind};

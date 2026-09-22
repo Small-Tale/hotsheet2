@@ -52,6 +52,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import {
   AIConversationDemo,
   aiConversationDemoOpen,
@@ -216,6 +217,7 @@ import {
   showTerminalVisibilityDemo,
   showTerminalVisibilityDemoContextMenu,
   submitTerminalVisibilityDemoName,
+  terminalVisibilityDemoTypes,
   TerminalVisibilityDialogDemo,
   toggleTerminalVisibilityDemo,
 } from './terminal-visibility-demo';
@@ -1226,7 +1228,12 @@ delegate(root, 'click', '[data-action="open-terminal-context-menu"]', (event, ta
   showTerminalDashboardContextMenu(target as HTMLElement, box.right, box.bottom);
 });
 delegate(root, 'click', '[data-action="show-terminal-visibility-demo"]', showTerminalVisibilityDemo);
-delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', closeTerminalVisibilityDemo);
+wireTerminalVisibilityTypeFilter(root, (types) => {
+  terminalVisibilityDemoTypes.value = types;
+});
+delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+  if (event.target === target) closeTerminalVisibilityDemo();
+});
 delegate(root, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
   selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
 });

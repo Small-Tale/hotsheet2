@@ -90,6 +90,7 @@ fn poisoned() -> TermError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TerminalKind;
     use std::time::{Duration, Instant};
 
     fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
@@ -126,6 +127,30 @@ mod tests {
         assert!(mgr.kill(&k).unwrap());
         assert!(mgr.get(&k).is_none());
         assert!(!mgr.kill(&k).unwrap(), "already gone");
+    }
+
+    #[test]
+    fn creation_kind_survives_reattachment_but_a_new_terminal_gets_its_own_kind() {
+        let mgr = TerminalManager::new();
+        let k = key("proj", "kind");
+        let shell = mgr.get_or_spawn(k.clone(), TermSpec::new("cat")).unwrap();
+        assert_eq!(shell.kind(), TerminalKind::Shell);
+        let mut ai_spec = TermSpec::new("cat");
+        ai_spec.kind = TerminalKind::Ai;
+        let reattached = mgr.get_or_spawn(k.clone(), ai_spec.clone()).unwrap();
+        assert!(Arc::ptr_eq(&shell, &reattached));
+        assert_eq!(reattached.kind(), TerminalKind::Shell);
+
+        mgr.kill(&k).unwrap();
+        let ai = mgr.get_or_spawn(k.clone(), ai_spec).unwrap();
+        assert_eq!(ai.kind(), TerminalKind::Ai);
+        let reattached = mgr.get_or_spawn(k.clone(), TermSpec::new("cat")).unwrap();
+        assert!(Arc::ptr_eq(&ai, &reattached));
+        assert_eq!(reattached.kind(), TerminalKind::Ai);
+        mgr.kill(&k).unwrap();
+        let replacement = mgr.get_or_spawn(k.clone(), TermSpec::new("cat")).unwrap();
+        assert_eq!(replacement.kind(), TerminalKind::Shell);
+        mgr.kill(&k).unwrap();
     }
 
     #[test]

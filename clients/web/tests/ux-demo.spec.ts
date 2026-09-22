@@ -940,6 +940,17 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
     'rgba(0, 0, 0, 0)',
   );
   await expect(dialog.getByRole('tab', { name: 'Focus' })).toHaveAttribute('aria-selected', 'true');
+  const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
+  await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
+  await types.click();
+  await types.locator('wa-option[value="deselect-all"]').click();
+  await expect(types).toHaveJSProperty('open', true);
+  await expect(types).toHaveJSProperty('value', []);
+  await types.locator('wa-option[value="chat"]').click();
+  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(types).toHaveJSProperty('open', false);
+  await expect(dialog).toHaveJSProperty('open', true);
   await dialog.getByRole('button', { name: 'Add visibility group' }).click();
   const nameDialog = page.locator('[data-terminal-visibility-name-dialog]'),
     name = nameDialog.getByRole('textbox', { name: 'Group name' });
@@ -950,6 +961,15 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(nameDialog).toHaveJSProperty('open', false);
   const review = dialog.getByRole('tab', { name: 'Review' });
   await expect(review).toHaveAttribute('aria-selected', 'true');
+  await expect(types).toHaveJSProperty('value', ['chat']);
+  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(1);
+  await types.locator('[part~="expand-icon"]').click();
+  await expect(types).toHaveJSProperty('open', true);
+  await types.locator('wa-option[value="select-all"]').click();
+  await expect
+    .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
+    .toEqual(['ai', 'chat', 'shell']);
+  await page.keyboard.press('Escape');
   await dialog.getByRole('button', { name: /Hide Development/ }).click();
   await expect(dialog.getByRole('button', { name: /Show Development/ })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-z0m2vv-visibility-demo-open-wide.png', fullPage: true });

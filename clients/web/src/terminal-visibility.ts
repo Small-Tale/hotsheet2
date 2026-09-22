@@ -1,3 +1,5 @@
+import type { TerminalDashboardGroup } from './components/terminal-dashboard';
+
 export const DEFAULT_TERMINAL_VISIBILITY_GROUP_ID = 'default';
 export const DEFAULT_TERMINAL_VISIBILITY_GROUP_NAME = 'Default';
 export const TERMINAL_VISIBILITY_STORAGE_KEY = 'hotsheet.terminals.visibility-groups';
@@ -153,4 +155,40 @@ export function hideNewTerminalInNamedGroups(state: TerminalVisibilityState, key
         : { ...group, hiddenKeys: [...group.hiddenKeys, key] },
     ),
   };
+}
+
+export type TerminalVisibilityType = 'shell' | 'ai' | 'chat';
+export const TERMINAL_VISIBILITY_TYPES: readonly TerminalVisibilityType[] = ['shell', 'ai', 'chat'];
+
+export function terminalVisibilityTypes(value: readonly string[]): TerminalVisibilityType[] {
+  if (value.includes('select-all')) return [...TERMINAL_VISIBILITY_TYPES];
+  if (value.includes('deselect-all')) return [];
+  return TERMINAL_VISIBILITY_TYPES.filter((kind) => value.includes(kind));
+}
+
+export function terminalVisibilityItems(
+  groups: readonly TerminalDashboardGroup[],
+  scope: string,
+  types: readonly TerminalVisibilityType[] = TERMINAL_VISIBILITY_TYPES,
+) {
+  const projectId = scope.startsWith('project:') ? scope.slice('project:'.length) : undefined;
+  return groups
+    .filter((group) => !projectId || group.projectId === projectId)
+    .map((group) => ({
+      projectId: group.projectId,
+      projectName: group.projectName,
+      items: [
+        ...group.sessions.map((session) => ({
+          key: `${session.projectId}:${session.id}`,
+          label: session.title ?? session.id,
+          kind: session.kind === 'ai' ? ('ai' as const) : ('shell' as const),
+        })),
+        ...(group.chats ?? []).map((chat) => ({
+          key: `${chat.projectId}:${chat.id}`,
+          label: chat.name,
+          kind: 'chat' as const,
+        })),
+      ].filter((item) => types.includes(item.kind)),
+    }))
+    .filter((group) => group.items.length > 0);
 }

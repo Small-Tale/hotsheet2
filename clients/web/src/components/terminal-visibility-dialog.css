@@ -6,7 +6,7 @@
   min-width: 0;
   width: 100%;
   max-height: min(remify(704px), calc(100vh - remify(128px)));
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 [data-terminal-visibility-dialog]::part(body) {
   padding: 0;
@@ -114,4 +114,13 @@
   .terminal-visibility-dialog {
     max-height: calc(100vh - remify(64px));
   }
+}
+
+.terminal-visibility-dialog__filter {
+  min-width: 0;
+  padding: var(--wa-space-s);
+  border-bottom: 1px solid var(--wa-color-surface-border);
+}
+.terminal-visibility-dialog__filter wa-select {
+  width: 100%;
 }

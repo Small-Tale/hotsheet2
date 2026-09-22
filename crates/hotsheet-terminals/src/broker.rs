@@ -20,7 +20,7 @@ use tokio::net::{UnixListener, UnixStream};
 
 use crate::manager::TerminalManager;
 use crate::sizing::ViewportClaim;
-use crate::terminal::TermSpec;
+use crate::terminal::{TermSpec, TerminalKind};
 
 /// Detached brokers exit after this long with no terminals and no connected clients.
 pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
@@ -43,6 +43,8 @@ pub enum Request {
     /// Open (or reattach to) a terminal `id` running `command`.
     Open {
         id: String,
+        #[serde(default)]
+        kind: TerminalKind,
         command: String,
         #[serde(default)]
         args: Vec<String>,
@@ -142,6 +144,9 @@ pub enum Response {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrokerTermInfo {
     pub id: String,
+    /// Immutable creation kind. Older brokers report shell when this field is absent.
+    #[serde(default)]
+    pub kind: TerminalKind,
     pub alive: bool,
     pub busy: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -156,6 +161,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
     let osc = term.term_state();
     BrokerTermInfo {
         id: id.to_string(),
+        kind: term.kind(),
         alive: term.is_alive(),
         busy: term.activity() == crate::busy::Activity::Busy,
         cwd: osc.cwd,
@@ -357,12 +363,14 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
         Request::Ping => Response::Pong,
         Request::Open {
             id,
+            kind,
             command,
             args,
             cwd,
             env,
         } => {
             let spec = TermSpec {
+                kind,
                 command,
                 args,
                 cwd: cwd.map(std::path::PathBuf::from),
@@ -525,6 +533,41 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    #[test]
+    fn creation_kind_round_trips_and_legacy_broker_messages_default_to_shell() {
+        let legacy: Request =
+            serde_json::from_str(r#"{"op":"open","id":"legacy","command":"claude"}"#).unwrap();
+        assert!(matches!(
+            legacy,
+            Request::Open {
+                kind: TerminalKind::Shell,
+                ..
+            }
+        ));
+        let legacy: BrokerTermInfo = serde_json::from_str(
+            r#"{"id":"legacy","alive":true,"busy":false,"link":"https://ai.example"}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.kind, TerminalKind::Shell);
+        assert_eq!(serde_json::to_value(legacy).unwrap()["kind"], "shell");
+        let ai: Request =
+            serde_json::from_str(r#"{"op":"open","id":"ai","command":"cat","kind":"ai"}"#).unwrap();
+        assert!(matches!(
+            ai,
+            Request::Open {
+                kind: TerminalKind::Ai,
+                ..
+            }
+        ));
+        assert_eq!(serde_json::to_value(ai).unwrap()["kind"], "ai");
+        assert!(
+            serde_json::from_str::<Request>(
+                r#"{"op":"open","id":"bad","command":"cat","kind":"link"}"#,
+            )
+            .is_err()
+        );
+    }
+
     async fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
         let deadline = Instant::now() + Duration::from_secs(secs);
         while Instant::now() < deadline {
@@ -551,6 +594,7 @@ mod tests {
         let opened = client
             .request(&Request::Open {
                 id: "t1".into(),
+                kind: TerminalKind::Shell,
                 command: "cat".into(),
                 args: vec![],
                 cwd: None,
@@ -629,6 +673,7 @@ mod tests {
         client
             .request(&Request::Open {
                 id: "s1".into(),
+                kind: TerminalKind::Shell,
                 command: "cat".into(),
                 args: vec![],
                 cwd: None,
@@ -722,6 +767,7 @@ mod tests {
             let _ = a
                 .request(&Request::Open {
                     id: "shared".into(),
+                    kind: TerminalKind::Ai,
                     command: "cat".into(),
                     args: vec![],
                     cwd: None,
@@ -739,10 +785,29 @@ mod tests {
             Response::List { terminals } => {
                 assert_eq!(terminals.len(), 1);
                 assert_eq!(terminals[0].id, "shared");
+                assert_eq!(terminals[0].kind, TerminalKind::Ai);
                 assert!(terminals[0].alive);
             }
             other => panic!("expected List, got {other:?}"),
         }
+        // A restarted server's ordinary reattach cannot turn the AI terminal into a shell.
+        let reopened = b
+            .request(&Request::Open {
+                id: "shared".into(),
+                kind: TerminalKind::Shell,
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+        assert!(matches!(reopened, Response::Terminal { info } if info.kind == TerminalKind::Ai));
+        b.request(&Request::Kill {
+            id: "shared".into(),
+        })
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
@@ -801,6 +866,7 @@ mod tests {
         client
             .request(&Request::Open {
                 id: "keeps-alive".into(),
+                kind: TerminalKind::Shell,
                 command: "cat".into(),
                 args: vec![],
                 cwd: None,

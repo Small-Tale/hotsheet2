@@ -4118,6 +4118,103 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
 });
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`filters workspace visibility by creation kind and chat in ${theme} (HS2-SE3RVM)`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: theme });
+    await installFakeTerminalSockets(page, true);
+    await mockProject(page);
+    await page.route('**/terminals', (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({
+            json: [
+              { id: 'codex-main', kind: 'ai', alive: true, busy: true, cwd: '/work/demo' },
+              { id: 'tests', alive: true, busy: false, cwd: '/work/demo', link: 'https://ai.example/session' },
+            ],
+          })
+        : route.fallback(),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat', { exact: true }).click();
+    await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
+    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+    const chat = dashboard.locator('[data-component="workspace-chat-tile"]');
+    await expect(chat).toHaveCount(1);
+    await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
+    const dialog = page.locator('[data-terminal-visibility-dialog]');
+    const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
+    const rows = dialog.locator('[data-action="toggle-terminal-visibility"]');
+    await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
+    await expect(rows).toHaveCount(3);
+    await dialog
+      .locator('dialog')
+      .screenshot({ path: `/private/tmp/hs2-se3rvm-dialog-${theme}-after.png`, animations: 'disabled' });
+    await types.locator('[part~="expand-icon"]').click();
+    const choose = async (value: string, selected: string[], count: number) => {
+      await types.locator(`wa-option[value="${value}"]`).click();
+      await expect(types).toHaveJSProperty('open', true);
+      await expect
+        .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
+        .toEqual([...selected].sort());
+      await expect(rows).toHaveCount(count);
+      for (const kind of ['shell', 'ai', 'chat'])
+        await expect(types.locator(`wa-option[value="${kind}"]`)).toHaveJSProperty('selected', selected.includes(kind));
+    };
+    await expect(types.locator('wa-option[value="browser"]')).toHaveJSProperty('disabled', true);
+    await choose('deselect-all', [], 0);
+    await expect(dialog.getByText('No workspace items match the selected types.')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Hide listed' })).toBeDisabled();
+    await choose('ai', ['ai'], 1);
+    await expect(rows).toHaveAccessibleName('Hide Codex Main');
+    await choose('shell', ['shell', 'ai'], 2);
+    await choose('ai', ['shell'], 1);
+    await expect(rows).toHaveAccessibleName('Hide Tests');
+    await choose('chat', ['shell', 'chat'], 2);
+    await choose('select-all', ['shell', 'ai', 'chat'], 3);
+    await choose('deselect-all', [], 0);
+    await choose('chat', ['chat'], 1);
+    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-filter-${theme}-open.png`, animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await expect(types).toHaveJSProperty('open', false);
+    await expect(dialog).toHaveJSProperty('open', true);
+    await dialog.getByRole('button', { name: 'Hide listed' }).click();
+    await expect(rows).toHaveAccessibleName('Show Codex chat');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(chat).toHaveCount(0);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
+    await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
+    await page.reload();
+    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    await expect(chat).toHaveCount(0);
+    await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
+    await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
+    await expect(rows).toHaveCount(3);
+    await types.locator('[part~="expand-icon"]').click();
+    await choose('deselect-all', [], 0);
+    await choose('chat', ['chat'], 1);
+    await page.keyboard.press('Escape');
+    await dialog.getByRole('button', { name: 'Show listed' }).click();
+    await expect(rows).toHaveAccessibleName('Hide Codex chat');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await types.locator('[part~="expand-icon"]').click();
+    await choose('select-all', ['shell', 'ai', 'chat'], 3);
+    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-filter-${theme}-mobile.png`, animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(chat).toBeVisible();
+    await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
+    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-dashboard-${theme}-chat.png`, animations: 'disabled' });
+  });
+}
+
 test('creates, renames, persists, and context-deletes terminal visibility groups', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);

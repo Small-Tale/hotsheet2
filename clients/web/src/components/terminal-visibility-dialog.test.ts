@@ -24,6 +24,26 @@ const groups = [
   },
 ];
 describe('TerminalVisibilityDialog', () => {
+  it('renders a native multi-select with special actions and no matching empty project headers', () => {
+    const markup = String(
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups,
+        types: [],
+      }),
+    );
+    expect(markup).toContain('data-terminal-type-filter');
+    expect(markup).toContain('data-selected-types=""');
+    expect(markup).toContain('multiple');
+    expect(markup).toContain('value="select-all"');
+    expect(markup).toContain('value="deselect-all"');
+    expect(markup).toContain('value="browser" disabled');
+    expect(markup).toContain('No workspace items match the selected types.');
+    expect(markup).not.toContain('data-component="list-header"');
+    expect(markup).not.toContain('data-action="toggle-terminal-visibility"');
+  });
   it('keeps the tab toolbar transparent', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8'),
       toolbar = css.match(/\.terminal-visibility-dialog__toolbar \{([^}]+)\}/)?.[1] ?? '';

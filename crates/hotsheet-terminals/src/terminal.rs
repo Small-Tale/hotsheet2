@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::busy::{Activity, BusyDetector};
@@ -39,9 +40,19 @@ fn pty_err<E: std::fmt::Display>(e: E) -> TermError {
     TermError::Pty(e.to_string())
 }
 
+/// Why a terminal was created. Output, command names, and later attachments cannot change it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalKind {
+    #[default]
+    Shell,
+    Ai,
+}
+
 /// What to launch in the terminal.
 #[derive(Debug, Clone)]
 pub struct TermSpec {
+    pub kind: TerminalKind,
     pub command: String,
     pub args: Vec<String>,
     pub cwd: Option<PathBuf>,
@@ -56,6 +67,7 @@ impl TermSpec {
     /// A shell-less command with a sensible default size and no extra env.
     pub fn new(command: impl Into<String>) -> Self {
         Self {
+            kind: TerminalKind::Shell,
             command: command.into(),
             args: Vec::new(),
             cwd: None,
@@ -93,6 +105,7 @@ impl Ring {
 
 /// A running PTY terminal.
 pub struct Terminal {
+    kind: TerminalKind,
     master: Mutex<Box<dyn MasterPty + Send>>,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     writer: Mutex<Box<dyn Write + Send>>,
@@ -187,6 +200,7 @@ impl Terminal {
         let mut sizer = SizeArbiter::default();
         sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
+            kind: spec.kind,
             master: Mutex::new(pair.master),
             child: Mutex::new(child),
             writer: Mutex::new(writer),
@@ -197,6 +211,11 @@ impl Terminal {
             sizer: Arc::new(Mutex::new(sizer)),
             size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
         })
+    }
+
+    /// The immutable creation kind, independent of the process's output or current command.
+    pub fn kind(&self) -> TerminalKind {
+        self.kind
     }
 
     /// A viewport's size claim (HS2-BD7Q74): update the arbiter and, if the reconciled size

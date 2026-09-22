@@ -1478,16 +1478,27 @@ HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 flow layout, magnification/hiding, and independent persisted width/high zoom
 controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-component
-Manage Workspace Visibility dialog, its badge counts terminals hidden by the active group, and the
+Manage Workspace Visibility dialog, its badge counts terminals and AI chats hidden by the active group, and the
 adjacent Select switches among device-local named groups. Default is permanent; named groups
-can be created, renamed, and removed, and each group records terminal inclusion without
+can be created, renamed, and removed, and each group records workspace-item inclusion without
 destroying sessions. The compact selector's open menu sizes to its option content instead of
 the narrow closed control, so checkmarks and complete group names remain visible. The dialog's
 tab toolbar remains transparent against the white dialog
 surface rather than introducing a separate gray band. Visibility groups apply only to the
 global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
-appear in Default and start hidden in existing named groups. The dashboard always uses one
+and newly created AI chats appear in Default and start hidden in existing named groups.
+The dialog lists both terminal and chat tiles and filters rows through a normal multi-select
+for Shell Terminals, AI Terminals, and AI Chat. Select All and Deselect All affect the
+filter only, keep the popup open, and never change visibility. Hide listed / Show listed
+apply only to matching rows in the selected visibility group. No selected types yields an
+explicit empty result and disabled bulk actions. Switching groups retains the filter;
+reopening the dialog resets it to all supported types. Web Browsers is disabled until
+browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
+`connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
+through PTY reattachment and broker-backed server restart. Legacy sessions without kind
+remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).
+The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector. Terminal and AI-chat
 cards share that flow in both the cross-project Workspace grid and the drawer's **Project
 grid**. AI cards show provider, working/ready state, and the latest conversation summary.

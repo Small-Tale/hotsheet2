@@ -45,7 +45,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
-    src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
+    src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
+    src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-viewport-runtime.ts # Lazy live/static xterm rendering, input, leased claims, server-size scaling, and reconnect lifecycle
@@ -161,6 +162,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). locations() = cheap id+root mapping (no ticket parse) for hot paths; list() parses counts outside the stores lock so detail reads never serialize behind an all-stores scan (HS2-P6N7FR). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up) + ≤6-hourly purge_all_trash retention sweep (HS2-MWDR19)
+      tests/terminal_broker.rs # Creation-kind HTTP/broker integration: shell/AI creation, OSC8 independence, reattach and server-restart preservation
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per project under ${HOTSHEET_HOME}/broker, using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in lib.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)

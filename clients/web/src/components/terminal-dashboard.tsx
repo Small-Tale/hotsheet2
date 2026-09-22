@@ -20,6 +20,7 @@ import type { TerminalVisibilityGroup } from '../terminal-visibility';
 
 export interface TerminalDashboardSession {
   id: string;
+  kind?: 'shell' | 'ai';
   projectId: string;
   projectName: string;
   title?: string;

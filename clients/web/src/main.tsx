@@ -376,7 +376,12 @@ import {
   setTerminalVisibleInGroup,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
+  TERMINAL_VISIBILITY_TYPES,
+  terminalProjectVisibilityScope,
+  terminalVisibilityItems,
+  type TerminalVisibilityType,
 } from './terminal-visibility';
+import { wireTerminalVisibilityTypeFilter } from './terminal-visibility-filter';
 import { hasUnresolvedBlocker } from './ticket-blocking';
 import { ticketBoardGroups, ticketBoardGroupTotal } from './ticket-board-layout';
 import {
@@ -721,6 +726,7 @@ const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
 const magnifiedTerminalKey = signal<string | undefined>(undefined),
   terminalVisibility = signal(parseTerminalVisibilityState(localStorage.getItem(TERMINAL_VISIBILITY_STORAGE_KEY))),
   terminalVisibilityDialogScope = signal<string | undefined>(undefined),
+  terminalVisibilityFilter = signal<readonly TerminalVisibilityType[]>(TERMINAL_VISIBILITY_TYPES),
   terminalVisibilityContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
   terminalVisibilityNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
 const terminalNames = signal(parseTerminalNames(localStorage.getItem('hotsheet.terminals.names'))),
@@ -1324,9 +1330,10 @@ function terminalHiddenKeys(scope: string) {
 }
 function terminalHiddenCount(scope: string, projectId?: string) {
   const live = new Set(
-    terminalGroups.value
-      .filter((group) => !projectId || group.projectId === projectId)
-      .flatMap((group) => group.sessions.map((session) => `${session.projectId}:${session.id}`)),
+    terminalVisibilityItems(
+      workspaceTerminalGroups(),
+      projectId ? terminalProjectVisibilityScope(projectId) : scope,
+    ).flatMap((group) => group.items.map((item) => item.key)),
   );
   return terminalHiddenKeys(scope).filter((key) => live.has(key)).length;
 }
@@ -1341,11 +1348,11 @@ function terminalVisibilityScopeFor(target: Element) {
   );
 }
 function terminalKeysForVisibilityDialog() {
-  const scope = terminalVisibilityDialogScope.value,
-    projectId = scope?.startsWith('project:') ? scope.slice('project:'.length) : undefined;
-  return terminalGroups.value
-    .filter((group) => !projectId || group.projectId === projectId)
-    .flatMap((group) => group.sessions.map((session) => `${session.projectId}:${session.id}`));
+  return terminalVisibilityItems(
+    workspaceTerminalGroups(),
+    terminalVisibilityDialogScope.value ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
+    terminalVisibilityFilter.value,
+  ).flatMap((group) => group.items.map((item) => item.key));
 }
 function drawerTabOrder(projectId: string) {
   return terminalDrawerOrderByProject.value[projectId] ?? loadDrawerTabOrder(localStorage, projectId);
@@ -1804,6 +1811,7 @@ async function createDrawerAIChat(selection: AiToolDefaults, options: { connecti
       ...terminalDrawerChatsByProject.value,
       [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
     };
+    persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
     selectDrawerItem(tab.id);
     setTerminalDrawerVisible(true);
     return tab;
@@ -3900,6 +3908,7 @@ async function openSavedConversation() {
       ...terminalDrawerChatsByProject.value,
       [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
     };
+    persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
     replaceConversationStates({
       ...conversationStates.peek(),
       [connectionId]: { messages: saved.messages, activity: saved.activity },
@@ -6726,26 +6735,29 @@ function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
     },
   };
 }
+function workspaceTerminalGroups(): TerminalDashboardGroup[] {
+  const conversations = conversationStates.peek();
+  return terminalGroups.value.map((group) => {
+    const connections = driveConnectionsByProject.value[group.projectId] ?? [],
+      chats = (terminalDrawerChatsByProject.value[group.projectId] ?? []).map((chat) => {
+        const connection = connections.find((item) => item.id === chat.connectionId),
+          state = conversations[chat.connectionId] ?? EMPTY_CONVERSATION;
+        return {
+          id: chat.id,
+          projectId: group.projectId,
+          projectName: group.projectName,
+          name: chat.name,
+          tool: aiToolLabel(chat.tool),
+          busy: connection?.busy ?? false,
+          summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
+        };
+      });
+    return { ...group, chats, itemOrder: drawerTabOrder(group.projectId) };
+  });
+}
 function globalWorkspaceSurfaceProps(): GlobalWorkspaceSurfaceProps {
   if (shellMode.value === 'terminals') {
-    const conversations = conversationStates.peek(),
-      groups = terminalGroups.value.map((group) => {
-        const connections = driveConnectionsByProject.value[group.projectId] ?? [],
-          chats = (terminalDrawerChatsByProject.value[group.projectId] ?? []).map((chat) => {
-            const connection = connections.find((item) => item.id === chat.connectionId),
-              state = conversations[chat.connectionId] ?? EMPTY_CONVERSATION;
-            return {
-              id: chat.id,
-              projectId: group.projectId,
-              projectName: group.projectName,
-              name: chat.name,
-              tool: aiToolLabel(chat.tool),
-              busy: connection?.busy ?? false,
-              summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
-            };
-          });
-        return { ...group, chats, itemOrder: drawerTabOrder(group.projectId) };
-      });
+    const groups = workspaceTerminalGroups();
     return {
       kind: 'terminals',
       dashboard: {
@@ -7598,7 +7610,8 @@ mount(appRoot, () => {
         open={Boolean(visibilityScope)}
         state={terminalVisibility.value}
         scope={visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
-        groups={terminalGroups.value}
+        groups={workspaceTerminalGroups()}
+        types={terminalVisibilityFilter.value}
         contextMenu={terminalVisibilityContextMenu.value}
       />
       <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />
@@ -8400,12 +8413,17 @@ function wireTerminalInteractions() {
     terminalContextMenu.value = undefined;
     if (magnifiedTerminalKey.value === key) magnifiedTerminalKey.value = undefined;
   });
+  wireTerminalVisibilityTypeFilter(document.body, (types) => {
+    terminalVisibilityFilter.value = types;
+  });
   delegate(document.body, 'click', '[data-action="open-terminal-visibility"]', (event, target) => {
     event.stopImmediatePropagation();
     terminalVisibilityContextMenu.value = undefined;
+    terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
     terminalVisibilityDialogScope.value = terminalVisibilityScopeFor(target);
   });
-  delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', () => {
+  delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+    if (event.target !== target) return;
     terminalVisibilityContextMenu.value = undefined;
     terminalVisibilityNamePrompt.value = undefined;
     terminalVisibilityDialogScope.value = undefined;
