@@ -83,7 +83,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 47 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 48 -->"));
     assert_eq!(p.manifest.instructions.target, "AGENTS.md");
     assert_eq!(p.manifest.mcp.format, "codex-toml");
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");

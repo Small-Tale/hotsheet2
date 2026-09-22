@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 47 -->
+<!-- hotsheet-skill-version: 48 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -19,7 +19,9 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    environment and user authorize delegation, assign concrete independent tickets or
    bounded investigations in parallel. Do not parallelize tickets that edit the same
    surfaces or depend on unresolved decisions. The primary agent owns integration,
-   ticket status, verification, and publishing.
+   ticket status, verification, and publishing. A stopped, completed, interrupted, or
+   otherwise idle delegated worker does not make its claimed ticket non-actionable: the
+   primary agent must inspect and resume that handoff until the ticket is published.
 3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
    session-specific worker id. Immediately before active work, claim the assigned ticket
    with the atomic CLI form
@@ -38,12 +40,13 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
    leave it only in a comment/TODO/note. Reference every follow-up slug in the current
    ticket's completing note, then continue.
-5. **Publish at ticket boundaries.** Run required gates, review the diff, make one commit
-   for that ticket, include its ticket slug in the commit message, and push before
-   beginning the next sequential ticket. Combine tickets only when their implementations
-   overlap so strongly that separation would be unsafe or misleading, or when they are
-   duplicates; a combined commit message must reference every ticket slug it addresses.
-   Integrate parallel tickets separately.
+5. **Publish immediately at ticket boundaries.** Run required gates, review the diff,
+   make one commit for that ticket, include its ticket slug in the commit message, push
+   it immediately, and confirm the remote accepted it before beginning, resuming, or
+   integrating any other ticket. Do not batch completed local commits for a later push.
+   Combine tickets only when their implementations overlap so strongly that separation
+   would be unsafe or misleading, or when they are duplicates; a combined commit message
+   must reference every ticket slug it addresses. Integrate parallel tickets separately.
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 

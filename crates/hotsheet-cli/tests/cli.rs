@@ -336,6 +336,49 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     );
 }
 
+#[test]
+fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    std::fs::write(
+        store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["codex"]}"#,
+    )
+    .unwrap();
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 49 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
+    let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
+    std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
+    let skill = "<!-- hotsheet-skill-version: 49 -->\nnewer skill\n";
+    std::fs::write(&skill_path, skill).unwrap();
+
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .arg("setup")
+        .arg("--refresh")
+        .arg("--project")
+        .arg(&project)
+        .assert()
+        .success();
+
+    assert_eq!(
+        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+        instructions
+    );
+    assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
+    assert!(project.join(".codex/config.toml").is_file());
+}
+
 #[cfg(unix)]
 #[test]
 fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {

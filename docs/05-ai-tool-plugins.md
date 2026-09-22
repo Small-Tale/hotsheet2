@@ -60,10 +60,16 @@ byte-level no-op, and managed instruction markers remain the boundary around con
 Hot Sheet may replace. Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
 `.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized
 with their canonical shared workflows; refresh replaces a stale Hot Sheet adapter while
-preserving unrelated user-authored skills and instruction content. Bundled skill versions
-are checked against the current shared adapters, and Windows detection honors command
-wrappers from `PATHEXT`, so freshness does
-not silently skip npm-installed tools or replace a newer workflow with an older bundle.
+preserving unrelated user-authored skills and instruction content. Instruction blocks and
+skills carry numeric workflow-version markers. Before refreshing either artifact, setup
+re-reads both installed targets and compares each marker with its bundled counterpart. If
+either installed half is newer, setup preserves both as one workflow
+bundle while continuing merge-safe MCP and hook maintenance. This prevents a stale,
+long-running server or CLI from producing a mixed or downgraded workflow. Unversioned and
+older managed artifacts still upgrade normally. Bundled skill versions are checked against
+the current shared adapters, and Windows detection honors command wrappers from `PATHEXT`,
+so freshness does not silently skip npm-installed tools or replace a newer workflow with an
+older bundle.
 In the source-backed web development bridge, the compiled CLI reports a digest of all
 embedded setup assets and the bridge independently hashes the live `plugins/` tree. A
 missing or mismatched digest refuses project setup with a rebuild command before any

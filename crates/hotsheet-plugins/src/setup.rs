@@ -143,9 +143,13 @@ fn setup_plugins(
                 targets: bad.join(", "),
             });
         }
-        let mut wrote = vec![write_instructions(project_dir, &p)?];
-        if let Some(skill) = write_skill(project_dir, &p)? {
-            wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
+        let preserve_newer_workflow = installed_workflow_is_newer(project_dir, &p);
+        let mut wrote = Vec::new();
+        if !preserve_newer_workflow {
+            wrote.push(write_instructions(project_dir, &p)?);
+            if let Some(skill) = write_skill(project_dir, &p)? {
+                wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
+            }
         }
         wrote.push(write_mcp(project_dir, &store_abs, &p)?);
         if let Some(hook) = write_hooks(project_dir, &p)? {
@@ -157,6 +161,42 @@ fn setup_plugins(
         });
     }
     Ok(reports)
+}
+
+const INSTRUCTIONS_VERSION_PREFIX: &str = "<!-- hotsheet-instructions-version: ";
+const SKILL_VERSION_PREFIX: &str = "<!-- hotsheet-skill-version: ";
+
+fn marked_version(contents: &str, prefix: &str) -> Option<u64> {
+    contents.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(prefix)
+            .and_then(|value| value.strip_suffix(" -->"))
+            .and_then(|value| value.parse().ok())
+    })
+}
+
+fn installed_workflow_is_newer(project: &Path, plugin: &Plugin) -> bool {
+    let bundled_instruction_version =
+        marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+    let instructions =
+        std::fs::read_to_string(project.join(&plugin.manifest.instructions.target)).ok();
+    let begin = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
+    let end = format!("<!-- END hotsheet:{} -->", plugin.id());
+    let instruction_version = instructions.as_deref().and_then(|contents| {
+        let start = contents.find(&begin)?;
+        let finish = contents[start..].find(&end)? + start + end.len();
+        marked_version(&contents[start..finish], INSTRUCTIONS_VERSION_PREFIX)
+    });
+    if instruction_version.is_some_and(|version| version > bundled_instruction_version) {
+        return true;
+    }
+    plugin.skill().is_some_and(|(target, bundled)| {
+        let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
+        std::fs::read_to_string(project.join(target))
+            .ok()
+            .and_then(|contents| marked_version(&contents, SKILL_VERSION_PREFIX))
+            .is_some_and(|version| version > bundled_version)
+    })
 }
 
 /// The `hotsheet-mcp` command string to record in a tool's MCP config: the absolute sibling
@@ -599,10 +639,22 @@ mod tests {
     use super::*;
 
     fn fixture_plugin(root: &Path, instructions: &str) {
+        fixture_plugin_version(root, instructions, 1);
+    }
+
+    fn fixture_plugin_version(root: &Path, instructions: &str, version: u64) {
         let plugin = root.join("fixture");
         std::fs::create_dir(&plugin).unwrap();
-        std::fs::write(plugin.join("instructions.md"), instructions).unwrap();
-        std::fs::write(plugin.join("SKILL.md"), "current skill\n").unwrap();
+        std::fs::write(
+            plugin.join("instructions.md"),
+            format!("<!-- hotsheet-instructions-version: {version} -->\n{instructions}"),
+        )
+        .unwrap();
+        std::fs::write(
+            plugin.join("SKILL.md"),
+            format!("<!-- hotsheet-skill-version: {version} -->\ncurrent skill\n"),
+        )
+        .unwrap();
         std::fs::write(
             plugin.join("manifest.toml"),
             r#"
@@ -676,8 +728,9 @@ args = ["--path", "{store}"]
         assert!(String::from_utf8_lossy(&instructions).contains("User text."));
         assert!(String::from_utf8_lossy(&instructions).contains("current instructions"));
         assert_eq!(
-            std::fs::read(project.path().join(".fixture/skills/hotsheet/SKILL.md")).unwrap(),
-            b"current skill\n"
+            std::fs::read_to_string(project.path().join(".fixture/skills/hotsheet/SKILL.md"))
+                .unwrap(),
+            "<!-- hotsheet-skill-version: 1 -->\ncurrent skill\n"
         );
         assert!(project.path().join(".fixture/mcp.json").is_file());
 
@@ -692,6 +745,91 @@ args = ["--path", "{store}"]
             std::fs::read(project.path().join("AGENTS.md")).unwrap(),
             instructions
         );
+    }
+
+    #[test]
+    fn stale_setup_preserves_a_newer_installed_workflow_as_one_bundle() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let newer_plugins = tempfile::tempdir().unwrap();
+        let stale_plugins = tempfile::tempdir().unwrap();
+        fixture_plugin_version(newer_plugins.path(), "newer instructions\n", 9);
+        fixture_plugin_version(stale_plugins.path(), "stale instructions\n", 8);
+
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("fixture"),
+            false,
+            None,
+            &[newer_plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        let instructions = std::fs::read(project.path().join("AGENTS.md")).unwrap();
+        let skill =
+            std::fs::read(project.path().join(".fixture/skills/hotsheet/SKILL.md")).unwrap();
+
+        let report = run_setup_in(
+            store.path(),
+            project.path(),
+            Some("fixture"),
+            false,
+            None,
+            &[stale_plugins.path().to_path_buf()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read(project.path().join("AGENTS.md")).unwrap(),
+            instructions
+        );
+        assert_eq!(
+            std::fs::read(project.path().join(".fixture/skills/hotsheet/SKILL.md")).unwrap(),
+            skill
+        );
+        assert_eq!(report[0].wrote, [".fixture/mcp.json"]);
+    }
+
+    #[test]
+    fn either_newer_installed_artifact_protects_mixed_workflow_versions() {
+        let store = tempfile::tempdir().unwrap();
+        let plugins = tempfile::tempdir().unwrap();
+        fixture_plugin_version(plugins.path(), "bundled instructions\n", 8);
+
+        for newer_artifact in ["instructions", "skill"] {
+            let project = tempfile::tempdir().unwrap();
+            let instruction_version = if newer_artifact == "instructions" {
+                9
+            } else {
+                7
+            };
+            let skill_version = if newer_artifact == "skill" { 9 } else { 7 };
+            let instructions = format!(
+                "<!-- BEGIN hotsheet:fixture -->\n<!-- hotsheet-instructions-version: {instruction_version} -->\ninstalled instructions\n<!-- END hotsheet:fixture -->\n"
+            );
+            let skill =
+                format!("<!-- hotsheet-skill-version: {skill_version} -->\ninstalled skill\n");
+            std::fs::write(project.path().join("AGENTS.md"), &instructions).unwrap();
+            let skill_path = project.path().join(".fixture/skills/hotsheet/SKILL.md");
+            std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
+            std::fs::write(&skill_path, &skill).unwrap();
+
+            run_setup_in(
+                store.path(),
+                project.path(),
+                Some("fixture"),
+                false,
+                None,
+                &[plugins.path().to_path_buf()],
+            )
+            .unwrap();
+
+            assert_eq!(
+                std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap(),
+                instructions
+            );
+            assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
+        }
     }
 
     #[test]

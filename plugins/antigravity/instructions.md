@@ -1,3 +1,5 @@
+<!-- hotsheet-instructions-version: 48 -->
+
 ## Hot Sheet — ticket workflow
 
 This project tracks work as **Hot Sheet** tickets (plain files under the store). Use them to
