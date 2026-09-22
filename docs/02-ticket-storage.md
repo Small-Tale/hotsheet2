@@ -691,6 +691,12 @@ engine** so the user effectively never runs git by hand:
   (§2.7) this is safe to do without asking.
 - **Commit** local ticket edits automatically (a Hot Sheet edit writes the file and
   commits it — the user doesn't stage/commit tickets manually).
+  Concurrent Git index/ref lock collisions retry the complete local stage/check/commit
+  transaction up to 20 times with capped backoff (4.375 seconds of total retry waits).
+  Retrying rechecks for an already-committed no-op and preserves path-scoped commits.
+  Hot Sheet never deletes another process's Git lock. Exhausted contention or any
+  other Git failure warns while preserving the successful ticket write; network
+  publication remains asynchronous (HS2-C71XN1).
 - **Push** automatically after local commits, with backoff + retry on failure.
 - **Offline-tolerant:** when the remote is unreachable, keep working locally and
   reconcile on reconnect; never block a local edit on the network.

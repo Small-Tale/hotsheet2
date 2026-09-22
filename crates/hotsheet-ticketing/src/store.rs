@@ -13,6 +13,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use hotsheet_model::{
     Attachment, Note, NoteKind, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file,
@@ -536,6 +537,18 @@ impl FsStore {
         {
             return Ok(false);
         }
+        retry_autocommit(
+            || self.autocommit_attempt(message, paths),
+            std::thread::sleep,
+            20,
+        )
+    }
+
+    fn autocommit_attempt(
+        &self,
+        message: &str,
+        paths: Option<&[PathBuf]>,
+    ) -> Result<bool, StoreError> {
         self.ensure_managed_gitignore()?;
         // An unborn repository has no baseline tree: its first mutation must also commit
         // the store metadata/attributes. Once HEAD exists, path-scoped commits are safe.
@@ -1337,18 +1350,32 @@ fn frontmatter_value(text: &str, key: &str) -> Option<String> {
 
 // ---- git helpers (shell-based; the store IS a git repo, docs/02 §2.3) --------------
 
+/// Replay the complete local transaction after lock contention. Another writer may
+/// have committed during the wait, so re-stage and re-check rather than retrying a
+/// stale commit alone. Never remove Git's lock or retry unrelated failures.
+fn retry_autocommit(
+    mut attempt: impl FnMut() -> Result<bool, StoreError>,
+    mut wait: impl FnMut(Duration),
+    mut retries: usize,
+) -> Result<bool, StoreError> {
+    let mut delay = Duration::from_millis(25);
+    loop {
+        let result = attempt();
+        let contention = matches!(&result, Err(StoreError::Git(message)) if
+            (message.contains(".lock") && message.contains("File exists"))
+                || (message.contains("cannot lock ref") && message.contains("but expected")));
+        if !contention || retries == 0 {
+            return result;
+        }
+        retries -= 1;
+        wait(delay);
+        delay = (delay * 2).min(Duration::from_millis(250));
+    }
+}
+
 /// Run `git -C root <args>`, erroring on a non-zero exit.
 fn git(root: &Path, args: &[&str]) -> Result<(), StoreError> {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(StoreError::Git(format!("`git {}` failed", args.join(" "))))
-    }
+    git_paths(root, args, &[])
 }
 
 fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreError> {
@@ -1356,19 +1383,21 @@ fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreE
         .iter()
         .map(|path| path.strip_prefix(root).unwrap_or(path))
         .collect::<Vec<_>>();
-    let status = Command::new("git")
+    let output = Command::new("git")
+        .env("LC_ALL", "C")
         .arg("-C")
         .arg(root)
         .args(args)
         .args(&relative)
-        .status()?;
-    if status.success() {
+        .output()?;
+    if output.status.success() {
         Ok(())
     } else {
         Err(StoreError::Git(format!(
-            "`git {}` failed for {} path(s)",
+            "`git {}` failed for {} path(s): {}",
             args.join(" "),
-            paths.len()
+            paths.len(),
+            String::from_utf8_lossy(&output.stderr).trim()
         )))
     }
 }
@@ -2197,6 +2226,64 @@ mod tests {
                 .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn autocommit_replays_lock_collisions_until_success_or_another_writers_noop() {
+        let failures = [
+            "Unable to create 'index.lock': File exists",
+            "cannot lock ref 'HEAD': is at a but expected b",
+            "Unable to create 'index.lock': File exists",
+        ];
+        let mut calls = 0;
+        let mut waits = Vec::new();
+        let committed = retry_autocommit(
+            || {
+                calls += 1;
+                failures
+                    .get(calls - 1)
+                    .map_or(Ok(false), |message| Err(StoreError::Git((*message).into())))
+            },
+            |delay| waits.push(delay.as_millis()),
+            20,
+        )
+        .unwrap();
+        assert!(!committed);
+        assert_eq!(calls, 4);
+        assert_eq!(waits, [25, 50, 100]);
+        assert!(retry_autocommit(|| Ok(true), |_| panic!("no wait needed"), 20).unwrap());
+    }
+
+    #[test]
+    fn autocommit_bounds_lock_retries_and_does_not_retry_other_errors() {
+        let mut calls = 0;
+        let mut waited = Duration::ZERO;
+        let error = retry_autocommit(
+            || {
+                calls += 1;
+                Err(StoreError::Git("index.lock: File exists".into()))
+            },
+            |delay| waited += delay,
+            20,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("index.lock"));
+        assert_eq!(calls, 21);
+        assert_eq!(waited, Duration::from_millis(4375));
+        for message in ["pre-commit hook rejected", "index.lock: Permission denied"] {
+            let result = retry_autocommit(
+                || Err(StoreError::Git(message.into())),
+                |_| panic!("non-contention errors must not be retried"),
+                20,
+            );
+            assert!(result.unwrap_err().to_string().contains(message));
+        }
+        let result = retry_autocommit(
+            || Err(StoreError::Io(std::io::Error::other("spawn failure"))),
+            |_| panic!("process launch errors must not be retried"),
+            20,
+        );
+        assert!(matches!(result, Err(StoreError::Io(_))));
     }
 
     #[test]

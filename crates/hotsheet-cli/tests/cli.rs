@@ -30,6 +30,113 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn concurrent_edits_retry_external_git_locks_without_losing_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    hs(root).args(["init", "--prefix", "HS"]).assert().success();
+    let slugs: Vec<_> = (0..4)
+        .map(|index| new_ticket(root, &format!("Before {index}")))
+        .collect();
+    let lock = root.join(".git/index.lock");
+    std::fs::write(&lock, "another process owns this lock").unwrap();
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = slugs
+            .iter()
+            .enumerate()
+            .map(|(index, slug)| {
+                scope.spawn(move || {
+                    hs(root)
+                        .args(["edit", slug, "--title", &format!("After {index}")])
+                        .assert()
+                        .success()
+                        .stderr(predicate::str::contains("autocommit failed").not());
+                })
+            })
+            .collect();
+        let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            if store
+                .list_tickets()
+                .unwrap()
+                .iter()
+                .all(|ticket| ticket.title.starts_with("After "))
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "ticket writes never finished"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        // The durable edits precede commit retries; no writer removes another
+        // process's lock. Only this test, its owner, releases it.
+        assert_eq!(
+            std::fs::read_to_string(&lock).unwrap(),
+            "another process owns this lock"
+        );
+        std::fs::remove_file(&lock).unwrap();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+    });
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    assert!(
+        status.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+    let history = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["log", "--format=%s", "-4"])
+        .output()
+        .unwrap();
+    assert!(history.status.success());
+    let subjects = String::from_utf8(history.stdout).unwrap();
+    for slug in slugs {
+        assert!(
+            subjects.contains(&slug),
+            "missing commit for {slug}: {subjects}"
+        );
+    }
+}
+
+#[test]
+fn exhausted_git_lock_retries_preserve_the_edit_and_external_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    hs(root).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(root, "Before persistent lock");
+    let lock = root.join(".git/index.lock");
+    std::fs::write(&lock, "external owner").unwrap();
+    hs(root)
+        .args(["edit", &slug, "--title", "Durable despite lock"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("autocommit failed"));
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), "external owner");
+    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+    assert_eq!(
+        store.list_tickets().unwrap()[0].title,
+        "Durable despite lock"
+    );
+    std::fs::remove_file(lock).unwrap();
+    hs(root)
+        .args(["edit", &slug, "--title", "Recovery commits pending edit"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("autocommit failed").not());
+}
+
+#[test]
 fn trash_restore_and_purge_have_headless_cli_parity() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
