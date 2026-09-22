@@ -1,6 +1,7 @@
 import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { type CommandAndAiInteractionsDependencies, wireCommandAndAiInteractions } from './commands-and-ai';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
@@ -191,5 +192,95 @@ describe('extracted handlers retain live application bindings', () => {
     handler('click', '[data-action="cancel-saved-view"]')(new Event('click'), target({}));
     expect(opened.value).toBe(false);
     expect(close).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
+  function setup(apple: boolean) {
+    const capturingShortcutId = signal<string | undefined>(undefined);
+    const keyboardShortcutOverrides = signal<Record<string, ShortcutChord>>({});
+    const storage = new Map<string, string>();
+    const frames: FrameRequestCallback[] = [];
+    const focus = vi.fn();
+    vi.stubGlobal('localStorage', {
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal('CSS', { escape: (value: string) => value });
+    Object.assign(document, { querySelector: vi.fn(() => ({ focus })) });
+    wireCommandAndAiInteractions({
+      capturingShortcutId,
+      keyboardShortcutOverrides,
+      appleShortcutPlatform: apple,
+      project: () => ({ id: 'project' }),
+      setSettingsCategory: vi.fn(),
+    } as unknown as CommandAndAiInteractionsDependencies);
+    const click = (action: string, dataset: Record<string, string> = {}) =>
+      handler('click', `[data-action="${action}"]`)(new Event('click'), target(dataset));
+    const press = (id: string, key: string, flags: Partial<KeyboardEvent> = {}) => {
+      const event = Object.assign(
+        new Event('keydown', { cancelable: true }),
+        { key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false },
+        flags,
+      );
+      handler('keydown', '[data-shortcut-capture]')(event, target({ shortcutCapture: id }));
+      return event;
+    };
+    return { capturingShortcutId, keyboardShortcutOverrides, storage, frames, focus, click, press };
+  }
+
+  for (const apple of [true, false]) {
+    it(`waits for a real key, commits once, cancels, resets and refills on ${apple ? 'Apple' : 'non-Apple'}`, () => {
+      const state = setup(apple),
+        { click, press } = state;
+      click('edit-shortcut', { shortcutId: 'open-search' });
+      expect(press('open-search', 'Control', { ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(state.capturingShortcutId.value).toBe('open-search');
+      expect(state.storage.size).toBe(0);
+      press('open-search', 'k', { ctrlKey: true });
+      const committed = { key: 'k', mod: !apple, shift: false, alt: false, ...(apple ? { ctrl: true } : {}) };
+      expect(state.keyboardShortcutOverrides.value).toEqual({ 'open-search': committed });
+      expect(state.capturingShortcutId.value).toBeUndefined();
+      expect(JSON.parse(state.storage.get(KEYBOARD_SHORTCUT_STORAGE_KEY)!)).toEqual({ 'open-search': committed });
+      // A stale key repeat cannot overwrite the committed binding after recording ended.
+      expect(press('open-search', 'x', { repeat: true }).defaultPrevented).toBe(false);
+      click('edit-shortcut', { shortcutId: 'open-search' });
+      press('open-search', 'Escape', { ctrlKey: true });
+      expect(state.keyboardShortcutOverrides.value).toEqual({ 'open-search': committed });
+      click('edit-shortcut', { shortcutId: 'undo' });
+      click('cancel-shortcut-capture');
+      expect(press('undo', 'z', { ctrlKey: true }).defaultPrevented).toBe(false);
+      click('edit-shortcut', { shortcutId: 'undo' });
+      press('undo', 'j', { ctrlKey: true, metaKey: true, shiftKey: true, altKey: true });
+      expect(Object.keys(state.keyboardShortcutOverrides.value)).toEqual(['open-search', 'undo']);
+      click('reset-shortcut', { shortcutId: 'undo' });
+      expect(state.keyboardShortcutOverrides.value).toEqual({ 'open-search': committed });
+      click('edit-shortcut', { shortcutId: 'open-search' });
+      click('reset-all-shortcuts');
+      expect(state.capturingShortcutId.value).toBeUndefined();
+      expect(state.storage.size).toBe(0);
+      expect(state.keyboardShortcutOverrides.value).toEqual({});
+      click('edit-shortcut', { shortcutId: 'open-search' });
+      press('open-search', 'q', { ctrlKey: true });
+      expect(state.keyboardShortcutOverrides.value['open-search'].key).toBe('q');
+    });
+  }
+
+  it('rejects superseded, cancelled and non-editable capture owners', () => {
+    const state = setup(true),
+      { click, press } = state;
+    click('edit-shortcut', { shortcutId: 'open-search' });
+    click('edit-shortcut', { shortcutId: 'undo' });
+    expect(press('open-search', 'k', { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(state.capturingShortcutId.value).toBe('undo');
+    click('select-settings-category', { itemId: 'keyboard' });
+    expect(state.capturingShortcutId.value).toBe('undo');
+    click('select-settings-category', { itemId: 'appearance' });
+    expect(press('undo', 'k', { ctrlKey: true }).defaultPrevented).toBe(false);
+    click('edit-shortcut', { shortcutId: 'activate' });
+    click('edit-shortcut', { shortcutId: 'unknown' });
+    expect(state.capturingShortcutId.value).toBeUndefined();
+    expect(state.storage.size).toBe(0);
   });
 });

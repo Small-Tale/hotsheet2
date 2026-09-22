@@ -62,4 +62,14 @@ describe('KeyboardSettings', () => {
     // reset-all is enabled once overrides exist.
     expect(markup).toMatch(/data-action="reset-all-shortcuts"(?![^>]*disabled)/);
   });
+  it('distinguishes Control from Command and projects conflicts on the supplied platform (HS2-835BZD)', () => {
+    const overrides = { undo: { key: 'k', ctrl: true } };
+    const apple = String(KeyboardSettings({ overrides, apple: true }));
+    expect(apple).toContain('⌃K');
+    expect(apple).toContain('⌘K');
+    expect(apple).not.toContain('keyboard-settings__conflict');
+    const other = String(KeyboardSettings({ overrides, apple: false }));
+    expect(other).toContain('Ctrl+K');
+    expect(other.match(/class="keyboard-settings__conflict"/g)).toHaveLength(2);
+  });
 });

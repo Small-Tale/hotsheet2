@@ -59,7 +59,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                 const overridden = shortcut.editable && Boolean(overrides[shortcut.id]);
                 const conflict =
                   shortcut.editable && !capturing && chord
-                    ? findChordConflict(shortcut.id, chord, overrides)
+                    ? findChordConflict(shortcut.id, chord, overrides, apple)
                     : undefined;
                 return (
                   <li

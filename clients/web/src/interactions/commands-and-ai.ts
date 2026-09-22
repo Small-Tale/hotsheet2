@@ -738,7 +738,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   delegate(document.body, 'keydown', '[data-shortcut-capture]', (event, target) => {
     const keyboard = event as KeyboardEvent,
       id = data(target).shortcutCapture;
-    if (!id || !shortcutDef(id)?.editable) return;
+    if (!id || capturingShortcutId.value !== id || !shortcutDef(id)?.editable) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (keyboard.key === 'Escape') {

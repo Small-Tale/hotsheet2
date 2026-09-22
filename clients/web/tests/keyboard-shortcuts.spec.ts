@@ -221,3 +221,128 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await page.keyboard.press('c');
   await expect(composer).toBeHidden();
 });
+
+for (const apple of [true, false]) {
+  test(`captures physical Control chords in settings on ${apple ? 'Apple' : 'non-Apple'} (HS2-835BZD)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.addInitScript((isApple) => {
+      Object.defineProperty(navigator, 'userAgent', {
+        get: () =>
+          isApple ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      });
+    }, apple);
+    await installFixture(page);
+    // Keep the real sync client connected without a zero-delay polling fallback in this HTTP fixture.
+    await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', () => undefined);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
+      node.value = '/work/hotsheet2';
+    });
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByLabel('Settings view').click();
+    await page.locator('.settings-navigation [data-item-id="keyboard"]').click();
+    const screen = page.locator('[data-component="keyboard-settings"]');
+    const row = (id: string) => screen.locator(`li[data-shortcut-id="${id}"]`);
+    const record = async (id: string) => {
+      await row(id).locator('[data-action="edit-shortcut"]').click();
+      await expect(screen.locator(`[data-shortcut-capture="${id}"]`)).toBeFocused();
+    };
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.keyboard-shortcuts') || '{}'));
+
+    await record('open-search');
+    await page.keyboard.down('Control');
+    await expect(screen.locator('[data-shortcut-capture="open-search"]')).toBeFocused();
+    expect(await stored()).toEqual({});
+    await page.keyboard.press('g');
+    await page.keyboard.up('Control');
+    await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃G' : 'Ctrl+G');
+    expect(await stored()).toEqual({
+      'open-search': { key: 'g', mod: !apple, shift: false, alt: false, ...(apple ? { ctrl: true } : {}) },
+    });
+    await expect(screen.locator('[data-shortcut-capture]')).toHaveCount(0);
+    await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
+
+    // Escape and the explicit Cancel action leave the previous binding intact, even with Control held.
+    const saved = await stored();
+    await record('open-search');
+    await page.keyboard.press('Control+Escape');
+    expect(await stored()).toEqual(saved);
+    await record('undo');
+    await page.keyboard.down('Control');
+    await page.keyboard.up('Control');
+    await screen.getByRole('button', { name: 'Cancel editing Undo', exact: true }).click();
+    expect(await stored()).toEqual(saved);
+
+    // Different physical modifiers stay distinct; adding the exact same chord flags both rows.
+    await record('undo');
+    await page.keyboard.press('Meta+g');
+    await expect(row('undo').locator('kbd')).toHaveText(apple ? '⌘G' : 'Meta+G');
+    await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
+    await record('undo');
+    await page.keyboard.press('Control+g');
+    await expect(row('undo').getByRole('status')).toContainText('Open search');
+    await expect(row('open-search').getByRole('status')).toContainText('Undo');
+    if (apple) await page.screenshot({ path: '/private/tmp/hs2-835bzd-control-conflict-wide.png' });
+    await row('undo').locator('[data-action="reset-shortcut"]').click();
+    await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
+
+    // Every held modifier survives the editor and reload. No subset can invoke the binding.
+    await record('redo');
+    await page.keyboard.press('Control+Meta+Alt+Shift+J');
+    await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
+    await page.reload();
+    await page.getByLabel('Settings view').click();
+    await page.locator('.settings-navigation [data-item-id="keyboard"]').click();
+    await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃G' : 'Ctrl+G');
+    await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
+
+    await page.getByRole('button', { name: 'List view', exact: true }).click();
+    await page.locator('.app-shell__work-area').focus();
+    await page.keyboard.press('g');
+    await page.keyboard.press('Meta+g');
+    await page.keyboard.press('Control+Alt+g');
+    await page.keyboard.press('Control+Meta+g');
+    await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
+    await page.keyboard.press('Control+g');
+    await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
+
+    await page.getByLabel('Settings view').click();
+    await screen.getByRole('button', { name: 'Reset all to defaults' }).click();
+    expect(await stored()).toEqual({});
+    await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌘K' : 'Ctrl+K');
+    await expect(screen.getByRole('button', { name: 'Reset all to defaults' })).toBeDisabled();
+    await record('open-search');
+    await page.keyboard.press('Control+q');
+    await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃Q' : 'Ctrl+Q');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+    await expect
+      .poll(async () =>
+        page.locator('.app-shell__main').evaluate((node) => {
+          const box = node.getBoundingClientRect();
+          return { x: Math.round(box.x), width: Math.round(box.width) };
+        }),
+      )
+      .toEqual({ x: 0, width: 390 });
+    await expect(row('open-search')).toBeVisible();
+    await record('undo');
+    await page.keyboard.press('Control+q');
+    await expect(row('undo').getByRole('status')).toContainText('Open search');
+    await expect(row('open-search').getByRole('status')).toContainText('Undo');
+    const bounds = await screen.evaluate((node) => ({
+      width: node.getBoundingClientRect().width,
+      scroll: node.scrollWidth,
+    }));
+    expect(bounds.scroll).toBeLessThanOrEqual(bounds.width + 1);
+    if (apple) {
+      await page.screenshot({ path: '/private/tmp/hs2-835bzd-control-conflict-narrow.png', animations: 'disabled' });
+    }
+    await row('undo').locator('[data-action="reset-shortcut"]').click();
+    await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
+  });
+}

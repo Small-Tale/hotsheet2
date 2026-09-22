@@ -463,7 +463,13 @@ and identity-less legacy entries remain conservatively blocking.
   Overrides are stored
   device-locally and resolved through the shared registry (`matchesShortcut`) at the central
   keydown dispatcher, the ticket clipboard policy, and ticket-row selection, so a rebinding takes
-  effect immediately (HS2-9PR10F). While a modal dialog is open the central keydown dispatcher
+  effect immediately (HS2-9PR10F). Recording preserves physical Control separately from
+  Command on Apple, and Meta separately from Control elsewhere, including chords that hold
+  both along with Shift or Alt. Modifier-only presses keep recording; Escape or Cancel leaves
+  the previous binding unchanged. Matching and conflict warnings compare the exact physical
+  modifiers on the current platform, while existing primary-modifier bindings retain their
+  platform mapping. Control is shown as ⌃ on Apple and Ctrl elsewhere (HS2-835BZD).
+  While a modal dialog is open the central keydown dispatcher
   suppresses these background app shortcuts — search focus, ticket undo/redo, and the ticket
   clipboard — so, for example, Cmd-K cannot focus the workspace search from inside a dialog; they
   resume once no modal remains, and the modal keeps its own text-field editing and shortcuts

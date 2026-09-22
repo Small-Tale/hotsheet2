@@ -17,6 +17,10 @@ export interface ShortcutChord {
   key: string;
   /** The primary command modifier — Cmd on macOS, Ctrl elsewhere. */
   mod?: boolean;
+  /** Physical Control, including on Apple where `mod` means Command. */
+  ctrl?: boolean;
+  /** Physical Meta, including on non-Apple platforms where `mod` means Control. */
+  meta?: boolean;
   shift?: boolean;
   alt?: boolean;
 }
@@ -345,11 +349,22 @@ export function isAppleShortcutPlatform(navigatorLike: Pick<Navigator, 'userAgen
   return /macintosh|mac os|iphone|ipad|ipod/i.test(navigatorLike.userAgent || '');
 }
 
-export function chordsEqual(a: ShortcutChord | undefined, b: ShortcutChord | undefined): boolean {
+function chordModifiers(chord: ShortcutChord, apple: boolean) {
+  return { ctrl: Boolean(chord.ctrl || (!apple && chord.mod)), meta: Boolean(chord.meta || (apple && chord.mod)) };
+}
+
+export function chordsEqual(
+  a: ShortcutChord | undefined,
+  b: ShortcutChord | undefined,
+  apple = isAppleShortcutPlatform(),
+): boolean {
   if (!a || !b) return a === b;
+  const aModifiers = chordModifiers(a, apple),
+    bModifiers = chordModifiers(b, apple);
   return (
     a.key.toLowerCase() === b.key.toLowerCase() &&
-    Boolean(a.mod) === Boolean(b.mod) &&
+    aModifiers.ctrl === bModifiers.ctrl &&
+    aModifiers.meta === bModifiers.meta &&
     Boolean(a.shift) === Boolean(b.shift) &&
     Boolean(a.alt) === Boolean(b.alt)
   );
@@ -384,7 +399,14 @@ export function loadShortcutOverrides(storage: Pick<Storage, 'getItem'> = localS
   for (const [id, chord] of Object.entries(parsed as Record<string, unknown>)) {
     const def = SHORTCUTS_BY_ID.get(id);
     if (def?.editable && isValidChord(chord))
-      result[id] = { key: chord.key, mod: Boolean(chord.mod), shift: Boolean(chord.shift), alt: Boolean(chord.alt) };
+      result[id] = {
+        key: chord.key,
+        mod: Boolean(chord.mod),
+        shift: Boolean(chord.shift),
+        alt: Boolean(chord.alt),
+        ...(chord.ctrl ? { ctrl: true } : {}),
+        ...(chord.meta ? { meta: true } : {}),
+      };
   }
   return result;
 }
@@ -415,12 +437,11 @@ export function matchesChord(
   apple = isAppleShortcutPlatform(),
 ): boolean {
   if (!chord) return false;
-  const mod = apple ? event.metaKey : event.ctrlKey;
-  const otherMod = apple ? event.ctrlKey : event.metaKey;
+  const modifiers = chordModifiers(chord, apple);
   return (
     event.key.toLowerCase() === chord.key.toLowerCase() &&
-    mod === Boolean(chord.mod) &&
-    !otherMod &&
+    event.ctrlKey === modifiers.ctrl &&
+    event.metaKey === modifiers.meta &&
     event.shiftKey === Boolean(chord.shift) &&
     event.altKey === Boolean(chord.alt)
   );
@@ -440,8 +461,8 @@ const MODIFIER_KEYS = new Set(['Control', 'Meta', 'Shift', 'Alt', 'AltGraph']);
 
 /**
  * Capture a chord from a keydown while recording a new binding, or `undefined` if the event is a
- * lone modifier (keep waiting for the real key). The primary modifier is required to be Cmd/Ctrl
- * on the matching platform.
+ * lone modifier (keep waiting for the real key). Preserve the platform's primary command modifier
+ * as `mod` for existing bindings, and retain the other physical modifier explicitly.
  */
 export function chordFromEvent(
   event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>,
@@ -450,7 +471,14 @@ export function chordFromEvent(
   if (MODIFIER_KEYS.has(event.key)) return undefined;
   const mod = apple ? event.metaKey : event.ctrlKey;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-  return { key, mod, shift: event.shiftKey, alt: event.altKey };
+  return {
+    key,
+    mod,
+    shift: event.shiftKey,
+    alt: event.altKey,
+    ...(apple && event.ctrlKey ? { ctrl: true } : {}),
+    ...(!apple && event.metaKey ? { meta: true } : {}),
+  };
 }
 
 /** Another editable shortcut that already uses `chord` (a conflict), or `undefined`. */
@@ -458,9 +486,10 @@ export function findChordConflict(
   id: string,
   chord: ShortcutChord,
   overrides: Record<string, ShortcutChord>,
+  apple = isAppleShortcutPlatform(),
 ): ShortcutDef | undefined {
   return KEYBOARD_SHORTCUTS.find(
-    (other) => other.id !== id && other.editable && chordsEqual(resolveChord(other.id, overrides), chord),
+    (other) => other.id !== id && other.editable && chordsEqual(resolveChord(other.id, overrides), chord, apple),
   );
 }
 
@@ -468,7 +497,9 @@ export function findChordConflict(
 export function formatChord(chord: ShortcutChord | undefined, apple = isAppleShortcutPlatform()): string {
   if (!chord) return 'Unassigned';
   const parts: string[] = [];
-  if (chord.mod) parts.push(apple ? '⌘' : 'Ctrl');
+  const modifiers = chordModifiers(chord, apple);
+  if (modifiers.ctrl) parts.push(apple ? '⌃' : 'Ctrl');
+  if (modifiers.meta) parts.push(apple ? '⌘' : 'Meta');
   if (chord.alt) parts.push(apple ? '⌥' : 'Alt');
   if (chord.shift) parts.push(apple ? '⇧' : 'Shift');
   parts.push(formatKey(chord.key, apple));

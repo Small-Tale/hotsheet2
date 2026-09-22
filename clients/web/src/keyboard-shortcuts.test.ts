@@ -137,6 +137,15 @@ describe('keyboard-shortcuts registry', () => {
     expect(formatChord(undefined)).toBe('Unassigned');
   });
 
+  it('retains Control separately from Command when capturing on Apple (HS2-835BZD)', () => {
+    const event = key({ key: 'k', ctrlKey: true });
+    const chord = chordFromEvent(event, true);
+    expect(formatChord(chord, true)).toBe('⌃K');
+    expect(matchesChord(event, chord, true)).toBe(true);
+    expect(matchesChord(key({ key: 'k' }), chord, true)).toBe(false);
+    expect(matchesChord(key({ key: 'k', metaKey: true }), chord, true)).toBe(false);
+  });
+
   it('detects a conflict only among other editable shortcuts', () => {
     // Rebind undo onto open-search's default chord → conflict reported for each other's chord.
     const overrides: Record<string, ShortcutChord> = { undo: { key: 'k', mod: true } };
@@ -144,6 +153,53 @@ describe('keyboard-shortcuts registry', () => {
     expect(findChordConflict('open-search', { key: 'k', mod: true }, overrides)?.id).toBe('undo');
     // A unique chord conflicts with nothing.
     expect(findChordConflict('undo', { key: 'j', mod: true, alt: true }, overrides)).toBeUndefined();
+  });
+});
+
+describe('physical modifier capture matrix (HS2-835BZD)', () => {
+  for (const apple of [true, false]) {
+    it(`round-trips and exactly matches all modifier combinations on ${apple ? 'Apple' : 'non-Apple'}`, () => {
+      const storage = fakeStorage();
+      const eventFor = (mask: number) =>
+        key({
+          key: 'K',
+          ctrlKey: Boolean(mask & 1),
+          metaKey: Boolean(mask & 2),
+          shiftKey: Boolean(mask & 4),
+          altKey: Boolean(mask & 8),
+        });
+      for (let mask = 0; mask < 16; mask++) {
+        const event = eventFor(mask),
+          chord = chordFromEvent(event, apple)!;
+        saveShortcutOverrides({ 'open-search': chord }, storage);
+        const loaded = loadShortcutOverrides(storage);
+        expect(loaded['open-search']).toEqual(chord);
+        for (let candidate = 0; candidate < 16; candidate++) {
+          expect(
+            matchesShortcut('open-search', eventFor(candidate), loaded, apple),
+            `captured=${String(mask)} candidate=${String(candidate)}`,
+          ).toBe(candidate === mask);
+        }
+        expect(matchesChord(key({ ...event, key: 'j' }), chord, apple)).toBe(false);
+      }
+      for (const modifier of ['Control', 'Meta', 'Shift', 'Alt', 'AltGraph']) {
+        expect(chordFromEvent(key({ ...eventFor(15), key: modifier }), apple)).toBeUndefined();
+      }
+    });
+  }
+
+  it('compares effective modifiers for conflicts and avoids duplicate aliases in labels', () => {
+    const control = { key: 'k', ctrl: true },
+      command = { key: 'k', meta: true };
+    expect(findChordConflict('undo', control, {}, true)).toBeUndefined();
+    expect(findChordConflict('undo', control, {}, false)?.id).toBe('open-search');
+    expect(findChordConflict('undo', command, {}, true)?.id).toBe('open-search');
+    expect(findChordConflict('undo', command, {}, false)).toBeUndefined();
+    expect(formatChord({ key: 'k', mod: true, ctrl: true, meta: true, shift: true, alt: true }, true)).toBe('⌃⌘⌥⇧K');
+    expect(formatChord({ key: 'k', mod: true, ctrl: true, meta: true, shift: true, alt: true }, false)).toBe(
+      'Ctrl+Meta+Alt+Shift+K',
+    );
+    expect(chordsEqual(control, command, true)).toBe(false);
   });
 });
 
