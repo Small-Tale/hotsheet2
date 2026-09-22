@@ -4,9 +4,10 @@ import { basename } from 'node:path';
 import { expect, type Locator, test } from '@playwright/test';
 
 import type { ConversationMessage } from '../src/ai-conversation';
-import type { MediaAnnotation, TicketRow } from '../src/api';
+import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
+import { realTicketServer } from './real-ticket-server';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
@@ -15368,4 +15369,80 @@ test('opens a distinct terminal for each shell command even when a create is sti
   releaseFirst();
   // The second shell command must still open its own terminal (not be dropped by the in-flight create).
   await expect.poll(() => posted).toEqual(['npm run lint', 'npm test']);
+});
+
+test('a quoting feedback reply clears Needs review through the real server (HS2-AVXYCB)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Choose the feedback reply behavior',
+      category: 'task',
+      status: 'started',
+      up_next: true,
+    });
+    const initial = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: 'FEEDBACK NEEDED: Keep the current behavior or use the revised flow?',
+      note_kind: 'feedback_needed',
+    });
+    const requestNote = initial.notes.at(-1)!;
+    await mockProject(page);
+    // Only external project discovery/provider data are fixtures. Ticket reads, mutations,
+    // concurrency tokens, classification, and index projections use the actual Rust server.
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const row = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"]`);
+    await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
+    await row.click();
+    await page.getByRole('button', { name: 'Open ticket reader' }).click();
+    const reader = page.getByRole('dialog').filter({ has: page.locator('[data-component="ticket-inspector"]') }),
+      inspector = reader.locator('[data-component="ticket-inspector"]'),
+      note = reader.locator(`article[data-note-id="${requestNote.id}"]`);
+    await expect(inspector).toHaveAttribute('data-needs-review', 'true');
+    await note.scrollIntoViewIfNeeded();
+    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-before-wide.png' });
+    // The real inline composer quotes the original request when inserting an answer.
+    await note.getByRole('button', { name: 'Add response at a character position' }).click();
+    await note.getByRole('textbox', { name: /Response at character/ }).fill('Use the revised flow. This is my answer.');
+    await note.getByRole('button', { name: 'Respond' }).click();
+    await expect(inspector).toHaveAttribute('data-needs-review', 'false');
+    await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
+    const persisted = await server.request<FullTicket>(`/tickets/${created.id}`),
+      reply = persisted.notes.at(-1)!;
+    expect(persisted.feedback_needed).toBe(false);
+    expect(reply.kind).toBe('regular');
+    expect(reply.text).toContain('> FEEDBACK NEEDED');
+    expect(reply.text).toContain('Use the revised flow. This is my answer.');
+    const replyCard = reader.locator(`article[data-note-id="${reply.id}"]`);
+    await expect(replyCard).toContainText('Use the revised flow. This is my answer.');
+    await expect(replyCard.locator('.note-card__feedback-block')).toHaveCount(0);
+    await expect(note.locator('.note-card__feedback-block')).toHaveCount(0);
+    await replyCard.scrollIntoViewIfNeeded();
+    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-answered-wide.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(inspector).toHaveAttribute('data-needs-review', 'false');
+    await replyCard.scrollIntoViewIfNeeded();
+    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-answered-mobile.png' });
+    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
+    await page.reload();
+    await expect(row).toBeVisible();
+    await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  } finally {
+    await server.stop();
+  }
 });

@@ -361,3 +361,18 @@ everything else is inherited and automated.
 - Terminal-sizing arbiter (a transition-matrix target): [06-clients.md](06-clients.md) §6.7
 - Migrator conformance test: [07-migration.md](07-migration.md) §7.2.1
 - AI-tool plugin interface + its testability rule: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.10
+
+### Real ticket-server browser regression
+
+`npm run test:e2e` in `clients/web` builds the CLI and server before Playwright. Focused
+`npx playwright test` runs can reuse those binaries after `cargo build -p hotsheet-cli
+-p hotsheet-server --bins` at the repository root. `tests/real-ticket-server.ts` creates an
+isolated store, checkout registry, ephemeral loopback server, and process cleanup for
+browser flows that must prove real storage/classification/index behavior. Optional
+`HOTSHEET_TEST_CLI_BIN` and `HOTSHEET_TEST_SERVER_BIN` paths select frozen verification
+binaries when other worktrees share the build cache.
+
+HS2-AVXYCB exercises the actual reader's quoted inline answer against that server,
+checks the persisted ordinary note and cleared indexed/full-ticket review state, then
+reloads to confirm persistence. Provider discovery stays deterministic; ticket reads and
+writes cross the real HTTP and filesystem boundaries.
