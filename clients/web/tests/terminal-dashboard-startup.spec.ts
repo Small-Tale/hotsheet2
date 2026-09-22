@@ -207,7 +207,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
   await page.screenshot({ path: '/private/tmp/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const sidebar = page.locator('[data-component="terminal-operations-sidebar"]'),
+  const sidebar = page.locator('.terminal-operations-sidebar'),
     all = sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),
     summaries = sidebar.locator('[data-component="project-summary"]'),
     demoSummary = sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),

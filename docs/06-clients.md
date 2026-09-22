@@ -671,11 +671,12 @@ and identity-less legacy entries remain conservatively blocking.
   `wireTokenSearchFields.onEdit` callback in both the application and UX catalog rather
   than through a second competing delegated input listener (HS2-HJ585K).
 
-  Shared Kerf layout primitives own common shell geometry. Project, settings, and
-  notification sidebars use `Pane` for their header/content/footer structure; settings
-  and notification groups use `ListHeader` instead of local heading imitations; and the
-  terminal ticket rail uses `SunkenPanel` for its lowered content surface. Product CSS
-  is limited to placement and the token overrides those components deliberately expose.
+  Shared Kerf layout primitives own common shell geometry. Project, settings,
+  notification, and terminal-operations sidebars use `Pane` for their
+  header/content/footer structure; settings and notification groups use `ListHeader`
+  instead of local heading imitations; and the terminal ticket rail uses `SunkenPanel`
+  for its lowered content surface. Product CSS is limited to placement and the token
+  overrides those components deliberately expose.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries

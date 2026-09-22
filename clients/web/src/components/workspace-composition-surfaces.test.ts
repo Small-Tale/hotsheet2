@@ -39,7 +39,7 @@ describe('workspace composition surfaces', () => {
     expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo project statistics');
     expect(String(ProjectTerminalDrawerSurface({}))).toBe('');
     expect(String(TerminalOperationsSurface({ projects: [] }))).toContain(
-      'data-component="terminal-operations-sidebar"',
+      'class="kui-pane terminal-operations-sidebar"',
     );
   });
 

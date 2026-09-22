@@ -1,7 +1,9 @@
+import '@kerfjs/ui/layout.css';
 import './terminal-operations-sidebar.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Pane } from '@kerfjs/ui/pane';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { PanelLeftClose } from 'lucide';
@@ -31,43 +33,45 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
   const aggregate = projects.length > 1 ? aggregateTerminalProjectSummaries(projects) : undefined;
   const groups = aggregate ? [aggregate, ...projects] : projects;
   const chartMaximum = aggregate ? chartDomainMaximum(aggregate.trend) : undefined;
+  const header = (
+    <Toolbar
+      divider={false}
+      trailing={
+        <ToolbarControlGroup appearance="borderless" single>
+          <button
+            type="button"
+            data-action="toggle-project-sidebar"
+            aria-label="Hide operations sidebar"
+            title="Hide operations sidebar"
+          >
+            <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
+          </button>
+        </ToolbarControlGroup>
+      }
+    />
+  );
   return (
-    <aside
-      class="terminal-operations-sidebar"
-      data-component="terminal-operations-sidebar"
-      aria-label="Terminal operations sidebar"
+    <Pane
+      element="aside"
+      label="Terminal operations sidebar"
+      className="terminal-operations-sidebar"
+      header={header}
+      contentClassName="terminal-operations-sidebar__groups"
     >
-      <Toolbar
-        divider={false}
-        trailing={
-          <ToolbarControlGroup appearance="borderless" single>
-            <button
-              type="button"
-              data-action="toggle-project-sidebar"
-              aria-label="Hide operations sidebar"
-              title="Hide operations sidebar"
-            >
-              <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
-            </button>
-          </ToolbarControlGroup>
-        }
-      />
-      <div class="terminal-operations-sidebar__groups">
-        {groups.map((group) => (
-          <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
-            <ListHeader label={group.name} />
-            <ProjectSummary
-              completedToday={group.completedToday}
-              inProgress={group.inProgress}
-              trend={group.trend}
-              projectId={group.id}
-              chartTone={group.id === 'all' ? 'success' : 'brand'}
-              chartMaximum={chartMaximum}
-              backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
-            />
-          </section>
-        ))}
-      </div>
-    </aside>
+      {groups.map((group) => (
+        <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
+          <ListHeader label={group.name} />
+          <ProjectSummary
+            completedToday={group.completedToday}
+            inProgress={group.inProgress}
+            trend={group.trend}
+            projectId={group.id}
+            chartTone={group.id === 'all' ? 'success' : 'brand'}
+            chartMaximum={chartMaximum}
+            backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
+          />
+        </section>
+      ))}
+    </Pane>
   );
 }
