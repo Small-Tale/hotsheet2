@@ -204,7 +204,11 @@ and identity-less legacy entries remain conservatively blocking.
   the mobile toolbar (HS2-0SARDD): the redundant project name is dropped from the main toolbar (the
   project Select already carries it), both the project and view Selects are borderless and sized to
   their selected label rather than stretching, and while search is open the view-mode segmented
-  control is hidden so the search field gets the full toolbar row.
+  control is hidden so the search field gets the full toolbar row. The project combobox has the
+  stable accessible name `Project`, independent of selected project text and migration status;
+  Kerf owns forwarding that name to the actual Web Awesome shadow control without adding a
+  visible label or changing the compact geometry (HS2-Q6EM0B). The name survives project
+  changes and switching between desktop tabs and the mobile Select.
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,

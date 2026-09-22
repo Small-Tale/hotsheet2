@@ -293,12 +293,32 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-tab-kind="project"');
     expect(markup).toContain('class="project-tab-bar project-tab-bar--mobile"');
     expect(markup).toContain('name="mobile-project"');
+    // The shadow combobox uses Web Awesome's label contract, not host ARIA alone.
+    expect(markup).toMatch(/<wa-select\b[^>]*\slabel="Project"/);
     expect(markup).toContain('value="two"');
     expect(markup).toContain('<wa-option value="one"');
     expect(markup).toContain('<wa-option value="two"');
     // The dashboard mode switcher and Add-project action remain.
     expect(markup).toContain('aria-label="Workspace grid"');
     expect(markup).toContain('data-action="choose-project"');
+  });
+
+  it.each([
+    { label: 'Copying attachments', state: 'running' as const, percent: 37, text: '37%' },
+    { label: 'Waiting for backup', state: 'running' as const, text: 'Working' },
+    { label: 'Backup failed', state: 'failed' as const, text: 'Attention' },
+    { label: 'Backup complete', state: 'succeeded' as const, text: 'Backup' },
+  ])('keeps the mobile Project name independent of $label (HS2-Q6EM0B)', (operation) => {
+    const markup = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: [{ id: 'demo', name: 'Demo', location: 'local', selected: true, operation }],
+      }),
+    );
+    expect(markup).toMatch(/<wa-select\b[^>]*\slabel="Project"/);
+    expect(markup).toContain('class="project-tab-bar__selected-project">Demo');
+    expect(markup).toContain(`aria-label="${operation.label}"`);
+    expect(markup).toContain(`<small>${operation.text}</small>`);
   });
 
   it('shares context-menu actions across project and terminal tabs with Option reversing direction', () => {

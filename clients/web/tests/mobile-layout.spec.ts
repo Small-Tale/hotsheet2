@@ -287,6 +287,9 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(scrim).toBeVisible();
   await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  // Ordinary Select content retains its name and selected text alongside the custom project control.
+  await expect(inspector.getByRole('combobox', { name: 'Category', exact: true })).toHaveValue('Bug');
+  await expect(inspector.locator('wa-select[name="inspector-category"]')).toHaveJSProperty('value', 'bug');
 
   // Tap-away on the scrim returns to the list; the selection persists so tapping reopens it.
   await scrim.click({ position: { x: 10, y: 400 } });
@@ -296,7 +299,9 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
 });
 
-test('mobile replaces the project tabs and view title with select controls (HS2-4C5RM7)', async ({ page }) => {
+test('mobile replaces the project tabs and view title with select controls (HS2-4C5RM7)', async ({
+  page,
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -364,6 +369,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
 
@@ -371,6 +377,9 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   const projectSelect = page.locator('wa-select[name="mobile-project"]');
   await expect(projectSelect).toBeVisible();
   await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
+  const projectCombobox = page.getByRole('combobox', { name: 'Project', exact: true });
+  await expect(projectCombobox).toHaveValue('demo');
+  await expect(projectCombobox).toHaveAccessibleName('Project');
   await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(0);
   await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
 
@@ -391,11 +400,28 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   // Adding a project opens and activates it; the project Select then switches the active project.
   await page.locator('.project-tab-bar--mobile').getByRole('button', { name: 'Add project' }).click();
   await expect(projectSelect).toHaveAttribute('value', 'other-checkout');
+  await expect(projectCombobox).toHaveValue('other');
+  await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('other');
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
   await projectSelect.click();
   await projectSelect.locator('wa-option[value="demo-checkout"]').click();
   await expect(projectSelect).toHaveJSProperty('value', 'demo-checkout');
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+  await expect(projectCombobox).toHaveAccessibleName('Project');
+  await expect(projectCombobox).toHaveValue('demo');
+  await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('demo');
+  const projectGeometry = await projectSelect.evaluate((element) => ({
+    host: element.getBoundingClientRect().height,
+    control: element.shadowRoot!.querySelector('[part~="combobox"]')!.getBoundingClientRect().height,
+  }));
+  expect(Math.abs(projectGeometry.host - projectGeometry.control)).toBeLessThan(1);
+  await page.screenshot({ path: testInfo.outputPath('q6-beta28-mobile-project-accessible-name.png') });
+  // The same stable name survives destruction/recreation of the responsive bar.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(projectCombobox).toHaveAccessibleName('Project');
+  await expect(projectSelect).toHaveJSProperty('value', 'demo-checkout');
 });
 
 test('mobile toolbar drops the project name, uses borderless content-fit selects, and hides the segmented control while searching (HS2-0SARDD)', async ({

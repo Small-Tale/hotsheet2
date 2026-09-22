@@ -65,6 +65,13 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(
       String(TicketPrioritySelect({ name: 'priority', value: 'urgent', ariaLabel: 'Compact priority' })),
     ).toContain('aria-label="Compact priority"');
+    // Ordinary Select content must name Web Awesome's actual shadow combobox too (HS2-Q6EM0B).
+    expect(String(TicketCategorySelect({ name: 'category', value: 'bug', ariaLabel: 'Compact category' }))).toMatch(
+      /<wa-select\b[^>]*\slabel="Compact category"/,
+    );
+    expect(String(TicketPrioritySelect({ name: 'priority', value: 'urgent', ariaLabel: 'Compact priority' }))).toMatch(
+      /<wa-select\b[^>]*\slabel="Compact priority"/,
+    );
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
     expect(status).toContain('kui-select kui-select--custom-selected kui-select--label-hidden ticket-status-menu');

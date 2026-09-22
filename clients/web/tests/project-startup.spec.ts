@@ -251,7 +251,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
-  await expect(page.locator('.project-tab-bar [role="combobox"]')).toHaveValue('beta');
+  await expect(page.getByRole('combobox', { name: 'Project', exact: true })).toHaveValue('beta');
   await page.locator('[data-component="app-shell"]').evaluate(async (node) => {
     await Promise.all(
       node
