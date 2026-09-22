@@ -445,7 +445,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'ai-conversation',
         'AIConversation',
-        'Multi-turn streamed AI conversation with inline permissions and interruption.',
+        'Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.',
         'feature-floor',
         true,
         ['permission-request', 'drive-control'],

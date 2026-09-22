@@ -57,8 +57,10 @@ import {
   AIConversationDemo,
   aiConversationDemoOpen,
   aiConversationDraft,
+  aiConversationPresentation,
   aiConversationProvider,
   aiConversationProviderLabel,
+  aiConversationSaveCount,
   aiConversationScenario,
   AIConversationSettings,
 } from './ai-conversation-demo';
@@ -1629,6 +1631,13 @@ const openAIConversationDemo = () => {
     root.querySelector<HTMLElement & { show?(): void }>('[data-component="ai-conversation"]')?.show?.();
   });
 };
+delegate(root, 'change', '[data-settings="ai-conversation"] [name="presentation"]', (_event, target) => {
+  aiConversationPresentation.value = (target as FormControl).value as typeof aiConversationPresentation.value;
+  openAIConversationDemo();
+});
+delegate(root, 'click', '[data-action="save-conversation"]', () => {
+  aiConversationSaveCount.value++;
+});
 delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
   aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
   openAIConversationDemo();

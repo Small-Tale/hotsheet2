@@ -895,6 +895,13 @@ and identity-less legacy entries remain conservatively blocking.
   reader's scroll position, so a range can be picked while scrolled back through history. Sending a
   message is an explicit continuation, so it returns the transcript to its latest edge and pins it.
 
+  Dialog and embedded conversation headers use native Save/Stop buttons in Kerf
+  `ToolbarControlGroup`; the group owns button geometry and keyboard focus treatment.
+  Save is disabled for empty or active transcripts, and Stop appears only for an
+  interruptible active response. Both controls preserve their production actions and
+  keyboard activation. At narrow widths the header omits its repeated usage summary so
+  tool identity and actions fit; per-message usage remains available (HS2-WXVAF3).
+
   Completed transcripts can be saved from either conversation presentation. Messages remain
   directly selectable in the live transcript: one pick anchors a range, a second includes every
   message between the boundaries, and the selected range can be copied to the system clipboard.

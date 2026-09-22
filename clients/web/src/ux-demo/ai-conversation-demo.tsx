@@ -8,6 +8,8 @@ export type AIConversationScenario =
   'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted';
 export const aiConversationScenario = signal<AIConversationScenario>('streaming');
 export const aiConversationDemoOpen = signal(true);
+export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
+export const aiConversationSaveCount = signal(0);
 export const aiConversationDraft = signal('Can you also explain the compatibility boundary?');
 export const aiConversationProvider = signal('codex');
 export const AI_CONVERSATION_PROVIDERS = [
@@ -129,11 +131,23 @@ function scenarioState() {
 export function AIConversationDemo() {
   const state = scenarioState();
   return (
-    <section aria-label="AIConversation demo">
-      <wa-button appearance="accent" data-action="open-ai-conversation-demo">
-        Open conversation
-      </wa-button>
+    <section
+      aria-label="AIConversation demo"
+      class="ai-conversation-demo"
+      data-presentation={aiConversationPresentation.value}
+    >
+      {aiConversationPresentation.value === 'dialog' && (
+        <wa-button appearance="accent" data-action="open-ai-conversation-demo">
+          Open conversation
+        </wa-button>
+      )}
+      <output role="status">
+        {aiConversationSaveCount.value
+          ? `Prepared ${aiConversationSaveCount.value} conversation export${aiConversationSaveCount.value === 1 ? '' : 's'}.`
+          : ''}
+      </output>
       <AIConversation
+        presentation={aiConversationPresentation.value}
         open={aiConversationDemoOpen.value}
         tool={aiConversationProviderLabel()}
         sessionId="019-demo-session"
@@ -167,6 +181,10 @@ export function AIConversationDemo() {
 export function AIConversationSettings() {
   return (
     <form class="settings-form" data-settings="ai-conversation">
+      <wa-select name="presentation" label="Presentation" value={aiConversationPresentation.value}>
+        <wa-option value="dialog">Dialog</wa-option>
+        <wa-option value="embedded">Embedded</wa-option>
+      </wa-select>
       <wa-select name="scenario" label="Public state" value={aiConversationScenario.value}>
         <wa-option value="empty">Empty</wa-option>
         <wa-option value="streaming">Streaming</wa-option>
@@ -176,9 +194,11 @@ export function AIConversationSettings() {
         <wa-option value="failed">Failed</wa-option>
         <wa-option value="interrupted">Interrupted</wa-option>
       </wa-select>
-      <wa-button type="button" data-action="open-ai-conversation-demo">
-        Open conversation
-      </wa-button>
+      {aiConversationPresentation.value === 'dialog' && (
+        <wa-button type="button" data-action="open-ai-conversation-demo">
+          Open conversation
+        </wa-button>
+      )}
     </form>
   );
 }

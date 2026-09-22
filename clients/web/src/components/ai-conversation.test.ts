@@ -23,6 +23,37 @@ const permission: PermissionItem = {
 const css = readFileSync(new URL('./ai-conversation.css', import.meta.url), 'utf8');
 
 describe('AIConversation', () => {
+  it.each(['dialog', 'embedded'] as const)(
+    'keeps native toolbar actions and eligibility in the %s presentation',
+    (presentation) => {
+      const render = (busy: boolean, interruptible: boolean, populated: boolean, preview = false) =>
+        String(
+          AIConversation({
+            open: true,
+            presentation,
+            tool: 'Codex',
+            draft: '',
+            busy,
+            interruptible,
+            messages: populated ? [{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }] : [],
+            readOnly: preview,
+            readOnlyContext: 'preview',
+          }),
+        );
+      const save = (markup: string) => markup.match(/<button[^>]*data-action="save-conversation"[^>]*>/)?.[0];
+      const ready = render(false, false, true);
+      expect(save(ready)).toContain('type="button"');
+      expect(save(ready)).not.toContain('disabled');
+      expect(ready).toContain('data-component="toolbar-control-group"');
+      expect(save(render(false, false, false))).toContain('disabled');
+      const busy = render(true, true, true);
+      expect(save(busy)).toContain('disabled');
+      expect(busy).toMatch(/<button[^>]*type="button"[^>]*data-action="stop-conversation"/);
+      expect(render(true, false, true)).not.toContain('data-action="stop-conversation"');
+      expect(ready).not.toContain('data-action="stop-conversation"');
+      expect(render(false, false, true, true)).not.toContain('data-action="save-conversation"');
+    },
+  );
   it('renders ordered Markdown turns, progress, and an inline permission request', () => {
     const markup = String(
       AIConversation({

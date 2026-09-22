@@ -223,18 +223,29 @@ export function AIConversation({
             ? 'Ready for your first message'
             : `${messages.length} message${messages.length === 1 ? '' : 's'}`;
   const saveAction = previewOnly ? null : (
-    <wa-button
+    <button
+      type="button"
       class="ai-conversation__header-action"
-      appearance="plain"
-      size="small"
       data-action="save-conversation"
       disabled={busy || messages.length === 0}
       aria-label="Save conversation"
       title={busy ? 'Wait for the active response before saving' : 'Save conversation'}
     >
       <LucideIcon icon={Download} name="download" />
-    </wa-button>
+    </button>
   );
+  const stopAction =
+    busy && interruptible ? (
+      <button
+        type="button"
+        class="ai-conversation__header-action"
+        data-action="stop-conversation"
+        aria-label={`Stop ${tool}`}
+        title={`Stop ${tool}`}
+      >
+        <LucideIcon icon={Square} name="square" />
+      </button>
+    ) : null;
   const actions = (
     <>
       {totalUsage && (
@@ -243,18 +254,7 @@ export function AIConversation({
         </span>
       )}
       {saveAction}
-      {busy && interruptible && (
-        <wa-button
-          class="ai-conversation__header-action"
-          appearance="plain"
-          size="small"
-          data-action="stop-conversation"
-          aria-label={`Stop ${tool}`}
-          title={`Stop ${tool}`}
-        >
-          <LucideIcon icon={Square} name="square" />
-        </wa-button>
-      )}
+      {stopAction}
     </>
   );
   const inlinePermissions = presentation === 'dialog' && foreground ? [] : permissions,
@@ -460,21 +460,18 @@ export function AIConversation({
             <LucideIcon icon={Bot} name="bot" />
             <strong>{tool} conversation</strong>
           </span>
-          <span class="ai-conversation__embedded-actions">
-            {saveAction}
-            {busy && interruptible && (
-              <wa-button
-                class="ai-conversation__header-action"
-                appearance="plain"
-                size="small"
-                data-action="stop-conversation"
-                aria-label={`Stop ${tool}`}
-                title={`Stop ${tool}`}
-              >
-                <LucideIcon icon={Square} name="square" />
-              </wa-button>
-            )}
-          </span>
+          {(saveAction || stopAction) && (
+            <ToolbarControlGroup
+              label={`${tool} conversation actions`}
+              appearance="borderless"
+              className="ai-conversation__embedded-actions"
+            >
+              <>
+                {saveAction}
+                {stopAction}
+              </>
+            </ToolbarControlGroup>
+          )}
         </header>
         {savedNotice}
         {sessionControls}

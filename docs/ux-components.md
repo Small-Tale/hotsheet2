@@ -266,10 +266,13 @@ does not introduce polling or another network request.
   conversation without running `$hotsheet`; Drive uses a separate stable connection and explicitly
   starts that workflow in the drawer. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
-  - header: tool identity, ready/working/message-count context instead of an opaque session id,
-    conversation usage, close action, and a Stop
-    action only while the active connection advertises `interrupt`; absence hides Stop
-    rather than rendering an inert control
+  - header: tool identity, ready/working/message-count context, conversation usage, and
+    native Save/Stop buttons inside Kerf `ToolbarControlGroup` in both dialog and embedded
+    presentations. Save is disabled for empty or active transcripts; Stop appears only
+    while the active connection advertises `interrupt`. The group owns button geometry
+    and keyboard focus treatment. The dialog uses light-dismiss/Escape without a redundant
+    close action. The demo exposes both presentations and exercises save/interruption
+    through its deterministic state (HS2-WXVAF3).
   - session controls: visibly labeled model and effort choices appear only for plugin-declared live-change
     capabilities and apply to subsequent turns; popup hide events stay scoped to
     the nested select and never dismiss the conversation surface; selecting a model revalidates effort and

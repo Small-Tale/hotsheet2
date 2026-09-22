@@ -1092,9 +1092,9 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Multi-turn streamed AI conversation with inline permissions and interruption.",
+      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
       "useWhen": [
-        "Hot Sheet needs multi-turn streamed AI conversation with inline permissions and interruption."
+        "Hot Sheet needs dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific AIConversation behavior."

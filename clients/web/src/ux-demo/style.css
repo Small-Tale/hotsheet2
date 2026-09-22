@@ -703,3 +703,17 @@ body[data-resizing-project-sidebar='true'] {
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);
 }
+
+.ai-conversation-demo[data-presentation='embedded'] {
+  display: flex;
+  width: min(100%, remify(768px));
+  height: min(remify(608px), calc(100vh - remify(160px)));
+  min-height: remify(320px);
+  flex-direction: column;
+}
+.ai-conversation-demo[data-presentation='embedded'] > .ai-conversation {
+  flex: 1;
+}
+.ai-conversation-demo > output:empty {
+  display: none;
+}

@@ -5101,3 +5101,66 @@ test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)',
   await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/claude/hs2-z0cthn-command-run-dialog.png', fullPage: true });
 });
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`uses native AI toolbar actions in dialog and embedded views in ${theme} (HS2-WXVAF3)`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript((value) => {
+      localStorage.setItem('hotsheet.ux-demo.theme', value);
+    }, theme);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/ux-demo?component=ai-conversation&dev-review=false');
+    const host = page.locator('[data-component="ai-conversation"]'),
+      save = host.getByRole('button', { name: 'Save conversation' }),
+      stop = host.getByRole('button', { name: 'Stop Codex' });
+    await expect(host.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await expect(save).toHaveJSProperty('tagName', 'BUTTON');
+    await expect(save).toBeDisabled();
+    await expect(stop).toHaveJSProperty('tagName', 'BUTTON');
+    await stop.focus();
+    await expect(stop).toBeFocused();
+    await expect(stop).toHaveCSS('outline-style', 'solid');
+    await host.getByRole('dialog').screenshot({ path: `/private/tmp/hs2-wxvaf3-dialog-${theme}-wide.png` });
+    await page.setViewportSize({ width: 390, height: 850 });
+    await expect(host.locator('.ai-conversation__header-usage')).toBeHidden();
+    await host.getByRole('dialog').screenshot({ path: `/private/tmp/hs2-wxvaf3-dialog-${theme}-narrow.png` });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await stop.press('Space');
+    await expect(stop).toHaveCount(0);
+    await expect(host).toContainText('Stopped before the suite completed.');
+    await expect(save).toBeEnabled();
+    await save.focus();
+    await save.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 1 conversation export.');
+    await page.locator('[data-action="toggle-settings"]').click();
+    const settings = page.locator('[data-settings="ai-conversation"]');
+    await settings.locator('[name="presentation"]').evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'embedded';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(host).toHaveAttribute('data-presentation', 'embedded');
+    await settings.locator('[name="scenario"]').evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'streaming';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await host.screenshot({ path: `/private/tmp/hs2-wxvaf3-embedded-${theme}-wide.png` });
+    await page.setViewportSize({ width: 390, height: 850 });
+    await expect(save).toBeDisabled();
+    await expect(stop).toBeVisible();
+    await expect(stop).toHaveJSProperty('tagName', 'BUTTON');
+    await expect
+      .poll(async () => {
+        const box = await stop.boundingBox();
+        return box ? box.x >= 0 && box.x + box.width <= 390 : false;
+      })
+      .toBe(true);
+    await host.screenshot({ path: `/private/tmp/hs2-wxvaf3-embedded-${theme}-narrow.png` });
+    await stop.click();
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 2 conversation exports.');
+  });
+}

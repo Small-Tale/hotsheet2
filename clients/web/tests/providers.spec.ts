@@ -3527,7 +3527,11 @@ test('selects and copies chat messages before saving that range without choosing
     .toContain('The referenced proof is ready.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain('Export the referenced proof.');
   await conversation.screenshot({ path: '/private/tmp/hs2-eqhary-selected-chat-wide.png' });
-  await conversation.getByRole('button', { name: 'Save conversation' }).click();
+  const saveConversation = conversation.getByRole('button', { name: 'Save conversation' });
+  await expect(saveConversation).toHaveJSProperty('tagName', 'BUTTON');
+  await saveConversation.focus();
+  await expect(saveConversation).toBeFocused();
+  await saveConversation.press('Enter');
   const dialog = page.locator('[data-component="conversation-export-dialog"]'),
     dialogPanel = dialog.getByRole('dialog');
   await expect(dialog).toHaveJSProperty('open', true);
@@ -8906,6 +8910,12 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(
     conversationHost.locator('.ai-conversation__foreground [data-component="permission-request-popup"]'),
   ).toBeVisible();
+  await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toHaveJSProperty(
+    'tagName',
+    'BUTTON',
+  );
+  await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toBeDisabled();
+  await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveJSProperty('tagName', 'BUTTON');
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
   page.once('dialog', (nativeDialog) => nativeDialog.accept('Keep the concise summaries.'));
   await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
