@@ -254,7 +254,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   now part of the normal suite. **Pending (HS2-FPXSD0):** raise measured coverage
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
-- The `check` job also validates the feature double-coverage matrix. Repository guidance
+- The `check` job also validates the feature double-coverage matrix. Its validator accepts
+  formatter-padded Markdown cells, ignores table separators, and checks every feature row
+  and evidence reference, including rejecting rows outside the matrix markers. Repository guidance
   requires the matrix to change with feature/requirement status or test-layer changes,
   making missing unit/E2E evidence visible even when line coverage remains green.
 - **Manual test plan** (`docs/manual-test-plan.md`, created with the first code):

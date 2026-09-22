@@ -8,13 +8,13 @@ export function validateMatrix(root, text) {
   const match = text.match(/<!-- coverage-matrix:begin -->([\s\S]*?)<!-- coverage-matrix:end -->/);
   const body = match?.[1];
   if (!body) return { count: 0, failures: ["coverage matrix markers are missing"] };
-  const rows = body.split("\n").filter((line) => /^\| [a-z0-9-]+ \|/.test(line));
+  const rows = body.split("\n").filter((line) => /^\|\s*[a-z0-9][a-z0-9-]*\s*\|/.test(line));
   if (!rows.length) return { count: 0, failures: ["coverage matrix has no feature rows"] };
   const ids = new Set();
   const failures = [];
   const outsideRows = `${text.slice(0, match.index)}${text.slice(match.index + match[0].length)}`
     .split("\n")
-    .filter((line) => /^\| [a-z0-9-]+ \|/.test(line));
+    .filter((line) => /^\|\s*[a-z0-9][a-z0-9-]*\s*\|/.test(line));
   for (const row of outsideRows) {
     const id = row.split("|", 3)[1].trim();
     failures.push(`${id}: feature row is outside coverage matrix markers`);

@@ -62,3 +62,16 @@ test("rejects feature rows after the coverage matrix end marker", () => {
   const result = validateMatrix(root, matrix);
   assert.ok(result.failures.includes("hidden-feature: feature row is outside coverage matrix markers"));
 });
+
+
+test("validates padded feature rows and ignores formatted table separators", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = fixture()
+    .replace("|---|---|---|---|---|---|---|", "| --------- | --- | --- | --- | --- | --- | --- |")
+    .replace("| feature-a |", "| feature-a             |");
+  assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
+  assert.ok(validateMatrix(root, matrix.replace("req.md", "missing.md")).failures.some((failure) => failure.includes("missing requirement missing.md")));
+  const outside = `${matrix}\n| outside-feature          | req.md | Hidden | unit.rs | e2e.rs | — | double-covered |`;
+  assert.ok(validateMatrix(root, outside).failures.includes("outside-feature: feature row is outside coverage matrix markers"));
+});
