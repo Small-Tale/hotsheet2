@@ -292,6 +292,12 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Export interchange:** `hotsheet-export.json` (`exportVersion`, `project`,
   `tickets[]`) — [07](07-migration.md) §7.2.1; produced by the migrator, consumed by
   `hotsheet-cli import` (`import.rs::ExportFile`).
+- **Pending HS1 attachment imports:** `hotsheet-hs1-import-pending/<ticket-ulid>.json`
+  in the destination store — version 1 contains `attachments` (the original export
+  descriptors) and `completed` (verified attachment ULIDs). `import.rs::PendingImport`
+  atomically replaces this checkpoint before ticket publication and after each copy;
+  retry preserves current user edits and completed deletions. Successful verification
+  removes it and the final import commit includes the removal. See [07](07-migration.md).
 
 ## Build / test
 

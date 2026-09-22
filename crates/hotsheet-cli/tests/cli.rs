@@ -647,6 +647,123 @@ fn import_normalizes_close_state_and_retains_the_hs1_number() {
 }
 
 #[test]
+fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery() {
+    let root = tempfile::tempdir().unwrap();
+    let store_path = root.path().join("store");
+    let export = root.path().join("hotsheet-export.json");
+    let run = || {
+        let mut command = hs(&store_path);
+        command
+            .env("GIT_AUTHOR_NAME", "Hot Sheet test")
+            .env("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Hot Sheet test")
+            .env("GIT_COMMITTER_EMAIL", "hotsheet@example.invalid");
+        command
+    };
+    std::fs::write(
+        &export,
+        r#"{
+      "exportVersion": 1,
+      "project": {"name":"Retry demo","ticketPrefix":"HS"},
+      "tickets": [{"ticket_number":"HS-1","title":"Original title",
+        "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
+        "attachments":[
+          {"original_filename":"first.png","stored_path":"first.png"},
+          {"original_filename":"second.png","stored_path":"second.png"}
+        ]}]
+    }"#,
+    )
+    .unwrap();
+    std::fs::write(root.path().join("first.png"), b"FIRST").unwrap();
+    run()
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("reading staged attachment"));
+    let store = hotsheet_ticketing::FsStore::open(&store_path).unwrap();
+    let ticket = store.list_tickets().unwrap().remove(0);
+    let checkpoint = store_path
+        .join("hotsheet-hs1-import-pending")
+        .join(format!("{}.json", ticket.id));
+    assert!(checkpoint.is_file());
+    assert_eq!(ticket.attachments.len(), 1);
+    run()
+        .args([
+            "edit",
+            &ticket.slug,
+            "--title",
+            "User title",
+            "--note",
+            "Keep this note",
+        ])
+        .assert()
+        .success();
+    let edited = store.read_ticket(&ticket.id).unwrap();
+    // Completed files no longer need the staging source on a retry.
+    std::fs::remove_file(root.path().join("first.png")).unwrap();
+    run()
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .failure();
+    assert!(checkpoint.is_file());
+    std::fs::write(root.path().join("second.png"), b"SECOND").unwrap();
+    run()
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Imported 0 ticket(s) (1 attachment file(s)), skipped 1 already present",
+        ));
+    let repaired = store.read_ticket(&ticket.id).unwrap();
+    assert_eq!(repaired.title, edited.title);
+    assert_eq!(repaired.notes, edited.notes);
+    assert_eq!(repaired.updated_at, edited.updated_at);
+    assert_eq!(repaired.attachments.len(), 2);
+    for (name, bytes) in [
+        ("first.png", b"FIRST".as_slice()),
+        ("second.png", b"SECOND".as_slice()),
+    ] {
+        let attachment = repaired
+            .attachments
+            .iter()
+            .find(|att| att.filename == name)
+            .unwrap();
+        assert_eq!(
+            store.read_attachment(&ticket.id, &attachment.id).unwrap().1,
+            bytes
+        );
+    }
+    assert!(!checkpoint.exists());
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&store_path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    assert!(git(&["status", "--porcelain"]).is_empty());
+    let repaired_head = git(&["rev-parse", "HEAD"]);
+    run()
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Imported 0 ticket(s) (0 attachment file(s)), skipped 1 already present",
+        ))
+        .stderr(predicate::str::contains("warning:").not());
+    assert_eq!(git(&["rev-parse", "HEAD"]), repaired_head);
+    assert!(git(&["status", "--porcelain"]).is_empty());
+    assert_eq!(store.list_tickets().unwrap().len(), 1);
+}
+
+#[test]
 fn checkout_register_list_and_resolve_are_store_independent() {
     let checkout = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();

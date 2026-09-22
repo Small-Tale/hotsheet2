@@ -226,12 +226,12 @@ pub fn run_import(store_path: &Path, export_file: &Path, prefix: &str) -> Result
 
     let base_dir = export_file.parent().unwrap_or_else(|| Path::new("."));
     let summary = import(&store, &export, base_dir)?;
-    if summary.written > 0 {
-        git_commit_all(
-            store_path,
-            &format!("Import {} tickets from Hot Sheet 1", summary.written),
-        );
-    }
+    // A retry may only repair attachments or remove a verified copy checkpoint.
+    // The helper is a no-op when a completed re-import has no staged changes.
+    git_commit_all(
+        store_path,
+        &format!("Import {} tickets from Hot Sheet 1", summary.written),
+    );
     Ok(summary)
 }
 

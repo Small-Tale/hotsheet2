@@ -163,7 +163,24 @@ For each ticket:
   (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
   close outcome and `archive`/soft-delete to `obsolete`, carrying the best available
   close timestamp and clearing `up_next` for every inactive status ([02](02-ticket-storage.md) §2.6a).
-- Write the file into the target store; copy attachments to `attachments/<id>/`.
+- Before writing a ticket with attachments, atomically record its expected attachment
+  list in `hotsheet-hs1-import-pending/<ticket-ulid>.json` in the destination store.
+  Write the ticket, copy attachments to `attachments/<id>/`, and checkpoint each
+  verified attachment identity. A failed read or write leaves this checkpoint intact.
+  Retrying the same export repairs unfinished copies while retaining current ticket
+  fields, notes, timestamps, attachment names, annotations, and provenance. Readable
+  destination payloads are retained without requiring their staged source files;
+  already-verified attachments deliberately removed between attempts stay removed.
+  An export omitting a pending ticket, a changed attachment list, an unsupported
+  checkpoint version, or a ticket file disappearing after verified copies fails
+  explicitly and retains the checkpoint.
+  Remove the checkpoint only after the remaining destination payloads are verified,
+  and commit the recovery even when it writes no new tickets (HS2-9ZW7B8).
+- A completed ticket without a pending-copy checkpoint is skipped on reimport, so
+  later user edits and deletions remain authoritative. This also conservatively skips
+  partial imports made by older versions that never wrote checkpoints: the importer
+  cannot distinguish their missing copies from intentional deletions. Explicit legacy
+  diagnostics and selected recovery are tracked separately in HS2-94EB35.
 - Rewrite `blocked_by` old-number refs to new ULIDs (**two-pass**: assign all IDs
   first, then resolve edges — including `duplicate_of` if present).
 - Translate every runnable HS1 custom-command leaf into a native HS2 command kind in

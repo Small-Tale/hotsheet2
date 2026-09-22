@@ -5,18 +5,20 @@
 //! Idempotent without retaining HS1 fields: source identity deterministically mints
 //! each destination ULID, so a repeat import recognizes the same ticket by its HS2 id.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use hotsheet_model::{
-    CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
+    AttachmentMetadata, CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid,
+    derive_slug,
 };
 use hotsheet_ticketing::{
-    FsStore, Scope, Settings,
+    FsStore, Scope, Settings, StoreError,
     commands::{CommandDefinition, CommandKind},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// The export-file `exportVersion` this importer understands (`docs/07` §7.2.1).
@@ -121,7 +123,7 @@ pub struct ExportNote {
 
 /// An attachment as exported: its display filename + the staged file path (relative
 /// to the export JSON's directory, written by the migrator's staging pass).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ExportAttachment {
     #[serde(default)]
     pub id: Option<String>,
@@ -129,6 +131,85 @@ pub struct ExportAttachment {
     pub stored_path: String,
     #[serde(default)]
     pub created_at: Option<String>,
+}
+
+const PENDING_IMPORT_DIRECTORY: &str = "hotsheet-hs1-import-pending";
+
+/// Written before the ticket so a failed attachment copy can be resumed without
+/// rebuilding user-edited ticket fields. Completed identities also distinguish a
+/// deliberate later deletion from an attachment that has never been copied.
+#[derive(Deserialize, Serialize)]
+struct PendingImport {
+    version: u32,
+    attachments: Vec<ExportAttachment>,
+    completed: BTreeSet<Ulid>,
+}
+
+impl PendingImport {
+    fn require_pending_tickets(store: &FsStore, ids: &[Ulid]) -> Result<()> {
+        let entries = match std::fs::read_dir(store.root().join(PENDING_IMPORT_DIRECTORY)) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let id = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .and_then(|value| Ulid::from_string(value).ok())
+                .with_context(|| format!("invalid HS1 import checkpoint {}", path.display()))?;
+            if !ids.contains(&id) {
+                bail!("HS1 export omits pending ticket {id}; retry with the original export");
+            }
+        }
+        Ok(())
+    }
+
+    fn read(store: &FsStore, id: &Ulid) -> Result<Option<Self>> {
+        let path = store
+            .root()
+            .join(PENDING_IMPORT_DIRECTORY)
+            .join(format!("{id}.json"));
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
+        };
+        let pending: Self = serde_json::from_slice(&bytes)
+            .with_context(|| format!("reading import checkpoint {}", path.display()))?;
+        if pending.version != 1 {
+            bail!(
+                "unsupported HS1 import checkpoint version {} for {id}",
+                pending.version
+            );
+        }
+        Ok(Some(pending))
+    }
+
+    fn write(&self, store: &FsStore, id: &Ulid) -> Result<()> {
+        let directory = store.root().join(PENDING_IMPORT_DIRECTORY);
+        std::fs::create_dir_all(&directory)?;
+        let mut staged = tempfile::NamedTempFile::new_in(&directory)?;
+        serde_json::to_writer_pretty(&mut staged, self)?;
+        staged.write_all(b"\n")?;
+        staged.as_file().sync_all()?;
+        staged.persist(directory.join(format!("{id}.json")))?;
+        Ok(())
+    }
+
+    fn remove(store: &FsStore, id: &Ulid) -> Result<()> {
+        std::fs::remove_file(
+            store
+                .root()
+                .join(PENDING_IMPORT_DIRECTORY)
+                .join(format!("{id}.json")),
+        )?;
+        Ok(())
+    }
 }
 
 /// Result of an import run.
@@ -158,6 +239,7 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
         .enumerate()
         .map(|(i, t)| import_id(&export.project, t, i))
         .collect();
+    PendingImport::require_pending_tickets(store, &ids)?;
     let id_by_number: HashMap<&str, Ulid> = export
         .tickets
         .iter()
@@ -168,13 +250,41 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
     // Pass 2 — build + write.
     let mut summary = ImportSummary::default();
     for (src, id) in export.tickets.iter().zip(&ids) {
+        let pending = PendingImport::read(store, id)?;
+        if let Some(pending) = &pending
+            && pending.attachments != src.attachments
+        {
+            bail!(
+                "HS1 attachment export changed for pending ticket {id}; retry with the original attachment list"
+            );
+        }
         if already.contains(id) {
             summary.skipped += 1;
-            continue;
+            if pending.is_none() {
+                continue;
+            }
         }
-        store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
-        summary.written += 1;
-        summary.attachments += copy_attachments(store, base_dir, id, &src.attachments)?;
+        let mut pending = pending.unwrap_or_else(|| PendingImport {
+            version: 1,
+            attachments: src.attachments.clone(),
+            completed: BTreeSet::new(),
+        });
+        if !already.contains(id) && !pending.completed.is_empty() {
+            bail!(
+                "pending HS1 ticket {id} disappeared after attachment copies; restore the ticket before retrying"
+            );
+        }
+        if !src.attachments.is_empty() {
+            pending.write(store, id)?;
+        }
+        if !already.contains(id) {
+            store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
+            summary.written += 1;
+        }
+        summary.attachments += copy_attachments(store, base_dir, id, &mut pending)?;
+        if !src.attachments.is_empty() {
+            PendingImport::remove(store, id)?;
+        }
     }
     import_settings(store, export)?;
     Ok(summary)
@@ -523,31 +633,94 @@ fn copy_attachments(
     store: &FsStore,
     base_dir: &Path,
     id: &Ulid,
-    attachments: &[ExportAttachment],
+    pending: &mut PendingImport,
 ) -> Result<usize> {
     let mut n = 0;
-    for att in attachments {
-        let src = base_dir.join(&att.stored_path);
-        let bytes = std::fs::read(&src)
-            .with_context(|| format!("reading staged attachment {}", src.display()))?;
-        let filename = att
-            .original_filename
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(&att.stored_path);
+    for att in &pending.attachments {
         let attachment_id = att
             .id
             .as_deref()
             .and_then(|value| Ulid::from_string(value).ok())
             .unwrap_or_else(|| FsStore::legacy_attachment_id(id, &att.stored_path));
         let ticket = store.read_ticket(id)?;
-        let created_at = att
-            .created_at
-            .clone()
-            .map(Timestamp::new)
-            .unwrap_or(ticket.created_at);
-        store.write_attachment(id, attachment_id, created_at, filename, &bytes)?;
+        let existing = ticket
+            .attachments
+            .iter()
+            .find(|item| item.id == attachment_id);
+        if existing.is_none() && pending.completed.contains(&attachment_id) {
+            // The copy was verified before this identity disappeared: respect the
+            // user's later deletion, including while another copy remains pending.
+            continue;
+        }
+        if existing.is_some() {
+            match store.read_attachment(id, &attachment_id) {
+                Ok(_) => {
+                    if pending.completed.insert(attachment_id) {
+                        pending.write(store, id)?;
+                    }
+                    continue;
+                }
+                Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let src = base_dir.join(&att.stored_path);
+        let bytes = std::fs::read(&src)
+            .with_context(|| format!("reading staged attachment {}", src.display()))?;
+        let (filename, created_at, metadata) = if let Some(existing) = existing {
+            // A missing payload can be repaired without reverting a rename,
+            // annotation, or provenance edit made since the first attempt.
+            (
+                existing.filename.as_str(),
+                existing.created_at.clone(),
+                AttachmentMetadata {
+                    batch_id: existing.batch_id.clone(),
+                    batch_label: existing.batch_label.clone(),
+                    actor: existing.actor.clone(),
+                    purpose: existing.purpose,
+                },
+            )
+        } else {
+            (
+                att.original_filename
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&att.stored_path),
+                att.created_at
+                    .clone()
+                    .map(Timestamp::new)
+                    .unwrap_or(ticket.created_at.clone()),
+                AttachmentMetadata::default(),
+            )
+        };
+        let (mut updated, _) = store.write_attachment_with_metadata(
+            id,
+            attachment_id,
+            created_at,
+            filename,
+            &bytes,
+            metadata,
+        )?;
+        updated.updated_at = ticket.updated_at;
+        store.write_ticket(&updated)?;
+        store
+            .read_attachment(id, &attachment_id)
+            .with_context(|| format!("verifying imported attachment {attachment_id} for {id}"))?;
+        pending.completed.insert(attachment_id);
+        pending.write(store, id)?;
         n += 1;
+    }
+    // Leave the checkpoint in place on any verification failure. A later retry
+    // must never mistake an incomplete ticket for an entirely imported one.
+    let ticket = store.read_ticket(id)?;
+    for attachment_id in &pending.completed {
+        if ticket
+            .attachments
+            .iter()
+            .any(|item| &item.id == attachment_id)
+        {
+            store.read_attachment(id, attachment_id)?;
+        }
     }
     Ok(n)
 }
@@ -699,6 +872,262 @@ mod tests {
           ]
         }"#;
         serde_json::from_str(json).unwrap()
+    }
+
+    fn attachment_export() -> ExportFile {
+        let mut export = export_json();
+        export.tickets.truncate(1);
+        export.tickets[0].attachments = ["first.png", "second.png"]
+            .into_iter()
+            .map(|name| ExportAttachment {
+                id: None,
+                original_filename: Some(name.to_string()),
+                stored_path: name.to_string(),
+                created_at: Some("2026-08-01T01:00:00Z".to_string()),
+            })
+            .collect();
+        export
+    }
+
+    #[test]
+    fn attachment_retry_preserves_ticket_and_attachment_edits() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let export = attachment_export();
+        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        assert!(import(&store, &export, staging.path()).is_err());
+        let mut ticket = store.list_tickets().unwrap().remove(0);
+        let id = ticket.id;
+        let first_id = ticket.attachments[0].id;
+        assert_eq!(ticket.updated_at.as_str(), "2026-08-02T00:00:00Z");
+        assert_eq!(
+            PendingImport::read(&store, &id)
+                .unwrap()
+                .unwrap()
+                .completed
+                .len(),
+            1
+        );
+        ticket = store
+            .rename_attachment(&id, &first_id, "2026-09-22T12:00:00Z".into(), "edited.png")
+            .unwrap();
+        ticket.title = "User-edited title".to_string();
+        ticket.details = "Keep my edits".to_string();
+        ticket.tags.push("after-import".to_string());
+        ticket.attachments[0].batch_label = Some("User batch".to_string());
+        ticket.attachments[0]
+            .annotations
+            .push(hotsheet_model::MediaAnnotation {
+                id: "user-annotation".to_string(),
+                x: 100,
+                y: 100,
+                width: 200,
+                height: 200,
+                start_ms: None,
+                end_ms: None,
+                text: "Keep this".to_string(),
+            });
+        store.write_ticket(&ticket).unwrap();
+        std::fs::remove_file(staging.path().join("first.png")).unwrap();
+        // Repeated failures retain both the checkpoint and the user's changes.
+        assert!(import(&store, &export, staging.path()).is_err());
+        assert_eq!(store.read_ticket(&id).unwrap(), ticket);
+        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap(),
+            ImportSummary {
+                written: 0,
+                skipped: 1,
+                attachments: 1,
+            }
+        );
+        let repaired = store.read_ticket(&id).unwrap();
+        assert_eq!(repaired.title, ticket.title);
+        assert_eq!(repaired.details, ticket.details);
+        assert_eq!(repaired.tags, ticket.tags);
+        assert_eq!(repaired.notes, ticket.notes);
+        assert_eq!(repaired.updated_at, ticket.updated_at);
+        assert_eq!(
+            repaired.attachments.iter().find(|att| att.id == first_id),
+            ticket.attachments.first()
+        );
+        assert_eq!(store.read_attachment(&id, &first_id).unwrap().1, b"FIRST");
+        assert!(PendingImport::read(&store, &id).unwrap().is_none());
+        // Completed imports must never resurrect a subsequent intentional deletion.
+        let deleted = store
+            .remove_attachment(&id, &first_id, "2026-09-22T13:00:00Z".into())
+            .unwrap();
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap().attachments,
+            0
+        );
+        assert_eq!(store.read_ticket(&id).unwrap(), deleted);
+    }
+
+    #[test]
+    fn attachment_retry_respects_deletion_while_other_copies_are_pending() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let export = attachment_export();
+        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        assert!(import(&store, &export, staging.path()).is_err());
+        let ticket = store.list_tickets().unwrap().remove(0);
+        let first_id = ticket.attachments[0].id;
+        let deleted = store
+            .remove_attachment(&ticket.id, &first_id, "2026-09-22T13:00:00Z".into())
+            .unwrap();
+        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap().attachments,
+            1
+        );
+        let repaired = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(repaired.attachments.len(), 1);
+        assert_ne!(repaired.attachments[0].id, first_id);
+        assert_eq!(repaired.updated_at, deleted.updated_at);
+        assert!(PendingImport::read(&store, &ticket.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn attachment_retry_repairs_missing_payload_and_retains_checkpoint_on_write_failure() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let export = attachment_export();
+        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        assert!(import(&store, &export, staging.path()).is_err());
+        let ticket = store.list_tickets().unwrap().remove(0);
+        let id = ticket.id;
+        let first_id = ticket.attachments[0].id;
+        let renamed = store
+            .rename_attachment(&id, &first_id, "2026-09-22T12:00:00Z".into(), "renamed.png")
+            .unwrap();
+        std::fs::remove_file(
+            store
+                .attachment_dir(&id)
+                .join(first_id.to_string())
+                .join("renamed.png"),
+        )
+        .unwrap();
+        let second_id = FsStore::legacy_attachment_id(&id, "second.png");
+        let blocked_destination = store.attachment_dir(&id).join(second_id.to_string());
+        // A directory in place of the payload prevents the store writer's copy.
+        std::fs::create_dir_all(blocked_destination.join("second.png")).unwrap();
+        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        assert!(import(&store, &export, staging.path()).is_err());
+        assert_eq!(store.read_attachment(&id, &first_id).unwrap().1, b"FIRST");
+        assert_eq!(store.read_ticket(&id).unwrap(), renamed);
+        let pending = PendingImport::read(&store, &id).unwrap().unwrap();
+        assert!(pending.completed.contains(&first_id));
+        assert!(!pending.completed.contains(&second_id));
+        std::fs::remove_dir_all(blocked_destination).unwrap();
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap().attachments,
+            1
+        );
+        assert_eq!(store.read_attachment(&id, &second_id).unwrap().1, b"SECOND");
+        assert!(PendingImport::read(&store, &id).unwrap().is_none());
+    }
+
+    #[test]
+    fn attachment_retry_guards_checkpoint_and_recovers_before_ticket_publication() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let mut export = attachment_export();
+        let id = import_id(&export.project, &export.tickets[0], 0);
+        let mut pending = PendingImport {
+            version: 1,
+            attachments: export.tickets[0].attachments.clone(),
+            completed: BTreeSet::new(),
+        };
+        pending.write(&store, &id).unwrap();
+        let tickets = std::mem::take(&mut export.tickets);
+        assert!(
+            import(&store, &export, staging.path())
+                .unwrap_err()
+                .to_string()
+                .contains("export omits pending ticket")
+        );
+        export.tickets = tickets;
+        export.tickets[0].attachments.reverse();
+        assert!(
+            import(&store, &export, staging.path())
+                .unwrap_err()
+                .to_string()
+                .contains("attachment export changed")
+        );
+        assert!(store.list_tickets().unwrap().is_empty());
+        export.tickets[0].attachments.reverse();
+        pending.version = 2;
+        pending.write(&store, &id).unwrap();
+        assert!(
+            import(&store, &export, staging.path())
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported HS1 import checkpoint")
+        );
+        assert!(store.list_tickets().unwrap().is_empty());
+        pending.version = 1;
+        pending.write(&store, &id).unwrap();
+        for name in ["first.png", "second.png"] {
+            std::fs::write(staging.path().join(name), name).unwrap();
+        }
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap(),
+            ImportSummary {
+                written: 1,
+                skipped: 0,
+                attachments: 2
+            }
+        );
+        assert!(PendingImport::read(&store, &id).unwrap().is_none());
+        // An interruption after all copies but before checkpoint removal is also safe.
+        pending.completed = store
+            .read_ticket(&id)
+            .unwrap()
+            .attachments
+            .iter()
+            .map(|att| att.id)
+            .collect();
+        pending.write(&store, &id).unwrap();
+        std::fs::remove_dir_all(staging.path()).unwrap();
+        let ticket_path = store.ticket_path(&id);
+        let ticket_bytes = std::fs::read(&ticket_path).unwrap();
+        std::fs::remove_file(&ticket_path).unwrap();
+        assert!(
+            import(&store, &export, staging.path())
+                .unwrap_err()
+                .to_string()
+                .contains("disappeared after attachment copies")
+        );
+        assert!(PendingImport::read(&store, &id).unwrap().is_some());
+        std::fs::write(ticket_path, ticket_bytes).unwrap();
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap().attachments,
+            0
+        );
+        assert!(PendingImport::read(&store, &id).unwrap().is_none());
+    }
+
+    #[test]
+    fn attachment_retry_does_not_guess_about_uncheckpointed_legacy_imports() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        let export = attachment_export();
+        let id = import_id(&export.project, &export.tickets[0], 0);
+        let legacy = build_ticket(&export.tickets[0], id, "HS", &HashMap::new());
+        store.write_ticket(&legacy).unwrap();
+        for name in ["first.png", "second.png"] {
+            std::fs::write(staging.path().join(name), name).unwrap();
+        }
+        assert_eq!(
+            import(&store, &export, staging.path()).unwrap(),
+            ImportSummary {
+                written: 0,
+                skipped: 1,
+                attachments: 0,
+            }
+        );
+        assert_eq!(store.read_ticket(&id).unwrap(), legacy);
     }
 
     #[test]
