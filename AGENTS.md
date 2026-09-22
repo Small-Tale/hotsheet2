@@ -10,6 +10,8 @@
 <!-- hotsheet:end section=claude-adapter -->
 
 <!-- BEGIN hotsheet:codex -->
+<!-- hotsheet-instructions-version: 48 -->
+
 ## Hot Sheet — ticket workflow
 
 This project tracks work as **Hot Sheet** tickets (plain files under the store). Use them to
@@ -107,6 +109,8 @@ already uses; this default guidance does not require or forbid pushing on its ow
 <!-- END hotsheet:codex -->
 
 <!-- BEGIN hotsheet:antigravity -->
+<!-- hotsheet-instructions-version: 48 -->
+
 ## Hot Sheet — ticket workflow
 
 This project tracks work as **Hot Sheet** tickets (plain files under the store). Use them to
@@ -204,6 +208,8 @@ already uses; this default guidance does not require or forbid pushing on its ow
 <!-- END hotsheet:antigravity -->
 
 <!-- BEGIN hotsheet:opencode -->
+<!-- hotsheet-instructions-version: 48 -->
+
 ## Hot Sheet — ticket workflow
 
 This project tracks work as **Hot Sheet** tickets (plain files under the store). Use them to

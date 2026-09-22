@@ -381,6 +381,8 @@ References to the *original* Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
+<!-- hotsheet-instructions-version: 48 -->
+
 ## Hot Sheet — ticket workflow
 
 This project tracks work as **Hot Sheet** tickets (plain files under the store). Use them to
