@@ -14907,6 +14907,24 @@ test('remembers scroll per project, mode and view through delayed loading and sh
 });
 
 test('preserves list and every board-column scroll position across ticket mutations (HS2-CEBNAJ)', async ({ page }) => {
+  // Keep the real progressive-render callback pending while the user scrolls and mutates.
+  // A busy browser can defer idle work even after every board column is already visible.
+  await page.addInitScript(() => {
+    let nextId = 0;
+    const callbacks = new Map<number, IdleRequestCallback>();
+    window.requestIdleCallback = (callback) => {
+      callbacks.set(++nextId, callback);
+      return nextId;
+    };
+    window.cancelIdleCallback = (id) => callbacks.delete(id);
+    Object.assign(window, {
+      flushTicketIdleWork() {
+        const pending = [...callbacks.values()];
+        callbacks.clear();
+        for (const callback of pending) callback({ didTimeout: true, timeRemaining: () => 0 });
+      },
+    });
+  });
   const statuses = ['not_started', 'started', 'completed', 'verified'] as const,
     items = Array.from({ length: 120 }, (_, index) => ({
       ...row,
@@ -15005,8 +15023,10 @@ test('preserves list and every board-column scroll position across ticket mutati
   const listTarget = page.locator('[data-component="ticket-list-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
   await listTarget.scrollIntoViewIfNeeded();
-  await listTarget.click({ button: 'right' });
   const listBefore = await workspace.evaluate((node) => node.scrollTop);
+  expect(listBefore).toBeGreaterThan(0);
+  await listTarget.click({ button: 'right' });
+  await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
   await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
   await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${listSlug}"]`)).toHaveAttribute(
     'data-status',
@@ -15016,37 +15036,53 @@ test('preserves list and every board-column scroll position across ticket mutati
   await page.getByRole('button', { name: 'Columns view' }).click();
   const columns = page.locator('.ticket-board-column__tickets');
   await expect(columns).toHaveCount(4);
-  await columns.evaluateAll((nodes) => {
-    for (const node of nodes) (node as HTMLElement).scrollTop = 260;
-  });
-  const boardTarget = page.locator('[data-column-id="completed"] [data-component="ticket-list-row"]').nth(5),
-    boardSlug = await boardTarget.getAttribute('data-ticket-slug');
-  await boardTarget.click({ button: 'right' });
-  const before = await columns.evaluateAll(
-    (nodes) =>
-      Object.fromEntries(
-        nodes.map((node) => [
-          node.closest('[data-column-id]')!.getAttribute('data-column-id'),
-          (node as HTMLElement).scrollTop,
-        ]),
-      ) as Record<string, number>,
-  );
-  await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
-  await expect(page.locator(`[data-column-id="verified"] [data-ticket-slug="${boardSlug}"]`)).toBeVisible();
-  const after = await columns.evaluateAll(
-    (nodes) =>
-      Object.fromEntries(
-        nodes.map((node) => [
-          node.closest('[data-column-id]')!.getAttribute('data-column-id'),
-          (node as HTMLElement).scrollTop,
-        ]),
-      ) as Record<string, number>,
-  );
-  for (const [id, scrollTop] of Object.entries(before)) {
-    expect(after[id]).toBeGreaterThan(0);
-    expect(Math.abs(after[id] - scrollTop)).toBeLessThanOrEqual(2);
+  const positions = () =>
+    columns.evaluateAll(
+      (nodes) =>
+        Object.fromEntries(
+          nodes.map((node) => [
+            node.closest('[data-column-id]')!.getAttribute('data-column-id'),
+            (node as HTMLElement).scrollTop,
+          ]),
+        ) as Record<string, number>,
+    );
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt === 3) {
+      // Settle the previously delayed work, then exercise another edit after reset.
+      await page.evaluate(() => {
+        (window as typeof window & { flushTicketIdleWork(): void }).flushTicketIdleWork();
+      });
+    }
+    await columns.evaluateAll((nodes) => {
+      nodes.forEach((node, index) => {
+        (node as HTMLElement).scrollTop = 260 + index * 20;
+      });
+    });
+    const boardTarget = page.locator('[data-column-id="completed"] [data-component="ticket-list-row"]').nth(5),
+      boardSlug = await boardTarget.getAttribute('data-ticket-slug'),
+      scrolled = await positions();
+    expect(Object.values(scrolled).every((top) => top > 0)).toBe(true);
+    await boardTarget.click({ button: 'right' });
+    const before = await positions();
+    // Opening the context menu is already a render and must not lose pending user scrolling.
+    expect(Object.values(before).every((top) => top > 0)).toBe(true);
+    await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
+    await expect(page.locator(`[data-column-id="verified"] [data-ticket-slug="${boardSlug}"]`)).toBeVisible();
+    const after = await positions();
+    for (const [id, scrollTop] of Object.entries(before)) {
+      expect(after[id]).toBeGreaterThan(0);
+      expect(Math.abs(after[id] - scrollTop)).toBeLessThanOrEqual(2);
+    }
   }
-  await page.screenshot({ path: '/private/tmp/hs2-cebnaj-board-scroll-retained.png', fullPage: true });
+  await page.screenshot({
+    path: '/private/tmp/hs2-q9z4km-board-scroll-wide.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 900, height: 760 });
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
+  await expect(page.locator('[data-component="ticket-list-row"]')).not.toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-q9z4km-scroll-narrow.png', fullPage: true, animations: 'disabled' });
 });
 
 test('dismisses every remaining dialog through its native close event (HS2-3RQ7V7)', async ({ page }) => {

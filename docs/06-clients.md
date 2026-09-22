@@ -500,6 +500,11 @@ and identity-less legacy entries remain conservatively blocking.
   grid after loading and progressive rendering. A new combination starts at the top;
   changed contents clamp the saved position to the available scroll range. Inspector
   and drawer scrolling remain independent of this workspace memory.
+  Scrolling during a pending loading or progressive-render pass takes precedence over
+  the older destination for that owner and axis (HS2-Q9Z4KM). Untouched columns and axes
+  retain their desired destinations through temporary layout clamping and empty/refill
+  transitions. Leaving a scope before loading settles still remembers those user edits;
+  later mutation renders or stale restoration callbacks must not reset them.
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
