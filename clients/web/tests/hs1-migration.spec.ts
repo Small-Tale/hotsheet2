@@ -1,7 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-test('imports an HS1 project, then offers cleanup only after remote backup', async ({ page }) => {
-  test.setTimeout(60_000);
+async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs1') {
   let releaseImport!: () => void, releaseRemote!: () => void;
   const importGate = new Promise<void>((resolve) => {
       releaseImport = resolve;
@@ -9,17 +8,22 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
     remoteGate = new Promise<void>((resolve) => {
       releaseRemote = resolve;
     });
-  let imported = false,
-    remote = false,
-    deleted = false,
-    providerRequests = 0;
-  await page.route('**/*', async (route) => {
+  const state = {
+    imported: initialState === 'imported',
+    remote: initialState === 'imported',
+    deleted: false,
+    providerRequests: 0,
+  };
+  // Intercept the fixture API only: routing every Vite module adds thousands of browser/worker
+  // round trips to each reload and can exhaust the scenario budget under parallel suite load.
+  await page.route('**/__hotsheet/**', async (route) => {
     const request = route.request(),
-      path = new URL(request.url()).pathname;
+      url = new URL(request.url()),
+      path = url.pathname;
     if (path === '/__hotsheet/projects/open')
       return route.fulfill({
         status: 201,
-        json: imported
+        json: state.imported
           ? {
               id: 'legacy',
               root: '/work/legacy',
@@ -29,7 +33,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
               needsTicketSetup: false,
               needsHs1Migration: false,
               hs1ImportCompleted: true,
-              hs1CleanupEligible: remote,
+              hs1CleanupEligible: state.remote,
               hs1DatabasePath: '/work/legacy/.hotsheet/db',
               hs1PostgresVersion: '17',
             }
@@ -50,7 +54,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
     if (path === '/__hotsheet/projects/migrate-hs1' && request.method() === 'POST') {
       expect(request.postDataJSON()).toEqual({ root: '/work/legacy', location: '/work/legacy.hs2' });
       await importGate;
-      imported = true;
+      state.imported = true;
       return route.fulfill({
         status: 201,
         json: {
@@ -75,17 +79,17 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
       });
     if (path === '/__hotsheet/projects/setup-git-remote' && request.method() === 'POST') {
       await remoteGate;
-      remote = true;
+      state.remote = true;
       return route.fulfill({ json: { connected: true } });
     }
     if (path === '/__hotsheet/projects/legacy/hs1-data' && request.method() === 'DELETE') {
-      deleted = true;
+      state.deleted = true;
       return route.fulfill({ json: { removed: ['db', 'attachments', 'settings.json'] } });
     }
     if (path.endsWith('/providers')) {
-      providerRequests += 1;
+      state.providerRequests += 1;
       return route.fulfill({
-        json: imported
+        json: state.imported
           ? [
               {
                 connection_id: 'git-import',
@@ -113,6 +117,10 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
       path.endsWith('/connections') ||
       path.endsWith('/permissions') ||
       path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/ai-tools') ||
+      path.endsWith('/drive/sessions') ||
       path.endsWith('/terminals')
     )
       return route.fulfill({ json: [] });
@@ -121,9 +129,30 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
       return route.fulfill({
         json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
       });
-    if (path.endsWith('/ws/poll')) return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+    if (path.endsWith('/ws/poll')) {
+      // Establish the cursor (and answer zero-timeout catch-up) immediately. Idle polls stay
+      // pending until navigation closes them, matching the server's blocking transport.
+      if (!url.searchParams.has('since') || url.searchParams.get('timeout_ms') === '0')
+        return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+      return;
+    }
     return route.continue();
   });
+  return { state, releaseImport, releaseRemote };
+}
+
+async function reloadRestoredProject(page: Page) {
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  // A missing banner alone can pass while the page is still restoring its remembered project.
+  // Wait for both the owning project and its completed ticket load before testing persistence.
+  await expect(page.locator('.project-tab-bar')).toContainText('Legacy project');
+  await expect(page.locator('.ticket-empty-state--project')).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
+}
+
+test('imports an HS1 project, then offers cleanup only after remote backup', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const { state, releaseImport, releaseRemote } = await mockHs1Project(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -135,26 +164,28 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await dialog.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-pwyts8-hs1-import-wide.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('hs1-import-wide.png'), fullPage: true, animations: 'disabled' });
   await page.setViewportSize({ width: 520, height: 720 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-pwyts8-hs1-import-narrow.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('hs1-import-narrow.png'), fullPage: true, animations: 'disabled' });
   await dialog.getByRole('button', { name: 'Import project' }).click();
   await expect(dialog.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
   await expect(dialog.getByRole('status')).toContainText('copying attachments');
   releaseImport();
   await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', true);
   await expect(page.locator('.app-toast')).toContainText('Imported 27 tickets and 4 attachments');
-  expect(providerRequests).toBeGreaterThanOrEqual(2);
+  expect(state.providerRequests).toBeGreaterThanOrEqual(2);
+  const banner = page.locator('.hs1-cleanup-banner');
+  await expect(banner).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/legacy.hs2.git');
   await page.getByRole('button', { name: 'Connect & push' }).click();
   const remoteProgress = page.locator('.ticket-source-setup__remote-progress');
   await expect(remoteProgress.locator('wa-progress-bar')).toHaveAttribute('indeterminate', '');
   await expect(remoteProgress).toContainText('Large repositories can take several minutes.');
+  await expect(banner).toHaveCount(0);
   releaseRemote();
-  const banner = page.locator('.hs1-cleanup-banner');
   await expect(banner).toBeVisible();
-  expect(remote).toBe(true);
+  expect(state.remote).toBe(true);
   await expect(banner).toHaveAttribute('data-component', 'state-banner');
   await expect(banner).toHaveAttribute('data-tone', 'success');
   await expect(banner).toHaveAttribute('role', 'status');
@@ -162,28 +193,46 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect(banner).toContainText('safely backed up');
   await expect(banner.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
   await page.setViewportSize({ width: 2048, height: 900 });
-  await banner.screenshot({ path: '/private/tmp/hs2-750wsy-hs1-cleanup-banner-wide.png' });
+  await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 760, height: 720 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await banner.screenshot({ path: '/private/tmp/hs2-750wsy-hs1-cleanup-banner-narrow.png' });
+  await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-narrow.png'), animations: 'disabled' });
+  page.once('dialog', (prompt) => prompt.accept());
+  await banner.getByRole('button', { name: 'Delete old files…' }).click();
+  await expect(banner).toHaveCount(0);
+  expect(state.deleted).toBe(true);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText('Removed 3 old Hot Sheet 1 items');
+  await page.setViewportSize({ width: 2048, height: 1280 });
+  await page.screenshot({
+    path: testInfo.outputPath('hs1-project-owned-cleanup-wide.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await reloadRestoredProject(page);
+  await expect(banner).toHaveCount(0);
+});
+
+// Persistence has its own scenario so unrelated module navigations do not consume the import/
+// backup/delete flow's timeout budget. Both tests still restore through the real application.
+test('persists HS1 cleanup dismissal until the saved dismissal is cleared', async ({ page }) => {
+  test.setTimeout(60_000);
+  const { state } = await mockHs1Project(page, 'imported');
+  await page.setViewportSize({ width: 760, height: 720 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const banner = page.locator('.hs1-cleanup-banner');
+  await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: 'Dismiss' }).click();
   await expect(banner).toHaveCount(0);
-  await page.reload();
+  await reloadRestoredProject(page);
   await expect(banner).toHaveCount(0);
   await page.evaluate(() => {
     for (const key of Object.keys(localStorage))
       if (key.startsWith('hotsheet.workspace.hs1-cleanup-dismissed.')) localStorage.removeItem(key);
   });
-  await page.reload();
+  await reloadRestoredProject(page);
   await expect(banner).toBeVisible();
-  page.once('dialog', (prompt) => prompt.accept());
-  await banner.getByRole('button', { name: 'Delete old files…' }).click();
-  await expect(banner).toHaveCount(0);
-  expect(deleted).toBe(true);
-  await expect(page.locator('.app-error')).toHaveCount(0);
-  await expect(page.locator('.app-toast')).toContainText('Removed 3 old Hot Sheet 1 items');
-  await page.setViewportSize({ width: 2048, height: 1280 });
-  await page.screenshot({ path: '/private/tmp/hs2-rwdmv3-project-owned-cleanup-wide.png', fullPage: true });
-  await page.reload();
-  await expect(banner).toHaveCount(0);
+  expect(state.deleted).toBe(false);
 });

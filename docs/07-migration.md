@@ -232,6 +232,12 @@ actions retain their explicit 28.8 px minimum height and 8 px inline padding. Th
 cleanup notice supplies its Dismiss and Delete controls as one app-owned action group
 inside the primitive's single action slot so the pair wraps together at narrow widths.
 
+Browser regressions keep import/backup/delete and persisted dismissal/reopen as independently
+initialized scenarios. After reload, they wait for the owning project and its loaded workspace
+before asserting banner absence. Fixtures intercept only bridge API requests, keep idle
+long polls pending, and give each test its own screenshot paths so parallel runs do not
+intercept every development asset or overwrite each other's evidence (HS2-AMYY7Z).
+
 The same migration is runnable **by hand** in one command, independent of the UI
 prompt: **`hotsheet-migrate <old-project>/.hotsheet -C <new-store>`** spawns the Node
 exporter against a copy of the old database and imports the result. It is a
