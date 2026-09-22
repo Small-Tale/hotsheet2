@@ -29,6 +29,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
+    scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
+    scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/project-startup.ts   #   Concurrent remembered-project preparation, bounded parallel retry, ordered registration, and single activation

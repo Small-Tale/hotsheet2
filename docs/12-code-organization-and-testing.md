@@ -125,6 +125,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
   runs the repository-wide format check first, so CI rejects drift in all supported
   source and structured-content areas (HS2-F0BC6Q).
+  Both commands require the tracked web, migrator, compatibility-spike, docs, and
+  workflow paths. The setup-generated root `opencode.json` is optional in a clean
+  checkout; when present, it receives the same formatting and syntax checks. Missing
+  tracked paths and unreadable or malformed local config remain errors. Rust formatting
+  continues through `cargo fmt` after Prettier succeeds (HS2-G9K0NY).
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
