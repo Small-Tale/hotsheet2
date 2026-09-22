@@ -667,6 +667,12 @@ and identity-less legacy entries remain conservatively blocking.
   collapsible search adopts the project-persisted open signal: its canonical magnifier moves
   focus into the editor, and an empty blur or Escape collapses it without app-owned focusout
   bookkeeping; populated searches and marked suggestion/date/help surfaces remain open.
+  Select All followed by Backspace or Delete clears ordinary text and filter chips
+  without collapsing the focused editor, including repeated empty/refill sequences
+  on narrow screens. Focus may still leave normally: a deliberate keyboard handoff
+  collapses the empty field, and the search launcher reopens it ready for typing.
+  This behavior comes from the published Kerf beta.28 managed-focus implementation
+  rather than an application reopen workaround (HS2-GRAQ2K).
   When composed inside a toolbar control group, the group retains its border, padding,
   and focus ring in both collapsed and expanded states. The ordinary workspace header
   and workspace-grid ticket rail share that package-owned treatment (HS2-TNSD4K).

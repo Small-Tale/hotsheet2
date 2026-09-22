@@ -11873,6 +11873,74 @@ test('deletes a trailing token immediately after Space commits it', async ({ pag
   await expect(query).toHaveText('');
 });
 
+for (const width of [1440, 390]) {
+  test(`keeps workspace search focused after Select All deletion and yields to outside focus at ${width}px (HS2-GRAQ2K)`, async ({
+    page,
+  }, testInfo) => {
+    await mockProject(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
+      query = page.getByRole('searchbox', { name: 'Search tickets' }),
+      chip = query.locator('[data-component="token-search-token"]'),
+      group = page.locator('.workspace-header__search-group').filter({
+        has: page.locator('[data-token-search-id="workspace-search"]'),
+      });
+    await trigger.click();
+    for (const [index, key] of ['Backspace', 'Delete', 'Backspace', 'Delete'].entries()) {
+      await query.fill(index % 2 ? 'is:active tag:client ' : 'before is:active tag:client after ');
+      await expect(chip).toHaveCount(2);
+      await query.press('ControlOrMeta+A');
+      await page.keyboard.press(key);
+      await expect(query).toBeFocused();
+      await expect(query).toHaveText('');
+      await expect(chip).toHaveCount(0);
+      await expect(group).toHaveAttribute('data-expanded', 'true');
+      // Repeated deletion while empty must not collapse the editor or require a click.
+      await page.keyboard.press(key);
+      await expect(query).toBeFocused();
+      await page.keyboard.insertText(`refilled ${index}`);
+      await expect(query).toHaveText(`refilled ${index}`);
+      await expect(chip).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`select-all-refilled-${width}.png`), animations: 'disabled' });
+    await query.press('ControlOrMeta+A');
+    await page.keyboard.press('Backspace');
+    await expect(query).toBeFocused();
+    await group.screenshot({ path: testInfo.outputPath(`select-all-empty-${width}.png`), animations: 'disabled' });
+    // A real keyboard focus handoff must still collapse an empty managed field.
+    await page.keyboard.press('Shift+Tab');
+    await expect(query).toBeHidden();
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+    await expect(trigger).toBeVisible();
+    const outside = await page.evaluateHandle(() => document.activeElement);
+    expect(await outside.evaluate((element) => element !== document.body)).toBe(true);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        }),
+    );
+    expect(await outside.evaluate((element) => element === document.activeElement)).toBe(true);
+    await outside.dispose();
+    await trigger.click();
+    await expect(query).toBeFocused();
+    await page.keyboard.insertText('reopened');
+    await expect(query).toHaveText('reopened');
+    await query.press('ControlOrMeta+A');
+    await page.keyboard.press('Delete');
+    await query.press('Escape');
+    await expect(trigger).toBeFocused();
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+  });
+}
+
 for (const surface of ['workspace', 'saved-view']) {
   test(`preserves ${surface} replacement input when token-deletion frames resume late (HS2-PR5TNA)`, async ({
     page,

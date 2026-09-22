@@ -180,4 +180,19 @@ describe('inline advanced-search tokens', () => {
     expect(back).toHaveLength(1);
     expect(back[0]).toMatchObject({ kind: 'is', value: 'started', raw: 'is:started', offset: 0 });
   });
+
+  it('drops every controlled token on Select All deletion and accepts repeated refills (HS2-GRAQ2K)', () => {
+    let current = consumeSearchTokens('before is:active tag:client after ').tokens;
+    for (const raw of ['tag:server ', 'is:started ', 'tag:client ', 'is:active ']) {
+      const emptied = fromTokenSearchTokens([], current);
+      expect(emptied).toEqual([]);
+      expect(effectiveSearch('', emptied)).toEqual({ text: '', tokens: [] });
+      expect(fromTokenSearchTokens([], emptied)).toEqual([]);
+      const refill = consumeSearchTokens(`refilled ${raw}`);
+      current = fromTokenSearchTokens(refill.tokens.map(toTokenSearchToken), emptied);
+      expect(current).toEqual(refill.tokens);
+      expect(current).toHaveLength(1);
+      expect(orderedSearchText(refill.text, current)).toBe(`refilled ${raw.trim()}`);
+    }
+  });
 });
