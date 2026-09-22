@@ -131,11 +131,18 @@ fn require_clean(store: &Path) -> Result<()> {
 pub fn verify_export(store: &Path, export_path: &Path) -> Result<()> {
     let export: crate::import::ExportFile = serde_json::from_slice(&std::fs::read(export_path)?)?;
     let store = FsStore::open(store)?;
+    let base = export_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     for (index, source) in export.tickets.iter().enumerate() {
         let id = crate::import::import_id(&export.project, source, index);
         store.read_ticket(&id)?;
         for attachment in &source.attachments {
             let attachment_id = crate::import::attachment_id(&id, attachment);
+            if crate::import_recovery::omission_approved(&store, &export, &id, attachment, base)? {
+                continue;
+            }
             store.read_attachment(&id, &attachment_id).with_context(|| format!(
                 "exported HS1 attachment {attachment_id} is missing from ticket {id}; recover the missing import files before backup or cleanup"
             ))?;
@@ -160,6 +167,10 @@ pub fn record(store_path: &Path, source: &Path) -> Result<()> {
         store_path.join(crate::HS1_IMPORT_RECEIPT),
         store_path.join("hotsheet-store.json"),
     ];
+    let omissions = store_path.join(crate::import_recovery::OMISSIONS_FILE);
+    if omissions.exists() {
+        required.push(omissions);
+    }
     for ticket in store.list_tickets()? {
         required.push(store.ticket_path(&ticket.id));
         for attachment in ticket.attachments {

@@ -143,6 +143,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/setup.rs           #   `hotsheet-cli setup <tool>`: thin wrapper over hotsheet_plugins::run_setup (adds the enabled-plugin filter from Settings)
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
+      src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
@@ -299,6 +300,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   atomically replaces this checkpoint before ticket publication and after each copy;
   retry preserves current user edits and completed deletions. Successful verification
   removes it and the final import commit includes the removal. See [07](07-migration.md).
+- **Legacy HS1 recovery:** `hotsheet-cli -C <store> import <export> --diagnose-attachments`
+  performs a read-only comparison. Repeatable `--restore-attachment` and
+  `--confirm-omission` selections preserve existing edits and require explicit identities.
+  Version-1 `hotsheet-hs1-attachment-omissions.json` records source-bound approvals;
+  completion verification requires that evidence in the committed import revision.
 - **Verified HS1 backup:** Git-local `hotsheet-hs1-import-completed.json` version 1
   records `sourceProject` and the exact committed `revision` after strict ticket/payload
   inclusion checks (`crates/hotsheet-cli/src/import_completion.rs`). Git-local

@@ -258,20 +258,26 @@ impl FsStore {
 
     /// Open an existing store, erroring if `root` is not a Hot Sheet store.
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
-        let root = root.into();
-        if !root.join(STORE_METADATA_FILE).is_file() {
-            return Err(StoreError::NotAStore(root));
-        }
-        let store = Self {
-            root,
-            push_after_commit: true,
-            #[cfg(test)]
-            background_push_observer: None,
-        };
+        let store = Self::open_without_maintenance(root)?;
         if let Err(error) = store.ensure_managed_gitignore() {
             eprintln!("warning: could not maintain store .gitignore: {error}");
         }
         Ok(store)
+    }
+
+    /// Open for diagnostics without maintaining Git files or writing store state.
+    /// Mutation methods remain available; callers of this constructor own their use.
+    pub fn open_without_maintenance(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
+        let root = root.into();
+        if !root.join(STORE_METADATA_FILE).is_file() {
+            return Err(StoreError::NotAStore(root));
+        }
+        Ok(Self {
+            root,
+            push_after_commit: true,
+            #[cfg(test)]
+            background_push_observer: None,
+        })
     }
 
     /// Let an owning service publish commits itself (for example, the server's

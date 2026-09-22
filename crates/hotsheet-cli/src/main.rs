@@ -331,6 +331,15 @@ enum Cmd {
         /// Prefix used if the store must be created first.
         #[arg(long, default_value = "HS")]
         prefix: String,
+        /// Read-only JSON comparison of exported attachment identities and payloads.
+        #[arg(long, conflicts_with_all = ["restore_attachment", "confirm_omission"])]
+        diagnose_attachments: bool,
+        /// Restore only this diagnostic selection (TICKET_ULID/ATTACHMENT_ULID); repeatable.
+        #[arg(long, value_name = "SELECTION")]
+        restore_attachment: Vec<String>,
+        /// Confirm an intentionally deleted attachment should stay absent; repeatable.
+        #[arg(long, value_name = "SELECTION")]
+        confirm_omission: Vec<String>,
     },
     /// Copy a ticket into another store as a new ticket (new ULID; original untouched).
     Copy {
@@ -861,6 +870,10 @@ fn main() -> Result<()> {
             | Cmd::Ls { .. }
             | Cmd::Show { .. }
             | Cmd::Reindex { .. }
+            | Cmd::Import {
+                diagnose_attachments: true,
+                ..
+            }
     );
     let result = match cli.command {
         Cmd::Init {
@@ -1129,7 +1142,36 @@ fn main() -> Result<()> {
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(cmd),
-        Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
+        Cmd::Import {
+            file,
+            prefix,
+            diagnose_attachments,
+            restore_attachment,
+            confirm_omission,
+        } => {
+            if diagnose_attachments {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&hotsheet_cli::import_recovery::diagnose(
+                        &cli.path, &file
+                    )?)?
+                );
+                Ok(())
+            } else if !restore_attachment.is_empty() || !confirm_omission.is_empty() {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&hotsheet_cli::import_recovery::recover(
+                        &cli.path,
+                        &file,
+                        &restore_attachment,
+                        &confirm_omission
+                    )?)?
+                );
+                Ok(())
+            } else {
+                cmd_import(&cli.path, &file, &prefix)
+            }
+        }
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::ProviderCopy {
             id,

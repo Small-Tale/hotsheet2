@@ -205,6 +205,61 @@ store has the schema-valid durable `hotsheet-hs1-import.json` receipt whose cano
 `sourceProject` matches this exact checkout. Missing, malformed, or unrelated receipts
 leave the strict HS1 launch refusal in place.
 
+### Explicit recovery of older partial attachment imports
+
+Older imports can lack both a payload and its pending-copy checkpoint. Absence alone
+cannot distinguish an interrupted import from an attachment intentionally deleted later.
+Ordinary reimport preserves those deletions and existing ticket edits (HS2-94EB35).
+Use a complete portable export to review the destination first:
+
+```sh
+hotsheet-cli -C <ticket-store> import <bundle>/hotsheet-export.json --diagnose-attachments
+```
+
+This command performs no writes, including Git maintenance or proof updates. Its JSON
+lists every exported attachment with a stable `selection` (`TICKET_ULID/ATTACHMENT_ULID`),
+source/destination names, source SHA-256 or read error, pending-checkpoint and omission
+evidence, and one of
+`present`, `missing_ticket`, `missing_metadata`, or `missing_payload`. Import missing
+tickets normally before repairing their attachments. A selected ticket with a pending
+import checkpoint must complete its ordinary retry before legacy recovery. Recovery
+requires readable payloads within the selected portable bundle; absolute paths and links
+outside it are rejected.
+
+Restore only reviewed selections; both selection options may be repeated:
+
+```sh
+hotsheet-cli -C <ticket-store> import <bundle>/hotsheet-export.json \
+  --restore-attachment <ticket-ulid>/<attachment-ulid>
+```
+
+The operation validates the full request before writing, leaves other attachments alone,
+and preserves ticket fields, timestamps, edited attachment names, annotations, and
+provenance. Existing readable payloads are never overwritten. Repeating an unchanged
+selection is a no-op. Source changes, malformed evidence, conflicting selections, or
+unknown identities fail explicitly.
+
+If an exported attachment was intentionally deleted, confirm that specific omission:
+
+```sh
+hotsheet-cli -C <ticket-store> import <bundle>/hotsheet-export.json \
+  --confirm-omission <ticket-ulid>/<attachment-ulid>
+```
+
+Confirmation is allowed only when destination attachment metadata is absent; it never
+deletes existing metadata or files. A missing payload with retained metadata must be
+restored, or explicitly deleted through normal attachment operations first. Confirmation
+writes version-1 `hotsheet-hs1-attachment-omissions.json` evidence containing the ticket
+and attachment IDs, source filename and SHA-256, an export-identity fingerprint, and the
+confirmation time. The evidence follows the store's autocommit policy and must be
+included in the proven import revision. Changed source content or attachment identity invalidates that approval.
+
+An actual recovery or new confirmation invalidates previous import/backup proof. Rerun
+migration, then push and verify backup again before cleanup. Matching explicit omissions
+are accepted during completed-import verification; ordinary reimport still leaves them
+absent. Restoring an omitted attachment removes its omission entry. Repeating an already
+confirmed unchanged omission preserves its timestamp and existing proof.
+
 ## 7.3 The UI-prompted flow (per project, on demand)
 
 Per the ticket, migration is offered automatically with a confirmation — **per

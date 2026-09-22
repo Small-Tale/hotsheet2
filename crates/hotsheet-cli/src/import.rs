@@ -669,48 +669,7 @@ fn copy_attachments(
                 Err(error) => return Err(error.into()),
             }
         }
-        let src = base_dir.join(&att.stored_path);
-        let bytes = std::fs::read(&src)
-            .with_context(|| format!("reading staged attachment {}", src.display()))?;
-        let (filename, created_at, metadata) = if let Some(existing) = existing {
-            // A missing payload can be repaired without reverting a rename,
-            // annotation, or provenance edit made since the first attempt.
-            (
-                existing.filename.as_str(),
-                existing.created_at.clone(),
-                AttachmentMetadata {
-                    batch_id: existing.batch_id.clone(),
-                    batch_label: existing.batch_label.clone(),
-                    actor: existing.actor.clone(),
-                    purpose: existing.purpose,
-                },
-            )
-        } else {
-            (
-                att.original_filename
-                    .as_deref()
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(&att.stored_path),
-                att.created_at
-                    .clone()
-                    .map(Timestamp::new)
-                    .unwrap_or(ticket.created_at.clone()),
-                AttachmentMetadata::default(),
-            )
-        };
-        let (mut updated, _) = store.write_attachment_with_metadata(
-            id,
-            attachment_id,
-            created_at,
-            filename,
-            &bytes,
-            metadata,
-        )?;
-        updated.updated_at = ticket.updated_at;
-        store.write_ticket(&updated)?;
-        store
-            .read_attachment(id, &attachment_id)
-            .with_context(|| format!("verifying imported attachment {attachment_id} for {id}"))?;
+        restore_missing_attachment(store, base_dir, id, att)?;
         pending.completed.insert(attachment_id);
         pending.write(store, id)?;
         n += 1;
@@ -728,6 +687,72 @@ fn copy_attachments(
         }
     }
     Ok(n)
+}
+
+/// Restore one explicitly selected missing payload while preserving destination metadata.
+/// Ordinary import calls this only for identities covered by its pending checkpoint.
+pub(crate) fn restore_missing_attachment(
+    store: &FsStore,
+    base_dir: &Path,
+    id: &Ulid,
+    att: &ExportAttachment,
+) -> Result<bool> {
+    let attachment_id = attachment_id(id, att);
+    let ticket = store.read_ticket(id)?;
+    let existing = ticket
+        .attachments
+        .iter()
+        .find(|item| item.id == attachment_id);
+    if existing.is_some() {
+        match store.read_attachment(id, &attachment_id) {
+            Ok(_) => return Ok(false),
+            Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let src = base_dir.join(&att.stored_path);
+    let bytes = std::fs::read(&src)
+        .with_context(|| format!("reading staged attachment {}", src.display()))?;
+    let (filename, created_at, metadata) = if let Some(existing) = existing {
+        // A missing payload can be repaired without reverting a rename,
+        // annotation, or provenance edit made since the first attempt.
+        (
+            existing.filename.as_str(),
+            existing.created_at.clone(),
+            AttachmentMetadata {
+                batch_id: existing.batch_id.clone(),
+                batch_label: existing.batch_label.clone(),
+                actor: existing.actor.clone(),
+                purpose: existing.purpose,
+            },
+        )
+    } else {
+        (
+            att.original_filename
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&att.stored_path),
+            att.created_at
+                .clone()
+                .map(Timestamp::new)
+                .unwrap_or(ticket.created_at.clone()),
+            AttachmentMetadata::default(),
+        )
+    };
+    let (mut updated, _) = store.write_attachment_with_metadata(
+        id,
+        attachment_id,
+        created_at,
+        filename,
+        &bytes,
+        metadata,
+    )?;
+    updated.updated_at = ticket.updated_at;
+    store.write_ticket(&updated)?;
+    store
+        .read_attachment(id, &attachment_id)
+        .with_context(|| format!("verifying imported attachment {attachment_id} for {id}"))?;
+    Ok(true)
 }
 
 fn build_ticket(
