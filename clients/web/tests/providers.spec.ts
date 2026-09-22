@@ -7755,8 +7755,12 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await page.screenshot({ path: '/private/tmp/hs2-mwdr19-restored-queue-narrow.png' });
 });
 
-test('projects a newly created ticket within one frame without a collection refresh', async ({ page }) => {
+test('projects a newly created ticket within one frame without a collection refresh', async ({ page }, testInfo) => {
   await mockProject(page);
+  await page.route(/\/tickets$/, async (route) => {
+    if (route.request().method() === 'POST') await new Promise((resolve) => setTimeout(resolve, 200));
+    return route.fallback();
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
@@ -7765,30 +7769,70 @@ test('projects a newly created ticket within one frame without a collection refr
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Immediate ticket');
   await page.evaluate(() => {
-    document.querySelector('[data-action="create-ticket-form"]')!.addEventListener(
-      'submit',
-      () => {
-        const started = performance.now(),
-          observer = new MutationObserver(() => {
-            if (document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')) {
-              (window as typeof window & { newTicketProjectionMs?: number }).newTicketProjectionMs =
-                performance.now() - started;
-              observer.disconnect();
-            }
-          });
-        observer.observe(document.body, { attributes: true, childList: true, subtree: true });
-      },
-      { once: true, capture: true },
-    );
+    const state = window as typeof window & {
+      newTicketResponseAt?: number;
+      newTicketTransportMs?: number;
+      newTicketProjectionMs?: number;
+      newTicketProjectionFrames?: number;
+    };
+    let frames = 0;
+    let animationFrame = 0;
+    const countFrame = () => {
+      frames += 1;
+      animationFrame = requestAnimationFrame(countFrame);
+    };
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const started = performance.now();
+      const response = await nativeFetch(...args);
+      const [input, init] = args;
+      const url = input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      if (method === 'POST' && new URL(url, location.href).pathname.endsWith('/tickets')) {
+        const readJson = response.json.bind(response);
+        response.json = async () => {
+          const ticket: unknown = await readJson();
+          state.newTicketResponseAt = performance.now();
+          state.newTicketTransportMs = state.newTicketResponseAt - started;
+          animationFrame = requestAnimationFrame(countFrame);
+          return ticket;
+        };
+      }
+      return response;
+    };
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')) {
+        state.newTicketProjectionMs = performance.now() - state.newTicketResponseAt!;
+        state.newTicketProjectionFrames = frames;
+        cancelAnimationFrame(animationFrame);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
   });
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(row).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as typeof window & { newTicketProjectionMs?: number }).newTicketProjectionMs),
-    )
-    .toBeLessThan(100);
+  const timings = await page.evaluate(() => {
+    const state = window as typeof window & {
+      newTicketProjectionMs: number;
+      newTicketTransportMs: number;
+      newTicketProjectionFrames: number;
+    };
+    return {
+      projection: state.newTicketProjectionMs,
+      transport: state.newTicketTransportMs,
+      frames: state.newTicketProjectionFrames,
+    };
+  });
+  await testInfo.attach('new-ticket-projection-timings', {
+    body: JSON.stringify(timings),
+    contentType: 'application/json',
+  });
+  expect(timings.transport).toBeGreaterThanOrEqual(150);
+  expect(timings.projection).toBeGreaterThanOrEqual(0);
+  expect(timings.frames).toBeLessThanOrEqual(1);
+  if (process.env.HOTSHEET_WEB_PERFORMANCE_GATE === '1') expect(timings.projection).toBeLessThan(100);
   await page.waitForTimeout(250);
   const createIndex = requests.findIndex((value) => value.startsWith('POST ') && value.endsWith('/tickets'));
   expect(createIndex).toBeGreaterThanOrEqual(0);

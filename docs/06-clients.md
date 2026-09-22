@@ -2156,7 +2156,12 @@ GET) and the projection/reconciliation logic. `npm run test:performance` is the 
 local browser gate: after warm application startup, its click-to-next-frame projection
 must remain below 100 ms; 33 ms is the aspirational two-frame target. Network/disk/git
 completion is reported separately and does not delay acknowledged visual feedback. The
-same warm click-to-DOM ceiling applies to an authoritative new-ticket response.
+same warm 100 ms ceiling applies from the parsed authoritative new-ticket response to
+its first DOM projection. The parallel suite asserts projection within the first animation
+frame opportunity; the performance command runs one worker and additionally enforces the
+100 ms ceiling, keeping machine contention separate from application scheduling. The
+creation regression deliberately delays the request and reports transport separately,
+so network or fixture latency cannot be mistaken for rendering work (HS2-126KNQ).
 
 ## 6.10 Repository status browser
 

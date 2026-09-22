@@ -15,7 +15,7 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "test:performance": "playwright test tests/providers.spec.ts -g 'projects Up Next immediately'",
+    "test:performance": "HOTSHEET_WEB_PERFORMANCE_GATE=1 playwright test tests/providers.spec.ts --workers=1 -g 'projects Up Next immediately|projects a newly created ticket'",
     "stress:scale": "node scripts/scale-stress.mjs"
   },
   "dependencies": {
