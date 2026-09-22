@@ -17,23 +17,15 @@
 .workspace-header__actions {
   justify-content: flex-end;
 }
-.view-mode-switcher__button {
+.view-mode-switcher__content {
   position: relative;
-  display: grid;
-  width: remify(32px);
-  height: remify(32px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
 }
 .view-mode-switcher__badge {
   position: absolute;
-  top: remify(-3.84px);
-  right: remify(-4.8px);
+  top: remify(-12px);
+  right: remify(-12px);
   display: grid;
   min-width: remify(14.4px);
   padding: remify(1px) remify(5px);
@@ -46,21 +38,9 @@
   line-height: 1;
   place-items: center;
 }
-.view-mode-switcher__button svg,
 .workspace-header__actions wa-button svg {
   width: remify(16px);
   height: remify(16px);
-}
-.view-mode-switcher__button:hover {
-  background: var(--wa-color-surface-default);
-}
-.view-mode-switcher__button[aria-pressed='true'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-s);
-}
-.view-mode-switcher__button:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 25%, transparent);
 }
 .workspace-header__actions wa-button::part(base) {
   width: remify(32px);

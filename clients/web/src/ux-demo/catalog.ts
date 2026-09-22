@@ -119,7 +119,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'workspace-header',
         'WorkspaceHeader',
-        'Project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.',
+        'Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.',
         'feature-floor',
         true,
         ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board'],
@@ -515,7 +515,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-ticket-rail',
         'TerminalTicketRail',
-        'Compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.',
+        'Compact rail with equal-width List/Notifications segments, bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.',
         'feature-floor',
         true,
         [

@@ -44,9 +44,7 @@ describe('TerminalTicketRail', () => {
   });
   it('keeps compact search last, animates active search onto a full row, and centers the ticket header independently', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(
-      /\.view-mode-switcher \{[^}]*border-radius:var\(--wa-border-radius-m\)[^}]*grid-column:1 \/ -1/,
-    );
+    expect(css).toMatchSource(/\.view-mode-switcher \{[^}]*grid-column:1 \/ -1/);
     expect(css).toMatchSource(/workspace-header__utility-group \{[^}]*grid-column:2/);
     expect(css).toMatchSource(
       /workspace-header__search-group \{[^}]*grid-column:3[^}]*grid-row:2[^}]*transition:width \.25s ease/,

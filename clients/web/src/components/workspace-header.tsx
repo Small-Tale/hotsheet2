@@ -6,6 +6,7 @@ import './workspace-header.css';
 import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -33,6 +34,7 @@ import {
 import { type InlineSearchToken, toTokenSearchToken } from '../inline-search';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
+export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
 export type WorkspaceUpNextState = 'none' | 'mixed' | 'all';
@@ -53,6 +55,7 @@ function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
 export interface WorkspaceHeaderProps {
   projectName: string;
   mode: WorkspaceViewMode;
+  presentation?: WorkspaceControlsPresentation;
   searchOpen?: boolean;
   searchQuery?: string;
   searchTokens?: readonly InlineSearchToken[];
@@ -80,40 +83,39 @@ export function WorkspaceIdentity({ projectName }: { projectName: string }) {
   );
 }
 
-function ModeButton({
-  mode,
-  current,
-  label,
-  icon,
-  iconName,
-  badge = 0,
-}: {
-  mode: WorkspaceViewMode;
-  current: WorkspaceViewMode;
-  label: string;
-  icon: IconNode;
-  iconName: string;
-  badge?: number;
-}) {
-  return (
-    <button
-      type="button"
-      tabindex="0"
-      class="view-mode-switcher__button"
-      data-action="set-view-mode"
-      data-view-mode={mode}
-      aria-label={`${label} view${badge ? `, ${badge} pending` : ''}`}
-      aria-pressed={String(mode === current)}
-      title={`${label} view`}
-    >
-      <LucideIcon icon={icon} name={iconName} />
-      {badge > 0 && (
-        <span class="view-mode-switcher__badge" aria-hidden="true">
-          {badge > 99 ? '99+' : badge}
-        </span>
-      )}
-    </button>
-  );
+function workspaceModeChoices(
+  count: number,
+  listOnly: boolean,
+  presentation: WorkspaceControlsPresentation,
+): ReadonlyArray<SegmentedControlChoice<WorkspaceViewMode>> {
+  const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
+    { value: 'list', label: 'List', icon: List, iconName: 'list' },
+    { value: 'board', label: 'Columns', icon: Columns3, iconName: 'columns-3' },
+    { value: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
+    { value: 'settings', label: 'Settings', icon: Settings, iconName: 'settings' },
+  ];
+  return modes
+    .filter(({ value }) =>
+      presentation === 'rail' ? value === 'list' || value === 'notifications' : !listOnly || value !== 'board',
+    )
+    .map(({ value, label, icon, iconName }) => {
+      const badge = value === 'notifications' ? count : 0;
+      return {
+        value,
+        label: `${label} view${badge ? `, ${badge} pending` : ''}`,
+        title: `${label} view`,
+        content: (
+          <span class="view-mode-switcher__content">
+            <LucideIcon icon={icon} name={iconName} />
+            {badge > 0 && (
+              <span class="view-mode-switcher__badge" aria-hidden="true">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+        ),
+      };
+    });
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
@@ -208,6 +210,7 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
   listOnly = false,
+  presentation,
 }: {
   mode: WorkspaceViewMode;
   projectActionsDisabled: boolean;
@@ -220,10 +223,11 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
   listOnly?: boolean;
+  presentation: WorkspaceControlsPresentation;
 }) {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
-    ...(listOnly
+    ...(listOnly || presentation === 'rail'
       ? []
       : [{ value: 'board' as const, label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' }]),
     {
@@ -232,7 +236,9 @@ function WorkspaceOverflowControls({
       icon: Bell,
       iconName: 'bell',
     },
-    { value: 'settings', label: 'Show Settings', icon: Settings, iconName: 'settings' },
+    ...(presentation === 'rail'
+      ? []
+      : [{ value: 'settings' as const, label: 'Show Settings', icon: Settings, iconName: 'settings' }]),
   ];
   return (
     <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
@@ -318,6 +324,7 @@ const localSearchDateTimeExample = new Intl.DateTimeFormat(undefined, {
 
 export function WorkspaceControls({
   mode,
+  presentation = 'toolbar',
   searchOpen = false,
   searchQuery = '',
   searchTokens = [],
@@ -347,22 +354,17 @@ export function WorkspaceControls({
     trigger = workspaceSortTrigger(sort, sortDirection);
   return (
     <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
-      <ToolbarControlGroup className="view-mode-switcher" label="View mode">
-        <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
-        {listOnly ? (
-          <></>
-        ) : (
-          <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
-        )}
-        <ModeButton
-          mode="notifications"
-          current={mode}
-          label="Notifications"
-          icon={Bell}
-          iconName="bell"
-          badge={notificationCount}
+      <ToolbarControlGroup className="view-mode-switcher" shape={presentation === 'rail' ? 'rounded' : 'pill'}>
+        <SegmentedControl
+          id="workspace-view-mode"
+          label="View mode"
+          value={mode}
+          choices={workspaceModeChoices(notificationCount, listOnly, presentation)}
+          action="set-view-mode"
+          appearance="toolbar"
+          shape={presentation === 'rail' ? 'rounded' : 'pill'}
+          layout={presentation === 'rail' ? 'equal' : 'content'}
         />
-        <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>
         <Select
@@ -547,6 +549,7 @@ export function WorkspaceControls({
         selectedTicketsUpNext={selectedTicketsUpNext}
         selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
         listOnly={listOnly}
+        presentation={presentation}
       />
     </div>
   );
@@ -555,6 +558,7 @@ export function WorkspaceControls({
 export function WorkspaceHeader({
   projectName,
   mode,
+  presentation = 'toolbar',
   searchOpen = false,
   searchQuery = '',
   searchTokens = [],
@@ -577,6 +581,7 @@ export function WorkspaceHeader({
       {controlsVisible && (
         <WorkspaceControls
           mode={mode}
+          presentation={presentation}
           searchOpen={searchOpen}
           searchQuery={searchQuery}
           searchTokens={searchTokens}

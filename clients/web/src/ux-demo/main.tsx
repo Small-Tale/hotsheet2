@@ -258,7 +258,7 @@ import {
   zoomGalleryDemo,
 } from './ticket-metadata-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
-import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
+import { ToolbarControlGroupDemo, toolbarGroupDemoMode } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
 import {
@@ -1732,6 +1732,9 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
   if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
 });
 wireWorkspaceOverflowKeyboard(root);
+delegate(root, 'click', '[data-action="set-toolbar-group-demo-mode"]', (_event, target) => {
+  toolbarGroupDemoMode.value = (target as HTMLElement).dataset.segmentValue as typeof toolbarGroupDemoMode.value;
+});
 function openSelectedDemoTicketActions(target: Element): void {
   const selected = collectionTickets.value.find((ticket) => ticket.selected);
   if (!selected) return;
@@ -1749,7 +1752,8 @@ delegate(root, 'click', '[data-action="open-selected-ticket-actions"]', (_event,
   openSelectedDemoTicketActions(target);
 });
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
-  workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
+  const metadata = (target as HTMLElement).dataset;
+  workspaceMode.value = (metadata.segmentValue ?? metadata.viewMode) as typeof workspaceMode.value;
   if (workspaceMode.value === 'settings') {
     workspaceSearchOpen.value = false;
     workspaceSearchHelpOpen.value = false;

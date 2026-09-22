@@ -653,6 +653,14 @@ and identity-less legacy entries remain conservatively blocking.
   replacing the compact workspace search. The overlay is available from the toolbar and
   the platform Search shortcut (`Command-K`/`Control-K`).
 
+  Workspace view choices use Kerf `SegmentedControl` with toolbar appearance inside
+  the existing toolbar group. List, Columns, Notifications, and Settings retain native
+  sequential focus, Enter/Space activation, selected pressed state, and notification
+  count labels (the visible badge caps at 99+). Mobile omits Columns without overwriting
+  the desktop preference. The explicit rail presentation offers only List and
+  Notifications as equal-width rounded segments; the ordinary toolbar uses content-width
+  pill segments. Overflow commands retain their existing mode action contract (HS2-F29QAT).
+
   The workspace and grid-rail selection toolbar uses native group
   buttons and an empty, yellow half-filled, or yellow filled Up Next star for none,
   some, or all selected tickets queued, with matching false/mixed/true pressed state.

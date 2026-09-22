@@ -6,15 +6,58 @@ import { describe, expect, it } from 'vitest';
 import {
   applyWorkspaceSortDirection,
   nextWorkspaceSort,
+  WorkspaceControls,
   WorkspaceHeader,
   type WorkspaceSort,
   type WorkspaceSortDirection,
   workspaceSortTrigger,
   type WorkspaceUpNextState,
   workspaceUpNextState,
+  type WorkspaceViewMode,
 } from './workspace-header';
 
 describe('WorkspaceHeader', () => {
+  it('projects all modes, resets, and edits through canonical native segments', () => {
+    const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
+    for (const mode of ['list', 'board', 'notifications', 'settings', 'list', 'board'] satisfies WorkspaceViewMode[]) {
+      const markup = String(WorkspaceControls({ mode }));
+      expect(markup.match(/aria-label="View mode"/g)).toHaveLength(1);
+      expect(markup).toContain('data-component="segmented-control"');
+      expect(markup).toContain('data-appearance="toolbar" data-shape="pill"');
+      expect(markup).toContain('data-layout="content"');
+      const buttons = [...markup.matchAll(/<button[^>]*data-segment-value="([^"]+)"[^>]*>[\s\S]*?<\/button>/g)];
+      expect(buttons).toHaveLength(4);
+      for (const [button, value] of buttons) {
+        expect(button).toContain('data-action="set-view-mode"');
+        expect(button).toContain('tabindex="0"');
+        expect(button).toContain(`aria-pressed="${String(value === mode)}"`);
+        expect(button).toContain(`data-selected="${String(value === mode)}"`);
+        expect(button).toContain(`data-lucide="${icons[value as WorkspaceViewMode]}"`);
+      }
+    }
+  });
+
+  it.each([0, 7, 120])('preserves the full accessible notification count %s and clamped badge', (count) => {
+    const markup = String(WorkspaceControls({ mode: 'notifications', notificationCount: count }));
+    expect(markup).toContain(`aria-label="Notifications view${count ? `, ${count} pending` : ''}"`);
+    if (count)
+      expect(markup).toContain(
+        `class="view-mode-switcher__badge" aria-hidden="true">${count > 99 ? '99+' : count}</span>`,
+      );
+    else expect(markup).not.toContain('view-mode-switcher__badge');
+  });
+
+  it('offers only equal-width List and Notifications in the explicit rounded rail presentation', () => {
+    const markup = String(WorkspaceControls({ mode: 'notifications', presentation: 'rail', notificationCount: 7 }));
+    expect(markup).toContain('data-shape="rounded"');
+    expect(markup).toContain('data-layout="equal"');
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(2);
+    for (const mode of ['board', 'settings']) {
+      expect(markup).not.toContain(`data-segment-value="${mode}"`);
+      expect(markup).not.toContain(`data-view-mode="${mode}"`);
+    }
+  });
+
   it('exposes an accessible selected view mode and optional search field', () => {
     const markup = String(
       WorkspaceHeader({
@@ -35,7 +78,9 @@ describe('WorkspaceHeader', () => {
       'data-component="toolbar-text" data-size="large"><span class="kui-toolbar-text__text">Hot Sheet 2',
     );
     expect(markup).toContain('aria-label="View mode"');
-    expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
+    expect(markup).toContain(
+      'data-segment-value="settings" data-selected="true" aria-label="Settings view" aria-pressed="true"',
+    );
     expect(markup).toContain('data-token-search-editor="workspace-search"');
     expect(markup).toContain('role="searchbox" aria-label="Search tickets"');
     expect(markup).toContain('contenteditable="false"');
@@ -176,16 +221,18 @@ describe('WorkspaceHeader', () => {
   it('hides the columns/board view toggle and its overflow entry when listOnly (mobile) (HS2-1XCHZT)', () => {
     const desktop = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
     // Desktop keeps the columns toggle button and its overflow entry.
-    expect(desktop).toContain('data-view-mode="board" aria-label="Columns view"');
+    expect(desktop).toContain('data-segment-value="board" data-selected="false" aria-label="Columns view"');
     expect(desktop).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
-    expect(desktop.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(4);
+    expect(desktop.match(/data-action="set-view-mode"/g)).toHaveLength(4);
 
     const mobile = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', listOnly: true }));
     // Mobile drops the board toggle and its overflow entry, keeping list/notifications/settings.
     expect(mobile).not.toContain('data-view-mode="board"');
     expect(mobile).not.toContain('Show Columns View');
-    expect(mobile.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(3);
-    expect(mobile).toContain('data-view-mode="list" aria-label="List view" aria-pressed="true"');
+    expect(mobile.match(/data-action="set-view-mode"/g)).toHaveLength(3);
+    expect(mobile).toContain(
+      'data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"',
+    );
   });
 
   it('delegates the collapsed find state to the canonical TokenSearchField trigger', () => {
@@ -211,7 +258,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('aria-label="Search syntax"');
     expect(markup).toContain('aria-label="Notifications view, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
-    expect(markup.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(4);
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
     expect(markup).not.toContain('data-workspace-search="true"');
     const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(css).toMatch(

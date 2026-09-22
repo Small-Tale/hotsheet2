@@ -124,7 +124,7 @@ export function TerminalTicketRailDemo() {
           <WorkspaceControls
             {...workspaceDemoSelection()}
             mode={mode}
-            listOnly
+            presentation="rail"
             searchOpen={workspaceSearchOpen.value}
             searchQuery={workspaceSearchQuery.value}
             searchHelpOpen={workspaceSearchHelpOpen.value}

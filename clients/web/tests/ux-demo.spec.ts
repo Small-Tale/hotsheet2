@@ -2011,6 +2011,14 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
   await expect(notificationBadge).toHaveCSS('padding', '1px 5px');
   await expect(notificationBadge).toHaveCSS('background-color', 'rgb(255, 204, 0)');
+  const badgeBounds = await notificationBadge.boundingBox();
+  const bellBounds = await header.locator('.view-mode-switcher [data-lucide="bell"]').boundingBox();
+  expect(badgeBounds!.y + badgeBounds!.height).toBeLessThanOrEqual(bellBounds!.y + 2);
+  await expect(header.getByRole('group', { name: 'View mode', exact: true })).toHaveAttribute(
+    'data-component',
+    'segmented-control',
+  );
+  await header.screenshot({ path: '/private/tmp/hs2-f29qat-demo-badge-wide.png', animations: 'disabled' });
   await notificationBadge.screenshot({ path: '/private/tmp/hs2-x9embf-notification-badge.png' });
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
@@ -2277,6 +2285,23 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.kui-toolbar-control-group');
   await expect(groups).toHaveCount(8);
+  const segments = demo.getByRole('group', { name: 'View mode', exact: true });
+  await expect(segments).toHaveAttribute('data-component', 'segmented-control');
+  const list = segments.getByRole('button', { name: 'List view' });
+  await expect(list).toHaveAttribute('aria-pressed', 'true');
+  await list.focus();
+  await page.keyboard.press('Tab');
+  const columns = segments.getByRole('button', { name: 'Columns view' });
+  await expect(columns).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(columns).toHaveAttribute('aria-pressed', 'true');
+  await expect(list).toHaveAttribute('aria-pressed', 'false');
+  await segments.getByRole('button', { name: 'Settings view' }).click();
+  await expect(segments).toHaveAttribute('data-value', 'settings');
+  await list.click();
+  await expect(list).toHaveAttribute('aria-pressed', 'true');
+  await columns.click();
+  await expect(columns).toHaveAttribute('aria-pressed', 'true');
   for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin', 'panel-left-open'])
     await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   const heights = await groups.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));

@@ -57,18 +57,7 @@
 }
 .terminal-ticket-rail__controls .view-mode-switcher {
   width: 100%;
-  border-radius: var(--wa-border-radius-m);
   grid-column: 1 / -1;
-}
-.terminal-ticket-rail__controls .view-mode-switcher > * {
-  flex: 1;
-}
-.terminal-ticket-rail__controls .view-mode-switcher > :is(button, wa-button) {
-  border-radius: var(--wa-border-radius-s);
-}
-.terminal-ticket-rail__controls .view-mode-switcher [data-view-mode='board'],
-.terminal-ticket-rail__controls .view-mode-switcher [data-view-mode='settings'] {
-  display: none;
 }
 .terminal-ticket-rail__controls .workspace-header__sort-group {
   grid-column: 1;

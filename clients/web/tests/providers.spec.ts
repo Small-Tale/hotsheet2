@@ -2349,6 +2349,85 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   await expect(lastTile.locator('.xterm')).toBeVisible();
 });
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`projects Kerf workspace segments through mode transitions in ${theme} (HS2-F29QAT)`, async ({ page }) => {
+    await page.setViewportSize({ width: 1728, height: 971 });
+    await page.emulateMedia({ colorScheme: theme });
+    await installFakeTerminalSockets(page, true);
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const toolbar = page.locator('.app-shell__main > .kui-toolbar');
+    const segments = toolbar.getByRole('group', { name: 'View mode', exact: true });
+    const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
+    const expectMode = async (group: Locator, selected: keyof typeof icons, modes = Object.keys(icons)) => {
+      await expect(group).toHaveAttribute('data-component', 'segmented-control');
+      await expect(group).toHaveAttribute('data-appearance', 'toolbar');
+      await expect(group).toHaveAttribute('data-value', selected);
+      await expect(group.getByRole('button')).toHaveCount(modes.length);
+      for (const mode of modes) {
+        const button = group.locator(`[data-segment-value="${mode}"]`);
+        await expect(button).toHaveAttribute('data-action', 'set-view-mode');
+        await expect(button).toHaveAttribute('tabindex', '0');
+        await expect(button).toHaveAttribute('data-selected', String(mode === selected));
+        await expect(button).toHaveAttribute('aria-pressed', String(mode === selected));
+        await expect(button.locator(`[data-lucide="${icons[mode as keyof typeof icons]}"]`)).toBeVisible();
+      }
+    };
+    await expectMode(segments, 'list');
+    await expect(segments).toHaveAttribute('data-layout', 'content');
+    await expect(segments).toHaveAttribute('data-shape', 'pill');
+    await segments.getByRole('button', { name: 'List view' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(segments.getByRole('button', { name: 'Columns view' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expectMode(segments, 'board');
+    await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
+    await page.screenshot({ path: `/private/tmp/hs2-f29qat-workspace-${theme}-wide.png`, animations: 'disabled' });
+    await segments.getByRole('button', { name: 'Notifications view' }).click();
+    await expectMode(segments, 'notifications');
+    await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
+    await segments.getByRole('button', { name: 'Settings view' }).click();
+    await expectMode(segments, 'settings');
+    await expect(page.getByRole('complementary', { name: 'Settings categories' })).toBeVisible();
+    // An independent state producer resets the selected control; another native edit still works.
+    await page.keyboard.press('ControlOrMeta+Shift+L');
+    await expectMode(segments, 'list');
+    await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+    await segments.getByRole('button', { name: 'Columns view' }).click();
+    await expectMode(segments, 'board');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectMode(segments, 'list', ['list', 'notifications', 'settings']);
+    await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+    await page.screenshot({ path: `/private/tmp/hs2-f29qat-workspace-${theme}-mobile.png`, animations: 'disabled' });
+    await page.setViewportSize({ width: 1728, height: 971 });
+    await expectMode(segments, 'board');
+    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    const rail = page.locator('[data-component="terminal-ticket-rail"]');
+    const railSegments = rail.getByRole('group', { name: 'View mode', exact: true });
+    await expectMode(railSegments, 'list', ['list', 'notifications']);
+    await expect(railSegments).toHaveAttribute('data-layout', 'equal');
+    await expect(railSegments).toHaveAttribute('data-shape', 'rounded');
+    const widths = await railSegments
+      .getByRole('button')
+      .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().width));
+    expect(widths[0]).toBeCloseTo(widths[1], 0);
+    expect(widths[0]).toBeGreaterThan(100);
+    await railSegments.getByRole('button', { name: 'Notifications view' }).click();
+    await expectMode(railSegments, 'notifications', ['list', 'notifications']);
+    await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
+    await railSegments.getByRole('button', { name: 'List view' }).click();
+    await expectMode(railSegments, 'list', ['list', 'notifications']);
+    await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
+    await rail.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await railSegments.getByRole('button', { name: 'Notifications view' }).click();
+    await expectMode(railSegments, 'notifications', ['list', 'notifications']);
+    await page.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-narrow.png`, animations: 'disabled' });
+  });
+}
+
 test('keeps a compact ticket rail beside the terminal dashboard and pushes into the inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFakeTerminalSockets(page, true);
@@ -13094,7 +13173,10 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const columns = overflow.locator('[data-view-mode="board"]');
   await expect(columns).toBeVisible();
   await columns.click();
-  await expect(toolbar.locator('.view-mode-switcher [data-view-mode="board"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbar.locator('.view-mode-switcher [data-segment-value="board"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   expect(await toolbar.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 

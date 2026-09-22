@@ -3,7 +3,9 @@ import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { signal } from 'kerfjs';
 import {
   ArrowDownAZ,
   ChevronLeft,
@@ -18,21 +20,27 @@ import {
   Star,
 } from 'lucide';
 
+export const toolbarGroupDemoMode = signal<'list' | 'board' | 'settings'>('list');
+
 export function ToolbarControlGroupDemo() {
   return (
     <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">
       <div>
         <h2>Segmented choices</h2>
-        <ToolbarControlGroup label="View mode">
-          <button class="view-mode-switcher__button" aria-label="List view" aria-pressed="true">
-            <LucideIcon icon={List} name="list" />
-          </button>
-          <button class="view-mode-switcher__button" aria-label="Columns view" aria-pressed="false">
-            <LucideIcon icon={Columns3} name="columns-3" />
-          </button>
-          <button class="view-mode-switcher__button" aria-label="Settings view" aria-pressed="false">
-            <LucideIcon icon={Settings} name="settings" />
-          </button>
+        <ToolbarControlGroup>
+          <SegmentedControl
+            id="toolbar-group-demo-mode"
+            label="View mode"
+            value={toolbarGroupDemoMode.value}
+            action="set-toolbar-group-demo-mode"
+            appearance="toolbar"
+            shape="pill"
+            choices={[
+              { value: 'list', label: 'List view', content: <LucideIcon icon={List} name="list" /> },
+              { value: 'board', label: 'Columns view', content: <LucideIcon icon={Columns3} name="columns-3" /> },
+              { value: 'settings', label: 'Settings view', content: <LucideIcon icon={Settings} name="settings" /> },
+            ]}
+          />
         </ToolbarControlGroup>
       </div>
       <div>

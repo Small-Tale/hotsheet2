@@ -259,6 +259,11 @@ test('mobile forces list view and hides the columns toggle, restoring board view
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Columns view' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to the list (HS2-N7RPFP)', async ({

@@ -341,6 +341,19 @@ does not introduce polling or another network request.
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
+The mode selector composes Kerf `SegmentedControl` inside `ToolbarControlGroup`, with
+one accessible View mode group and native sequentially focusable buttons. Kerf owns
+selection, hover, focus, and segment geometry. Hot Sheet supplies Lucide icons, the
+content-sized notification badge (full count in the accessible label, 99+ visual cap),
+and routes `data-segment-value` through the existing `set-view-mode` action; legacy
+`data-view-mode` producers and the responsive overflow menu keep their contract.
+`WorkspaceControls.presentation` defaults to `toolbar` (content-width pill); `rail`
+explicitly provides equal-width rounded List/Notifications choices. `listOnly` removes
+Columns from the ordinary toolbar and overflow for mobile. The WorkspaceHeader,
+TerminalTicketRail, and ToolbarControlGroup demos exercise these compositions
+(HS2-F29QAT). The WorkspaceHeader demo's existing Notifications content/controller gap
+is tracked separately in HS2-Y70MJY.
+
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   compact shared `Select` sort control whose popup carries simple direction arrows while
@@ -1334,7 +1347,7 @@ component used by list and column views, with the compact rail label `Ticket…`
 Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
 directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,
-and `Select` primitives; its app-owned responsive control grid uses an 8px within-group rhythm and
+`SegmentedControl`, and `Select` primitives; its app-owned responsive control grid uses an 8px within-group rhythm and
 a 4px connected top inset while preserving explicit control and transition geometry (HS2-4Y6SM9).
 
 ## 7. Overlays and shared interaction components

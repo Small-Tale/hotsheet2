@@ -262,9 +262,9 @@
       "id": "workspace-header",
       "name": "WorkspaceHeader",
       "kind": "composition",
-      "purpose": "Project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.",
+      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search.",
       "useWhen": [
-        "Hot Sheet needs project identity, display modes, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search."
+        "Hot Sheet needs project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, and search."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific WorkspaceHeader behavior."
@@ -1277,9 +1277,9 @@
       "id": "terminal-ticket-rail",
       "name": "TerminalTicketRail",
       "kind": "composition",
-      "purpose": "Compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.",
+      "purpose": "Compact rail with equal-width List/Notifications segments, bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.",
       "useWhen": [
-        "Hot Sheet needs compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail."
+        "Hot Sheet needs compact rail with equal-width List/Notifications segments, bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalTicketRail behavior."

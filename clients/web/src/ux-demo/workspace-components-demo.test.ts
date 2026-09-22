@@ -105,14 +105,14 @@ describe('connected workspace demo state', () => {
     workspaceMode.value = 'notifications';
     const notifications = String(TerminalTicketRailDemo());
     expect(notifications).toContain(
-      'data-view-mode="notifications" aria-label="Notifications view" aria-pressed="true"',
+      'data-segment-value="notifications" data-selected="true" aria-label="Notifications view" aria-pressed="true"',
     );
     expect(notifications).toContain('data-component="notification-center"');
     expect(notifications).not.toContain('data-component="ticket-list-row"');
     expect(notifications).not.toContain('data-view-mode="board"');
     workspaceMode.value = 'list';
     const list = String(TerminalTicketRailDemo());
-    expect(list).toContain('data-view-mode="list" aria-label="List view" aria-pressed="true"');
+    expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"');
     expect(list.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
     expect(list).not.toContain('data-component="notification-center"');
     workspaceMode.value = 'board';

@@ -6698,6 +6698,7 @@ function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
       controls: (
         <WorkspaceControls
           mode={mode}
+          presentation="rail"
           searchOpen={searchOpen.value}
           searchQuery={searchQuery.value}
           searchTokens={searchTokens.value}
@@ -9590,7 +9591,7 @@ function wireCommandAndAiInteractions() {
       });
   });
   delegate(document.body, 'click', '[data-action="set-view-mode"]', (_event, target) => {
-    const mode = data(target).viewMode as WorkspaceViewMode,
+    const mode = (data(target).segmentValue ?? data(target).viewMode) as WorkspaceViewMode,
       finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
     resetProgressiveTicketRendering();
     viewMode.value = mode;
