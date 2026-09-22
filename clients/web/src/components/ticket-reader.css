@@ -67,9 +67,6 @@
   max-width: remify(864px);
   font-size: var(--wa-font-size-l);
 }
-.ticket-reader .ticket-inspector--reader .ticket-inspector__tabs {
-  width: auto;
-}
 .ticket-reader .ticket-inspector--reader .ticket-inspector__content {
   width: 100%;
   margin: 0;

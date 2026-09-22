@@ -275,11 +275,15 @@ describe('TicketInspector', () => {
     );
   });
 
-  it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
+  it('contains equal full-width tab targets inside one compact inspector gutter (HS2-WKGMN4)', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(inspectorCss).toMatch(
-      /\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/,
+      /\.kui-tab-bar\.ticket-inspector__tabs \{[^}]*width: auto;[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/,
+    );
+    expect(inspectorCss).toMatch(/\.kui-app-tab\.ticket-inspector__tab \{[^}]*min-width: 0;[^}]*flex: 1 1 0/);
+    expect(inspectorCss).toMatch(
+      /\.ticket-inspector__tab \.kui-app-tab__select \{[^}]*flex: 1;[^}]*justify-content: center/,
     );
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \.kui-tab-bar__tabs \{[^}]*padding: var\(--kui-space-2xs\)/);
     expect(panelCss).toMatch(

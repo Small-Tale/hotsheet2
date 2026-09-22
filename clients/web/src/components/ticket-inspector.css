@@ -127,7 +127,8 @@
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
-.ticket-inspector__tabs {
+.kui-tab-bar.ticket-inspector__tabs {
+  width: auto;
   min-width: 0;
   min-height: 0;
   margin: 0 var(--kui-space-xs) var(--kui-space-xs);
@@ -143,7 +144,7 @@
   background: var(--wa-color-neutral-fill-normal);
   overflow: hidden;
 }
-.ticket-inspector__tab {
+.kui-app-tab.ticket-inspector__tab {
   width: auto;
   min-width: 0;
   height: remify(36px);
@@ -151,6 +152,7 @@
   flex: 1 1 0;
 }
 .ticket-inspector__tab .kui-app-tab__select {
+  flex: 1;
   justify-content: center;
   gap: var(--kui-space-2xs);
 }

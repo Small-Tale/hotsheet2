@@ -535,9 +535,9 @@
       "id": "ticket-inspector",
       "name": "TicketInspector",
       "kind": "composition",
-      "purpose": "Trailing ticket detail and editing surface.",
+      "purpose": "Trailing ticket detail and editing surface with contained, centered section tabs.",
       "useWhen": [
-        "Hot Sheet needs trailing ticket detail and editing surface."
+        "Hot Sheet needs trailing ticket detail and editing surface with contained, centered section tabs."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketInspector behavior."

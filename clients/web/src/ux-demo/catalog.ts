@@ -231,13 +231,14 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'ticket-inspector',
             'TicketInspector',
-            'Trailing ticket detail and editing surface.',
+            'Trailing ticket detail and editing surface with contained, centered section tabs.',
             'feature-floor',
             true,
             [
               'toolbar',
               'toolbar-text',
               'toolbar-control-group',
+              'app-tab',
               'ticket-info-panel',
               'ticket-timeline',
               'ticket-code-review',

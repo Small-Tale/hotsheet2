@@ -5462,13 +5462,75 @@ test('orders equal status priority and title groups by most recently updated', a
   }
 });
 
-test('uses labels only when the inspector segmented control has enough room', async ({ page }) => {
+test('contains and centers inspector tabs while showing labels only when they fit (HS2-WKGMN4)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebarTabs = page.locator('[data-region-id="app-inspector"] .ticket-inspector__tabs');
+  const captureTabChrome = async (tabs: Locator, path: string) => {
+    const clip = await tabs.evaluate((node) => {
+      const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"]')!,
+        frame = inspector.getBoundingClientRect(),
+        title = inspector.querySelector('h1')!.getBoundingClientRect(),
+        strip = node.getBoundingClientRect(),
+        top = title.top - 8;
+      return { x: frame.left, y: top, width: frame.width, height: strip.bottom - top + 8 };
+    });
+    await page.screenshot({ path, clip });
+  };
+  const expectTabGeometry = async (tabs: Locator) => {
+    await expect(async () => {
+      const geometry = await tabs.evaluate((node) => {
+        const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"]')!,
+          inspectorBox = inspector.getBoundingClientRect(),
+          inspectorStyle = getComputedStyle(inspector),
+          strip = node.getBoundingClientRect(),
+          tabBoxes = Array.from(node.querySelectorAll<HTMLElement>('.ticket-inspector__tab')).map((tab) => {
+            const cell = tab.getBoundingClientRect(),
+              cellStyle = getComputedStyle(tab),
+              button = tab.querySelector<HTMLElement>('[role="tab"]')!,
+              target = button.getBoundingClientRect(),
+              content = Array.from(button.children)
+                .filter((child) => getComputedStyle(child).position !== 'absolute')
+                .map((child) => child.getBoundingClientRect()),
+              contentLeft = Math.min(...content.map((box) => box.left)),
+              contentRight = Math.max(...content.map((box) => box.right));
+            return {
+              width: cell.width,
+              targetInset: [
+                target.left - cell.left - Number.parseFloat(cellStyle.borderLeftWidth),
+                cell.right - target.right - Number.parseFloat(cellStyle.borderRightWidth),
+              ],
+              centerDelta: (contentLeft + contentRight - cell.left - cell.right) / 2,
+            };
+          });
+        return {
+          gutter: [
+            strip.left - inspectorBox.left - Number.parseFloat(inspectorStyle.borderLeftWidth),
+            inspectorBox.right - strip.right - Number.parseFloat(inspectorStyle.borderRightWidth),
+          ],
+          padding: getComputedStyle(node).padding,
+          overflow: node.scrollWidth - node.clientWidth,
+          tabBoxes,
+        };
+      });
+      for (const gutter of geometry.gutter) expect(gutter).toBeCloseTo(8, 1);
+      expect(geometry.padding).toBe('0px');
+      expect(geometry.overflow).toBeLessThanOrEqual(1);
+      const widths = geometry.tabBoxes.map((tab) => tab.width);
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
+      for (const tab of geometry.tabBoxes) {
+        for (const inset of tab.targetInset) expect(Math.abs(inset)).toBeLessThan(1);
+        expect(Math.abs(tab.centerDelta)).toBeLessThan(1);
+      }
+    }).toPass({ timeout: 5_000 });
+  };
+  await expect(sidebarTabs.getByRole('tab')).toHaveCount(4);
+  await expect(sidebarTabs.getByRole('tab', { name: /Attachments/ })).toContainText('1 attachments');
+  await expectTabGeometry(sidebarTabs);
   expect(
     await sidebarTabs.locator('.kui-app-tab__name').evaluateAll((labels) =>
       labels.every((label) => {
@@ -5477,10 +5539,17 @@ test('uses labels only when the inspector segmented control has enough room', as
       }),
     ),
   ).toBe(true);
+  await captureTabChrome(sidebarTabs, '/private/tmp/hs2-wkgmn4-inspector-tabs-wide.png');
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await expectTabGeometry(sidebarTabs);
+  await captureTabChrome(sidebarTabs, '/private/tmp/hs2-wkgmn4-inspector-tabs-narrow.png');
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     readerTabs = reader.locator('.ticket-inspector__tabs');
   await expect(readerTabs.locator('.kui-app-tab__name').first()).toBeVisible();
+  await expectTabGeometry(readerTabs);
+  await captureTabChrome(readerTabs, '/private/tmp/hs2-wkgmn4-reader-tabs-wide.png');
   await page.screenshot({ path: '/private/tmp/hs2-2p9k4y-segments-wide.png', fullPage: true });
   await page.setViewportSize({ width: 868, height: 700 });
   expect(
@@ -5492,7 +5561,11 @@ test('uses labels only when the inspector segmented control has enough room', as
     ),
   ).toBe(true);
   await expect(readerTabs.getByRole('tab', { name: 'Code Review' }).locator('svg')).toBeVisible();
+  await expectTabGeometry(readerTabs);
   await page.screenshot({ path: '/private/tmp/hs2-2p9k4y-segments-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectTabGeometry(readerTabs);
+  await captureTabChrome(readerTabs, '/private/tmp/hs2-wkgmn4-reader-tabs-mobile.png');
 });
 
 interface RenderMetricsSnapshot {

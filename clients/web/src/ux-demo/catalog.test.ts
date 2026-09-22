@@ -160,6 +160,7 @@ describe('UX demo catalog', () => {
       'toolbar',
       'toolbar-text',
       'toolbar-control-group',
+      'app-tab',
       'ticket-info-panel',
       'ticket-timeline',
       'ticket-code-review',
