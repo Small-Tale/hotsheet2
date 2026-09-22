@@ -3,7 +3,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('dialog lifecycle event contracts', () => {
-  const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
+  const source = [
+    './main.tsx',
+    './interactions/terminals.ts',
+    './interactions/ticket-selection.ts',
+    './interactions/commands-and-ai.ts',
+    './interactions/inspector-and-editor.ts',
+    './interactions/search-and-composer.ts',
+  ]
+    .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+    .join('\n');
 
   it('uses cancelable Web Awesome wa-hide for every component dialog', () => {
     for (const selector of [

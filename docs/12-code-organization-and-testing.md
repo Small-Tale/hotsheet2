@@ -164,6 +164,35 @@ rest of `target`.
 
 ---
 
+### 12.6.3 Web interaction ownership
+
+The web client keeps application state, rendering, bootstrap, and project loading in
+`clients/web/src/main.tsx`. Twelve modules under `src/interactions/` own the existing
+project lifecycle, repository, navigation/tabs, terminals, ticket selection, saved
+views, commands/AI, notifications/links, search/composer, attachments/gallery,
+inspector/editor, and shell/global handler groups (HS2-YWF98M).
+
+Each module exports a wiring function and an explicit dependency interface. Importing
+it does not register listeners. Main invokes the functions once in their original
+order; each retains its original delegation root, capture/bubble phase, event name,
+selector, cancellation behavior, and shared Kerf adapter. Modules import pure helpers
+directly and never import main or create replacement application signals.
+
+Signal objects and functions can be passed directly. Shared mutable plain bindings
+such as selection anchors, long-press flags, drag state, gesture state, and editor
+draft bases cross the boundary as typed getters/setters; handlers read them through
+the dependency object rather than destructuring a stale primitive snapshot. Small
+shared DOM/domain types live in `interactions/types.ts`, and dataset adaptation lives
+in `interactions/dom.ts`.
+
+`interaction-wiring.test.ts` compares the ordered registration inventory with the
+pre-extraction baseline. Callback tests exercise external state replacement, repeated
+native dismissal, range anchors, and long-press suppression; production browser
+flows remain the end-to-end behavior contract. Changing registrations intentionally
+requires reviewing the inventory alongside those behavior tests. Splitting
+`openProject` and parallelizing remembered-project startup remain the separate
+HS2-V9ZVW0 scope.
+
 ## 12.7 Testing strategy
 
 Follows the project's philosophy (double coverage; transition-matrix testing for

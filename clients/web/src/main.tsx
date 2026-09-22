@@ -7,17 +7,11 @@ import './style.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PanelHeader } from '@kerfjs/ui/panel-header';
-import {
-  type ResizableRegionAxis,
-  type ResizableRegionEdge,
-  resizeRegionFromPointer,
-} from '@kerfjs/ui/resizable-region';
+import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
 import { placeTokenSearchCaret, readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
-import { wireTabBars } from '@kerfjs/ui/wire-tab-bars';
-import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
-import { batch, delegate, delegateCapture, effect, mount, signal } from 'kerfjs';
+import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
 
 import { isTicketActivelyWorkedOn, nextActiveTicketExpiry, projectTabTicketState } from './active-ticket-work';
@@ -41,7 +35,6 @@ import {
   type AiToolDescriptor,
   Api,
   type AttachmentMetadata,
-  type AttachmentPurpose,
   type Capabilities,
   type Checkout,
   type CheckoutTicketCounts,
@@ -66,12 +59,9 @@ import {
 } from './api';
 import {
   type AppRegionId,
-  isAppRegionId,
   loadAppRegionSize,
   normalizeAppRegionSize,
   saveAppRegionSize,
-  TERMINAL_DRAWER_MIN_SIZE,
-  terminalDrawerDragDecision,
   terminalDrawerMaximum,
 } from './app-region-resize';
 import { describeUnreadableAttachments, screenAttachmentFiles } from './attachment-files';
@@ -94,24 +84,15 @@ import {
 } from './board-pagination';
 import { isRemoteClient } from './client-origin';
 import { type CommandDropTarget, emptyExtraGroups, reorderCommandsMultiple } from './command-order';
-import type { CompatibilityAssessment } from './compatibility';
-import { AIConversation, isConversationSurfaceLifecycleEvent } from './components/ai-conversation';
+import { AIConversation } from './components/ai-conversation';
 import { AppEmptyState, ProjectRestoreState } from './components/app-empty-state';
 import { AppError } from './components/app-error';
-import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from './components/attachment-context-menu';
 import {
   attachmentGalleryAnnotationVisible,
-  attachmentGalleryDefaultRange,
   type AttachmentGalleryGeometry,
   type AttachmentGalleryImage,
-  attachmentGalleryImageIndex,
-  attachmentGalleryKeyboardAction,
-  attachmentGallerySelectionUrl,
   attachmentGalleryShiftUrl,
-  attachmentGallerySwipeDirection,
   type AttachmentGallerySwipeGesture,
-  attachmentGallerySwipeGesture,
-  attachmentGalleryZoomModel,
   releaseAttachmentGalleryVideo,
 } from './components/attachment-gallery';
 import { BulkTicketDialog, type BulkTicketDialogState } from './components/bulk-ticket-dialog';
@@ -141,7 +122,7 @@ import {
   projectRestoreTabId,
   rememberedProjectName,
 } from './components/project-restore-error';
-import { PROJECT_TAB_BAR_ID, type ProjectTabBarMode } from './components/project-tab-bar';
+import { type ProjectTabBarMode } from './components/project-tab-bar';
 import { type AppTabKind } from './components/project-tab-context-menu';
 import { type ExternalProviderKind, type GithubAuthState } from './components/provider-setup-form';
 import {
@@ -170,7 +151,6 @@ import {
 import type { RepositorySetupStep } from './components/repository-setup';
 import {
   type ChangeEvidenceView,
-  repositoryAbsolutePath,
   type RepositoryFileMenu,
   type RepositoryStatusView,
 } from './components/repository-status-popover';
@@ -180,11 +160,7 @@ import { type SettingsCategory, settingsCategoryTitle } from './components/setti
 import { SettingsWorkspace } from './components/settings-workspace';
 import type { TicketStatus } from './components/status-badge';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from './components/terminal-dashboard';
-import {
-  TERMINAL_DRAWER_TAB_BAR_ID,
-  type TerminalDrawerChatTab,
-  type TerminalDrawerProps,
-} from './components/terminal-drawer';
+import { type TerminalDrawerChatTab, type TerminalDrawerProps } from './components/terminal-drawer';
 import { TerminalRenameDialog } from './components/terminal-rename-dialog';
 import {
   TerminalVisibilityDialog,
@@ -192,7 +168,7 @@ import {
   type TerminalVisibilityNamePrompt,
 } from './components/terminal-visibility-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from './components/ticket-close-dialog';
-import { type CodeReviewComparison, codeReviewTarget } from './components/ticket-code-review';
+import { type CodeReviewComparison } from './components/ticket-code-review';
 import type { TicketEmptyStateProps } from './components/ticket-empty-state';
 import { type InspectorTab, type TicketInspectorProps } from './components/ticket-inspector';
 import { TicketInspectorSkeleton } from './components/ticket-inspector-skeleton';
@@ -201,15 +177,8 @@ import { type TicketLinkChoice, TicketLinkChoiceDialog } from './components/tick
 import { TicketList } from './components/ticket-list';
 import { showTicketReaderDialog, type TicketReaderDialogElement } from './components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from './components/ticket-row';
-import { eventTargetsContextMenu } from './components/ticket-row-context-menu';
-import {
-  adjacentTicketSlug,
-  isPlainTicketReselection,
-  selectAllTickets,
-  updateTicketSelection,
-} from './components/ticket-selection';
+import { isPlainTicketReselection, updateTicketSelection } from './components/ticket-selection';
 import { TicketSourceSetupDialog } from './components/ticket-source-setup-dialog';
-import { addTicketTag, removeTicketTag } from './components/ticket-tag-editor';
 import { SavedViewContextMenu, type SavedViewContextMenuState } from './components/view-navigation';
 import {
   GlobalWorkspaceSurface,
@@ -225,8 +194,6 @@ import {
   type WorkspaceSurfaceProps,
 } from './components/workspace-composition-surfaces';
 import {
-  nextWorkspaceSort,
-  wireWorkspaceOverflowKeyboard,
   WorkspaceControls,
   WorkspaceIdentity,
   type WorkspaceSort,
@@ -234,7 +201,6 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from './components/workspace-header';
-import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from './context-menu-position';
 import {
   buildConversationExportRequest,
   conversationExportAssets,
@@ -256,23 +222,18 @@ import { createDebouncedAutosave, type DebouncedAutosave } from './debounced-aut
 import type { DevReviewSubmission } from './dev-review';
 import { devReviewRequested } from './dev-review/request';
 import {
-  type DrawerTabCloseAction,
-  drawerTabCloseIds,
   drawerTabFocusRequestStillOwned,
   drawerTabSelectionAfterClose,
   loadDrawerTabOrder,
   orderedDrawerTabIds,
-  reorderDrawerTabIds,
   saveDrawerTabOrder,
 } from './drawer-tab-order';
-import { parseFeedbackChoices, updateFeedbackChoiceSelection } from './feedback-choices';
-import { DETAILS_FEEDBACK_ID, fullTicketFeedbackNeeded, presentedNoteKind } from './feedback-needed';
-import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from './feedback-replies';
+import { fullTicketFeedbackNeeded, presentedNoteKind } from './feedback-needed';
+import { type InlineFeedbackReply } from './feedback-replies';
 import {
   activeDatePrefix,
   activeTagPrefix,
   consumeSearchTokens,
-  dateTokenFromInput,
   effectiveSearch,
   fromTokenSearchTokens,
   type InlineSearchToken,
@@ -283,29 +244,35 @@ import {
   toTokenSearchToken,
 } from './inline-search';
 import { beginInteractionTiming } from './interaction-performance';
-import {
-  chordFromEvent,
-  isAppleShortcutPlatform,
-  loadShortcutOverrides,
-  matchesShortcut,
-  saveShortcutOverrides,
-  type ShortcutChord,
-  shortcutDef,
-} from './keyboard-shortcuts';
+import { wireAttachmentAndGalleryInteractions } from './interactions/attachments-and-gallery';
+import { wireCommandAndAiInteractions } from './interactions/commands-and-ai';
+import { data } from './interactions/dom';
+import { wireInspectorAndEditorInteractions } from './interactions/inspector-and-editor';
+import { wireNavigationAndTabInteractions } from './interactions/navigation-and-tabs';
+import { wireNotificationAndLinkInteractions } from './interactions/notifications-and-links';
+import { wireProjectLifecycleInteractions } from './interactions/project-lifecycle';
+import { wireRepositoryInteractions } from './interactions/repository';
+import { wireSearchAndComposerInteractions } from './interactions/search-and-composer';
+import { wireShellAndGlobalInteractions } from './interactions/shell-and-global';
+import { wireTerminalInteractions } from './interactions/terminals';
+import { wireTicketSelectionInteractions } from './interactions/ticket-selection';
+import type {
+  AttachmentMenu,
+  Control,
+  DetailsFinishTask,
+  NotWorkingTarget,
+  PendingEvidence,
+  Project,
+  RepositoryDetailState,
+  UnhealthyServerRecovery,
+} from './interactions/types';
+import { wireViewAndSavedViewInteractions } from './interactions/views-and-saved-views';
+import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from './keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from './local-ticket-changes';
 import { loadLucideCatalog } from './lucide-catalog';
 import { MigrationJobClient } from './migration-job-client';
 import { type MigrationJob, migrationPercent, migrationPhaseLabel } from './migration-progress';
-import {
-  closeMobileOverlay,
-  isMobileViewport,
-  MOBILE_OVERLAYS_CLOSED,
-  type MobileOverlayState,
-  openMobileOverlay,
-  shouldAutoOpenInspectorOnTap,
-  toggleMobileInspector,
-  toggleMobileSidebar,
-} from './mobile-layout';
+import { isMobileViewport, MOBILE_OVERLAYS_CLOSED, type MobileOverlayState } from './mobile-layout';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from './new-ticket-attachments';
 import { submitNotWorkingReport } from './not-working-workflow';
 import { mergeRetainedCreatedRows, PendingCreatedTickets } from './pending-created-tickets';
@@ -345,17 +312,10 @@ import { appendUniqueTicketRows } from './project-ticket-refresh';
 import { loadProjectTicketRefresh, type ProjectTicketRefresh } from './project-ticket-refresh';
 import { createRefreshBarrier } from './refresh-barrier';
 import { createRenderMetrics } from './render-metrics';
-import { updateRepositoryFileSelection } from './repository-file-selection';
 import { customViewNameAvailable, uniqueCustomViewId } from './saved-views';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from './server-busy';
-import { cycleTabId } from './tab-cycle';
-import { applyRememberedTabOrder, reorderTabs, replaceTabInPlace } from './tab-order';
-import {
-  adjustTerminalFit,
-  TERMINAL_GRID_DEFAULT_ACROSS,
-  TERMINAL_GRID_DEFAULT_HIGH,
-  terminalGridBasis,
-} from './terminal-grid-layout';
+import { applyRememberedTabOrder, replaceTabInPlace } from './tab-order';
+import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from './terminal-grid-layout';
 import { defaultTerminalName, parseTerminalNames, terminalNameKey } from './terminal-names';
 import { ProgressiveTerminalWorkQueue } from './terminal-progressive-work';
 import { terminalDrawerActivation, terminalProjectOwner } from './terminal-project-scope';
@@ -368,14 +328,8 @@ import {
 } from './terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
-  addTerminalVisibilityGroup,
   hideNewTerminalInNamedGroups,
   parseTerminalVisibilityState,
-  removeTerminalVisibilityGroup,
-  renameTerminalVisibilityGroup,
-  selectTerminalVisibilityGroup,
-  setAllTerminalsVisibleInGroup,
-  setTerminalVisibleInGroup,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
   TERMINAL_VISIBILITY_TYPES,
@@ -383,7 +337,6 @@ import {
   terminalVisibilityItems,
   type TerminalVisibilityType,
 } from './terminal-visibility';
-import { wireTerminalVisibilityTypeFilter } from './terminal-visibility-filter';
 import { hasUnresolvedBlocker } from './ticket-blocking';
 import { ticketBoardGroups, ticketBoardGroupTotal } from './ticket-board-layout';
 import {
@@ -394,8 +347,7 @@ import {
   canAtomicallyBulkUpdate,
   canBulkUpdate,
 } from './ticket-bulk-operations';
-import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
-import { ticketClipboardAction } from './ticket-clipboard-shortcuts';
+import { loadLastTicketCategory } from './ticket-category-preference';
 import {
   duplicateReference,
   type DuplicateTarget,
@@ -405,12 +357,7 @@ import {
   validateTicketClose,
 } from './ticket-close';
 import { ticketCompletionTrend } from './ticket-completion-trend';
-import {
-  loadTicketEditorSizes,
-  manuallyResizedTicketEditorHeight,
-  saveTicketEditorSize,
-  ticketEditorKind,
-} from './ticket-editor-size';
+import { loadTicketEditorSizes } from './ticket-editor-size';
 import {
   isTicketConcurrencyConflict,
   reconcileActiveDraft,
@@ -465,17 +412,11 @@ import {
 import { createTrailingTask } from './trailing-task';
 import { renderStormSuppressionReason, type UiStabilityDiagnostics } from './ui-stability-diagnostics';
 import { ensureVideoPoster, syncVideoPosters } from './video-posters';
-import {
-  loadWorkspacePreferences,
-  saveWorkspacePreferences,
-  sortableWorkspaceView,
-  toggleCollapsedCommandGroup,
-} from './workspace-preferences';
+import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView } from './workspace-preferences';
 import {
   activeProjectRoot,
   deleteDraftFiles,
   dismissHs1CleanupPrompt,
-  dismissHs1MigrationPrompt,
   hs1CleanupPromptDismissed,
   hs1MigrationPromptDismissed,
   loadDraftFiles,
@@ -549,24 +490,7 @@ if (import.meta.env.DEV) {
   ).__hotsheetUiStabilityDiagnostics = uiStabilityDiagnostics;
 }
 
-type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };
 loadTicketEditorSizes(localStorage, document.documentElement.style);
-interface Project {
-  id: string;
-  root: string;
-  name: string;
-  stores: string[];
-  apiPath: string;
-  compatibility: CompatibilityAssessment;
-  needsTicketSetup?: boolean;
-  needsHs1Migration?: boolean;
-  hs1ImportCompleted?: boolean;
-  hs1CleanupEligible?: boolean;
-  hs1SourcePath?: string;
-  hs1DatabasePath?: string;
-  hs1PostgresVersion?: string;
-}
-const data = (target: Element) => (target as HTMLElement).dataset;
 
 const projects = signal<Project[]>([]),
   selectedProjectId = signal(''),
@@ -621,10 +545,7 @@ const remoteProjectDialogOpen = signal(false),
   remoteProjectCheckouts = signal<Checkout[]>([]),
   remoteProjectLoading = signal(false),
   remoteProjectError = signal('');
-interface UnhealthyServerRecovery {
-  store: string;
-  expected: { pid: number; url: string; started_at: string };
-}
+
 const unhealthyServerRecovery = signal<UnhealthyServerRecovery | undefined>(undefined),
   unhealthyServerRecoveryBusy = signal(false);
 const projectCloseDialog = signal<ProjectCloseDialogState | undefined>(undefined);
@@ -717,15 +638,7 @@ const changeEvidenceView = signal<ChangeEvidenceView>('docs');
 const changeEvidenceReader = signal<string | undefined>(undefined);
 const repositoryComparison = signal<CodeReviewComparison>({ active: false, side: 'a' }),
   expandedCodeReviewCommits = signal<string[]>([]);
-interface RepositoryDetailState {
-  view: RepositoryStatusView;
-  files: RepositoryFile[];
-  commits: CodeReview['commits'];
-  nextCursor?: number;
-  loading: boolean;
-  loaded: boolean;
-  error: string;
-}
+
 const repositoryDetail = signal<RepositoryDetailState>({
   view: 'unstaged',
   files: [],
@@ -815,19 +728,7 @@ const appTabContextMenu = signal<
 >(undefined);
 const bulkTicketDialog = signal<BulkTicketDialogState | undefined>(undefined);
 let bulkTicketSlugs: string[] = [];
-interface NotWorkingTarget {
-  projectId: string;
-  apiPath: string;
-  ticketId: string;
-  slug: string;
-  connectionId: string;
-  mode: 'not-working' | 'reopen';
-}
-interface PendingEvidence {
-  id: string;
-  name: string;
-  file: File;
-}
+
 const CLOSED_NOT_WORKING_TARGET: NotWorkingTarget = {
   projectId: '',
   apiPath: '',
@@ -1020,16 +921,7 @@ let attachmentGallerySvgFrame: number | undefined, attachmentGallerySvgPreviousF
 let attachmentGalleryLivePlayhead = 0,
   attachmentGalleryLiveVolume = 1;
 let attachmentGalleryObserver: ResizeObserver | undefined;
-interface AttachmentMenu {
-  x: number;
-  y: number;
-  ticket: string;
-  name: string;
-  url: string;
-  id?: string;
-  kind: AttachmentContextMenuKind;
-  reader?: string;
-}
+
 const attachmentMenu = signal<AttachmentMenu | undefined>(undefined);
 const readerDetailsMode = signal<MarkdownEditorMode>('preview'),
   readerDetailsDraft = signal('');
@@ -7843,12 +7735,7 @@ function beginDetailsEdit(reader = false, frame?: TicketReaderFrame) {
   mode.value = 'write';
   queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
 }
-interface DetailsFinishTask {
-  reader: boolean;
-  ticketId?: string;
-  generation: number;
-  saved: Promise<boolean>;
-}
+
 let pointerDetailsReader: boolean | undefined,
   pointerDetailsFinish: DetailsFinishTask | undefined,
   pointerDetailsTimer: number | undefined;
@@ -7936,424 +7823,71 @@ function shiftGallery(delta: number) {
 function activeTicketSurface(): ParentNode {
   return (readerOpen.value ? document.querySelector('[data-component="ticket-reader"]') : null) ?? document;
 }
-function wireProjectLifecycleInteractions() {
-  delegate(document.body, 'click', '[data-action="add-project"]', () => {
-    openProjectPicker();
-  });
-  delegate(document.body, 'click', '[data-action="choose-project"]', () => {
-    if (isRemoteClient()) void openRemoteProjectDialog();
-    else void chooseAndOpenProject();
-  });
-  delegate(document.body, 'click', '[data-action="cancel-open-project"]', () => {
-    unhealthyServerRecovery.value = undefined;
-    projectDialogOpen.value = false;
-  });
-  delegate(document.body, 'click', '[data-action="open-remote-checkout"]', (_event, target) => {
-    const root = data(target.closest<HTMLElement>('[data-checkout-root]')!).checkoutRoot;
-    if (root) void openRemoteCheckout(root);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-remote-project"]', () => {
-    remoteProjectDialogOpen.value = false;
-  });
-  delegate(document.body, 'wa-hide', '[data-remote-project-dialog]', () => {
-    remoteProjectDialogOpen.value = false;
-  });
-  delegate(document.body, 'wa-hide', '[data-project-dialog]', () => {
-    unhealthyServerRecovery.value = undefined;
-    projectDialogOpen.value = false;
-  });
-  delegate(document.body, 'submit', '[data-action="import-hs1-project"]', (event, target) => {
-    event.preventDefault();
-    void importHs1Project(target as HTMLFormElement);
-  });
-  delegate(document.body, 'click', '[data-action="browse-hs1-ticket-store"]', () => {
-    void chooseHs1TicketStore();
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-hs1-migration"]', () => {
-    const target = hs1MigrationProject.value;
-    if (!target || hs1MigrationBusy.value) return;
-    dismissHs1MigrationPrompt(localStorage, target.id, hs1SourceIdentity(target));
-    hs1MigrationProject.value = undefined;
-  });
-  delegate(document.body, 'wa-hide', '[data-component="hs1-migration-dialog"]', () => {
-    const target = hs1MigrationProject.value;
-    if (!target || hs1MigrationBusy.value) return;
-    dismissHs1MigrationPrompt(localStorage, target.id, hs1SourceIdentity(target));
-    hs1MigrationProject.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="open-hs1-migration"]', () => {
-    const current = project();
-    if (!current?.needsHs1Migration) return;
-    hs1MigrationProject.value = current;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => document.querySelector<Control>('[data-component="hs1-migration-dialog"]')?.show?.()),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="migration-job-details"]', () => {
-    const root = project()?.root;
-    if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: !migrationJobDetails.value[root] };
-  });
-  delegate(document.body, 'click', '[data-action="reconnect-migration-job"]', () => {
-    const root = project()?.root;
-    if (root)
-      void migrationJobs.join(root).catch((reason: unknown) => {
-        migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [root]: String(reason) };
-      });
-  });
-  delegate(document.body, 'click', '[data-action="retry-migration-job"]', () => {
-    const target = project(),
-      job = target && migrationJobsByRoot.value[target.root];
-    if (target && job)
-      void migrationJobs
-        .start({
-          projectId: target.id,
-          root: target.root,
-          location: job.store,
-          kind: job.kind,
-          remote: job.remote,
-          retryAttempt: job.attempt,
-        })
-        .catch((reason: unknown) => {
-          migrationConnectionErrors.value = {
-            ...migrationConnectionErrors.value,
-            [target.root]: reason instanceof Error ? reason.message : String(reason),
-          };
-        });
-  });
-  delegate(document.body, 'click', '[data-action="backup-migration-job"]', () => {
-    const target = project(),
-      job = target && migrationJobsByRoot.value[target.root];
-    if (!target || !job || job.status === 'running' || (job.kind === 'import' && job.status !== 'succeeded')) return;
-    ticketSourceSetupProject.value = target;
-    createdGitTicketStore.value = job.store;
-    ticketSourceSetupNavigation.value = 'push';
-  });
-  delegate(document.body, 'click', '[data-action="remove-hs1-data"]', () => {
-    void removeOldHs1Data();
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-hs1-cleanup"]', () => {
-    const current = project();
-    if (!current) return;
-    dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));
-    projects.value = projects.value.map((item) =>
-      item.id === current.id ? { ...item, hs1CleanupEligible: false } : item,
-    );
-  });
-  delegate(document.body, 'wa-hide', '[data-ticket-source-setup-dialog]', () => {
-    ticketSourceSetupProject.value = undefined;
-    providerSetupKind.value = undefined;
-    providerEditingId.value = undefined;
-    providerSettingsError.value = '';
-    createdGitTicketStore.value = '';
-    ticketSourceRemoteError.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-ticket-source-setup"]', () => {
-    ticketSourceSetupProject.value = undefined;
-    providerSetupKind.value = undefined;
-    providerEditingId.value = undefined;
-    providerSettingsError.value = '';
-    createdGitTicketStore.value = '';
-    ticketSourceRemoteError.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="submit-ticket-store-remote"]', () =>
-    document.querySelector<HTMLFormElement>('#ticket-source-remote-form')?.requestSubmit(),
-  );
-  delegate(document.body, 'submit', '[data-action="connect-ticket-store-remote"]', (event, target) => {
-    event.preventDefault();
-    void connectCreatedGitRemote(target as HTMLFormElement);
-  });
-  delegate(document.body, 'click', '[data-action="back-ticket-store-remote"]', () => {
-    ticketSourceSetupNavigation.value = 'pop';
-    createdGitTicketStore.value = '';
-    ticketSourceRemoteError.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="create-project-git-source"]', () => {
-    void createProjectGitSource();
-  });
-  delegate(document.body, 'click', '[data-action="create-project-git-source-custom"]', () => {
-    void createProjectGitSource(true);
-  });
-  delegate(document.body, 'click', '[data-action="browse-project-path"]', (_event, target) => {
-    void chooseProjectPath(target);
-  });
-  delegate(document.body, 'click', '[data-action="recover-unhealthy-server"]', () => {
-    void recoverUnhealthyProjectServer();
-  });
-  delegate(document.body, 'click', '[data-action="reload-client"]', () => {
-    window.location.reload();
-  });
-}
-wireProjectLifecycleInteractions();
-function wireRepositoryInteractions() {
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="open-repository-status"]',()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)});
-  delegate(document.body, 'click', '[data-action="refresh-repository-status"]', () => {
-    void refreshRepositoryStatus();
-  });
-  delegate(document.body, 'click', '[data-action="initialize-repository"]', () => {
-    void initializeRepository();
-  });
-  delegate(document.body, 'submit', '[data-action="connect-repository-remote"]', (event, target) => {
-    event.preventDefault();
-    void connectRepositoryRemote(target as HTMLFormElement);
-  });
-  delegate(document.body, 'click', '[data-action="skip-repository-remote"]', () => {
-    skipRepositoryRemote();
-  });
-  delegate(document.body, 'click', '[data-action="select-repository-view"]', (_event, target) => {
-    const view = data(target).itemId as RepositoryStatusView;
-    repositoryView.value = view;
-    repositoryFileMenu.value = undefined;
-    repositorySelectedFiles.value = [];
-    repositoryFileSelectionAnchor = undefined;
-    void loadRepositoryDetail(view, true);
-  });
-  function selectRepositoryComparisonCommit(sha: string) {
-    const current = repositoryComparison.value;
-    repositoryComparison.value = current.side === 'a' ? { ...current, a: sha, side: 'b' } : { ...current, b: sha };
-  }
-  function toggleExpandedCodeReviewCommit(sha: string) {
-    expandedCodeReviewCommits.value = expandedCodeReviewCommits.value.includes(sha)
-      ? expandedCodeReviewCommits.value.filter((item) => item !== sha)
-      : [...expandedCodeReviewCommits.value, sha];
-  }
-  delegate(document.body, 'click', '[data-action="toggle-repository-comparison"]', () => {
-    if (repositoryComparison.value.active) {
-      repositoryComparison.value = { active: false, side: 'a' };
-      return;
-    }
-    repositoryView.value = 'commits';
-    repositoryComparison.value = { active: true, side: 'a' };
-    if (repositoryDetail.value.view !== 'commits') void loadRepositoryDetail('commits', true);
-  });
-  delegate(document.body, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
-    repositoryComparison.value = { ...repositoryComparison.value, side: data(target).comparisonSide as 'a' | 'b' };
-  });
-  delegate(document.body, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
-    selectRepositoryComparisonCommit(data(target).commitSha!);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
-    toggleExpandedCodeReviewCommit(data(target).commitSha!);
-  });
-  delegate(
-    document.body,
-    'keydown',
-    '[data-action="select-repository-comparison-commit"],[data-action="toggle-code-review-commit"]',
-    (event, target) => {
-      const key = (event as KeyboardEvent).key;
-      if (key !== 'Enter' && key !== ' ') return;
-      event.preventDefault();
-      const action = data(target).action,
-        sha = data(target).commitSha!;
-      if (action === 'select-repository-comparison-commit') selectRepositoryComparisonCommit(sha);
-      else toggleExpandedCodeReviewCommit(sha);
-    },
-  );
-  async function performRepositoryFileAction(path: string, action: 'open' | 'reveal') {
-    const current = project();
-    if (!current) return;
-    repositoryFileMenu.value = undefined;
-    try {
-      await new Api(current.apiPath).repositoryFileAction(current.id, path, action);
-      showToast(action === 'open' ? 'Opened file.' : 'Opened file location.');
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  const repositoryFileSelector = '[data-action="select-repository-file"]';
-  function visibleRepositoryFilePaths(target: Element) {
-    return [
-      ...(target.closest('.repository-status-popover__files')?.querySelectorAll<HTMLElement>(repositoryFileSelector) ??
-        []),
-    ]
-      .map((item) => data(item).itemId!)
-      .filter(Boolean);
-  }
-  function selectRepositoryFile(target: Element, event: MouseEvent | KeyboardEvent) {
-    const path = data(target).itemId;
-    if (!path) return;
-    repositorySelectedFiles.value = updateRepositoryFileSelection(
-      repositorySelectedFiles.value,
-      visibleRepositoryFilePaths(target),
-      path,
-      { additive: event.metaKey || event.ctrlKey, range: event.shiftKey, anchor: repositoryFileSelectionAnchor },
-    );
-    if (!event.shiftKey) repositoryFileSelectionAnchor = path;
-    repositoryFileMenu.value = undefined;
-  }
-  async function openRepositoryFileDiff(paths: string[], area: 'staged' | 'unstaged') {
-    const current = project();
-    if (!current) return;
-    try {
-      await Promise.all(
-        paths.map((path) =>
-          new Api(current.apiPath).openRepositoryReview(current.id, { mode: 'worktree_file', path, area }),
-        ),
-      );
-      showToast(
-        `Opened ${paths.length === 1 ? `${area} file diff` : `${paths.length} ${area} file diffs`} in ${repository.value?.difftool ?? 'the configured diff tool'}.`,
-      );
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  function openRepositoryFileMenu(target: Element, x: number, y: number) {
-    const row = target.closest<HTMLElement>(repositoryFileSelector) ?? (target as HTMLElement),
-      path = data(row).itemId;
-    if (!path) return;
-    const source = target.closest('[data-component="change-evidence-dialog"]') ? 'ticket' : 'repository',
-      selected = repositorySelectedFiles.value.includes(path) ? repositorySelectedFiles.value : [path];
-    repositorySelectedFiles.value = selected;
-    repositoryFileSelectionAnchor = path;
-    const canDiff = source === 'ticket' ? Boolean(codeReview.value?.difftool) : Boolean(repository.value?.difftool),
-      diff = canDiff
-        ? source === 'ticket'
-          ? 'ticket'
-          : repositoryView.value === 'staged' || repositoryView.value === 'unstaged'
-            ? repositoryView.value
-            : repositoryView.value === 'conflicted'
-              ? 'unstaged'
-              : undefined
-        : undefined,
-      width = 232,
-      height = 226,
-      viewportPosition = viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
-        width,
-        height,
-      }),
-      bounds = row.closest('.dialog-surface')?.getBoundingClientRect(),
-      position = bounds
-        ? {
-            x: Math.max(bounds.left + 8, Math.min(viewportPosition.x, bounds.right - width - 8)),
-            y: Math.max(bounds.top + 8, Math.min(viewportPosition.y, bounds.bottom - height - 8)),
-          }
-        : viewportPosition,
-      absolutePaths = selected.flatMap((item) => {
-        const absolute = repositoryAbsolutePath(repository.value?.root, item, repository.value?.platform);
-        return absolute ? [absolute] : [];
-      });
-    repositoryFileMenu.value = {
-      path,
-      paths: selected,
-      absolutePath: absolutePaths[0],
-      absolutePaths,
-      diff,
-      ...position,
-    };
-  }
-  delegate(document.body, 'click', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const box = target.getBoundingClientRect();
-    openRepositoryFileMenu(target, box.right, box.bottom);
-  });
-  delegate(document.body, 'keydown', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const box = target.getBoundingClientRect();
-    openRepositoryFileMenu(target, box.right, box.bottom);
-  });
-  delegate(document.body, 'click', repositoryFileSelector, (event, target) => {
-    selectRepositoryFile(target, event as MouseEvent);
-  });
-  delegate(document.body, 'dblclick', repositoryFileSelector, (event, target) => {
-    if ((event.target as Element).closest('[data-action="open-repository-file-menu-trigger"]')) return;
-    void performRepositoryFileAction(data(target).itemId!, 'open');
-  });
-  delegate(document.body, 'keydown', repositoryFileSelector, (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
-    event.preventDefault();
-    selectRepositoryFile(target, event as KeyboardEvent);
-  });
-  delegate(document.body, 'contextmenu', repositoryFileSelector, (event, target) => {
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    openRepositoryFileMenu(target, pointer.clientX, pointer.clientY);
-  });
-  delegate(document.body, 'click', '[data-repository-file-action]', (event, target) => {
-    event.stopPropagation();
-    const menu = repositoryFileMenu.value,
-      action = data(target).repositoryFileAction;
-    if (!menu) return;
-    const paths = menu.paths ?? [menu.path];
-    repositoryFileMenu.value = undefined;
-    if (action === 'show-diff') {
-      if (menu.diff === 'ticket') openTicketFileDiff(paths);
-      else if (menu.diff === 'staged' || menu.diff === 'unstaged') void openRepositoryFileDiff(paths, menu.diff);
-      return;
-    }
-    if (action === 'copy-path' || action === 'copy-absolute-path') {
-      const values =
-        action === 'copy-path' ? paths : (menu.absolutePaths ?? (menu.absolutePath ? [menu.absolutePath] : []));
-      void navigator.clipboard
-        .writeText(values.join('\n'))
-        .then(() => {
-          showToast(`${values.length === 1 ? 'Path' : `${values.length} paths`} copied.`);
-        })
-        .catch((reason: unknown) => {
-          error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-        });
-      return;
-    }
-    if ((action === 'open' || action === 'reveal') && paths.length === 1)
-      void performRepositoryFileAction(paths[0], action);
-  });
-  delegate(document.body, 'click', '[data-action="open-repository-review"]', (_event, target) => {
-    const current = project(),
-      reviewTarget = codeReviewTarget(data(target));
-    if (!current || !reviewTarget) return;
-    void new Api(current.apiPath)
-      .openRepositoryReview(current.id, reviewTarget)
-      .then(() => {
-        showToast(`Opened in ${repository.value?.difftool ?? 'the configured diff tool'}.`);
-      })
-      .catch((reason: unknown) => {
-        error.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="open-change-evidence"]',(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))});
-  delegate(document.body, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
-    changeEvidenceView.value = data(target).itemId as ChangeEvidenceView;
-    repositorySelectedFiles.value = [];
-    repositoryFileSelectionAnchor = undefined;
-  });
-  function openTicketFileDiff(paths: string[]) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket) return;
-    codeReviewMessage.value = `Opening ${paths.length === 1 ? 'file diff' : `${paths.length} file diffs`}…`;
-    void Promise.all(
-      paths.map((path) =>
-        new Api(current.apiPath).openCodeReview(current.id, ticket.id, { mode: 'ticket_file', path }),
-      ),
-    )
-      .then(() => {
-        if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
-          codeReviewMessage.value = '';
-          showToast(
-            `Opened ${paths.length === 1 ? 'file diff' : `${paths.length} file diffs`} in ${codeReview.value?.difftool ?? 'the configured diff tool'}.`,
-          );
-        }
-      })
-      .catch((reason: unknown) => {
-        if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
-          codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  }
-  delegate(document.body, 'submit', '[data-action="open-project-form"]', (event, target) => {
-    event.preventDefault();
-    const root = (target.querySelector('[name="project-root"]') as Control).value,
-      store = (target.querySelector('[name="ticket-store"]') as Control).value;
-    void openProject(root, store || undefined);
-  });
-}
-wireRepositoryInteractions();
+
+wireProjectLifecycleInteractions({
+  openProjectPicker,
+  openRemoteProjectDialog,
+  chooseAndOpenProject,
+  unhealthyServerRecovery,
+  projectDialogOpen,
+  openRemoteCheckout,
+  remoteProjectDialogOpen,
+  importHs1Project,
+  chooseHs1TicketStore,
+  hs1MigrationProject,
+  hs1MigrationBusy,
+  hs1SourceIdentity,
+  project,
+  migrationJobDetails,
+  migrationJobs,
+  migrationConnectionErrors,
+  migrationJobsByRoot,
+  ticketSourceSetupProject,
+  createdGitTicketStore,
+  ticketSourceSetupNavigation,
+  removeOldHs1Data,
+  projects,
+  providerSetupKind,
+  providerEditingId,
+  providerSettingsError,
+  ticketSourceRemoteError,
+  connectCreatedGitRemote,
+  createProjectGitSource,
+  chooseProjectPath,
+  recoverUnhealthyProjectServer,
+});
+
+wireRepositoryInteractions({
+  repository,
+  repositoryView,
+  repositorySetupStep,
+  repositorySetupError,
+  repositoryFileMenu,
+  repositorySelectedFiles,
+  get repositoryFileSelectionAnchor() {
+    return repositoryFileSelectionAnchor;
+  },
+  set repositoryFileSelectionAnchor(value) {
+    repositoryFileSelectionAnchor = value;
+  },
+  repositoryComparison,
+  expandedCodeReviewCommits,
+  loadRepositoryDetail,
+  refreshRepositoryStatus,
+  initializeRepository,
+  connectRepositoryRemote,
+  skipRepositoryRemote,
+  repositoryDetail,
+  project,
+  showToast,
+  error,
+  codeReview,
+  changeEvidenceView,
+  changeEvidenceReader,
+  selectedTicket,
+  codeReviewMessage,
+  openProject,
+});
 let draggedCommandIds: string[] = [];
 function clearCommandDropIndicators() {
   document
@@ -8370,3650 +7904,682 @@ function clearCommandDrag() {
     .forEach((element) => delete element.dataset.commandDragging);
   clearCommandDropIndicators();
 }
-function wireNavigationAndTabInteractions() {
-  wireTabBars(document.body, {
-    activation: 'manual',
-    onReorder: ({ barId, sourceId, targetId, position }) => {
-      if (barId === PROJECT_TAB_BAR_ID) {
-        projects.value = reorderTabs(projects.value, (item) => item.id, sourceId, targetId, position);
-        localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
-        return;
-      }
-      if (barId !== TERMINAL_DRAWER_TAB_BAR_ID) return;
-      const current = project();
-      if (!current) return;
-      persistDrawerTabOrder(
-        current.id,
-        reorderDrawerTabIds(currentDrawerTabIds(current.id), sourceId, targetId, position),
-      );
-      focusDrawerTab(current.id, sourceId);
-    },
-  });
-  delegate(document.body, 'keydown', '[role="tab"]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      key = keyboard.key;
-    if (event.defaultPrevented) return;
-    if ((key === 'Delete' || key === 'Backspace') && target.closest('[data-tab-kind]')) {
-      event.preventDefault();
-      target.closest<HTMLElement>('[data-tab-kind]')?.querySelector<HTMLButtonElement>('.kui-app-tab__close')?.click();
-      return;
-    }
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
-    if (target.closest('[data-component="tab-bar"]')) return;
-    const tablist = target.closest<HTMLElement>('[role="tablist"]');
-    if (!tablist) return;
-    const tabs = [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].filter(
-        (tab) => tab.closest('[role="tablist"]') === tablist && !tab.hasAttribute('disabled'),
-      ),
-      index = tabs.indexOf(target as HTMLElement);
-    if (index < 0 || tabs.length < 2) return;
-    event.preventDefault();
-    const next =
-      key === 'Home'
-        ? 0
-        : key === 'End'
-          ? tabs.length - 1
-          : key === 'ArrowLeft'
-            ? (index - 1 + tabs.length) % tabs.length
-            : (index + 1) % tabs.length;
-    tabs[next].focus();
-  });
-  delegate(document.body, 'click', '[data-action="reveal-corrupt-ticket"]', (_event, target) => {
-    void revealCorruptTicket(data(target).corruptKey!);
-  });
-  delegate(document.body, 'click', '[data-action="repair-corrupt-ticket"]', (_event, target) => {
-    void queueCorruptTicketRepair(data(target).corruptKey!);
-  });
-  delegate(document.body, 'click', '[data-action="select-corrupt-ticket"]', (_event, target) => {
-    const key = data(target).corruptKey;
-    if (!key || !corruptTickets.value.some((ticket) => corruptTicketKey(ticket) === key)) return;
-    selectedCorruptKey.value = key;
-    selectedTicket.value = null;
-    selectedTicketSlugs.value = [];
-    ticketSelectionAnchor = undefined;
-    setInspectorVisible(true);
-    error.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
-    statsProjectId.value = undefined;
-    setShellMode(data(target).shellMode as ProjectTabBarMode);
-  });
-  delegate(document.body, 'change', 'wa-select[name="terminal-rail-project"]', (_event, target) => {
-    selectTerminalRailProject((target as Control).value);
-  });
-  delegate(document.body, 'change', 'wa-select[name="terminal-rail-view"]', (_event, target) => {
-    selectTicketView((target as Control).value as TicketView);
-  });
-  delegate(document.body, 'change', 'wa-select[name="mobile-view"]', (_event, target) => {
-    selectTicketView((target as Control).value as TicketView);
-  });
-  delegate(document.body, 'click', '[data-action="back-terminal-ticket-rail"]', () => {
-    terminalRailDirection.value = 'backward';
-    terminalRailScreen.value = 'root';
-  });
-  delegate(document.body, 'click', '[data-action="open-project-stats"]', (_event, target) => {
-    const current = project();
-    if (!current) return;
-    const requested = data(target).projectId;
-    statsProjectId.value = requested === 'all' ? undefined : requested || current.id;
-    setShellMode('stats');
-  });
-  delegate(document.body, 'click', '[data-action="select-project-tab"]', (_event, target) => {
-    selectProjectTab(data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!);
-  });
-  delegate(document.body, 'change', 'wa-select[name="mobile-project"]', (_event, target) => {
-    selectProjectTab((target as Control).value);
-  });
-  delegate(document.body, 'click', '[data-action="retry-project-restore"]', (_event, target) => {
-    const root = data(target).projectRoot;
-    if (root) void retryProjectRestore(root);
-  });
-}
-wireNavigationAndTabInteractions();
-function wireTerminalInteractions() {
-  delegate(document.body, 'click', '[data-action="zoom-terminal-grid"]', (_event, target) => {
-    const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
-      bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
-      basis = drawer ? 'high' : terminalGridBasis(bounds.height),
-      direction = data(target).zoomDirection as 'in' | 'out';
-    if (drawer) {
-      terminalDrawerFitHigh.value = adjustTerminalFit(terminalDrawerFitHigh.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.drawer-fit-high', String(terminalDrawerFitHigh.value));
-    } else if (basis === 'across') {
-      terminalFitAcross.value = adjustTerminalFit(terminalFitAcross.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.fit-across', String(terminalFitAcross.value));
-    } else {
-      terminalFitHigh.value = adjustTerminalFit(terminalFitHigh.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.fit-high', String(terminalFitHigh.value));
-    }
-  });
-  delegate(document.body, 'click', '[data-action="preview-terminal"]', (event, target) => {
-    if ((event.target as Element).closest('button') || (event as MouseEvent).detail > 1) return;
-    if (terminalPreviewClickTimer !== undefined) window.clearTimeout(terminalPreviewClickTimer);
-    const key = data(target).terminalKey;
-    terminalPreviewClickTimer = window.setTimeout(() => {
-      terminalPreviewClickTimer = undefined;
-      const session = terminalSession(key);
-      if (!session) return;
-      pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
-      magnifiedTerminalKey.value = key;
-    }, 220);
-  });
-  delegate(document.body, 'keydown', '[data-action="preview-terminal"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-    event.preventDefault();
-    const key = data(target).terminalKey,
-      session = terminalSession(key);
-    if (!session) return;
-    pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
-    magnifiedTerminalKey.value = key;
-  });
-  delegate(document.body, 'dblclick', '[data-component="terminal-tile"]', (event, target) => {
-    if (data(target).magnified === 'true') return;
-    event.preventDefault();
-    if (terminalPreviewClickTimer !== undefined) {
-      window.clearTimeout(terminalPreviewClickTimer);
-      terminalPreviewClickTimer = undefined;
-    }
-    openTerminalInProject(data(target).terminalKey!);
-  });
-  delegate(document.body, 'dblclick', '.terminal-dashboard__magnified .terminal-tile__footer', (event, target) => {
-    if ((event.target as Element).closest('button')) return;
-    event.preventDefault();
-    openTerminalInProject(data(target.closest('[data-component="terminal-tile"]')!).terminalKey!);
-  });
-  delegate(document.body, 'contextmenu', '[data-component="terminal-tile"]', (event, target) => {
-    if (data(target).magnified === 'true') return;
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    terminalContextMenu.value = {
-      key: data(target).terminalKey!,
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: 104,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
-    event.preventDefault();
-    const box = target.getBoundingClientRect();
-    terminalContextMenu.value = {
-      key: data(target).itemId!,
-      ...viewportSafeContextMenuPosition(box.right, box.bottom, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: 104,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
-    if (event.target === target) magnifiedTerminalKey.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="hide-dashboard-terminal"]', (_event, target) => {
-    const key = data(target).terminalKey ?? data(target).itemId,
-      scope = terminalVisibilityScopeFor(target),
-      active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
-    if (key) persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, false));
-    terminalContextMenu.value = undefined;
-    if (magnifiedTerminalKey.value === key) magnifiedTerminalKey.value = undefined;
-  });
-  wireTerminalVisibilityTypeFilter(document.body, (types) => {
-    terminalVisibilityFilter.value = types;
-  });
-  delegate(document.body, 'click', '[data-action="open-terminal-visibility"]', (event, target) => {
-    event.stopImmediatePropagation();
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
-    terminalVisibilityDialogScope.value = terminalVisibilityScopeFor(target);
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
-    if (event.target !== target) return;
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityNamePrompt.value = undefined;
-    terminalVisibilityDialogScope.value = undefined;
-  });
-  delegate(document.body, 'change', '[name="terminal-visibility-group"]', (_event, target) => {
-    const scope = terminalVisibilityScopeFor(target),
-      id = (target as Control).value;
-    persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
-  });
-  delegate(document.body, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
-    const scope = terminalVisibilityDialogScope.value,
-      id = data(target).itemId;
-    terminalVisibilityContextMenu.value = undefined;
-    if (scope && id) persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
-  });
-  delegate(document.body, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
-    const id = data(target).visibilityGroupId;
-    if (!id || id === 'default') return;
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    terminalVisibilityContextMenu.value = {
-      id,
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 192,
-        height: 96,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="add-terminal-visibility-group"]', () => {
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityNamePrompt.value = { mode: 'add', value: '' };
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
-        ?.focus(),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
-    const menu = terminalVisibilityContextMenu.value,
-      group = terminalVisibility.value.groups.find((item) => item.id === menu?.id);
-    terminalVisibilityContextMenu.value = undefined;
-    if (!group) return;
-    terminalVisibilityNamePrompt.value = { mode: 'rename', groupId: group.id, value: group.name };
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
-        ?.focus(),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
-    const id = terminalVisibilityContextMenu.value?.id;
-    terminalVisibilityContextMenu.value = undefined;
-    if (id) persistTerminalVisibility(removeTerminalVisibilityGroup(terminalVisibility.value, id));
-  });
-  delegate(document.body, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
-    event.preventDefault();
-    const prompt = terminalVisibilityNamePrompt.value,
-      scope = terminalVisibilityDialogScope.value,
-      name = target.querySelector<Control>('[name="terminal-visibility-group-name"]')?.value.trim();
-    if (!prompt || !scope || !name) return;
-    if (prompt.mode === 'add') {
-      const added = addTerminalVisibilityGroup(terminalVisibility.value, crypto.randomUUID(), name);
-      persistTerminalVisibility(selectTerminalVisibilityGroup(added.state, scope, added.group.id));
-    } else if (prompt.groupId)
-      persistTerminalVisibility(renameTerminalVisibilityGroup(terminalVisibility.value, prompt.groupId, name));
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-terminal-visibility-name"]', () => {
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-visibility-name-dialog]', () => {
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-visibility"]', (_event, target) => {
-    const scope = terminalVisibilityDialogScope.value,
-      key = data(target).itemId;
-    if (!scope || !key) return;
-    const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-      visible = active.hiddenKeys.includes(key);
-    persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
-  });
-  delegate(
-    document.body,
-    'click',
-    '[data-action="show-all-terminals-in-group"], [data-action="hide-all-terminals-in-group"]',
-    (_event, target) => {
-      const scope = terminalVisibilityDialogScope.value;
-      if (!scope) return;
-      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-        visible = data(target).action === 'show-all-terminals-in-group';
-      persistTerminalVisibility(
-        setAllTerminalsVisibleInGroup(terminalVisibility.value, active.id, terminalKeysForVisibilityDialog(), visible),
-      );
-    },
-  );
-  delegate(document.body, 'click', '[data-action="open-terminal-project"]', (_event, target) => {
-    openTerminalInProject(data(target).terminalKey ?? data(target).itemId!);
-  });
-  delegate(document.body, 'click', '[data-action="open-grid-ai-chat"]', (_event, target) => {
-    openGridAIChat(data(target).projectId!, data(target).chatId!);
-  });
-  delegate(document.body, 'keydown', '[data-component="workspace-chat-tile"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-    event.preventDefault();
-    openGridAIChat(data(target).projectId!, data(target).chatId!);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-drawer"]', () => {
-    setTerminalDrawerVisible(!terminalDrawerVisible.value);
-  });
-  delegate(document.body, 'dblclick', '[data-action="toggle-terminal-drawer-maximize"]', (event) => {
-    if ((event.target as Element).closest('button, input, textarea, select, a, [data-tab-kind="terminal"]')) return;
-    toggleTerminalDrawerMaximized();
-  });
-  delegate(document.body, 'dblclick', '[data-tab-kind="terminal"], [data-action="select-drawer-item"]', (event) => {
-    if ((event.target as Element).closest('[data-tab-kind="ai-chat"]')) return;
-    event.stopPropagation();
-    toggleTerminalDrawerMaximized();
-  });
-  delegate(document.body, 'click', '[data-action="select-drawer-item"]', (_event, target) => {
-    const tab = target.closest<HTMLElement>('[data-tab-kind]');
-    selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-create-menu"]', (event) => {
-    event.stopPropagation();
-    terminalDrawerCreateMenuOpen.value = !terminalDrawerCreateMenuOpen.value;
-  });
-  delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
-    const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
-    terminalDrawerCreateMenuOpen.value = false;
-    if (kind === 'default-shell') {
-      void createProjectTerminal();
-      return;
-    }
-    const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey);
-    if (!configuration) return;
-    if (kind === 'ai-shell') void createProjectTerminal(configuration);
-    else void createDrawerAIChat(configuration);
-  });
-  delegate(document.body, 'click', '[data-action="open-saved-conversation"]', () => {
-    void openSavedConversation();
-  });
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (terminalDrawerCreateMenuOpen.value && !(event.target as Element).closest('.terminal-drawer__create-wrap'))
-        terminalDrawerCreateMenuOpen.value = false;
-    },
-    { capture: true },
-  );
-  delegate(document.body, 'click', '[data-action="create-project-terminal"]', () => {
-    void createProjectTerminal();
-  });
-  delegate(document.body, 'click', '[data-action="close-project-tab"]', (event, target) => {
-    event.stopPropagation();
-    requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
-  });
-  delegate(document.body, 'click', '[data-action="select-project-close-resource"]', (_event, target) => {
-    const state = projectCloseDialog.value,
-      key = data(target).itemId;
-    if (!state || !key || key === state.selectedKey) return;
-    projectCloseDialog.value = { ...state, selectedKey: key, error: '' };
-    restoreBorrowedProjectCloseTerminal(state);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-project-close"]', () => {
-    cancelProjectClose();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="project-close-dialog"]', () => {
-    if (!projectCloseDialog.value?.operation) cancelProjectClose();
-  });
-  delegate(document.body, 'click', '[data-action="confirm-close-project"]', () => {
-    confirmProjectClose();
-  });
-  delegate(document.body, 'click', '[data-action="close-all-project-resources"]', () => {
-    void closeAllProjectResources();
-  });
-  delegate(document.body, 'click', '[data-action="close-terminal-tab"]', (event, target) => {
-    event.stopPropagation();
-    void closeTerminalIds([data(target.closest<HTMLElement>('[data-tab-kind="terminal"]')!).terminalId!]);
-  });
-  delegate(document.body, 'click', '[data-action="close-ai-chat-tab"]', (event, target) => {
-    event.stopPropagation();
-    closeDrawerAIChat(data(target.closest<HTMLElement>('[data-tab-kind="ai-chat"]')!).chatId!);
-  });
-  delegate(document.body, 'contextmenu', '[data-tab-kind]', (event, target) => {
-    event.preventDefault();
-    if (data(target).restoreFailure === 'true') return;
-    const pointer = event as MouseEvent,
-      kind = data(target).tabKind as AppTabKind,
-      id =
-        kind === 'project'
-          ? data(target).projectId!
-          : kind === 'ai-chat'
-            ? data(target).chatId!
-            : data(target).terminalId!;
-    appTabContextMenu.value = {
-      kind,
-      id,
-      direction: pointer.altKey ? 'left' : 'right',
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 256,
-        height: 202,
-      }),
-    };
-  });
-  delegate(
-    document.body,
-    'click',
-    '[data-action="project-tab-context-action"], [data-action="terminal-tab-context-action"]',
-    (_event, target) => {
-      const menu = appTabContextMenu.value;
-      if (!menu) return;
-      const ordered =
-          menu.kind === 'project' ? projects.value.map((item) => item.id) : currentDrawerTabIds(project()?.id ?? ''),
-        action = data(target).tabAction;
-      if (action === 'rename' && menu.kind === 'terminal') {
-        const group = terminalGroups.value.find((item) => item.projectId === project()?.id),
-          session = group?.sessions.find((item) => item.id === menu.id);
-        appTabContextMenu.value = undefined;
-        if (session) {
-          terminalRename.value = {
-            projectId: session.projectId,
-            terminalId: session.id,
-            value: session.title ?? session.id,
-          };
-          queueMicrotask(() => document.querySelector<Control>('[name="terminal-name"]')?.focus());
-        }
-        return;
-      }
-      const ids = drawerTabCloseIds(ordered, menu.id, action as DrawerTabCloseAction);
-      appTabContextMenu.value = undefined;
-      if (menu.kind === 'project') requestProjectClose(ids);
-      else void closeDrawerTabIds(ids);
-    },
-  );
-  delegate(document.body, 'submit', '[data-action="rename-terminal-form"]', (event, target) => {
-    event.preventDefault();
-    const rename = terminalRename.value,
-      name = target.querySelector<Control>('[name="terminal-name"]')?.value ?? '';
-    if (!rename || !name.trim()) return;
-    saveTerminalName(rename.projectId, rename.terminalId, name);
-    terminalRename.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-terminal-rename"]', () => {
-    terminalRename.value = undefined;
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-rename-dialog]', () => {
-    terminalRename.value = undefined;
-  });
-}
-wireTerminalInteractions();
-function wireTicketSelectionInteractions() {
-  delegate(document.body, 'click', '[data-action="select-ticket-row"]', (event, target) => {
-    if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
-    const pointer = event as MouseEvent,
-      rail = Boolean(target.closest('[data-component="terminal-ticket-rail"]'));
-    // Mobile has no persistent side inspector, so a plain tap on a workspace-list ticket auto-opens the
-    // right inspector overlay (tap-away on the scrim returns to the list) — HS2-N7RPFP. Range/toggle
-    // multi-select taps and the terminal rail are excluded.
-    if (
-      shouldAutoOpenInspectorOnTap({
-        mobile: viewportMobile.value,
-        rail,
-        shiftKey: pointer.shiftKey,
-        metaKey: pointer.metaKey,
-        ctrlKey: pointer.ctrlKey,
-      })
-    )
-      mobileOverlay.value = openMobileOverlay('inspector');
-    void selectTickets(
-      data(target).ticketSlug!,
-      { range: pointer.shiftKey, toggle: pointer.metaKey || pointer.ctrlKey },
-      selectionOrder(target),
-    ).then((ticket) => {
-      if (rail && ticket && selectedTicketSlugs.value.length === 1) {
-        terminalRailDirection.value = 'forward';
-        terminalRailScreen.value = 'ticket';
-      }
-    });
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-action="select-ticket-row"]', (event, target) => {
-    const pointer = event as PointerEvent,
-      active = document.activeElement,
-      slug = data(target).ticketSlug!;
-    if (
-      pointer.button === 0 &&
-      active instanceof HTMLElement &&
-      active.closest('[data-component="ticket-inspector"], [data-component="ticket-reader"]') &&
-      active.matches(
-        'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
-      ) &&
-      isPlainTicketReselection(selectedTicketSlugs.value, selectedTicket.value?.slug, slug, {
-        range: pointer.shiftKey,
-        toggle: pointer.metaKey || pointer.ctrlKey,
-      })
-    )
-      event.preventDefault();
-  });
-  delegate(document.body, 'click', '[data-action="select-ticket-column"]', (event, target) => {
-    event.stopImmediatePropagation();
-    const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]'),
-      columnId = column?.dataset.columnId;
-    if (!columnId) return;
-    const slugs =
-      ticketBoardGroups(visibleTickets(), selectedView.value, hideVerifiedColumn())
-        .find((group) => group.id === columnId)
-        ?.tickets.map((ticket) => ticket.slug) ?? [];
-    cancelTicketDrafts();
-    selectedCorruptKey.value = undefined;
-    selectedTicketSlugs.value = slugs;
-    ticketSelectionAnchor = slugs[0];
-    selectedTicket.value = null;
-    setInspectorVisible(true);
-  });
-  delegate(document.body, 'dblclick', '[data-action="select-ticket-row"]', (event, target) => {
-    if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
-    void openTicketReader(data(target).ticketSlug!, selectionOrder(target), target as HTMLElement);
-  });
-  delegate(document.body, 'contextmenu', '[data-action="select-ticket-row"]', (event, target) => {
-    event.preventDefault();
-    const pointer = event as MouseEvent,
-      slug = data(target).ticketSlug!;
-    if (!selectedTicketSlugs.value.includes(slug)) void selectTickets(slug, {}, selectionOrder(target));
-    ticketContextMenu.value = {
-      ...viewportSafePointerPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight),
-      ticketSlug: slug,
-    };
-  });
-  wireWorkspaceOverflowKeyboard(document.body);
-  delegate(document.body, 'click', '[data-action="toggle-selected-up-next"]', () => {
-    const selected = selectedRows();
-    if (selected.length === 0) return;
-    void executeBulkTicketAction(
-      { kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) },
-      selected.map((ticket) => ticket.slug),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="open-selected-ticket-actions"]', (_event, target) => {
-    const selected = selectedRows();
-    if (selected.length === 0) return;
-    const rect = target.getBoundingClientRect(),
-      position = viewportSafeContextMenuPosition(rect.right - 232, rect.bottom, window.innerWidth, window.innerHeight, {
-        width: 232,
-        height: 382,
-      });
-    ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
-  });
-  delegate(document.body, 'click', '[data-context-field]', (event, target) => {
-    event.stopPropagation();
-    const menu = ticketContextMenu.value,
-      field = data(target).contextField as 'category' | 'priority' | 'status' | undefined,
-      value = data(target).contextValue;
-    if (!menu || !field || !value) return;
-    const slugs = selectedTicketSlugs.value.length ? [...selectedTicketSlugs.value] : [menu.ticketSlug];
-    ticketContextMenu.value = undefined;
-    requestAnimationFrame(() => {
-      void executeBulkTicketAction({ kind: 'field', field, value }, slugs);
-    });
-  });
-  delegate(document.body, 'click', '[data-context-action="Report not working"]', (event) => {
-    event.stopImmediatePropagation();
-    const menu = ticketContextMenu.value;
-    if (!menu) return;
-    const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-    ticketContextMenu.value = undefined;
-    if (ticket) openNotWorking(ticket);
-  });
-  delegate(document.body, 'click', '[data-context-action="Reopen ticket"]', (event) => {
-    event.stopImmediatePropagation();
-    const menu = ticketContextMenu.value;
-    if (!menu) return;
-    const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-    ticketContextMenu.value = undefined;
-    if (ticket) openNotWorking(ticket, 'reopen');
-  });
-  delegate(document.body, 'click', '[data-context-action="Close ticket"]', (event) => {
-    event.stopImmediatePropagation();
-    const menu = ticketContextMenu.value;
-    if (!menu) return;
-    const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-    ticketContextMenu.value = undefined;
-    if (ticket) openTicketClose(ticket);
-  });
-  delegate(document.body, 'click', '[data-context-action]', (_event, target) => {
-    const menu = ticketContextMenu.value;
-    if (!menu) return;
-    const action = data(target).contextAction,
-      slugs = selectedTicketSlugs.value.length ? [...selectedTicketSlugs.value] : [menu.ticketSlug],
-      selected = tickets.value.filter((item) => slugs.includes(item.slug)),
-      row = document.querySelector<HTMLElement>(
-        `[data-action="select-ticket-row"][data-ticket-slug="${CSS.escape(menu.ticketSlug)}"]`,
-      );
-    ticketContextMenu.value = undefined;
-    if (action === 'Open ticket') {
-      void openTicketReader(menu.ticketSlug, undefined, row ?? undefined);
-      return;
-    }
-    if (action === 'Verify ticket') {
-      void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'verified' }, slugs);
-      return;
-    }
-    if (action === 'Reopen ticket') {
-      void executeBulkTicketAction({ kind: 'reopen' }, slugs);
-      return;
-    }
-    if (action === 'Toggle Up Next' && selected.length) {
-      void executeBulkTicketAction({ kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) }, slugs);
-      return;
-    }
-    if (action === 'Duplicate ticket') {
-      copySelection(false);
-      void pasteSelection();
-      return;
-    }
-    if (action === 'Move to Backlog') {
-      void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'backlog' }, slugs);
-      return;
-    }
-    if (action === 'Archive ticket') {
-      void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'archive' }, slugs);
-      return;
-    }
-    if (action === 'Add tag') {
-      openBulkTicketDialog('add-tag', slugs);
-      return;
-    }
-    if (action === 'Remove tag') {
-      openBulkTicketDialog('remove-tag', slugs);
-      return;
-    }
-    if (action === 'Delete ticket') {
-      openBulkTicketDialog('delete', slugs);
-      return;
-    }
-    if (action === 'Restore ticket') {
-      void restoreTrashedTickets(slugs);
-      return;
-    }
-  });
-  delegate(document.body, 'submit', '[data-action="submit-bulk-tag"]', (event, target) => {
-    event.preventDefault();
-    const value = target.querySelector<Control>('[name="bulk-ticket-tag"]')?.value ?? '',
-      mode = data(target).tagMode;
-    if (mode === 'add' || mode === 'remove')
-      void executeBulkTicketAction({ kind: mode === 'add' ? 'add-tag' : 'remove-tag', tag: value }, bulkTicketSlugs);
-  });
-  delegate(document.body, 'click', '[data-action="choose-bulk-tag"]', (_event, target) => {
-    const input = document.querySelector<Control>('[name="bulk-ticket-tag"]');
-    if (input) {
-      input.value = data(target).tag ?? '';
-      input.focus();
-    }
-  });
-  delegate(document.body, 'click', '[data-action="cancel-bulk-ticket-action"]', () => {
-    bulkTicketDialog.value = undefined;
-    bulkTicketSlugs = [];
-  });
-  delegate(document.body, 'click', '[data-action="open-empty-trash"]', () => {
-    openEmptyTrash();
-  });
-  delegate(document.body, 'click', '[data-action="confirm-empty-trash"]', () => {
-    void emptyTrash();
-  });
-  delegate(document.body, 'change', '[name="ticket-close-reason"]', (_event, target) => {
-    setTicketCloseReason((target as Control).value as TicketCloseReason);
-  });
-  delegate(document.body, 'input', '[name="ticket-close-target-search"]', (_event, target) => {
-    searchTicketCloseTargets((target as Control).value);
-  });
-  delegate(document.body, 'click', '[data-action="select-ticket-close-target"]', (_event, target) => {
-    const current = ticketCloseDialog.value,
-      candidate = current?.candidates.find((item) => duplicateTargetKey(item) === data(target).itemId);
-    if (current && candidate)
-      ticketCloseDialog.value = { ...current, selected: candidate, query: '', candidates: [], error: '' };
-  });
-  delegate(document.body, 'click', '[data-action="clear-ticket-close-target"]', () => {
-    const current = ticketCloseDialog.value;
-    if (!current) return;
-    ticketCloseDialog.value = { ...current, selected: undefined, query: '', candidates: [], error: '' };
-    queueMicrotask(() => document.querySelector<Control>('[name="ticket-close-target-search"]')?.focus());
-  });
-  delegate(document.body, 'submit', '[data-action="submit-ticket-close"]', (event) => {
-    event.preventDefault();
-    void submitTicketClose();
-  });
-  delegate(document.body, 'click', '[data-action="cancel-ticket-close"]', () => {
-    closeTicketCloseDialog();
-  });
-  delegate(document.body, 'wa-hide', '[data-component="ticket-close-dialog"]', (event, target) => {
-    if (event.composedPath()[0] === target) closeTicketCloseDialog();
-  });
-  delegate(document.body, 'click', '[data-action="open-duplicate-target"]', (_event, target) => {
-    ticketLinkReturnFocus = target as HTMLElement;
-    void openDuplicateTarget(data(target).targetId ?? data(target).itemId!);
-  });
-  delegate(document.body, 'click', '[data-action="confirm-bulk-delete"]', () => {
-    void executeBulkTicketAction({ kind: 'delete' }, bulkTicketSlugs);
-  });
-  delegate(
-    document.body,
-    'wa-hide',
-    '[data-component="bulk-tag-dialog"], [data-component="bulk-delete-dialog"], [data-component="empty-trash-dialog"]',
-    () => {
-      bulkTicketDialog.value = undefined;
-      bulkTicketSlugs = [];
-    },
-  );
-  delegate(document.body, 'input', '[name="not-working-note"]', (_event, target) => {
-    notWorkingNote.value = (target as HTMLTextAreaElement).value;
-    scheduleProjectSessionPersistence();
-    presentNotWorkingDialog();
-  });
-  delegate(document.body, 'change', 'input[name="not-working-attachments"]', (_event, target) => {
-    const input = target as HTMLInputElement;
-    if (input.files?.length) void addNotWorkingFiles(input.files);
-    input.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="remove-not-working-attachment"]', (_event, target) => {
-    const id = data(target).pendingAttachmentId;
-    if (id) void deleteDraftFiles(draftScope('not-working', notWorkingTarget.value.projectId), [id]);
-    notWorkingFiles.value = notWorkingFiles.value.filter((item) => item.id !== id);
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'dragover', '[data-not-working-dropzone="true"]', (event, target) => {
-    event.preventDefault();
-    (target as HTMLElement).dataset.dragging = 'true';
-  });
-  delegate(document.body, 'dragleave', '[data-not-working-dropzone="true"]', (_event, target) => {
-    delete (target as HTMLElement).dataset.dragging;
-  });
-  delegate(document.body, 'drop', '[data-not-working-dropzone="true"]', (event, target) => {
-    event.preventDefault();
-    delete (target as HTMLElement).dataset.dragging;
-    const files = (event as DragEvent).dataTransfer?.files;
-    if (files?.length) void addNotWorkingFiles(files);
-  });
-  delegate(document.body, 'submit', '[data-action="submit-not-working"]', (event) => {
-    event.preventDefault();
-    void submitNotWorking();
-  });
-  delegate(document.body, 'click', '[data-action="cancel-not-working"]', () => {
-    closeNotWorking();
-  });
-  delegate(document.body, 'wa-hide', '[data-component="not-working-dialog"]', (_event, dialog) => {
-    const target = notWorkingTarget.value,
-      activeLabel = target.mode === 'reopen' ? `Reopen Ticket — ${target.slug}` : `Not Working — ${target.slug}`;
-    if (!notWorkingSubmitting.value && target.slug && dialog.getAttribute('aria-label') === activeLabel)
-      closeNotWorking();
-  });
-  delegate(document.body, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      row = target as HTMLElement,
-      slug = data(row).ticketSlug!,
-      ordered = selectionOrder(row);
-    if (matchesShortcut('select-all-tickets', keyboard, keyboardShortcutOverrides.value, appleShortcutPlatform)) {
-      event.preventDefault();
-      const next = selectAllTickets(visibleTickets().map((ticket) => ticket.slug));
-      ticketSelectionAnchor = next.anchor;
-      selectedTicketSlugs.value = [...next.selected];
-      return;
-    }
-    if (keyboard.key === 'ArrowUp' || keyboard.key === 'ArrowDown') {
-      event.preventDefault();
-      const next = adjacentTicketSlug(ordered, slug, keyboard.key === 'ArrowDown' ? 1 : -1);
-      if (next) {
-        document.querySelector<HTMLElement>(`[data-ticket-slug="${next}"]`)?.focus();
-        void selectTickets(next, { range: keyboard.shiftKey }, ordered);
-      }
-      return;
-    }
-    if (keyboard.key === 'Enter' || keyboard.key === ' ') {
-      event.preventDefault();
-      void selectTickets(slug, { range: keyboard.shiftKey, toggle: keyboard.metaKey || keyboard.ctrlKey }, ordered);
-    }
-  });
-}
-wireTicketSelectionInteractions();
-function wireViewAndSavedViewInteractions() {
-  delegate(document.body, 'click', '[data-ticket-selection-root="true"]', (event) => {
-    const pointer = event as MouseEvent;
-    if (
-      (event.target as Element).closest('[data-action="select-ticket-row"]') ||
-      pointer.shiftKey ||
-      pointer.metaKey ||
-      pointer.ctrlKey
-    )
-      return;
-    selectedCorruptKey.value = undefined;
-    selectedTicketSlugs.value = [];
-    ticketSelectionAnchor = undefined;
-    selectedTicket.value = null;
-  });
-  delegate(document.body, 'click', '[data-action="select-view"]', (_event, target) => {
-    selectTicketView((data(target).itemId ?? 'all') as TicketView);
-  });
-  delegateCapture(document.body, 'click', '[data-action="add-view"]', (event) => {
-    if (isEditableEvent(event)) return;
-    openSavedViewDialog();
-  });
-  delegate(document.body, 'click', '[data-action="open-saved-view-menu"]', (event, target) => {
-    event.stopPropagation();
-    const rect = target.getBoundingClientRect(),
-      id = data(target).itemId,
-      label = data(target).itemLabel;
-    if (!id || !label) return;
-    savedViewMenu.value = {
-      id,
-      label,
-      ...viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-        width: 192,
-        height: 96,
-      }),
-    };
-  });
-  delegate(document.body, 'contextmenu', '[data-saved-view-id]', (event, target) => {
-    event.preventDefault();
-    const row = target.closest<HTMLElement>('.view-navigation__item') ?? (target as HTMLElement),
-      id = data(row).savedViewId,
-      label = data(row).savedViewLabel,
-      pointer = event as MouseEvent;
-    if (!id || !label) return;
-    savedViewMenu.value = {
-      id,
-      label,
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 192,
-        height: 96,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="edit-saved-view"]', (event, target) => {
-    event.stopPropagation();
-    savedViewMenu.value = undefined;
-    openSavedViewRename(data(target).itemId!);
-  });
-  delegate(document.body, 'click', '[data-action="delete-saved-view"]', (event, target) => {
-    event.stopPropagation();
-    savedViewMenu.value = undefined;
-    openSavedViewDelete(data(target).itemId!);
-  });
-  delegate(document.body, 'input', '[name="saved-view-name"]', (_event, target) => {
-    savedViewName.value = (target as Control).value;
-    savedViewError.value = '';
-  });
-  delegate(document.body, 'input', '[data-token-search-editor="saved-view-query"]', (event, target) => {
-    const editor = target as HTMLElement,
-      state = readInlineSearchField(editor, savedViewQueryTokens.value),
-      input = event as InputEvent,
-      commitsToken =
-        (typeof input.data === 'string' && /\s$/.test(input.data)) ||
-        (input.inputType === 'insertFromPaste' && /\s$/.test(state.text));
-    if (updateSavedViewQuery(state.text, false, state.tokens, commitsToken)) focusSavedViewQuery();
-  });
-  delegate(document.body, 'mousedown', '[data-action="clear-saved-view-query"]', (event) => {
-    event.preventDefault();
-  });
-  delegate(document.body, 'click', '[data-action="remove-saved-view-query-token"]', (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw) removeSavedViewQueryToken(raw);
-  });
-  delegate(document.body, 'click', '[data-action="edit-saved-view-query-token"]', editSavedViewQueryToken);
-  delegate(
-    document.body,
-    'dblclick',
-    '[data-token-search-editor="saved-view-query"] [data-component="token-search-token"]',
-    editSavedViewQueryToken,
-  );
-  delegate(document.body, 'click', '[data-action="clear-saved-view-query"]', () => {
-    const editor = document.querySelector<HTMLElement>('[data-token-search-editor="saved-view-query"]');
-    if (editor) editor.textContent = '';
-    savedViewQuery.value = '';
-    savedViewQueryTokens.value = [];
-    savedViewError.value = '';
-    focusSavedViewQuery(0);
-  });
-  delegate(document.body, 'submit', '[data-action="save-saved-view"]', (event, target) => {
-    event.preventDefault();
-    void saveSavedView(target as HTMLFormElement);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-saved-view"]', () => {
-    closeSavedViewDialog();
-  });
-  delegate(document.body, 'wa-hide', '[data-component="saved-view-dialog"]', (event) => {
-    if (savedViewBusy.value) {
-      event.preventDefault();
-      return;
-    }
-    closeSavedViewDialog();
-  });
-  delegate(document.body, 'click', '[data-action="confirm-delete-saved-view"]', () => {
-    void deleteSavedView();
-  });
-  delegate(document.body, 'click', '[data-action="cancel-delete-saved-view"]', () => {
-    closeSavedViewDelete();
-  });
-  delegate(document.body, 'wa-hide', '[data-component="saved-view-delete-dialog"]', (event) => {
-    if (savedViewDeleteBusy.value) {
-      event.preventDefault();
-      return;
-    }
-    closeSavedViewDelete();
-  });
-}
-wireViewAndSavedViewInteractions();
-function wireCommandAndAiInteractions() {
-  delegate(document.body, 'click', '[data-action="toggle-command-group"]', () => {
-    commandGroupExpanded.value = !commandGroupExpanded.value;
-    persistWorkspacePreferences();
-  });
-  delegate(document.body, 'click', '[data-action="toggle-command-section"]', (_event, target) => {
-    const current = project(),
-      group = target.closest<HTMLElement>('[data-command-group]')?.dataset.commandGroup;
-    if (!current || !group) return;
-    commandGroupsCollapsed.value = toggleCollapsedCommandGroup(commandGroupsCollapsed.value, current.id, group);
-    persistWorkspacePreferences();
-  });
-  delegate(document.body, 'click', '[data-action="toggle-drive"]', () => {
-    void toggleSidebarDrive();
-  });
-  delegate(document.body, 'click', '[data-action="toggle-drive-options"]', (event) => {
-    event.stopPropagation();
-    const opening = !driveOptionsOpen.value;
-    driveOptionsOpen.value = opening;
-    if (opening && !aiTools.value.length && !aiSettingsLoading.value) void refreshAiConfiguration(undefined, true);
-  });
-  delegate(document.body, 'click', '[data-action="select-drive-default"]', () => {
-    const current = project();
-    if (!current) return;
-    driveOverridesByProject.value = { ...driveOverridesByProject.value, [current.id]: {} };
-  });
-  delegate(document.body, 'click', '[data-action="select-drive-tool"]', (_event, target) => {
-    const current = project(),
-      tool = data(target).value;
-    if (!current || !tool) return;
-    driveOverridesByProject.value = { ...driveOverridesByProject.value, [current.id]: normalizedAiSelection({ tool }) };
-  });
-  delegate(document.body, 'click', '[data-action="select-drive-model"]', (_event, target) => {
-    selectDriveModel(data(target).value ?? '');
-  });
-  delegate(document.body, 'click', '[data-action="open-drive-manual-model"]', () => {
-    openManualModel('drive');
-  });
-  delegate(document.body, 'click', '[data-action="select-drive-effort"]', (_event, target) => {
-    const current = project(),
-      effort = data(target).value;
-    if (!current || !effort) return;
-    driveOverridesByProject.value = {
-      ...driveOverridesByProject.value,
-      [current.id]: { ...effectiveDriveSelection(current.id), effort },
-    };
-  });
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      const insideDriveRow = event
-        .composedPath()
-        .some((item) => item instanceof Element && item.matches('.project-sidebar__drive-row'));
-      if (driveOptionsOpen.value && !insideDriveRow) driveOptionsOpen.value = false;
-    },
-    { capture: true },
-  );
-  delegate(document.body, 'click', '[data-action="open-conversation"]', () => {
-    void openSidebarConversation();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="ai-conversation"]', (event, target) => {
-    if (isConversationSurfaceLifecycleEvent(event, target)) conversationOpen.value = false;
-  });
-  delegate(document.body, 'click', '[data-action="save-conversation"]', () => {
-    openConversationExport();
-  });
-  delegate(document.body, 'click', '[data-action="pick-conversation-message"]', (event, target) => {
-    if ((event.target as Element).closest('a,button,input,select,textarea') || window.getSelection()?.toString())
-      return;
-    const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
-      messageId = data(target).messageId;
-    if (connectionId && messageId) pickConversationMessage(connectionId, messageId);
-  });
-  delegate(document.body, 'keydown', '[data-action="pick-conversation-message"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-    keyboard.preventDefault();
-    (target as HTMLElement).click();
-  });
-  delegate(document.body, 'click', '[data-action="copy-conversation-selection"]', (_event, target) => {
-    const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
-    if (connectionId) void copyConversationSelection(connectionId);
-  });
-  delegate(document.body, 'click', '[data-action="clear-conversation-selection"]', (_event, target) => {
-    const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
-    if (connectionId) clearConversationSelection(connectionId);
-  });
-  delegateCapture(document.body, 'click', '[data-component="conversation-export-dialog"]', (event) => {
-    const action = event
-        .composedPath()
-        .find((item): item is HTMLElement => item instanceof HTMLElement && Boolean(item.dataset.action))
-        ?.dataset.action,
-      state = conversationExportDialog.value;
-    if (!state) return;
-    if (action === 'next-conversation-export-step') {
-      conversationExportDialog.value = { ...state, step: 2, navigation: 'push', error: '' };
-      return;
-    }
-    if (action === 'previous-conversation-export-step') {
-      conversationExportDialog.value = { ...state, step: 1, navigation: 'pop', error: '' };
-      return;
-    }
-    if (action === 'cancel-conversation-export') {
-      conversationExportDialog.value = undefined;
-      return;
-    }
-    if (action === 'finish-conversation-export') {
-      event.preventDefault();
-      void finishConversationExport();
-    }
-  });
-  delegate(document.body, 'change', 'input[name="conversation-export-scope"]', (_event, target) => {
-    const state = conversationExportDialog.value;
-    if (!state) return;
-    const kind = (target as HTMLInputElement).value;
-    if (kind === 'all') updateConversationExportDraft((draft) => ({ ...draft, scope: { kind: 'all' } }));
-    else if (state.selectedRange) updateConversationExportDraft((draft) => ({ ...draft, scope: state.selectedRange! }));
-  });
-  delegate(document.body, 'change', 'input[name="conversation-export-write-mode"]', (_event, target) => {
-    const value = (target as HTMLInputElement).value;
-    if (value === 'reexport' || value === 'overwrite')
-      updateConversationExportDraft((draft) => ({ ...draft, writeMode: value }));
-  });
-  delegate(document.body, 'change', 'input[name="conversation-export-attachments"]', (_event, target) => {
-    updateConversationExportDraft((draft) => ({
-      ...draft,
-      bundle: { ...draft.bundle, includeAttachments: (target as HTMLInputElement).checked },
-    }));
-  });
-  delegate(document.body, 'change', 'input[name="conversation-export-media"]', (_event, target) => {
-    updateConversationExportDraft((draft) => ({
-      ...draft,
-      bundle: { ...draft.bundle, includeMedia: (target as HTMLInputElement).checked },
-    }));
-  });
-  delegate(document.body, 'change', 'input[name="conversation-export-summary"]', (_event, target) => {
-    updateConversationExportDraft((draft) => ({
-      ...draft,
-      bundle: { ...draft.bundle, includeSummary: (target as HTMLInputElement).checked },
-    }));
-  });
-  delegate(document.body, 'submit', '[data-action="submit-conversation-export"]', (event) => {
-    event.preventDefault();
-    void finishConversationExport();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="conversation-export-dialog"]', (event, target) => {
-    if (event.target !== target) return;
-    if (conversationExportDialog.value?.busy) {
-      event.preventDefault();
-      return;
-    }
-    conversationExportDialog.value = undefined;
-  });
-  delegate(document.body, 'input', '[name="conversation-draft"]', (_event, target) => {
-    const id = conversationConnectionId.value;
-    if (id) conversationDrafts.value = { ...conversationDrafts.value, [id]: (target as HTMLTextAreaElement).value };
-  });
-  delegate(document.body, 'keydown', '[name="conversation-draft"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' || keyboard.shiftKey || keyboard.isComposing) return;
-    keyboard.preventDefault();
-    target.closest<HTMLFormElement>('form')?.requestSubmit();
-  });
-  delegate(document.body, 'submit', '[data-action="send-conversation-turn"]', (event) => {
-    event.preventDefault();
-    void sendConversationTurn();
-  });
-  delegate(document.body, 'click', '[data-action="stop-conversation"]', () => {
-    void stopConversation();
-  });
-  delegate(document.body, 'click', '[data-action="select-conversation-provider"]', (_event, target) => {
-    void selectConversationProvider(data(target).value ?? '');
-  });
-  delegate(document.body, 'click', '[data-action="select-conversation-model"]', (_event, target) => {
-    selectConversationModel(data(target).value ?? '');
-  });
-  delegate(document.body, 'click', '[data-action="select-conversation-effort"]', (_event, target) => {
-    selectConversationEffort(data(target).value ?? '');
-  });
-  delegate(document.body, 'click', '[data-action="open-conversation-manual-model"]', () => {
-    openManualModel('conversation');
-  });
-  delegate(document.body, 'click', '[data-action="rate-ai-content"]', (_event, target) => {
-    const ticket = selectedTicket.value,
-      rating = data(target).aiFeedbackRating,
-      targetId = data(target).aiFeedbackTarget;
-    if (!ticket || !targetId || !['helpful', 'not-helpful'].includes(rating ?? '') || !canAddNotes()) return;
-    const detail = window
-      .prompt(
-        rating === 'helpful'
-          ? 'What should Hot Sheet keep doing? (optional)'
-          : 'What should Hot Sheet change or stop doing? (optional)',
-      )
-      ?.trim();
-    if (detail === undefined) return;
-    const consequence =
-        rating === 'helpful' ? 'Helpful — keep suggestions like this.' : 'Not helpful — stop suggestions like this.',
-      note = [`AI feedback for ${targetId}: ${consequence}`, detail].filter(Boolean).join('\n\n');
-    void updateSelected({ note, note_kind: 'regular' }).then((saved) => {
-      if (saved) showToast('AI feedback saved as a ticket note.');
-    });
-  });
-  delegate(document.body, 'click', '[data-action="run-command"]', (event, target) => {
-    if (commandLongPressFired) {
-      event.preventDefault();
-      commandLongPressFired = false;
-      return;
-    }
-    void runCommand(data(target).itemId!);
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-command-dialog"]', () => {
-    commandDialogId.value = undefined;
-    commandStopConfirmation.value = false;
-  });
-  delegateCapture(
-    document.body,
-    'close',
-    '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
-    () => {
-      commandDialogId.value = undefined;
-      commandStopConfirmation.value = false;
-    },
-  );
-  delegate(document.body, 'click', '[data-action="confirm-stop-command"]', (_event, target) => {
-    const current = project(),
-      runId = data(target).runId;
-    if (!current || !runId) return;
-    void new Api(current.apiPath)
-      .cancelCommandRun(runId)
-      .then((run) => {
-        commandRuns.value = commandRuns.value.map((item) => (item.id === run.id ? run : item));
-        commandDialogId.value = undefined;
-        commandStopConfirmation.value = false;
-      })
-      .catch((reason: unknown) => {
-        error.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function openCommandEditor(id:string){commandSettingsEditingId.value=id;commandIconSearch.value='';void loadLucideCatalog();(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.()}
-  delegate(document.body, 'click', '[data-action="edit-command-setting"]', (_event, target) => {
-    const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-    if (id) openCommandEditor(id);
-  });
-  delegate(document.body, 'click', '[data-action="add-command-setting"]', () => {
-    const current = project();
-    if (current) openCommandEditor(addCommandSetting(current.id));
-  });
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="close-command-editor"]',()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();commandSettingsEditingId.value=undefined;commandIconSearch.value=''});
-  delegateCapture(
-    document.body,
-    'toggle',
-    `#${COMMAND_EDITOR_DIALOG_ID}`,
-    (event) => {
-      if ((event as ToggleEvent).newState === 'closed' && manualModelDialog.value?.target !== 'command') {
-        commandSettingsEditingId.value = undefined;
-        commandIconSearch.value = '';
-      }
-    },
-    { match: 'direct' },
-  );
-  delegate(document.body, 'click', '[data-action="delete-command-setting"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-    if (current && id) deleteCommandSetting(current.id, id);
-  });
-  delegate(document.body, 'click', '[data-action="add-command-group"]', () => {
-    const current = project();
-    if (current) addCommandGroup(current.id);
-  });
-  delegate(document.body, 'click', '[data-action="delete-command-group"]', (_event, target) => {
-    const current = project(),
-      group = target.closest<HTMLElement>('[data-group]')?.dataset.group;
-    if (current && group) deleteCommandGroup(current.id, group);
-  });
-  delegate(document.body, 'dblclick', '.command-settings-editor__row', (event, target) => {
-    if ((event.target as Element).closest('.command-settings-editor__row-menu')) return;
-    const id = (target as HTMLElement).dataset.commandId;
-    if (id) openCommandEditor(id);
-  });
-  delegate(document.body, 'contextmenu', '.command-settings-editor__row', (event, target) => {
-    const menu = target.querySelector<HTMLElement & { show?(): void }>('.command-settings-editor__row-menu');
-    if (!menu) return;
-    event.preventDefault();
-    menu.show?.();
-  });
-  delegate(document.body, 'click', '.command-settings-editor__row', (event, target) => {
-    if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))
-      return;
-    const current = project(),
-      id = (target as HTMLElement).dataset.commandId;
-    if (!current || !id) return;
-    const mouse = event as MouseEvent;
-    selectCommandRow(current.id, id, { toggle: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
-  });
-  delegate(document.body, 'dragstart', '.command-settings-editor__row', (event, target) => {
-    const current = project(),
-      element = target as HTMLElement,
-      id = element.dataset.commandId;
-    if (!current || !id) return;
-    const selection = commandSelection(current.id);
-    draggedCommandIds =
-      selection.length > 1 && selection.includes(id)
-        ? commandSettingsDefinitions(current.id)
-            .map((command) => command.id)
-            .filter((commandId) => selection.includes(commandId))
-        : [id];
-    if (draggedCommandIds.length <= 1) {
-      selectCommandSetting(current.id, id);
-    }
-    document.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach((row) => {
-      if (draggedCommandIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
-    });
-    const transfer = (event as DragEvent).dataTransfer;
-    if (transfer) {
-      transfer.effectAllowed = 'move';
-      transfer.setData('text/plain', draggedCommandIds.join(','));
-    }
-  });
-  delegate(document.body, 'dragover', '.command-settings-editor__list', (event) => {
-    if (!draggedCommandIds.length) return;
-    const drag = event as DragEvent,
-      over = drag.target as Element,
-      row = over.closest<HTMLElement>('[data-command-id]');
-    clearCommandDropIndicators();
-    if (row && row.dataset.commandId && !draggedCommandIds.includes(row.dataset.commandId)) {
-      drag.preventDefault();
-      const bounds = row.getBoundingClientRect();
-      row.dataset.commandDropPosition = drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
-      if (drag.dataTransfer) drag.dataTransfer.dropEffect = 'move';
-      return;
-    }
-    const container = over.closest<HTMLElement>('[data-command-group-drop]');
-    if (container) {
-      drag.preventDefault();
-      container.dataset.commandDropActive = 'true';
-      if (drag.dataTransfer) drag.dataTransfer.dropEffect = 'move';
-    }
-  });
-  delegate(document.body, 'drop', '.command-settings-editor__list', (event) => {
-    const sources = draggedCommandIds,
-      current = project();
-    if (!sources.length) {
-      clearCommandDrag();
-      return;
-    }
-    const drag = event as DragEvent,
-      over = drag.target as Element,
-      row = over.closest<HTMLElement>('[data-command-id]');
-    drag.preventDefault();
-    let dropTarget: CommandDropTarget | undefined;
-    if (row && row.dataset.commandId && !sources.includes(row.dataset.commandId)) {
-      const bounds = row.getBoundingClientRect();
-      dropTarget = {
-        kind: 'row',
-        id: row.dataset.commandId,
-        position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
-      };
-    } else {
-      const container = over.closest<HTMLElement>('[data-command-group-drop]');
-      if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
-    }
-    clearCommandDrag();
-    if (current && dropTarget) reorderCommandSettings(current.id, sources, dropTarget);
-  });
-  delegate(document.body, 'dragend', '.command-settings-editor__row', clearCommandDrag);
-  delegate(document.body, 'input', '[data-command-field]', (_event, target) => {
-    const current = project(),
-      field = (target as HTMLInputElement).name,
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-    if (current && id && field) updateCommandSetting(current.id, id, field, (target as HTMLInputElement).value);
-  });
-  delegate(document.body, 'input', '[name="command-icon-search"]', (_event, target) => {
-    commandIconSearch.value = (target as HTMLInputElement).value;
-  });
-  delegate(document.body, 'click', '[data-action="select-command-icon"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-      name = (target as HTMLElement).dataset.iconName;
-    if (current && id && name) updateCommandSetting(current.id, id, 'icon', name);
-  });
-  delegate(document.body, 'click', '[data-action="select-command-ai-default"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-    if (current && id) updateCommandAiSelection(current.id, id, {});
-  });
-  delegate(document.body, 'click', '[data-action="select-command-ai-tool"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-      tool = data(target).value,
-      descriptor = aiTools.value.find((item) => item.id === tool);
-    if (!current || !id || !tool || !descriptor) return;
-    const selection = normalizedAiSelection({ tool });
-    updateCommandAiSelection(current.id, id, selection);
-  });
-  delegate(document.body, 'click', '[data-action="select-command-ai-model"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-      model = data(target).value,
-      command = id ? commandSettingsDefinitions(current?.id).find((item) => item.id === id) : undefined;
-    if (!current || !id || !model || !command) return;
-    const active = effectiveCommandAiSelection(command),
-      selection = normalizedAiSelection({ tool: active.tool, model });
-    updateCommandAiSelection(current.id, id, selection);
-  });
-  delegate(document.body, 'click', '[data-action="select-command-ai-effort"]', (_event, target) => {
-    const current = project(),
-      id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-      effort = data(target).value,
-      command = id ? commandSettingsDefinitions(current?.id).find((item) => item.id === id) : undefined;
-    if (!current || !id || !effort || !command) return;
-    updateCommandAiSelection(current.id, id, { ...effectiveCommandAiSelection(command), effort });
-  });
-  delegate(document.body, 'click', '[data-action="open-command-manual-model"]', (_event, target) => {
-    const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-    if (id) openManualModel('command', id);
-  });
-  delegate(document.body, 'change', '[data-action="toggle-loading-activity"]', (_event, target) => {
-    const checked = (target as HTMLInputElement).checked;
-    showLoadingActivity.value = checked;
-    localStorage.setItem('hotsheet.show-loading-activity', String(checked));
-  });
-  delegate(document.body, 'change', '[data-action="toggle-global-shell-history"]', (_event, target) => {
-    const current = project(),
-      checked = (target as HTMLInputElement).checked;
-    if (!current) return;
-    inheritGlobalShellHistory.value = checked;
-    terminalSettingsMessage.value = 'Saving…';
-    void new Api(current.apiPath)
-      .saveTerminalSettings({ inherit_global_shell_history: checked })
-      .then((value) => {
-        if (project()?.id !== current.id) return;
-        inheritGlobalShellHistory.value = value.inherit_global_shell_history;
-        terminalSettingsMessage.value = 'Saved locally. New terminals will use this setting.';
-      })
-      .catch((reason: unknown) => {
-        if (project()?.id !== current.id) return;
-        inheritGlobalShellHistory.value = !checked;
-        terminalSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
-  delegate(document.body, 'submit', '[data-action="save-trash-settings"]', (event, target) => {
-    event.preventDefault();
-    const current = project(),
-      raw = target.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
-      days = Number(raw);
-    if (!current) return;
-    if (!Number.isSafeInteger(days) || days < 1) {
-      trashSettingsMessagesByProject.value = {
-        ...trashSettingsMessagesByProject.value,
-        [current.id]: 'Enter a positive whole number of days.',
-      };
-      return;
-    }
-    trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [current.id]: 'Saving…' };
-    void new Api(current.apiPath)
-      .saveTrashSettings(current.id, { trash_cleanup_days: days })
-      .then((value) => {
-        if (project()?.id !== current.id) return;
-        trashCleanupDaysByProject.value = {
-          ...trashCleanupDaysByProject.value,
-          [current.id]: value.trash_cleanup_days,
-        };
-        trashSettingsMessagesByProject.value = {
-          ...trashSettingsMessagesByProject.value,
-          [current.id]: 'Saved for this project.',
-        };
-        showToast('Trash retention saved.');
-      })
-      .catch((reason: unknown) => {
-        if (project()?.id === current.id)
-          trashSettingsMessagesByProject.value = {
-            ...trashSettingsMessagesByProject.value,
-            [current.id]: reason instanceof Error ? reason.message : String(reason),
-          };
-      });
-  });
-  delegate(document.body, 'click', '[data-action="set-view-mode"]', (_event, target) => {
-    const mode = (data(target).segmentValue ?? data(target).viewMode) as WorkspaceViewMode,
-      finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
-    resetProgressiveTicketRendering();
-    viewMode.value = mode;
-    persistWorkspacePreferences();
-    finishTiming();
-  });
-  delegate(document.body, 'click', '[data-action="select-settings-category"]', (_event, target) => {
-    const current = project(),
-      category = (data(target).itemId ?? 'sources') as SettingsCategory;
-    if (!current) return;
-    if (category !== 'keyboard') setCapturingShortcut(undefined);
-    setSettingsCategory(current.id, category);
-    if (category === 'sources') void refreshProviderConnections();
-    if (category === 'terminals') void refreshTerminalSettings();
-    if (category === 'lifecycle') void refreshTrashSettings();
-    if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
-  });
-  function setCapturingShortcut(id: string | undefined) {
-    capturingShortcutId.value = id;
-    if (id !== undefined)
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() =>
-          document.querySelector<HTMLElement>(`[data-shortcut-capture="${CSS.escape(id)}"]`)?.focus(),
-        ),
-      );
-  }
-  function persistShortcutOverrides(next: Record<string, ShortcutChord>) {
-    keyboardShortcutOverrides.value = next;
-    saveShortcutOverrides(next, localStorage);
-  }
-  delegate(document.body, 'click', '[data-action="edit-shortcut"]', (_event, target) => {
-    const id = data(target).shortcutId;
-    if (id && shortcutDef(id)?.editable) setCapturingShortcut(id);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-shortcut-capture"]', () => {
-    setCapturingShortcut(undefined);
-  });
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="reset-shortcut"]',(_event,target)=>{const id=data(target).shortcutId;if(!id||!keyboardShortcutOverrides.value[id])return;persistShortcutOverrides(Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId])=>entryId!==id)));if(capturingShortcutId.value===id)setCapturingShortcut(undefined)});
-  delegate(document.body, 'click', '[data-action="reset-all-shortcuts"]', () => {
-    persistShortcutOverrides({});
-    setCapturingShortcut(undefined);
-  });
-  delegate(document.body, 'keydown', '[data-shortcut-capture]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      id = data(target).shortcutCapture;
-    if (!id || !shortcutDef(id)?.editable) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (keyboard.key === 'Escape') {
-      setCapturingShortcut(undefined);
-      return;
-    }
-    const chord = chordFromEvent(keyboard, appleShortcutPlatform);
-    if (!chord) return;
-    persistShortcutOverrides({ ...keyboardShortcutOverrides.value, [id]: chord });
-    setCapturingShortcut(undefined);
-  });
-  delegate(document.body, 'change', 'wa-select[name="ai-default-tool"]', (_event, target) => {
-    void saveAiDefaults(normalizedAiSelection({ tool: (target as Control).value }));
-  });
-  delegate(document.body, 'change', 'wa-select[name="ai-default-model"]', (_event, target) => {
-    const model = (target as Control).value,
-      manual = target.closest<HTMLElement>('[data-other-model-value]')?.dataset.otherModelValue;
-    if (manual === model) openManualModel('settings');
-    else selectDefaultModel(model);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-manual-model"]', () => {
-    const state = manualModelDialog.value;
-    manualModelDialog.value = undefined;
-    restoreCommandEditorAfterManualModel(state);
-  });
-  delegate(document.body, 'submit', '[data-action="submit-manual-model"]', (event, target) => {
-    event.preventDefault();
-    const state = manualModelDialog.value,
-      model = target.querySelector<Control>('[name="manual-model"]')?.value.trim();
-    if (!state || !model) return;
-    manualModelDialog.value = undefined;
-    if (state.target === 'drive') selectDriveModel(model);
-    else if (state.target === 'conversation') selectConversationModel(model);
-    else if (state.target === 'command') {
-      const current = project(),
-        command = state.commandId
-          ? commandSettingsDefinitions(current?.id).find((item) => item.id === state.commandId)
-          : undefined;
-      if (current && command && state.commandId)
-        updateCommandAiSelection(current.id, state.commandId, {
-          tool: effectiveCommandAiSelection(command).tool,
-          model,
-        });
-      restoreCommandEditorAfterManualModel(state);
-    } else selectDefaultModel(model);
-  });
-  delegateCapture(document.body, 'wa-after-show', '[data-component="manual-model-dialog"]', () => {
-    manualModelDialogShown = true;
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="manual-model-dialog"]', () => {
-    if (manualModelDialogShown) {
-      const state = manualModelDialog.value;
-      manualModelDialog.value = undefined;
-      restoreCommandEditorAfterManualModel(state);
-    }
-  });
-  delegate(document.body, 'change', 'wa-select[name="ai-default-effort"]', (_event, target) => {
-    void saveAiDefaults({ ...aiDefaults.value, effort: (target as Control).value });
-  });
-  delegate(document.body, 'click', '[data-action="open-provider-dialog"]', () => {
-    const current = project();
-    if (!current) return;
-    ticketSourceSetupProject.value = current;
-    providerSetupKind.value = undefined;
-    providerEditingId.value = undefined;
-    providerSettingsError.value = '';
-    createdGitTicketStore.value = '';
-    ticketSourceSetupNavigation.value = 'none';
-    void refreshProviderConnections(current);
-  });
-  delegate(document.body, 'click', '[data-action="edit-provider-connection"]', (_event, target) => {
-    const current = project(),
-      connection = providerConnections.value.find((item) => item.id === data(target).itemId);
-    if (!current || !connection) return;
-    ticketSourceSetupNavigation.value = 'none';
-    ticketSourceSetupProject.value = current;
-    providerSetupKind.value = connection.provider as ExternalProviderKind;
-    providerEditingId.value = connection.id;
-    providerSettingsError.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="select-provider-kind"]', (_event, target) => {
-    ticketSourceSetupNavigation.value = 'push';
-    providerSetupKind.value = (data(target).itemId ?? data(target).providerKind) as ExternalProviderKind;
-    providerEditingId.value = undefined;
-    providerSettingsError.value = '';
-    githubAuth.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="back-provider-kind"]', () => {
-    cancelGitHubSignIn();
-    ticketSourceSetupNavigation.value = 'pop';
-    providerSetupKind.value = undefined;
-    providerEditingId.value = undefined;
-    providerSettingsError.value = '';
-    githubAuth.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="start-github-sign-in"]', (_event, target) => {
-    const form = target.closest<HTMLFormElement>('form');
-    if (form) void startGitHubSignIn(form);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-github-sign-in"]', () => {
-    cancelGitHubSignIn();
-  });
-  delegate(document.body, 'click', '[data-action="submit-provider-setup"]', () =>
-    document.querySelector<HTMLFormElement>('#provider-setup-form')?.requestSubmit(),
-  );
-  delegate(document.body, 'submit', '[data-action="save-provider-connection"]', (event, target) => {
-    event.preventDefault();
-    void saveExternalProvider(target as HTMLFormElement);
-  });
-}
-wireCommandAndAiInteractions();
-function wireNotificationAndLinkInteractions() {
-  delegate(document.body, 'click', '[data-action="select-notification-view"]', (_event, target) => {
-    notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
-  });
-  delegate(
-    document.body,
-    'change',
-    '[name="permission-automation-action"], [name="permission-automation-delay"]',
-    () => {
-      const current = project();
-      if (!current) return;
-      const action = (document.querySelector<Control>('[name="permission-automation-action"]')?.value ??
-          'off') as PermissionAutomation['action'],
-        delayMs = Number(document.querySelector<Control>('[name="permission-automation-delay"]')?.value ?? 60_000),
-        next = parsePermissionAutomation({ action, delayMs });
-      permissionTimer.hide();
-      permissionCountdown = undefined;
-      permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [current.id]: next };
-      localStorage.setItem(`hotsheet.project.${current.id}.permission-automation`, JSON.stringify(next));
-      updatePermissionTimer();
-      permissionRevision.value += 1;
-    },
-  );
-  delegate(document.body, 'click', '[data-action="ignore-permission"]', (_event, target) => {
-    const key = data(target).requestKey;
-    if (!key) return;
-    permissionTimer.hide();
-    permissionInbox.ignore(key);
-    updatePermissionTimer();
-    permissionRevision.value += 1;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-permission-automation"]', (event, target) => {
-    event.stopImmediatePropagation();
-    const key = data(target).requestKey;
-    if (!key) return;
-    permissionTimer.cancel(key);
-    permissionCountdown = undefined;
-    permissionRevision.value += 1;
-  });
-  delegate(document.body, 'click', '[data-action="resolve-permission"]', (_event, target) => {
-    const key = data(target).requestKey,
-      item = pendingPermissions().find((value) => value.key === key);
-    if (item)
-      void resolvePermission(item, data(target).decision as PermissionDecision, data(target).scope as PermissionScope);
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-app-error"]', () => {
-    error.value = '';
-  });
-  delegate(document.body, 'change', '[data-action="toggle-verified-column"]', (_event, target) => {
-    const id = selectedProjectId.value;
-    if (!id) return;
-    const checked = (target as HTMLInputElement).checked;
-    hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
-    localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
-  });
-  delegate(document.body, 'click', '[data-action="open-linked-ticket"]', (event, target) => {
-    event.preventDefault();
-    const slug = data(target).ticketSlug;
-    if (slug) {
-      ticketLinkReturnFocus = target as HTMLElement;
-      void selectLinkedTicket(slug, data(target).ticketProjectId);
-    }
-  });
-  delegate(document.body, 'click', '[data-action="select-ticket-link-match"]', (_event, target) => {
-    const choice = ticketLinkChoice.value,
-      key = data(target).matchKey,
-      match = choice?.matches.find((item) => ticketLinkMatchKey(item) === key);
-    if (match) void openTicketLinkMatch(match);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-ticket-link-choice"]', () => {
-    cancelTicketLinkChoice();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="ticket-link-choice-dialog"]', () => {
-    if (ticketLinkChoice.value) cancelTicketLinkChoice();
-  });
-}
-wireNotificationAndLinkInteractions();
-function wireSearchAndComposerInteractions() {
-  // Kerf owns the token-search editor chrome, collapsible reveal/focus/Escape/empty-blur,
-  // Enter submit, adjacent-chip keyboard, and caret restoration. Hot Sheet adopts its persisted
-  // workspace signal and retains parsing plus the caller-owned suggestion/date/help surfaces.
-  const tokenSearchFields = wireTokenSearchFields(document.body, {
-    collapsible: { signals: { 'workspace-search': searchOpen } },
-    onSubmit: ({ id, editor }) => {
-      if (id === 'workspace-search') {
-        const state = readWorkspaceSearchEditor(editor);
-        if (updateTicketSearch(state.text, true, state.tokens)) restoreWorkspaceSearchEnd();
-      } else if (id === 'saved-view-query') {
-        const state = readInlineSearchField(editor, savedViewQueryTokens.value);
-        if (updateSavedViewQuery(state.text, true, state.tokens)) focusSavedViewQuery();
-      }
-    },
-    onEdit: ({ id, editor, event }) => {
-      if (id !== 'workspace-search') return;
-      const state = readWorkspaceSearchEditor(editor),
-        commitsToken =
-          (typeof event.data === 'string' && /\s$/.test(event.data)) ||
-          (event.inputType === 'insertFromPaste' && /\s$/.test(state.text));
-      if (updateTicketSearch(state.text, false, state.tokens, commitsToken)) restoreWorkspaceSearchEnd();
-    },
-    keyboard: {
-      onRemoveToken: ({ id, value }) => {
-        if (id === 'workspace-search') removeWorkspaceSearchToken(value);
-        else if (id === 'saved-view-query') removeSavedViewQueryToken(value);
-      },
-    },
-  });
-  delegate(document.body, 'keydown', '[data-token-search-editor="workspace-search"]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      editor = target as HTMLElement;
-    if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
-      event.preventDefault();
-      placeTokenSearchCaret(editor, 0);
-    }
-  });
-  delegate(document.body, 'mousedown', '[data-action="select-workspace-search-tag"]', (event) => {
-    event.preventDefault();
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-action="select-workspace-search-tag"]', (event) => {
-    event.preventDefault();
-  });
-  delegate(document.body, 'click', '[data-action="select-workspace-search-tag"]', (_event, target) => {
-    addWorkspaceSearchTag(data(target).tag!);
-  });
-  delegate(document.body, 'click', '[data-action="remove-workspace-search-token"]', (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw) removeWorkspaceSearchToken(raw);
-  });
-  delegate(document.body, 'click', '[data-action="edit-workspace-search-token"]', editWorkspaceSearchToken);
-  delegate(
-    document.body,
-    'click',
-    '[data-token-search-editor="workspace-search"] [data-component="token-search-token"]',
-    (event, target) => {
-      if ((event as MouseEvent).detail === 2) editWorkspaceSearchToken(event, target);
-    },
-  );
-  delegate(
-    document.body,
-    'dblclick',
-    '[data-token-search-editor="workspace-search"] [data-component="token-search-token"]',
-    editWorkspaceSearchToken,
-  );
-  delegate(document.body, 'click', '[data-action="toggle-workspace-search-help"]', () => {
-    searchHelpOpen.value = !searchHelpOpen.value;
-  });
-  delegate(document.body, 'click', '[data-action="apply-workspace-search-date"]', (_event, target) => {
-    const date = document.querySelector<HTMLInputElement>('[name="workspace-search-date"]')?.value;
-    if (!date) return;
-    const time = document.querySelector<HTMLInputElement>('[name="workspace-search-time"]')?.value ?? '',
-      prefix = data(target).datePrefix as Parameters<typeof dateTokenFromInput>[0],
-      token = dateTokenFromInput(prefix, date, time, navigator.language);
-    if (!token) return;
-    replaceActiveWorkspaceSearchToken(new RegExp(`(?:^|\\s)(${prefix}:[^\\s]*)$`, 'i'), token);
-    focusWorkspaceSearch();
-  });
-  delegate(document.body, 'click', '[data-action="clear-workspace-search"]', () => {
-    workspaceSearchEditingToken = false;
-    const editor = document.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
-    if (editor) editor.textContent = '';
-    batch(() => {
-      searchQuery.value = '';
-      searchTokens.value = [];
-      searchHelpOpen.value = false;
-    });
-    scheduleTicketSearch();
-  });
-  delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
-    const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);
-    resetProgressiveTicketRendering();
-    sort.value = next.sort;
-    sortDirection.value = next.direction;
-    persistWorkspacePreferences();
-  });
-  delegate(document.body, 'wa-select', '.workspace-header__overflow', (event) => {
-    const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
-      action = item.dataset.workspaceOverflowAction;
-    if (action === 'toggle-selected-up-next') {
-      const selected = selectedRows();
-      if (selected.length > 0)
-        void executeBulkTicketAction(
-          { kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) },
-          selected.map((ticket) => ticket.slug),
-        );
-      return;
-    }
-    if (action === 'open-selected-ticket-actions') {
-      const selected = selectedRows();
-      if (selected.length === 0) return;
-      const rect = item.getBoundingClientRect(),
-        position = viewportSafeContextMenuPosition(
-          rect.right - 232,
-          rect.bottom,
-          window.innerWidth,
-          window.innerHeight,
-          { width: 232, height: 382 },
-        );
-      ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
-      return;
-    }
-    if (action === 'open-workspace-search') {
-      tokenSearchFields.open('workspace-search');
-      return;
-    }
-    if (action === 'set-view-mode') {
-      const mode = item.dataset.viewMode as WorkspaceViewMode;
-      resetProgressiveTicketRendering();
-      viewMode.value = mode;
-      persistWorkspacePreferences();
-      return;
-    }
-    if (action === 'set-workspace-sort') {
-      const selected = item.dataset.workspaceSort as WorkspaceSort | undefined;
-      if (!selected) return;
-      const next = nextWorkspaceSort(sort.value, sortDirection.value, selected);
-      resetProgressiveTicketRendering();
-      sort.value = next.sort;
-      sortDirection.value = next.direction;
-      persistWorkspacePreferences();
-    }
-  });
-  delegate(document.body, 'click', '[data-action="expand-ticket-composer"]', (_event, target) => {
-    openTicketComposer(target as HTMLElement);
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
-    if (event.target === target && composerSubmitting.value) event.preventDefault();
-  });
-  delegateCapture(document.body, 'wa-after-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
-    if (event.target === target && composerExpanded.value) resetTicketComposer();
-  });
-  delegate(document.body, 'input', '[name="new-ticket-title"]', (_event, target) => {
-    composerTitle.value = (target as Control).value;
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'input', '[name="new-ticket-details"]', (_event, target) => {
-    composerDetails.value = (target as HTMLTextAreaElement).value;
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'change', '[name="new-ticket-category"]', (_event, target) => {
-    composerCategory.value = (target as Control).value;
-    saveLastTicketCategory(localStorage, composerCategory.value);
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
-    composerUpNext.value = !composerUpNext.value;
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'change', 'input[name="new-ticket-attachments"]', (_event, target) => {
-    const input = target as HTMLInputElement;
-    if (input.files?.length) void addNewTicketFiles(input.files);
-    input.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="remove-new-ticket-attachment"]', (_event, target) => {
-    const id = data(target).pendingAttachmentId;
-    if (id) void deleteDraftFiles(draftScope('composer'), [id]);
-    composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
-    composerAttachmentMessage.value = '';
-    composerAttachmentError.value = false;
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'dragover', '[data-new-ticket-drop-target="true"]', (event, target) => {
-    if (draggedTickets) return;
-    event.preventDefault();
-    (target as HTMLElement).dataset.dragging = 'true';
-  });
-  delegate(document.body, 'dragleave', '[data-new-ticket-drop-target="true"]', (_event, target) => {
-    delete (target as HTMLElement).dataset.dragging;
-  });
-  delegate(document.body, 'drop', '[data-new-ticket-drop-target="true"]', (event, target) => {
-    if (draggedTickets) return;
-    event.preventDefault();
-    event.stopPropagation();
-    delete (target as HTMLElement).dataset.dragging;
-    const files = (event as DragEvent).dataTransfer?.files;
-    if (files?.length) {
-      if (!composerExpanded.value) openTicketComposer(target as HTMLElement);
-      void addNewTicketFiles(files);
-    }
-  });
-  delegate(document.body, 'submit', '[data-action="create-ticket-form"]', (event) => {
-    event.preventDefault();
-    void submitNewTicket();
-  });
-  delegate(document.body, 'click', '[data-action="toggle-row-up-next"]', (event, target) => {
-    event.stopPropagation();
-    const article = target.closest('[data-ticket-slug]') as HTMLElement,
-      ticket = tickets.value.find((item) => item.slug === article.dataset.ticketSlug);
-    if (ticket) void history().execute(ticket.slug, { up_next: !ticket.up_next });
-  });
-}
-wireSearchAndComposerInteractions();
-function wireAttachmentAndGalleryInteractions() {
-  delegate(document.body, 'change', 'input[name="ticket-attachments"]', (_event, target) => {
-    const input = target as HTMLInputElement,
-      slug = input.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug;
-    if (slug && input.files?.length) void addAttachments(slug, input.files);
-    input.value = '';
-  });
-  delegate(document.body, 'dragover', '[data-attachment-drop-target="true"]', (event, target) => {
-    event.preventDefault();
-    (target as HTMLElement).dataset.draggingAttachment = 'true';
-  });
-  delegate(document.body, 'dragleave', '[data-attachment-drop-target="true"]', (_event, target) => {
-    delete (target as HTMLElement).dataset.draggingAttachment;
-  });
-  delegate(document.body, 'drop', '[data-attachment-drop-target="true"]', (event, target) => {
-    event.preventDefault();
-    const element = target as HTMLElement;
-    delete element.dataset.draggingAttachment;
-    const slug = element.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug,
-      files = (event as DragEvent).dataTransfer?.files;
-    if (slug && files?.length) void addAttachments(slug, files);
-  });
-  async function openSelectedAttachment(id: string) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket) return;
-    await api().checkoutAttachmentAction(current.id, ticket.id, id, 'open');
-  }
-  function metadataForBatch(
-    batch: HTMLElement,
-    batch_id = batch.dataset.attachmentBatch || crypto.randomUUID(),
-  ): AttachmentMetadata {
-    const role = batch.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
-    return {
-      batch_id,
-      batch_label: batch.querySelector<HTMLInputElement>('[name="attachment-batch-label"]')?.value.trim() || undefined,
-      purpose: (batch.querySelector<HTMLSelectElement>('[name="attachment-batch-purpose"]')?.value || undefined) as
-        AttachmentPurpose | undefined,
-      actor: role
-        ? {
-            role,
-            identity: batch.dataset.attachmentActorIdentity || undefined,
-            display_name: batch.dataset.attachmentActorName || undefined,
-          }
-        : undefined,
-    };
-  }
-  async function persistAttachmentMetadata(ids: string[], metadata: AttachmentMetadata) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || !ids.length) return;
-    attachmentMessage.value = 'Updating attachment group…';
-    try {
-      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.id, ids, metadata);
-      selectedTicket.value = result.ticket;
-      attachmentMessage.value = '';
-      showToast('Attachment group updated.');
-      await refreshProject();
-    } catch (reason) {
-      attachmentMessage.value = `Update failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-    }
-  }
-  delegate(
-    document.body,
-    'change',
-    '[name="attachment-batch-label"], [name="attachment-batch-purpose"]',
-    (_event, target) => {
-      const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
-        ids = batch?.dataset.attachmentIds?.split(',').filter(Boolean);
-      if (batch && ids?.length) void persistAttachmentMetadata(ids, metadataForBatch(batch));
-    },
-  );
-  delegate(document.body, 'dblclick', '[data-action="edit-attachment-batch-label"]', (_event, target) => {
-    const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
-      input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
-    if (!batch || !input || input.disabled) return;
-    batch.dataset.editingLabel = 'true';
-    input.dataset.originalValue = input.value;
-    queueMicrotask(() => {
-      input.focus();
-      input.select();
-    });
-  });
-  delegate(document.body, 'keydown', '[name="attachment-batch-label"]', (event, target) => {
-    const input = target as HTMLInputElement,
-      key = (event as KeyboardEvent).key;
-    if (key !== 'Escape' && key !== 'Enter') return;
-    const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-    if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
-    input.blur();
-    requestAnimationFrame(() => {
-      if (ids)
-        document.body
-          .querySelector<HTMLElement>(
-            `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-          )
-          ?.focus();
-    });
-  });
-  delegateCapture(document.body, 'blur', '[name="attachment-batch-label"]', (_event, target) => {
-    delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
-    delete (target as HTMLInputElement).dataset.originalValue;
-  });
-  function clearGroupedAttachmentDrag(surface?: HTMLElement) {
-    draggedGroupedAttachmentId = undefined;
-    if (surface) {
-      delete surface.dataset.draggingGroupAttachment;
-      for (const target of surface.querySelectorAll<HTMLElement>('[data-drag-over]')) delete target.dataset.dragOver;
-    }
-  }
-  delegate(document.body, 'dragstart', '[data-drag-attachment-id]', (event, target) => {
-    draggedGroupedAttachmentId = data(target).dragAttachmentId;
-    const transfer = (event as DragEvent).dataTransfer;
-    if (transfer && draggedGroupedAttachmentId) {
-      transfer.effectAllowed = 'move';
-      transfer.setData('application/x-hotsheet-attachment', draggedGroupedAttachmentId);
-    }
-    const surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]');
-    if (surface) surface.dataset.draggingGroupAttachment = 'true';
-  });
-  delegate(document.body, 'dragend', '[data-drag-attachment-id]', (_event, target) => {
-    clearGroupedAttachmentDrag(target.closest<HTMLElement>('[data-component="ticket-attachments"]') ?? undefined);
-  });
-  delegate(
-    document.body,
-    'dragover',
-    '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-    (event, target) => {
-      if (!draggedGroupedAttachmentId) return;
-      event.preventDefault();
-      event.stopPropagation();
-      (target as HTMLElement).dataset.dragOver = 'true';
-      const transfer = (event as DragEvent).dataTransfer;
-      if (transfer) transfer.dropEffect = 'move';
-    },
-  );
-  delegate(
-    document.body,
-    'dragleave',
-    '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-    (event, target) => {
-      const related = (event as DragEvent).relatedTarget;
-      if (related instanceof Node && target.contains(related)) return;
-      delete (target as HTMLElement).dataset.dragOver;
-    },
-  );
-  delegate(
-    document.body,
-    'drop',
-    '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-    (event, target) => {
-      if (!draggedGroupedAttachmentId) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const id = draggedGroupedAttachmentId,
-        surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]'),
-        source = surface
-          ?.querySelector<HTMLElement>(`[data-drag-attachment-id="${CSS.escape(id)}"]`)
-          ?.closest<HTMLElement>('[data-attachment-ids]'),
-        destination = target.closest<HTMLElement>('[data-attachment-group-drop-target]'),
-        newGroup = target.matches('[data-attachment-new-group-drop-target]');
-      clearGroupedAttachmentDrag(surface ?? undefined);
-      if (!source) return;
-      if (newGroup) {
-        const role = source.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
-        void persistAttachmentMetadata([id], {
-          batch_id: crypto.randomUUID(),
-          batch_label: 'New group',
-          actor: role
-            ? {
-                role,
-                identity: source.dataset.attachmentActorIdentity || undefined,
-                display_name: source.dataset.attachmentActorName || undefined,
-              }
-            : undefined,
-        });
-        return;
-      }
-      if (destination && destination !== source) void persistAttachmentMetadata([id], metadataForBatch(destination));
-    },
-  );
-  delegate(document.body, 'dblclick', '[data-action="open-attachment-row"]', (event, target) => {
-    if ((event.target as Element).closest('button, input, a')) return;
-    void openSelectedAttachment(data(target).attachmentActionId!);
-  });
-  delegate(document.body, 'click', '[data-action="open-attachment-gallery"]', (_event, target) => {
-    const selection = data(target),
-      url = attachmentGallerySelectionUrl(galleryImages(), {
-        url: selection.attachmentUrl,
-        ticket: selection.attachmentTicket,
-        name: selection.attachmentName,
-        attachmentId: selection.galleryAttachmentId,
-      });
-    if (url) resetAttachmentGallery(url);
-  });
-  delegate(document.body, 'click', '[data-action="close-attachment-gallery"]', () => {
-    resetAttachmentGallery();
-  });
-  delegate(document.body, 'click', '[data-action="previous-gallery-image"]', () => {
-    shiftGallery(-1);
-  });
-  delegate(document.body, 'click', '[data-action="next-gallery-image"]', () => {
-    shiftGallery(1);
-  });
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="zoom-gallery-image"]',(_event,target)=>{const model=attachmentGalleryZoomModel(attachmentGalleryGeometry.value,attachmentGalleryScale.value),direction=data(target).zoomDirection==='out'?-1:1,next=model.stops[model.index+direction];if(next!==undefined)attachmentGalleryScale.value=next});
-  delegate(document.body, 'click', '[data-action="open-gallery-attachment-menu"]', (_event, target) => {
-    const active = attachmentGalleryUrl.value,
-      images = galleryImages(),
-      index = active ? attachmentGalleryImageIndex(images, active) : -1,
-      image = index >= 0 ? images[index] : undefined;
-    if (!image?.ticket) return;
-    const rect = target.getBoundingClientRect(),
-      position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-      });
-    attachmentMenu.value = {
-      ...position,
-      ticket: image.ticket,
-      name: image.name,
-      url: image.url,
-      id: image.attachmentId,
-      kind: 'host',
-    };
-  });
-  delegate(document.body, 'click', '[data-action="open-attachment-menu"]', (event, target) => {
-    event.stopPropagation();
-    const item = target.closest<HTMLElement>('[data-component="ticket-attachment-item"]'),
-      ticket = selectedTicket.value,
-      name = item?.dataset.attachmentName,
-      url = item?.dataset.attachmentUrl,
-      id = item?.dataset.attachmentActionId;
-    if (!ticket || !name || !url || !id) return;
-    const rect = target.getBoundingClientRect(),
-      position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-      });
-    attachmentMenu.value = {
-      ...position,
-      ticket: ticket.slug,
-      name,
-      url,
-      id,
-      kind: 'item',
-      reader: target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId,
-    };
-  });
-  delegateCapture(document.body, 'load', '[data-gallery-image="true"]', () => {
-    syncAttachmentGalleryMeasurement();
-  });
-  delegateCapture(document.body, 'loadedmetadata', '[data-gallery-media="true"]', (event, target) => {
-    syncAttachmentGalleryMeasurement();
-    if (target instanceof HTMLVideoElement && activeAttachmentGalleryVideo(event.target))
-      attachmentGalleryDuration.value = Math.round(target.duration * 1000);
-  });
-  delegate(document.body, 'click', '[data-action="open-referenced-attachment"]', (event, target) => {
-    event.preventDefault();
-    const current = project(),
-      ticket = data(target).attachmentTicket,
-      name = data(target).attachmentName;
-    if (current && ticket && name)
-      void api()
-        .checkoutAttachmentByNameAction(current.id, ticket, name, 'open')
-        .catch((reason: unknown) => {
-          error.value = reason instanceof Error ? reason.message : String(reason);
-        });
-  });
-  delegate(document.body, 'contextmenu', '[data-attachment-url]', (event, target) => {
-    event.preventDefault();
-    const ticket = data(target).attachmentTicket ?? selectedTicket.value?.slug,
-      name = data(target).attachmentName,
-      url = data(target).attachmentUrl,
-      pointer = event as MouseEvent,
-      kind: AttachmentContextMenuKind = data(target).attachmentMenuKind === 'item' ? 'item' : 'host',
-      id = data(target).attachmentActionId ?? data(target).galleryAttachmentId;
-    if (ticket && name && url)
-      attachmentMenu.value = {
-        ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-          width: 224,
-          height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-        }),
-        ticket,
-        name,
-        url,
-        id,
-        kind,
-        reader:
-          (target as HTMLElement).closest('[data-component="ticket-reader"]')?.getAttribute('data-reader-frame-id') ??
-          undefined,
-      };
-  });
-  async function attachmentMenuHostAction(menu: AttachmentMenu, action: 'open' | 'reveal' | 'path') {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket) return undefined;
-    return menu.id && menu.ticket === ticket.slug
-      ? api().checkoutAttachmentAction(current.id, ticket.id, menu.id, action)
-      : api().checkoutAttachmentByNameAction(current.id, menu.ticket, menu.name, action);
-  }
-  delegate(document.body, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
-    const menu = attachmentMenu.value,
-      action = data(target).itemId;
-    if (!menu) return;
-    attachmentMenu.value = undefined;
-    if (action === 'download') {
-      const link = document.createElement('a');
-      link.href = menu.url;
-      link.download = menu.name;
-      link.click();
-      return;
-    }
-    if (action === 'copy-reference') {
-      const local = menu.ticket === selectedTicket.value?.slug;
-      void navigator.clipboard
-        .writeText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
-        .then(() => {
-          showToast('Attachment reference copied to clipboard.');
-        })
-        .catch((reason: unknown) => {
-          error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-        });
-      return;
-    }
-    if (action === 'copy-path') {
-      void attachmentMenuHostAction(menu, 'path')
-        .then(
-          (result) =>
-            result &&
-            navigator.clipboard.writeText(result.path).then(() => {
-              showToast('Attachment path copied to clipboard.');
-            }),
-        )
-        .catch((reason: unknown) => {
-          error.value = reason instanceof Error ? reason.message : String(reason);
-        });
-      return;
-    }
-    if (action === 'rename') {
-      const current = project(),
-        ticket = selectedTicket.value,
-        filename = window.prompt('Attachment filename', menu.name);
-      if (current && ticket && menu.id && filename?.trim())
-        void api()
-          .renameCheckoutAttachment(current.id, ticket.id, menu.id, filename.trim())
-          .then((result) => {
-            selectedTicket.value = result.ticket;
-            showToast('Attachment renamed.');
-            return refreshProject();
-          })
-          .catch((reason: unknown) => {
-            error.value = reason instanceof Error ? reason.message : String(reason);
-          });
-      return;
-    }
-    if (action === 'remove') {
-      if (menu.kind === 'host') resetAttachmentGallery();
-      void removeSelectedAttachment(menu.id);
-      return;
-    }
-    if (action === 'open' || action === 'reveal')
-      void attachmentMenuHostAction(menu, action)
-        .then(() => {
-          showToast(action === 'open' ? 'Opened attachment.' : 'Opened attachment location.');
-        })
-        .catch((reason: unknown) => {
-          error.value = reason instanceof Error ? reason.message : String(reason);
-        });
-  });
-  const clampAnnotation = (value: number) => Math.max(0, Math.min(10_000, Math.round(value)));
-  function annotationPoint(event: PointerEvent, surface: DOMRect) {
-    return {
-      x: clampAnnotation(((event.clientX - surface.left) * 10_000) / surface.width),
-      y: clampAnnotation(((event.clientY - surface.top) * 10_000) / surface.height),
-    };
-  }
-  delegate(document.body, 'click', '[data-action="toggle-gallery-markup"]', () => {
-    if (attachmentGalleryMarkup.value) {
-      attachmentGalleryMarkup.value = false;
-      finishGalleryAnnotationSession();
-    } else {
-      beginGalleryAnnotationSession();
-      attachmentGalleryMarkup.value = true;
-    }
-    attachmentGalleryDrawMode.value = false;
-    attachmentGallerySelectedAnnotation.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="toggle-gallery-draw"]', () => {
-    attachmentGalleryDrawMode.value = !attachmentGalleryDrawMode.value;
-    attachmentGallerySelectedAnnotation.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="select-gallery-annotation"]', (event, target) => {
-    event.stopPropagation();
-    attachmentGallerySelectedAnnotation.value = data(target).annotationId;
-  });
-  delegate(document.body, 'dblclick', '[data-action="edit-gallery-annotation"]', (event, target) => {
-    event.stopPropagation();
-    const id = data(target).annotationId,
-      annotation = attachmentGalleryAnnotations.value.find((item) => item.id === id);
-    if (!annotation) return;
-    const text = window.prompt('Annotation note (optional)', annotation.text);
-    if (text === null) return;
-    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-      item.id === id ? { ...item, text } : item,
-    );
-  });
-  delegate(document.body, 'click', '[data-action="delete-gallery-annotation"]', () => {
-    const id = attachmentGallerySelectedAnnotation.value;
-    if (!id || !window.confirm('Delete this annotation?')) return;
-    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter((item) => item.id !== id);
-    attachmentGallerySelectedAnnotation.value = undefined;
-  });
-  function setGalleryPlayhead(milliseconds: number, commit = true) {
-    const next = Math.max(0, Math.min(attachmentGalleryDuration.value, Math.round(milliseconds))),
-      video = activeAttachmentGalleryVideo();
-    updateGalleryPlaybackPresentation(next);
-    if (commit) attachmentGalleryPlayhead.value = next;
-    if (video) video.currentTime = next / 1000;
-  }
-  function setGalleryAnnotationEndpoint(annotationId: string, endpoint: 'start' | 'end', milliseconds: number) {
-    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) => {
-      if (item.id !== annotationId) return item;
-      const next = Math.max(0, Math.min(attachmentGalleryDuration.value, Math.round(milliseconds))),
-        start = item.start_ms ?? next,
-        end = item.end_ms ?? start;
-      return endpoint === 'start'
-        ? { ...item, start_ms: Math.min(next, end) }
-        : { ...item, end_ms: Math.max(start, next) };
-    });
-  }
-  delegate(document.body, 'click', '[data-action="seek-gallery-annotation"]', (_event, target) => {
-    const annotationId = data(target).annotationId,
-      milliseconds = Number(data(target).annotationTime);
-    if (!annotationId || !Number.isFinite(milliseconds)) return;
-    setGalleryPlayhead(milliseconds);
-    if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
-    const pointer = event as PointerEvent,
-      track = target.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect(),
-      annotationId = data(target).annotationId,
-      endpoint = data(target).galleryRangeHandle;
-    if (
-      !track ||
-      !annotationId ||
-      annotationId !== attachmentGallerySelectedAnnotation.value ||
-      (endpoint !== 'start' && endpoint !== 'end')
-    )
-      return;
-    event.preventDefault();
-    event.stopPropagation();
-    attachmentRangeGesture = { pointerId: pointer.pointerId, annotationId, endpoint, track };
-  });
-  delegate(document.body, 'keydown', '[data-gallery-range-handle]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'ArrowLeft' && keyboard.key !== 'ArrowRight') return;
-    event.preventDefault();
-    const annotationId = data(target).annotationId,
-      endpoint = data(target).galleryRangeHandle,
-      annotation = attachmentGalleryAnnotations.value.find((item) => item.id === annotationId);
-    if (
-      !annotation ||
-      annotation.id !== attachmentGallerySelectedAnnotation.value ||
-      (endpoint !== 'start' && endpoint !== 'end')
-    )
-      return;
-    const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
-    setGalleryAnnotationEndpoint(annotation.id, endpoint, (current ?? 0) + (keyboard.key === 'ArrowLeft' ? -100 : 100));
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-gallery-annotation-surface="true"]', (event, target) => {
-    if (!attachmentGalleryMarkup.value) return;
-    const pointer = event as PointerEvent,
-      surface = target.getBoundingClientRect(),
-      button = (pointer.target as Element).closest<HTMLElement>('[data-annotation-id]'),
-      handle = (pointer.target as HTMLElement).dataset.annotationHandle;
-    if (button) {
-      const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === button.dataset.annotationId);
-      if (!annotation) return;
-      event.preventDefault();
-      event.stopPropagation();
-      attachmentGallerySelectedAnnotation.value = annotation.id;
-      attachmentAnnotationGesture = {
-        kind: handle ? 'resize' : 'move',
-        pointerId: pointer.pointerId,
-        startX: pointer.clientX,
-        startY: pointer.clientY,
-        surface,
-        annotation: { ...annotation },
-        handle,
-      };
-      return;
-    }
-    attachmentGallerySelectedAnnotation.value = undefined;
-    if (!attachmentGalleryDrawMode.value) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const point = annotationPoint(pointer, surface),
-      timed = attachmentGalleryDuration.value > 0,
-      annotation: MediaAnnotation = {
-        id: crypto.randomUUID(),
-        x: point.x,
-        y: point.y,
-        width: 1,
-        height: 1,
-        text: '',
-        ...(timed ? attachmentGalleryDefaultRange(attachmentGalleryLivePlayhead, attachmentGalleryDuration.value) : {}),
-      };
-    attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, annotation];
-    attachmentGallerySelectedAnnotation.value = annotation.id;
-    attachmentAnnotationGesture = {
-      kind: 'draw',
-      pointerId: pointer.pointerId,
-      startX: pointer.clientX,
-      startY: pointer.clientY,
-      surface,
-      annotation,
-    };
-  });
-  document.addEventListener('pointermove', (event) => {
-    const gesture = attachmentAnnotationGesture;
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-    event.preventDefault();
-    const dx = ((event.clientX - gesture.startX) * 10_000) / gesture.surface.width,
-      dy = ((event.clientY - gesture.startY) * 10_000) / gesture.surface.height,
-      base = gesture.annotation;
-    let next = { ...base };
-    if (gesture.kind === 'draw') {
-      const point = annotationPoint(event, gesture.surface);
-      next = {
-        ...base,
-        x: Math.min(base.x, point.x),
-        y: Math.min(base.y, point.y),
-        width: Math.max(1, Math.abs(point.x - base.x)),
-        height: Math.max(1, Math.abs(point.y - base.y)),
-      };
-    } else if (gesture.kind === 'move') {
-      next = {
-        ...base,
-        x: clampAnnotation(Math.min(10_000 - base.width, base.x + dx)),
-        y: clampAnnotation(Math.min(10_000 - base.height, base.y + dy)),
-      };
-    } else {
-      const handle = gesture.handle ?? '',
-        right = base.x + base.width,
-        bottom = base.y + base.height;
-      if (handle.includes('w')) {
-        next.x = clampAnnotation(Math.min(right - 50, base.x + dx));
-        next.width = right - next.x;
-      }
-      if (handle.includes('e')) next.width = clampAnnotation(Math.max(50, Math.min(10_000 - base.x, base.width + dx)));
-      if (handle.includes('n')) {
-        next.y = clampAnnotation(Math.min(bottom - 50, base.y + dy));
-        next.height = bottom - next.y;
-      }
-      if (handle.includes('s'))
-        next.height = clampAnnotation(Math.max(50, Math.min(10_000 - base.y, base.height + dy)));
-    }
-    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-      item.id === base.id ? next : item,
-    );
-  });
-  document.addEventListener('pointermove', (event) => {
-    const gesture = attachmentRangeGesture;
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-    event.preventDefault();
-    setGalleryAnnotationEndpoint(
-      gesture.annotationId,
-      gesture.endpoint,
-      ((event.clientX - gesture.track.left) * attachmentGalleryDuration.value) / gesture.track.width,
-    );
-  });
-  document.addEventListener('pointerup', (event) => {
-    const gesture = attachmentAnnotationGesture;
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-    attachmentAnnotationGesture = undefined;
-    event.preventDefault();
-    const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === gesture.annotation.id);
-    if (!annotation) return;
-    if (annotation.width < 50 || annotation.height < 50) {
-      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter(
-        (item) => item.id !== annotation.id,
-      );
-      attachmentGallerySelectedAnnotation.value = undefined;
-      return;
-    }
-    if (gesture.kind === 'draw') {
-      attachmentGalleryDrawMode.value = false;
-      const text = window.prompt('Annotation note (optional)', '');
-      if (text !== null)
-        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-          item.id === annotation.id ? { ...item, text } : item,
-        );
-    }
-  });
-  document.addEventListener('pointerup', (event) => {
-    if (!attachmentRangeGesture || event.pointerId !== attachmentRangeGesture.pointerId) return;
-    attachmentRangeGesture = undefined;
-    event.preventDefault();
-  });
-  function toggleGalleryPlayback() {
-    const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
-    if (video) {
-      if (video.paused) void video.play();
-      else video.pause();
-      return;
-    }
-    attachmentGalleryPlaying.value = !attachmentGalleryPlaying.value;
-    if (attachmentGalleryPlaying.value) {
-      attachmentGallerySvgPreviousFrame = undefined;
-      attachmentGallerySvgFrame = requestAnimationFrame(gallerySvgClock);
-    } else {
-      attachmentGalleryPlayhead.value = attachmentGalleryLivePlayhead;
-      stopGallerySvgClock();
-    }
-  }
-  delegate(document.body, 'click', '[data-action="toggle-gallery-playback"]', () => {
-    toggleGalleryPlayback();
-  });
-  delegate(document.body, 'keydown', '[data-component="attachment-gallery"]', (event) => {
-    const keyboard = event as KeyboardEvent,
-      origin = event.target as Element,
-      playheadControl = origin.matches('input[name="gallery-playhead"]');
-    if (
-      !document.querySelector('.attachment-gallery video') ||
-      (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
-    )
-      return;
-    const action = attachmentGalleryKeyboardAction(
-      keyboard.key,
-      attachmentGalleryLivePlayhead,
-      attachmentGalleryDuration.value,
-      keyboard.shiftKey,
-    );
-    if (!action) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (action.kind === 'toggle-playback') {
-      toggleGalleryPlayback();
-      return;
-    }
-    document.querySelector<HTMLVideoElement>('.attachment-gallery video')?.pause();
-    setGalleryPlayhead(action.playheadMs);
-  });
-  delegate(document.body, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
-    setGalleryPlayhead(Number((target as HTMLInputElement).value), false);
-  });
-  delegate(document.body, 'change', 'input[name="gallery-playhead"]', (_event, target) => {
-    setGalleryPlayhead(Number((target as HTMLInputElement).value));
-  });
-  delegate(document.body, 'click', '[data-action="toggle-gallery-volume"]', (event) => {
-    event.stopPropagation();
-    attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
-  });
-  delegate(document.body, 'input', 'input[name="gallery-volume"]', (_event, target) => {
-    const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
-      volume = Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
-    attachmentGalleryLiveVolume = volume;
-    if (attachmentGalleryMuted.value) attachmentGalleryMuted.value = false;
-    if (video) {
-      video.volume = volume;
-      video.muted = false;
-    }
-  });
-  delegate(document.body, 'change', 'input[name="gallery-volume"]', (_event, target) => {
-    attachmentGalleryVolume.value = Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
-  });
-  delegate(document.body, 'click', '[data-action="toggle-gallery-muted"]', (event) => {
-    event.stopPropagation();
-    const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
-      unmute = attachmentGalleryMuted.value || attachmentGalleryLiveVolume === 0;
-    if (unmute && attachmentGalleryLiveVolume === 0) {
-      attachmentGalleryLiveVolume = 0.5;
-      attachmentGalleryVolume.value = 0.5;
-      if (video) video.volume = 0.5;
-    }
-    attachmentGalleryMuted.value = !unmute;
-    if (video) video.muted = !unmute;
-  });
-  delegateCapture(document.body, 'timeupdate', '.attachment-gallery video', (event) => {
-    const video = activeAttachmentGalleryVideo(event.target),
-      slider = document.querySelector<HTMLInputElement>('.attachment-gallery input[name="gallery-playhead"]');
-    if (video && (!video.paused || document.activeElement !== slider))
-      updateGalleryPlaybackPresentation(Math.round(video.currentTime * 1000));
-  });
-  delegateCapture(document.body, 'play', '.attachment-gallery video', (event) => {
-    if (activeAttachmentGalleryVideo(event.target)) attachmentGalleryPlaying.value = true;
-  });
-  delegateCapture(document.body, 'pause', '.attachment-gallery video', (event) => {
-    if (activeAttachmentGalleryVideo(event.target)) {
-      attachmentGalleryPlayhead.value = attachmentGalleryLivePlayhead;
-      attachmentGalleryPlaying.value = false;
-    }
-  });
-  document.addEventListener('click', (event) => {
-    if (attachmentGalleryVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume'))
-      attachmentGalleryVolumeOpen.value = false;
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-component="attachment-gallery"]', (event) => {
-    const pointer = event as PointerEvent,
-      origin = event.target instanceof Element ? event.target : undefined,
-      stage = origin?.closest<HTMLElement>('[data-gallery-zoom-stage="true"]');
-    attachmentSwipeGesture = attachmentGallerySwipeGesture({
-      pointerId: pointer.pointerId,
-      clientX: pointer.clientX,
-      clientY: pointer.clientY,
-      button: pointer.button,
-      markup: attachmentGalleryMarkup.value,
-      stage: Boolean(stage),
-      interactive: Boolean(origin?.closest('button,input,textarea,select,a,[contenteditable="true"]')),
-      horizontallyScrollable: Boolean(stage && stage.scrollWidth > stage.clientWidth + 1),
-    });
-  });
-  delegateCapture(document.body, 'pointerup', '[data-component="attachment-gallery"]', (event) => {
-    const pointer = event as PointerEvent,
-      direction = attachmentGallerySwipeDirection(
-        attachmentSwipeGesture,
-        pointer.pointerId,
-        pointer.clientX,
-        pointer.clientY,
-      );
-    attachmentSwipeGesture = undefined;
-    if (direction) shiftGallery(direction);
-  });
-  document.addEventListener('pointercancel', (event) => {
-    if (event.pointerId === attachmentSwipeGesture?.pointerId) attachmentSwipeGesture = undefined;
-  });
-  async function removeSelectedAttachment(id?: string) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || !id || !canUseAttachments()) return;
-    attachmentMessage.value = 'Removing attachment…';
-    try {
-      const result = await api().deleteCheckoutAttachment(current.id, ticket.id, id);
-      selectedTicket.value = result.ticket;
-      attachmentMessage.value = '';
-      showToast('Attachment removed.');
-      await refreshProject();
-    } catch (reason) {
-      attachmentMessage.value = `Remove failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-    }
-  }
-}
-wireAttachmentAndGalleryInteractions();
-function wireInspectorAndEditorInteractions() {
-  delegate(document.body, 'click', '[data-action="toggle-inspector-up-next"]', () => {
-    if (selectedTicket.value) void updateSelectedTracked({ up_next: !selectedTicket.value.up_next });
-  });
-  delegate(document.body, 'click', '[data-action="copy-ticket-slug"]', (_event, target) => {
-    const slug = target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug;
-    if (!slug) return;
-    void navigator.clipboard
-      .writeText(slug)
-      .then(() => {
-        showToast(`${slug} copied to clipboard.`);
-      })
-      .catch((reason: unknown) => {
-        error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-      });
-  });
-  delegate(document.body, 'change', '[name="inspector-category"]', (_event, target) => {
-    void updateSelectedTracked({ category: (target as Control).value });
-  });
-  delegate(document.body, 'change', '[name="inspector-priority"]', (_event, target) => {
-    void updateSelectedTracked({ priority: (target as Control).value });
-  });
-  delegate(document.body, 'change', '[name="inspector-status"]', (_event, target) => {
-    const select = target as Control & { open?: boolean },
-      value = select.value,
-      apply = () => {
-        void updateSelectedTracked({ status: value });
-      };
-    if (select.open) select.addEventListener('wa-after-hide', apply, { once: true });
-    else apply();
-  });
-  function updateConflictDraft(field: string, value: string, base = value) {
-    if (field === 'details' && readerOpen.value) {
-      readerDetailsDraft.value = value;
-      readerDetailsDraftBase = base;
-    } else if (field === 'details') {
-      detailsDraft.value = value;
-      detailsDraftBase = base;
-    } else if (field === 'title') {
-      titleDraft.value = value;
-      titleDraftBase = base;
-    } else if (field === 'blocked_reason' && readerOpen.value) {
-      readerBlockedReasonDraft.value = value;
-      readerBlockedReasonDraftBase = base;
-    } else if (field === 'blocked_reason') {
-      blockedReasonDraft.value = value;
-      blockedReasonDraftBase = base;
-    } else if (field === 'note' && readerOpen.value) {
-      readerNoteDraft.value = value;
-      readerNoteDraftBase = base;
-    } else if (field === 'note') {
-      noteDraft.value = value;
-      noteDraftBase = base;
-    }
-  }
-  function isReaderSurface(target: Element) {
-    return Boolean(target.closest('[data-component="ticket-reader"]'));
-  }
-  function resolvedConflictPatch(conflict: TicketFieldConflict, value: string): TicketPatch {
-    if (conflict.field === 'note') return { note_id: conflict.key.slice('note:'.length), note: value };
-    if (conflict.field === 'tags')
-      return {
-        tags: value
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-      };
-    if (conflict.field === 'up_next') return { up_next: value.toLocaleLowerCase() === 'true' };
-    if (conflict.field === 'blocked_reason') return { blocked_reason: value.trim() || null };
-    return { [conflict.field]: value };
-  }
-  delegate(document.body, 'input', '[name="ticket-conflict-resolution"]', (_event, target) => {
-    fieldConflictResolution.value = (target as HTMLTextAreaElement).value;
-  });
-  delegate(document.body, 'click', '[data-action="accept-remote-ticket-field"]', () => {
-    const conflict = fieldConflict.value;
-    if (!conflict) return;
-    updateConflictDraft(conflict.field, conflict.theirs);
-    fieldConflict.value = undefined;
-    fieldConflictResolution.value = '';
-  });
-  delegate(document.body, 'click', '[data-action="apply-ticket-field-merge"]', () => {
-    const conflict = fieldConflict.value;
-    if (!conflict) return;
-    const value = fieldConflictResolution.value;
-    if (conflict.field === 'title' && !value.trim()) {
-      error.value = 'Ticket title cannot be empty.';
-      return;
-    }
-    updateConflictDraft(conflict.field, value, conflict.theirs);
-    fieldConflict.value = undefined;
-    fieldConflictResolution.value = '';
-    void updateSelectedTracked(resolvedConflictPatch(conflict, value));
-  });
-  function beginTitleEdit() {
-    if (!selectedTicket.value || !canUpdateSelected()) return;
-    titleDraft.value = selectedTicket.value.title;
-    titleDraftBase = selectedTicket.value.title;
-    titleEditing.value = true;
-    queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
-  }
-  delegate(document.body, 'dblclick', '[data-action="edit-ticket-title"]', () => {
-    beginTitleEdit();
-  });
-  delegate(document.body, 'keydown', '[data-action="edit-ticket-title"]', (event) => {
-    if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-    event.preventDefault();
-    beginTitleEdit();
-  });
-  delegate(document.body, 'input', '[name="ticket-title"]', (_event, target) => {
-    titleDraft.value = (target as HTMLInputElement).value;
-    if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
-  });
-  delegate(document.body, 'focusout', '[name="ticket-title"]', () => {
-    if (!titleDraft.value.trim()) return;
-    void titleAutosave.flush().then((saved) => {
-      if (saved) titleEditing.value = false;
-    });
-  });
-  function setSelectedTags(tags: string[]) {
-    if (!selectedTicket.value || !canUpdateSelected()) return;
-    selectedTicket.value = { ...selectedTicket.value, tags };
-    tagsAutosave.schedule(tags);
-  }
-  function addTagFromInput(target: HTMLInputElement) {
-    const next = addTicketTag(selectedTicket.value?.tags ?? [], target.value);
-    target.value = '';
-    setSelectedTags(next);
-  }
-  delegate(document.body, 'keydown', '[name="ticket-tag-input"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (!['Enter', ','].includes(keyboard.key)) return;
-    event.preventDefault();
-    addTagFromInput(target as HTMLInputElement);
-  });
-  delegate(document.body, 'focusout', '[name="ticket-tag-input"]', (_event, target) => {
-    if ((target as HTMLInputElement).value.trim()) addTagFromInput(target as HTMLInputElement);
-    void tagsAutosave.flush();
-  });
-  delegate(document.body, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
-    const tag = data(target).tagId;
-    if (tag) setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
-  });
-  delegateCapture(document.body, 'pointerdown', '*', (event, target) => {
-    const active = document.activeElement;
-    if (
-      event.defaultPrevented ||
-      !(active instanceof HTMLTextAreaElement) ||
-      active.name !== 'markdown-source' ||
-      active.closest('[data-component="markdown-editor"]')?.contains(target)
-    )
-      return;
-    pointerDetailsReader = isReaderSurface(active);
-    pointerDetailsFinish = undefined;
-  });
-  delegate(document.body, 'dblclick', '[data-action="edit-markdown"]', (_event, target) => {
-    beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'click', '[data-action="edit-markdown"]', (_event, target) => {
-    if (data(target).empty === 'true') beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'keydown', '[data-action="edit-markdown"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (!['Enter', ' '].includes(keyboard.key)) return;
-    event.preventDefault();
-    beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'input', '[name="markdown-source"]', (_event, target) => {
-    const frame = linkedReaderFrame(target),
-      value = (target as HTMLTextAreaElement).value;
-    if (frame) {
-      replaceLinkedReaderFrame(frame.id, (current) => ({ ...current, edit: { ...current.edit, detailsDraft: value } }));
-      linkedReaderSaves(frame.id).details.schedule(value);
-      return;
-    }
-    const reader = isReaderSurface(target),
-      draft = reader ? readerDetailsDraft : detailsDraft,
-      autosave = reader ? readerDetailsAutosave : detailsAutosave;
-    draft.value = value;
-    autosave.schedule(draft.value);
-  });
-  delegate(document.body, 'focusout', '[name="markdown-source"]', (event, target) => {
-    const frame = linkedReaderFrame(target);
-    if (frame) {
-      void linkedReaderSaves(frame.id)
-        .details.flush()
-        .then((saved) => {
-          if (saved)
-            replaceLinkedReaderFrame(frame.id, (current) => ({
-              ...current,
-              edit: { ...current.edit, detailsMode: 'preview' },
-            }));
-        });
-      return;
-    }
-    const next = (event as FocusEvent).relatedTarget;
-    if (next instanceof Node && target.closest('[data-component="markdown-editor"]')?.contains(next)) {
-      pointerDetailsReader = undefined;
-      return;
-    }
-    if (next instanceof Element && next.closest('[data-component="ticket-field-conflict"]')) {
-      pointerDetailsReader = undefined;
-      return;
-    }
-    const reader = isReaderSurface(target);
-    if (pointerDetailsReader === reader) {
-      pointerDetailsFinish = beginDetailsFinish(reader);
-      return;
-    }
-    setTimeout(() => void finishDetailsEdit(reader), 0);
-  });
-  function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame) {
-    const note = (frame?.ticket ?? selectedTicket.value)?.notes.find((item) => item.id === id);
-    if (!note) return;
-    if (frame) {
-      if (!frame.capabilities.note_edit) return;
-      replaceLinkedReaderFrame(frame.id, (current) => ({
-        ...current,
-        edit: {
-          ...current.edit,
-          editingNoteId: id,
-          noteDraft: note.text,
-          noteBase: note.text,
-          noteGeneration: current.edit.noteGeneration + 1,
-        },
-      }));
-      queueMicrotask(() =>
-        document
-          .querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="note-body"][data-note-id="${id}"]`)
-          ?.focus(),
-      );
-      return;
-    }
-    const editing = reader ? readerEditingNoteId : editingNoteId,
-      draft = reader ? readerNoteDraft : noteDraft;
-    editing.value = id;
-    draft.value = reader && note.kind === 'feedback_needed' ? '' : note.text;
-    if (reader) readerNoteDraftBase = draft.value;
-    else noteDraftBase = draft.value;
-    queueMicrotask(() =>
-      activeTicketSurface().querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus(),
-    );
-  }
-  delegate(document.body, 'click', '[data-action="add-ticket-note"]', () => {
-    if (!canAddNotes()) return;
-    editingNoteId.value = undefined;
-    composingNote.value = true;
-    newNoteDraft.value = '';
-    scheduleProjectSessionPersistence();
-    queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="new-note-body"]')?.focus());
-  });
-  delegate(document.body, 'input', '[name="new-note-body"]', (_event, target) => {
-    newNoteDraft.value = (target as HTMLTextAreaElement).value;
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'click', '[data-action="cancel-new-note"]', () => {
-    composingNote.value = false;
-    newNoteDraft.value = '';
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'submit', '[data-action="create-note-form"]', (event) => {
-    event.preventDefault();
-    const text = newNoteDraft.value.trim();
-    if (!text || !canAddNotes()) return;
-    void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
-      if (saved) {
-        composingNote.value = false;
-        newNoteDraft.value = '';
-        scheduleProjectSessionPersistence();
-      }
-    });
-  });
-  delegate(document.body, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => {
-    beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!, isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'keydown', '[data-edit-on-double-click="true"]', (event, target) => {
-    if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-    event.preventDefault();
-    beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!, isReaderSurface(target));
-  });
-  delegate(document.body, 'input', '[name="note-body"]', (_event, target) => {
-    const frame = linkedReaderFrame(target),
-      id = data(target).noteId,
-      value = (target as HTMLTextAreaElement).value;
-    if (frame && id) {
-      replaceLinkedReaderFrame(frame.id, (current) => ({
-        ...current,
-        edit: { ...current.edit, editingNoteId: id, noteDraft: value },
-      }));
-      linkedReaderSaves(frame.id).note.schedule({ id, value });
-      return;
-    }
-    const reader = isReaderSurface(target),
-      editing = reader ? readerEditingNoteId : editingNoteId,
-      draft = reader ? readerNoteDraft : noteDraft,
-      autosave = reader ? readerNoteAutosave : noteAutosave;
-    editing.value = id;
-    draft.value = value;
-    if (data(target).noteResponse !== 'true' && editing.value)
-      autosave.schedule({ id: editing.value, value: draft.value });
-    else scheduleProjectSessionPersistence();
-  });
-  function focusInlineFeedbackReply(noteId: string, offset: number) {
-    const existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-    if (!existing.some((reply) => reply.offset === offset))
-      readerInlineFeedbackReplies.value = {
-        ...readerInlineFeedbackReplies.value,
-        [noteId]: [...existing, { offset, text: '' }],
-      };
-    scheduleProjectSessionPersistence();
-    queueMicrotask(() =>
-      activeTicketSurface()
-        .querySelector<HTMLElement>(
-          `[name="inline-feedback-response"][data-note-id="${noteId}"][data-offset="${offset}"]`,
-        )
-        ?.focus(),
-    );
-  }
-  function feedbackSource(noteId: string) {
-    return noteId === DETAILS_FEEDBACK_ID
-      ? selectedTicket.value?.details
-      : selectedTicket.value?.notes.find((item) => item.id === noteId)?.text;
-  }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function inlineFeedbackClickOffset(event:MouseEvent,target:Element){const start=Number(data(target).segmentStart),end=Number(data(target).segmentEnd),noteId=data(target).noteId!,source=feedbackSource(noteId)?.slice(start,end)??'',caretDocument=document as Document&{caretPositionFromPoint?:(x:number,y:number)=>{offsetNode:Node;offset:number}|null},position=caretDocument.caretPositionFromPoint?.(event.clientX,event.clientY);if(!position||!target.contains(position.offsetNode))return end;const range=document.createRange();range.selectNodeContents(target);range.setEnd(position.offsetNode,position.offset);return start+sourceOffsetForVisibleOffset(source,target.textContent??'',range.toString().length)}
-  delegate(document.body, 'click', '[data-action="add-inline-feedback-reply"]', (event, target) => {
-    if ((event.target as Element).closest('a')) return;
-    focusInlineFeedbackReply(data(target).noteId!, inlineFeedbackClickOffset(event as MouseEvent, target));
-  });
-  delegate(document.body, 'keydown', '[data-action="add-inline-feedback-reply"]', (event, target) => {
-    if ((event.target as Element).closest('a') || !['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-    event.preventDefault();
-    focusInlineFeedbackReply(data(target).noteId!, Number(data(target).segmentEnd));
-  });
-  delegate(document.body, 'input', '[name="inline-feedback-response"]', (_event, target) => {
-    const noteId = data(target).noteId!,
-      offset = Number(data(target).offset),
-      existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-    readerInlineFeedbackReplies.value = {
-      ...readerInlineFeedbackReplies.value,
-      [noteId]: existing.map((reply) =>
-        reply.offset === offset ? { ...reply, text: (target as HTMLTextAreaElement).value } : reply,
-      ),
-    };
-    scheduleProjectSessionPersistence();
-  });
-  delegate(document.body, 'click', '[data-action="remove-inline-feedback-reply"]', (_event, target) => {
-    const noteId = data(target).noteId!,
-      offset = Number(data(target).offset),
-      existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-    readerInlineFeedbackReplies.value = {
-      ...readerInlineFeedbackReplies.value,
-      [noteId]: existing.filter((reply) => reply.offset !== offset),
-    };
-    scheduleProjectSessionPersistence();
-  });
-  function toggleFeedbackChoice(event: MouseEvent | KeyboardEvent, target: Element) {
-    const noteId = data(target).noteId!,
-      choiceId = data(target).choiceId!,
-      source = feedbackSource(noteId),
-      group = source && parseFeedbackChoices(source);
-    if (!group) return;
-    const next = updateFeedbackChoiceSelection(
-      group.choices.map((choice) => choice.id),
-      readerFeedbackChoiceSelections.value[noteId] ?? [],
-      choiceId,
-      readerFeedbackChoiceAnchors.get(noteId),
-      { additive: event.metaKey || event.ctrlKey, range: event.shiftKey },
-    );
-    readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
-    if (next.anchor) readerFeedbackChoiceAnchors.set(noteId, next.anchor);
-    scheduleProjectSessionPersistence();
-  }
-  delegate(document.body, 'click', '[data-action="toggle-feedback-choice"]', (event, target) => {
-    if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
-    toggleFeedbackChoice(event as MouseEvent, target);
-  });
-  delegate(document.body, 'keydown', '[data-action="toggle-feedback-choice"]', (event, target) => {
-    if (
-      !['Enter', ' '].includes((event as KeyboardEvent).key) ||
-      (event.target as Element).closest('a,[data-action="open-attachment-gallery"]')
-    )
-      return;
-    event.preventDefault();
-    toggleFeedbackChoice(event as KeyboardEvent, target);
-  });
-  delegate(document.body, 'focusout', '[name="note-body"]', (_event, target) => {
-    if (data(target).noteResponse === 'true') return;
-    const frame = linkedReaderFrame(target);
-    if (frame) {
-      void linkedReaderSaves(frame.id)
-        .note.flush()
-        .then((saved) => {
-          if (saved)
-            replaceLinkedReaderFrame(frame.id, (current) => ({
-              ...current,
-              edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
-            }));
-        });
-      return;
-    }
-    const reader = isReaderSurface(target),
-      editing = reader ? readerEditingNoteId : editingNoteId,
-      draft = reader ? readerNoteDraft : noteDraft,
-      autosave = reader ? readerNoteAutosave : noteAutosave;
-    void autosave.flush().then((saved) => {
-      if (saved) {
-        editing.value = undefined;
-        draft.value = '';
-      }
-    });
-  });
-  delegate(document.body, 'click', '[data-action="save-note-edit"]', (_event, target) => {
-    const reader = isReaderSurface(target),
-      editing = reader ? readerEditingNoteId : editingNoteId,
-      draft = reader ? readerNoteDraft : noteDraft,
-      id = editing.value ?? data(target).noteId,
-      note = selectedTicket.value?.notes.find((item) => item.id === id),
-      response = data(target).noteResponse === 'true' || note?.kind === 'feedback_draft',
-      source = id ? feedbackSource(id) : undefined,
-      value =
-        source && response
-          ? combineFeedbackReply(
-              source,
-              readerInlineFeedbackReplies.value[id ?? ''] ?? [],
-              draft.value,
-              readerFeedbackChoiceSelections.value[id ?? ''] ?? [],
-            )
-          : draft.value;
-    if (!id || !value.trim()) return;
-    const patch = response ? { note: value, note_kind: 'regular' } : { note_id: id, note: value };
-    void updateSelected(patch).then((saved) => {
-      if (saved) {
-        editing.value = undefined;
-        draft.value = '';
-        readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
-        readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-        readerFeedbackChoiceAnchors.delete(id);
-      }
-    });
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-feedback"]', (_event, target) => {
-    const id = data(target).noteId;
-    if (!id) return;
-    void updateSelected({ note: 'No response needed', note_kind: 'regular' }).then((saved) => {
-      if (saved) {
-        readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
-        readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-        readerFeedbackChoiceAnchors.delete(id);
-      }
-    });
-  });
-  delegate(document.body, 'click', '[data-action="delete-note"]', (_event, target) => {
-    const current = project(),
-      ticket = selectedTicket.value,
-      noteId = data(target).noteId;
-    if (!current || !ticket || !noteId || !canDeleteNotes()) return;
-    void api()
-      .deleteCheckoutNote(current.id, ticket.id, noteId)
-      .then((result) => {
-        selectedTicket.value = result.ticket;
-        editingNoteId.value = undefined;
-        noteDraft.value = '';
-        return refreshProject();
-      })
-      .catch((reason: unknown) => {
-        error.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
-  delegate(document.body, 'click', '[data-action="load-next-ticket-page"]', (_event, target) => {
-    const columnId = target.closest<HTMLElement>('[data-component="ticket-board-column"]')?.dataset.columnId;
-    if (
-      columnId &&
-      viewMode.value === 'board' &&
-      isPerColumnBoardView(selectedView.value, workspaceSearchActive()) &&
-      boardColumnStatus(columnId)
-    )
-      void loadBoardColumnMore(columnId);
-    else void loadNextTicketPage();
-  });
-  function beginBlockedReasonEdit(reader = false, frame?: TicketReaderFrame) {
-    if (frame) {
-      if (!frame.capabilities.update) return;
-      replaceLinkedReaderFrame(frame.id, (current) => ({
-        ...current,
-        edit: {
-          ...current.edit,
-          blockedReasonEditing: true,
-          blockedReasonDraft: current.ticket.blocked_reason ?? '',
-          blockedReasonBase: current.ticket.blocked_reason ?? '',
-          blockedReasonGeneration: current.edit.blockedReasonGeneration + 1,
-        },
-      }));
-      queueMicrotask(() =>
-        document.querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="blocked-reason"]`)?.focus(),
-      );
-      return;
-    }
-    const draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
-      editing = reader ? readerBlockedReasonEditing : blockedReasonEditing;
-    draft.value = selectedTicket.value?.blocked_reason ?? '';
-    if (reader) readerBlockedReasonDraftBase = draft.value;
-    else blockedReasonDraftBase = draft.value;
-    editing.value = true;
-    queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
-  }
-  delegate(document.body, 'click', '[data-action="edit-blocked-reason"]', (_event, target) => {
-    beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'dblclick', '[data-edit-blocked-reason="true"]', (_event, target) => {
-    beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
-  });
-  delegate(document.body, 'keydown', '[data-edit-blocked-reason="true"]', (event, target) => {
-    if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-    event.preventDefault();
-    beginBlockedReasonEdit(isReaderSurface(target));
-  });
-  delegate(document.body, 'input', '[name="blocked-reason"]', (_event, target) => {
-    const frame = linkedReaderFrame(target),
-      value = (target as HTMLTextAreaElement).value;
-    if (frame) {
-      replaceLinkedReaderFrame(frame.id, (current) => ({
-        ...current,
-        edit: { ...current.edit, blockedReasonDraft: value },
-      }));
-      linkedReaderSaves(frame.id).blocked.schedule(value);
-      return;
-    }
-    const reader = isReaderSurface(target),
-      draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
-      autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
-    draft.value = value;
-    autosave.schedule(draft.value);
-  });
-  delegate(document.body, 'focusout', '[name="blocked-reason"]', (_event, target) => {
-    const frame = linkedReaderFrame(target);
-    if (frame) {
-      void linkedReaderSaves(frame.id)
-        .blocked.flush()
-        .then((saved) => {
-          if (saved)
-            replaceLinkedReaderFrame(frame.id, (current) => ({
-              ...current,
-              edit: { ...current.edit, blockedReasonEditing: false },
-            }));
-        });
-      return;
-    }
-    const reader = isReaderSurface(target),
-      editing = reader ? readerBlockedReasonEditing : blockedReasonEditing,
-      autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
-    void autosave.flush().then((saved) => {
-      if (saved) editing.value = false;
-    });
-  });
-  delegate(
-    document.body,
-    'pointerup',
-    'textarea[name="markdown-source"], textarea[name="blocked-reason"], textarea[name="note-body"], textarea[name="new-ticket-details"]',
-    (_event, target) => {
-      const textarea = target as HTMLTextAreaElement,
-        kind = ticketEditorKind(textarea.name),
-        height = manuallyResizedTicketEditorHeight(textarea.style.height);
-      if (kind && height !== undefined)
-        saveTicketEditorSize(
-          localStorage,
-          document.documentElement.style,
-          kind,
-          isReaderSurface(target) ? 'reader' : 'sidebar',
-          height,
-        );
-    },
-  );
-  delegate(document.body, 'click', '[data-action="open-ticket-reader"]', (_event, target) => {
-    presentTicketReaderDialog('workspace-reader', target as HTMLElement, () => {
-      readerOpen.value = true;
-      if (readerTab.value === 'code-review' && !codeReviewLoading.value) void refreshCodeReview();
-    });
-  });
-  delegate(document.body, 'click', '[data-action="respond-to-feedback"]', (_event, target) => {
-    const noteId = data(target).noteId;
-    if (!noteId) return;
-    readerTab.value = 'info';
-    scheduleProjectSessionPersistence();
-    presentTicketReaderDialog(
-      'workspace-reader',
-      target as HTMLElement,
-      () => {
-        readerOpen.value = true;
-      },
-      () => {
-        const reader = readerDialog('workspace-reader'),
-          surface =
-            noteId === DETAILS_FEEDBACK_ID
-              ? reader?.querySelector<HTMLElement>('[data-details-feedback="true"]')
-              : [...(reader?.querySelectorAll<HTMLElement>('[data-component="note-card"]') ?? [])].find(
-                  (candidate) => candidate.dataset.noteId === noteId,
-                );
-        surface?.querySelector<HTMLElement>('[name="note-body"]')?.focus({ preventScroll: true });
-        surface?.scrollIntoView({ block: 'center' });
-      },
-    );
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="ticket-reader"]', (event, target) => {
-    if (event.target !== target) return;
-    const dialog = target as TicketReaderDialogElement,
-      id = dialog.dataset.readerFrameId;
-    if (!id) return;
-    if (readerApprovedClose.delete(id)) return;
-    event.preventDefault();
-    approveTicketReaderClose(dialog);
-  });
-  delegateCapture(document.body, 'wa-after-hide', '[data-component="ticket-reader"]', (event, target) => {
-    if (event.target === target) finishTicketReaderClose(target as TicketReaderDialogElement);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-reader-text-size"]', () => {
-    readerLargeText.value = !readerLargeText.value;
-    localStorage.setItem('hotsheet.reader.large-text', String(readerLargeText.value));
-  });
-  delegate(document.body, 'click', '[data-action="set-inspector-tab"]', (_event, target) => {
-    const tab = data(target).tabId as InspectorTab,
-      frameId = target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
-    if (frameId && frameId !== 'workspace-reader')
-      linkedReaderStack.value = linkedReaderStack.value.map((frame) =>
-        frame.id === frameId ? { ...frame, activeTab: tab } : frame,
-      );
-    else if (isReaderSurface(target)) readerTab.value = tab;
-    else inspectorTab.value = tab;
-    scheduleProjectSessionPersistence();
-    if ((!frameId || frameId === 'workspace-reader') && tab === 'code-review' && !codeReviewLoading.value)
-      void refreshCodeReview();
-  });
-  delegate(document.body, 'click', '[data-action="open-code-review"]', (_event, target) => {
-    const current = project(),
-      ticket = selectedTicket.value,
-      reviewTarget = codeReviewTarget(data(target));
-    if (!current || !ticket || !reviewTarget) return;
-    codeReviewMessage.value = 'Opening diff tool…';
-    void new Api(current.apiPath)
-      .openCodeReview(current.id, ticket.id, reviewTarget)
-      .then(() => {
-        if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
-          codeReviewMessage.value = '';
-          showToast(`Opened in ${codeReview.value?.difftool ?? 'the configured diff tool'}.`);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
-          codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
-}
-wireInspectorAndEditorInteractions();
-function wireShellAndGlobalInteractions() {
-  delegate(document.body, 'click', '[data-action="close-ticket-inspector"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = closeMobileOverlay(mobileOverlay.value, 'inspector');
-    else setInspectorVisible(false);
-  });
-  delegate(document.body, 'click', '[data-action="open-ticket-inspector"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = openMobileOverlay('inspector');
-    else setInspectorVisible(true);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = toggleMobileSidebar(mobileOverlay.value);
-    else setSidebarVisible(!sidebarVisible.value);
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-mobile-overlays"]', () => {
-    mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
-  });
-  delegate(document.body, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
-    const handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-component="resizable-region"]'),
-      id = handle.dataset.regionId;
-    if (!region || !isAppRegionId(id) || region.dataset.collapsed === 'true') return;
-    event.preventDefault();
-    const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
-    appRegionResizeDrag = {
-      id,
-      axis,
-      edge: (region.dataset.edge ?? 'end') as ResizableRegionEdge,
-      startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY,
-      startSize: appRegionSize(id),
-      pendingSize: appRegionSize(id),
-      region,
-      handle,
-    };
-    document.body.dataset.resizingRegion = axis;
-  });
-  delegate(document.body, 'keydown', '[data-kui-resize-handle]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-component="resizable-region"]'),
-      id = handle.dataset.regionId;
-    if (!region || !isAppRegionId(id)) return;
-    const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
-    if (
-      (axis === 'horizontal' && !['ArrowLeft', 'ArrowRight'].includes(keyboard.key)) ||
-      (axis === 'vertical' && !['ArrowUp', 'ArrowDown'].includes(keyboard.key))
-    )
-      return;
-    event.preventDefault();
-    const direction = ['ArrowRight', 'ArrowDown'].includes(keyboard.key) ? 1 : -1,
-      edge = (region.dataset.edge ?? 'end') as ResizableRegionEdge,
-      raw = resizeRegionFromPointer(appRegionSize(id), direction * 16, edge);
-    if (
-      id === 'app-terminal-drawer' &&
-      appRegionSize(id) <= TERMINAL_DRAWER_MIN_SIZE &&
-      raw < TERMINAL_DRAWER_MIN_SIZE
-    ) {
-      setTerminalDrawerVisible(false);
-      return;
-    }
-    setAppRegionSize(id, raw);
-  });
-  window.addEventListener('pointermove', (event) => {
-    const drag = appRegionResizeDrag;
-    if (!drag) return;
-    const point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
-      raw = resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge);
-    if (drag.id === 'app-terminal-drawer') {
-      const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value);
-      drag.pendingSize = decision.size;
-      drag.collapseRequested = decision.collapse;
-    } else drag.pendingSize = normalizeAppRegionSize(drag.id, raw);
-    if (drag.frame !== undefined) return;
-    drag.frame = requestAnimationFrame(() => {
-      drag.frame = undefined;
-      drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
-      drag.region.style.setProperty('--kui-resizable-region-expanded-size', `${drag.pendingSize}px`);
-      drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
-    });
-  });
-  window.addEventListener('resize', syncTerminalDrawerMaximum);
-  function finishAppRegionResize() {
-    const drag = appRegionResizeDrag;
-    if (!drag) return;
-    if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
-    appRegionResizeDrag = undefined;
-    delete document.body.dataset.resizingRegion;
-    setAppRegionSize(drag.id, drag.pendingSize);
-    if (drag.id === 'app-terminal-drawer' && drag.collapseRequested) {
-      setTerminalDrawerVisible(false);
-      return;
-    }
-    if (drag.id === 'app-terminal-drawer')
-      requestAnimationFrame(() => {
-        const target = document.querySelector<HTMLElement>(
-          '[data-terminal-drawer-measure="true"] .terminal-drawer__content',
-        );
-        if (target) updateTerminalDrawerBounds(target);
-        window.dispatchEvent(new CustomEvent(TERMINAL_DRAWER_RESIZE_END_EVENT));
-      });
-  }
-  window.addEventListener('pointerup', finishAppRegionResize);
-  window.addEventListener('pointercancel', finishAppRegionResize);
-  function clearTicketDrag() {
-    draggedTickets = undefined;
-    document
-      .querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]')
-      .forEach((target) => delete target.dataset.draggingTicket);
-  }
-  delegate(document.body, 'dragstart', '[data-action="select-ticket-row"]', (event, target) => {
-    const source = project(),
-      slug = data(target).ticketSlug;
-    if (!source || !slug) return;
-    const slugs = selectedTicketSlugs.value.includes(slug) ? [...selectedTicketSlugs.value] : [slug];
-    draggedTickets = { slugs, source };
-    const transfer = (event as DragEvent).dataTransfer;
-    if (transfer) {
-      transfer.effectAllowed = 'copyMove';
-      transfer.setData('application/x-hotsheet-tickets', slugs.join(','));
-    }
-  });
-  delegate(
-    document.body,
-    'dragover',
-    '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-    (event, target) => {
-      const drag = draggedTickets;
-      if (!drag) return;
-      const destinationProject = data(target).ticketDropProject;
-      if (destinationProject === drag.source.id) return;
-      event.preventDefault();
-      (target as HTMLElement).dataset.draggingTicket = 'true';
-      if ((event as DragEvent).dataTransfer)
-        (event as DragEvent).dataTransfer!.dropEffect =
-          destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
-    },
-  );
-  delegate(
-    document.body,
-    'dragleave',
-    '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-    (_event, target) => {
-      delete (target as HTMLElement).dataset.draggingTicket;
-    },
-  );
-  delegate(document.body, 'drop', '[data-ticket-drop-status]', (event, target) => {
-    const drag = draggedTickets;
-    if (!drag || project()?.id !== drag.source.id) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const nextStatus = data(target).ticketDropStatus,
-      itemId = data(target).itemId,
-      rows = tickets.value.filter((ticket) => drag.slugs.includes(ticket.slug)),
-      eligible = rows
-        .filter((ticket) =>
-          nextStatus === 'not_started' && itemId === 'all'
-            ? ['backlog', 'archive', 'deleted', 'moved'].includes(ticket.status ?? '')
-            : ticket.status !== nextStatus,
-        )
-        .map((ticket) => ticket.slug);
-    clearTicketDrag();
-    if (eligible.length === 1) void history().execute(eligible[0], { status: nextStatus });
-    else if (eligible.length > 1)
-      void executeBulkTicketAction({ kind: 'field', field: 'status', value: nextStatus! }, eligible);
-  });
-  delegate(document.body, 'drop', '[data-ticket-drop-action="duplicate"]', (event) => {
-    const drag = draggedTickets,
-      destination = project();
-    if (!drag || !destination) return;
-    event.preventDefault();
-    event.stopPropagation();
-    clearTicketDrag();
-    void copyDraggedTickets(destination, drag);
-  });
-  delegate(document.body, 'drop', '[data-ticket-drop-project]', (event, target) => {
-    const drag = draggedTickets,
-      destination = projects.value.find((item) => item.id === data(target).ticketDropProject);
-    if (!drag || !destination || destination.id === drag.source.id) return;
-    event.preventDefault();
-    event.stopPropagation();
-    clearTicketDrag();
-    void copyDraggedTickets(destination, drag);
-  });
-  delegate(document.body, 'dragend', '[data-action="select-ticket-row"]', () => {
-    clearTicketDrag();
-  });
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      const area = document.querySelector<HTMLElement>('.app-shell__work-area'),
-        active = document.activeElement;
-      if (
-        area &&
-        active instanceof HTMLElement &&
-        (active === area || area.contains(active)) &&
-        !event.composedPath().includes(area)
-      )
-        active.blur();
-    },
-    { capture: true },
-  );
-  document.addEventListener(
-    'keydown',
-    (event) => {
-      if (capturingShortcutId.value !== undefined) return;
-      // While a modal dialog is open these app-level shortcuts (search focus, ticket undo/redo/clipboard)
-      // would reach the workspace behind the modal — suppress them so e.g. Cmd-K cannot focus the background
-      // search from inside a dialog (HS2-FW4PYZ). The modal keeps its own text-field editing and shortcuts.
-      if (document.querySelector('wa-dialog[open], dialog:modal')) return;
-      const overrides = keyboardShortcutOverrides.value,
-        editable = isEditableEvent(event);
-      if (matchesShortcut('open-search', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        searchOpen.value = true;
-        focusWorkspaceSearch();
-        return;
-      }
-      if (!editable && matchesShortcut('redo', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        void history().redo();
-        return;
-      }
-      if (!editable && matchesShortcut('undo', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        void history().undo();
-        return;
-      }
-      if (matchesShortcut('toggle-left-sidebar', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        if (viewportMobile.value) mobileOverlay.value = toggleMobileSidebar(mobileOverlay.value);
-        else setSidebarVisible(!sidebarVisible.value);
-        return;
-      }
-      if (matchesShortcut('toggle-right-sidebar', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        if (viewportMobile.value) mobileOverlay.value = toggleMobileInspector(mobileOverlay.value);
-        else setInspectorVisible(!inspectorVisible.value);
-        return;
-      }
-      if (matchesShortcut('toggle-bottom-drawer', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        setTerminalDrawerVisible(!terminalDrawerVisible.value);
-        return;
-      }
-      if (matchesShortcut('view-list', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        switchWorkspaceView('list');
-        return;
-      }
-      if (matchesShortcut('view-board', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        switchWorkspaceView('board');
-        return;
-      }
-      if (matchesShortcut('view-notifications', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        switchWorkspaceView('notifications');
-        return;
-      }
-      if (matchesShortcut('view-settings', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        switchWorkspaceView('settings');
-        return;
-      }
-      if (matchesShortcut('view-workspace-grid', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        setShellMode(shellMode.value === 'terminals' ? 'project' : 'terminals');
-        return;
-      }
-      if (matchesShortcut('view-all-stats', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        if (shellMode.value === 'stats' && statsProjectId.value === undefined) setShellMode('project');
-        else {
-          statsProjectId.value = undefined;
-          setShellMode('stats');
-        }
-        return;
-      }
-      if (
-        matchesShortcut('project-tab-next', event, overrides, appleShortcutPlatform) ||
-        matchesShortcut('project-tab-previous', event, overrides, appleShortcutPlatform)
-      ) {
-        event.preventDefault();
-        const next = cycleTabId(
-          projects.value.map((item) => item.id),
-          selectedProjectId.value,
-          matchesShortcut('project-tab-next', event, overrides, appleShortcutPlatform) ? 1 : -1,
-        );
-        if (next) selectProjectTab(next);
-        return;
-      }
-      if (
-        matchesShortcut('drawer-tab-next', event, overrides, appleShortcutPlatform) ||
-        matchesShortcut('drawer-tab-previous', event, overrides, appleShortcutPlatform)
-      ) {
-        event.preventDefault();
-        const drawerProject = project();
-        if (drawerProject) {
-          const next = cycleTabId(
-            ['grid', ...currentDrawerTabIds(drawerProject.id)],
-            terminalDrawerSelected.value,
-            matchesShortcut('drawer-tab-next', event, overrides, appleShortcutPlatform) ? 1 : -1,
-          );
-          if (next) {
-            setTerminalDrawerVisible(true);
-            selectDrawerItem(next);
-          }
-        }
-        return;
-      }
-      if (!editable && matchesShortcut('new-ticket', event, overrides, appleShortcutPlatform)) {
-        event.preventDefault();
-        if (project()) {
-          setShellMode('project');
-          openTicketComposer();
-        }
-        return;
-      }
-      const clipboardMatch = matchesShortcut('copy-tickets', event, overrides, appleShortcutPlatform)
-        ? 'copy'
-        : matchesShortcut('cut-tickets', event, overrides, appleShortcutPlatform)
-          ? 'cut'
-          : matchesShortcut('paste-tickets', event, overrides, appleShortcutPlatform)
-            ? 'paste'
-            : undefined;
-      const action = ticketClipboardAction({
-        action: clipboardMatch,
-        ticketWorkAreaFocused: ticketWorkAreaFocused(),
-        editable: editable || Boolean(document.querySelector('wa-dialog[open]')),
-        textSelected: ordinaryTextSelected(),
-        hasTicketSelection: selectedTicketSlugs.value.length > 0,
-        hasTicketClipboard: Boolean(clipboard?.tickets.length),
-      });
-      if (!action) return;
-      event.preventDefault();
-      if (action === 'copy' || action === 'cut') copySelection(action === 'cut');
-      else void pasteSelection();
-    },
-    { capture: true },
-  );
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (ticketContextMenu.value && !eventTargetsContextMenu(event)) ticketContextMenu.value = undefined;
-      if (appTabContextMenu.value && !(event.target as Element).closest('.app-tab-context-menu'))
-        appTabContextMenu.value = undefined;
-      if (terminalContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"]'))
-        terminalContextMenu.value = undefined;
-      if (
-        terminalVisibilityContextMenu.value &&
-        !(event.target as Element).closest('.terminal-visibility-dialog__context-menu')
-      )
-        terminalVisibilityContextMenu.value = undefined;
-      if (
-        repositoryFileMenu.value &&
-        !(event.target as Element).closest('[data-component="repository-file-context-menu"]')
-      )
-        repositoryFileMenu.value = undefined;
-      if (attachmentMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"]'))
-        attachmentMenu.value = undefined;
-    },
-    { capture: true },
-  );
-  document.addEventListener('pointerdown', (event) => {
-    const target = (event.target as Element).closest<HTMLElement>('[data-action="run-command"]');
-    if (!target) return;
-    commandLongPressFired = false;
-    if (commandLongPressTimer !== undefined) window.clearTimeout(commandLongPressTimer);
-    commandLongPressTimer = window.setTimeout(() => {
-      commandLongPressTimer = undefined;
-      commandLongPressFired = true;
-      void openCommandHistory(target.dataset.itemId!);
-    }, 550);
-  });
-  for (const eventName of ['pointerup', 'pointercancel'] as const)
-    document.addEventListener(eventName, () => {
-      if (commandLongPressTimer !== undefined) {
-        window.clearTimeout(commandLongPressTimer);
-        commandLongPressTimer = undefined;
-      }
-    });
-  document.addEventListener('keydown', (event) => {
-    if (
-      !event.defaultPrevented &&
-      attachmentGalleryUrl.value &&
-      !document.querySelector('.attachment-gallery video') &&
-      ['ArrowLeft', 'ArrowRight'].includes(event.key)
-    ) {
-      event.preventDefault();
-      shiftGallery(event.key === 'ArrowLeft' ? -1 : 1);
-      return;
-    }
-    if (event.key === 'Escape') {
-      const galleryOpen = Boolean(attachmentGalleryUrl.value);
-      ticketContextMenu.value = undefined;
-      appTabContextMenu.value = undefined;
-      terminalContextMenu.value = undefined;
-      repositoryFileMenu.value = undefined;
-      attachmentMenu.value = undefined;
-      resetAttachmentGallery();
-      magnifiedTerminalKey.value = undefined;
-      if (galleryOpen) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    }
-  });
-  delegate(document.body, 'click', '*', completePointerDetailsFinish);
-  delegateCapture(document.body, 'pointerup', '*', schedulePointerDetailsFinish);
-  delegateCapture(document.body, 'pointercancel', '*', schedulePointerDetailsFinish);
-}
-wireShellAndGlobalInteractions();
+
+wireNavigationAndTabInteractions({
+  projects,
+  currentRememberedProjectRoots,
+  project,
+  persistDrawerTabOrder,
+  currentDrawerTabIds,
+  focusDrawerTab,
+  revealCorruptTicket,
+  queueCorruptTicketRepair,
+  corruptTickets,
+  selectedCorruptKey,
+  selectedTicket,
+  selectedTicketSlugs,
+  get ticketSelectionAnchor() {
+    return ticketSelectionAnchor;
+  },
+  set ticketSelectionAnchor(value) {
+    ticketSelectionAnchor = value;
+  },
+  setInspectorVisible,
+  error,
+  statsProjectId,
+  setShellMode,
+  selectTerminalRailProject,
+  selectTicketView,
+  terminalRailDirection,
+  terminalRailScreen,
+  selectProjectTab,
+  retryProjectRestore,
+});
+
+wireTerminalInteractions({
+  terminalDrawerBounds,
+  terminalDashboardSize,
+  terminalDrawerFitHigh,
+  terminalFitAcross,
+  terminalFitHigh,
+  get terminalPreviewClickTimer() {
+    return terminalPreviewClickTimer;
+  },
+  set terminalPreviewClickTimer(value) {
+    terminalPreviewClickTimer = value;
+  },
+  terminalSession,
+  get pendingTerminalFocus() {
+    return pendingTerminalFocus;
+  },
+  set pendingTerminalFocus(value) {
+    pendingTerminalFocus = value;
+  },
+  magnifiedTerminalKey,
+  openTerminalInProject,
+  terminalContextMenu,
+  terminalVisibilityScopeFor,
+  terminalVisibility,
+  persistTerminalVisibility,
+  terminalVisibilityFilter,
+  terminalVisibilityContextMenu,
+  terminalVisibilityDialogScope,
+  terminalVisibilityNamePrompt,
+  terminalKeysForVisibilityDialog,
+  openGridAIChat,
+  setTerminalDrawerVisible,
+  terminalDrawerVisible,
+  toggleTerminalDrawerMaximized,
+  selectDrawerItem,
+  terminalDrawerCreateMenuOpen,
+  createProjectTerminal,
+  aiLaunchConfiguration,
+  createDrawerAIChat,
+  openSavedConversation,
+  requestProjectClose,
+  projectCloseDialog,
+  restoreBorrowedProjectCloseTerminal,
+  cancelProjectClose,
+  confirmProjectClose,
+  closeAllProjectResources,
+  closeTerminalIds,
+  closeDrawerAIChat,
+  appTabContextMenu,
+  projects,
+  currentDrawerTabIds,
+  project,
+  terminalGroups,
+  terminalRename,
+  closeDrawerTabIds,
+  saveTerminalName,
+});
+
+wireTicketSelectionInteractions({
+  viewportMobile,
+  mobileOverlay,
+  selectTickets,
+  selectionOrder,
+  selectedTicketSlugs,
+  terminalRailDirection,
+  terminalRailScreen,
+  selectedTicket,
+  visibleTickets,
+  selectedView,
+  hideVerifiedColumn,
+  cancelTicketDrafts,
+  selectedCorruptKey,
+  get ticketSelectionAnchor() {
+    return ticketSelectionAnchor;
+  },
+  set ticketSelectionAnchor(value) {
+    ticketSelectionAnchor = value;
+  },
+  setInspectorVisible,
+  openTicketReader,
+  ticketContextMenu,
+  selectedRows,
+  executeBulkTicketAction,
+  tickets,
+  openNotWorking,
+  openTicketClose,
+  copySelection,
+  pasteSelection,
+  openBulkTicketDialog,
+  restoreTrashedTickets,
+  get bulkTicketSlugs() {
+    return bulkTicketSlugs;
+  },
+  set bulkTicketSlugs(value) {
+    bulkTicketSlugs = value;
+  },
+  bulkTicketDialog,
+  openEmptyTrash,
+  emptyTrash,
+  setTicketCloseReason,
+  searchTicketCloseTargets,
+  ticketCloseDialog,
+  submitTicketClose,
+  closeTicketCloseDialog,
+  get ticketLinkReturnFocus() {
+    return ticketLinkReturnFocus;
+  },
+  set ticketLinkReturnFocus(value) {
+    ticketLinkReturnFocus = value;
+  },
+  openDuplicateTarget,
+  notWorkingNote,
+  scheduleProjectSessionPersistence,
+  presentNotWorkingDialog,
+  addNotWorkingFiles,
+  draftScope,
+  notWorkingTarget,
+  notWorkingFiles,
+  submitNotWorking,
+  closeNotWorking,
+  notWorkingSubmitting,
+  keyboardShortcutOverrides,
+  appleShortcutPlatform,
+});
+
+wireViewAndSavedViewInteractions({
+  selectedCorruptKey,
+  selectedTicketSlugs,
+  get ticketSelectionAnchor() {
+    return ticketSelectionAnchor;
+  },
+  set ticketSelectionAnchor(value) {
+    ticketSelectionAnchor = value;
+  },
+  selectedTicket,
+  selectTicketView,
+  isEditableEvent,
+  openSavedViewDialog,
+  savedViewMenu,
+  openSavedViewRename,
+  openSavedViewDelete,
+  savedViewName,
+  savedViewError,
+  readInlineSearchField,
+  savedViewQueryTokens,
+  updateSavedViewQuery,
+  focusSavedViewQuery,
+  removeSavedViewQueryToken,
+  editSavedViewQueryToken,
+  savedViewQuery,
+  saveSavedView,
+  closeSavedViewDialog,
+  savedViewBusy,
+  deleteSavedView,
+  closeSavedViewDelete,
+  savedViewDeleteBusy,
+});
+
+wireCommandAndAiInteractions({
+  commandGroupExpanded,
+  persistWorkspacePreferences,
+  project,
+  commandGroupsCollapsed,
+  toggleSidebarDrive,
+  driveOptionsOpen,
+  aiTools,
+  aiSettingsLoading,
+  refreshAiConfiguration,
+  driveOverridesByProject,
+  normalizedAiSelection,
+  selectDriveModel,
+  openManualModel,
+  effectiveDriveSelection,
+  openSidebarConversation,
+  conversationOpen,
+  openConversationExport,
+  pickConversationMessage,
+  copyConversationSelection,
+  clearConversationSelection,
+  conversationExportDialog,
+  finishConversationExport,
+  updateConversationExportDraft,
+  conversationConnectionId,
+  conversationDrafts,
+  sendConversationTurn,
+  stopConversation,
+  selectConversationProvider,
+  selectConversationModel,
+  selectConversationEffort,
+  selectedTicket,
+  canAddNotes,
+  updateSelected,
+  showToast,
+  get commandLongPressFired() {
+    return commandLongPressFired;
+  },
+  set commandLongPressFired(value) {
+    commandLongPressFired = value;
+  },
+  runCommand,
+  commandDialogId,
+  commandStopConfirmation,
+  commandRuns,
+  error,
+  commandSettingsEditingId,
+  commandIconSearch,
+  addCommandSetting,
+  manualModelDialog,
+  deleteCommandSetting,
+  addCommandGroup,
+  deleteCommandGroup,
+  selectCommandRow,
+  commandSelection,
+  get draggedCommandIds() {
+    return draggedCommandIds;
+  },
+  set draggedCommandIds(value) {
+    draggedCommandIds = value;
+  },
+  commandSettingsDefinitions,
+  selectCommandSetting,
+  clearCommandDropIndicators,
+  clearCommandDrag,
+  reorderCommandSettings,
+  updateCommandSetting,
+  updateCommandAiSelection,
+  effectiveCommandAiSelection,
+  showLoadingActivity,
+  inheritGlobalShellHistory,
+  terminalSettingsMessage,
+  trashSettingsMessagesByProject,
+  trashCleanupDaysByProject,
+  resetProgressiveTicketRendering,
+  viewMode,
+  setSettingsCategory,
+  refreshProviderConnections,
+  refreshTerminalSettings,
+  refreshTrashSettings,
+  capturingShortcutId,
+  keyboardShortcutOverrides,
+  appleShortcutPlatform,
+  saveAiDefaults,
+  selectDefaultModel,
+  restoreCommandEditorAfterManualModel,
+  get manualModelDialogShown() {
+    return manualModelDialogShown;
+  },
+  set manualModelDialogShown(value) {
+    manualModelDialogShown = value;
+  },
+  aiDefaults,
+  ticketSourceSetupProject,
+  providerSetupKind,
+  providerEditingId,
+  providerSettingsError,
+  createdGitTicketStore,
+  ticketSourceSetupNavigation,
+  providerConnections,
+  githubAuth,
+  cancelGitHubSignIn,
+  startGitHubSignIn,
+  saveExternalProvider,
+});
+
+wireNotificationAndLinkInteractions({
+  notificationView,
+  project,
+  permissionTimer,
+  get permissionCountdown() {
+    return permissionCountdown;
+  },
+  set permissionCountdown(value) {
+    permissionCountdown = value;
+  },
+  permissionAutomationByProject,
+  updatePermissionTimer,
+  permissionRevision,
+  permissionInbox,
+  pendingPermissions,
+  resolvePermission,
+  error,
+  selectedProjectId,
+  hideVerifiedByProject,
+  get ticketLinkReturnFocus() {
+    return ticketLinkReturnFocus;
+  },
+  set ticketLinkReturnFocus(value) {
+    ticketLinkReturnFocus = value;
+  },
+  selectLinkedTicket,
+  ticketLinkChoice,
+  openTicketLinkMatch,
+  cancelTicketLinkChoice,
+});
+
+wireSearchAndComposerInteractions({
+  searchOpen,
+  readWorkspaceSearchEditor,
+  updateTicketSearch,
+  restoreWorkspaceSearchEnd,
+  readInlineSearchField,
+  savedViewQueryTokens,
+  updateSavedViewQuery,
+  focusSavedViewQuery,
+  removeWorkspaceSearchToken,
+  removeSavedViewQueryToken,
+  addWorkspaceSearchTag,
+  editWorkspaceSearchToken,
+  searchHelpOpen,
+  replaceActiveWorkspaceSearchToken,
+  focusWorkspaceSearch,
+  get workspaceSearchEditingToken() {
+    return workspaceSearchEditingToken;
+  },
+  set workspaceSearchEditingToken(value) {
+    workspaceSearchEditingToken = value;
+  },
+  searchQuery,
+  searchTokens,
+  scheduleTicketSearch,
+  sort,
+  sortDirection,
+  resetProgressiveTicketRendering,
+  persistWorkspacePreferences,
+  selectedRows,
+  executeBulkTicketAction,
+  ticketContextMenu,
+  viewMode,
+  openTicketComposer,
+  composerSubmitting,
+  composerExpanded,
+  resetTicketComposer,
+  composerTitle,
+  scheduleProjectSessionPersistence,
+  composerDetails,
+  composerCategory,
+  composerUpNext,
+  addNewTicketFiles,
+  draftScope,
+  composerAttachments,
+  composerAttachmentMessage,
+  composerAttachmentError,
+  get draggedTickets() {
+    return draggedTickets;
+  },
+  set draggedTickets(value) {
+    draggedTickets = value;
+  },
+  submitNewTicket,
+  tickets,
+  history,
+});
+
+wireAttachmentAndGalleryInteractions({
+  selectedTicket,
+  addAttachments,
+  project,
+  api,
+  attachmentMessage,
+  showToast,
+  refreshProject,
+  get draggedGroupedAttachmentId() {
+    return draggedGroupedAttachmentId;
+  },
+  set draggedGroupedAttachmentId(value) {
+    draggedGroupedAttachmentId = value;
+  },
+  galleryImages,
+  resetAttachmentGallery,
+  shiftGallery,
+  attachmentGalleryGeometry,
+  attachmentGalleryScale,
+  attachmentGalleryUrl,
+  attachmentMenu,
+  syncAttachmentGalleryMeasurement,
+  activeAttachmentGalleryVideo,
+  attachmentGalleryDuration,
+  error,
+  attachmentGalleryMarkup,
+  finishGalleryAnnotationSession,
+  beginGalleryAnnotationSession,
+  attachmentGalleryDrawMode,
+  attachmentGallerySelectedAnnotation,
+  attachmentGalleryAnnotations,
+  updateGalleryPlaybackPresentation,
+  attachmentGalleryPlayhead,
+  get attachmentRangeGesture() {
+    return attachmentRangeGesture;
+  },
+  set attachmentRangeGesture(value) {
+    attachmentRangeGesture = value;
+  },
+  get attachmentAnnotationGesture() {
+    return attachmentAnnotationGesture;
+  },
+  set attachmentAnnotationGesture(value) {
+    attachmentAnnotationGesture = value;
+  },
+  get attachmentGalleryLivePlayhead() {
+    return attachmentGalleryLivePlayhead;
+  },
+  set attachmentGalleryLivePlayhead(value) {
+    attachmentGalleryLivePlayhead = value;
+  },
+  attachmentGalleryPlaying,
+  get attachmentGallerySvgPreviousFrame() {
+    return attachmentGallerySvgPreviousFrame;
+  },
+  set attachmentGallerySvgPreviousFrame(value) {
+    attachmentGallerySvgPreviousFrame = value;
+  },
+  get attachmentGallerySvgFrame() {
+    return attachmentGallerySvgFrame;
+  },
+  set attachmentGallerySvgFrame(value) {
+    attachmentGallerySvgFrame = value;
+  },
+  gallerySvgClock,
+  stopGallerySvgClock,
+  attachmentGalleryVolumeOpen,
+  get attachmentGalleryLiveVolume() {
+    return attachmentGalleryLiveVolume;
+  },
+  set attachmentGalleryLiveVolume(value) {
+    attachmentGalleryLiveVolume = value;
+  },
+  attachmentGalleryMuted,
+  attachmentGalleryVolume,
+  get attachmentSwipeGesture() {
+    return attachmentSwipeGesture;
+  },
+  set attachmentSwipeGesture(value) {
+    attachmentSwipeGesture = value;
+  },
+  canUseAttachments,
+});
+
+wireInspectorAndEditorInteractions({
+  selectedTicket,
+  updateSelectedTracked,
+  showToast,
+  error,
+  readerOpen,
+  readerDetailsDraft,
+  get readerDetailsDraftBase() {
+    return readerDetailsDraftBase;
+  },
+  set readerDetailsDraftBase(value) {
+    readerDetailsDraftBase = value;
+  },
+  detailsDraft,
+  get detailsDraftBase() {
+    return detailsDraftBase;
+  },
+  set detailsDraftBase(value) {
+    detailsDraftBase = value;
+  },
+  titleDraft,
+  get titleDraftBase() {
+    return titleDraftBase;
+  },
+  set titleDraftBase(value) {
+    titleDraftBase = value;
+  },
+  readerBlockedReasonDraft,
+  get readerBlockedReasonDraftBase() {
+    return readerBlockedReasonDraftBase;
+  },
+  set readerBlockedReasonDraftBase(value) {
+    readerBlockedReasonDraftBase = value;
+  },
+  blockedReasonDraft,
+  get blockedReasonDraftBase() {
+    return blockedReasonDraftBase;
+  },
+  set blockedReasonDraftBase(value) {
+    blockedReasonDraftBase = value;
+  },
+  readerNoteDraft,
+  get readerNoteDraftBase() {
+    return readerNoteDraftBase;
+  },
+  set readerNoteDraftBase(value) {
+    readerNoteDraftBase = value;
+  },
+  noteDraft,
+  get noteDraftBase() {
+    return noteDraftBase;
+  },
+  set noteDraftBase(value) {
+    noteDraftBase = value;
+  },
+  fieldConflictResolution,
+  fieldConflict,
+  canUpdateSelected,
+  titleEditing,
+  activeTicketSurface,
+  titleAutosave,
+  tagsAutosave,
+  get pointerDetailsReader() {
+    return pointerDetailsReader;
+  },
+  set pointerDetailsReader(value) {
+    pointerDetailsReader = value;
+  },
+  get pointerDetailsFinish() {
+    return pointerDetailsFinish;
+  },
+  set pointerDetailsFinish(value) {
+    pointerDetailsFinish = value;
+  },
+  beginDetailsEdit,
+  linkedReaderFrame,
+  replaceLinkedReaderFrame,
+  linkedReaderSaves,
+  readerDetailsAutosave,
+  detailsAutosave,
+  beginDetailsFinish,
+  finishDetailsEdit,
+  readerEditingNoteId,
+  editingNoteId,
+  canAddNotes,
+  composingNote,
+  newNoteDraft,
+  scheduleProjectSessionPersistence,
+  updateSelected,
+  readerNoteAutosave,
+  noteAutosave,
+  readerInlineFeedbackReplies,
+  readerFeedbackChoiceSelections,
+  readerFeedbackChoiceAnchors,
+  project,
+  canDeleteNotes,
+  api,
+  refreshProject,
+  viewMode,
+  selectedView,
+  workspaceSearchActive,
+  loadBoardColumnMore,
+  loadNextTicketPage,
+  readerBlockedReasonEditing,
+  blockedReasonEditing,
+  readerBlockedReasonAutosave,
+  blockedReasonAutosave,
+  presentTicketReaderDialog,
+  readerTab,
+  codeReviewLoading,
+  refreshCodeReview,
+  readerDialog,
+  readerApprovedClose,
+  approveTicketReaderClose,
+  finishTicketReaderClose,
+  readerLargeText,
+  linkedReaderStack,
+  inspectorTab,
+  codeReviewMessage,
+  codeReview,
+});
+
+wireShellAndGlobalInteractions({
+  viewportMobile,
+  mobileOverlay,
+  setInspectorVisible,
+  setSidebarVisible,
+  sidebarVisible,
+  get appRegionResizeDrag() {
+    return appRegionResizeDrag;
+  },
+  set appRegionResizeDrag(value) {
+    appRegionResizeDrag = value;
+  },
+  appRegionSize,
+  setTerminalDrawerVisible,
+  setAppRegionSize,
+  terminalDrawerMax,
+  syncTerminalDrawerMaximum,
+  updateTerminalDrawerBounds,
+  get draggedTickets() {
+    return draggedTickets;
+  },
+  set draggedTickets(value) {
+    draggedTickets = value;
+  },
+  project,
+  selectedTicketSlugs,
+  tickets,
+  history,
+  executeBulkTicketAction,
+  copyDraggedTickets,
+  projects,
+  capturingShortcutId,
+  keyboardShortcutOverrides,
+  isEditableEvent,
+  appleShortcutPlatform,
+  searchOpen,
+  focusWorkspaceSearch,
+  inspectorVisible,
+  terminalDrawerVisible,
+  switchWorkspaceView,
+  setShellMode,
+  shellMode,
+  statsProjectId,
+  selectedProjectId,
+  selectProjectTab,
+  currentDrawerTabIds,
+  terminalDrawerSelected,
+  selectDrawerItem,
+  openTicketComposer,
+  ticketWorkAreaFocused,
+  ordinaryTextSelected,
+  get clipboard() {
+    return clipboard;
+  },
+  set clipboard(value) {
+    clipboard = value;
+  },
+  copySelection,
+  pasteSelection,
+  ticketContextMenu,
+  appTabContextMenu,
+  terminalContextMenu,
+  terminalVisibilityContextMenu,
+  repositoryFileMenu,
+  attachmentMenu,
+  get commandLongPressFired() {
+    return commandLongPressFired;
+  },
+  set commandLongPressFired(value) {
+    commandLongPressFired = value;
+  },
+  get commandLongPressTimer() {
+    return commandLongPressTimer;
+  },
+  set commandLongPressTimer(value) {
+    commandLongPressTimer = value;
+  },
+  openCommandHistory,
+  attachmentGalleryUrl,
+  shiftGallery,
+  resetAttachmentGallery,
+  magnifiedTerminalKey,
+  completePointerDetailsFinish,
+  schedulePointerDetailsFinish,
+});
 // Flush the debounced session (including the in-progress new-ticket composer draft) before the page
 // is hidden, reloaded, or restarted, so a background refresh/restart never loses typed text (HS2-D4PB9Y).
 const flushProjectSessionPersistence = () => {

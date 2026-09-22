@@ -4,7 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 describe('transient operation feedback', () => {
   it('uses toasts for completed actions instead of persistent surface messages', () => {
-    const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
+    const source = [
+      './main.tsx',
+      './interactions/repository.ts',
+      './interactions/attachments-and-gallery.ts',
+      './interactions/inspector-and-editor.ts',
+    ]
+      .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+      .join('\n');
     for (const pattern of [
       /showToast\(`Opened in \$\{codeReview\.value\?\.difftool/,
       /showToast\('Attachment removed\.'\)/,

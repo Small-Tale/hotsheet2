@@ -5,13 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { KEYBOARD_SHORTCUTS } from './keyboard-shortcuts';
 
 /**
- * The central keydown dispatcher in `main.tsx` is not importable in isolation, so its wiring is
+ * The central keydown dispatcher lives in `interactions/shell-and-global.ts`; its complete wiring is
  * asserted against the module source: every view/panel and tab-cycling command shortcut added in
  * HS2-9SHYWD must be resolved through `matchesShortcut` in the dispatcher and act on the matching
  * app state, so a new registry entry cannot be shipped without a runtime binding.
  */
 describe('keyboard-shortcut dispatcher wiring (HS2-9SHYWD)', () => {
-  const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
+  const source = ['./interactions/shell-and-global.ts']
+    .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+    .join('\n');
 
   const boundIds = [
     'toggle-left-sidebar',
