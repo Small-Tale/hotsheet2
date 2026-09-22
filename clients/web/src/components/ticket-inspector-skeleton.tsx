@@ -130,7 +130,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
             tabIndex={-1}
           />
         </section>
-        <section class="ticket-inspector__section">
+        <section class="ticket-inspector__section ticket-inspector__details-section">
           <ListHeader label="Details" />
           <div class="ticket-inspector__details-surface">
             <div class="ticket-inspector__ph-lines">

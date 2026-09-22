@@ -101,6 +101,22 @@
   min-height: remify(48px);
   cursor: text;
 }
+/* Details labels a field, so use the same compact label-to-control gap as Category. Keep the
+   ListHeader's inline border/padding ownership without its navigation-row height. */
+.ticket-inspector__content .ticket-inspector__details-section {
+  gap: calc(var(--kui-font-xs) * 0.5);
+}
+.ticket-inspector__details-section > .kui-list-header,
+.ticket-inspector__details-section .kui-list-header__title {
+  min-height: 0;
+}
+.ticket-inspector__details-section .kui-list-header__title {
+  padding-block: 0;
+  border-block: 0;
+}
+.ticket-inspector__details-section .kui-list-header__label {
+  line-height: var(--wa-line-height-condensed);
+}
 .ticket-inspector__details-surface {
   min-width: 0;
   max-width: 100%;

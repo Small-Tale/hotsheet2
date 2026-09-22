@@ -782,7 +782,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `TicketInfoPanel` — **demo built**: metadata; safe Markdown details on a white
   basic-note-like surface; blocked reason before Details with its header outside the
   gray reason box; tags; notes with collection-derived counts; and provider/update
-  provenance. Its intrinsic-width boundaries keep both metadata columns, long
+  provenance. The passive Details heading keeps ListHeader's inline inset while using
+  Category's compact label geometry and `0.5em` gap above the field. Preview,
+  editing, read-only, reader, and loading states share that spacing (HS2-S6S709).
+  Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
   The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG, refined in HS2-R64ETQ):

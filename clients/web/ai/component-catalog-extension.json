@@ -582,9 +582,9 @@
       "id": "ticket-info-panel",
       "name": "TicketInfoPanel",
       "kind": "composition",
-      "purpose": "Ticket metadata, details, tags, notes, and provenance.",
+      "purpose": "Ticket metadata, compact field-labeled details, tags, notes, and provenance.",
       "useWhen": [
-        "Hot Sheet needs ticket metadata, details, tags, notes, and provenance."
+        "Hot Sheet needs ticket metadata, compact field-labeled details, tags, notes, and provenance."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketInfoPanel behavior."

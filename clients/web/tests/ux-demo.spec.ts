@@ -2819,9 +2819,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     })),
   );
   expect(sectionRhythm).toHaveLength(3);
-  expect(sectionRhythm.map((section) => section.gap)).toEqual(['8px', '8px', '8px']);
+  expect(sectionRhythm.map((section) => section.gap)).toEqual(['8px', '6px', '8px']);
   expect(sectionRhythm[0].headerHeight).toBeUndefined();
-  expect(sectionRhythm[1].headerHeight).toBeCloseTo(44, 1);
+  const categoryLabelHeight = await inspector
+    .locator('wa-select[name="inspector-category"]')
+    .evaluate((node) => node.shadowRoot!.querySelector('[part~="form-control-label"]')!.getBoundingClientRect().height);
+  expect(sectionRhythm[1].headerHeight).toBeCloseTo(categoryLabelHeight, 1);
   expect(sectionRhythm[2].headerHeight).toBeCloseTo(44, 1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();

@@ -11,6 +11,46 @@ import { TicketStatusMenu } from './ticket-status-menu';
 import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
+  it('uses compact Details field-label geometry in preview and editing modes (HS2-S6S709)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(css).toContainSource(
+      '.ticket-inspector__content .ticket-inspector__details-section { gap: calc(var(--kui-font-xs) * 0.5); }',
+    );
+    expect(css).toContainSource(
+      '.ticket-inspector__details-section > .kui-list-header, .ticket-inspector__details-section .kui-list-header__title { min-height: 0; }',
+    );
+    expect(css).toContainSource(
+      '.ticket-inspector__details-section .kui-list-header__title { padding-block: 0; border-block: 0; }',
+    );
+    for (const detailsMode of ['preview', 'write'] as const) {
+      const markup = String(
+        TicketInfoPanel({
+          status: 'started',
+          priority: 'high',
+          category: 'feature',
+          tags: [],
+          details: 'Body',
+          detailsMode,
+        }),
+      );
+      expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
+      expect(markup).toContain('<h2 class="kui-list-header__label">Details</h2>');
+      expect(markup).toContain(`data-mode="${detailsMode}"`);
+    }
+    const readOnly = String(
+      TicketInfoPanel({
+        status: 'started',
+        priority: 'high',
+        category: 'feature',
+        tags: [],
+        details: 'Body',
+        canEditText: false,
+      }),
+    );
+    expect(readOnly).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
+    expect(readOnly).not.toContain('aria-label="Edit Ticket details"');
+  });
+
   it('renders colored category icons and semantic priority icons', () => {
     const category = String(TicketCategorySelect({ name: 'category', value: 'bug' }));
     expect(category).toContain('data-component="select"');

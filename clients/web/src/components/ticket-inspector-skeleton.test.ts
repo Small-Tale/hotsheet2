@@ -10,6 +10,7 @@ describe('TicketInspectorSkeleton', () => {
     // It reuses the real inspector chrome so it still looks like the inspector.
     expect(markup).toContain('class="ticket-inspector ticket-inspector--placeholder"');
     expect(markup).toContain('class="kui-tab-bar ticket-inspector__tabs"');
+    expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
     // Real Kerf tab bar with four disabled placeholder tabs and Info selected.
     expect(markup.match(/data-component="app-tab"/g)).toHaveLength(4);
     expect(markup).toContain('data-tab-id="info" data-selected="true" data-placeholder="true"');

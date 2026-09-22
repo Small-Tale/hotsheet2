@@ -7956,6 +7956,56 @@ test('projects a newly created ticket within one frame without a collection refr
   ).toEqual([]);
 });
 
+test('matches Details label spacing to Category before and after editing (HS2-S6S709)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const patches = await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const expectDetailsSpacing = async (surface: Locator) => {
+    await expect(async () => {
+      const spacing = await surface.evaluate((node) => {
+        const category = node.querySelector('wa-select[name="inspector-category"]')!.shadowRoot!,
+          categoryLabel = category.querySelector('[part~="form-control-label"]')!.getBoundingClientRect(),
+          categoryField = category.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
+          detailsLabel = node.querySelector('.ticket-inspector__details-section h2')!.getBoundingClientRect(),
+          detailsField = node.querySelector('.ticket-inspector__details-surface')!.getBoundingClientRect();
+        return {
+          categoryGap: categoryField.top - categoryLabel.bottom,
+          detailsGap: detailsField.top - detailsLabel.bottom,
+        };
+      });
+      expect(spacing.categoryGap).toBeGreaterThan(0);
+      expect(spacing.detailsGap).toBeCloseTo(spacing.categoryGap, 1);
+    }).toPass({ timeout: 5_000 });
+  };
+  const exerciseDetails = async (surface: Locator, name: string) => {
+    const section = surface.locator('.ticket-inspector__details-section');
+    await expectDetailsSpacing(surface);
+    await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-preview.png` });
+    await surface.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    const editor = surface.getByRole('textbox', { name: 'Ticket details' });
+    await expect(editor).toBeFocused();
+    await expectDetailsSpacing(surface);
+    await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-editing.png` });
+    const next = `Details edited in ${name}.`;
+    await editor.fill(next);
+    await editor.blur();
+    await expect.poll(() => patches.some((patch) => patch.details === next)).toBe(true);
+    await expect(surface.getByRole('button', { name: 'Edit Ticket details' })).toContainText(next);
+    await expectDetailsSpacing(surface);
+  };
+  await exerciseDetails(sidebar, 'sidebar-wide');
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await exerciseDetails(sidebar, 'sidebar-narrow');
+  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await exerciseDetails(reader, 'reader-mobile');
+});
+
 test('autosaves ticket text fields without explicit save or cancel controls', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
