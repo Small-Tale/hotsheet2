@@ -766,6 +766,63 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   await rail.screenshot({ path: '/private/tmp/hs2-r292m4-terminal-ticket-rail-narrow.png' });
 });
 
+test('keeps the ticket rail search bordered across focus, blur, collapse, and refill (HS2-TNSD4K)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  const rail = page.locator('[data-component="terminal-ticket-rail"]');
+  const group = rail.locator('.workspace-header__search-group');
+  const search = rail.getByRole('searchbox', { name: 'Search tickets' });
+  const rows = rail.locator('[data-component="ticket-list-row"]');
+  const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
+  await expect(rows).toHaveCount(7);
+  await expect(rail.locator('[data-view-mode="board"]')).toHaveCount(0);
+  await rail.getByRole('button', { name: 'Notifications view', exact: true }).click();
+  await expect(rail.getByRole('button', { name: 'Notifications view', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(rail.getByRole('region', { name: 'Notifications', exact: true })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Search tickets' })).toBeDisabled();
+  await expect(rows).toHaveCount(0);
+  await rail.getByRole('button', { name: 'List view', exact: true }).click();
+  await expect(rail.getByRole('button', { name: 'List view', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(rail.getByRole('region', { name: 'Notifications', exact: true })).toHaveCount(0);
+  await expect(rows).toHaveCount(7);
+  await expect(group).toHaveCSS('border-width', '1px');
+  await rail.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(search).toBeFocused();
+  await expect(group).toHaveCSS('border-width', '1px');
+  await expect(group).not.toHaveCSS('box-shadow', 'none');
+  await expect(group.locator('.kui-token-search')).toHaveCSS('border-width', '0px');
+  await search.fill('long-tag-example');
+  await expect(rows).toHaveCount(1);
+  await blurTarget.focus();
+  await expect(search).toBeVisible();
+  await expect(group).toHaveCSS('border-width', '1px');
+  await expect(group).toHaveCSS('box-shadow', 'none');
+  await search.focus();
+  await expect(group).not.toHaveCSS('box-shadow', 'none');
+  await rail.getByRole('button', { name: 'Clear search' }).click();
+  await expect(search).toHaveText('');
+  await expect(rows).toHaveCount(7);
+  await blurTarget.focus();
+  await expect(search).toHaveCount(0);
+  await expect(group).toHaveCSS('border-width', '1px');
+  await rail.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(search).toBeFocused();
+  await expect(group).toHaveCSS('border-width', '1px');
+  await expect(group).not.toHaveCSS('box-shadow', 'none');
+  await rail.screenshot({ path: '/private/tmp/hs2-tnsd4k-rail-search-demo-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await search.fill('A long query that wraps onto a second line inside the narrow ticket rail');
+  await expect.poll(() => rail.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(group).toHaveCSS('border-width', '1px');
+  await expect(group).not.toHaveCSS('box-shadow', 'none');
+  await rail.screenshot({ path: '/private/tmp/hs2-tnsd4k-rail-search-demo-narrow.png', animations: 'disabled' });
+});
+
 test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
@@ -1927,6 +1984,9 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const search = header.getByRole('searchbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
+  await expect(searchGroup).toHaveCSS('border-width', '1px');
+  await expect(searchGroup).toHaveCSS('border-style', 'solid');
+  await expect(searchControl).toHaveCSS('border-width', '0px');
   await expect(searchGroup).not.toHaveCSS('box-shadow', 'none');
   await expect
     .poll(() => searchGroup.evaluate((node) => node.getBoundingClientRect().width))
@@ -1949,10 +2009,13 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await search.fill('long-tag-example');
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(search).toBeVisible();
+  await expect(searchGroup).toHaveCSS('border-width', '1px');
+  await expect(searchGroup).toHaveCSS('box-shadow', 'none');
   await search.fill('');
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(header.getByRole('button', { name: 'Search tickets' })).toBeVisible();
+  await expect(searchGroup).toHaveCSS('border-width', '1px');
   await expect(
     page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
   ).toHaveCount(20);

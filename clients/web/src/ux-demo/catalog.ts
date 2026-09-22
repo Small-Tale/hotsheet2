@@ -514,10 +514,17 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-ticket-rail',
         'TerminalTicketRail',
-        'Compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail.',
+        'Compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.',
         'feature-floor',
         true,
-        ['ticket-list', 'ticket-inspector', 'content-transition', 'workspace-header', 'quick-ticket-composer'],
+        [
+          'ticket-list',
+          'ticket-inspector',
+          'content-transition',
+          'workspace-header',
+          'quick-ticket-composer',
+          'notification-center',
+        ],
       ),
       demo(
         'fixed-aspect-terminal-card',

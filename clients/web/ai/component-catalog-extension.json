@@ -1277,9 +1277,9 @@
       "id": "terminal-ticket-rail",
       "name": "TerminalTicketRail",
       "kind": "composition",
-      "purpose": "Compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail.",
+      "purpose": "Compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.",
       "useWhen": [
-        "Hot Sheet needs compact list and notifications rail with a separated scroller, ticket launcher, and push navigation into detail."
+        "Hot Sheet needs compact list and notifications rail with a bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalTicketRail behavior."

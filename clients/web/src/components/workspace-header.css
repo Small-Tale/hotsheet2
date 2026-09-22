@@ -155,17 +155,12 @@ wa-button.workspace-header__text-action::part(base) {
   overflow: visible;
   align-self: flex-start;
 }
-/* Kerf's TokenSearchField owns the field chrome (border, pill radius, focus ring, tokens, clear)
-   ONLY once expanded, so strip the enclosing control group's chrome then to avoid a double
-   border. While collapsed the group keeps its ordinary toolbar pill so the search button reads
-   as a peer of the other control groups (HS2-88P90P, HS2-Y5A574). */
+/* In Kerf's grouped TokenSearchField composition the control group owns the border,
+   padding, and focus ring in both collapsed and expanded states. Only size and place
+   that composition here; removing the group's chrome also removes the field's border. */
 .workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded='true'] {
   --kui-token-search-expanded-width: 48rem;
   min-width: 19rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
   flex: 1 1 19rem;
 }
 .workspace-header__search-group .kui-token-search {

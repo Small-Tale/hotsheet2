@@ -2,6 +2,7 @@ import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
+import { NotificationCenter } from '../components/notification-center';
 import { QuickTicketComposer, QuickTicketLauncher } from '../components/quick-ticket-composer';
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
@@ -85,6 +86,7 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
 }
 
 export function TerminalTicketRailDemo() {
+  const mode = workspaceMode.value === 'notifications' ? 'notifications' : 'list';
   return (
     <section class="terminal-ticket-rail-demo">
       <TerminalTicketRail
@@ -99,8 +101,24 @@ export function TerminalTicketRailDemo() {
           { id: 'archive', label: 'Archive' },
         ]}
         selectedViewId="all"
-        controls={<WorkspaceControls mode="list" sort="updated" notificationCount={2} />}
-        content={<TicketList tickets={collectionTickets.value.slice(0, 7)} label="Demo project tickets" />}
+        controls={
+          <WorkspaceControls
+            mode={mode}
+            listOnly
+            searchOpen={workspaceSearchOpen.value}
+            searchQuery={workspaceSearchQuery.value}
+            searchHelpOpen={workspaceSearchHelpOpen.value}
+            sort={workspaceSort.value}
+            sortDirection={workspaceSortDirection.value}
+          />
+        }
+        content={
+          mode === 'notifications' ? (
+            <NotificationCenter title="Notifications" pending={[]} history={[]} />
+          ) : (
+            <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />
+          )
+        }
         inspector={<TicketInspectorDemo />}
         active="root"
         action={<QuickTicketLauncher label="Ticket…" />}

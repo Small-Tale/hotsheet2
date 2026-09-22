@@ -2391,8 +2391,19 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     searchInput = rail.getByRole('searchbox', { name: 'Search tickets' });
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
   await expect.poll(() => expandedSearch.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(80);
+  await expect(expandedSearch).toHaveCSS('border-width', '1px');
+  await expect(expandedSearch).toHaveCSS('border-style', 'solid');
+  await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
+  await expect(expandedSearch.locator('.kui-token-search')).toHaveCSS('border-width', '0px');
+  await rail.screenshot({ path: '/private/tmp/hs2-tnsd4k-rail-search-empty-focused.png', animations: 'disabled' });
   await searchInput.fill('has:attachment ');
   await expect(rail.locator('[data-component="token-search-token"][data-token-value="has:attachment"]')).toBeVisible();
+  await rail.getByRole('button', { name: 'List view', exact: true }).focus();
+  await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
+  await expect(expandedSearch).toHaveCSS('border-width', '1px');
+  await expect(expandedSearch).toHaveCSS('box-shadow', 'none');
+  await searchInput.focus();
+  await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
   await searchInput.fill('updated-after:4h ago');
   await searchInput.press('Enter');
   await expect(
@@ -2403,6 +2414,13 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
   await page.screenshot({ path: '/private/tmp/hs2-egekzg-terminal-ticket-rail-search-wide.png', fullPage: true });
   await rail.getByRole('button', { name: 'Clear search' }).click();
+  await rail.getByRole('button', { name: 'List view', exact: true }).focus();
+  await expect(expandedSearch).toHaveAttribute('data-expanded', 'false');
+  await expect(expandedSearch).toHaveCSS('border-width', '1px');
+  await rail.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(searchInput).toBeFocused();
+  await expect(expandedSearch).toHaveCSS('border-width', '1px');
+  await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
   await rail.getByRole('button', { name: 'Hide ticket rail' }).click();
   const railRegion = page.locator('section[data-region-id="app-inspector"]');
   await expect(railRegion).toHaveAttribute('data-collapsed', 'true');

@@ -675,6 +675,15 @@ empty-field blur collapse, and Escape collapse while the app's responsive header
 to read the same state. The same component backs both the workspace toolbar search and the
 saved-view dialog's non-collapsible query field.
 
+For the collapsible toolbar composition, Kerf's `ToolbarControlGroup` owns the enclosing
+border, padding, and focus ring while the child `TokenSearchField` avoids a duplicate
+border. Hot Sheet only sizes and places that composition; expansion must not strip the
+group's chrome in either the workspace header or workspace-grid ticket rail. The rail
+demo binds the same search signals for expansion, query filtering, help, and clearing,
+including populated blur and empty-collapse/reopen transitions. Its mode controls project
+the shared List/Notifications state into the selected button and corresponding content,
+with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
+
 - `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
   atomic chips in their expression order, with character-level text wrapping and token-level
   chip wrapping; supports inline tag,

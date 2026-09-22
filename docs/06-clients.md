@@ -633,6 +633,9 @@ and identity-less legacy entries remain conservatively blocking.
   collapsible search adopts the project-persisted open signal: its canonical magnifier moves
   focus into the editor, and an empty blur or Escape collapses it without app-owned focusout
   bookkeeping; populated searches and marked suggestion/date/help surfaces remain open.
+  When composed inside a toolbar control group, the group retains its border, padding,
+  and focus ring in both collapsed and expanded states. The ordinary workspace header
+  and workspace-grid ticket rail share that package-owned treatment (HS2-TNSD4K).
   Explicit lifecycle expressions and filter chips narrow the
   selected collection. Boolean expressions that cannot be represented as one provider query
   walk every compact cursor page for that collection, retain only client-side matches, and

@@ -84,7 +84,7 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__search-group[data-expanded="true"] { max-width:100%; height:auto; overflow:visible; align-self:flex-start; }',
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; padding:0; border:0; background:transparent; box-shadow:none; flex: 1 1 19rem; }',
+      '.workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; flex: 1 1 19rem; }',
     );
     expect(headerCss).toContainSource(
       '.workspace-header__search-group .kui-token-search { --kui-token-search-background: var(--wa-color-surface-default); --kui-token-search-border: var(--wa-color-neutral-border-normal); --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet); }',
