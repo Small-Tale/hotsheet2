@@ -73,6 +73,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics
     src/ticket-scroll-state.ts # In-session project/mode/view scroll snapshots, deferred restoration, and content-bound clamping
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
+    src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting

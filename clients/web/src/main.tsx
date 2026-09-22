@@ -9,7 +9,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PanelHeader } from '@kerfjs/ui/panel-header';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
-import { placeTokenSearchCaret, readTokenSearchField } from '@kerfjs/ui/token-search-field';
+import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
@@ -243,6 +243,7 @@ import {
   tokenQuery,
   toTokenSearchToken,
 } from './inline-search';
+import { restoreInlineSearchCaret } from './inline-search-caret';
 import { beginInteractionTiming } from './interaction-performance';
 import { wireAttachmentAndGalleryInteractions } from './interactions/attachments-and-gallery';
 import { wireCommandAndAiInteractions } from './interactions/commands-and-ai';
@@ -2638,18 +2639,10 @@ function removeWorkspaceSearchToken(raw: string) {
   return true;
 }
 function focusWorkspaceSearch(offset?: number) {
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      const editor = document.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
-      if (editor) placeTokenSearchCaret(editor, offset);
-    }),
-  );
+  restoreInlineSearchCaret(document, '[data-token-search-editor="workspace-search"]', offset);
 }
 function restoreWorkspaceSearchEnd() {
-  queueMicrotask(() => {
-    const editor = document.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
-    if (editor) placeTokenSearchCaret(editor);
-  });
+  focusWorkspaceSearch();
 }
 function scheduleTicketSearch() {
   resetProgressiveTicketRendering();
@@ -5847,12 +5840,7 @@ function updateSavedViewQuery(
   return parsed.tokens.length > 0;
 }
 function focusSavedViewQuery(offset?: number) {
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      const editor = document.querySelector<HTMLElement>('[data-token-search-editor="saved-view-query"]');
-      if (editor) placeTokenSearchCaret(editor, offset);
-    }),
-  );
+  restoreInlineSearchCaret(document, '[data-token-search-editor="saved-view-query"]', offset);
 }
 function removeSavedViewQueryToken(raw: string) {
   const token = savedViewQueryTokens.value.find((value) => value.raw === raw);

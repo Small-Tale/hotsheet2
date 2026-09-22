@@ -714,6 +714,14 @@ empty-field blur collapse, and Escape collapse while the app's responsive header
 to read the same state. The same component backs both the workspace toolbar search and the
 saved-view dialog's non-collapsible query field.
 
+For app-owned token edits/removals, `inline-search-caret.ts` restores the caret in
+the current task's microtask checkpoint, after synchronous rendering/batching.
+It coalesces requests for the same field and respects a newer focus handoff. It
+does not defer across animation frames, which could collapse a later replacement
+selection and duplicate surrounding text. Both workspace and saved-view fields
+cover repeated Backspace/Delete, replacement, clear/refill, and continued typing
+(HS2-PR5TNA).
+
 For the collapsible toolbar composition, Kerf's `ToolbarControlGroup` owns the enclosing
 border, padding, and focus ring while the child `TokenSearchField` avoids a duplicate
 border. Hot Sheet only sizes and places that composition; expansion must not strip the

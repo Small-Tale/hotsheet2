@@ -706,6 +706,10 @@ and identity-less legacy entries remain conservatively blocking.
   clearing chips keeps the current editor open for immediate continued typing, while
   subsequently focusing another control collapses an empty search normally. The app
   no longer queues its own reopen after clear (HS2-M4BNX5).
+  App-owned token removal and editing restore the workspace/saved-view caret after
+  the current render, before the next input task. Restoration coalesces repeated
+  requests and respects newer focus handoffs; delayed animation frames must not
+  collapse a replacement selection and duplicate surrounding query text (HS2-PR5TNA).
 
   Shared Kerf layout primitives own common shell geometry. Project, settings,
   notification, and terminal-operations sidebars use `Pane` for their

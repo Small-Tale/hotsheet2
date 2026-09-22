@@ -11861,6 +11861,112 @@ test('deletes a trailing token immediately after Space commits it', async ({ pag
   await expect(query).toHaveText('');
 });
 
+for (const surface of ['workspace', 'saved-view']) {
+  test(`preserves ${surface} replacement input when token-deletion frames resume late (HS2-PR5TNA)`, async ({
+    page,
+  }) => {
+    await mockProject(page);
+    await page.route('**/views', (route) => route.fulfill({ json: [] }));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page
+      .getByRole('button', { name: surface === 'workspace' ? 'Search tickets' : 'Add view', exact: true })
+      .click();
+    if (surface === 'saved-view') {
+      const name = page.getByRole('textbox', { name: 'View name' });
+      await expect(name).toBeFocused();
+      await name.fill('Token deletion regression');
+    }
+    const query = page.getByRole('searchbox', { name: surface === 'workspace' ? 'Search tickets' : 'Search query' }),
+      chip = query.locator('[data-component="token-search-token"]');
+    await query.fill('before is:active after ');
+    await expect(chip).toHaveAttribute('data-token-value', 'is:active');
+    for (const key of ['Backspace', 'Delete', 'Backspace', 'Delete']) {
+      await query.evaluate((editor, key) => {
+        const token = editor.querySelector('[data-component="token-search-token"]')!,
+          text = key === 'Backspace' ? token.nextSibling : token.previousSibling,
+          node = text!.firstChild ?? text!,
+          selection = getSelection()!,
+          range = document.createRange();
+        range.setStart(node, key === 'Backspace' ? 0 : (node.textContent?.length ?? 0));
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }, key);
+      const frames = await page.evaluateHandle(() => {
+        const original = window.requestAnimationFrame.bind(window),
+          originalCancel = window.cancelAnimationFrame.bind(window),
+          pending = new Map<number, FrameRequestCallback>();
+        let next = -1;
+        window.requestAnimationFrame = (callback) => {
+          const id = next--;
+          pending.set(id, callback);
+          return id;
+        };
+        window.cancelAnimationFrame = (id) => {
+          if (id < 0) pending.delete(id);
+          else originalCancel(id);
+        };
+        return {
+          advance() {
+            const callbacks = [...pending.values()];
+            pending.clear();
+            for (const callback of callbacks) callback(performance.now());
+          },
+          restore() {
+            window.requestAnimationFrame = original;
+            window.cancelAnimationFrame = originalCancel;
+            for (const callback of pending.values()) original(callback);
+            pending.clear();
+          },
+        };
+      });
+      try {
+        await query.press(key);
+        await expect(chip).toHaveCount(0);
+        await expect(query).toHaveText('before  after ');
+        // A busy browser may deliver the old restoration between selecting replacement
+        // text and its insertion. Keep this ordering deterministic instead of adding sleep.
+        await query.selectText();
+        await frames.evaluate((clock) => {
+          clock.advance();
+        });
+        await frames.evaluate((clock) => {
+          clock.advance();
+        });
+        await page.keyboard.insertText('before is:active after ');
+        await expect(chip).toHaveAttribute('data-token-value', 'is:active');
+        await expect(query.locator('[data-token-search-text]')).toHaveText(['before ', ' after ']);
+      } finally {
+        await frames.evaluate((clock) => {
+          clock.restore();
+        });
+        await frames.dispose();
+      }
+    }
+    await page
+      .getByRole('button', { name: surface === 'workspace' ? 'Clear search' : 'Clear search query', exact: true })
+      .click();
+    await expect(chip).toHaveCount(0);
+    await expect(query).toHaveText('');
+    await expect(query).toBeFocused();
+    await query.fill('refilled tag:client after ');
+    await expect(chip).toHaveAttribute('data-token-value', 'tag:client');
+    await expect(query.locator('[data-token-search-text]')).toHaveText(['refilled ', ' after ']);
+    await chip.getByRole('button', { name: 'Remove tag client' }).click();
+    await expect(chip).toHaveCount(0);
+    await expect(query).toBeFocused();
+    await page.keyboard.insertText('more');
+    await expect(query).toHaveText('refilled more after ');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.screenshot({ path: `/private/tmp/hs2-pr5tna-${surface}-${width}.png`, animations: 'disabled' });
+    }
+  });
+}
+
 test('edits inline filters and exposes attachment, lifecycle-date, and syntax helpers', async ({ page }) => {
   const structured: URL[] = [];
   await mockProject(page);
