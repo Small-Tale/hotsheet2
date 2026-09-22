@@ -1283,7 +1283,8 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
 }
 
 const devReviewTestTitles = new Set([
-  'activates Dev Review by default in development and honors the explicit false opt-out',
+  'activates Dev Review by default and preserves its desktop/mobile lifecycle',
+  'honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)',
   'does not report intentional render bursts during remembered-project startup',
   'suppresses interaction-bound render bursts but reports a storm that persists afterward',
   'keeps feedback rectangle input within its frame budget in the populated main app',
@@ -1304,7 +1305,7 @@ test.beforeEach(async ({ page }, testInfo) => {
   });
 });
 
-test('activates Dev Review by default in development and honors the explicit false opt-out', async ({ page }) => {
+test('activates Dev Review by default and preserves its desktop/mobile lifecycle', async ({ page }) => {
   let submission: { actorRole: string; attachments: Array<{ filename: string; mimeType: string }> } | undefined;
   await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
     submission = route.request().postDataJSON();
@@ -1347,7 +1348,11 @@ test('activates Dev Review by default in development and honors the explicit fal
   ).toBe(true);
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('.hs-dev-review')).toBeVisible();
+});
+
+test('honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)', async ({ page }) => {
   await page.goto('/?dev-review=false');
+  await expect(page.getByRole('button', { name: 'Open project', exact: true })).toBeVisible();
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   expect(
     await page.evaluate(() =>

@@ -2,7 +2,20 @@ import { expect, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
-test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
+test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)', async ({ page }) => {
+  await page.goto('/ux-demo?dev-review=false');
+  const catalog = page.getByRole('navigation', { name: 'UX components components' });
+  await expect(catalog).toBeVisible();
+  await catalog.getByRole('button', { name: /TicketRow/ }).click();
+  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+});
+
+test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF)', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
   const catalogShell = page.locator('[data-component="catalog"]'),
@@ -49,7 +62,6 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(relationships.getByText('Uses', { exact: true })).toBeVisible();
   await relationships.getByText('TagChip', { exact: true }).click();
   await expect(page).toHaveURL('/ux-demo?dev-review=false&component=tag-chip');
-  await page.reload();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   const collapse = page.getByRole('button', { name: 'Collapse UX components catalog' });
   await collapse.click();

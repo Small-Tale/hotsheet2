@@ -182,6 +182,12 @@ transition-matrix tests are the real assurance.
   drive it over HTTP/WS with a test client; assert full flows with minimal mocks.
 - **Client E2E:** the Kerf web UI via **Playwright** against a real running server;
   the Tauri app via its harness; SwiftUI via XCUITest (later).
+  Keep independent startup and reload contracts in focused scenarios with positive
+  application/component readiness before absence assertions. Responsive layout tests
+  resize the same adversarial content and assert it remains present at each size;
+  a second navigation must not silently reset the content under test. Test structure
+  should absorb parallel-suite startup costs without weakening the shared timeout
+  or replacing a required reload with an in-page update (HS2-9TZ9AF).
 - **CLI + MCP E2E:** drive the CLI against a temp store (assert disk state +
   idempotence); drive the `hotsheet_*` MCP tools via a test MCP client.
 
