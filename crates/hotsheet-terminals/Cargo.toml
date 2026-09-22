@@ -28,6 +28,8 @@ tokio = { workspace = true, features = ["io-util", "time"] }
 serde = { workspace = true }
 serde_json.workspace = true
 ureq.workspace = true
+libc.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

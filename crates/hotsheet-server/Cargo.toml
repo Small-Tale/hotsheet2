@@ -44,6 +44,7 @@ tempfile.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+libc.workspace = true
 tower.workspace = true
 http-body-util.workspace = true
 hotsheet-aitools.workspace = true

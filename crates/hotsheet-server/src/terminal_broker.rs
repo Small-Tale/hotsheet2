@@ -22,11 +22,11 @@ pub struct TerminalBroker {
 }
 
 impl TerminalBroker {
-    /// The socket path for a store: `${HOTSHEET_HOME}/broker/<project-id>.sock`.
-    fn socket_for(project: &str) -> PathBuf {
-        hotsheet_plugins::hotsheet_home()
-            .join("broker")
-            .join(format!("{project}.sock"))
+    /// New namespaces use short private paths. An adopted legacy namespace keeps its
+    /// original address across idle exits so old and new server handles cannot split.
+    fn socket_for(project: &str) -> std::io::Result<PathBuf> {
+        let home = hotsheet_plugins::hotsheet_home();
+        hotsheet_terminals::broker_socket::select_socket(&home, project)
     }
 
     /// Ensure a broker is running for `store_path` and return its coordinates. Connects to an
@@ -35,7 +35,7 @@ impl TerminalBroker {
     /// at startup.
     pub fn ensure(store_path: &Path) -> anyhow::Result<Self> {
         let project = hotsheet_tls::project_id(store_path);
-        let socket = Self::socket_for(&project);
+        let socket = Self::socket_for(&project)?;
 
         if is_live(&socket) {
             return Ok(Self {
@@ -43,9 +43,6 @@ impl TerminalBroker {
                 project,
                 restart: Arc::new(tokio::sync::Mutex::new(())),
             });
-        }
-        if let Some(parent) = socket.parent() {
-            std::fs::create_dir_all(parent)?;
         }
         spawn_broker(&socket, &project)?;
 
@@ -66,7 +63,7 @@ impl TerminalBroker {
     /// Return the already-running broker for `store_path` without spawning one.
     pub fn discover(store_path: &Path) -> Option<Self> {
         let project = hotsheet_tls::project_id(store_path);
-        let socket = Self::socket_for(&project);
+        let socket = Self::socket_for(&project).ok()?;
         is_live(&socket).then_some(Self {
             socket,
             project,
@@ -122,9 +119,6 @@ impl TerminalBroker {
         if let Ok(client) = BrokerClient::connect(&self.socket).await {
             return Ok(client);
         }
-        if let Some(parent) = self.socket.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         spawn()?;
         let mut last_error = None;
         for _ in 0..40 {
@@ -179,6 +173,7 @@ fn is_live(socket: &Path) -> bool {
 /// sibling binary; a server-only development build falls back to the server's hidden broker
 /// process mode so making detached hosting the default does not add a packaging footgun.
 fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
+    hotsheet_terminals::broker_socket::prepare_parent(socket)?;
     let current = std::env::current_exe().ok();
     let (executable, self_hosted) = broker_launch(current);
     let mut command = std::process::Command::new(executable);
@@ -222,8 +217,79 @@ mod tests {
     use hotsheet_terminals::{
         BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
     };
+    use std::os::unix::fs::PermissionsExt;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn legacy_namespace_stays_pinned_across_idle_exit_and_interleaved_restarts() {
+        let home = tempfile::Builder::new()
+            .prefix("hs-legacy-")
+            .tempdir_in("/tmp")
+            .unwrap();
+        // SAFETY: nextest isolates tests in separate processes.
+        unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+        let parent = home.path().join("broker");
+        std::fs::create_dir(&parent).unwrap();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let legacy = parent.join("project.sock");
+        let listener = tokio::net::UnixListener::bind(&legacy).unwrap();
+        let task = tokio::spawn(serve_broker(
+            listener,
+            "project".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+        let retained = TerminalBroker::at(&legacy, "project");
+        assert_eq!(
+            std::fs::metadata(&parent).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        task.abort();
+        let _ = task.await;
+        std::fs::remove_file(&legacy).unwrap();
+        // Idle cleanup removed the socket, but the ownership marker pins the address.
+        let fresh = TerminalBroker::at(TerminalBroker::socket_for("project").unwrap(), "project");
+        assert_eq!(fresh.socket, retained.socket);
+        for (first, second) in [(&fresh, &retained), (&retained, &fresh)] {
+            let listener = tokio::net::UnixListener::bind(&first.socket).unwrap();
+            let task = tokio::spawn(serve_broker(
+                listener,
+                "project".into(),
+                Arc::new(TerminalManager::new()),
+            ));
+            let mut client = second
+                .connect_or_restart(|| panic!("the other handle already owns the restarted broker"))
+                .await
+                .unwrap();
+            assert!(matches!(
+                client.request(&BrokerRequest::Ping).await.unwrap(),
+                BrokerResponse::Pong
+            ));
+            assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+            drop(client);
+            task.abort();
+            let _ = task.await;
+            std::fs::remove_file(&legacy).unwrap();
+        }
+    }
+
+    #[test]
+    fn accepting_legacy_without_pong_does_not_choose_a_new_namespace() {
+        let home = tempfile::Builder::new()
+            .prefix("hs-legacy-")
+            .tempdir_in("/tmp")
+            .unwrap();
+        // SAFETY: nextest isolates tests in separate processes.
+        unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+        let parent = home.path().join("broker");
+        std::fs::create_dir(&parent).unwrap();
+        let legacy = parent.join("project.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&legacy).unwrap();
+        // No accept/Pong loop exists: selection must depend on ownership, not health.
+        assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+        assert!(legacy.with_extension("lock").is_file());
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_call_connection_restarts_an_idle_broker_with_a_missing_socket() {

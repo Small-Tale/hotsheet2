@@ -299,7 +299,11 @@ requires its version to match the CLI, and forwards foreground/stop arguments wi
 clear missing-binary and mismatch diagnostics. Detached broker terminal hosting is the
 normal server mode, so a stop or restart does not end PTYs; `--kill-all-terminals` is
 accepted only with `--stop` and clears the selected project's retained terminals through
-the existing broker protocol. `hotsheet-cli serve --list` works without
+the existing broker protocol. New detached sockets use a short private per-user `/tmp`
+namespace keyed by configured home and project, independent of `HOTSHEET_HOME` length;
+non-socket state remains in that home. Live owned legacy sockets are still discovered.
+Socket ownership, stale-path handling, and cleanup are described in [05](05-ai-tool-plugins.md)
+§5.4. `hotsheet-cli serve --list` works without
 selecting a store: it deduplicates registrations by server identity, health-checks live
 processes, labels stale/unhealthy/invalid records, lists every hosted store, and never
 prints bearer secrets. The Vite platform bridge supplies the client-side half: detached

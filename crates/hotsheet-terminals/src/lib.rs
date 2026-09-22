@@ -14,6 +14,7 @@
 //! alive across server stops/restarts and feeds busy state into the connection registry.
 
 pub mod broker;
+pub mod broker_socket;
 pub mod busy;
 pub mod env;
 pub mod manager;

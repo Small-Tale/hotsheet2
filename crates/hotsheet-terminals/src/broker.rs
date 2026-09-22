@@ -18,6 +18,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 
+pub use crate::broker_socket::SocketCleanup;
 use crate::manager::TerminalManager;
 use crate::sizing::ViewportClaim;
 use crate::terminal::{TermSpec, TerminalKind};
@@ -183,9 +184,7 @@ pub async fn run_broker_process(
     project: String,
 ) -> std::io::Result<()> {
     let socket = socket.as_ref();
-    let _ = std::fs::remove_file(socket);
-    let listener = UnixListener::bind(socket)?;
-    let _socket_cleanup = SocketCleanup::new(socket);
+    let (listener, _ownership) = crate::broker_socket::bind(socket)?;
     serve_broker_with_idle(
         listener,
         project,
@@ -423,24 +422,6 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
         Request::Attach { .. } => Response::Err {
             message: "attach is a streaming op, not a request/response op".into(),
         },
-    }
-}
-
-/// Removes a broker socket on clean shutdown. Binding still removes stale sockets first;
-/// this guard covers the orderly idle-GC/process-exit path.
-pub struct SocketCleanup {
-    path: std::path::PathBuf,
-}
-
-impl SocketCleanup {
-    pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
-}
-
-impl Drop for SocketCleanup {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -899,7 +880,7 @@ mod tests {
     fn socket_cleanup_removes_the_socket_path_on_drop() {
         let dir = tempfile::tempdir().unwrap();
         let socket = dir.path().join("broker.sock");
-        std::fs::write(&socket, "placeholder").unwrap();
+        let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
         drop(SocketCleanup::new(&socket));
         assert!(!socket.exists());
     }

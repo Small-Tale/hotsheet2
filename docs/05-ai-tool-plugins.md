@@ -213,6 +213,21 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   connected clients; any activity resets the grace. A server that outlives that idle
   exit reconnects through one shared restart lock, launches a fresh broker when the
   socket is gone, and retries the connection before serving the next terminal request.
+  New broker sockets use `/tmp/hotsheet2-brokers-<effective-uid>/<home-project-hash>.sock`:
+  the short path stays within Unix socket address limits even when `HOTSHEET_HOME` is
+  under macOS's long temporary-directory root. The private directory is owned by the
+  effective user with mode 0700; sockets and persistent ownership-lock files use 0600.
+  The key includes the canonical configured home and project, so separate homes do not
+  share terminal brokers. Indexes, instance registrations, settings, and other state
+  remain under the configured home. An owned legacy socket is adopted under a shared
+  namespace-selection lock and pinned by its persistent ownership-lock inode, even
+  after idle socket cleanup. Retained and fresh server handles therefore reuse the
+  same legacy address across exits/restarts; failed health probes never select a
+  second namespace. This preserves terminals across upgrades. Symlink/shared directories and
+  non-socket stale paths are rejected with a diagnostic; exclusive no-follow locks
+  serialize detached ownership, and shutdown removes only the socket inode it bound.
+  Lock files remain in place to avoid unlink/recreate races; they hold no durable
+  application data and the operating system releases their lock on process exit.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into
   child shells — HS1 §22.13.1).
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
