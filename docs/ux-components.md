@@ -1278,6 +1278,11 @@ splitter resists below 228 px and treats a continued 48 px overshoot as an inten
 The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar groups and
 terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the
 connected rows in its create menu (HS2-4Y6SM9).
+On mobile, focusing the active dedicated xterm temporarily replaces that drawer chrome with a
+full visual-viewport terminal and one Exit pill. The terminal tracks the visual viewport's
+offset and height while the software keyboard opens, so it never extends underneath the keyboard.
+Explicit Exit restores the selected terminal tab; desktop transitions, drawer hiding, and terminal
+replacement clear the ephemeral mode rather than restoring it later (HS2-GMTQZM).
 Terminal tabs can be pointer-dragged into a new same-project order, which survives session
 list refreshes for the current client lifetime. Grid and
 dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.

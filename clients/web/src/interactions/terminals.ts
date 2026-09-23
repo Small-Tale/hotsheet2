@@ -54,6 +54,9 @@ export interface TerminalInteractionsDependencies {
   readonly toggleTerminalDrawerMaximized: () => void;
   readonly selectDrawerItem: (id: string) => void;
   readonly terminalDrawerCreateMenuOpen: Signal<boolean>;
+  readonly enterMobileTerminalFocus: (terminalId: string) => void;
+  readonly exitMobileTerminalFocus: () => void;
+  readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
   readonly aiLaunchConfiguration: (kind: 'ai-shell' | 'ai-chat', customize: boolean) => AiToolDefaults | undefined;
   readonly createDrawerAIChat: (
@@ -119,6 +122,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     toggleTerminalDrawerMaximized,
     selectDrawerItem,
     terminalDrawerCreateMenuOpen,
+    enterMobileTerminalFocus,
+    exitMobileTerminalFocus,
+    focusDrawerTab,
     createProjectTerminal,
     aiLaunchConfiguration,
     createDrawerAIChat,
@@ -140,6 +146,19 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     closeDrawerTabIds,
     saveTerminalName,
   } = dependencies;
+  delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {
+    const viewport = target.closest<HTMLElement>('[data-terminal-id]');
+    if (!viewport?.closest('[data-component="terminal-drawer"][data-mode="dedicated"]')) return;
+    enterMobileTerminalFocus(viewport.dataset.terminalId!);
+  });
+  delegate(document.body, 'click', '[data-action="exit-terminal-focus-mode"]', () => {
+    const current = project(),
+      drawer = document.querySelector<HTMLElement>('[data-component="terminal-drawer"]'),
+      terminalId = drawer?.querySelector<HTMLElement>('.terminal-session:not([hidden]) [data-terminal-id]')?.dataset
+        .terminalId;
+    exitMobileTerminalFocus();
+    if (current && drawer?.dataset.mode === 'dedicated' && terminalId) focusDrawerTab(current.id, terminalId);
+  });
   delegate(document.body, 'click', '[data-action="zoom-terminal-grid"]', (_event, target) => {
     const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
       bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,

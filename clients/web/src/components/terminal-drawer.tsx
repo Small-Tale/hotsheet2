@@ -4,9 +4,20 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { Bot, FolderOpen, LayoutGrid, MessageSquare, PanelBottomClose, Plus, SquareTerminal, X } from 'lucide';
+import {
+  Bot,
+  FolderOpen,
+  LayoutGrid,
+  MessageSquare,
+  Minimize2,
+  PanelBottomClose,
+  Plus,
+  SquareTerminal,
+  X,
+} from 'lucide';
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
+import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import { TerminalDashboard, type TerminalDashboardSession, TerminalSession } from './terminal-dashboard';
 
@@ -34,6 +45,8 @@ export interface TerminalDrawerProps {
   message?: string;
   maximized?: boolean;
   createMenuOpen?: boolean;
+  focusMode?: boolean;
+  focusViewport?: MobileTerminalViewport;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 
@@ -53,6 +66,8 @@ export function TerminalDrawer({
   message = '',
   maximized = false,
   createMenuOpen = false,
+  focusMode = false,
+  focusViewport,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -129,79 +144,87 @@ export function TerminalDrawer({
       data-project-id={projectId}
       data-mode={selectedChat ? 'ai-chat' : selected === 'grid' ? 'grid' : 'dedicated'}
       data-maximized={String(maximized)}
+      data-focus-mode={String(focusMode)}
       data-terminal-drawer-measure="true"
       aria-label={`${projectName} terminal drawer`}
+      style={
+        focusMode && focusViewport
+          ? `--terminal-focus-left:${focusViewport.left}px;--terminal-focus-top:${focusViewport.top}px;--terminal-focus-width:${focusViewport.width}px;--terminal-focus-height:${focusViewport.height}px`
+          : undefined
+      }
     >
-      <header
-        class="terminal-drawer__rail"
-        data-action="toggle-terminal-drawer-maximize"
-        title={`Double-click to ${maximized ? 'restore' : 'maximize'} terminal drawer`}
-      >
-        <TabBar
-          id={TERMINAL_DRAWER_TAB_BAR_ID}
-          label="Terminal drawer views"
-          className="terminal-drawer__views"
-          // Terminal selection replaces the controlled tab nodes and changes a live work surface.
-          // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
-          activation="manual"
-          trailing={
-            <>
-              <div class="terminal-drawer__create-wrap">
-                <button
-                  type="button"
-                  class="terminal-drawer__create"
-                  data-action="toggle-terminal-create-menu"
-                  aria-label="New drawer item"
-                  aria-expanded={String(createMenuOpen)}
-                  title="New shell or AI chat"
-                >
-                  <LucideIcon icon={Plus} name="plus" />
-                </button>
-                {createMenuOpen && (
-                  <div class="terminal-drawer__create-menu" role="menu" aria-label="New drawer item">
-                    <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="default-shell">
-                      <span slot="icon">
-                        <LucideIcon icon={SquareTerminal} name="square-terminal" />
-                      </span>
-                      Default shell
-                    </wa-dropdown-item>
-                    <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-shell">
-                      <span slot="icon">
-                        <LucideIcon icon={Bot} name="bot" />
-                      </span>
-                      AI shell
-                    </wa-dropdown-item>
-                    <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-chat">
-                      <span slot="icon">
-                        <LucideIcon icon={MessageSquare} name="message-square" />
-                      </span>
-                      AI chat
-                    </wa-dropdown-item>
-                    <wa-dropdown-item data-action="open-saved-conversation">
-                      <span slot="icon">
-                        <LucideIcon icon={FolderOpen} name="folder-open" />
-                      </span>
-                      Saved conversation…
-                    </wa-dropdown-item>
-                  </div>
-                )}
-              </div>
-              <div class="terminal-drawer__actions">
-                <button
-                  type="button"
-                  data-action="toggle-terminal-drawer"
-                  aria-label="Hide terminal drawer"
-                  title="Hide terminal drawer"
-                >
-                  <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
-                </button>
-              </div>
-            </>
-          }
+      {!focusMode && (
+        <header
+          class="terminal-drawer__rail"
+          data-action="toggle-terminal-drawer-maximize"
+          title={`Double-click to ${maximized ? 'restore' : 'maximize'} terminal drawer`}
         >
-          {tabs}
-        </TabBar>
-      </header>
+          <TabBar
+            id={TERMINAL_DRAWER_TAB_BAR_ID}
+            label="Terminal drawer views"
+            className="terminal-drawer__views"
+            // Terminal selection replaces the controlled tab nodes and changes a live work surface.
+            // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
+            activation="manual"
+            trailing={
+              <>
+                <div class="terminal-drawer__create-wrap">
+                  <button
+                    type="button"
+                    class="terminal-drawer__create"
+                    data-action="toggle-terminal-create-menu"
+                    aria-label="New drawer item"
+                    aria-expanded={String(createMenuOpen)}
+                    title="New shell or AI chat"
+                  >
+                    <LucideIcon icon={Plus} name="plus" />
+                  </button>
+                  {createMenuOpen && (
+                    <div class="terminal-drawer__create-menu" role="menu" aria-label="New drawer item">
+                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="default-shell">
+                        <span slot="icon">
+                          <LucideIcon icon={SquareTerminal} name="square-terminal" />
+                        </span>
+                        Default shell
+                      </wa-dropdown-item>
+                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-shell">
+                        <span slot="icon">
+                          <LucideIcon icon={Bot} name="bot" />
+                        </span>
+                        AI shell
+                      </wa-dropdown-item>
+                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-chat">
+                        <span slot="icon">
+                          <LucideIcon icon={MessageSquare} name="message-square" />
+                        </span>
+                        AI chat
+                      </wa-dropdown-item>
+                      <wa-dropdown-item data-action="open-saved-conversation">
+                        <span slot="icon">
+                          <LucideIcon icon={FolderOpen} name="folder-open" />
+                        </span>
+                        Saved conversation…
+                      </wa-dropdown-item>
+                    </div>
+                  )}
+                </div>
+                <div class="terminal-drawer__actions">
+                  <button
+                    type="button"
+                    data-action="toggle-terminal-drawer"
+                    aria-label="Hide terminal drawer"
+                    title="Hide terminal drawer"
+                  >
+                    <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
+                  </button>
+                </div>
+              </>
+            }
+          >
+            {tabs}
+          </TabBar>
+        </header>
+      )}
       <div class="terminal-drawer__content">
         {selectedChat ? (
           selectedChat.content
@@ -222,6 +245,18 @@ export function TerminalDrawer({
           />
         )}
       </div>
+      {focusMode && (
+        <button
+          type="button"
+          class="terminal-drawer__focus-exit"
+          data-action="exit-terminal-focus-mode"
+          aria-label="Exit terminal focus"
+          title="Exit terminal focus"
+        >
+          <LucideIcon icon={Minimize2} name="minimize-2" />
+          <span>Exit</span>
+        </button>
+      )}
     </section>
   );
 }

@@ -1712,6 +1712,13 @@ nor a transitioning focus outline can paint over the modal. On the first replay 
 fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
 `%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
 dedicated drawer stream are preserved unchanged.
+On a mobile layout, keyboard focus in the active dedicated drawer terminal promotes that
+terminal to a fixed, chrome-free focus surface with only an accessible Exit action. Its bounds
+follow `VisualViewport` offset and size changes rather than the layout viewport, so Mobile Safari's
+virtual keyboard shrinks and repositions the terminal instead of covering its bottom rows. Exit
+restores focus to the selected drawer tab; a later terminal focus may re-enter. Drawer hiding,
+tab/project replacement, and crossing to desktop invalidate stale focus-mode ownership
+(HS2-GMTQZM).
 The browser regression follows the complete user path with a newly created terminal: enter
 Nano, resize the drawer up and down, abruptly maximize, move to the dashboard grid, magnify
 and dismiss, then double-click back into the drawer. Every boundary asserts the current

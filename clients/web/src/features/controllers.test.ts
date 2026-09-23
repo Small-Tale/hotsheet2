@@ -7,6 +7,7 @@ import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
+import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import type { DrawerAIChat } from '../project-drive';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import { DEFAULT_WORKSPACE_PREFERENCES } from '../workspace-preferences';
@@ -421,6 +422,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDrawerSelected: signal('ai-chat:chat-a'),
       terminalDrawerMaximized: signal(false),
       terminalDrawerCreateMenuOpen: signal(false),
+      mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
     },
     conversations: {
       conversationStates: state.conversationStates,

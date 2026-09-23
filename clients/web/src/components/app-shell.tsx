@@ -43,6 +43,7 @@ export interface AppShellProps {
   terminalDrawerSize?: number;
   terminalDrawerMax?: number;
   terminalDrawerTransitioning?: boolean;
+  terminalFocusMode?: boolean;
   sidePanelSeparator?: ResizableRegionSeparator;
   terminalDrawerContentOverflow?: ResizableRegionContentOverflow;
 }
@@ -70,6 +71,7 @@ export function AppShell({
   terminalDrawerSize = 320,
   terminalDrawerMax = 520,
   terminalDrawerTransitioning = false,
+  terminalFocusMode = false,
   sidePanelSeparator = 'auto',
   terminalDrawerContentOverflow = 'clip',
 }: AppShellProps) {
@@ -80,6 +82,7 @@ export function AppShell({
       data-mode={mode}
       data-mobile={String(mobile)}
       data-sidebar-visible={String(sidebarVisible)}
+      data-terminal-focus-mode={String(terminalFocusMode)}
     >
       {mode !== 'stats' && sidebar && (
         <ResizableRegion
@@ -171,9 +174,9 @@ export function AppShell({
             edge="start"
             collapsed={!terminalDrawerVisible}
             transitioning={terminalDrawerTransitioning}
-            separator="auto"
+            separator={terminalFocusMode ? 'hidden' : 'auto'}
             collapseMotion="fade-slide"
-            contentOverflow={terminalDrawerContentOverflow}
+            contentOverflow={terminalFocusMode ? 'visible' : terminalDrawerContentOverflow}
             presentation="inline"
             restoreControl={
               !terminalDrawerTransitioning ? (

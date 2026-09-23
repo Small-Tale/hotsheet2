@@ -186,6 +186,11 @@ import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } fr
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { isMobileViewport, MOBILE_OVERLAYS_CLOSED, type MobileOverlayState } from '../mobile-layout';
+import {
+  INACTIVE_MOBILE_TERMINAL_FOCUS,
+  mobileTerminalViewport,
+  transitionMobileTerminalFocus,
+} from '../mobile-terminal-focus';
 import { mergeRetainedCreatedRows, PendingCreatedTickets } from '../pending-created-tickets';
 import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-notifications';
 import { priorityFromWire } from '../priority-wire';
@@ -394,7 +399,8 @@ export async function startHotSheetWebClient() {
     terminalDrawerBounds = signal({ width: 900, height: 320 }),
     terminalDrawerFitAcross = signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-across')) || 2),
     terminalDrawerFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-high')) || 2),
-    terminalDrawerSelected = signal('grid');
+    terminalDrawerSelected = signal('grid'),
+    mobileTerminalFocus = signal(INACTIVE_MOBILE_TERMINAL_FOCUS);
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
     terminalDrawerOrderByProject = signal<Record<string, string[]>>({}),
     terminalDrawerCreateMenuOpen = signal(false);
@@ -1186,10 +1192,10 @@ export async function startHotSheetWebClient() {
   function observeTerminalDrawer(){queueMicrotask(()=>{terminalDrawerObserver?.disconnect();if(!terminalDrawerVisible.value)return;const target=document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content');if(!target)return;terminalDrawerObserver=new ResizeObserver(entries=>{if(appRegionResizeDrag?.id==='app-terminal-drawer')return;const rect=entries[0]?.contentRect;if(rect)updateTerminalDrawerBounds(target,rect)});terminalDrawerObserver.observe(target)})}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current&&terminalDrawerChatsByProject.value[current.id]?.some(item=>item.id===terminalDrawerSelected.value);if(current&&terminalDrawerSelected.value!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:terminalDrawerSelected.value};terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
+  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current&&terminalDrawerChatsByProject.value[current.id]?.some(item=>item.id===terminalDrawerSelected.value);if(current&&terminalDrawerSelected.value!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:terminalDrawerSelected.value};terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function selectDrawerItem(id:string){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(current&&id!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:id};if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current)localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id)}
+  function selectDrawerItem(id:string){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(current&&id!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:id};if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current)localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id)}
   function openTerminalInProject(key: string) {
     const session = terminalSession(key);
     if (!session) return;
@@ -1533,6 +1539,7 @@ export async function startHotSheetWebClient() {
   // Switch the active project tab (shared by the desktop project tab click and the mobile project Select —
   // HS2-4C5RM7). `next` is a tab id: a project id, or a restore-failure tab id.
   function selectProjectTab(next: string) {
+    exitMobileTerminalFocus();
     setShellMode('project');
     const failure = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === next);
     if (failure) {
@@ -1589,6 +1596,26 @@ export async function startHotSheetWebClient() {
   function toggleTerminalDrawerMaximized() {
     terminalDrawerMaximized.value = !terminalDrawerMaximized.value;
     settleTerminalDrawerGeometry();
+  }
+  function currentMobileTerminalViewport() {
+    return mobileTerminalViewport(window.visualViewport, window);
+  }
+  function enterMobileTerminalFocus(terminalId: string) {
+    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
+      type: 'terminal-focus',
+      mobile: viewportMobile.value,
+      terminalId,
+      viewport: currentMobileTerminalViewport(),
+    });
+  }
+  function syncMobileTerminalViewport() {
+    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
+      type: 'viewport-change',
+      viewport: currentMobileTerminalViewport(),
+    });
+  }
+  function exitMobileTerminalFocus() {
+    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, { type: 'exit' });
   }
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];
@@ -1830,10 +1857,17 @@ export async function startHotSheetWebClient() {
     mobileOverlay = signal<MobileOverlayState>(MOBILE_OVERLAYS_CLOSED);
   window.addEventListener('resize', () => {
     const mobile = isMobileViewport(window.innerWidth);
-    if (mobile === viewportMobile.value) return;
-    viewportMobile.value = mobile;
-    if (!mobile) mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
+    if (mobile !== viewportMobile.value) {
+      viewportMobile.value = mobile;
+      if (!mobile) {
+        mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
+        exitMobileTerminalFocus();
+      }
+    }
+    if (mobile) syncMobileTerminalViewport();
   });
+  window.visualViewport?.addEventListener('resize', syncMobileTerminalViewport);
+  window.visualViewport?.addEventListener('scroll', syncMobileTerminalViewport);
   const ticketSnapshot = (slug: string) =>
     tickets.value.find((item) => item.slug === slug) as TicketSnapshot | undefined;
   const ticketSearchKey = (ticket: WireTicketRow) => `${ticket.connection_id}:${ticket.native_id}`;
@@ -3845,6 +3879,7 @@ export async function startHotSheetWebClient() {
         terminalDrawerSelected,
         terminalDrawerMaximized,
         terminalDrawerCreateMenuOpen,
+        mobileTerminalFocus,
       },
       conversations: {
         conversationStates,
@@ -4198,6 +4233,13 @@ export async function startHotSheetWebClient() {
         terminalDrawerSize={appRegionSize('app-terminal-drawer')}
         terminalDrawerMax={terminalDrawerMax.value}
         terminalDrawerTransitioning={terminalDrawerTransitioning.value}
+        terminalFocusMode={
+          mobileTerminalFocus.value.active &&
+          mobileTerminalFocus.value.terminalId === terminalDrawerSelected.value &&
+          viewportMobile.value &&
+          terminalDrawerVisible.value &&
+          drawerViewAllowed
+        }
         sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
         terminalDrawerContentOverflow={terminalDrawerCreateMenuOpen.value ? 'visible' : 'clip'}
         inspector={
@@ -4560,7 +4602,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailDirection, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, mobileOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

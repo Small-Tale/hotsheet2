@@ -14,6 +14,7 @@ import { type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalDrawerChatTab, type TerminalDrawerProps } from '../components/terminal-drawer';
 import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-composition-surfaces';
 import type { Project } from '../interactions/types';
+import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
@@ -42,6 +43,7 @@ export interface TerminalPresentationDependencies {
     terminalDrawerSelected: Signal<string>;
     terminalDrawerMaximized: Signal<boolean>;
     terminalDrawerCreateMenuOpen: Signal<boolean>;
+    mobileTerminalFocus: Signal<MobileTerminalFocusState>;
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -81,6 +83,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDrawerSelected,
     terminalDrawerMaximized,
     terminalDrawerCreateMenuOpen,
+    mobileTerminalFocus,
   } = dependencies.terminals;
   const {
     conversationStates,
@@ -195,6 +198,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           ),
         };
       });
+    const focused = mobileTerminalFocus.value;
     return {
       projectId: current.id,
       projectName: current.name,
@@ -211,6 +215,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       message: terminalDashboardMessage.value,
       maximized: terminalDrawerMaximized.value,
       createMenuOpen: terminalDrawerCreateMenuOpen.value,
+      focusMode: focused.active && focused.terminalId === terminalDrawerSelected.value,
+      focusViewport: focused.viewport,
     };
   }
 

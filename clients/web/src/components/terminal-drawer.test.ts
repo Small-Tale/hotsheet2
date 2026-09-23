@@ -212,6 +212,36 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
   });
+  it('replaces every drawer chrome control with one exit action in mobile terminal focus mode (HS2-GMTQZM)', () => {
+    const markup = String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 390,
+          height: 492,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'one',
+          focusMode: true,
+          focusViewport: { left: 4, top: 18, width: 382, height: 492 },
+        }),
+      ),
+      css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
+    expect(markup).toContain('data-focus-mode="true"');
+    expect(markup).toContain(
+      'style="--terminal-focus-left:4px;--terminal-focus-top:18px;--terminal-focus-width:382px;--terminal-focus-height:492px"',
+    );
+    expect(markup).toContain('data-action="exit-terminal-focus-mode"');
+    expect(markup).toContain('aria-label="Exit terminal focus"');
+    expect(markup).not.toContain('class="terminal-drawer__rail"');
+    expect(markup).not.toContain('data-action="toggle-terminal-drawer"');
+    expect(markup).not.toContain('data-component="tab-bar"');
+    expect(css).toMatchSource(
+      ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: var(--terminal-focus-top); left: var(--terminal-focus-left); width: var(--terminal-focus-width); height: var(--terminal-focus-height);",
+    );
+    expect(css).toContain('env(safe-area-inset-top, 0px)');
+  });
   it('keeps project-drawer visibility local and offers no grouping controls', () => {
     const markup = render();
     expect(markup).not.toContain('aria-label="Manage workspace visibility"');

@@ -161,6 +161,75 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   await page.screenshot({ path: '/private/tmp/hs2-43n9zb-mobile-floating-controls.png', fullPage: true });
 });
 
+test('gives a focused mobile terminal the visual viewport until explicit exit (HS2-GMTQZM)', async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    const viewport = Object.assign(new EventTarget(), {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 390,
+      height: 844,
+    });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    Object.defineProperty(window, '__setTerminalTestViewport', {
+      configurable: true,
+      value: (next: { left: number; top: number; width: number; height: number }) => {
+        viewport.offsetLeft = next.left;
+        viewport.offsetTop = next.top;
+        viewport.width = next.width;
+        viewport.height = next.height;
+        viewport.dispatchEvent(new Event('resize'));
+      },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page, true);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  const terminalInput = drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea');
+  await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
+  await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'true');
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  await expect(drawer.locator('.terminal-drawer__rail')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Exit terminal focus' })).toBeVisible();
+  expect(await drawer.boundingBox()).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('mobile-terminal-focus-full.png') });
+
+  await page.evaluate(() => {
+    (
+      window as unknown as Window & {
+        __setTerminalTestViewport: (next: { left: number; top: number; width: number; height: number }) => void;
+      }
+    ).__setTerminalTestViewport({ left: 4, top: 18, width: 382, height: 492 });
+  });
+  await expect
+    .poll(async () => {
+      const box = await drawer.boundingBox();
+      return box && { x: box.x, y: box.y, width: box.width, height: box.height, bottom: box.y + box.height };
+    })
+    .toEqual({ x: 4, y: 18, width: 382, height: 492, bottom: 510 });
+  await expect(terminalInput).toBeFocused();
+  await drawer.screenshot({ path: testInfo.outputPath('mobile-terminal-focus-keyboard.png') });
+
+  await page.getByRole('button', { name: 'Exit terminal focus' }).click();
+  await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
+  await expect(drawer.locator('.terminal-drawer__rail')).toBeVisible();
+  await expect(
+    drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select'),
+  ).toBeFocused();
+  await terminalInput.focus();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await expect(shell).toHaveAttribute('data-mobile', 'false');
+  await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
+});
+
 test('mobile viewport uses a single-column layout with overlay sidebars, one at a time (HS2-ZK51WP)', async ({
   page,
 }) => {

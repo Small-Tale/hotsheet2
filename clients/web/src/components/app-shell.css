@@ -36,6 +36,12 @@
 .app-shell__main > .kui-resizable-region {
   background: var(--wa-color-surface-default);
 }
+.app-shell[data-terminal-focus-mode='true']
+  .app-shell__main
+  > .kui-resizable-region[data-region-id='app-terminal-drawer'] {
+  z-index: 200;
+  overflow: visible;
+}
 .app-shell__terminal-drawer-restore.kui-floating-toolbar {
   position: static;
 }

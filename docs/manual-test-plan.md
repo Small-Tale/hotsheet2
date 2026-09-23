@@ -46,6 +46,13 @@ When automation lands, remove the manual-only step and record it below.
 7. HS2-S708S3 — in that dedicated drawer terminal, confirm the PTY stays 80 columns, chooses
    M rows to fill the available drawer height, width-fits without clipping, and recomputes M
    after rotation or drawer-height changes. Confirm read-only grid previews remain 80×24.
+8. HS2-GMTQZM — on current **physical-device Mobile Safari**, focus the dedicated drawer
+   terminal and confirm it occupies the complete visible screen with only the Exit control
+   remaining. Open the software keyboard and verify the terminal's bottom edge and final row
+   stay above the keyboard while its top edge follows any shifted visual viewport; rotate the
+   device and repeat. Tap Exit and confirm the ordinary drawer chrome returns with focus on the
+   selected terminal tab. Automated Chromium coverage exercises the same VisualViewport state
+   transitions, but cannot reproduce iOS keyboard composition and safe-area behavior exactly.
 
 ### Browser identities on ordinary LAN HTTP
 
