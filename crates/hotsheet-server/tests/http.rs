@@ -314,8 +314,61 @@ async fn client_drive_requires_an_explicit_source_for_an_ambiguous_checkout() {
 
 #[tokio::test]
 async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("ci-fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(
+        fixture.join("instructions.md"),
+        "CI fixture instructions.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        r#"
+id = "ci-fixture"
+display_name = "CI Fixture"
+product_name = "CI Fixture"
+tier = "cli-agent"
+[detection]
+binaries = ["rustc"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "spawn"
+program = "rustc"
+content = "arg"
+models = [
+  { id = "fixture-model", label = "Fixture Model", effort_levels = ["low", "high"] },
+]
+default_model = "fixture-model"
+default_effort = "low"
+session_options = ["model", "effort"]
+"#,
+    )
+    .unwrap();
+
     let (_dir, state) = state();
-    let router = app(state);
+    let router = app(state.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/ai-tools")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
     let tools = router
         .clone()
         .oneshot(authed("GET", "/ai-tools?refresh=true", None))
@@ -323,23 +376,41 @@ async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated(
         .unwrap();
     assert_eq!(tools.status(), StatusCode::OK);
     let tools = body_json(tools).await;
-    assert!(tools.is_array());
-    let tool = tools[0]["id"].as_str().unwrap();
+    let tool = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["id"] == "ci-fixture")
+        .expect("the explicit CI fixture is discovered");
+    assert_eq!(tool["default_model"], "fixture-model");
+    assert_eq!(tool["default_effort"], "low");
 
     let manual = router
         .clone()
         .oneshot(authed(
             "PUT",
             "/ai-settings",
-            Some(&format!(
-                r#"{{"tool":{},"model":"legacy model \"beta\""}}"#,
-                serde_json::to_string(tool).unwrap()
-            )),
+            Some(r#"{"tool":"ci-fixture","model":"fixture-model","effort":"high"}"#),
         ))
         .await
         .unwrap();
     assert_eq!(manual.status(), StatusCode::OK);
-    assert_eq!(body_json(manual).await["model"], "legacy model \"beta\"");
+    assert_eq!(body_json(manual).await["model"], "fixture-model");
+
+    let saved = router
+        .clone()
+        .oneshot(authed("GET", "/ai-settings", None))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await,
+        serde_json::json!({
+            "tool": "ci-fixture",
+            "model": "fixture-model",
+            "effort": "high"
+        })
+    );
 
     let invalid = router
         .oneshot(authed(
