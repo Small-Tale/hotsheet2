@@ -52,8 +52,11 @@ pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]
          Create every follow-up immediately, without asking: unfinished steps, open \
          questions, known gaps, out-of-scope work, and designed-but-unbuilt behavior each \
          get a ticket as soon as identified, never only a comment/TODO/note. Set the \
-         current ticket to `completed` with a note containing the result, verification, \
-         and every follow-up slug. Then run the repository's required gates, commit the \
+         current ticket to `completed` with a scannable Markdown note that leads with the \
+         outcome and separates the result, verification, and follow-ups with short headings \
+         and bullets when the note is substantial. Never leave a dense prose or raw-log \
+         dump; keep simple updates brief and omit empty sections. Include every follow-up \
+         slug. Then run the repository's required gates, commit the \
          coherent ticket-sized change, and push it before starting another ticket. Use \
          `FEEDBACK NEEDED` only when a user decision or unavailable external state blocks \
          the current ticket; leave it `started` and name the blocker. FEEDBACK NEEDED \
@@ -386,6 +389,16 @@ mod tests {
         assert!(md.contains("every follow-up slug"));
         assert!(md.contains("`FEEDBACK NEEDED` only when"));
         assert!(md.contains("FEEDBACK NEEDED never replaces follow-ups"));
+    }
+
+    #[test]
+    fn render_requires_scannable_markdown_completion_notes() {
+        let md = render(&[]);
+
+        assert!(md.contains("scannable Markdown note"));
+        assert!(md.contains("separates the result, verification, and follow-ups"));
+        assert!(md.contains("Never leave a dense prose or raw-log dump"));
+        assert!(md.contains("keep simple updates brief and omit empty sections"));
     }
 
     #[test]

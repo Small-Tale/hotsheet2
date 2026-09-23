@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 48 -->
+<!-- hotsheet-skill-version: 49 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -56,6 +56,14 @@ docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; include result, verification, and all follow-up slugs in the
 completing note.
+
+Format AI-authored notes for human scanning. Lead with the outcome or decision, not a
+chronological transcript. For a substantial note, use short Markdown sections such as
+`## Result`, `## Verification`, and `## Follow-ups`; use bullets for parallel facts,
+numbered lists only for a real sequence, and tables only when they clarify a dense
+comparison or timeline. Break long prose into short paragraphs and format commands,
+paths, and ticket slugs as code. Never leave an undifferentiated text/log dump or one
+dense paragraph. Keep simple updates brief and omit empty sections.
 
 Write durable ticket text, notes, completion summaries, and documentation so another
 developer can understand them from a different clone. Never copy a developer-specific

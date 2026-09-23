@@ -144,7 +144,7 @@ fn tools_list() -> Value {
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
-                "note": str_prop("note text to append, or replacement text when note_id is present"),
+                "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
                 "note_summary": str_prop("optional concise plain-text timeline headline"),
                 "note_id": str_prop("existing note ULID to edit instead of appending")

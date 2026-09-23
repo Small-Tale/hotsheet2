@@ -27,7 +27,10 @@ and release.
    for every incomplete item without asking, waiting, or leaving it only in a note/TODO.
    Then complete with `hotsheet_update` using `status: "completed"` and a required note,
    or `hotsheet-cli edit <id> --status completed --note "what changed"`; include the
-   result, verification, and every follow-up slug in that note.
+   result, verification, and every follow-up slug in that note. Format substantial notes
+   as scannable Markdown: lead with the outcome, use short `## Result`, `## Verification`,
+   and `## Follow-ups` sections with bullets, and avoid dense prose or raw-log dumps. Keep
+   simple updates brief and omit empty sections.
 5. Release with `hotsheet_release` using `id` and `worker`, or
    `hotsheet-cli release <id> --worker <id>`, then return to step 1.
 

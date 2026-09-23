@@ -93,6 +93,15 @@ such as `<repo-root>/path`; a developer's home directory, username, or absolute 
 location is not presented as shared project structure. An exact local path is retained only
 when the path itself is indispensable evidence for a machine-local diagnostic.
 
+AI-authored ticket notes are also optimized for **human scanning** (HS2-MBJX7C). The
+bundled instructions, Hot Sheet skills, and derived `worklist.md` tell agents to lead with
+the outcome rather than a chronological transcript; substantial notes use short Markdown
+sections for results, verification, and follow-ups, with bullets for parallel facts and
+tables only when they clarify a dense comparison or timeline. Simple updates stay brief,
+empty sections are omitted, and raw logs or multi-part results are not left as one dense
+paragraph. Multiline CLI notes use `--note-file` so the intended Markdown structure reaches
+the ticket intact.
+
 Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
 instructions.md`) carries a compact, **project-neutral** default policy so a brand-new
 project that never customizes its `CLAUDE.md`/`AGENTS.md` still gets strong defaults

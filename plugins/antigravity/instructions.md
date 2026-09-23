@@ -1,4 +1,4 @@
-<!-- hotsheet-instructions-version: 48 -->
+<!-- hotsheet-instructions-version: 49 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -45,6 +45,14 @@ verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` 
 blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Format AI-authored notes for human scanning.** Lead with the outcome or decision, not a
+chronological transcript. For a substantial note, use short Markdown sections such as
+`## Result`, `## Verification`, and `## Follow-ups`; use bullets for parallel facts,
+numbered lists only for a real sequence, and tables only when they clarify a dense
+comparison or timeline. Break long prose into short paragraphs and format commands, paths,
+and ticket slugs as code. Never leave an undifferentiated text/log dump or one dense
+paragraph. Keep simple updates brief and omit empty sections.
 
 Normally continue until every actionable Up Next ticket is complete. Read the whole queue
 before choosing an order; weigh dependencies, overlap, risk, and safe parallelization. Treat

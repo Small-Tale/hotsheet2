@@ -53,6 +53,13 @@ commentary remains a `regular` note.
 Activity notes are timeline history, not the primary home for a result. Put an
 investigation's conclusion, decision, recommendation, or other important durable content
 in a `regular` Markdown note. A finishing activity may briefly point to that regular note.
+Format every AI-authored note for human scanning. Lead with the outcome or decision, not a
+chronological transcript. For a substantial note, use short descriptive sections such as
+`## Result`, `## Verification`, and `## Follow-ups`; use bullets for parallel facts, numbered
+lists only for a real sequence, and tables when they make a dense comparison or timeline
+materially easier to read. Break long prose into short paragraphs and format commands,
+paths, and ticket slugs as code. Never paste an undifferentiated text/log dump or compress a
+multi-part result into one dense paragraph. Keep simple updates brief and omit empty sections.
 For multiline Markdown passed through the CLI, always use `--note-file`; `--note` rejects
 literal `\n` sequences outside inline/fenced backtick code so escaped line breaks cannot
 silently become visible text. Use `--allow-literal-backslash-n` only when such prose is
@@ -381,7 +388,7 @@ References to the *original* Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 48 -->
+<!-- hotsheet-instructions-version: 49 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -428,6 +435,14 @@ verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` 
 blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Format AI-authored notes for human scanning.** Lead with the outcome or decision, not a
+chronological transcript. For a substantial note, use short Markdown sections such as
+`## Result`, `## Verification`, and `## Follow-ups`; use bullets for parallel facts,
+numbered lists only for a real sequence, and tables only when they clarify a dense
+comparison or timeline. Break long prose into short paragraphs and format commands, paths,
+and ticket slugs as code. Never leave an undifferentiated text/log dump or one dense
+paragraph. Keep simple updates brief and omit empty sections.
 
 Normally continue until every actionable Up Next ticket is complete. Read the whole queue
 before choosing an order; weigh dependencies, overlap, risk, and safe parallelization. Treat
