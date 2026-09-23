@@ -828,9 +828,9 @@
       "id": "attachment-gallery",
       "name": "AttachmentGallery",
       "kind": "component",
-      "purpose": "Full-screen keyboard, arrow, and swipe image viewer.",
+      "purpose": "Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.",
       "useWhen": [
-        "Hot Sheet needs full-screen keyboard, arrow, and swipe image viewer."
+        "Hot Sheet needs always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific AttachmentGallery behavior."

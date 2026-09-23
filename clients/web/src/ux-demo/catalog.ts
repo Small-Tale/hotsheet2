@@ -360,7 +360,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'attachment-gallery',
             'AttachmentGallery',
-            'Full-screen keyboard, arrow, and swipe image viewer.',
+            'Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.',
             'feature-floor',
             true,
           ),

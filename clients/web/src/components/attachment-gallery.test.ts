@@ -23,6 +23,20 @@ describe('AttachmentGallery', () => {
     { id: 'a', name: 'a.png', url: '/a.png' },
     { id: 'b', name: 'b.svg', url: '/b.svg' },
   ];
+  it('scopes the invariant inverse palette to gallery chrome without recoloring source media (HS2-1CACB4)', () => {
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.attachment-gallery \{[^}]*color-scheme: only light;/);
+    expect(css.match(/color-scheme:/g)).toHaveLength(1);
+    expect(css).not.toMatch(/:root|prefers-color-scheme|filter:\s*(?:invert|brightness|contrast)/);
+    for (const name of ['a.png', 'clip.mp4']) {
+      const markup = String(
+        AttachmentGallery({ images: [{ id: 'media', name, url: `/${name}` }], activeUrl: `/${name}` }),
+      );
+      expect(markup).toContain('class="attachment-gallery"');
+      expect(markup).toContain(`src="/${name}"`);
+      expect(markup).toContain('data-tone="dark"');
+    }
+  });
   it('keeps full-screen media and its sizing wrapper square-cornered', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/\.attachment-gallery__media-wrap \{[^}]*border-radius:0/);

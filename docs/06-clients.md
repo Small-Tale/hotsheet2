@@ -1128,6 +1128,11 @@ and identity-less legacy entries remain conservatively blocking.
   stage, so both contain and cover scales are calculated from the space that remains.
   Full-screen media preserves the source image or video's square outer geometry: the
   gallery does not add corner rounding to either the media or its sizing wrapper.
+  The gallery retains its dark light-mode appearance under both device and explicit app
+  dark preferences, including annotations, playback, volume popup, and zoom controls.
+  Its dialog scopes `color-scheme: only light` so the shared inverse-neutral palette
+  stays stable without duplicating colors or changing the surrounding app's theme.
+  Images and video retain their original colors; no theme filter is applied (HS2-1CACB4).
   Its filename uses inverse toolbar text, while navigation, action, close, and zoom
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
   borders, icons, and hover states retain contrast over arbitrary images. Gallery chrome

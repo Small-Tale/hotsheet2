@@ -1,4 +1,7 @@
 .attachment-gallery {
+  /* Inverse light-palette tokens are the gallery's dark chrome. Keep that
+     palette local so device/app dark mode cannot invert it or the media controls. */
+  color-scheme: only light;
   position: fixed;
   z-index: 1400;
   inset: 0;
