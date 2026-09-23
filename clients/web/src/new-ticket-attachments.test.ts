@@ -16,6 +16,35 @@ describe('new ticket attachments', () => {
     expect(result).toEqual({ ticket: { id: 'ticket', attachments: ['one.txt', 'two.txt'] }, failed: [] });
   });
 
+  it('does not start the next upload or settle the batch while the current upload is delayed', async () => {
+    let releaseFirst: () => void = () => undefined;
+    const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      }),
+      uploads: string[] = [];
+    let settled = false;
+    const batch = createTicketWithAttachments(
+      [new File(['one'], 'one.txt'), new File(['two'], 'two.txt')],
+      async () => ({ id: 'ticket' }),
+      async (ticket, file) => {
+        uploads.push(file.name);
+        if (file.name === 'one.txt') await firstGate;
+        return ticket;
+      },
+    ).finally(() => {
+      settled = true;
+    });
+
+    await vi.waitFor(() => {
+      expect(uploads).toEqual(['one.txt']);
+    });
+    expect(settled).toBe(false);
+    releaseFirst();
+    await batch;
+    expect(uploads).toEqual(['one.txt', 'two.txt']);
+    expect(settled).toBe(true);
+  });
+
   it('projects the created ticket before attachment uploads settle', async () => {
     const order: string[] = [];
     await createTicketWithAttachments(

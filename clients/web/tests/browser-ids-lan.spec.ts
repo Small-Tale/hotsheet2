@@ -26,6 +26,13 @@ for (const width of [390, 1280]) {
       cleanups.push(() => context.close());
       const page = await context.newPage();
       cleanups.push(() => page.unrouteAll({ behavior: 'ignoreErrors' }));
+      let releaseThirdUpload: () => void = () => undefined;
+      const thirdUploadGate = new Promise<void>((resolve) => {
+        releaseThirdUpload = resolve;
+      });
+      cleanups.push(async () => {
+        releaseThirdUpload();
+      });
       const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
         connections: ToolConnection[] = [],
         uploads: string[] = [],
@@ -128,8 +135,13 @@ for (const width of [390, 1280]) {
           turns.push(request.postDataJSON().content);
           return route.fulfill({ status: 503, json: { error: 'Test tool is offline' } });
         }
-        if (path.endsWith('/attachments') && request.method() === 'POST')
+        if (path.endsWith('/attachments') && request.method() === 'POST') {
           uploads.push(decodeURIComponent(request.headers()['x-hotsheet-attachment-batch']));
+          // Hold the first attachment on the second ticket. Ticket creation deliberately
+          // projects and opens the ticket before its sequential attachment batch settles,
+          // so the visible details editor is not the batch-completion boundary.
+          if (uploads.length === 3) await thirdUploadGate;
+        }
         const response = await route.fetch({
           url: `${server.url}${path}${url.search}`,
           headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
@@ -170,8 +182,12 @@ for (const width of [390, 1280]) {
         await composer.getByRole('button', { name: 'Create ticket' }).click();
         await expect(composer).toBeHidden();
         await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
+        if (index === 1) {
+          await expect.poll(() => uploads.length).toBe(3);
+          releaseThirdUpload();
+        }
       }
-      expect(uploads).toHaveLength(4);
+      await expect.poll(() => uploads.length).toBe(4);
       expect(uploads[0]).toBe(uploads[1]);
       expect(uploads[2]).toBe(uploads[3]);
       expect(uploads[0]).not.toBe(uploads[2]);
