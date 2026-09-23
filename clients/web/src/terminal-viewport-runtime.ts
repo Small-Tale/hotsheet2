@@ -282,13 +282,16 @@ function initializeTerminalViewport(
   // On a phone-width viewport a dedicated drawer terminal keeps the canonical 80 columns but fills
   // the available height with M rows, scaled to fit width (HS2-S708S3).
   let mobileGridRows = TERMINAL_DASHBOARD_ROWS,
-    lastMobileClaimGrid = '';
+    lastMobileClaimGrid = '',
+    lastSettledGeometry: { cols: number; rows: number } | undefined;
   const proposed = () => {
     if (mobile80xM()) return { cols: TERMINAL_DASHBOARD_COLS, rows: mobileGridRows };
     if (fixedDashboardGrid) return { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
     return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
   };
+  const claimDimensions = () =>
+    !fixedDashboardGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
   const reconcileScale = () => {
     if (!terminal.element) return;
     if (fixedDashboardGrid || mobile80xM()) {
@@ -321,7 +324,8 @@ function initializeTerminalViewport(
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(visible);
     if (socket?.readyState !== WebSocket.OPEN) return;
-    const size = proposed();
+    if (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, false));
   };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
@@ -329,10 +333,11 @@ function initializeTerminalViewport(
   let lastInteractionAt = 0;
   const signalInteraction = () => {
     if (scaledPreview || socket?.readyState !== WebSocket.OPEN) return;
+    if (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const sizingFocus = claimsSizing();
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(visible);
-    const size = proposed();
+    const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, true));
     lastInteractionAt = Date.now();
   };
@@ -435,7 +440,7 @@ function initializeTerminalViewport(
     render.dispose();
   });
   const applySettledGeometry = () => {
-    if (disposed) return;
+    if (disposed || element.closest('[hidden]')) return;
     try {
       if (mobile80xM()) {
         if (webgl) {
@@ -459,7 +464,9 @@ function initializeTerminalViewport(
       }
     } catch {
       /* layout can be transiently zero-sized */
+      return;
     }
+    if (!fixedDashboardGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
     element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
     reconcileScale();
     claim();
@@ -510,7 +517,7 @@ function initializeTerminalViewport(
         if (!size) return;
         serverSize = size.pty_size;
         const drivenByViewer = size.driven_by === viewerId;
-        const local = proposed();
+        const local = claimDimensions();
         terminal.resize(local.cols, local.rows);
         element.dataset.driving = String(drivenByViewer);
         element.dataset.ptySize = `${size.pty_size.cols}x${size.pty_size.rows}`;

@@ -141,6 +141,9 @@
   overflow: hidden;
   background: var(--hs-terminal-background);
 }
+.terminal-session[hidden] {
+  display: none;
+}
 .terminal-session .terminal-viewport {
   position: relative;
   inset: auto;

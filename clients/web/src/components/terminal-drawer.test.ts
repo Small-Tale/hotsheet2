@@ -202,12 +202,13 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-maximized="true"');
     expect(markup).toContain('Double-click to restore terminal drawer');
   });
-  it('selects one undecorated full-content terminal without grid chrome or zoom', () => {
+  it('retains dedicated terminal sessions while presenting one without grid chrome or zoom', () => {
     const markup = render('one');
     expect(markup).toContain('data-mode="dedicated"');
     expect(markup).toContain('data-component="terminal-session"');
     expect(markup.match(/data-terminal-id="one"/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(markup.match(/data-component="terminal-viewport"/g)).toHaveLength(1);
+    expect(markup.match(/data-component="terminal-viewport"/g)).toHaveLength(2);
+    expect(markup.match(/class="terminal-session"[^>]*hidden/g)).toHaveLength(1);
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
   });

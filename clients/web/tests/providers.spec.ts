@@ -2996,7 +2996,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
-  const dedicated = drawer.locator('[data-component="terminal-session"]');
+  const dedicated = drawer.locator('[data-component="terminal-session"]:not([hidden])');
   await expect(dedicated).toBeVisible();
   await expect(drawer.locator('[data-component="terminal-tile"]')).toHaveCount(0);
   await expect(drawer.getByRole('toolbar', { name: 'Workspace tile zoom' })).toHaveCount(0);
@@ -3099,6 +3099,83 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-586bvq-terminal-drawer-short.png', fullPage: true });
+});
+
+test('keeps fitted terminal sizing by retaining dedicated drawer sessions across tab switches (HS2-V93PYF)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    codex = drawer.getByRole('tab', { name: /Codex Main/ }),
+    tests = drawer.getByRole('tab', { name: /Tests/ }),
+    claimsFor = (terminalId: string) =>
+      page.evaluate((id) => {
+        const sockets = (
+          window as unknown as { __terminalSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalSockets.filter((socket) => socket.url.includes(`/terminals/${id}/attach`));
+        return sockets.map((socket) =>
+          socket.sent
+            .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
+            .map(
+              (value) => JSON.parse(value).resize as { cols: number; rows: number; focus: boolean; visible: boolean },
+            ),
+        );
+      }, terminalId);
+
+  await codex.click();
+  const firstViewport = drawer.locator('[data-terminal-id="codex-main"][data-display-mode="interactive"]');
+  await expect(firstViewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(firstViewport).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect
+    .poll(async () => (await claimsFor('codex-main')).at(-1)?.at(-1))
+    .toMatchObject({
+      focus: true,
+      visible: true,
+    });
+  await firstViewport.evaluate((element) => {
+    Object.assign(element, { __hs2RetainedTerminal: true });
+  });
+  const socketsBeforeSwitch = (await claimsFor('codex-main')).length;
+  const dedicatedClaimsBeforeSwitch = (await claimsFor('codex-main')).at(-1) ?? [];
+  expect(dedicatedClaimsBeforeSwitch.map(({ cols, rows }) => `${cols}x${rows}`)).not.toContain('80x24');
+  const dedicatedClaimCountBeforeSwitch = dedicatedClaimsBeforeSwitch.length,
+    dedicatedSizeBeforeSwitch = `${dedicatedClaimsBeforeSwitch.at(-1)?.cols}x${dedicatedClaimsBeforeSwitch.at(-1)?.rows}`;
+
+  await tests.click();
+  await expect(drawer.locator('[data-terminal-id="tests"][data-display-mode="interactive"]')).toHaveAttribute(
+    'data-geometry-ready',
+    'true',
+  );
+  expect(
+    ((await claimsFor('codex-main')).at(-1) ?? [])
+      .slice(dedicatedClaimCountBeforeSwitch)
+      .map(({ cols, rows }) => `${cols}x${rows}`),
+  ).toEqual(expect.arrayContaining([dedicatedSizeBeforeSwitch]));
+  expect(
+    new Set(
+      ((await claimsFor('codex-main')).at(-1) ?? [])
+        .slice(dedicatedClaimCountBeforeSwitch)
+        .map(({ cols, rows }) => `${cols}x${rows}`),
+    ),
+  ).toEqual(new Set([dedicatedSizeBeforeSwitch]));
+  const beforeReturn = (await claimsFor('codex-main')).length;
+  expect(beforeReturn).toBe(socketsBeforeSwitch);
+  await codex.click();
+  const retained = drawer.locator('[data-terminal-id="codex-main"][data-display-mode="interactive"]');
+  await expect(retained).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(retained).not.toHaveAttribute('data-grid-size', '80x24');
+  expect(await retained.evaluate((element) => '__hs2RetainedTerminal' in element)).toBe(true);
+  expect((await claimsFor('codex-main')).length).toBe(socketsBeforeSwitch);
+  expect(((await claimsFor('codex-main')).at(-1) ?? []).map(({ cols, rows }) => `${cols}x${rows}`)).not.toContain(
+    '80x24',
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-v93pyf-terminal-retained-after.png', fullPage: true });
 });
 
 test('closes a terminal tab after its process has stopped (HS2-DPTG65)', async ({ page }) => {
@@ -3833,7 +3910,9 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await expect(liveConversation).toContainText('The event stream remains authoritative.');
   await expect(createViewDialog).toBeHidden();
   await drawer.getByRole('tab', { name: /Codex Main/ }).click();
-  const drawerViewport = drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]');
+  const drawerViewport = drawer.locator(
+    '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
+  );
   await expect(drawerViewport).toHaveAttribute('data-connection', 'connected');
   const initialGrid = await drawerViewport.getAttribute('data-grid-size');
   const originalSocket = await page.evaluate(() => {
@@ -4061,7 +4140,9 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click();
-  const viewport = drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]');
+  const viewport = drawer.locator(
+    '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
+  );
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await viewport.click();
   const claimCount = () =>
@@ -4356,7 +4437,9 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
   await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
-  const viewport = drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]');
+  const viewport = drawer.locator(
+    '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
+  );
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
   await page.keyboard.type('focused immediately');
@@ -6867,7 +6950,7 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole('tab', { name: 'Lint project' })).toHaveAttribute('aria-selected', 'true');
   await expect(
-    drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]'),
+    drawer.locator('[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]'),
   ).toHaveAttribute('data-connection', 'connected');
   await page.screenshot({ path: '/private/tmp/hs2-2bkgpk-shell-command-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1180, height: 651 });

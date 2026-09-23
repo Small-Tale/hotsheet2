@@ -232,13 +232,14 @@ export function FixedAspectTerminalCard({
   );
 }
 
-export function TerminalSession({ session }: { session: TerminalDashboardSession }) {
+export function TerminalSession({ session, active = true }: { session: TerminalDashboardSession; active?: boolean }) {
   return (
     <section
       class="terminal-session"
       data-key={keyFor(session)}
       data-component="terminal-session"
       data-terminal-key={keyFor(session)}
+      hidden={!active}
       aria-label={`${session.title ?? session.id} terminal`}
     >
       <div

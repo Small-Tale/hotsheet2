@@ -548,10 +548,12 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
       .poll(async () => {
         const claim = await latestClaim(),
           [cols, rows] = geometry.grid!.split('x').map(Number);
-        if (!claim) return false;
-        return claim.cols === cols && claim.rows === rows;
+        return {
+          actual: claim ? `${claim.cols}x${claim.rows}` : undefined,
+          expected: `${cols}x${rows}`,
+        };
       })
-      .toBe(true);
+      .toEqual({ actual: geometry.grid, expected: geometry.grid });
     const claim = await latestClaim();
     if (!claim) throw new Error('missing terminal resize claim');
     expect(claim).toMatchObject({ focus: true, visible: true });

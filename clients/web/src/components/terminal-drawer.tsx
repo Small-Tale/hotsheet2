@@ -206,7 +206,7 @@ export function TerminalDrawer({
         {selectedChat ? (
           selectedChat.content
         ) : selectedSession ? (
-          <TerminalSession session={selectedSession} />
+          sessions.map((session) => <TerminalSession session={session} active={session.id === selectedSession.id} />)
         ) : (
           <TerminalDashboard
             groups={[{ projectId, projectName, sessions, chats: gridChats, itemOrder: orderedIds }]}

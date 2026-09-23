@@ -1742,7 +1742,10 @@ open/closed drawer preference is preserved so it returns unchanged on the next t
 and fading its fixed-size content on the compositor. Its 40 px restore action uses the
 region's safe-area-aware bottom-end placement (HS2-4Y6SM9). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
-the content area. Its grid tab
+the content area. While switching directly among terminal tabs, the drawer keeps every
+dedicated session element that belongs to that presentation mounted and hides the inactive
+ones. Returning to a terminal therefore preserves its xterm, WebSocket, fitted grid, scroll
+position, and input state instead of constructing a fresh 80×24 xterm (HS2-V93PYF). Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
