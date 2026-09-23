@@ -22,10 +22,9 @@ import {
   terminalReconnectDelay,
   terminalResizeClaim,
   terminalScrollbackLimit,
-  terminalShouldAdoptServerSize,
   terminalShouldUseWebgl,
   terminalUsesMobile80xM,
-  terminalViewportClaimsSizingFocus,
+  terminalViewportClaimsSizing,
   terminalViewportScale,
   terminalViewportShouldAutoFocus,
 } from './terminal-viewport';
@@ -149,17 +148,10 @@ describe('terminal viewport protocol', () => {
       TERMINAL_DASHBOARD_LINE_HEIGHT,
     ]).toEqual([80, 24, 24, 1.085]);
   });
-  it('lets fixed 80 by 24 surfaces drive sizing without accepting keyboard input', () => {
-    expect(terminalViewportClaimsSizingFocus(true, true, false, false)).toBe(true);
-    expect(terminalViewportClaimsSizingFocus(false, true, false, false)).toBe(true);
-    expect(terminalViewportClaimsSizingFocus(false, false, false, false)).toBe(false);
-    expect(terminalViewportClaimsSizingFocus(false, false, true, false)).toBe(true);
-    expect(terminalViewportClaimsSizingFocus(false, false, false, true)).toBe(true);
-  });
-  it('keeps preview and locally authoritative grids stable when server-size messages race', () => {
-    expect(terminalShouldAdoptServerSize(true, false, false)).toBe(false);
-    expect(terminalShouldAdoptServerSize(false, true, false)).toBe(false);
-    expect(terminalShouldAdoptServerSize(false, false, true)).toBe(false);
-    expect(terminalShouldAdoptServerSize(false, false, false)).toBe(true);
+  it('bases sizing claims on presentation mode instead of keyboard focus', () => {
+    expect(terminalViewportClaimsSizing(true, true)).toBe(true);
+    expect(terminalViewportClaimsSizing(false, true)).toBe(true);
+    expect(terminalViewportClaimsSizing(false, false)).toBe(true);
+    expect(terminalViewportClaimsSizing(true, false)).toBe(false);
   });
 });

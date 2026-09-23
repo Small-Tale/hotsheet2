@@ -2094,9 +2094,15 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified Codex Main' });
   await expect(magnified).toBeVisible();
   const magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
-  await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   await expect(magnifiedViewport.locator('.xterm-helper-textarea')).toBeFocused();
-  await expect.poll(() => latestClaim('codex-main')).toMatchObject({ cols: 80, rows: 24, focus: true });
+  await expect
+    .poll(async () => {
+      const claim = await latestClaim('codex-main');
+      return `${claim?.cols}x${claim?.rows}`;
+    })
+    .not.toBe('80x24');
+  await expect.poll(() => latestClaim('codex-main')).toMatchObject({ focus: true });
   await expect
     .poll(() =>
       magnifiedViewport.evaluate((element) => {
@@ -2110,17 +2116,12 @@ test('uses independent width and height terminal dashboard zoom scales', async (
             screen.top >= frame.top - 1 &&
             screen.right <= frame.right + 1 &&
             screen.bottom <= frame.bottom + 1,
-          flush = Math.min(Math.abs(screen.right - frame.right), Math.abs(screen.bottom - frame.bottom)) <= 2;
-        return (
-          contained &&
-          flush &&
-          Math.abs(matrix.a - matrix.d) < 0.001 &&
-          Math.abs(frame.width / frame.height - 5 / 3) < 0.01
-        );
+          usesFrame = screen.width > frame.width * 0.9 && screen.height > frame.height * 0.85;
+        return contained && usesFrame && Math.abs(matrix.a - matrix.d) < 0.001 && frame.height > 400;
       }),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-mtrjms-dashboard-80x24-magnified.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-fitted-magnified-provider-after.png', fullPage: true });
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
   await compactTile.click({ button: 'right' });
@@ -2212,6 +2213,19 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     })
     .not.toBe('80x24');
   await expect(dedicatedViewport).toHaveAttribute('data-driving', 'true');
+  await page.getByRole('button', { name: 'Workspace grid' }).focus();
+  await expect(drawer.locator('.xterm-helper-textarea')).not.toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 840 });
+  await expect.poll(() => latestClaim('tests')).toMatchObject({ focus: true });
+  await expect
+    .poll(async () => {
+      const claim = await latestClaim('tests');
+      return `${claim?.cols}x${claim?.rows}`;
+    })
+    .not.toBe('80x24');
+  await expect(dedicatedViewport).not.toHaveAttribute('data-viewing-label');
+  await expect(dedicatedViewport).not.toHaveAttribute('aria-description');
+  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-terminal-fit-with-external-focus-after.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(dashboard).toBeVisible();
   await dashboard.locator('[data-terminal-key="demo-checkout:tests"]').dblclick();
@@ -2718,7 +2732,9 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     );
   });
   expect(new Set(viewers).size).toBe(viewers.length);
-  await expect(magnified).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnified).not.toHaveAttribute('data-grid-size', '80x24');
+  const magnifiedGrid = await magnified.getAttribute('data-grid-size');
+  expect(magnifiedGrid).toMatch(/^\d+x\d+$/);
   await page.evaluate(() => {
     const sockets = (
         window as unknown as {
@@ -2734,7 +2750,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   });
   await expect(magnified).toHaveAttribute('data-driving', 'false');
   await expect(magnified).toHaveAttribute('data-pty-size', '300x120');
-  await expect(magnified).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnified).toHaveAttribute('data-grid-size', magnifiedGrid!);
   await expect(magnified).toHaveAttribute('data-scale', '1');
   await expect(magnified).not.toHaveAttribute('data-viewing-label');
   await page.waitForTimeout(200);
@@ -2753,7 +2769,8 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
       .at(-1)!
       .emitSize(300, 120, driver);
   });
-  await expect(magnified).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnified).toHaveAttribute('data-grid-size', magnifiedGrid!);
+  await expect(magnified).toHaveAttribute('data-sizing-focus', 'true');
   await expect(magnified).toHaveAttribute('data-scale', '1');
   await expect(magnified).not.toHaveAttribute('data-viewing-label');
   const contained = await magnified.evaluate((element) => {
@@ -3851,7 +3868,8 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await page.getByRole('button', { name: 'Close demo' }).click();
   const dialog = page.locator('[data-component="project-close-dialog"]');
   const terminalPreview = dialog.locator('[data-component="terminal-viewport"]');
-  await expect(terminalPreview).toHaveAttribute('data-grid-size', '80x24');
+  await expect(terminalPreview).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
+  await expect(terminalPreview).toHaveAttribute('data-sizing-focus', 'false');
   await dialog.getByRole('button', { name: /Codex chat/ }).click();
   const preview = dialog.locator('[data-component="ai-conversation"]');
   await expect(preview).toHaveAttribute('data-read-only', 'true');
@@ -3876,7 +3894,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-7se31f-close-chat-wide.png', fullPage: true });
 
   await dialog.getByRole('button', { name: /Codex Main/ }).click();
-  await expect(terminalPreview).toHaveAttribute('data-grid-size', '80x24');
+  await expect(terminalPreview).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   const beforeCancel = await originalClaims();
   expect(beforeCancel.count).toBeGreaterThanOrEqual(beforeOpen.count);
   await dialog.getByRole('button', { name: 'Cancel' }).click();

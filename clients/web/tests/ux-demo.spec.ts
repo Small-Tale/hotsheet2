@@ -979,17 +979,19 @@ test('catalogs both FixedAspectTerminalCard variants and their dashboard relatio
   await expect(magnified).toBeVisible();
   for (const viewport of [previewViewport, magnifiedViewport]) {
     await expect(viewport).toHaveAttribute('data-connection', 'connected');
-    await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
     await expect(viewport).toHaveAttribute('data-renderer', 'dom');
-    const rows = viewport.locator('.xterm-rows > div');
-    await expect(rows).toHaveCount(24);
-    await expect(rows.first()).toContainText('GNU nano 8.4');
-    await expect(rows.nth(1)).toContainText('File: src/main.tsx');
-    await expect(rows.nth(20)).toContainText('export { app };');
-    await expect(rows.last()).toContainText('^X Exit');
-    for (const bar of [rows.first(), rows.nth(1), rows.nth(21), rows.nth(22), rows.last()])
-      expect(await bar.evaluate((node) => node.textContent.length)).toBe(80);
   }
+  await expect(previewViewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-size', '80x24');
+  const rows = previewViewport.locator('.xterm-rows > div');
+  await expect(rows).toHaveCount(24);
+  await expect(rows.first()).toContainText('GNU nano 8.4');
+  await expect(rows.nth(1)).toContainText('File: src/main.tsx');
+  await expect(rows.nth(20)).toContainText('export { app };');
+  await expect(rows.last()).toContainText('^X Exit');
+  for (const bar of [rows.first(), rows.nth(1), rows.nth(21), rows.nth(22), rows.last()])
+    expect(await bar.evaluate((node) => node.textContent.length)).toBe(80);
+  await expect(magnifiedViewport.locator('.xterm-rows')).toContainText('GNU nano 8.4');
   await expect(preview).toHaveCSS('border-width', '0px');
   await expect(magnified).toHaveCSS('border-width', '0px');
   const sizing = await stage.evaluate((element) => {

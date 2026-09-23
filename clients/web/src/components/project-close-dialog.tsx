@@ -88,7 +88,6 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
             data-project-id={projectId}
             data-terminal-id={resource.id}
             data-display-mode="scaled-preview"
-            data-grid-policy="dashboard-80x24"
             data-geometry-ready="false"
             aria-hidden="true"
           ></div>

@@ -124,21 +124,8 @@ export function terminalDedicatedGridSize(cols: number, rows: number) {
   return { cols: Math.max(1, cols), rows: Math.max(1, rows - 1) };
 }
 
-export function terminalShouldAdoptServerSize(
-  scaledPreview: boolean,
-  locallyFocused: boolean,
-  drivenByViewer: boolean,
-): boolean {
-  return !scaledPreview && !locallyFocused && !drivenByViewer;
-}
-
-export function terminalViewportClaimsSizingFocus(
-  scaledPreview: boolean,
-  fixedDashboardGrid: boolean,
-  focusRequested: boolean,
-  containsActiveElement: boolean,
-): boolean {
-  return fixedDashboardGrid || (!scaledPreview && (focusRequested || containsActiveElement));
+export function terminalViewportClaimsSizing(scaledPreview: boolean, fixedDashboardGrid: boolean): boolean {
+  return fixedDashboardGrid || !scaledPreview;
 }
 
 export function terminalBrowserWebSocketUrl(

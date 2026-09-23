@@ -237,7 +237,8 @@ test('opens ticket references from interactive terminals without linking scaled 
     )
     .toContain('echo link-input');
   await page.setViewportSize({ width: 1024, height: 650 });
-  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(viewport).toHaveAttribute('data-grid-size', /^\d+x\d+$/);
+  await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
   await page.screenshot({ path: testInfo.outputPath('interactive-terminal-narrow.png'), fullPage: true });
 });
 
@@ -338,19 +339,34 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
-  await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
-  await expect(magnifiedViewport).toHaveAttribute('data-pty-size', '80x24');
+  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
+  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect
+    .poll(async () => {
+      const grid = await magnifiedViewport.getAttribute('data-grid-size'),
+        pty = await magnifiedViewport.getAttribute('data-pty-size');
+      return grid === pty;
+    })
+    .toBe(true);
   await expect(magnifiedViewport).toHaveAttribute('data-sizing-focus', 'true');
   await expect(magnifiedViewport).toHaveAttribute('data-renderer', 'dom');
   await expect(magnifiedViewport.locator('canvas')).toHaveCount(0);
   await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
   await expect(magnifiedViewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect(magnifiedViewport.locator('.xterm-rows')).toContainText('Exit');
-  await assertGridGeometry(magnifiedViewport);
-  const magnifiedFont = await magnifiedViewport.getAttribute('data-font-size');
-  await page.waitForTimeout(250);
-  await expect(magnifiedViewport).toHaveAttribute('data-font-size', magnifiedFont!);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-canonical-80x24-magnified-after.png', fullPage: true });
+  await expect
+    .poll(async () => {
+      const value = await geometry(magnifiedViewport);
+      return Boolean(
+        value &&
+        value.viewportRight <= 2 &&
+        value.viewportBottom <= 2 &&
+        value.scaleSkew < 0.001 &&
+        Math.abs(value.frameAspect - 5 / 3) > 0.1,
+      );
+    })
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-fitted-magnified-after.png', fullPage: true });
   await magnified.getByRole('button', { name: 'Open nano in project terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -605,6 +621,21 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
         );
       });
       expect(contained).toBe(true);
+    },
+    assertFitted = async (viewport: typeof dedicated) => {
+      await expect(viewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
+      await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
+      await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
+      await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
+      await expect(viewport).toHaveAttribute('data-renderer', 'dom');
+      await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+      await expect
+        .poll(async () => {
+          const grid = await viewport.getAttribute('data-grid-size'),
+            pty = await viewport.getAttribute('data-pty-size');
+          return grid === pty;
+        })
+        .toBe(true);
     };
   await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));
   const magnifiedFramesId = await startTerminalFrameSampling(
@@ -619,7 +650,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(readyMagnifiedFrame - firstMagnifiedFrame).toBeLessThanOrEqual(3);
   expect(magnifiedFrames.slice(firstMagnifiedFrame, readyMagnifiedFrame).every((frame) => frame?.hidden)).toBe(true);
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified Terminal New' });
-  await assertFixed(magnified.locator('[data-display-mode="interactive"]'));
+  await assertFitted(magnified.locator('[data-display-mode="interactive"]'));
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
   await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));

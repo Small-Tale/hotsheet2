@@ -105,25 +105,27 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('aria-label="Busy" title="Busy"');
     expect(markup).not.toContain('/work/one');
   });
-  it('uses one fixed-aspect card component and defers only dashboard previews', () => {
+  it('reserves fixed 80x24 sizing for dashboard grid previews', () => {
     const session = groups[0].sessions[0],
       preview = String(FixedAspectTerminalCard({ session })),
       magnified = String(FixedAspectTerminalCard({ session, mode: 'magnified' }));
     for (const markup of [preview, magnified]) {
       expect(markup).toContain('terminal-tile__viewport-frame');
-      expect(markup).toContain('data-grid-policy="dashboard-80x24"');
       expect(markup).toContain('data-geometry-ready="false"');
       expect(markup).toContain('data-action="open-terminal-context-menu"');
       expect(markup).toContain('data-lucide="ellipsis"');
     }
+    expect(preview).toContain('data-grid-policy="dashboard-80x24"');
     expect(preview).toContain('data-fixed-aspect-terminal-card="preview"');
     expect(preview).toContain('data-display-mode="scaled-preview"');
     expect(preview).toContain('data-mount-policy="visible-progressive"');
     expect(magnified).toContain('data-fixed-aspect-terminal-card="magnified"');
     expect(magnified).toContain('data-display-mode="interactive"');
     expect(magnified).toContain('data-mount-policy="immediate"');
+    expect(magnified).toContain('data-mobile-grid-policy="80xm"');
+    expect(magnified).not.toContain('data-grid-policy="dashboard-80x24"');
   });
-  it('keeps the smallest tile keyboard-focusable and makes only its fixed-grid magnified copy interactive', () => {
+  it('keeps the smallest tile keyboard-focusable and makes its fitted magnified copy interactive', () => {
     const compact = String(TerminalDashboard({ groups, width: 900, height: 600, fitAcross: 7, fitHigh: 3 }));
     expect(compact).toContain('data-basis="high"');
     expect(compact).toContain('data-fit="3"');
@@ -134,7 +136,7 @@ describe('TerminalDashboard', () => {
     );
     expect(magnified).toContain('role="dialog"');
     expect(magnified).toContain('data-display-mode="interactive"');
-    expect(magnified.match(/data-grid-policy="dashboard-80x24"/g)).toHaveLength(2);
+    expect(magnified.match(/data-grid-policy="dashboard-80x24"/g)).toHaveLength(1);
     expect(magnified.match(/data-component="terminal-viewport"/g)).toHaveLength(2);
     expect(magnified).toContain('data-action="open-terminal-project"');
     expect(magnified).toContain('Open Codex in project terminal drawer');

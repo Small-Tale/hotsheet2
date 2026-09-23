@@ -294,20 +294,6 @@
 .terminal-viewport .xterm-viewport {
   overflow-y: auto;
 }
-.terminal-viewport[data-driving='false']::after {
-  position: sticky;
-  z-index: 2;
-  left: var(--wa-space-xs);
-  bottom: var(--wa-space-xs);
-  display: inline-block;
-  padding: var(--wa-space-2xs) var(--wa-space-xs);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-normal);
-  background: color-mix(in srgb, var(--wa-color-surface-default) 88%, transparent);
-  box-shadow: var(--wa-shadow-s);
-  content: attr(data-viewing-label);
-  font-size: var(--wa-font-size-2xs);
-}
 .terminal-tile__footer {
   display: flex;
   min-height: var(--terminal-tile-footer-height);
@@ -392,13 +378,13 @@
 }
 .terminal-dashboard__magnified .terminal-tile {
   width: min(100%, remify(1152px));
-  height: auto;
+  height: 100%;
   max-height: none;
 }
 .terminal-dashboard__magnified .terminal-tile__preview {
+  flex: 1;
   min-height: 0;
   padding: var(--terminal-tile-frame-inset);
-  flex: none;
 }
 .terminal-dashboard__magnified .terminal-tile__preview pre {
   position: absolute;
@@ -409,12 +395,11 @@
   position: relative;
   inset: auto;
   width: 100%;
-  aspect-ratio: 5 / 3;
+  height: 100%;
+  aspect-ratio: auto;
   pointer-events: auto;
 }
-/* On a phone the magnified terminal drops the 5:3 card and fills the screen so its 80×M grid
-   (HS2-Z84F78) uses the full available height. Gated on the same data-mobile signal as the JS
-   `isMobileViewport` check that drives the 80×M sizing, so CSS and layout agree. */
+/* On a phone the fitted magnified terminal uses the full screen. */
 .app-shell[data-mobile='true'] .terminal-dashboard__magnified {
   padding: remify(8px);
   place-items: stretch;

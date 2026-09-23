@@ -38,9 +38,7 @@ export function terminalDemoOutput(id: string): string {
 }
 
 export function syncTerminalDemoViewports(root: HTMLElement, mounts: Map<HTMLElement, () => void>): void {
-  const elements = new Set(
-    root.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"][data-grid-policy="dashboard-80x24"]'),
-  );
+  const elements = new Set(root.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));
   for (const [element, dispose] of mounts)
     if (!elements.has(element)) {
       dispose();

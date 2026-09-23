@@ -159,7 +159,8 @@ export function FixedAspectTerminalCard({
       data-terminal-id={session.id}
       data-display-mode={dashboardPreview ? 'scaled-preview' : 'interactive'}
       data-mount-policy={dashboardPreview ? 'visible-progressive' : 'immediate'}
-      data-grid-policy="dashboard-80x24"
+      data-grid-policy={dashboardPreview ? 'dashboard-80x24' : undefined}
+      data-mobile-grid-policy={magnified ? '80xm' : undefined}
       data-geometry-ready="false"
       aria-hidden={dashboardPreview ? 'true' : undefined}
       aria-label={dashboardPreview ? undefined : `${session.title ?? session.id} interactive terminal`}

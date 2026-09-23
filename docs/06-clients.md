@@ -1673,17 +1673,15 @@ stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to t
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
-changing rows, columns, or glyph proportions. Magnified interactive grids first fit their font
-metrics to the fixed frame, then apply only the measured uniform residual scale so at least one
-screen edge is flush without stretching either axis. Magnifying a grid tile preserves
-the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
-never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
-remain fitted to their actual interactive viewport and reserve one physical containment row;
+changing rows, columns, or glyph proportions. Magnified interactive terminals first fit their font
+metrics and row/column count to the available modal frame. Magnifying a grid tile therefore
+leaves the grid-only 80×24 contract and becomes an available-space interactive terminal.
+Dedicated project-drawer terminals are likewise fitted to their actual interactive viewport
+and reserve one physical containment row;
 server size echoes cannot restore the edge row that would otherwise be clipped. Abrupt drawer
 changes such as maximize explicitly publish a post-layout resize boundary on the next animation
 frame, with a settled follow-up, instead of depending on an observer that can remain one resize
-behind the container. Fixed-grid surfaces reveal after one physical-scale pass, avoiding the
-incremental typography loop while moving from a drawer to the dashboard or magnifying a card. The preview
+behind the container. Fixed-grid preview surfaces reveal after one physical-scale pass. The preview
 and its inset frame use the terminal background token, so unused space
 cannot expose an unrelated gray surface. The computed tile height derives the 5:3 preview
 from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
@@ -1693,7 +1691,7 @@ centered over a full-browser dimming layer; click-away restores the grid. Its fo
 an external-open action, and both that action and a footer double-click open the terminal in
 its project's maximized drawer. A grid-tile double-click does the same, while right-click
 exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer
-opens that exact same menu from the keyboard or pointer. The focused dedicated drawer consumer re-fits after both
+opens that exact same menu from the keyboard or pointer. The dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 While that magnified viewport is open, its containing workspace is promoted above adjacent
 shell regions, both side-region separators are suppressed, and the workspace suppresses its own
@@ -1706,13 +1704,13 @@ The browser regression follows the complete user path with a newly created termi
 Nano, resize the drawer up and down, abruptly maximize, move to the dashboard grid, magnify
 and dismiss, then double-click back into the drawer. Every boundary asserts the current
 claimed/grid geometry and visible xterm-screen containment. It samples the post-paint frames
-through maximize and both fixed-grid mounts, so a stale or malformed intermediate frame cannot
+through maximize, the fixed-grid preview, and the fitted magnified surface, so a stale or malformed intermediate frame cannot
 pass on a correct final state alone. Returning from the dashboard to an already-open drawer is
 idempotent and settles geometry without replaying the drawer's show animation.
 The UX catalog mounts the same xterm frontend over deterministic ANSI fixtures rather than
 substituting a text placeholder. Its preview is constrained to a realistic grid-card width,
-the magnified variant receives the remaining stage width, and both demonstrate the canonical
-code font and a populated 80×24 Nano screen. Its initial terminal focus is one-shot: later
+the magnified variant receives the remaining stage width; the preview demonstrates the canonical
+80×24 grid while the magnified terminal fits that available stage. Its initial terminal focus is one-shot: later
 xterm paints, including cursor blinking, never steal focus from catalog controls or close an
 open Web Awesome popup.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
@@ -1885,9 +1883,9 @@ and ranges rather than terminal DOM or HTML, so ANSI styling, wrapped rows, WebG
 selection, focus, and normal input remain intact. Dragging to select text within a ticket
 reference does not activate the link or reopen a dismissed reader; after clearing the
 selection, ordinary clicks activate references again (HS2-H6ZXNM). Scaled dashboard previews deliberately do
-not register the provider. Magnified desktop terminals fit their real xterm font metrics to
-the fixed frame and apply a uniform measured residual physical scale, keeping glyph proportions,
-pointer hit-testing, selection, and a flush frame edge aligned with the visible 80×24 cells
+not register the provider. Magnified desktop terminals fit their real xterm row/column grid to
+the available frame, keeping glyph proportions, pointer hit-testing, selection, and visible cells
+aligned with the input surface
 (HS2-2DW829).
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
@@ -1895,7 +1893,7 @@ Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engine
 fallback after load failure or context loss). Apple WebKit uses the DOM renderer as a
 conservative compatibility policy; renderer selection alone is not proof of painted glyphs. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
 DOM renderer. Read-only previews are uniformly CSS-scaled, while interactive magnified
-surfaces fit font metrics before a small uniform residual scale; scaling a WebGL raster makes
+surfaces fit their row/column grid to available space; scaling a WebGL raster makes
 the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
 scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
@@ -1936,10 +1934,10 @@ read-only and never accepts keyboard input. This ensures entering the dashboard 
 resizes the PTY to the promised 80×24 contract rather than merely drawing an 80×24 xterm over
 output that the TUI emitted for the drawer's previous size. Conversely, offscreen dashboard
 cards do not mount a viewport or open a socket until intersection observation reaches them, so
-an unpainted or hidden fixed-grid card cannot take sizing control. Finishing a drawer drag or maximize
-returns input focus to the selected dedicated terminal before its final claim; clicking the
-drawer rail must not leave the server holding the old PTY size while only the WebGL canvas
-grows around stale TUI output.
+an unpainted or hidden fixed-grid card cannot take sizing control. Interactive magnified and
+dedicated terminals claim their fitted dimensions whenever they are visible, independently of
+which app control owns keyboard focus. Finishing a drawer drag or maximize publishes its final
+claim; clicking or focusing another control cannot revert the terminal to a stale 80×24 size.
 
 ### 6.7.1 The fundamental constraint
 
@@ -1975,9 +1973,13 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
 - `interacting` distinguishes a **genuine user interaction** (a tap/click, a focus gain, or a
   keystroke) from the steady heartbeat/geometry claim every viewport streams. Only an
   interacting claim advances the server's per-viewport interaction recency; a plain heartbeat
-  keeps the prior value. Without this, two focused devices' interleaved 5-second heartbeats
+  keeps the prior value. Without this, two sizing-eligible devices' interleaved 5-second heartbeats
   would ping-pong "most recent focus" and thrash the PTY size, leaving the device the user
   isn't touching (e.g. a phone) rendering the other device's size (**HS2-3ZBQDG**).
+- The protocol retains the historical `focus` field name, but the web client uses it as
+  **sizing eligibility**. Visible grid previews and visible interactive terminals are eligible;
+  keyboard focus only controls input and never changes a terminal's local geometry
+  (**HS2-KKE1PM**).
 
 - `viewerId` is **per viewport, not per device** (`<clientId>:<paneId>`), so
   intra-device and cross-device viewports arbitrate uniformly — this _is_ the
@@ -1989,39 +1991,39 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
 - The server broadcasts the resulting `ptySize` to **all** viewers, so everyone
   agrees on the real size and each renders within its own viewport (§6.7.4).
 
-### 6.7.3 The sizing policy: focus-follows, with hysteresis
+### 6.7.3 The sizing policy: interaction-follows, with hysteresis
 
 Default policy (= tmux `window-size latest`, which is exactly the maintainer's ask —
 "right-sized based on whichever device and view area had most recent focus"):
 
 - **The PTY follows the size of the viewport the user most recently _interacted_
-  with.** When focus/interaction moves from the big macOS pane to the small iPhone
+  with.** When interaction moves from the big macOS pane to the small iPhone
   view, the PTY resizes to the iPhone (after the guards below); when it returns, it
   resizes back. The interaction-recency tiebreak (advanced only by `interacting`
   claims — see §6.7.2) decides between two viewports that both believe they're focused,
   so one device's background heartbeats can never steal control (**HS2-3ZBQDG**).
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
-  PTY's local sizing focus. A grid tile cannot accept keyboard input, but entering
+  PTY's local sizing claimant. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at
   the grid contract rather than at an obsolete hidden-drawer size.
-- **A focused, actively-typing viewport's size is locked in** — a background device
+- **An actively-used viewport's size is locked in** — a background device
   cannot resize the PTY out from under someone mid-keystroke. To change the size,
-  take focus (which transfers the size).
-- **When nothing is focused, hold the current size** (don't resize on mere
+  interact with its terminal (which transfers the size).
+- **When no eligible viewport remains, hold the current size** (don't resize on mere
   visibility changes) — glancing at a terminal from a second device must not reflow
   it.
 
 **Anti-thrash guards** (named so implementation has targets; tune later):
 
-- `SIZE_FOCUS_HOLD_MS` (~500 ms) — a newly-focused viewport must hold focus this
-  long before its size is applied (kills ping-pong when focus flickers).
+- `SIZE_FOCUS_HOLD_MS` (~500 ms, retaining the protocol's historical name) — a newly
+  eligible viewport must remain eligible this long before its size is applied.
 - `SIZE_MIN_DELTA` (≥2 cols/rows) — ignore sub-threshold differences.
 - `SIZE_RESIZE_MIN_INTERVAL_MS` (~100 ms) — rate-limit actual PTY resizes to ten per
   second. Browser viewports coalesce layout work to animation frames and send a final
   claim 120 ms after resizing settles, so a suppressed in-window update cannot leave the
   terminal at an obsolete size until its heartbeat.
 
-**Alternative policies (configurable per terminal), for when focus-follows isn't
+**Alternative policies (configurable per terminal), for when interaction-follows isn't
 wanted:**
 
 - `smallest` — size to the smallest _visible_ viewport so everyone sees the whole
@@ -2035,26 +2037,15 @@ above, and expose the alternatives as a per-terminal setting.
 
 ### 6.7.4 Rendering when a viewport ≠ the PTY size
 
-Every non-driving viewport reconciles its viewport against the broadcast `ptySize`:
-
-- **Viewport larger than the PTY** → **letterbox**: render the grid at its true
-  size within the pane (centered / top-left), padded with the theme background.
-  Never stretch. (HS1 already handles the gutter/padding — §22.6.)
-- **Viewport smaller than the PTY** → **scale-to-fit then scroll**: shrink the font
-  toward a readable floor to fit; below that floor, scroll within the pane. A phone
-  glancing at a desktop-sized terminal scales to fit for reading; to _interact_ it
-  takes focus and the PTY resizes to it.
-- Show a subtle affordance when a viewport isn't driving the size (e.g. "viewing at
-  120×40 — tap to resize to this screen") so the mismatch is legible, not confusing.
-
-The web viewport implements this with a true-size top-left letterbox when the PTY fits,
-proportional scale-to-fit down to a 70% readable floor when it does not, and pane-local
-scrolling below that floor. A non-driving overlay reports the broadcast dimensions and
-invites focus; focusing sends a new claim and leaves the arbiter—not the browser—to decide
-whether and when the PTY actually resizes.
+Every interactive viewport keeps its xterm fitted to the space it occupies, including while
+keyboard focus is in a toolbar, editor, or another app control. A broadcast naming another
+driver records the PTY's authoritative dimensions but does not replace the local fitted grid or
+show a misleading focus-to-resize badge. Genuine interaction with that terminal advances its
+recency claim and lets the server move the shared PTY to those fitted dimensions. Fixed 80×24
+rendering and physical scaling belong only to workspace and drawer grid tiles.
 
 **Mobile 80×M (HS2-Z84F78, HS2-S708S3).** On a phone-width viewport (`isMobileViewport`, the same
-1024px breakpoint as the single-column layout) an interactive terminal keeps the canonical
+1024px breakpoint as the single-column layout) a magnified or dedicated interactive terminal keeps the canonical
 **80 columns** — so line wrapping matches every other device — and chooses **M rows to fill
 the available height**, scaling the whole grid to fit the phone width. The text ends up
 small (80 columns on a ~390px screen), which is the deliberate trade for consistent width.

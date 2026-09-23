@@ -21,8 +21,9 @@ When automation lands, remove the manual-only step and record it below.
 ### Cross-device terminal sizing
 
 1. Attach macOS and iOS-sized viewers to the same remote terminal.
-2. Move focus between viewers and verify the configured sizing policy, letterboxing,
-   and lease expiry without oscillation.
+2. Interact with each terminal in turn and verify the configured sizing policy and lease
+   expiry without oscillation. Move keyboard focus to surrounding app controls and confirm
+   each visible interactive terminal remains fitted with no focus-to-resize badge.
 3. Disconnect the focused viewer and verify the remaining viewer takes ownership.
 4. HS2-3ZBQDG — with both devices attached and idle (only heartbeats), confirm the PTY
    size stays put and neither device shows the other's size (no ~5s oscillation, no
