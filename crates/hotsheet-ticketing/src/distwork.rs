@@ -80,7 +80,14 @@ where
     match outcome {
         WorkOutcome::Continued => {
             let expires = now.plus_minutes(lease_minutes);
-            let _ = distclaim::renew(store.root(), &id, worker, &marker.oid, expires, now)?;
+            if matches!(
+                distclaim::renew(store.root(), &id, worker, &marker.oid, expires.clone(), now,)?,
+                ClaimResult::Won(_)
+            ) {
+                ops::renew(store, &id, now.clone(), expires, worker).map_err(|error| {
+                    DistError::Store(format!("persist local claim renewal: {error}"))
+                })?;
+            }
         }
         WorkOutcome::Completed | WorkOutcome::Failed => {
             distclaim::release(store.root(), &id)?;
@@ -126,6 +133,14 @@ fn record_local_claim(
     t.claimed_by = Some(worker.to_string());
     t.claim_lease_expires_at = Some(expires.clone());
     t.claim_count += 1;
+    ops::append_claim_event(
+        &mut t,
+        hotsheet_model::ClaimEventKind::Claim,
+        worker,
+        now,
+        Some(expires.clone()),
+        None,
+    );
     t.updated_at = now.clone();
     ops::start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t).map_err(store_err)?;
@@ -239,6 +254,7 @@ mod tests {
             a.read_ticket(&a_got).unwrap().status,
             hotsheet_model::Status::Started
         );
+        assert_eq!(a.read_ticket(&a_got).unwrap().claim_history.len(), 1);
 
         // The queue is now exhausted for a third worker.
         assert!(
@@ -262,6 +278,18 @@ mod tests {
         assert!(
             claims.iter().any(|c| c.id == Some(id1)),
             "Continued keeps the marker"
+        );
+        assert_eq!(
+            a.read_ticket(&id1)
+                .unwrap()
+                .claim_history
+                .iter()
+                .map(|event| event.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                hotsheet_model::ClaimEventKind::Claim,
+                hotsheet_model::ClaimEventKind::Renew,
+            ]
         );
 
         // A Completed turn on the next ticket releases its marker. A real drive marks the

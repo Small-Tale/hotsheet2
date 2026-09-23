@@ -135,6 +135,7 @@ export interface TicketRow {
   worker_label?: string;
   legacy_number?: string;
   claim_count: number;
+  claim_history?: ClaimEvent[];
   created_at?: string;
   updated_at?: string;
   completed_at?: string;
@@ -143,6 +144,14 @@ export interface TicketRow {
   duplicate_of?: string;
   details?: string;
   notes?: Note[];
+}
+export interface ClaimEvent {
+  id: string;
+  kind: 'claim' | 'renew' | 'release';
+  worker: string;
+  at: string;
+  lease_expires_at?: string;
+  worker_label?: string;
 }
 export interface CheckoutTicketQuery {
   text?: string;

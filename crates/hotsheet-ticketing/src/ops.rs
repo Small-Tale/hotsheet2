@@ -11,8 +11,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::str::FromStr;
 
 use hotsheet_model::{
-    CloseReason, Note, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp, Ulid,
-    derive_slug,
+    ClaimEvent, ClaimEventKind, CloseReason, Note, NoteKind, Priority, ReviewRequest, Status,
+    Ticket, Timestamp, Ulid, derive_slug,
 };
 
 use crate::store::{FsStore, StoreError};
@@ -568,7 +568,7 @@ pub fn update(
         // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
         if !s.is_active() {
             t.up_next = false;
-            clear_claim_fields(&mut t);
+            end_claim(&mut t, &now);
         } else if t.close_reason.is_some() {
             // Reopening — moving back to an active status — clears the close annotation
             // (close_reason/closed_at/duplicate_of), per HS2-61.
@@ -577,14 +577,14 @@ pub fn update(
             t.duplicate_of = None;
         }
         if s.is_active() && !previous_status.is_active() {
-            clear_claim_fields(&mut t);
+            end_claim(&mut t, &now);
         }
     }
     // Also covers `--up-next` on an already-inactive ticket when no status is present in
     // this patch. Up Next is only meaningful for not_started/started.
     if !t.status.is_active() {
         t.up_next = false;
-        clear_claim_fields(&mut t);
+        end_claim(&mut t, &now);
     }
     if has_substantive_change(&before, &t) {
         t.updated_at = now;
@@ -606,6 +606,41 @@ fn clear_claim_fields(ticket: &mut Ticket) {
     ticket.claimed_by = None;
     ticket.claim_lease_expires_at = None;
     ticket.worker_label = None;
+}
+
+fn end_claim(ticket: &mut Ticket, now: &Timestamp) {
+    if let Some(worker) = ticket.claimed_by.clone() {
+        append_claim_event(ticket, ClaimEventKind::Release, &worker, now, None, None);
+    }
+    clear_claim_fields(ticket);
+}
+
+pub(crate) fn append_claim_event(
+    ticket: &mut Ticket,
+    kind: ClaimEventKind,
+    worker: &str,
+    at: &Timestamp,
+    lease_expires_at: Option<Timestamp>,
+    worker_label: Option<String>,
+) {
+    let mut entropy = DefaultHasher::new();
+    ticket.id.hash(&mut entropy);
+    ticket.claim_history.len().hash(&mut entropy);
+    worker.hash(&mut entropy);
+    (kind as u8).hash(&mut entropy);
+    at.as_str().hash(&mut entropy);
+    let timestamp_ms = at
+        .instant()
+        .map(|instant| instant.unix_timestamp_nanos().max(0) as u64 / 1_000_000)
+        .unwrap_or_default();
+    ticket.claim_history.push(ClaimEvent {
+        id: Ulid::from_parts(timestamp_ms, entropy.finish() as u128),
+        kind,
+        worker: worker.to_string(),
+        at: at.clone(),
+        lease_expires_at,
+        worker_label,
+    });
 }
 
 fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: &Timestamp) {
@@ -693,7 +728,7 @@ pub fn prepare_not_working(
     ticket.up_next = true;
     ticket.completed_at = None;
     ticket.verified_at = None;
-    clear_claim_fields(ticket);
+    end_claim(ticket, &now);
     ticket.close_reason = None;
     ticket.closed_at = None;
     ticket.duplicate_of = None;
@@ -1228,7 +1263,7 @@ pub fn close(
     }
     // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
     t.up_next = false;
-    clear_claim_fields(&mut t);
+    end_claim(&mut t, &now);
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -1263,6 +1298,7 @@ pub fn copy_ticket(
     t.claim_lease_expires_at = None;
     t.worker_label = None;
     t.claim_count = 0;
+    t.claim_history.clear();
     t.completed_at = None;
     t.verified_at = None;
     t.closed_at = None;
@@ -1456,6 +1492,16 @@ pub fn claim_next(
     t.claim_lease_expires_at = Some(lease_expires);
     t.worker_label = label;
     t.claim_count += 1;
+    let lease_expires_at = t.claim_lease_expires_at.clone();
+    let worker_label = t.worker_label.clone();
+    append_claim_event(
+        &mut t,
+        ClaimEventKind::Claim,
+        worker,
+        now,
+        lease_expires_at,
+        worker_label,
+    );
     t.updated_at = now.clone();
     start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t)?;
@@ -1550,7 +1596,16 @@ fn prepare_claim(
             .and_then(|current| current.chronological_cmp(&lease_expires))
             == Some(Ordering::Less)
         {
-            t.claim_lease_expires_at = Some(lease_expires);
+            t.claim_lease_expires_at = Some(lease_expires.clone());
+            let worker_label = label.clone().or_else(|| t.worker_label.clone());
+            append_claim_event(
+                &mut t,
+                ClaimEventKind::Renew,
+                worker,
+                now,
+                Some(lease_expires),
+                worker_label,
+            );
         }
         if label.is_some() {
             t.worker_label = label;
@@ -1560,6 +1615,16 @@ fn prepare_claim(
         t.claim_lease_expires_at = Some(lease_expires);
         t.worker_label = label;
         t.claim_count += 1;
+        let lease_expires_at = t.claim_lease_expires_at.clone();
+        let worker_label = t.worker_label.clone();
+        append_claim_event(
+            &mut t,
+            ClaimEventKind::Claim,
+            worker,
+            now,
+            lease_expires_at,
+            worker_label,
+        );
     }
     t.updated_at = now.clone();
     Ok(t)
@@ -1585,9 +1650,7 @@ pub fn release(
         }
         _ => {}
     }
-    t.claimed_by = None;
-    t.claim_lease_expires_at = None;
-    t.worker_label = None;
+    end_claim(&mut t, &now);
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -1613,7 +1676,16 @@ pub fn renew(
         }
         None => return Err(OpError::NotClaimed(t.slug.clone())),
     }
-    t.claim_lease_expires_at = Some(lease_expires);
+    t.claim_lease_expires_at = Some(lease_expires.clone());
+    let label = t.worker_label.clone();
+    append_claim_event(
+        &mut t,
+        ClaimEventKind::Renew,
+        worker,
+        &now,
+        Some(lease_expires),
+        label,
+    );
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -3081,6 +3153,15 @@ mod tests {
             },
         )
         .unwrap();
+        claim(
+            &src,
+            &id,
+            &ts("2026-08-19T00:10:00Z"),
+            ts("2026-08-19T00:40:00Z"),
+            "copy-source-worker",
+            None,
+        )
+        .unwrap();
         let attachment_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
         src.write_attachment(
             &id,
@@ -3104,6 +3185,8 @@ mod tests {
             "fresh copy resets workflow"
         );
         assert!(!copy.up_next);
+        assert_eq!(copy.claim_count, 0);
+        assert!(copy.claim_history.is_empty());
         // Source untouched (still present, still started).
         assert_eq!(src.read_ticket(&id).unwrap().status, Status::Started);
         // The copy is a real ticket in the destination.
@@ -3466,6 +3549,12 @@ mod tests {
         assert_eq!(claimed.title, "t1", "Up Next is preferred");
         assert_eq!(claimed.claimed_by.as_deref(), Some("w1"));
         assert_eq!(claimed.claim_count, 1);
+        assert_eq!(claimed.claim_history.len(), 1);
+        assert_eq!(claimed.claim_history[0].kind, ClaimEventKind::Claim);
+        assert_eq!(
+            claimed.claim_history[0].lease_expires_at,
+            Some(lease.clone())
+        );
 
         // wrong worker can't release/renew
         assert!(matches!(
@@ -3478,9 +3567,12 @@ mod tests {
         ));
 
         // holder renews then releases
-        renew(&store, &claimed.id, now.clone(), lease.clone(), "w1").unwrap();
+        let renewed = renew(&store, &claimed.id, now.clone(), lease.clone(), "w1").unwrap();
+        assert_eq!(renewed.claim_history[1].kind, ClaimEventKind::Renew);
         let released = release(&store, &claimed.id, now, "w1", false).unwrap();
         assert!(released.claimed_by.is_none());
+        assert_eq!(released.claim_history[2].kind, ClaimEventKind::Release);
+        assert!(released.claim_history[2].lease_expires_at.is_none());
     }
 
     #[test]
@@ -3523,6 +3615,14 @@ mod tests {
         assert!(completed.claim_lease_expires_at.is_none());
         assert!(completed.worker_label.is_none());
         assert_eq!(completed.claim_count, 1, "claim history is retained");
+        assert_eq!(
+            completed
+                .claim_history
+                .iter()
+                .map(|event| event.kind)
+                .collect::<Vec<_>>(),
+            vec![ClaimEventKind::Claim, ClaimEventKind::Release]
+        );
 
         let mut legacy = completed;
         legacy.claimed_by = Some("stale-worker".into());
@@ -3626,6 +3726,7 @@ mod tests {
                     .contains("Status changed from Not Started to Started")
         }));
         assert_eq!(first.claim_count, 1);
+        assert_eq!(first.claim_history[0].kind, ClaimEventKind::Claim);
 
         let retry = claim(
             &store,
@@ -3643,6 +3744,15 @@ mod tests {
         assert_eq!(retry.worker_label.as_deref(), Some("Agent one"));
         assert_eq!(
             retry.claim_lease_expires_at.as_ref().unwrap().as_str(),
+            "2026-08-19T00:50:00Z"
+        );
+        assert_eq!(retry.claim_history[1].kind, ClaimEventKind::Renew);
+        assert_eq!(
+            retry.claim_history[1]
+                .lease_expires_at
+                .as_ref()
+                .unwrap()
+                .as_str(),
             "2026-08-19T00:50:00Z"
         );
         assert!(matches!(
@@ -3668,6 +3778,27 @@ mod tests {
         .unwrap();
         assert_eq!(takeover.claimed_by.as_deref(), Some("w2"));
         assert_eq!(takeover.claim_count, 2);
+        assert_eq!(
+            takeover
+                .claim_history
+                .iter()
+                .map(|event| (event.kind, event.worker.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (ClaimEventKind::Claim, "w1"),
+                (ClaimEventKind::Renew, "w1"),
+                (ClaimEventKind::Claim, "w2"),
+            ]
+        );
+        assert_eq!(
+            takeover.claim_history[1]
+                .lease_expires_at
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "2026-08-19T00:50:00Z",
+            "an expired holder's exact end remains its final lease deadline"
+        );
         assert!(matches!(
             claim(
                 &store,

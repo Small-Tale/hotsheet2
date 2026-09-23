@@ -256,6 +256,7 @@ impl GitLabProvider {
             worker_label: None,
             legacy_number: None,
             claim_count: 0,
+            claim_history: vec![],
             assignees: issue
                 .assignees
                 .into_iter()

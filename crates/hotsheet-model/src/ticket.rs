@@ -158,6 +158,29 @@ pub struct ExternalLink {
     pub remote_hash: String,
 }
 
+/// One durable transition in a ticket's claim-lease lifecycle. The current lease fields
+/// remain the live coordination signal; this append-only history exists for exact process
+/// timing and audit across expiry, handoff, and repeated claims.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimEvent {
+    pub id: Ulid,
+    pub kind: ClaimEventKind,
+    pub worker: String,
+    pub at: Timestamp,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at: Option<Timestamp>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaimEventKind {
+    Claim,
+    Renew,
+    Release,
+}
+
 /// A ticket. Shared frontmatter fields serialize to YAML; `details` renders as the
 /// Markdown body and `notes` under `## Notes`. Optional/empty fields are omitted for
 /// clean diffs. Construct via [`Ticket::new`] and fill the rest.
@@ -205,6 +228,8 @@ pub struct Ticket {
     pub worker_label: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub claim_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claim_history: Vec<ClaimEvent>,
 
     // Assignment (`docs/10` §10.2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

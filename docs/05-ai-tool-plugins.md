@@ -380,6 +380,11 @@ lengthy work, and release on completion, handoff, error, or feedback. A same-wor
 claim retry is idempotent and does not inflate `claim_count`; another live holder is a
 conflict, while an expired lease can be acquired as a new attempt. Every successful claim
 advances Not Started to Started in the same durable write; later status values are preserved.
+Each successful claim, renewal, and explicit release is also appended to `claim_history`.
+For telemetry, a worker interval starts at a `claim` event; renewals replace its current
+deadline; a `release` ends it at that event's time, while an absent release ends it at the
+last claim/renew `lease_expires_at`. A later claim starts a distinct interval, so expiry,
+handoff, and repeated acquisitions remain exactly derivable without a background expiry job.
 
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 

@@ -20,7 +20,7 @@
 
 use std::collections::BTreeMap;
 
-use hotsheet_model::{Attachment, Note, Ticket};
+use hotsheet_model::{Attachment, ClaimEvent, Note, Ticket};
 
 /// How the `details` body resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +135,12 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.claim_count,
         ours_wins,
     );
+    m.claim_history = merge_claim_history(
+        &base.claim_history,
+        &ours.claim_history,
+        &theirs.claim_history,
+        ours_wins,
+    );
 
     // Tombstone / provenance scalars.
     m.moved_to_store = pick3(
@@ -225,6 +231,36 @@ fn merge_attachments(
             .then(a.id.cmp(&b.id))
     });
     attachments
+}
+
+/// Claim events are immutable append-only records. Union concurrent histories by event
+/// ULID so independent workers cannot erase one another's telemetry during a git merge.
+fn merge_claim_history(
+    base: &[ClaimEvent],
+    ours: &[ClaimEvent],
+    theirs: &[ClaimEvent],
+    ours_wins: bool,
+) -> Vec<ClaimEvent> {
+    let mut by_id: BTreeMap<hotsheet_model::Ulid, ClaimEvent> = BTreeMap::new();
+    for event in base {
+        by_id.insert(event.id, event.clone());
+    }
+    for (events, preferred) in [(theirs, !ours_wins), (ours, ours_wins)] {
+        for event in events {
+            if preferred {
+                by_id.insert(event.id, event.clone());
+            } else {
+                by_id.entry(event.id).or_insert_with(|| event.clone());
+            }
+        }
+    }
+    let mut events: Vec<_> = by_id.into_values().collect();
+    events.sort_by(|a, b| {
+        a.at.chronological_cmp(&b.at)
+            .unwrap_or_else(|| a.at.as_str().cmp(b.at.as_str()))
+            .then(a.id.cmp(&b.id))
+    });
+    events
 }
 
 /// 3-way pick for a single scalar: unchanged side wins; both-changed → last-writer-wins.
@@ -320,7 +356,7 @@ fn merge_body(base: &str, ours: &str, theirs: &str) -> BodyMerge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hotsheet_model::{Priority, Status, Ticket, Timestamp, Ulid};
+    use hotsheet_model::{ClaimEventKind, Priority, Status, Ticket, Timestamp, Ulid};
 
     fn ulid(s: &str) -> Ulid {
         Ulid::from_string(s).unwrap()
@@ -404,6 +440,42 @@ mod tests {
         let m = merge_tickets(&base, &ours, &theirs).ticket;
         assert_eq!(m.notes.len(), 2, "both appends kept");
         assert!(m.notes[0].id < m.notes[1].id, "sorted by id");
+    }
+
+    #[test]
+    fn concurrent_claim_events_union_by_id_in_time_order() {
+        let event = |id: &str, worker: &str, at: &str| ClaimEvent {
+            id: ulid(id),
+            kind: ClaimEventKind::Claim,
+            worker: worker.into(),
+            at: ts(at),
+            lease_expires_at: Some(ts("2026-08-19T03:00:00Z")),
+            worker_label: None,
+        };
+        let mut base = base_ticket();
+        base.claim_history = vec![event(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+            "base",
+            "2026-08-19T00:30:00Z",
+        )];
+        let mut ours = base.clone();
+        ours.claim_history = vec![event(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            "ours",
+            "2026-08-19T02:00:00Z",
+        )];
+        let mut theirs = base.clone();
+        theirs.claim_history = vec![event(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+            "theirs",
+            "2026-08-19T01:00:00Z",
+        )];
+
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(merged.claim_history.len(), 3);
+        assert_eq!(merged.claim_history[0].worker, "base");
+        assert_eq!(merged.claim_history[1].worker, "theirs");
+        assert_eq!(merged.claim_history[2].worker, "ours");
     }
 
     #[test]

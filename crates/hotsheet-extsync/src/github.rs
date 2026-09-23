@@ -345,6 +345,7 @@ impl GitHubProvider {
             worker_label: None,
             legacy_number: None,
             claim_count: 0,
+            claim_history: vec![],
             assignees: issue.assignees.into_iter().map(|user| user.login).collect(),
             review_requests: vec![],
             schema: 1,

@@ -8887,6 +8887,9 @@ async fn exact_ticket_claim_accepts_slug_and_rejects_a_live_second_worker() {
         "claim starts the ticket atomically"
     );
     assert_eq!(claimed["claim_count"], 1);
+    assert_eq!(claimed["claim_history"][0]["kind"], "claim");
+    assert_eq!(claimed["claim_history"][0]["worker"], "orchestrator-1");
+    assert!(claimed["claim_history"][0]["lease_expires_at"].is_string());
 
     let retry = body_json(
         app.clone()
@@ -8900,6 +8903,7 @@ async fn exact_ticket_claim_accepts_slug_and_rejects_a_live_second_worker() {
     )
     .await;
     assert_eq!(retry["claim_count"], 1, "same-holder retry is idempotent");
+    assert_eq!(retry["claim_history"][1]["kind"], "renew");
 
     let denied = app
         .oneshot(authed(

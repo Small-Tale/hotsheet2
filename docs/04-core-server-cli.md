@@ -60,7 +60,8 @@ the git+index foundation:
 - **Data-driven AI-tool plugin registry with a purity boundary** — the cleanest
   abstraction in HS1; carried wholesale. [05-ai-tool-plugins.md](05-ai-tool-plugins.md).
 - **Claim/lease ticket primitive** orthogonal to status/up_next, with a
-  conflict-guarded write chokepoint, lazy reclaim, and poison quarantine.
+  conflict-guarded write chokepoint, lazy reclaim, poison quarantine, and append-only
+  `claim_history` telemetry on full ticket responses.
 - **PTY broker as a detached process** so terminals survive a server restart.
 - **Byte-stream busy inference** (spinner detection) rather than tool-specific
   busy APIs.

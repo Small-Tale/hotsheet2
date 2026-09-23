@@ -19,7 +19,7 @@ pub use format::{ParseError, parse_file, to_file_string};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{
     Attachment, AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,
-    ExternalLink, MediaAnnotation, Note, ReviewRequest, Ticket,
+    ClaimEvent, ClaimEventKind, ExternalLink, MediaAnnotation, Note, ReviewRequest, Ticket,
 };
 pub use timestamp::Timestamp;
 

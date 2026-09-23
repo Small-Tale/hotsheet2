@@ -10,7 +10,9 @@
 //!   builds the same struct from its SQL columns, and a serverless scan builds it via
 //!   [`TicketRow::from`], so a list looks identical whichever path produced it.
 
-use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp};
+use hotsheet_model::{
+    ClaimEvent, CloseReason, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp,
+};
 use serde::Serialize;
 
 use crate::auto_context::{self, AutoContextEntry, TicketAutoContext};
@@ -65,6 +67,9 @@ pub struct ApiTicket {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub legacy_number: Option<String>,
     pub claim_count: u32,
+    /// Append-only lease lifecycle used to derive exact active intervals. A missing
+    /// release is bounded by the last claim/renew event's lease expiry.
+    pub claim_history: Vec<ClaimEvent>,
     pub assignees: Vec<String>,
     pub review_requests: Vec<ReviewRequest>,
     pub schema: u32,
@@ -150,6 +155,7 @@ impl ApiTicket {
             worker_label: t.worker_label.clone(),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
+            claim_history: t.claim_history.clone(),
             assignees: t.assignees.clone(),
             review_requests: t.review_requests.clone(),
             schema: t.schema,

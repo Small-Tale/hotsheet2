@@ -2444,17 +2444,20 @@ mod tests {
         assert_eq!(exact["worker_label"], "Codex");
         assert_eq!(exact["status"], "started");
         assert_eq!(exact["claim_count"], 1);
+        assert_eq!(exact["claim_history"][0]["kind"], "claim");
         let retry = call(
             &backend,
             "hotsheet_claim",
             json!({ "id": assigned_id.clone(), "worker": "orchestrator", "lease_minutes": 60 }),
         );
         assert_eq!(retry["claim_count"], 1);
-        call(
+        assert_eq!(retry["claim_history"][1]["kind"], "renew");
+        let released = call(
             &backend,
             "hotsheet_release",
             json!({ "id": assigned_slug, "worker": "orchestrator" }),
         );
+        assert_eq!(released["claim_history"][2]["kind"], "release");
         call(
             &backend,
             "hotsheet_update",

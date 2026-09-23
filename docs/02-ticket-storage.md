@@ -512,6 +512,9 @@ the same core code, tested once — [04-core-server-cli.md](04-core-server-cli.m
     removed). No conflict.
   - Claim fields: **newest lease wins**, and a stale lease is reclaimable anyway
     (§2.7-note below), so these never wedge a merge.
+  - Claim history: **union by event ULID**, ordered by event time then ULID. Concurrent
+    claim/renew/release records are all retained even when the current lease fields use
+    last-writer-wins.
 - **Notes:** **union by note-ULID.** Each note is uniquely identified, so appends
   from both sides are simply combined and **sorted by ULID (= chronological)**.
   A note edited on both sides resolves by the note's own newest timestamp; a note
@@ -617,8 +620,9 @@ ticket file (my read state is not your read state). Three tiers:
 `notes`, `blocked_by`, **`assignees` + assignment requests**
 ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)),
 `attachments`, and the shared timestamps (`created_at`, `updated_at`,
-`completed_at`, `verified_at`). Coordination `claim_*` fields are shared too — they
-_are_ the distributed-work signal — but expiring, so they never wedge anything.
+`completed_at`, `verified_at`). Coordination `claim_*` fields are shared too. The current
+lease fields _are_ the distributed-work signal and expire so they never wedge anything;
+`claim_history` is durable append-only telemetry.
 
 **Tier B — Local (per-user / per-machine, NOT committed, but ON DISK).** Facts that
 differ per person or per device:
@@ -659,7 +663,8 @@ maps to exactly one tier:
 | `assignees` · `review_requests` · `external`                                                                                                                     | A (shared)               | committed frontmatter                                                                                                                                  |
 | `attachments`                                                                                                                                                    | A (shared)               | committed `attachments/<ulid>/`                                                                                                                        |
 | `created_at` · `updated_at` · `completed_at` · `verified_at` · close/move fields (`closed_at` · `close_reason` · `duplicate_of` · `moved_to_store` · `moved_at`) | A (shared)               | committed frontmatter                                                                                                                                  |
-| `claimed_by` · `claim_lease_expires_at` · `worker_label` · `claim_count`                                                                                         | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges                                                                                     |
+| `claimed_by` · `claim_lease_expires_at` · `worker_label`                                                                                                         | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges                                                                                     |
+| `claim_count` · `claim_history`                                                                                                                                  | A (shared, durable)      | committed frontmatter — append-only lifecycle telemetry survives release, expiry, handoff, and repeated claims                                         |
 | **read state** (`last_read_at` / unread)                                                                                                                         | **B (local)**            | `local/reads.json` (gitignored), keyed by ULID                                                                                                         |
 | **feedback drafts** (notes of kind `feedback_draft`)                                                                                                             | **B (local)**            | dropped from the committed file today; overlay persistence is HS2-AWTHJE                                                                               |
 | **UI / view state** (last view, scroll, drawer)                                                                                                                  | **B (local)**            | overlay `local/…` — HS2-AWTHJE                                                                                                                         |
