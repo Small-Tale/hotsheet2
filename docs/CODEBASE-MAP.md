@@ -35,13 +35,18 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/project-startup.ts   #   Concurrent remembered-project preparation, bounded parallel retry, ordered registration, and single activation
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
-    src/main.tsx             #   Bootstrap, project/cache/ticket orchestration, root AppShell render, and ordered interaction wiring
+    src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
+    src/app/runtime.tsx      #   Application runtime composition: project/cache/ticket orchestration and feature-controller integration
+    src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, icons, and dialog composition
       repository.tsx          # Status/detail paging, stale-response guards, observer, review, and evidence projection
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
       gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
+      saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
+      project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
+      ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, and pending focus
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render

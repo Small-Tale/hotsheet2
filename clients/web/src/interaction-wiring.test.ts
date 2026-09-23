@@ -21,6 +21,9 @@ const groups = [
 ];
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8');
 const main = read('./main.tsx');
+const runtime = read('./app/runtime.tsx');
+const interactionBindings = read('./app/interaction-bindings.ts');
+const applicationWiring = read('./app/wire-interactions.ts');
 const registrations = new Set([
   'delegate',
   'delegateCapture',
@@ -32,14 +35,27 @@ const registrations = new Set([
 
 describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   it('invokes each side-effect-free group once in the original registration order', () => {
-    const tree = ts.createSourceFile('main.tsx', main, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const calls = tree.statements
-      .filter(ts.isExpressionStatement)
-      .map((statement) => statement.expression)
-      .filter(ts.isCallExpression)
-      .map((call) => call.expression.getText(tree))
-      .filter((name) => /^wire.*Interactions$/.test(name));
-    expect(calls).toEqual(groups.map(([, group]) => group));
+    const orderedRegistrations = [
+      'projectLifecycle',
+      'repository',
+      'navigationAndTabs',
+      'terminals',
+      'ticketSelection',
+      'viewsAndSavedViews',
+      'commandsAndAi',
+      'notificationsAndLinks',
+      'searchAndComposer',
+      'attachmentsAndGallery',
+      'inspectorAndEditor',
+      'shellAndGlobal',
+    ];
+    expect([...applicationWiring.matchAll(/registrations\.(\w+)\(\);/g)].map((match) => match[1])).toEqual(
+      orderedRegistrations,
+    );
+    expect(runtime.match(/wireHotSheetInteractions\(/g)).toHaveLength(1);
+    expect(runtime).not.toMatch(/const register\w+Interactions/);
+    expect(interactionBindings.match(/wire\w+Interactions\(dependencies\);/g)).toHaveLength(groups.length);
+    for (const [, group] of groups) expect(interactionBindings).toContain(`${group}(dependencies);`);
     for (const [file, group] of groups) {
       const source = read(`./interactions/${file}.ts`);
       const module = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
@@ -92,6 +108,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
         .every((line) => line.split('\t')[2] === 'document.body'),
     ).toBe(true);
     expect(main).not.toMatch(/delegate(?:Capture)?\(document\.body/);
+    expect(runtime).not.toMatch(/delegate(?:Capture)?\(document\.body/);
   });
 
   it('retains shared Kerf tab and token-search adapters in their owning modules', () => {
@@ -102,5 +119,22 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     expect(navigation).toContainSource('if(barId===PROJECT_TAB_BAR_ID)');
     expect(navigation).toContainSource('if(barId!==TERMINAL_DRAWER_TAB_BAR_ID)return;');
     expect(navigation).not.toContain('DRAWER_APP_TAB_SELECTOR');
+  });
+
+  it('keeps main.tsx as a bounded side-effect bootstrap', () => {
+    expect(main.split('\n')).toHaveLength(12);
+    expect(main).toContain('await startHotSheetWebClient();');
+    expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
+    expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);
+  });
+
+  it('preserves mutable interaction accessors when registrations share one live port', () => {
+    const port = runtime.slice(
+      runtime.indexOf('const interactionBindingsPort:'),
+      runtime.indexOf('wireHotSheetInteractions(createHotSheetInteractionBindings'),
+    );
+    const getters = [...port.matchAll(/\bget (\w+)\(\)/g)].map((match) => match[1]);
+    expect(getters.length).toBeGreaterThan(20);
+    for (const name of getters) expect(port).toContain(`set ${name}(value)`);
   });
 });

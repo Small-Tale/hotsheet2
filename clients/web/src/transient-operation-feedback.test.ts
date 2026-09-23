@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('transient operation feedback', () => {
   it('uses toasts for completed actions instead of persistent surface messages', () => {
     const source = [
-      './main.tsx',
+      './app/runtime.tsx',
       './interactions/repository.ts',
       './interactions/attachments-and-gallery.ts',
       './interactions/inspector-and-editor.ts',

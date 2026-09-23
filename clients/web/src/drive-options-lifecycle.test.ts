@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('Drive options lifecycle (HS2-S010QF)', () => {
-  const source = ['./main.tsx', './interactions/commands-and-ai.ts', './interactions/shell-and-global.ts']
+  const source = ['./app/runtime.tsx', './interactions/commands-and-ai.ts', './interactions/shell-and-global.ts']
     .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
     .join('\n');
 

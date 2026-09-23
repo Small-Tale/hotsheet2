@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('project dialog lifecycle', () => {
   it('synchronizes native Web Awesome dismissal back to the Kerf open signal', () => {
-    const source = ['./main.tsx', './interactions/project-lifecycle.ts']
+    const source = ['./app/runtime.tsx', './features/project-lifecycle.ts', './interactions/project-lifecycle.ts']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');
 
@@ -15,7 +15,7 @@ describe('project dialog lifecycle', () => {
   });
 
   it('clears setup state on the actual dialog hide event so later renders cannot reopen it', () => {
-    const source = ['./main.tsx', './interactions/project-lifecycle.ts']
+    const source = ['./app/runtime.tsx', './features/project-lifecycle.ts', './interactions/project-lifecycle.ts']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');
 
@@ -24,7 +24,7 @@ describe('project dialog lifecycle', () => {
   });
 
   it('routes the project-tab plus through the native chooser on same-device clients and the open-projects list on remote clients (HS2-VFNCXG)', () => {
-    const source = ['./main.tsx', './interactions/project-lifecycle.ts']
+    const source = ['./app/runtime.tsx', './features/project-lifecycle.ts', './interactions/project-lifecycle.ts']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');
 

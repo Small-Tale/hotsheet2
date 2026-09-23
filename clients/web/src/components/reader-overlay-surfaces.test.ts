@@ -80,7 +80,7 @@ describe('reader and overlay composition surfaces', () => {
   });
 
   it('keeps legacy inline render surfaces out of the application root', () => {
-    const source = readFileSync(new URL('../main.tsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../app/runtime.tsx', import.meta.url), 'utf8');
     expect(source).not.toMatch(
       /function (Reader|ReaderLayers|VisiblePermissionPopup|AIConversationSurface|RepositoryStatusSurface|ChangeEvidenceSurface|TicketContextMenu|AttachmentMenuSurface|Gallery|CommandDialog|ConnectionDetailsSurface|CompatibilityBanner|AppTabMenuSurface|NotWorkingSurface)\(/,
     );

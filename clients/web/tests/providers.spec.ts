@@ -2200,7 +2200,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
-  const dedicatedViewport = drawer.locator('[data-display-mode="interactive"]');
+  const dedicatedViewport = drawer.locator('.terminal-session:not([hidden]) [data-display-mode="interactive"]');
   await expect(dedicatedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   await expect(drawer.locator('.xterm-helper-textarea')).toBeFocused();
   await expect

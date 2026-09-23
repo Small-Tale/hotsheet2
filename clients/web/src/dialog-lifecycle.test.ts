@@ -4,12 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 describe('dialog lifecycle event contracts', () => {
   const source = [
-    './main.tsx',
+    './app/runtime.tsx',
     './interactions/terminals.ts',
     './interactions/ticket-selection.ts',
     './interactions/commands-and-ai.ts',
     './interactions/inspector-and-editor.ts',
     './interactions/search-and-composer.ts',
+    './features/saved-views.ts',
   ]
     .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
     .join('\n');

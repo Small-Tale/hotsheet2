@@ -171,8 +171,10 @@ rest of `target`.
 
 ### 12.6.3 Web interaction ownership
 
-The web client keeps bootstrap, project activation and cache publication, ticket mutation,
-search/composer orchestration, and root rendering in `clients/web/src/main.tsx`.
+The web client keeps `clients/web/src/main.tsx` as a bounded browser entry that imports
+global styles and explicitly starts the application runtime. Runtime composition lives
+under `clients/web/src/app/`; `wire-interactions.ts` owns the behavior-sensitive ordering
+of the twelve registration groups, while feature modules own their state and workflows.
 Twelve modules under `src/interactions/` own the existing
 project lifecycle, repository, navigation/tabs, terminals, ticket selection, saved
 views, commands/AI, notifications/links, search/composer, attachments/gallery,
@@ -207,7 +209,7 @@ onboarding, failure identities, and empty/refilled sessions.
 
 ### 12.6.4 Web feature state and presentation owners
 
-Eight factories under `clients/web/src/features/` own cohesive state/controllers and
+Eleven factories under `clients/web/src/features/` own cohesive state/controllers and
 render projections extracted from the root (HS2-DHYGXJ):
 
 - `commands.tsx`: project command drafts, selection anchors, autosave, icon search,
@@ -219,6 +221,11 @@ render projections extracted from the root (HS2-DHYGXJ):
 - `gallery.tsx`: media selection, gestures, playback, measurement, annotation sessions,
   and gallery/menu composition.
 - `conversation-archive.tsx`: message-range selection, copy, export, and saved-chat opening.
+- `saved-views.ts`: shared-view dialog/query state, validation, persistence, rename, and deletion.
+- `project-lifecycle.ts`: project restoration/opening, migration and ticket-source setup,
+  provider authentication, stale-response guards, and lifecycle-owned dialog state.
+- `ticket-workflows.ts`: ticket mutations, autosave, selection, bulk and clipboard operations,
+  linked readers, attachments, creation, close, and Not Working workflows.
 - `ai-configuration.tsx`: project AI configuration, tool/model/effort selection,
   provider changes, and manual-model lifecycle.
 - `terminal-viewports.ts`: DOM mount identity, intersection observation, progressive
@@ -226,7 +233,7 @@ render projections extracted from the root (HS2-DHYGXJ):
 - `terminal-presentation.tsx`: live workspace, drawer, and conversation surface props.
 
 Factories have explicit typed ports and no import-time listeners, observers, polling,
-or imports of `main.tsx`. Main creates each owner before mount or startup can use it,
+or imports of `main.tsx`. The runtime creates each owner before mount or startup can use it,
 passes signals rather than value snapshots, and retains cross-feature actions as
 callbacks. Mutable plain state crosses ports through getters/setters; each timer,
 generation, observer, or gesture binding has one owner. Presentation functions run
