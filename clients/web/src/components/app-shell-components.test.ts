@@ -30,6 +30,9 @@ describe('application shell components', () => {
     expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
     expect(css).not.toContain('data-transitioning');
     expect(css).toContainSource('.app-shell__terminal-drawer-restore.kui-floating-toolbar { position: static; }');
+    expect(css).toContainSource(
+      ".app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] { position: absolute; }",
+    );
     expect(css).toMatchSource(
       /\.app-shell \{ --kui-safe-area-inline-end: var\(--hotsheet-safe-area-right\); --kui-safe-area-block-end: var\(--hotsheet-safe-area-bottom\);/,
     );

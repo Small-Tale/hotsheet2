@@ -8,9 +8,9 @@
       "id": "app-shell",
       "name": "AppShell",
       "kind": "composition",
-      "purpose": "Responsive application regions with a stationary clipped shell and independent child scrolling.",
+      "purpose": "Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.",
       "useWhen": [
-        "Hot Sheet needs responsive application regions with a stationary clipped shell and independent child scrolling."
+        "Hot Sheet needs responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific AppShell behavior."

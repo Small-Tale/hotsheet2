@@ -68,6 +68,7 @@ export const shellStatsProjectName = signal<string | undefined>(undefined);
 export const shellSidebarSize = signal(272);
 export const shellSidebarVisible = signal(true);
 export const shellInspectorSize = signal(352);
+export const shellTerminalDrawerVisible = signal(false);
 export const resizeDemoWidth = signal(260);
 export const resizeDemoHeight = signal(180);
 export const resizeDemoCollapsed = signal(false);
@@ -383,6 +384,15 @@ export function AppShellDemo() {
         }
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}
+        terminalDrawer={
+          <section class="shell-mode-surface" aria-label="Example terminal drawer">
+            <h2>Terminal drawer</h2>
+            <button type="button" data-action="toggle-app-shell-demo-terminal-drawer">
+              Hide terminal drawer
+            </button>
+          </section>
+        }
+        terminalDrawerVisible={shellTerminalDrawerVisible.value}
         inspectorSize={shellInspectorSize.value}
         inspector={
           projectSettings ? (

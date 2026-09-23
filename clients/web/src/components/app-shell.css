@@ -39,6 +39,9 @@
 .app-shell__terminal-drawer-restore.kui-floating-toolbar {
   position: static;
 }
+.app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] {
+  position: absolute;
+}
 .app-shell__main > .project-tab-bar {
   border-bottom: 0;
   background: var(--wa-color-surface-default);

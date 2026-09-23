@@ -2296,6 +2296,17 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await expect(restore).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(restore.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'default');
   await expectDarkChildren(restore, 'drawer-restore');
+  const mainColumn = page.locator('.app-shell__main');
+  await expect
+    .poll(async () => {
+      const [mainBox, restoreBox] = await Promise.all([mainColumn.boundingBox(), restore.boundingBox()]);
+      if (!mainBox || !restoreBox) return undefined;
+      return {
+        rightInset: Math.round(mainBox.x + mainBox.width - restoreBox.x - restoreBox.width),
+        bottomInset: Math.round(mainBox.y + mainBox.height - restoreBox.y - restoreBox.height),
+      };
+    })
+    .toEqual({ rightInset: 16, bottomInset: 16 });
   await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(restore).toBeVisible();

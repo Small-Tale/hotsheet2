@@ -1799,7 +1799,9 @@ Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximizat
 preserving the last manual height. Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
 left, then the grid). The rail deliberately omits global visibility/group controls and collapses
-to one bottom-end Kerf floating toolbar containing the restore action. The same Kerf floating-toolbar
+to one bottom-end Kerf floating toolbar containing the restore action. Its Kerf restore wrapper is
+positioned against the center main column rather than the whole viewport, so an open inspector does
+not displace the action into inspector content (HS2-3ZGWMN). The same Kerf floating-toolbar
 composition owns the bottom-end zoom pair in both the global workspace grid and the drawer's Project
 grid, while the application continues to own visibility, actions, and safe-area-adjusted positioning
 (HS2-W3GPHW). Dedicated sessions use xterm's WebGL renderer by default on

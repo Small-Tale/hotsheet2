@@ -35,7 +35,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'app-shell',
         'AppShell',
-        'Responsive application regions with a stationary clipped shell and independent child scrolling.',
+        'Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.',
         'feature-floor',
         true,
         [

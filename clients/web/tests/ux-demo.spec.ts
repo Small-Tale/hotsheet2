@@ -3843,6 +3843,29 @@ test('holds the AppShell at its 1024 by 600 supported floor', async ({ page }) =
   await page.screenshot({ path: '/private/tmp/hs2-501eph-shell-floor.png', fullPage: true });
 });
 
+test('keeps the AppShell terminal restore action inside the main column (HS2-3ZGWMN)', async ({ page }) => {
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await page.goto('/ux-demo?component=app-shell');
+  const shell = page.locator('[data-component="app-shell"]'),
+    main = shell.locator('.app-shell__main'),
+    restore = shell.getByRole('toolbar', { name: 'Terminal drawer controls' });
+  await expect(restore).toBeVisible();
+  await expect
+    .poll(async () => {
+      const [mainBox, restoreBox] = await Promise.all([main.boundingBox(), restore.boundingBox()]);
+      if (!mainBox || !restoreBox) return undefined;
+      return {
+        rightInset: Math.round(mainBox.x + mainBox.width - restoreBox.x - restoreBox.width),
+        bottomInset: Math.round(mainBox.y + mainBox.height - restoreBox.y - restoreBox.height),
+      };
+    })
+    .toEqual({ rightInset: 16, bottomInset: 16 });
+  await restore.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await expect(shell.getByRole('region', { name: 'Example terminal drawer' })).toBeVisible();
+  await shell.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await expect(restore).toBeVisible();
+});
+
 test('keeps workspace spacing and the new-ticket action in the page header', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=app-shell');

@@ -85,6 +85,7 @@ import {
   shellMode,
   shellSidebarVisible,
   shellStatsProjectName,
+  shellTerminalDrawerVisible,
 } from './app-shell-demo';
 import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
@@ -1474,6 +1475,15 @@ delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => {
   shellSidebarVisible.value = !shellSidebarVisible.value;
   shellEvent.value = shellSidebarVisible.value ? 'Project sidebar shown.' : 'Project sidebar hidden.';
 });
+delegate(
+  root,
+  'click',
+  '[data-action="toggle-terminal-drawer"], [data-action="toggle-app-shell-demo-terminal-drawer"]',
+  () => {
+    shellTerminalDrawerVisible.value = !shellTerminalDrawerVisible.value;
+    shellEvent.value = shellTerminalDrawerVisible.value ? 'Terminal drawer shown.' : 'Terminal drawer hidden.';
+  },
+);
 delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   shellStatsProjectName.value = undefined;
   shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;

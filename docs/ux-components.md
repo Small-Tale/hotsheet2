@@ -164,6 +164,9 @@ sidebar content offscreen while the main region resizes, avoiding compressed con
 and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
+The collapsed terminal drawer's floating restore action is likewise positioned by the
+main column rather than the viewport, keeping it aligned with the workspace when the
+inspector is open (HS2-3ZGWMN).
 All project-sidebar content follows two explicit rails: full-row highlight layers are
 inset 8px from each sidebar edge, while visible text and icon slots use an 8px content
 inset inside that layer. Transparent idle rows retain the same highlight geometry.
