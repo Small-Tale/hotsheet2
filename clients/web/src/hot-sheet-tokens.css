@@ -27,6 +27,7 @@
   --hs-priority-high: #ff8d28;
   --hs-priority-default: #8e8e93;
   --hs-terminal-background: #000;
+  --hs-terminal-foreground: #fff;
   --hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s));
   --hs-reader-font-size-m: calc(1.5 * var(--wa-font-size-m));
   --hs-reader-font-size-l: calc(1.5 * var(--wa-font-size-l));

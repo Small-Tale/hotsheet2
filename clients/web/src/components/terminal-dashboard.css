@@ -261,9 +261,26 @@
 .terminal-viewport[data-connection='reconnecting'] {
   display: block;
 }
+.terminal-viewport[data-connection='error'] {
+  display: grid;
+  place-items: center;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+.terminal-viewport__error {
+  padding: var(--wa-space-s);
+  margin: 0;
+  min-width: 0;
+  color: var(--hs-terminal-foreground);
+  font-size: var(--wa-font-size-xs);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
 .terminal-tile__preview:has(
     .terminal-viewport[data-connection='connected'],
-    .terminal-viewport[data-connection='reconnecting']
+    .terminal-viewport[data-connection='reconnecting'],
+    .terminal-viewport[data-connection='error']
   )
   > pre {
   visibility: hidden;

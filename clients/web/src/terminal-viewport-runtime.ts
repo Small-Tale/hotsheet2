@@ -31,10 +31,36 @@ import {
   terminalViewportScale,
 } from './terminal-viewport';
 
+type OwnTerminalResource = (dispose: () => void) => void;
+
+function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () => void {
+  const cleanups: Array<() => void> = [];
+  const dispose = () => {
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+  };
+  try {
+    initialize((cleanup) => cleanups.push(cleanup));
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+  return dispose;
+}
+
 export function mountStaticTerminalViewportRuntime(
   element: HTMLElement,
-  { output, autoFocus = false }: { output: string; autoFocus?: boolean },
+  options: { output: string; autoFocus?: boolean },
 ): () => void {
+  return mountWithCleanup((own) => {
+    initializeStaticTerminalViewport(element, options, own);
+  });
+}
+
+function initializeStaticTerminalViewport(
+  element: HTMLElement,
+  { output, autoFocus = false }: { output: string; autoFocus?: boolean },
+  own: OwnTerminalResource,
+): void {
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
   if (scaledPreview) {
@@ -54,6 +80,9 @@ export function mountStaticTerminalViewportRuntime(
     fontSize: TERMINAL_DASHBOARD_FONT_SIZE,
     theme: { background },
   });
+  own(() => {
+    terminal.dispose();
+  });
   terminal.open(element);
   element.dataset.renderer = 'dom';
   element.dataset.connection = 'connected';
@@ -70,6 +99,10 @@ export function mountStaticTerminalViewportRuntime(
   let frame: number | undefined,
     disposed = false,
     initialFocusPending = autoFocus;
+  own(() => {
+    disposed = true;
+    if (frame !== undefined) window.cancelAnimationFrame(frame);
+  });
   const fill = () => {
     frame = undefined;
     if (disposed || !terminal.element) return;
@@ -95,34 +128,46 @@ export function mountStaticTerminalViewportRuntime(
   const schedule = () => {
     if (frame === undefined) frame = window.requestAnimationFrame(fill);
   };
-  const render = terminal.onRender(schedule),
-    resize = new ResizeObserver(schedule);
+  const render = terminal.onRender(schedule);
+  own(() => {
+    render.dispose();
+  });
+  const resize = new ResizeObserver(schedule);
+  own(() => {
+    resize.disconnect();
+  });
   resize.observe(element.parentElement ?? element);
   terminal.write(output, schedule);
   schedule();
   const focus = () => {
     terminal.focus();
   };
-  if (!scaledPreview) element.addEventListener('click', focus);
-  return () => {
-    disposed = true;
-    if (frame !== undefined) window.cancelAnimationFrame(frame);
-    resize.disconnect();
-    render.dispose();
-    if (!scaledPreview) element.removeEventListener('click', focus);
-    terminal.dispose();
-  };
+  if (!scaledPreview) {
+    element.addEventListener('click', focus);
+    own(() => {
+      element.removeEventListener('click', focus);
+    });
+  }
 }
 
-export function mountTerminalViewportRuntime(
+type TerminalRuntimeOptions = {
+  url: string;
+  viewerId: string;
+  autoFocus?: boolean;
+  onTicketReference?: (reference: string) => void;
+};
+
+export function mountTerminalViewportRuntime(element: HTMLElement, options: TerminalRuntimeOptions): () => void {
+  return mountWithCleanup((own) => {
+    initializeTerminalViewport(element, options, own);
+  });
+}
+
+function initializeTerminalViewport(
   element: HTMLElement,
-  {
-    url,
-    viewerId,
-    autoFocus = false,
-    onTicketReference,
-  }: { url: string; viewerId: string; autoFocus?: boolean; onTicketReference?: (reference: string) => void },
-): () => void {
+  { url, viewerId, autoFocus = false, onTicketReference }: TerminalRuntimeOptions,
+  own: OwnTerminalResource,
+): void {
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     settledResize = element.classList.contains('terminal-viewport--dedicated'),
@@ -154,10 +199,17 @@ export function mountTerminalViewportRuntime(
       theme: { background },
     }),
     fit = new FitAddon();
+  own(() => {
+    terminal.dispose();
+  });
   terminal.loadAddon(fit);
   terminal.open(element);
   const ticketLinks =
     !scaledPreview && onTicketReference ? registerTerminalTicketLinkProvider(terminal, onTicketReference) : undefined;
+  if (ticketLinks)
+    own(() => {
+      ticketLinks.dispose();
+    });
   let webgl: WebglAddon | undefined;
   const mobile80xM = () =>
     terminalUsesMobile80xM(
@@ -196,6 +248,15 @@ export function mountTerminalViewportRuntime(
     focusRequested = autoFocus,
     initialReplay = true,
     serverSize: { cols: number; rows: number } | undefined;
+  own(() => {
+    disposed = true;
+    if (reconnect !== undefined) window.clearTimeout(reconnect);
+    if (heartbeat !== undefined) window.clearInterval(heartbeat);
+    if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+    if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
+    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
+    socket?.close();
+  });
   const focused = () =>
     terminalViewportClaimsSizingFocus(
       scaledPreview,
@@ -363,6 +424,9 @@ export function mountTerminalViewportRuntime(
     });
   };
   const render = terminal.onRender(scheduleDashboardFill);
+  own(() => {
+    render.dispose();
+  });
   const applySettledGeometry = () => {
     if (disposed) return;
     try {
@@ -413,6 +477,9 @@ export function mountTerminalViewportRuntime(
     applySettledGeometry();
   };
   window.addEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
+  own(() => {
+    window.removeEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
+  });
   const connect = () => {
     if (disposed) return;
     initialReplay = true;
@@ -479,6 +546,9 @@ export function mountTerminalViewportRuntime(
     });
   };
   const resize = new ResizeObserver(fitAndClaim);
+  own(() => {
+    resize.disconnect();
+  });
   resize.observe(scaledPreview ? (element.parentElement ?? element) : element);
   fitAndClaim();
   const visibilityTarget = scaledPreview ? (element.parentElement ?? element) : element,
@@ -489,6 +559,9 @@ export function mountTerminalViewportRuntime(
         claim();
       }
     });
+  own(() => {
+    intersection.disconnect();
+  });
   intersection.observe(visibilityTarget);
   const focus = () => {
       if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
@@ -505,12 +578,22 @@ export function mountTerminalViewportRuntime(
     element.addEventListener('focusout', focus);
     element.addEventListener('pointerdown', signalInteraction);
     element.addEventListener('focusin', signalInteraction);
+    own(() => {
+      element.removeEventListener('click', focusTerminal);
+      element.removeEventListener('focusin', focus);
+      element.removeEventListener('focusout', focus);
+      element.removeEventListener('pointerdown', signalInteraction);
+      element.removeEventListener('focusin', signalInteraction);
+    });
   }
   const input = terminal.onData((value) => {
     if (!scaledPreview && socket?.readyState === WebSocket.OPEN) {
       socket.send(value);
       signalInteractionThrottled();
     }
+  });
+  own(() => {
+    input.dispose();
   });
   connect();
   if (autoFocus) {
@@ -538,27 +621,4 @@ export function mountTerminalViewportRuntime(
       window.setTimeout(focusIfCurrent, TERMINAL_RESIZE_SETTLE_MS);
     });
   }
-  return () => {
-    disposed = true;
-    if (reconnect !== undefined) window.clearTimeout(reconnect);
-    if (heartbeat !== undefined) window.clearInterval(heartbeat);
-    if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
-    if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
-    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
-    window.removeEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
-    resize.disconnect();
-    intersection.disconnect();
-    render.dispose();
-    input.dispose();
-    ticketLinks?.dispose();
-    if (!scaledPreview) {
-      element.removeEventListener('click', focusTerminal);
-      element.removeEventListener('focusin', focus);
-      element.removeEventListener('focusout', focus);
-      element.removeEventListener('pointerdown', signalInteraction);
-      element.removeEventListener('focusin', signalInteraction);
-    }
-    socket?.close();
-    terminal.dispose();
-  };
 }

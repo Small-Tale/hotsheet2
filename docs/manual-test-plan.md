@@ -33,8 +33,15 @@ When automation lands, remove the manual-only step and record it below.
    fills the screen (no 5:3 letterbox), shows a full 80 columns scaled to the phone width, and
    uses M rows to fill the height (many more than 24), and that a full-width TUI (e.g. `nano`,
    `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
-6. HS2-3ZBQDG — on current Mobile Safari, open a dedicated drawer terminal and confirm live
-   glyphs remain visible after attach, focus, typing, background/resume, and device rotation.
+6. HS2-3ZBQDG — on current **physical-device Mobile Safari**, use the server's ordinary
+   LAN HTTP address (not localhost or an HTTPS tunnel), then repeat on HTTPS. Confirm visible
+   scrollback glyphs in the Workspace grid, magnified terminal, and dedicated drawer. Type a
+   unique line and confirm its visible glyphs after attach, focus, background/resume, device
+   rotation, and reconnect. A renderer label or nonzero viewport size is insufficient: inspect
+   painted text. LAN HTTP must work with `crypto.randomUUID` absent and `getRandomValues`
+   present. If initialization is deliberately blocked, verify a readable terminal-local alert
+   replaces the black surface. Automated actual-WebKit insecure-origin/PTY pixel coverage
+   complements this physical device check; it does not emulate iOS background suspension.
 7. HS2-S708S3 — in that dedicated drawer terminal, confirm the PTY stays 80 columns, chooses
    M rows to fill the available drawer height, width-fits without clipping, and recomputes M
    after rotation or drawer-height changes. Confirm read-only grid previews remain 80×24.

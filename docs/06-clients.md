@@ -1803,8 +1803,7 @@ composition owns the bottom-end zoom pair in both the global workspace grid and 
 grid, while the application continues to own visibility, actions, and safe-area-adjusted positioning
 (HS2-W3GPHW). Dedicated sessions use xterm's WebGL renderer by default on
 non-Apple engines, fall back when WebGL is unavailable, and deliberately use xterm's DOM
-renderer on Apple WebKit because recent Safari/iOS releases can create a WebGL context while
-painting a blank glyph layer. They refit only after a drawer resize gesture settles. While
+renderer on Apple WebKit as a conservative compatibility policy. They refit only after a drawer resize gesture settles. While
 the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
 intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
 during a slow drag.
@@ -1893,14 +1892,31 @@ pointer hit-testing, selection, and a flush frame edge aligned with the visible 
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
-fallback after load failure or context loss). Apple WebKit, including every iOS browser, uses
-the DOM renderer because WebGL context creation is not sufficient proof that Safari will paint
-the glyph layer. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
+fallback after load failure or context loss). Apple WebKit uses the DOM renderer as a
+conservative compatibility policy; renderer selection alone is not proof of painted glyphs. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
 DOM renderer. Read-only previews are uniformly CSS-scaled, while interactive magnified
 surfaces fit font metrics before a small uniform residual scale; scaling a WebGL raster makes
 the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
 scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
+
+Terminal viewers must initialize on ordinary LAN HTTP origins as well as HTTPS/localhost.
+Viewer identities use native `crypto.randomUUID()` when exposed, otherwise a UUID built with
+`crypto.getRandomValues()`; only environments without Crypto use a time/random/counter identity.
+Each mounted viewer has a distinct identity, retained through reconnect. `randomUUID()` is
+[secure-context-only](https://www.w3.org/TR/WebCryptoAPI/#crypto-interface), while
+`getRandomValues()` remains available on LAN HTTP. Calling the former unconditionally reproduced
+black surfaces on ordinary LAN HTTP before xterm, renderer selection, or the socket
+started (HS2-3ZBQDG). This reproduces the reported appearance in actual WebKit; confirmation
+on the maintainer’s exact physical-device origin remains a manual check. The previous renderer policy did not address that startup failure.
+Lazy-module or runtime initialization failure now renders a readable terminal-local alert
+instead of leaving an empty black surface. Disposed pending mounts never initialize. Partial
+setup failures dispose allocated xterm, observers, listeners and scheduled work; a fresh mount
+removes its owned error alert and restores the read-only preview accessibility state.
+Real WebKit coverage uses a non-loopback HTTP origin, real PTY replay/live bytes, and painted
+light glyph pixels against the dark row background across preview, magnified, dedicated,
+resize, and reconnect paths. Actual device rotation/background checks remain in the manual
+plan. Other browser-generated IDs adopting the same helper are tracked by HS2-76ZR5P.
 
 A visible mounted fixed 80×24 surface is an active sizing claimant even though its grid preview is
 read-only and never accepts keyboard input. This ensures entering the dashboard actually

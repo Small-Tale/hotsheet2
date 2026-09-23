@@ -1,3 +1,5 @@
+import { browserRandomId } from './browser-id';
+
 export interface TerminalSizeMessage {
   pty_size: { cols: number; rows: number };
   driven_by?: string | null;
@@ -43,9 +45,9 @@ export const TERMINAL_PREVIEW_SCROLLBACK = 0;
 export const TERMINAL_MAGNIFIED_SCROLLBACK = 1_000;
 export const TERMINAL_DEDICATED_SCROLLBACK = 5_000;
 
-/** Apple WebKit's WebGL renderer has regressed to blank glyph layers in recent Safari
- * releases, including iOS. All iOS browsers use WebKit, so keep dedicated terminals on
- * xterm's DOM renderer there; desktop Chromium/Firefox can still use WebGL. */
+/** Keep the conservative DOM renderer policy on Apple WebKit; desktop
+ * Chromium/Firefox can still use WebGL. Renderer selection alone does not prove
+ * that initialization succeeded or that any terminal glyphs painted. */
 export function terminalShouldUseWebgl(userAgent: string): boolean {
   const appleWebKit = /AppleWebKit/i.test(userAgent),
     nonAppleWebKitDesktop = /(?:Chrome|Chromium|Edg|OPR)\//i.test(userAgent);
@@ -157,16 +159,47 @@ export interface TerminalViewportOptions {
 
 export function mountTerminalViewport(
   element: HTMLElement,
-  { url, viewerId = crypto.randomUUID(), autoFocus = false, onTicketReference }: TerminalViewportOptions,
+  { url, viewerId, autoFocus = false, onTicketReference }: TerminalViewportOptions,
 ): () => void {
+  return mountTerminalRuntime(element, async () => {
+    const { mountTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
+    return () =>
+      mountTerminalViewportRuntime(element, {
+        url,
+        viewerId: viewerId ?? browserRandomId(),
+        autoFocus,
+        onTicketReference,
+      });
+  });
+}
+
+function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => () => void>): () => void {
   let disposed = false,
     disposeRuntime: (() => void) | undefined;
+  if (element.dataset.connection === 'error') {
+    element.querySelector('.terminal-viewport__error')?.remove();
+    if (element.dataset.displayMode === 'scaled-preview') element.setAttribute('aria-hidden', 'true');
+  }
   element.dataset.connection = 'loading';
-  void import('./terminal-viewport-runtime').then(({ mountTerminalViewportRuntime }) => {
-    if (disposed) return;
-    disposeRuntime = mountTerminalViewportRuntime(element, { url, viewerId, autoFocus, onTicketReference });
-  });
+  void load()
+    .then((mount) => {
+      if (!disposed) disposeRuntime = mount();
+    })
+    .catch(() => {
+      if (disposed) return;
+      element.dataset.connection = 'error';
+      element.removeAttribute('aria-hidden');
+      element.style.width = '';
+      element.style.height = '';
+      element.style.transform = '';
+      const message = element.ownerDocument.createElement('p');
+      message.className = 'terminal-viewport__error';
+      message.setAttribute('role', 'alert');
+      message.textContent = 'Terminal could not start. Reload the page to try again.';
+      element.replaceChildren(message);
+    });
   return () => {
+    if (disposed) return;
     disposed = true;
     disposeRuntime?.();
   };
@@ -176,15 +209,8 @@ export function mountStaticTerminalViewport(
   element: HTMLElement,
   { output, autoFocus = false }: { output: string; autoFocus?: boolean },
 ): () => void {
-  let disposed = false,
-    disposeRuntime: (() => void) | undefined;
-  element.dataset.connection = 'loading';
-  void import('./terminal-viewport-runtime').then(({ mountStaticTerminalViewportRuntime }) => {
-    if (disposed) return;
-    disposeRuntime = mountStaticTerminalViewportRuntime(element, { output, autoFocus });
+  return mountTerminalRuntime(element, async () => {
+    const { mountStaticTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
+    return () => mountStaticTerminalViewportRuntime(element, { output, autoFocus });
   });
-  return () => {
-    disposed = true;
-    disposeRuntime?.();
-  };
 }

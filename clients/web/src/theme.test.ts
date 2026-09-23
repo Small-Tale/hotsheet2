@@ -85,6 +85,7 @@ describe('shared client theme', () => {
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map((match) => match[1]);
     const required = [
       '--hs-terminal-background',
+      '--hs-terminal-foreground',
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
       '--hs-ticket-state-up-next-on',
@@ -99,6 +100,13 @@ describe('shared client theme', () => {
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
     expect(new Set(references)).toEqual(new Set(cssReferences));
+  });
+
+  it('keeps terminal initialization errors readable on the fixed dark terminal surface', () => {
+    expect(css(tokenPath)).toContain('--hs-terminal-background: #000;');
+    expect(css(tokenPath)).toContain('--hs-terminal-foreground: #fff;');
+    const dashboard = css(resolve(sourceRoot, 'components/terminal-dashboard.css'));
+    expect(dashboard).toMatch(/\.terminal-viewport__error\s*\{[^}]*color: var\(--hs-terminal-foreground\)/);
   });
 
   it('keeps every client-owned stylesheet on the shared semantic color palette', () => {

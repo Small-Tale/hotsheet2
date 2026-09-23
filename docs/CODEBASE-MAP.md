@@ -67,9 +67,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
-    src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
+    src/browser-id.ts       #   Secure/ordinary-LAN browser identities using UUID/getRandomValues, legacy no-Crypto fallback
+    src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
-    src/terminal-viewport-runtime.ts # Lazy live/static xterm rendering, input, leased claims, server-size scaling, and reconnect lifecycle
+    src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
+    src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup and successful refill with idempotent teardown
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
@@ -120,6 +122,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
+    tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
     tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app

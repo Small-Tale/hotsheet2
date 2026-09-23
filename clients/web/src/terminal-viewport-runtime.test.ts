@@ -1,0 +1,156 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from './terminal-viewport-runtime';
+
+const allocated = vi.hoisted(() => ({
+  terminals: [] as Array<{
+    dispose: ReturnType<typeof vi.fn>;
+    render: ReturnType<typeof vi.fn>;
+    input: ReturnType<typeof vi.fn>;
+  }>,
+}));
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    dispose = vi.fn();
+    render = vi.fn();
+    input = vi.fn();
+    constructor() {
+      allocated.terminals.push(this);
+    }
+    open() {}
+    loadAddon() {}
+    onRender() {
+      return { dispose: this.render };
+    }
+    onData() {
+      return { dispose: this.input };
+    }
+    write() {}
+  },
+}));
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    dispose() {}
+  },
+}));
+vi.mock('@xterm/addon-webgl', () => ({
+  WebglAddon: class {
+    dispose() {}
+  },
+}));
+
+const resize: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
+  intersections: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
+  sockets: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+const windowMock = {
+  innerWidth: 390,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  requestAnimationFrame: vi.fn(() => 1),
+  cancelAnimationFrame: vi.fn(),
+  clearTimeout: vi.fn(),
+  clearInterval: vi.fn(),
+};
+let throwSocket = false,
+  throwObservation = false;
+
+beforeEach(() => {
+  allocated.terminals.length = 0;
+  resize.length = 0;
+  intersections.length = 0;
+  sockets.length = 0;
+  throwSocket = false;
+  throwObservation = false;
+  vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '#000' }));
+  vi.clearAllMocks();
+  vi.stubGlobal('window', windowMock);
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      disconnect = vi.fn();
+      constructor() {
+        resize.push(this);
+      }
+      observe() {
+        if (throwObservation) throw new Error('observe failed');
+      }
+    },
+  );
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      disconnect = vi.fn();
+      constructor() {
+        intersections.push(this);
+      }
+      observe() {}
+    },
+  );
+  vi.stubGlobal(
+    'WebSocket',
+    class {
+      close = vi.fn();
+      constructor() {
+        if (throwSocket) throw new Error('socket failed');
+        sockets.push(this);
+      }
+      addEventListener() {}
+    },
+  );
+});
+afterEach(() => vi.unstubAllGlobals());
+
+function element() {
+  const mock = {
+    dataset: { displayMode: 'interactive' },
+    style: {},
+    classList: { contains: () => false },
+    closest: () => null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  };
+  return { viewport: mock as unknown as HTMLElement, removed: mock.removeEventListener };
+}
+
+describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
+  it('disposes allocations after socket setup throws, then mounts and disposes a fresh viewer exactly once', () => {
+    const { viewport, removed } = element();
+    throwSocket = true;
+    expect(() => mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' })).toThrow(
+      'socket failed',
+    );
+    expect(allocated.terminals[0].dispose).toHaveBeenCalledTimes(1);
+    expect(allocated.terminals[0].render).toHaveBeenCalledTimes(1);
+    expect(allocated.terminals[0].input).toHaveBeenCalledTimes(1);
+    expect(resize[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(intersections[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(windowMock.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
+    expect(removed).toHaveBeenCalledTimes(5);
+    throwSocket = false;
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'two' });
+    dispose();
+    dispose();
+    expect(allocated.terminals[1].dispose).toHaveBeenCalledTimes(1);
+    expect(resize[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(intersections[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(sockets[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans a static mount when observation fails after terminal/render allocation, then supports refill', () => {
+    throwObservation = true;
+    expect(() => mountStaticTerminalViewportRuntime(element().viewport, { output: 'hello' })).toThrow('observe failed');
+    expect(allocated.terminals[0].dispose).toHaveBeenCalledTimes(1);
+    expect(allocated.terminals[0].render).toHaveBeenCalledTimes(1);
+    expect(resize[0].disconnect).toHaveBeenCalledTimes(1);
+    throwObservation = false;
+    const dispose = mountStaticTerminalViewportRuntime(element().viewport, { output: 'recovered' });
+    dispose();
+    dispose();
+    expect(allocated.terminals[1].dispose).toHaveBeenCalledTimes(1);
+    expect(resize[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
+  });
+});
