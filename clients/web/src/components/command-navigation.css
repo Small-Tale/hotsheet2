@@ -9,12 +9,42 @@
 .command-navigation__group > .kui-list-header {
   min-height: remify(23.2px);
 }
-/* The command color is applied through kerf's own --kui-list-item-* tokens (set inline) so it
-   wins regardless of CSS bundle order; kerf's transparent default previously overrode a plain
-   background here at equal specificity (HS2-YVYA8H). */
 .command-navigation__command {
   min-height: remify(40px);
   font-weight: 650;
+}
+.command-navigation__command:not([data-command-palette='transparent']) {
+  --kui-list-item-color: var(--hs-command-on);
+  --kui-list-item-background: var(--command-color);
+  --kui-list-item-hover-background: var(--command-color);
+  --kui-list-item-hover-border: transparent;
+  --kui-list-item-selected-color: var(--hs-command-on);
+  --kui-list-item-selected-background: var(--command-color);
+  --kui-list-item-selected-border: transparent;
+}
+.command-navigation__command[data-command-palette='blue'] {
+  --command-color: var(--hs-command-blue);
+}
+.command-navigation__command[data-command-palette='green'] {
+  --command-color: var(--hs-command-green);
+}
+.command-navigation__command[data-command-palette='orange'] {
+  --command-color: var(--hs-command-orange);
+}
+.command-navigation__command[data-command-palette='red'] {
+  --command-color: var(--hs-command-red);
+}
+.command-navigation__command[data-command-palette='purple'] {
+  --command-color: var(--hs-command-purple);
+}
+.command-navigation__command[data-command-palette='pink'] {
+  --command-color: var(--hs-command-pink);
+}
+.command-navigation__command[data-command-palette='teal'] {
+  --command-color: var(--hs-command-teal);
+}
+.command-navigation__command[data-command-palette='gray'] {
+  --command-color: var(--hs-command-gray);
 }
 .command-navigation__command:hover {
   filter: brightness(0.9);

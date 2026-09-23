@@ -1,6 +1,7 @@
 import '@kerfjs/ui/list-inset-text.css';
 import './ticket-notes.css';
 
+import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
@@ -63,7 +64,7 @@ export function TicketNotes({
         />
       )}
       {notes.length > 0 ? (
-        <List className="ticket-notes__list" gap="0.55rem">
+        <List className="ticket-notes__list" gap={rem(0.55)}>
           {notes.map((note) => (
             <NoteCard
               {...note}

@@ -1,3 +1,4 @@
+import { flex, pct } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 
@@ -13,7 +14,7 @@ export function ListDemo() {
       <List gap>{rows(3)}</List>
       <h2>Custom gap and scrolling</h2>
       <div style="display:flex;height:12rem" role="region" aria-label="Scrollable list example">
-        <List gap="var(--kui-space-s)" flex="1 1 0%" scrollable dividerSides="trbl">
+        <List gap="s" flex={flex(1, 1, pct(0))} scrollable dividerSides="trbl">
           {rows(12)}
         </List>
       </div>

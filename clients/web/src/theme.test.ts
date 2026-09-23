@@ -91,11 +91,29 @@ describe('shared client theme', () => {
       '--hs-ticket-state-up-next-on',
       '--hs-priority-high',
       '--hs-priority-default',
+      '--hs-category-task',
+      '--hs-category-feature',
+      '--hs-category-bug',
+      '--hs-category-investigation',
+      '--hs-category-requirement-change',
+      '--hs-category-issue',
+      '--hs-category-fallback',
+      '--hs-command-on',
+      '--hs-command-blue',
+      '--hs-command-green',
+      '--hs-command-orange',
+      '--hs-command-red',
+      '--hs-command-purple',
+      '--hs-command-pink',
+      '--hs-command-teal',
+      '--hs-command-gray',
       '--hs-reader-font-size-s',
       '--hs-reader-font-size-m',
       '--hs-reader-font-size-l',
     ];
-    const cssReferences = required.filter((token) => !token.startsWith('--hs-priority-'));
+    const cssReferences = required.filter(
+      (token) => !token.startsWith('--hs-priority-') && token !== '--hs-category-fallback',
+    );
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);

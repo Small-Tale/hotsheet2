@@ -132,6 +132,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   continues through `cargo fmt` after Prettier succeeds (HS2-G9K0NY).
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
+- Kerf component props that represent CSS lengths, flex shorthands, or colors use the
+  typed builders from `@kerfjs/ui/css-values`; raw CSS strings are not passed through
+  component APIs. Product colors are application-owned custom properties referenced with
+  `colorVar()`. Components without a raw `style` escape hatch, such as `ListItem`, use
+  finite `data-*` states and public component tokens in static CSS (HS2-KAWND3).
 
 ### 12.6.1 Optional local Rust compiler cache
 

@@ -1,7 +1,7 @@
 ---
 name: kerf-app
 description: Build UIs in the kerf reactive framework and its @kerfjs/ui component package (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs` or `@kerfjs/ui`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
-kerf-skill-version: 1.22.0
+kerf-skill-version: 1.23.0
 ---
 
 # Building apps with kerf
@@ -93,6 +93,7 @@ import {
   isSafeHtml,
   raw,
   Fragment,
+  type JSXChildren,
 } from "kerfjs";
 
 // Optional, only when you need granular collection updates:
@@ -120,6 +121,7 @@ if (import.meta.env.DEV) await import("kerfjs/dev");
 | `attr(name)`                                 | dynamic factory — `attr<N,V=string>(name)` returns `(value: V) => { readonly [name]: V }`; both generics off → N inferred, V defaults to string; specify both to constrain values                                                                                                                         |
 | `toElement(jsx)`                             | parse JSX into a DOM node (SVG-aware). Single-root → `Element`; multi-root (`<><svg/> label</>`, two icons side by side) → `DocumentFragment` that `appendChild`/`replaceChildren`/`append` inlines into the parent.                                                                                      |
 | `raw(html)`                                  | inject pre-escaped HTML                                                                                                                                                                                                                                                                                   |
+| `JSXChildren`                                | recursive type for general-purpose component `children`: SafeHtml, primitives, read-only signals, nullish/boolean empty values, and readonly arrays at any depth. Use a narrower union for semantically restricted slots                                                                                  |
 | `arraySignal(initial?)`                      | granular keyed-list signal (subpath `kerfjs/array-signal`); `each()` reconciles in O(patches)                                                                                                                                                                                                             |
 | `` html`…` ``                                | tagged template (subpath `kerfjs/html`) — JSX-identical runtime semantics with NO build step, for CDN/importmap projects. Real HTML attribute names (`class`, not `className`); holes only in text positions or as a COMPLETE attribute value (`attr=${v}` / `attr="${v}"`)                               |
 

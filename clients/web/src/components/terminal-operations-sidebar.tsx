@@ -59,7 +59,7 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
       header={header}
       contentClassName="terminal-operations-sidebar__groups"
     >
-      <List gap="var(--kui-space-m)">
+      <List gap="m">
         {groups.map((group) => (
           <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
             <ListHeader label={group.name} />

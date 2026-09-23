@@ -2,7 +2,6 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
-import '@awesome.me/webawesome/dist/components/select/select.js';
 import './quick-ticket-composer.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';

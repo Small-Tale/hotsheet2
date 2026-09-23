@@ -237,11 +237,19 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('Running Test');
     expect(markup).toContain('data-lucide="test-tube-2"');
     expect(markup).toContain('data-command-color="#3b82f6"');
+    expect(markup).toContain('data-command-palette="blue"');
     expect(markup).toContain('data-command-group="Checks"');
     expect(markup).toContain('class="kui-list command-navigation__items"');
     expect(markup).toContain('data-scrollable="false"');
     expect(markup).toContain('data-action="toggle-command-section"');
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
+    const css = readFileSync(new URL('./command-navigation.css', import.meta.url), 'utf8');
+    expect(css).toContainSource(
+      ".command-navigation__command[data-command-palette='blue'] { --command-color: var(--hs-command-blue); }",
+    );
+    expect(css).toContainSource(
+      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-list-item-color: var(--hs-command-on);",
+    );
   });
 
   it('shows half-opacity type icons for idle shell and AI commands', () => {

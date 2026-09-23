@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -59,7 +60,7 @@ export function NotificationNavigation({
       <section>
         <ListHeader label="Notifications" />
         <nav aria-label="Notification views">
-          <List gap="0.125rem">
+          <List gap={rem(0.125)}>
             {views.map((item) => (
               <ListItem
                 action="select-notification-view"

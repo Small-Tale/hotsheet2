@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { Bug } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
 import { groupAttachments, TicketAttachments } from './ticket-attachments';
@@ -55,7 +56,16 @@ describe('ticket metadata controls and inspector panels', () => {
     const category = String(TicketCategorySelect({ name: 'category', value: 'bug' }));
     expect(category).toContain('data-component="select"');
     expect(category).toContain('data-lucide="bug"');
-    expect(category).toContain('color:#ef4444');
+    expect(category).toContain('color:var(--hs-category-bug)');
+    expect(
+      String(
+        TicketCategorySelect({
+          name: 'category',
+          value: 'custom',
+          choices: [{ value: 'custom', label: 'Custom', color: '#123456', icon: Bug, iconName: 'bug' }],
+        }),
+      ),
+    ).toContain('color:var(--hs-category-fallback)');
     const priority = String(TicketPrioritySelect({ name: 'priority', value: 'urgent' }));
     expect(priority).toContain('data-lucide="chevrons-up"');
     expect(priority).toContain('data-lucide="minus"');

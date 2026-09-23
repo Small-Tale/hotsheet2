@@ -1,5 +1,6 @@
 import './command-navigation.css';
 
+import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -25,11 +26,7 @@ import {
 
 import { lucideCatalogVersion } from '../lucide-catalog';
 import { resolveCommandIcon } from './command-icon';
-import {
-  customizationContrastColor,
-  resolveCommandColor,
-  TRANSPARENT_CUSTOMIZATION_COLOR,
-} from './customization-palette';
+import { COMMAND_CUSTOMIZATION_COLORS, resolveCommandColor } from './customization-palette';
 
 const icons = {
   send: [Send, 'send'],
@@ -104,7 +101,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                 />
               )}
               {groupExpanded && (
-                <List className="command-navigation__items" gap="0.3rem">
+                <List className="command-navigation__items" gap={rem(0.3)}>
                   {items.map((command) => {
                     const { icon, name } = resolveCommandIcon(command.icon),
                       type =
@@ -114,18 +111,15 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                             ? { icon: Bot, name: 'bot', label: 'AI command' }
                             : undefined;
                     const color = resolveCommandColor(command.color);
-                    const transparent = color === TRANSPARENT_CUSTOMIZATION_COLOR;
-                    const textColor = transparent ? undefined : customizationContrastColor(color);
-                    const style = transparent
-                      ? undefined
-                      : `--command-color:${color};--command-text-color:${textColor};--kui-list-item-color:${textColor};--kui-list-item-background:${color};--kui-list-item-hover-background:${color};--kui-list-item-hover-border:transparent;--kui-list-item-selected-color:${textColor};--kui-list-item-selected-background:${color};--kui-list-item-selected-border:transparent`;
+                    const palette = COMMAND_CUSTOMIZATION_COLORS.find(
+                      (option) => option.value === color,
+                    )!.label.toLowerCase();
                     return (
                       <ListItem
                         action="run-command"
                         itemId={command.id}
-                        rootAttributes={{ 'data-command-color': color }}
+                        rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
                         className="command-navigation__command"
-                        style={style}
                         pressed={Boolean(command.running)}
                         title={
                           command.lastRun

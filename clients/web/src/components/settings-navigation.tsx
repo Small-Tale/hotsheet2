@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
 
+import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -63,7 +64,7 @@ export function SettingsNavigation({
     <section>
       <ListHeader label={heading} />
       <nav aria-label={heading}>
-        <List gap="0.125rem">
+        <List gap={rem(0.125)}>
           {items.map((item) => (
             <ListItem
               action="select-settings-category"

@@ -2202,7 +2202,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   const dedicatedViewport = drawer.locator('.terminal-session:not([hidden]) [data-display-mode="interactive"]');
   await expect(dedicatedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
-  await expect(drawer.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(dedicatedViewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect
     .poll(() => latestClaim('tests'))
     .toMatchObject({ cols: expect.any(Number), rows: expect.any(Number), focus: true });
@@ -2214,7 +2214,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     .not.toBe('80x24');
   await expect(dedicatedViewport).toHaveAttribute('data-driving', 'true');
   await page.getByRole('button', { name: 'Workspace grid' }).focus();
-  await expect(drawer.locator('.xterm-helper-textarea')).not.toBeFocused();
+  await expect(dedicatedViewport.locator('.xterm-helper-textarea')).not.toBeFocused();
   await page.setViewportSize({ width: 1280, height: 840 });
   await expect.poll(() => latestClaim('tests')).toMatchObject({ focus: true });
   await expect
@@ -2229,11 +2229,11 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(dashboard).toBeVisible();
   await dashboard.locator('[data-terminal-key="demo-checkout:tests"]').dblclick();
-  await expect(drawer.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(dedicatedViewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect
     .poll(() => latestClaim('tests'))
     .toMatchObject({ cols: expect.any(Number), rows: expect.any(Number), focus: true });
-  await expect(drawer.locator('[data-display-mode="interactive"]')).toHaveAttribute('data-driving', 'true');
+  await expect(dedicatedViewport).toHaveAttribute('data-driving', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-terminal-dashboard-drawer-refit.png', fullPage: true });
 });
 
@@ -15887,4 +15887,91 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await expect(editor.getByRole('status')).toContainText('Saved.');
   await expect(editor).toContainText('After return');
   await page.screenshot({ path: '/private/tmp/hs2-dhygxj-command-settings-narrow.png', animations: 'disabled' });
+});
+
+test('keeps terminal visibility anchored through interrupted close, resize, and repeated reopen (HS2-MX14DQ)', async ({
+  page,
+}, testInfo) => {
+  test.fail(
+    true,
+    'Published @kerfjs/ui@5.0.0-beta.31 omits its tagged Select lifecycle installer; tracked by HS2-3DHZF6.',
+  );
+  await page.setViewportSize({ width: 1024, height: 600 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
+  const select = page.locator('wa-select[name="terminal-visibility-group"]');
+  type Probe = HTMLElement & { open: boolean; held: Animation[]; completedShows: number; completedHides: number };
+  await select.evaluate((element) => {
+    const host = element as Probe;
+    host.completedShows = host.completedHides = 0;
+    host.addEventListener('wa-after-show', () => host.completedShows++);
+    host.addEventListener('wa-after-hide', () => host.completedHides++);
+  });
+  for (const [index, width] of [760, 1024, 760, 390].entries()) {
+    await select.click();
+    await expect.poll(() => select.evaluate((element) => (element as Probe).completedShows)).toBe(index * 2 + 1);
+    await select.evaluate((element) => {
+      const host = element as Probe;
+      host.held = [];
+      host.style.setProperty('--hide-duration', '10s');
+      host.addEventListener(
+        'wa-hide',
+        () =>
+          window.requestAnimationFrame(() => {
+            const popup = host.shadowRoot!.querySelector('wa-popup') as HTMLElement & { popup: HTMLElement };
+            host.held = popup.popup.getAnimations();
+            host.held.forEach((animation) => {
+              animation.pause();
+            });
+          }),
+        { once: true },
+      );
+    });
+    await page.keyboard.press('Escape');
+    await expect.poll(() => select.evaluate((element) => (element as Probe).held.length)).toBeGreaterThan(0);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 632 });
+    await select.click();
+    await select.evaluate((element) => {
+      (element as Probe).held.forEach((animation) => {
+        animation.finish();
+      });
+    });
+    await expect.poll(() => select.evaluate((element) => (element as Probe).completedShows)).toBe(index * 2 + 2);
+    await expect(select).toHaveJSProperty('open', true);
+    await expect(select.locator('[part="listbox"]')).toBeVisible();
+    expect(await select.evaluate((element) => (element as Probe).completedHides)).toBe(index);
+    const geometry = await select.evaluate((element) => {
+      const popup = element.shadowRoot!.querySelector('wa-popup')!,
+        anchor = element.shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!,
+        listbox = element.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!;
+      return {
+        active: popup.active,
+        hidden: listbox.hidden,
+        anchorConnected: anchor.isConnected,
+        anchor: anchor.getBoundingClientRect().toJSON(),
+        popup: listbox.getBoundingClientRect().toJSON(),
+      };
+    });
+    expect(geometry.active).toBe(true);
+    expect(geometry.hidden).toBe(false);
+    expect(geometry.anchorConnected).toBe(true);
+    expect(geometry.popup.width).toBeGreaterThan(0);
+    expect(geometry.popup.x).toBeGreaterThanOrEqual(10);
+    expect(geometry.popup.right).toBeLessThanOrEqual(width - 10);
+    expect(geometry.popup.right).toBeGreaterThan(geometry.anchor.x);
+    expect(geometry.popup.x).toBeLessThan(geometry.anchor.right);
+    await testInfo.attach(`reopened-${index}-${width}-geometry`, {
+      body: JSON.stringify(geometry, null, 2),
+      contentType: 'application/json',
+    });
+    if (width === 1024 || width === 390)
+      await page.screenshot({ path: testInfo.outputPath(`terminal-visibility-reopened-${width}.png`) });
+    await select.evaluate((element) => element.style.removeProperty('--hide-duration'));
+    await page.keyboard.press('Escape');
+    await expect(select.locator('[part="listbox"]')).toBeHidden();
+  }
 });

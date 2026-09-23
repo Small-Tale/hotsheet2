@@ -6,6 +6,7 @@ import './ticket-inspector-panel.css';
 import './ticket-inspector-skeleton.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { pct, rem } from '@kerfjs/ui/css-values';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -51,11 +52,11 @@ function PlaceholderNote({ kind, card = false }: { kind: 'activity' | 'regular';
           <LucideIcon icon={presentation.icon} name={presentation.iconName} />
           {presentation.label}
         </span>
-        <Skeleton width="2.5rem" height="0.6875rem" />
+        <Skeleton width={rem(2.5)} height={rem(0.6875)} />
       </div>
       <div class="ticket-inspector__ph-note-body">
         <Skeleton />
-        <Skeleton width="45%" />
+        <Skeleton width={pct(45)} />
       </div>
     </div>
   );
@@ -90,12 +91,12 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
       <header class="ticket-inspector__header">
         <Toolbar
           dividerSides=""
-          center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width="5.5rem" height="1rem" />}
+          center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width={rem(5.5)} height={rem(1)} />}
           trailing={actions}
         />
         <div class="ticket-inspector__ph-title" aria-hidden="true">
-          <Skeleton height="1.25rem" />
-          <Skeleton width="62%" height="1.25rem" />
+          <Skeleton height={rem(1.25)} />
+          <Skeleton width={pct(62)} height={rem(1.25)} />
         </div>
       </header>
       <div aria-hidden="true">
@@ -162,8 +163,8 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
           </div>
         </section>
         <footer class="ticket-inspector__ph-provenance">
-          <Skeleton width="6rem" height="0.6875rem" />
-          <Skeleton width="4rem" height="0.6875rem" />
+          <Skeleton width={rem(6)} height={rem(0.6875)} />
+          <Skeleton width={rem(4)} height={rem(0.6875)} />
         </footer>
       </div>
     </aside>

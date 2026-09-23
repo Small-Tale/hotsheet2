@@ -623,3 +623,83 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await expect(scrim).toHaveCount(0);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
 });
+
+for (const initialWidth of [390, 1280]) {
+  test(`keeps Clear typing in search before frames from ${initialWidth}px (HS2-NNNFFR)`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: initialWidth, height: 844 });
+    await openDemoProject(page);
+    const editor = page.getByRole('searchbox', { name: 'Search tickets' });
+    const field = page.locator('[data-token-search-id="workspace-search"]');
+    const outside = page.getByRole('button', { name: 'Add project', exact: true });
+    // Input tasks may arrive before the next frame. Hold only frames scheduled by
+    // the Clear click so Playwright's ordinary pointer actionability still runs.
+    await page.evaluate(() => {
+      const request = window.requestAnimationFrame.bind(window);
+      const cancel = window.cancelAnimationFrame.bind(window);
+      const pending = new Map<number, FrameRequestCallback>();
+      let clearing = false;
+      let sequence = 0;
+      document.addEventListener(
+        'click',
+        (event) => {
+          clearing =
+            event.target instanceof Element && Boolean(event.target.closest('[data-action="clear-workspace-search"]'));
+        },
+        true,
+      );
+      window.addEventListener('click', () => {
+        clearing = false;
+      });
+      window.requestAnimationFrame = (callback) => {
+        if (!clearing) return request(callback);
+        pending.set(--sequence, callback);
+        return sequence;
+      };
+      window.cancelAnimationFrame = (id) => {
+        if (!pending.delete(id)) cancel(id);
+      };
+      Object.assign(window, {
+        flushClearFrames: () => {
+          const callbacks = [...pending.values()];
+          pending.clear();
+          for (const callback of callbacks) callback(performance.now());
+        },
+      });
+    });
+    const flushFrames = () =>
+      page.evaluate(() => {
+        (window as unknown as { flushClearFrames(): void }).flushClearFrames();
+      });
+    for (const width of [initialWidth, initialWidth === 390 ? 1280 : 390, initialWidth]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
+      await expect(editor).toBeFocused();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await editor.fill('has:attachment ');
+        await expect(editor.locator('[data-component="token-search-token"]')).toHaveCount(1);
+        await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+        // Never refocus or wait for focus before typing: c is also the page's create shortcut.
+        await page.keyboard.type('continued');
+        expect(
+          await editor.evaluate((node) => ({ focused: document.activeElement === node, text: node.textContent })),
+        ).toEqual({ focused: true, text: 'continued' });
+        await expect(page.getByRole('dialog', { name: 'Create ticket', exact: true })).toHaveCount(0);
+        await expect(field).toHaveAttribute('data-expanded', 'true');
+        // An old clear must not collapse a newer replacement selection to a caret.
+        await page.keyboard.press('ControlOrMeta+A');
+        await flushFrames();
+        await page.keyboard.type('next query');
+        await expect(editor).toHaveText('next query');
+      }
+      await page.screenshot({
+        path: testInfo.outputPath(`clear-focus-${initialWidth}-to-${width}.png`),
+        animations: 'disabled',
+      });
+      await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+      await outside.focus();
+      await flushFrames();
+      await expect(outside).toBeFocused();
+      await expect(field).toHaveAttribute('data-expanded', 'false');
+    }
+  });
+}

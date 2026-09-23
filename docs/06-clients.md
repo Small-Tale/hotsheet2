@@ -681,8 +681,13 @@ and identity-less legacy entries remain conservatively blocking.
   without collapsing the focused editor, including repeated empty/refill sequences
   on narrow screens. Focus may still leave normally: a deliberate keyboard handoff
   collapses the empty field, and the search launcher reopens it ready for typing.
-  This behavior comes from the published Kerf beta.28 managed-focus implementation
+  This behavior comes from the published Kerf managed-focus implementation
   rather than an application reopen workaround (HS2-GRAQ2K).
+  Clear search also preserves focus across controlled editor replacement before the
+  next input task, so immediate typing stays in search even if an animation frame
+  has not run. Repeated clear/refill and desktop/mobile crossings retain this behavior;
+  a deliberate focus handoff still owns focus, and old Clear work cannot move a newer
+  selection. This contract is owned by Kerf (KF-E1DHC6; HS2-NNNFFR).
   When composed inside a toolbar control group, the group retains its border, padding,
   and focus ring in both collapsed and expanded states. The ordinary workspace header
   and workspace-grid ticket rail share that package-owned treatment (HS2-TNSD4K).
@@ -1566,7 +1571,14 @@ Manage Workspace Visibility dialog, its badge counts terminals and AI chats hidd
 adjacent Select switches among device-local named groups. Default is permanent; named groups
 can be created, renamed, and removed, and each group records workspace-item inclusion without
 destroying sessions. The compact selector's open menu sizes to its option content instead of
-the narrow closed control, so checkmarks and complete group names remain visible. The dialog's
+the narrow closed control, so checkmarks and complete group names remain visible.
+Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
+The contract for that shared lifecycle keeps the latest open/close request authoritative
+across interrupted animations and viewport changes; a previous close cannot hide a
+reopened menu or return its geometry to the origin. The tagged beta.31 source implements
+that contract, but the immutable npm beta.31 tarball omitted the lifecycle installer;
+the production regression remains expected-failing until the corrected upstream release
+tracked by HS2-3DHZF6. Consumers do not add popup delays or positioning repairs. The dialog's
 tab toolbar remains transparent against the white dialog
 surface rather than introducing a separate gray band. Visibility groups apply only to the
 global dashboard; the project drawer

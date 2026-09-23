@@ -722,7 +722,7 @@ empty-field blur collapse, and Escape collapse while the app's responsive header
 to read the same state. The same component backs both the workspace toolbar search and the
 saved-view dialog's non-collapsible query field.
 
-With the published Kerf beta.28 dependency, Select All followed by Backspace or
+With the published Kerf dependency, Select All followed by Backspace or
 Delete removes both text and tokens while keeping the empty workspace editor open
 and focused for immediate typing. Mixed text/token and token-only queries support
 repeated deletion and refill at desktop and mobile widths. The package restores
@@ -730,6 +730,12 @@ focus across controlled editor replacement; the application does not reopen it i
 a separate callback. A deliberate keyboard focus move out of the empty field still
 collapses it, and reopening or pressing Escape retains the normal managed-focus
 contract (HS2-GRAQ2K).
+
+Managed Clear restores the replacement editor at the DOM mutation checkpoint, before
+the next input task. The first typed shortcut letter therefore belongs to search even
+when rendering frames are delayed. Clear observation expires without delayed focus or
+caret changes, and a real outside focus handoff remains authoritative. The app only
+clears its query/token state; Kerf owns restoration (KF-E1DHC6; HS2-NNNFFR).
 
 For app-owned token edits/removals, `inline-search-caret.ts` restores the caret in
 the current task's microtask checkpoint, after synchronous rendering/batching.
