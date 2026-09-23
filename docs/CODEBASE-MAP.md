@@ -122,6 +122,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
+    tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
+    tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
     tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS

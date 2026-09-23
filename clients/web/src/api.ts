@@ -1,3 +1,4 @@
+import { browserRandomId } from './browser-id';
 import type { ServerCompatibility } from './compatibility';
 import { prioritiesToWire } from './priority-wire';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -523,7 +524,7 @@ export class Api {
       body: JSON.stringify({
         source: { connection_id: source.connection_id, native_id: source.native_id },
         destination_connection,
-        operation_id: crypto.randomUUID(),
+        operation_id: browserRandomId(),
         confirm: kind === 'move',
       }),
     });

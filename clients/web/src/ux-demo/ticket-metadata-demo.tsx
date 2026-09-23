@@ -1,5 +1,6 @@
 import { signal } from 'kerfjs';
 
+import { browserRandomId } from '../browser-id';
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
 import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
 import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
@@ -196,7 +197,7 @@ export function regroupAttachmentDemo(id: string, destinationBatch?: string) {
     item.id === id
       ? {
           ...item,
-          batch_id: destinationBatch ?? crypto.randomUUID(),
+          batch_id: destinationBatch ?? browserRandomId(),
           batch_label: destination ? destination.batch_label : 'New group',
           actor: destination?.actor ?? item.actor,
           purpose: destination?.purpose,
@@ -205,7 +206,7 @@ export function regroupAttachmentDemo(id: string, destinationBatch?: string) {
   );
 }
 export function renameAttachmentDemoBatch(batchId: string, label: string) {
-  const nextBatchId = batchId || crypto.randomUUID();
+  const nextBatchId = batchId || browserRandomId();
   attachmentDemoItems.value = attachmentDemoItems.value.map((item) =>
     (item.batch_id ?? '') === batchId
       ? { ...item, batch_id: nextBatchId, batch_label: label.trim() || undefined }

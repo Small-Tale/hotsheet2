@@ -680,3 +680,30 @@ describe('atomic Not Working transport', () => {
     fetchMock.mockRestore();
   });
 });
+
+it('allocates distinct transfer operation IDs on LAN HTTP, including failure then retry (HS2-76ZR5P)', async () => {
+  const getRandomValues = crypto.getRandomValues.bind(crypto),
+    source = { connection_id: 'git-source', native_id: 'ticket-one' } as Parameters<Api['transfer']>[1],
+    fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ error: 'Rejected' }, { status: 409 }))
+      .mockImplementation(async () => Response.json({ status: 'completed' }));
+  vi.stubGlobal('crypto', { getRandomValues });
+  try {
+    const api = new Api('/api');
+    await expect(api.transfer('copy', source, 'git-destination')).rejects.toThrow('Rejected');
+    await api.transfer('copy', source, 'git-destination');
+    await api.transfer('move', source, 'git-destination');
+    const requests = fetchMock.mock.calls.map(([, init]) => JSON.parse(init!.body as string));
+    expect(new Set(requests.map((body) => body.operation_id)).size).toBe(3);
+    for (const body of requests) {
+      expect(body.operation_id).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+      expect(body.source).toEqual(source);
+      expect(body.destination_connection).toBe('git-destination');
+    }
+    expect(requests.map((body) => body.confirm)).toEqual([false, false, true]);
+  } finally {
+    fetchMock.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});

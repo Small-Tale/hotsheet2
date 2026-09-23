@@ -3,6 +3,7 @@ import { signal } from 'kerfjs';
 
 import { type ConversationMessage, type ConversationState, EMPTY_CONVERSATION } from '../ai-conversation';
 import { Api, type ToolConnection } from '../api';
+import { browserRandomId } from '../browser-id';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import {
   buildConversationExportRequest,
@@ -176,7 +177,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
         canResume = Boolean(
           reopen.resumesOriginalSession && reopen.sessionId && (!source.projectId || source.projectId === current.id),
         );
-      let connectionId = `hotsheet-saved-chat-${crypto.randomUUID()}`,
+      let connectionId = `hotsheet-saved-chat-${browserRandomId()}`,
         readOnly = true,
         localOnly = true,
         resumeError = '';

@@ -72,6 +72,7 @@ import {
   isPerColumnBoardView,
   nextBoardColumnFetch,
 } from './board-pagination';
+import { browserRandomId } from './browser-id';
 import { isRemoteClient } from './client-origin';
 import { AppEmptyState, ProjectRestoreState } from './components/app-empty-state';
 import { AppError } from './components/app-error';
@@ -1376,7 +1377,7 @@ async function createShellCommandTerminal(command: CommandDefinition, current: P
 async function createDrawerAIChat(selection: AiToolDefaults, options: { connectionId?: string; drive?: boolean } = {}) {
   const current = project();
   if (!current) return;
-  const connectionId = options.connectionId ?? `hotsheet-drawer-chat-${crypto.randomUUID()}`,
+  const connectionId = options.connectionId ?? `hotsheet-drawer-chat-${browserRandomId()}`,
     existing = (terminalDrawerChatsByProject.value[current.id] ?? []).find(
       (item) => item.connectionId === connectionId,
     );
@@ -2375,7 +2376,7 @@ function focusAfterTicketReader(id: string, slug: string) {
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function openTicketLinkMatch(match:TicketLinkMatch){const target=projects.value.find(item=>item.id===match.projectId);if(!target){showToast(`No open project matches ${match.projectId}.`);return}ticketLinkChoice.value=undefined;const cached=ticketRowsByProject.value[target.id]??[],row=cached.find(item=>item.qualified_id===match.qualifiedId);if(row)ticketRowsByProject.value={...ticketRowsByProject.value,[target.id]:mergeTicketLinkRows(cached,[row])};try{const ticket=(await new Api(target.apiPath).checkoutTicket(target.id,match.ticketId)).ticket,capabilities=capabilitiesFor(ticket.connection_id);if(!capabilities)throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);const id=crypto.randomUUID(),trigger=ticketLinkReturnFocus;ticketLinkReturnFocus=undefined;linkedReaderStack.value=pushTicketReaderFrame(linkedReaderStack.value,{id,open:false,projectId:target.id,projectName:target.name,apiPath:target.apiPath,ticket,activeTab:'info',capabilities,edit:ticketReaderEditState(ticket)});presentTicketReaderDialog(id,trigger,()=>{replaceLinkedReaderFrame(id,frame=>({...frame,open:true}))})}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
+async function openTicketLinkMatch(match:TicketLinkMatch){const target=projects.value.find(item=>item.id===match.projectId);if(!target){showToast(`No open project matches ${match.projectId}.`);return}ticketLinkChoice.value=undefined;const cached=ticketRowsByProject.value[target.id]??[],row=cached.find(item=>item.qualified_id===match.qualifiedId);if(row)ticketRowsByProject.value={...ticketRowsByProject.value,[target.id]:mergeTicketLinkRows(cached,[row])};try{const ticket=(await new Api(target.apiPath).checkoutTicket(target.id,match.ticketId)).ticket,capabilities=capabilitiesFor(ticket.connection_id);if(!capabilities)throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);const id=browserRandomId(),trigger=ticketLinkReturnFocus;ticketLinkReturnFocus=undefined;linkedReaderStack.value=pushTicketReaderFrame(linkedReaderStack.value,{id,open:false,projectId:target.id,projectName:target.name,apiPath:target.apiPath,ticket,activeTab:'info',capabilities,edit:ticketReaderEditState(ticket)});presentTicketReaderDialog(id,trigger,()=>{replaceLinkedReaderFrame(id,frame=>({...frame,open:true}))})}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
 async function selectLinkedTicket(
   slug: string,
   projectId?: string,
@@ -2954,7 +2955,7 @@ function updateConversation(connectionId: string, update: (state: ConversationSt
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
 function conversationForActivity(current:Project,tool:string,session?:string){const conversations=conversationStates.peek(),connections=(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.tool.toLowerCase()===tool.toLowerCase()&&conversations[item.id]);return connections.find(item=>session&&(item.session_id===session||item.id===session))??(connections.length===1?connections[0]:undefined)}
 function beginConversation(connectionId: string, content: string) {
-  updateConversation(connectionId, (state) => beginConversationTurn(state, crypto.randomUUID(), content));
+  updateConversation(connectionId, (state) => beginConversationTurn(state, browserRandomId(), content));
 }
 async function toggleSidebarDrive() {
   const current = project();
@@ -4373,7 +4374,7 @@ async function addAttachments(slug: string, files: FileList | File[]) {
   attachmentMessage.value = `Adding ${files.length} attachment${files.length === 1 ? '' : 's'}…`;
   try {
     const screened = await screenAttachmentFiles(Array.from(files)),
-      batch_id = attachmentUploadBatchId(ticket.attachments, ticket.notes, () => crypto.randomUUID());
+      batch_id = attachmentUploadBatchId(ticket.attachments, ticket.notes, () => browserRandomId());
     let updated: FullTicket = ticket;
     for (const file of screened.readable)
       updated = await uploadAttachmentWithPoster(api(), current, updated, file, { batch_id, actor: { role: 'human' } });
@@ -4711,7 +4712,7 @@ async function openDuplicateTarget(id: string) {
 }
 // prettier-ignore
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-async function addNotWorkingFiles(files:FileList|File[]){const target=notWorkingTarget.value;if(!target||!(capabilitiesFor(target.connectionId)?.attachments??true))return;const screened=await screenAttachmentFiles(Array.from(files)),pending=screened.readable.map(file=>({id:crypto.randomUUID(),name:file.name,file}));notWorkingFiles.value=[...notWorkingFiles.value,...pending];await Promise.all(pending.map(item=>saveDraftFile(draftScope('not-working',target.projectId),item.id,item.file))).catch(()=>undefined);notWorkingError.value=describeUnreadableAttachments(screened.unreadable);scheduleProjectSessionPersistence();presentNotWorkingDialog()}
+async function addNotWorkingFiles(files:FileList|File[]){const target=notWorkingTarget.value;if(!target||!(capabilitiesFor(target.connectionId)?.attachments??true))return;const screened=await screenAttachmentFiles(Array.from(files)),pending=screened.readable.map(file=>({id:browserRandomId(),name:file.name,file}));notWorkingFiles.value=[...notWorkingFiles.value,...pending];await Promise.all(pending.map(item=>saveDraftFile(draftScope('not-working',target.projectId),item.id,item.file))).catch(()=>undefined);notWorkingError.value=describeUnreadableAttachments(screened.unreadable);scheduleProjectSessionPersistence();presentNotWorkingDialog()}
 function openTicketComposer(trigger?: HTMLElement) {
   if (composerExpanded.value) return;
   if (trigger && document.activeElement !== trigger) trigger.focus({ preventScroll: true });
@@ -4758,7 +4759,7 @@ async function addNewTicketFiles(files: FileList | File[]) {
   try {
     const screened = await screenAttachmentFiles(Array.from(files));
     if (composerAttachmentEpoch !== epoch || project()?.id !== origin.id) return;
-    const pending = screened.readable.map((file) => ({ id: crypto.randomUUID(), name: file.name, file }));
+    const pending = screened.readable.map((file) => ({ id: browserRandomId(), name: file.name, file }));
     composerAttachments.value = [...composerAttachments.value, ...pending];
     await Promise.all(
       pending.map((item) => saveDraftFile(draftScope('composer', origin.id), item.id, item.file)),
@@ -4788,7 +4789,7 @@ async function submitNewTicket() {
     return;
   const client = new Api(origin.apiPath),
     files = composerAttachments.value.map((item) => item.file),
-    batch_id = crypto.randomUUID(),
+    batch_id = browserRandomId(),
     placement = newTicketCreationPlacement(selectedView.value, composerUpNext.value),
     finishLocalCreation = beginLocalTicketCreation();
   composerSubmitting.value = true;

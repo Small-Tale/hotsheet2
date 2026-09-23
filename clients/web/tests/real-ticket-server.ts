@@ -94,7 +94,7 @@ export async function realTicketServer() {
       return response.json() as Promise<T>;
     };
     const checkout = await request<{ id: string }>('/checkouts', 'POST', { root, stores: [store] });
-    return { url, secret, checkoutId: checkout.id, store, request, stop };
+    return { url, secret, checkoutId: checkout.id, root, store, request, stop };
   } catch (error) {
     await stop();
     throw error;

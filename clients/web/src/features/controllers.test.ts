@@ -5,6 +5,7 @@ import type { ConversationState } from '../ai-conversation';
 import { Api, type CommandDefinition, type FullTicket, type RepositoryFile, type ToolConnection } from '../api';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
 import type { DrawerAIChat } from '../project-drive';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
@@ -459,4 +460,70 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     dashboard: { width: 390, height: 300, hiddenKeys: ['hidden'] },
   });
   expect(presentation.workspaceTerminalGroups()[0].chats?.[0].summary).toBe('Replacement');
+});
+
+it('isolates repeated LAN archive opens through read-only, failed resume and successful resume (HS2-76ZR5P)', async () => {
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  const state = chatOwners();
+  let resume = false,
+    fail = true;
+  const ids: string[] = [];
+  fetchMock.mockImplementation(async (url, init) => {
+    if (url === '/__hotsheet/conversation-exports/open')
+      return json({
+        conversation: {
+          displayPath: '/exports/saved',
+          manifest: {
+            format: 'hotsheet-conversation-export',
+            manifestVersion: 1,
+            exportId: 'saved-export',
+            revision: 1,
+            exportedAt: '2026-09-23T00:00:00Z',
+            selectedMessageIds: ['saved-message'],
+            bundle: { includeAttachments: false, includeMedia: false, includeSummary: false },
+            entries: [],
+            assets: [],
+            source: { tool: 'codex', projectId: 'a', conversationId: 'original' },
+            reopen: {
+              conversationId: 'original',
+              tool: 'codex',
+              firstMessageId: 'saved-message',
+              lastMessageId: 'saved-message',
+              resumesOriginalSession: resume,
+              sessionId: 'session',
+            },
+          },
+          messages: [{ id: 'saved-message', role: 'assistant', content: 'Saved result' }],
+          activity: [],
+        } satisfies ConversationExportOpenResult,
+      });
+    const body = JSON.parse(init!.body as string);
+    ids.push(body.connection_id);
+    if (fail) return Response.json({ error: 'Resume unavailable' }, { status: 503 });
+    return json({
+      id: body.connection_id,
+      tool: 'codex',
+      project: '/work/a',
+      role: 'main',
+      busy: false,
+      actions: ['send_turn'],
+    } satisfies ToolConnection);
+  });
+  await state.archive.openSavedConversation();
+  resume = true;
+  await state.archive.openSavedConversation();
+  fail = false;
+  await state.archive.openSavedConversation();
+  const tabs = state.terminalDrawerChatsByProject.value.a.slice(1);
+  expect(new Set(tabs.map((tab) => tab.connectionId)).size).toBe(3);
+  expect(tabs.map((tab) => [tab.readOnly, tab.localOnly])).toEqual([
+    [true, true],
+    [true, true],
+    [false, false],
+  ]);
+  expect(ids).toEqual(tabs.slice(1).map((tab) => tab.connectionId));
+  for (const tab of tabs)
+    expect(state.conversationStates.value[tab.connectionId].messages[0].content).toBe('Saved result');
+  expect(state.showToast).toHaveBeenCalledWith('Opened read-only; resume failed: Resume unavailable');
+  expect(state.error.value).toBe('');
 });

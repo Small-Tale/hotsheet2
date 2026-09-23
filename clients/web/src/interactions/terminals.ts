@@ -1,6 +1,7 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type AiToolDefaults } from '../api';
+import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
@@ -298,7 +299,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       name = target.querySelector<Control>('[name="terminal-visibility-group-name"]')?.value.trim();
     if (!prompt || !scope || !name) return;
     if (prompt.mode === 'add') {
-      const added = addTerminalVisibilityGroup(terminalVisibility.value, crypto.randomUUID(), name);
+      const added = addTerminalVisibilityGroup(terminalVisibility.value, browserRandomId(), name);
       persistTerminalVisibility(selectTerminalVisibilityGroup(added.state, scope, added.group.id));
     } else if (prompt.groupId)
       persistTerminalVisibility(renameTerminalVisibilityGroup(terminalVisibility.value, prompt.groupId, name));

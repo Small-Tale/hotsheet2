@@ -46,6 +46,17 @@ When automation lands, remove the manual-only step and record it below.
    M rows to fill the available drawer height, width-fits without clipping, and recomputes M
    after rotation or drawer-height changes. Confirm read-only grid previews remain 80×24.
 
+### Browser identities on ordinary LAN HTTP
+
+HS2-76ZR5P — on physical Mobile Safari at the server's LAN HTTP address, create a ticket
+with multiple attachments, cancel another draft then create again, draw two annotations,
+regroup attachments, and open linked ticket readers. Add, rename, remove and recreate a
+workspace visibility group. Create two AI chats, send turns, and reopen a saved conversation
+twice. Confirm both new objects remain independent, each attachment gesture shares its batch,
+and error/retry flows remain usable. Repeat after reload and over HTTPS. Automated WebKit
+coverage checks the real insecure-origin capability boundary; device suspension remains a
+manual check.
+
 ### Real-device mTLS enrollment
 
 1. Enroll a second physical device against an off-loopback server.

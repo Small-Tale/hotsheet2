@@ -1916,7 +1916,20 @@ removes its owned error alert and restores the read-only preview accessibility s
 Real WebKit coverage uses a non-loopback HTTP origin, real PTY replay/live bytes, and painted
 light glyph pixels against the dark row background across preview, magnified, dedicated,
 resize, and reconnect paths. Actual device rotation/background checks remain in the manual
-plan. Other browser-generated IDs adopting the same helper are tracked by HS2-76ZR5P.
+plan.
+
+The same shared browser identity helper covers chat connections and turns, saved-chat
+restoration, linked ticket readers, attachment drafts/batches/annotations, workspace visibility
+groups, provider transfer operations, and the attachment metadata demo (HS2-76ZR5P). These
+flows must work without `randomUUID` on ordinary LAN HTTP. A rename or reuse retains the
+existing object/batch identity; a new object, drawing, transfer invocation, or attachment
+batch gets a fresh identity, including after cancellation, deletion or failed execution.
+Later eligible upload gestures reuse the latest human batch until a durable status boundary;
+separate new tickets receive independent attachment batches.
+Node-side migration/export temporary files continue using Node's native crypto API.
+Consumer regressions pair isolated transitions with actual insecure-origin WebKit flows and
+real ticket/attachment persistence; AI execution and native archive selection remain fixture
+boundaries in that browser test.
 
 A visible mounted fixed 80×24 surface is an active sizing claimant even though its grid preview is
 read-only and never accepts keyboard input. This ensures entering the dashboard actually

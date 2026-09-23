@@ -1,10 +1,18 @@
 import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { MediaAnnotation } from '../api';
+import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
+import { initialTerminalVisibilityState } from '../terminal-visibility';
+import {
+  type AttachmentAndGalleryInteractionsDependencies,
+  wireAttachmentAndGalleryInteractions,
+} from './attachments-and-gallery';
 import { type CommandAndAiInteractionsDependencies, wireCommandAndAiInteractions } from './commands-and-ai';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
+import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
 import {
   type ViewAndSavedViewInteractionsDependencies,
   wireViewAndSavedViewInteractions,
@@ -283,4 +291,86 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     expect(state.capturingShortcutId.value).toBeUndefined();
     expect(state.storage.size).toBe(0);
   });
+});
+
+it('keeps LAN visibility identities stable on rename and distinct after delete/refill (HS2-76ZR5P)', () => {
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('customElements', { whenDefined: () => Promise.resolve() });
+  Object.assign(document.body, { querySelectorAll: () => [] });
+  const state = signal(initialTerminalVisibilityState()),
+    prompt = signal<TerminalVisibilityNamePrompt | undefined>({ mode: 'add', value: '' }),
+    menu = signal<{ id: string; x: number; y: number } | undefined>(undefined);
+  wireTerminalInteractions({
+    terminalVisibility: state,
+    terminalVisibilityNamePrompt: prompt,
+    terminalVisibilityContextMenu: menu,
+    terminalVisibilityDialogScope: signal('workspace'),
+    persistTerminalVisibility: (next) => {
+      state.value = next;
+    },
+  } as TerminalInteractionsDependencies);
+  const submit = handler('submit', '[data-action="submit-terminal-visibility-name"]'),
+    form = (value: string) => ({ querySelector: () => ({ value }) }) as unknown as Element;
+  submit(new Event('submit'), form('First'));
+  const id = state.value.groups.at(-1)!.id;
+  prompt.value = { mode: 'rename', groupId: id, value: 'First' };
+  submit(new Event('submit'), form('Renamed'));
+  expect(state.value.groups.at(-1)).toMatchObject({ id, name: 'Renamed' });
+  menu.value = { id, x: 0, y: 0 };
+  handler('click', '[data-action="remove-terminal-visibility-group"]')(new Event('click'), target({}));
+  expect(state.value.groups.some((group) => group.id === id)).toBe(false);
+  prompt.value = { mode: 'add', value: '' };
+  submit(new Event('submit'), form('Replacement'));
+  expect(state.value.groups.at(-1)!.id).not.toBe(id);
+  expect(prompt.value).toBeUndefined();
+});
+
+it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (HS2-76ZR5P)', () => {
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  const annotations = signal<MediaAnnotation[]>([]),
+    selected = signal<string | undefined>(undefined),
+    markup = signal(true),
+    draw = signal(true);
+  const bindings = {
+    attachmentGalleryMarkup: markup,
+    attachmentGalleryDrawMode: draw,
+    attachmentGalleryAnnotations: annotations,
+    attachmentGallerySelectedAnnotation: selected,
+    attachmentGalleryDuration: signal(0),
+  } as AttachmentAndGalleryInteractionsDependencies;
+  wireAttachmentAndGalleryInteractions(bindings);
+  const down = handler('pointerdown', '[data-gallery-annotation-surface="true"]', true),
+    surface = {
+      dataset: {},
+      closest: () => null,
+      getBoundingClientRect: () => ({ x: 0, y: 0, left: 0, top: 0, width: 100, height: 100 }),
+    } as unknown as Element;
+  const pointer = () => Object.assign(new Event('pointerdown'), { clientX: 10, clientY: 20, pointerId: 1 });
+  const paint = () => {
+    const event = pointer();
+    Object.defineProperty(event, 'target', { value: surface });
+    down(event, surface);
+  };
+  paint();
+  const first = selected.value;
+  paint();
+  expect(annotations.value).toHaveLength(2);
+  expect(selected.value).not.toBe(first);
+  const previous = annotations.value.map((item) => item.id);
+  annotations.value = [];
+  draw.value = false;
+  paint();
+  expect(annotations.value).toEqual([]);
+  draw.value = true;
+  paint();
+  expect(previous).not.toContain(selected.value);
+  expect(bindings.attachmentAnnotationGesture?.annotation.id).toBe(selected.value);
+  expect(annotations.value[0]).toMatchObject({ x: 1000, y: 2000, width: 1, height: 1 });
 });

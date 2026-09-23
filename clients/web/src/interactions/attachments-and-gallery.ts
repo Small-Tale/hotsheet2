@@ -7,6 +7,7 @@ import {
   type FullTicket,
   type MediaAnnotation,
 } from '../api';
+import { browserRandomId } from '../browser-id';
 import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
 import {
   attachmentGalleryDefaultRange,
@@ -146,7 +147,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   }
   function metadataForBatch(
     batch: HTMLElement,
-    batch_id = batch.dataset.attachmentBatch || crypto.randomUUID(),
+    batch_id = batch.dataset.attachmentBatch || browserRandomId(),
   ): AttachmentMetadata {
     const role = batch.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
     return {
@@ -282,7 +283,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       if (newGroup) {
         const role = source.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
         void persistAttachmentMetadata([id], {
-          batch_id: crypto.randomUUID(),
+          batch_id: browserRandomId(),
           batch_label: 'New group',
           actor: role
             ? {
@@ -617,7 +618,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     const point = annotationPoint(pointer, surface),
       timed = attachmentGalleryDuration.value > 0,
       annotation: MediaAnnotation = {
-        id: crypto.randomUUID(),
+        id: browserRandomId(),
         x: point.x,
         y: point.y,
         width: 1,
