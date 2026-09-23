@@ -735,7 +735,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
-  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.34.
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.35.
   The client follows the package's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
@@ -1576,10 +1576,10 @@ the narrow closed control, so checkmarks and complete group names remain visible
 Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
 The contract for that shared lifecycle keeps the latest open/close request authoritative
 across interrupted animations and viewport changes; a previous close cannot hide a
-reopened menu or return its geometry to the origin. Kerf beta.34 ships the lifecycle
-installer in the immutable npm artifact, and the production regression exercises repeated
-interrupted close, resize, and reopen sequences at wide and narrow widths. Consumers do not
-add popup delays or positioning repairs. The dialog's
+reopened menu or return its geometry to the origin. Kerf beta.35 retains the lifecycle
+installer shipped in beta.34's immutable npm artifact, and the production regression
+exercises repeated interrupted close, resize, and reopen sequences at wide and narrow
+widths. Consumers do not add popup delays or positioning repairs. The dialog's
 tab toolbar remains transparent against the white dialog
 surface rather than introducing a separate gray band. Visibility groups apply only to the
 global dashboard; the project drawer
