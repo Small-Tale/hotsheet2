@@ -7,6 +7,8 @@ const allocated = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>;
     render: ReturnType<typeof vi.fn>;
     input: ReturnType<typeof vi.fn>;
+    reset: ReturnType<typeof vi.fn>;
+    write: ReturnType<typeof vi.fn>;
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -16,6 +18,8 @@ vi.mock('@xterm/xterm', () => ({
     dispose = vi.fn();
     render = vi.fn();
     input = vi.fn();
+    reset = vi.fn();
+    write = vi.fn();
     constructor() {
       allocated.terminals.push(this);
     }
@@ -27,7 +31,6 @@ vi.mock('@xterm/xterm', () => ({
     onData() {
       return { dispose: this.input };
     }
-    write() {}
   },
 }));
 vi.mock('@xterm/addon-fit', () => ({
@@ -43,13 +46,19 @@ vi.mock('@xterm/addon-webgl', () => ({
 
 const resize: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
   intersections: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
-  sockets: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+  sockets: Array<EventTarget & { close: ReturnType<typeof vi.fn>; readyState: number }> = [],
+  scheduledTimeouts: Array<() => void> = [];
 const windowMock = {
   innerWidth: 390,
   addEventListener: vi.fn(),
   removeEventListener: vi.fn(),
   requestAnimationFrame: vi.fn(() => 1),
   cancelAnimationFrame: vi.fn(),
+  setTimeout: vi.fn((callback: () => void) => {
+    scheduledTimeouts.push(callback);
+    return scheduledTimeouts.length;
+  }),
+  setInterval: vi.fn(() => 1),
   clearTimeout: vi.fn(),
   clearInterval: vi.fn(),
 };
@@ -61,6 +70,7 @@ beforeEach(() => {
   resize.length = 0;
   intersections.length = 0;
   sockets.length = 0;
+  scheduledTimeouts.length = 0;
   throwSocket = false;
   throwObservation = false;
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '#000' }));
@@ -90,13 +100,16 @@ beforeEach(() => {
   );
   vi.stubGlobal(
     'WebSocket',
-    class {
+    class extends EventTarget {
+      static OPEN = 1;
+      readyState = 0;
       close = vi.fn();
       constructor() {
+        super();
         if (throwSocket) throw new Error('socket failed');
         sockets.push(this);
       }
-      addEventListener() {}
+      send() {}
     },
   );
 });
@@ -152,5 +165,29 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(allocated.terminals[1].dispose).toHaveBeenCalledTimes(1);
     expect(resize[1].disconnect).toHaveBeenCalledTimes(1);
     expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
+  });
+
+  it('replaces emulator state before every reconnect replay instead of appending duplicate output (HS2-0V2DYR)', () => {
+    const { viewport } = element(),
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
+      terminal = allocated.terminals[0],
+      replay = new TextEncoder().encode('authoritative replay\r\n').buffer;
+    sockets[0].readyState = 1;
+    sockets[0].dispatchEvent(new Event('open'));
+    sockets[0].dispatchEvent(new MessageEvent('message', { data: replay }));
+    expect(terminal.reset).not.toHaveBeenCalled();
+    expect(terminal.write).toHaveBeenCalledTimes(1);
+
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      sockets.at(-1)!.dispatchEvent(new Event('close'));
+      scheduledTimeouts.at(-1)!();
+      sockets.at(-1)!.readyState = 1;
+      sockets.at(-1)!.dispatchEvent(new Event('open'));
+      sockets.at(-1)!.dispatchEvent(new MessageEvent('message', { data: replay }));
+    }
+    expect(terminal.reset).toHaveBeenCalledTimes(2);
+    expect(terminal.write).toHaveBeenCalledTimes(3);
+    expect(terminal.reset.mock.invocationCallOrder[1]).toBeLessThan(terminal.write.mock.invocationCallOrder[2]);
+    dispose();
   });
 });

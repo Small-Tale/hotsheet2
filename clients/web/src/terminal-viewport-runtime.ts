@@ -268,6 +268,7 @@ function initializeTerminalViewport(
     disposed = false,
     focusRequested = autoFocus,
     initialReplay = true,
+    connectedOnce = false,
     serverSize: { cols: number; rows: number } | undefined;
   own(() => {
     disposed = true;
@@ -504,6 +505,12 @@ function initializeTerminalViewport(
     current.binaryType = 'arraybuffer';
     current.addEventListener('open', () => {
       if (socket !== current) return;
+      // Every attach begins with the broker/server's authoritative scrollback snapshot. A
+      // reconnect must replace the prior local emulator state before that replay arrives;
+      // appending it is what made recent transcript blocks repeat and could leave ANSI modes
+      // from the old stream active while the replay was interpreted (HS2-0V2DYR).
+      if (connectedOnce) terminal.reset();
+      connectedOnce = true;
       attempt = 0;
       element.dataset.connection = 'connected';
       fitAndClaim();

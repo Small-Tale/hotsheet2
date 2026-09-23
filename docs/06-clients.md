@@ -1712,6 +1712,10 @@ nor a transitioning focus outline can paint over the modal. On the first replay 
 fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
 `%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
 dedicated drawer stream are preserved unchanged.
+When an attach WebSocket reconnects, the first server replay is authoritative: the client resets
+the existing xterm emulator before applying it instead of appending the same bounded transcript
+again. This prevents repeated recent output and prevents stale ANSI modes from the disconnected
+stream from leaking into replayed text (HS2-0V2DYR).
 On a mobile layout, keyboard focus in the active dedicated drawer terminal promotes that
 terminal to a fixed, chrome-free focus surface with only an accessible Exit action. Its bounds
 follow `VisualViewport` offset and size changes rather than the layout viewport, so Mobile Safari's

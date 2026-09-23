@@ -2666,7 +2666,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
 
 test('streams ANSI terminal output, input, viewport leases, driver state, and reconnects without exposing credentials', async ({
   page,
-}) => {
+}, testInfo) => {
   await installFakeTerminalSockets(page);
   await mockProject(page);
   await page.goto('/');
@@ -2807,6 +2807,13 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __terminalSockets: unknown[] }).__terminalSockets.length))
     .toBeGreaterThan(before);
+  await expect
+    .poll(async () => {
+      const text = await magnified.locator('.xterm-rows').innerText();
+      return text.split('Live terminal ready').length - 1;
+    })
+    .toBe(1);
+  await page.screenshot({ path: testInfo.outputPath('terminal-reconnect-single-replay.png'), fullPage: true });
 });
 
 test('keeps dashboard terminals inset and scaled through aggressive viewport resizing', async ({ page }) => {
