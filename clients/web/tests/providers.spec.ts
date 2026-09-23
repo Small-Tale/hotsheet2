@@ -15899,10 +15899,6 @@ test('preserves feature-controller command editing and run-dialog parity across 
 test('keeps terminal visibility anchored through interrupted close, resize, and repeated reopen (HS2-MX14DQ)', async ({
   page,
 }, testInfo) => {
-  test.fail(
-    true,
-    'Published @kerfjs/ui@5.0.0-beta.31 omits its tagged Select lifecycle installer; tracked by HS2-3DHZF6.',
-  );
   await page.setViewportSize({ width: 1024, height: 600 });
   await installFakeTerminalSockets(page, true);
   await mockProject(page);

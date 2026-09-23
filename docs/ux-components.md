@@ -430,8 +430,9 @@ These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `AppTab`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.
-Hot Sheet pins `kerfjs` and `@kerfjs/ui` together at 5.0.0-beta.22 and treats the
-release's strengthened declaration unions as integration requirements: Select adapters
+Hot Sheet pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` together at
+5.0.0-beta.34 and treats the strengthened declaration unions introduced in beta.22 as
+integration requirements: Select adapters
 choose one accessible-name branch, while ListHeader compositions choose a complete
 passive or action branch. This keeps disabled/read-only surfaces semantically passive
 rather than emitting incomplete hidden actions. The production shell and UX catalog also

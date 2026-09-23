@@ -734,8 +734,9 @@ and identity-less legacy entries remain conservatively blocking.
   menu action metadata, resize action wiring, and tab identity. The shared package owns their generic anatomy and CSS,
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
-  The web client and its Kerf/Web Awesome spike pin `kerfjs` and `@kerfjs/ui` in
-  lockstep at 5.0.0-beta.24. The client follows that release's stricter component
+  The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.34.
+  The client follows the package's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
   instead of passing partial optional action props. The browser test runtime is kept at
@@ -1575,10 +1576,10 @@ the narrow closed control, so checkmarks and complete group names remain visible
 Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
 The contract for that shared lifecycle keeps the latest open/close request authoritative
 across interrupted animations and viewport changes; a previous close cannot hide a
-reopened menu or return its geometry to the origin. The tagged beta.31 source implements
-that contract, but the immutable npm beta.31 tarball omitted the lifecycle installer;
-the production regression remains expected-failing until the corrected upstream release
-tracked by HS2-3DHZF6. Consumers do not add popup delays or positioning repairs. The dialog's
+reopened menu or return its geometry to the origin. Kerf beta.34 ships the lifecycle
+installer in the immutable npm artifact, and the production regression exercises repeated
+interrupted close, resize, and reopen sequences at wide and narrow widths. Consumers do not
+add popup delays or positioning repairs. The dialog's
 tab toolbar remains transparent against the white dialog
 surface rather than introducing a separate gray band. Visibility groups apply only to the
 global dashboard; the project drawer
