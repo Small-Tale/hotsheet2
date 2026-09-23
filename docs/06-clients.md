@@ -1885,7 +1885,12 @@ than exposing the server secret to web content.
 
 The dashboard's metadata refresh reads only the terminal list. It does not fetch and retain
 a second full REST scrollback snapshot for every tile: each xterm's attach WebSocket is the
-single source for live output and its initial replay. Read-only grid previews keep no xterm
+single source for live output and its initial replay. The PTY host captures that replay and
+subscribes to future output under one lock, so output racing an attach cannot be duplicated or
+lost. If a viewer falls behind, both direct-server and detached-broker paths send an explicit
+`{"terminal_replay":"replace"}` control before the atomic replacement snapshot; the browser
+resets its emulator before applying it, then continues from the paired fresh live receiver
+(HS2-5W0V9M). Read-only grid previews keep no xterm
 history, temporary magnified dashboard viewers keep 1,000 lines, and dedicated interactive
 terminals retain the full 5,000-line client history. Disposing a viewport cancels its frames,
 timers, observers, xterm subscriptions/addons, and socket; repeated magnify/dismiss cycles are

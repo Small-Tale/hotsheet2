@@ -294,18 +294,13 @@ async fn stream_terminal(
         return write_line(&mut write, &StreamOut::NotFound).await;
     };
 
-    // Subscribe BEFORE snapshotting so no chunk is lost between the snapshot and the stream.
-    let mut out_rx = term.subscribe();
+    // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
+    // once in either the replay or the live stream (HS2-5W0V9M).
+    let (snapshot, mut out_rx) = term.subscribe_with_scrollback();
     let mut size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
-    write_line(
-        &mut write,
-        &StreamOut::Scrollback {
-            data: term.scrollback(),
-        },
-    )
-    .await?;
+    write_line(&mut write, &StreamOut::Scrollback { data: snapshot }).await?;
 
     loop {
         tokio::select! {
@@ -313,7 +308,9 @@ async fn stream_terminal(
                 Ok(data) => write_line(&mut write, &StreamOut::Output { data }).await?,
                 // Fell behind the fan-out — re-sync from a fresh snapshot.
                 Err(RecvError::Lagged(_)) => {
-                    write_line(&mut write, &StreamOut::Scrollback { data: term.scrollback() }).await?;
+                    let (snapshot, replacement) = term.subscribe_with_scrollback();
+                    out_rx = replacement;
+                    write_line(&mut write, &StreamOut::Scrollback { data: snapshot }).await?;
                 }
                 Err(RecvError::Closed) => break, // terminal ended
             },

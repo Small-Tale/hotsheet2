@@ -167,7 +167,7 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
   });
 
-  it('replaces emulator state before every reconnect replay instead of appending duplicate output (HS2-0V2DYR)', () => {
+  it('replaces emulator state for explicit lag resync and every reconnect replay (HS2-0V2DYR, HS2-5W0V9M)', () => {
     const { viewport } = element(),
       dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
       terminal = allocated.terminals[0],
@@ -178,6 +178,11 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(terminal.reset).not.toHaveBeenCalled();
     expect(terminal.write).toHaveBeenCalledTimes(1);
 
+    sockets[0].dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ terminal_replay: 'replace' }) }));
+    sockets[0].dispatchEvent(new MessageEvent('message', { data: replay }));
+    expect(terminal.reset).toHaveBeenCalledTimes(1);
+    expect(terminal.write).toHaveBeenCalledTimes(2);
+
     for (let cycle = 0; cycle < 2; cycle += 1) {
       sockets.at(-1)!.dispatchEvent(new Event('close'));
       scheduledTimeouts.at(-1)!();
@@ -185,9 +190,9 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
       sockets.at(-1)!.dispatchEvent(new Event('open'));
       sockets.at(-1)!.dispatchEvent(new MessageEvent('message', { data: replay }));
     }
-    expect(terminal.reset).toHaveBeenCalledTimes(2);
-    expect(terminal.write).toHaveBeenCalledTimes(3);
-    expect(terminal.reset.mock.invocationCallOrder[1]).toBeLessThan(terminal.write.mock.invocationCallOrder[2]);
+    expect(terminal.reset).toHaveBeenCalledTimes(3);
+    expect(terminal.write).toHaveBeenCalledTimes(4);
+    expect(terminal.reset.mock.invocationCallOrder[2]).toBeLessThan(terminal.write.mock.invocationCallOrder[3]);
     dispose();
   });
 });

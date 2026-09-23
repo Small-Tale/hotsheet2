@@ -7,6 +7,7 @@ import { Terminal } from '@xterm/xterm';
 import { isMobileViewport } from './mobile-layout';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import {
+  isTerminalReplacementReplay,
   parseTerminalSizeMessage,
   stripLeadingZshPromptEolMark,
   TERMINAL_DASHBOARD_COLS,
@@ -520,6 +521,11 @@ function initializeTerminalViewport(
     current.addEventListener('message', (event) => {
       if (socket !== current) return;
       if (typeof event.data === 'string') {
+        if (isTerminalReplacementReplay(event.data)) {
+          terminal.reset();
+          initialReplay = true;
+          return;
+        }
         const size = parseTerminalSizeMessage(event.data);
         if (!size) return;
         serverSize = size.pty_size;

@@ -32,6 +32,14 @@ export function parseTerminalSizeMessage(value: string): TerminalSizeMessage | u
   return undefined;
 }
 
+export function isTerminalReplacementReplay(value: string): boolean {
+  try {
+    return (JSON.parse(value) as { terminal_replay?: unknown }).terminal_replay === 'replace';
+  } catch {
+    return false;
+  }
+}
+
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
 export const TERMINAL_RESIZE_SETTLE_MS = 120;
 export const TERMINAL_DRAWER_RESIZE_END_EVENT = 'hotsheet-terminal-drawer-resize-end';

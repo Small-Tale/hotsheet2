@@ -7637,7 +7637,8 @@ fn classify_terminal_text(value: &str) -> TerminalText<'_> {
 
 #[cfg(test)]
 mod terminal_text_tests {
-    use super::{TerminalText, classify_terminal_text};
+    use super::{TerminalText, classify_terminal_text, terminal_replay_control};
+    use axum::extract::ws::Message;
 
     #[test]
     fn malformed_resize_controls_are_dropped_instead_of_becoming_pty_input() {
@@ -7654,6 +7655,14 @@ mod terminal_text_tests {
             TerminalText::Input("echo hello\n")
         ));
     }
+
+    #[test]
+    fn lag_resync_has_an_explicit_replacement_control() {
+        assert!(matches!(
+            terminal_replay_control(),
+            Message::Text(value) if value.as_str() == r#"{"terminal_replay":"replace"}"#
+        ));
+    }
 }
 
 /// The size the server chose, pushed to every viewer when it changes.
@@ -7666,6 +7675,11 @@ struct SizeMsg<'a> {
 struct PtySizeMsg {
     cols: u16,
     rows: u16,
+}
+
+/// A replay after initial attach replaces the viewer's emulator state rather than appending.
+fn terminal_replay_control() -> Message {
+    Message::Text(r#"{"terminal_replay":"replace"}"#.into())
 }
 
 /// Monotonic-ish wall clock in ms for the size arbiter (real millis; the arbiter is
@@ -7686,13 +7700,12 @@ async fn terminal_attach_loop(
 ) {
     use tokio::sync::broadcast::error::RecvError;
 
-    // Subscribe BEFORE snapshotting so no chunk is lost between the snapshot and the stream
-    // (a small overlap of already-seen bytes is harmless — the terminal renders it fine).
-    let mut rx = term.subscribe();
+    // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
+    // once in either the replay or the live stream (HS2-5W0V9M).
+    let (snapshot, mut rx) = term.subscribe_with_scrollback();
     let mut size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
-    let snapshot = term.scrollback();
     if !snapshot.is_empty() && socket.send(Message::Binary(snapshot.into())).await.is_err() {
         return;
     }
@@ -7707,7 +7720,11 @@ async fn terminal_attach_loop(
                 }
                 // Fell behind the fan-out buffer — re-sync from a fresh snapshot.
                 Err(RecvError::Lagged(_)) => {
-                    let snap = term.scrollback();
+                    let (snap, replacement) = term.subscribe_with_scrollback();
+                    rx = replacement;
+                    if socket.send(terminal_replay_control()).await.is_err() {
+                        break;
+                    }
                     if socket.send(Message::Binary(snap.into())).await.is_err() {
                         break;
                     }
@@ -7779,6 +7796,7 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
         Ok(s) => s,
         Err(_) => return, // dropping the socket closes it
     };
+    let mut received_initial_replay = false;
 
     loop {
         tokio::select! {
@@ -7786,8 +7804,18 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                 Ok(Some(f)) => {
                     use hotsheet_terminals::StreamOut as S;
                     match f {
-                        // Scrollback replay + live output both render as binary output frames.
-                        S::Scrollback { data } | S::Output { data } => {
+                        S::Scrollback { data } => {
+                            if received_initial_replay
+                                && socket.send(terminal_replay_control()).await.is_err()
+                            {
+                                break;
+                            }
+                            received_initial_replay = true;
+                            if socket.send(Message::Binary(data.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        S::Output { data } => {
                             if socket.send(Message::Binary(data.into())).await.is_err() {
                                 break;
                             }

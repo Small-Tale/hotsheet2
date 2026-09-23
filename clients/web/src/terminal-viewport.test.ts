@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isTerminalReplacementReplay,
   parseTerminalSizeMessage,
   stripLeadingZshPromptEolMark,
   TERMINAL_DASHBOARD_COLS,
@@ -58,6 +59,12 @@ describe('terminal viewport protocol', () => {
     });
     expect(parseTerminalSizeMessage('terminal text')).toBeUndefined();
     expect(parseTerminalSizeMessage('{"pty_size":{"cols":0,"rows":40}}')).toBeUndefined();
+  });
+  it('recognizes only the explicit replacement replay control', () => {
+    expect(isTerminalReplacementReplay('{"terminal_replay":"replace"}')).toBe(true);
+    expect(isTerminalReplacementReplay('{"terminal_replay":"append"}')).toBe(false);
+    expect(isTerminalReplacementReplay('{"pty_size":{"cols":80,"rows":24}}')).toBe(false);
+    expect(isTerminalReplacementReplay('terminal text')).toBe(false);
   });
   it('caps exponential reconnect backoff', () => {
     expect([0, 1, 2, 8].map(terminalReconnectDelay)).toEqual([250, 500, 1000, 8000]);

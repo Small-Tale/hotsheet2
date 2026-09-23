@@ -10,6 +10,30 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const SECRET: &str = "test-secret";
 
+async fn wait_for_terminal_text(base: String, id: String, needle: &'static str) {
+    tokio::task::spawn_blocking(move || {
+        for _ in 0..100 {
+            let response = ureq::get(&format!("{base}/terminals/{id}"))
+                .set("x-hotsheet-secret", SECRET)
+                .call()
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            if value["scrollback"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(needle)
+            {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("terminal never produced readiness marker {needle}");
+    })
+    .await
+    .unwrap();
+}
+
 fn workspace_binary(name: &str) -> std::path::PathBuf {
     if let Some(path) = std::env::var_os(format!("CARGO_BIN_EXE_{name}")) {
         return path.into();
@@ -149,10 +173,27 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
         let resp = ureq::post(&format!("{base}/terminals"))
             .set("x-hotsheet-secret", SECRET)
             .set("content-type", "application/json")
-            .send_string(r#"{"command":"cat"}"#)
+            .send_string(
+                r#"{"command":"/bin/sh","args":["-c","stty -echo; printf 'DIRECT-READY\\n'; exec cat"]}"#,
+            )
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+    wait_for_terminal_text(format!("http://{addr}"), id.clone(), "DIRECT-READY").await;
+
+    // Write immediately before attach. The PTY drain can publish this concurrently with the
+    // snapshot/subscription handoff; it must land in exactly one side of that boundary.
+    let handoff_base = format!("http://{addr}");
+    let handoff_id = id.clone();
+    tokio::task::spawn_blocking(move || {
+        ureq::post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"data":"direct-handoff-marker\n"}"#)
+            .unwrap();
     })
     .await
     .unwrap();
@@ -189,6 +230,11 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
     assert!(
         saw_echo,
         "the attach stream should carry cat's echo; saw: {seen:?}"
+    );
+    assert_eq!(
+        seen.matches("direct-handoff-marker").count(),
+        1,
+        "concurrent direct-server handoff must deliver its marker exactly once: {seen:?}"
     );
 
     // A bad secret is rejected at the upgrade (no stream).
@@ -303,7 +349,9 @@ async fn broker_mode_attach_streams_through_the_broker() {
         let resp = ureq::post(&format!("{base}/terminals"))
             .set("x-hotsheet-secret", SECRET)
             .set("content-type", "application/json")
-            .send_string(r#"{"command":"cat","id":"bws"}"#)
+            .send_string(
+                r#"{"command":"/bin/sh","args":["-c","stty -echo; printf 'BROKER-READY\\n'; exec cat"],"id":"bws"}"#,
+            )
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
@@ -311,6 +359,19 @@ async fn broker_mode_attach_streams_through_the_broker() {
     .await
     .unwrap();
     assert_eq!(id, "bws");
+    wait_for_terminal_text(format!("http://{addr}"), id.clone(), "BROKER-READY").await;
+
+    let handoff_base = format!("http://{addr}");
+    let handoff_id = id.clone();
+    tokio::task::spawn_blocking(move || {
+        ureq::post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"data":"broker-handoff-marker\n"}"#)
+            .unwrap();
+    })
+    .await
+    .unwrap();
 
     // Attach over the WebSocket — bridged to the broker stream.
     let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
@@ -329,12 +390,11 @@ async fn broker_mode_attach_streams_through_the_broker() {
         .await
         .unwrap();
 
-    let (mut saw_echo, mut saw_size) = (false, false);
+    let (mut saw_echo, mut saw_size, mut seen_output) = (false, false, String::new());
     let done = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        let mut seen = String::new();
         while let Some(Ok(msg)) = ws.next().await {
             match msg {
-                WsMessage::Binary(b) => seen.push_str(&String::from_utf8_lossy(&b)),
+                WsMessage::Binary(b) => seen_output.push_str(&String::from_utf8_lossy(&b)),
                 WsMessage::Text(t) => {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
                         if v.get("pty_size").is_some() {
@@ -346,7 +406,7 @@ async fn broker_mode_attach_streams_through_the_broker() {
                 WsMessage::Close(_) => break,
                 _ => {}
             }
-            saw_echo = seen.contains("broker-echo");
+            saw_echo = seen_output.contains("broker-echo");
             if saw_echo && saw_size {
                 return true;
             }
@@ -360,6 +420,11 @@ async fn broker_mode_attach_streams_through_the_broker() {
         done && saw_echo && saw_size,
         "broker attach should stream cat's echo AND route the size claim through \
          (echo={saw_echo}, size={saw_size})"
+    );
+    assert_eq!(
+        seen_output.matches("broker-handoff-marker").count(),
+        1,
+        "concurrent broker handoff must deliver its marker exactly once: {seen_output:?}"
     );
 }
 

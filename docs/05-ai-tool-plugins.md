@@ -212,7 +212,10 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   Unix or `COMSPEC` on Windows, with `/bin/sh` and `cmd.exe` fallbacks), matching
   HS1's explicit new-terminal behavior.
 - A **scrollback ring buffer** and multi-client attach (many viewers see one
-  stream, tmux-style).
+  stream, tmux-style). Retained scrollback and the live broadcast share one atomic
+  handoff: output concurrent with attach appears exactly once in either the snapshot or
+  the new subscriber. A lagged subscriber atomically takes a replacement snapshot and a
+  fresh live receiver rather than appending an overlapping replay (HS2-5W0V9M).
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
   recycles or is explicitly stopped. Detached hosting is the server default; ordinary

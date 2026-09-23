@@ -103,19 +103,60 @@ impl Ring {
     }
 }
 
+/// Owns retained and live output as one synchronization boundary. Publishing and taking a
+/// snapshot+subscription are mutually exclusive, so a chunk is either in the snapshot or in
+/// the receiver created with it, never both and never neither (HS2-5W0V9M).
+struct OutputReplay {
+    ring: Mutex<Ring>,
+    tx: broadcast::Sender<Vec<u8>>,
+}
+
+impl OutputReplay {
+    fn new(bytes: usize, chunks: usize) -> Self {
+        Self {
+            ring: Mutex::new(Ring::new(bytes)),
+            tx: broadcast::channel(chunks).0,
+        }
+    }
+
+    fn publish(&self, bytes: &[u8]) {
+        let mut ring = self
+            .ring
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        ring.push(bytes);
+        // Broadcast while the ring lock is held. `subscribe_with_snapshot` takes the same
+        // lock before subscribing, which makes the handoff sequence-exact.
+        let _ = self.tx.send(bytes.to_vec());
+    }
+
+    fn snapshot(&self) -> Vec<u8> {
+        self.ring
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .snapshot()
+    }
+
+    fn subscribe_with_snapshot(&self) -> (Vec<u8>, broadcast::Receiver<Vec<u8>>) {
+        let ring = self
+            .ring
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let receiver = self.tx.subscribe();
+        (ring.snapshot(), receiver)
+    }
+}
+
 /// A running PTY terminal.
 pub struct Terminal {
     kind: TerminalKind,
     master: Mutex<Box<dyn MasterPty + Send>>,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     writer: Mutex<Box<dyn Write + Send>>,
-    scrollback: Arc<Mutex<Ring>>,
+    output: Arc<OutputReplay>,
     busy: Arc<Mutex<BusyDetector>>,
     /// Informational OSC 7/8/9 state (cwd / hyperlink / progress), parsed from output (HS2-RCKEJ9).
     osc: Arc<Mutex<OscScanner>>,
-    /// Live output fan-out: every drained chunk is broadcast so a WS viewer streams new bytes
-    /// as they arrive (after replaying the scrollback snapshot). HS2-XTTTMV.
-    output_tx: broadcast::Sender<Vec<u8>>,
     /// Multi-viewer size arbiter — reconciles every attached viewport's size claim into one
     /// PTY size (HS2-BD7Q74). Shared across all viewers of this terminal.
     sizer: Arc<Mutex<SizeArbiter>>,
@@ -163,16 +204,10 @@ impl Terminal {
         let mut reader = pair.master.try_clone_reader().map_err(pty_err)?;
         let writer = pair.master.take_writer().map_err(pty_err)?;
 
-        let scrollback = Arc::new(Mutex::new(Ring::new(SCROLLBACK_BYTES)));
+        let output = Arc::new(OutputReplay::new(SCROLLBACK_BYTES, OUTPUT_CHANNEL_CAP));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
         let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(initial_cwd)));
-        let (output_tx, _) = broadcast::channel(OUTPUT_CHANNEL_CAP);
-        let (sb, bz, oc, tx) = (
-            scrollback.clone(),
-            busy.clone(),
-            osc.clone(),
-            output_tx.clone(),
-        );
+        let (out, bz, oc) = (output.clone(), busy.clone(), osc.clone());
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -180,17 +215,13 @@ impl Terminal {
                     Ok(0) | Err(_) => break, // EOF or the pty closed
                     Ok(n) => {
                         let chunk = &buf[..n];
-                        if let Ok(mut s) = sb.lock() {
-                            s.push(chunk);
-                        }
+                        out.publish(chunk);
                         if let Ok(mut d) = bz.lock() {
                             d.feed(chunk);
                         }
                         if let Ok(mut o) = oc.lock() {
                             o.feed(chunk);
                         }
-                        // Fan out to live viewers (Err just means no one is attached).
-                        let _ = tx.send(chunk.to_vec());
                     }
                 }
             }
@@ -204,10 +235,9 @@ impl Terminal {
             master: Mutex::new(pair.master),
             child: Mutex::new(child),
             writer: Mutex::new(writer),
-            scrollback,
+            output,
             busy,
             osc,
-            output_tx,
             sizer: Arc::new(Mutex::new(sizer)),
             size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
         })
@@ -260,11 +290,10 @@ impl Terminal {
         decision
     }
 
-    /// Subscribe to the live output stream — each drained PTY chunk, as it arrives. A viewer
-    /// should first replay [`scrollback`](Self::scrollback), then stream from here. A slow
-    /// subscriber may see `Lagged` and should re-sync from a fresh snapshot.
-    pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {
-        self.output_tx.subscribe()
+    /// Atomically capture retained output and subscribe immediately after it. Every concurrently
+    /// published chunk appears exactly once across the returned snapshot and receiver.
+    pub fn subscribe_with_scrollback(&self) -> (Vec<u8>, broadcast::Receiver<Vec<u8>>) {
+        self.output.subscribe_with_snapshot()
     }
 
     /// Write input bytes to the terminal (keystrokes / a command).
@@ -291,10 +320,7 @@ impl Terminal {
 
     /// A snapshot of the scrollback ring (what a re-attaching viewer replays).
     pub fn scrollback(&self) -> Vec<u8> {
-        self.scrollback
-            .lock()
-            .map(|s| s.snapshot())
-            .unwrap_or_default()
+        self.output.snapshot()
     }
 
     /// The inferred busy/idle activity from the output stream.
@@ -333,6 +359,7 @@ impl Terminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Barrier;
     use std::time::{Duration, Instant};
 
     fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
@@ -365,10 +392,60 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_and_live_subscription_partition_concurrent_output_exactly_once() {
+        for index in 0..500 {
+            let output = Arc::new(OutputReplay::new(1024, 8));
+            let barrier = Arc::new(Barrier::new(3));
+            let publishing = {
+                let output = output.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    output.publish(format!("marker-{index}").as_bytes());
+                })
+            };
+            let subscribing = {
+                let output = output.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    output.subscribe_with_snapshot()
+                })
+            };
+            barrier.wait();
+            publishing.join().unwrap();
+            let (mut combined, mut receiver) = subscribing.join().unwrap();
+            while let Ok(chunk) = receiver.try_recv() {
+                combined.extend_from_slice(&chunk);
+            }
+            assert_eq!(combined, format!("marker-{index}").as_bytes());
+        }
+    }
+
+    #[test]
+    fn lag_replacement_snapshot_starts_a_fresh_exact_live_boundary() {
+        let output = OutputReplay::new(1024, 2);
+        let (_, mut stale) = output.subscribe_with_snapshot();
+        output.publish(b"one");
+        output.publish(b"two");
+        output.publish(b"three");
+        assert!(matches!(
+            stale.try_recv(),
+            Err(broadcast::error::TryRecvError::Lagged(_))
+        ));
+
+        let (snapshot, mut fresh) = output.subscribe_with_snapshot();
+        assert_eq!(snapshot, b"onetwothree");
+        output.publish(b"four");
+        assert_eq!(fresh.try_recv().unwrap(), b"four");
+        assert!(fresh.try_recv().is_err());
+    }
+
+    #[test]
     fn subscribe_streams_live_output_to_a_late_and_early_subscriber() {
         let term = Terminal::spawn(TermSpec::new("cat")).expect("spawn cat");
         // Subscribe BEFORE writing — the subscriber should see the live echo.
-        let mut rx = term.subscribe();
+        let (_, mut rx) = term.subscribe_with_scrollback();
         term.write(b"live-line\n").unwrap();
 
         let mut acc: Vec<u8> = Vec::new();
