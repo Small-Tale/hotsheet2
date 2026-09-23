@@ -288,7 +288,7 @@ impl FsStore {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn with_background_push_observer(mut self, observer: BackgroundPushObserver) -> Self {
         self.background_push_observer = Some(observer);
         self
