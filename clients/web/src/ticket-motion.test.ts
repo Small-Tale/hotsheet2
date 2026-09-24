@@ -157,6 +157,17 @@ function snapshot(rows: Array<[string, MockRow, string]>): TicketMotionSnapshot 
 }
 
 describe('ticket motion', () => {
+  it('does not capture or animate a bulk collection replacement (HS2-E76C4K)', () => {
+    const previous = Array.from({ length: 101 }, (_, index) =>
+        row(`HS2-BULK${index}`, 'ticket-list', rect(10, 20 + index * 72)),
+      ),
+      incoming = row('HS2-MATCH', 'ticket-list', rect(10, 20));
+    const before = captureTicketMotion(root(previous), 'queue');
+    animateTicketMotion(before, root([incoming]), false, 'queue');
+    expect(before.rows.size).toBe(0);
+    expect(incoming.animate).not.toHaveBeenCalled();
+  });
+
   it('does not clone or animate rows when the ticket collection view changes', () => {
     const previous = row('HS2-A', 'ticket-list', rect(10, 20)),
       incoming = row('HS2-B', 'ticket-list', rect(10, 20));

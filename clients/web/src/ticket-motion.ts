@@ -12,6 +12,7 @@ export interface TicketMotionSnapshot {
 
 const LAYOUT_DURATION = 240,
   FADE_DURATION = 160,
+  MAX_CAPTURED_ROWS = 100,
   MOTION_EASING = 'cubic-bezier(.2,.8,.2,1)';
 export const TICKET_MOTION_LAYER = '90';
 const activeLayoutAnimations = new WeakMap<HTMLElement, Animation>();
@@ -72,8 +73,12 @@ function currentRow(container: HTMLElement): TicketMotionRow | undefined {
 }
 
 export function captureTicketMotion(root: ParentNode, collectionKey = ''): TicketMotionSnapshot {
-  const rows = new Map<string, TicketMotionRow>();
-  for (const container of motionContainers(root)) {
+  const rows = new Map<string, TicketMotionRow>(),
+    containers = motionContainers(root);
+  // Measuring and cloning an entire populated queue can monopolize the main thread for seconds when
+  // search replaces the collection. Bulk changes render directly; motion remains for ordinary ticket work.
+  if (containers.length > MAX_CAPTURED_ROWS) return { scope: '', rows };
+  for (const container of containers) {
     const row = currentRow(container),
       slug = row?.visual.dataset.ticketSlug;
     if (row && slug) rows.set(slug, row);

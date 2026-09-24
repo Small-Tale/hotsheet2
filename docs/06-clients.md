@@ -345,7 +345,9 @@ and identity-less legacy entries remain conservatively blocking.
   Pure inspector, sidebar, or viewport layout shifts never trigger collection motion.
   Queue, Backlog, Archive, and ticket-error views have distinct motion scopes, so
   replacing a whole collection never creates per-row transition ghosts; within-view
-  ticket arrivals, departures, and moves retain their normal motion.
+  ticket arrivals, departures, and moves retain their normal motion. Collections above
+  100 rendered tickets also bypass geometry capture and transition ghosts, keeping
+  search responsive when it replaces a fully rendered large queue (HS2-E76C4K).
   Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not

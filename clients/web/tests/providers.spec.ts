@@ -12599,7 +12599,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.screenshot({ path: '/private/tmp/hs2-v20ewj-archive-column.png', fullPage: true });
 });
 
-test('switches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
+test('switches and searches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
   const submissions: unknown[] = [];
   const statuses: Array<'not_started' | 'backlog' | 'archive'> = [
     ...Array.from({ length: 60 }, () => 'not_started' as const),
@@ -12621,9 +12621,13 @@ test('switches large ticket views without cloning every row into motion ghosts',
     submissions.push(route.request().postDataJSON());
     await route.fulfill({ status: 201, json: { slug: 'HS2-SHOULD-NOT-EXIST' } });
   });
-  await page.route('**/checkouts/demo-checkout/tickets*', (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: largeRows }) : route.fallback(),
-  );
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const query = new URL(route.request().url()).searchParams.get('text');
+    if (!query) return route.fulfill({ json: largeRows });
+    const matches = largeRows.filter((ticket) => ticket.title.includes(query));
+    return route.fulfill({ json: { items: matches, counts: {} } });
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
@@ -12660,6 +12664,19 @@ test('switches large ticket views without cloning every row into motion ghosts',
     }
     await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
     await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
+    if (view === 'Archive') {
+      await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
+      const editor = page.getByRole('searchbox', { name: 'Search tickets' }),
+        started = Date.now();
+      await editor.fill('2074');
+      expect(Date.now() - started).toBeLessThan(250);
+      await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
+      await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
+      await page.screenshot({ path: '/private/tmp/hs2-e76c4k-large-search.png', fullPage: true });
+      await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+      await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
+      await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
+    }
   }
   await page.waitForTimeout(300);
   expect(submissions).toEqual([]);
