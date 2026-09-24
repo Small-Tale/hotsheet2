@@ -33,6 +33,19 @@ import {
 
 type OwnTerminalResource = (dispose: () => void) => void;
 
+// Reset modes, erase scrollback + the visible display, and home the cursor in the same parser
+// batch as the authoritative replay. RIS alone does not erase every xterm buffer row.
+const TERMINAL_RESET_BYTES = new Uint8Array([
+  0x1b, 0x63, 0x1b, 0x5b, 0x33, 0x4a, 0x1b, 0x5b, 0x32, 0x4a, 0x1b, 0x5b, 0x48,
+]);
+
+function terminalReplacementPayload(value: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+  const replacement = new Uint8Array(TERMINAL_RESET_BYTES.length + value.length);
+  replacement.set(TERMINAL_RESET_BYTES);
+  replacement.set(value, TERMINAL_RESET_BYTES.length);
+  return replacement;
+}
+
 function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () => void {
   const cleanups: Array<() => void> = [];
   const dispose = () => {
@@ -270,6 +283,7 @@ function initializeTerminalViewport(
     focusRequested = autoFocus,
     initialReplay = true,
     connectedOnce = false,
+    replacementReplayPending = false,
     serverSize: { cols: number; rows: number } | undefined;
   own(() => {
     disposed = true;
@@ -506,11 +520,10 @@ function initializeTerminalViewport(
     current.binaryType = 'arraybuffer';
     current.addEventListener('open', () => {
       if (socket !== current) return;
-      // Every attach begins with the broker/server's authoritative scrollback snapshot. A
-      // reconnect must replace the prior local emulator state before that replay arrives;
-      // appending it is what made recent transcript blocks repeat and could leave ANSI modes
-      // from the old stream active while the replay was interpreted (HS2-0V2DYR).
-      if (connectedOnce) terminal.reset();
+      // Every attach begins with the broker/server's authoritative scrollback snapshot. Defer
+      // replacement until that binary frame arrives so reset + replay enter xterm as one parser
+      // write; clearing synchronously here exposes a blank frame while the replay is in flight.
+      replacementReplayPending = connectedOnce;
       connectedOnce = true;
       attempt = 0;
       element.dataset.connection = 'connected';
@@ -522,7 +535,7 @@ function initializeTerminalViewport(
       if (socket !== current) return;
       if (typeof event.data === 'string') {
         if (isTerminalReplacementReplay(event.data)) {
-          terminal.reset();
+          replacementReplayPending = true;
           initialReplay = true;
           return;
         }
@@ -543,6 +556,10 @@ function initializeTerminalViewport(
         if (initialReplay) {
           initialReplay = false;
           if (fixedDashboardGrid || magnified) bytes = stripLeadingZshPromptEolMark(bytes);
+        }
+        if (replacementReplayPending) {
+          replacementReplayPending = false;
+          bytes = terminalReplacementPayload(bytes);
         }
         terminal.write(bytes);
       };

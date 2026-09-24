@@ -7706,7 +7706,9 @@ async fn terminal_attach_loop(
     let mut size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
-    if !snapshot.is_empty() && socket.send(Message::Binary(snapshot.into())).await.is_err() {
+    // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
+    // atomically clear stale emulator state without blanking while waiting for a payload.
+    if socket.send(Message::Binary(snapshot.into())).await.is_err() {
         return;
     }
 

@@ -78,28 +78,106 @@ impl TermSpec {
     }
 }
 
-/// A bounded byte ring — drops the oldest bytes once full.
+#[derive(Clone, Copy)]
+struct RetainedByte {
+    value: u8,
+    safe_start: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+enum AnsiState {
+    #[default]
+    Ground,
+    Escape,
+    Csi,
+    String {
+        bell_terminated: bool,
+    },
+    StringEscape {
+        bell_terminated: bool,
+    },
+}
+
+impl AnsiState {
+    fn advance(self, byte: u8) -> Self {
+        match self {
+            Self::Ground => {
+                if byte == 0x1b {
+                    Self::Escape
+                } else {
+                    Self::Ground
+                }
+            }
+            Self::Escape => match byte {
+                b'[' => Self::Csi,
+                b']' => Self::String {
+                    bell_terminated: true,
+                },
+                b'P' | b'X' | b'^' | b'_' => Self::String {
+                    bell_terminated: false,
+                },
+                0x20..=0x2f => Self::Escape,
+                _ => Self::Ground,
+            },
+            Self::Csi => match byte {
+                0x18 | 0x1a => Self::Ground,
+                0x1b => Self::Escape,
+                0x40..=0x7e => Self::Ground,
+                _ => Self::Csi,
+            },
+            Self::String { bell_terminated } => match byte {
+                0x07 if bell_terminated => Self::Ground,
+                0x1b => Self::StringEscape { bell_terminated },
+                _ => Self::String { bell_terminated },
+            },
+            Self::StringEscape { bell_terminated } => {
+                if byte == b'\\' {
+                    Self::Ground
+                } else if byte == 0x1b {
+                    Self::StringEscape { bell_terminated }
+                } else {
+                    Self::String { bell_terminated }
+                }
+            }
+        }
+    }
+}
+
+/// A bounded byte ring that trims only at terminal-parser-safe boundaries. Raw byte eviction
+/// can expose the parameter tail of an ANSI command (for example `61m`) as visible text when a
+/// viewer replays into a fresh emulator. UTF-8 continuation bytes are likewise never retained as
+/// the first byte of a snapshot.
 struct Ring {
-    buf: VecDeque<u8>,
+    buf: VecDeque<RetainedByte>,
     cap: usize,
+    ansi: AnsiState,
 }
 impl Ring {
     fn new(cap: usize) -> Self {
         Self {
             buf: VecDeque::new(),
             cap,
+            ansi: AnsiState::Ground,
         }
     }
     fn push(&mut self, bytes: &[u8]) {
         for &b in bytes {
-            if self.buf.len() == self.cap {
+            let safe_start = matches!(self.ansi, AnsiState::Ground) && b & 0xc0 != 0x80;
+            self.buf.push_back(RetainedByte {
+                value: b,
+                safe_start,
+            });
+            self.ansi = self.ansi.advance(b);
+            if self.buf.len() > self.cap {
                 self.buf.pop_front();
+                while self.buf.front().is_some_and(|front| !front.safe_start) {
+                    self.buf.pop_front();
+                }
             }
-            self.buf.push_back(b);
         }
     }
     fn snapshot(&self) -> Vec<u8> {
-        self.buf.iter().copied().collect()
+        self.buf.iter().map(|byte| byte.value).collect()
     }
 }
 
@@ -371,6 +449,30 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         cond()
+    }
+
+    #[test]
+    fn bounded_replay_drops_partial_ansi_sequences_and_utf8_characters() {
+        let mut ansi = Ring::new(5);
+        ansi.push(b"prefix\x1b[38;5;");
+        ansi.push(b"61mOK");
+        assert_eq!(ansi.snapshot(), b"OK");
+
+        let mut utf8 = Ring::new(2);
+        utf8.push("A€B".as_bytes());
+        assert_eq!(utf8.snapshot(), b"B");
+    }
+
+    #[test]
+    fn bounded_replay_preserves_complete_split_ansi_sequences_before_eviction() {
+        let mut ring = Ring::new(64);
+        ring.push(b"\x1b]8;;https://example.com");
+        ring.push(b"\x1b\\link\x1b[0");
+        ring.push(b"m");
+        assert_eq!(
+            ring.snapshot(),
+            b"\x1b]8;;https://example.com\x1b\\link\x1b[0m"
+        );
     }
 
     #[test]

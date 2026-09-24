@@ -1244,7 +1244,13 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
           setTimeout(() => {
             this.readyState = FakeTerminalSocket.OPEN;
             this.dispatchEvent(new Event('open'));
-            this.emitBytes('\u001b[32mLive terminal ready\u001b[0m\r\n');
+            const replayDelay = (window as unknown as { __delayNextTerminalReplay?: number }).__delayNextTerminalReplay;
+            delete (window as unknown as { __delayNextTerminalReplay?: number }).__delayNextTerminalReplay;
+            if (replayDelay)
+              setTimeout(() => {
+                this.emitBytes('\u001b[32mLive terminal ready\u001b[0m\r\n');
+              }, replayDelay);
+            else this.emitBytes('\u001b[32mLive terminal ready\u001b[0m\r\n');
           });
         }
         send(value: unknown) {
@@ -2799,6 +2805,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     () => (window as unknown as { __terminalSockets: unknown[] }).__terminalSockets.length,
   );
   await page.evaluate(() => {
+    (window as unknown as { __delayNextTerminalReplay: number }).__delayNextTerminalReplay = 150;
     (window as unknown as { __terminalSockets: Array<{ sent: unknown[]; close(): void }> }).__terminalSockets
       .filter((socket) => socket.sent.some((value) => typeof value === 'string' && value.includes('viewer_id')))
       .at(-1)!
@@ -2807,13 +2814,27 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __terminalSockets: unknown[] }).__terminalSockets.length))
     .toBeGreaterThan(before);
+  await expect(magnified).toHaveAttribute('data-connection', 'connected');
+  expect(await magnified.locator('.xterm-rows').innerText()).toContain('Live terminal ready');
   await expect
     .poll(async () => {
       const text = await magnified.locator('.xterm-rows').innerText();
       return text.split('Live terminal ready').length - 1;
     })
     .toBe(1);
+  await expect(magnified.locator('.xterm-rows')).not.toContainText('browser input');
   await page.screenshot({ path: testInfo.outputPath('terminal-reconnect-single-replay.png'), fullPage: true });
+  await page
+    .getByRole('dialog', { name: 'Magnified Codex Main' })
+    .getByRole('button', { name: 'Open Codex Main in project terminal drawer' })
+    .click();
+  await page.setViewportSize({ width: 1728, height: 1117 });
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    drawerTerminal = drawer.locator('[data-component="terminal-viewport"][data-terminal-id="codex-main"]');
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  await expect(drawerTerminal).toHaveAttribute('data-connection', 'connected');
+  await expect(drawerTerminal.locator('.xterm-screen')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('terminal-drawer-reconnect-after.png'), fullPage: true });
 });
 
 test('keeps dashboard terminals inset and scaled through aggressive viewport resizing', async ({ page }) => {

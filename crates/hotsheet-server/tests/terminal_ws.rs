@@ -245,6 +245,116 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
     );
 }
 
+#[tokio::test]
+async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app(state)).await.unwrap();
+    });
+
+    let base = format!("http://{addr}");
+    let open_base = base.clone();
+    let id = tokio::task::spawn_blocking(move || {
+        let fill = hotsheet_terminals::SCROLLBACK_BYTES - 2;
+        let script = format!(
+            "printf 'prefix\\033[38;5;61m'; head -c {fill} /dev/zero | LC_ALL=C tr '\\000' A; sleep 5"
+        );
+        let body = serde_json::json!({
+            "command": "/bin/sh",
+            "args": ["-c", script],
+        })
+        .to_string();
+        let response = ureq::post(&format!("{open_base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&body)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+        value["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+
+    let wait_base = base.clone();
+    let wait_id = id.clone();
+    tokio::task::spawn_blocking(move || {
+        for _ in 0..200 {
+            let response = ureq::get(&format!("{wait_base}/terminals/{wait_id}"))
+                .set("x-hotsheet-secret", SECRET)
+                .call()
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            if value["scrollback"].as_str().unwrap_or_default().len()
+                >= hotsheet_terminals::SCROLLBACK_BYTES - 2
+            {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("terminal never filled the bounded replay");
+    })
+    .await
+    .unwrap();
+
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let WsMessage::Binary(replay) = first else {
+        panic!("first attach frame was not the binary replay: {first:?}");
+    };
+    assert_eq!(replay.len(), hotsheet_terminals::SCROLLBACK_BYTES - 2);
+    assert!(
+        replay.iter().all(|byte| *byte == b'A'),
+        "replay exposed a truncated ANSI parameter prefix: {:?}",
+        &replay[..replay.len().min(16)]
+    );
+}
+
+#[tokio::test]
+async fn empty_attach_replay_is_an_explicit_binary_boundary() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app(state)).await.unwrap();
+    });
+
+    let base = format!("http://{addr}");
+    let id = tokio::task::spawn_blocking(move || {
+        let response = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"command":"/bin/sh","args":["-c","sleep 2"]}"#)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+        value["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(matches!(first, WsMessage::Binary(replay) if replay.is_empty()));
+}
+
 /// Boot a server + open a `cat` terminal; returns (tempdir, addr, terminal id).
 async fn boot_with_cat() -> (tempfile::TempDir, std::net::SocketAddr, String) {
     let dir = tempfile::tempdir().unwrap();

@@ -1713,10 +1713,12 @@ nor a transitioning focus outline can paint over the modal. On the first replay 
 fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
 `%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
 dedicated drawer stream are preserved unchanged.
-When an attach WebSocket reconnects, the first server replay is authoritative: the client resets
-the existing xterm emulator before applying it instead of appending the same bounded transcript
-again. This prevents repeated recent output and prevents stale ANSI modes from the disconnected
-stream from leaking into replayed text (HS2-0V2DYR).
+When an attach WebSocket reconnects, the first server replay is authoritative: the client sends
+the reset and replacement bytes through xterm in one parser write instead of clearing the visible
+emulator while the replay is still in flight or appending the same bounded transcript again. An
+empty replay remains an explicit binary attach boundary. This prevents a blank flicker, repeated
+recent output, and stale ANSI modes from the disconnected stream leaking into replayed text
+(HS2-0V2DYR, HS2-BQR774).
 On a mobile layout, keyboard focus in the active dedicated drawer terminal promotes that
 terminal to a fixed, chrome-free focus surface with only an accessible Exit action. Its bounds
 follow `VisualViewport` offset and size changes rather than the layout viewport, so Mobile Safari's
@@ -1893,8 +1895,10 @@ single source for live output and its initial replay. The PTY host captures that
 subscribes to future output under one lock, so output racing an attach cannot be duplicated or
 lost. If a viewer falls behind, both direct-server and detached-broker paths send an explicit
 `{"terminal_replay":"replace"}` control before the atomic replacement snapshot; the browser
-resets its emulator before applying it, then continues from the paired fresh live receiver
-(HS2-5W0V9M). Read-only grid previews keep no xterm
+submits the emulator reset and snapshot as one parser write, then continues from the paired fresh live receiver
+(HS2-5W0V9M). The PTY host trims its byte-capped replay only at ANSI-ground and UTF-8 character
+boundaries, so eviction cannot expose a control sequence's parameter tail as ordinary terminal
+text (HS2-BQR774). Read-only grid previews keep no xterm
 history, temporary magnified dashboard viewers keep 1,000 lines, and dedicated interactive
 terminals retain the full 5,000-line client history. Disposing a viewport cancels its frames,
 timers, observers, xterm subscriptions/addons, and socket; repeated magnify/dismiss cycles are

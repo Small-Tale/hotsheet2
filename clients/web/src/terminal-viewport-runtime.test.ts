@@ -167,7 +167,7 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
   });
 
-  it('replaces emulator state for explicit lag resync and every reconnect replay (HS2-0V2DYR, HS2-5W0V9M)', () => {
+  it('atomically replaces emulator state with explicit lag and reconnect replay bytes (HS2-BQR774)', () => {
     const { viewport } = element(),
       dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
       terminal = allocated.terminals[0],
@@ -180,8 +180,10 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
 
     sockets[0].dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ terminal_replay: 'replace' }) }));
     sockets[0].dispatchEvent(new MessageEvent('message', { data: replay }));
-    expect(terminal.reset).toHaveBeenCalledTimes(1);
+    expect(terminal.reset).not.toHaveBeenCalled();
     expect(terminal.write).toHaveBeenCalledTimes(2);
+    const reset = [0x1b, 0x63, 0x1b, 0x5b, 0x33, 0x4a, 0x1b, 0x5b, 0x32, 0x4a, 0x1b, 0x5b, 0x48];
+    expect([...terminal.write.mock.calls[1][0]]).toEqual([...reset, ...new Uint8Array(replay)]);
 
     for (let cycle = 0; cycle < 2; cycle += 1) {
       sockets.at(-1)!.dispatchEvent(new Event('close'));
@@ -190,9 +192,17 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
       sockets.at(-1)!.dispatchEvent(new Event('open'));
       sockets.at(-1)!.dispatchEvent(new MessageEvent('message', { data: replay }));
     }
-    expect(terminal.reset).toHaveBeenCalledTimes(3);
+    expect(terminal.reset).not.toHaveBeenCalled();
     expect(terminal.write).toHaveBeenCalledTimes(4);
-    expect(terminal.reset.mock.invocationCallOrder[2]).toBeLessThan(terminal.write.mock.invocationCallOrder[3]);
+    expect([...terminal.write.mock.calls[2][0]]).toEqual([...reset, ...new Uint8Array(replay)]);
+    expect([...terminal.write.mock.calls[3][0]]).toEqual([...reset, ...new Uint8Array(replay)]);
+
+    sockets.at(-1)!.dispatchEvent(new Event('close'));
+    scheduledTimeouts.at(-1)!();
+    sockets.at(-1)!.readyState = 1;
+    sockets.at(-1)!.dispatchEvent(new Event('open'));
+    sockets.at(-1)!.dispatchEvent(new MessageEvent('message', { data: new ArrayBuffer(0) }));
+    expect([...terminal.write.mock.calls[4][0]]).toEqual(reset);
     dispose();
   });
 });
