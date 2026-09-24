@@ -6297,6 +6297,40 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
   await expect(created).toHaveAttribute('data-selected', 'true');
 });
 
+test('drags a newly created selected ticket without requiring reselection (HS2-6E9RRS)', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const sidebar = page.locator('.project-sidebar');
+  await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  const composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await composer.getByLabel('Ticket title').fill('Drag immediately after creation');
+  await composer.locator('[data-action="toggle-new-ticket-up-next"]').click();
+  await composer.getByRole('button', { name: 'Create ticket' }).click();
+  const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]'),
+    backlog = sidebar.locator('[data-ticket-drop-status="backlog"]');
+  await expect(created).toHaveAttribute('data-selected', 'true');
+  await created.evaluate((node) => {
+    const transfer = new DataTransfer();
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+    document
+      .querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!
+      .dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await backlog.dispatchEvent('drop');
+  await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
+  await backlog.click();
+  await expect(created).toBeVisible();
+  await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-6e9rrs-created-drag-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await expect(created).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-6e9rrs-created-drag-narrow.png', fullPage: true });
+});
+
 test('remembers the last ticket category after cancelling and refreshing', async ({ page }) => {
   await mockProject(page);
   await page.goto('/?dev-review=false');

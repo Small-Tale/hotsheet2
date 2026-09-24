@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow as WireTicketRow } from './api';
-import { mergeRetainedCreatedRows, PendingCreatedTickets } from './pending-created-tickets';
+import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from './pending-created-tickets';
 
 const row = (id: string): WireTicketRow => ({ id, slug: id.toUpperCase() }) as WireTicketRow;
 
@@ -55,5 +55,16 @@ describe('mergeRetainedCreatedRows', () => {
     expect(mergeRetainedCreatedRows([row('a')], [row('new')]).map((item) => item.id)).toEqual(['new', 'a']);
     // A retained row that the page already includes is not duplicated.
     expect(mergeRetainedCreatedRows([row('new'), row('a')], [row('new')]).map((item) => item.id)).toEqual(['new', 'a']);
+  });
+});
+
+describe('prependCreatedTicketRow', () => {
+  it('keeps a new row first and replaces repeated optimistic copies', () => {
+    expect(prependCreatedTicketRow([], row('new')).map((item) => item.id)).toEqual(['new']);
+    expect(prependCreatedTicketRow([row('a'), row('new'), row('b')], row('new')).map((item) => item.id)).toEqual([
+      'new',
+      'a',
+      'b',
+    ]);
   });
 });

@@ -70,3 +70,8 @@ export function mergeRetainedCreatedRows(
   const fetchedIds = new Set(fetched.map((ticket) => ticket.id));
   return [...retained.filter((row) => !fetchedIds.has(row.id)), ...fetched];
 }
+
+/** Put a newly created row first while replacing any optimistic copy of the same ticket. */
+export function prependCreatedTicketRow(current: readonly WireTicketRow[], created: WireTicketRow): WireTicketRow[] {
+  return [created, ...current.filter((ticket) => ticket.id !== created.id)];
+}

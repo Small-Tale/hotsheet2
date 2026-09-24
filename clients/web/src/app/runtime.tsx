@@ -192,7 +192,7 @@ import {
   mobileTerminalViewport,
   transitionMobileTerminalFocus,
 } from '../mobile-terminal-focus';
-import { mergeRetainedCreatedRows, PendingCreatedTickets } from '../pending-created-tickets';
+import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-notifications';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
@@ -3192,7 +3192,7 @@ export async function startHotSheetWebClient() {
       });
       pendingCreatedTickets.register(current.id, created);
       if (project()?.id === current.id) {
-        tickets.value = [created, ...tickets.value.filter((ticket) => ticket.id !== created.id)];
+        tickets.value = prependCreatedTicketRow(tickets.value, created);
         publishOptimisticTicketRows(current.id);
       }
       const connection = customAiCommandSignalConnection(

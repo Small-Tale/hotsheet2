@@ -31,7 +31,7 @@ import type { Control, NotWorkingTarget, PendingEvidence, Project } from '../int
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from '../new-ticket-attachments';
 import { submitNotWorkingReport } from '../not-working-workflow';
-import type { PendingCreatedTickets } from '../pending-created-tickets';
+import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import {
   bulkTagChoices,
   type BulkTicketAction,
@@ -1519,7 +1519,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           resetTicketComposer();
           if (project()?.id !== origin.id) return;
           cancelTicketDrafts();
-          tickets.value = [created, ...tickets.value.filter((ticket) => ticket.id !== created.id)];
+          tickets.value = prependCreatedTicketRow(tickets.value, created);
+          publishOptimisticTicketRows(origin.id);
           if (!createdTicketVisibleInView(created, selectedView.value)) selectTicketView('all');
           selectedTicket.value = null;
           selectedTicketSlugs.value = [created.slug];
