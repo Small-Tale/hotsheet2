@@ -152,4 +152,34 @@ describe('terminal viewport feature ownership (HS2-DHYGXJ)', () => {
     expect(mount.mock.calls[0][0]).toBe(second);
     expect(unobserve).toHaveBeenCalledWith(second);
   });
+
+  it('disposes a grid preview while its terminal is magnified and remounts it after dismissal (HS2-ACMRF6)', async () => {
+    mount.mockImplementation(() => vi.fn());
+    const owner = createTerminalViewportsController({
+        projects: signal([project('a')]),
+        pendingTerminalFocus: undefined,
+        openTicketReference: vi.fn(),
+      }),
+      preview = viewport('a', 'one', true),
+      magnified = viewport('a', 'one'),
+      restoredPreview = viewport('a', 'one', true);
+
+    elements = [preview];
+    owner.syncTerminalViewportMounts();
+    await paint();
+    expect(mount).toHaveBeenCalledWith(preview, expect.any(Object));
+
+    elements = [magnified];
+    owner.syncTerminalViewportMounts();
+    expect(mount).toHaveBeenCalledWith(magnified, expect.any(Object));
+    expect(mount.mock.results[0].value).toHaveBeenCalledTimes(1);
+    await paint();
+
+    elements = [restoredPreview];
+    owner.syncTerminalViewportMounts();
+    expect(mount.mock.results[1].value).toHaveBeenCalledTimes(1);
+    await paint();
+    expect(mount).toHaveBeenCalledWith(restoredPreview, expect.any(Object));
+    expect(mount).toHaveBeenCalledTimes(3);
+  });
 });

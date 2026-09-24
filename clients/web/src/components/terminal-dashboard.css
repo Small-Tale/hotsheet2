@@ -236,6 +236,11 @@
   background: var(--hs-terminal-background);
   pointer-events: none;
 }
+.terminal-tile__preview-placeholder {
+  position: absolute;
+  inset: 0;
+  background: var(--hs-terminal-background);
+}
 .terminal-tile__viewport-frame .terminal-viewport {
   inset: 0;
 }
@@ -280,7 +285,8 @@
 .terminal-tile__preview:has(
     .terminal-viewport[data-connection='connected'],
     .terminal-viewport[data-connection='reconnecting'],
-    .terminal-viewport[data-connection='error']
+    .terminal-viewport[data-connection='error'],
+    .terminal-tile__preview-placeholder
   )
   > pre {
   visibility: hidden;

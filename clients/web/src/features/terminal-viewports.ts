@@ -20,6 +20,13 @@ export interface TerminalViewportsDependencies {
     preferredProject: string,
   ) => void;
 }
+
+function terminalViewportIdentity(element: HTMLElement): string | undefined {
+  const projectId = element.dataset.projectId,
+    terminalId = element.dataset.terminalId;
+  return projectId && terminalId ? `${projectId}\u0000${terminalId}` : undefined;
+}
+
 export function createTerminalViewportsController(dependencies: TerminalViewportsDependencies) {
   const { projects } = dependencies;
   const terminalViewportMounts = new Map<HTMLElement, () => void>();
@@ -95,11 +102,13 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
   }
 
   function syncTerminalViewportMounts() {
-    const elements = new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));
+    const elements = new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]')),
+      replacementIdentities = new Set(Array.from(elements, terminalViewportIdentity).filter(Boolean));
     for (const [element, dispose] of terminalViewportMounts)
       if (!elements.has(element)) {
         terminalViewportMounts.delete(element);
-        terminalViewportWork.enqueueDisposal(dispose);
+        if (replacementIdentities.has(terminalViewportIdentity(element))) dispose();
+        else terminalViewportWork.enqueueDisposal(dispose);
       }
     for (const element of terminalViewportCandidates)
       if (!elements.has(element)) {

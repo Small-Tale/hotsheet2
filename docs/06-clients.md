@@ -1694,7 +1694,12 @@ that viewport, without another outer border. One canonical font geometry is esta
 is constructed, then a single uniform physical scale fits it to the available preview without
 changing rows, columns, or glyph proportions. Magnified interactive terminals first fit their font
 metrics and row/column count to the available modal frame. Magnifying a grid tile therefore
-leaves the grid-only 80×24 contract and becomes an available-space interactive terminal.
+leaves the grid-only 80×24 contract and becomes an available-space interactive terminal. While
+that terminal is magnified, its matching grid card replaces the live preview with a solid
+terminal-background placeholder and disposes the preview viewer. Dismissing the magnified view
+remounts the grid preview at 80×24. This keeps exactly one local sizing claimant for that terminal
+through the transition instead of letting the preview and magnified viewport resize the PTY back
+and forth.
 Dedicated project-drawer terminals are likewise fitted to their actual interactive viewport
 and reserve one physical containment row;
 server size echoes cannot restore the edge row that would otherwise be clipped. Abrupt drawer
@@ -1981,10 +1986,12 @@ read-only and never accepts keyboard input. This ensures entering the dashboard 
 resizes the PTY to the promised 80×24 contract rather than merely drawing an 80×24 xterm over
 output that the TUI emitted for the drawer's previous size. Conversely, offscreen dashboard
 cards do not mount a viewport or open a socket until intersection observation reaches them, so
-an unpainted or hidden fixed-grid card cannot take sizing control. Interactive magnified and
-dedicated terminals claim their fitted dimensions whenever they are visible, independently of
-which app control owns keyboard focus. Finishing a drawer drag or maximize publishes its final
-claim; clicking or focusing another control cannot revert the terminal to a stale 80×24 size.
+an unpainted or hidden fixed-grid card cannot take sizing control. The matching preview is also
+temporarily unmounted while its magnified interactive viewport owns the terminal, then restored
+after dismissal. Interactive magnified and dedicated terminals claim their fitted dimensions
+whenever they are visible, independently of which app control owns keyboard focus. Finishing a
+drawer drag or maximize publishes its final claim; clicking or focusing another control cannot
+revert the terminal to a stale 80×24 size.
 
 ### 6.7.1 The fundamental constraint
 

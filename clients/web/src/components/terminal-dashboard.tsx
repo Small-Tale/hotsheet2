@@ -138,34 +138,45 @@ export function TerminalDashboardControls({
   );
 }
 
-export function FixedAspectTerminalCard({
+function TerminalCard({
   session,
   mode = 'preview',
+  previewPaused = false,
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
+  previewPaused?: boolean;
 }) {
   const key = keyFor(session);
   const dashboardPreview = mode === 'preview',
     magnified = mode === 'magnified';
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
-  const viewport = (
-    <div
-      class={`terminal-viewport${dashboardPreview ? ' terminal-viewport--scaled-preview' : ''}`}
-      data-key={`${dashboardPreview ? 'preview' : 'viewport'}:${key}`}
-      data-morph-skip
-      data-component="terminal-viewport"
-      data-project-id={session.projectId}
-      data-terminal-id={session.id}
-      data-display-mode={dashboardPreview ? 'scaled-preview' : 'interactive'}
-      data-mount-policy={dashboardPreview ? 'visible-progressive' : 'immediate'}
-      data-grid-policy={dashboardPreview ? 'dashboard-80x24' : undefined}
-      data-mobile-grid-policy={magnified ? '80xm' : undefined}
-      data-geometry-ready="false"
-      aria-hidden={dashboardPreview ? 'true' : undefined}
-      aria-label={dashboardPreview ? undefined : `${session.title ?? session.id} interactive terminal`}
-    ></div>
-  );
+  const viewport =
+    dashboardPreview && previewPaused ? (
+      <div
+        class="terminal-tile__preview-placeholder"
+        data-component="terminal-preview-placeholder"
+        data-project-id={session.projectId}
+        data-terminal-id={session.id}
+        aria-hidden="true"
+      ></div>
+    ) : (
+      <div
+        class={`terminal-viewport${dashboardPreview ? ' terminal-viewport--scaled-preview' : ''}`}
+        data-key={`${dashboardPreview ? 'preview' : 'viewport'}:${key}`}
+        data-morph-skip
+        data-component="terminal-viewport"
+        data-project-id={session.projectId}
+        data-terminal-id={session.id}
+        data-display-mode={dashboardPreview ? 'scaled-preview' : 'interactive'}
+        data-mount-policy={dashboardPreview ? 'visible-progressive' : 'immediate'}
+        data-grid-policy={dashboardPreview ? 'dashboard-80x24' : undefined}
+        data-mobile-grid-policy={magnified ? '80xm' : undefined}
+        data-geometry-ready="false"
+        aria-hidden={dashboardPreview ? 'true' : undefined}
+        aria-label={dashboardPreview ? undefined : `${session.title ?? session.id} interactive terminal`}
+      ></div>
+    );
   return (
     <article
       class="terminal-tile"
@@ -177,6 +188,7 @@ export function FixedAspectTerminalCard({
       data-alive={String(session.alive)}
       data-magnified={String(magnified)}
       data-preview-only={String(dashboardPreview)}
+      data-preview-paused={String(dashboardPreview && previewPaused)}
       data-action={dashboardPreview ? 'preview-terminal' : undefined}
       tabindex={dashboardPreview ? '0' : undefined}
       aria-label={dashboardPreview ? `Preview ${session.title ?? session.id}` : undefined}
@@ -230,6 +242,16 @@ export function FixedAspectTerminalCard({
       </footer>
     </article>
   );
+}
+
+export function FixedAspectTerminalCard({
+  session,
+  mode = 'preview',
+}: {
+  session: TerminalDashboardSession;
+  mode?: 'preview' | 'magnified';
+}) {
+  return <TerminalCard session={session} mode={mode} />;
 }
 
 export function TerminalSession({ session, active = true }: { session: TerminalDashboardSession; active?: boolean }) {
@@ -317,11 +339,13 @@ function Grid({
   chats = [],
   itemOrder = [],
   layout,
+  magnifiedKey,
 }: {
   sessions: TerminalDashboardSession[];
   chats?: WorkspaceGridChat[];
   itemOrder?: string[];
   layout: ReturnType<typeof terminalGridLayout>;
+  magnifiedKey?: string;
 }) {
   const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`,
     chatPreviewScale = terminalPhysicalScale(
@@ -351,7 +375,7 @@ function Grid({
     >
       {items.map((item) =>
         item.kind === 'terminal' ? (
-          <FixedAspectTerminalCard session={item.session} />
+          <TerminalCard session={item.session} previewPaused={keyFor(item.session) === magnifiedKey} />
         ) : (
           <WorkspaceGridChatCard chat={item.chat} previewScale={chatPreviewScale} />
         ),
@@ -422,6 +446,7 @@ export function TerminalDashboard({
             chats={chats}
             itemOrder={visibleGroups.length === 1 ? visibleGroups[0].itemOrder : undefined}
             layout={layout}
+            magnifiedKey={magnifiedKey}
           />
         ) : (
           visibleGroups.map((group) => (
@@ -430,7 +455,13 @@ export function TerminalDashboard({
                 {group.projectName}
                 <span>{group.sessions.length + group.chats.length}</span>
               </h2>
-              <Grid sessions={group.sessions} chats={group.chats} itemOrder={group.itemOrder} layout={layout} />
+              <Grid
+                sessions={group.sessions}
+                chats={group.chats}
+                itemOrder={group.itemOrder}
+                layout={layout}
+                magnifiedKey={magnifiedKey}
+              />
             </section>
           ))
         )}

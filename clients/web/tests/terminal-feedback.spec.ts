@@ -454,12 +454,37 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
     await tile.click();
     const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
       viewport = magnified.locator('[data-display-mode="interactive"]');
+    await expect(tile.locator('[data-component="terminal-preview-placeholder"]')).toBeVisible();
+    await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveCount(0);
     await expect(viewport).toHaveAttribute('data-scrollback-limit', '1000');
     await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+    await expect.poll(liveSockets).toBe(baselineSockets);
+    if (cycle === 0) {
+      await page.screenshot({
+        path: '/private/tmp/hs2-acmrf6-magnified-placeholder-wide.png',
+        fullPage: true,
+        animations: 'disabled',
+      });
+      await page.setViewportSize({ width: 900, height: 650 });
+      await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+      await page.screenshot({
+        path: '/private/tmp/hs2-acmrf6-magnified-placeholder-narrow.png',
+        fullPage: true,
+        animations: 'disabled',
+      });
+      await page.setViewportSize({ width: 1180, height: 760 });
+    }
     await magnified.click({ position: { x: 5, y: 5 } });
     await expect(magnified).toHaveCount(0);
+    await expect(tile.locator('[data-component="terminal-preview-placeholder"]')).toHaveCount(0);
+    await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-connection', 'connected');
     await expect.poll(liveSockets).toBe(baselineSockets);
     expect(await page.locator('.xterm').count()).toBe(baselineTerminals);
+    if (cycle === 0)
+      await dashboard.screenshot({
+        path: '/private/tmp/hs2-acmrf6-restored-preview.png',
+        animations: 'disabled',
+      });
   }
   expect(detailRequests).toHaveLength(0);
 });

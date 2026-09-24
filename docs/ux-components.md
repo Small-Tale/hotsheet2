@@ -1351,8 +1351,11 @@ measured spacing-token inset and footer height outside the viewport. `FixedAspec
 owns this structure for both grid-preview and magnified-interactive variants. It withholds the
 xterm surface until bounded font-metric fitting is stable, so transitions do not expose each
 intermediate fitting pass. A plain activation
-magnifies and focuses an interactive copy in place over the same grid; clicking the surrounding
-overlay or pressing Escape restores the grid. Interactive magnified and dedicated variants
+magnifies and focuses an interactive copy in place over the same grid. During magnification,
+the matching grid card keeps its geometry and terminal-background fill but unmounts its preview
+xterm and viewer, leaving the fitted magnified viewport as the terminal's only local sizing
+claimant. Clicking the surrounding overlay or pressing Escape restores and remounts the 80×24
+grid preview. Interactive magnified and dedicated variants
 turn current, legacy, and project-qualified ticket references in xterm's parsed buffer into
 pointer-underlined links that open the stacked ticket reader. Selecting text within a link
 keeps the reader closed; clicking after clearing selection opens it normally. Preview tiles remain inert, and

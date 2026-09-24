@@ -136,11 +136,30 @@ describe('TerminalDashboard', () => {
     );
     expect(magnified).toContain('role="dialog"');
     expect(magnified).toContain('data-display-mode="interactive"');
-    expect(magnified.match(/data-grid-policy="dashboard-80x24"/g)).toHaveLength(1);
-    expect(magnified.match(/data-component="terminal-viewport"/g)).toHaveLength(2);
+    expect(magnified).toContain('data-component="terminal-preview-placeholder"');
+    expect(magnified).toContain('data-preview-paused="true"');
+    expect(magnified).not.toContain('data-grid-policy="dashboard-80x24"');
+    expect(magnified.match(/data-component="terminal-viewport"/g)).toHaveLength(1);
     expect(magnified).toContain('data-action="open-terminal-project"');
     expect(magnified).toContain('Open Codex in project terminal drawer');
     expect(magnified).not.toContain('Restore terminal grid');
+  });
+  it('pauses only the matching grid preview while a terminal is magnified', () => {
+    const second = { ...groups[0].sessions[0], id: 'term-2', title: 'Shell' },
+      markup = String(
+        TerminalDashboard({
+          groups: [{ ...groups[0], sessions: [groups[0].sessions[0], second] }],
+          width: 1200,
+          height: 700,
+          fitAcross: 4,
+          fitHigh: 2,
+          magnifiedKey: 'one:term-1',
+        }),
+      );
+    expect(markup.match(/data-component="terminal-preview-placeholder"/g)).toHaveLength(1);
+    expect(markup.match(/data-display-mode="scaled-preview"/g)).toHaveLength(1);
+    expect(markup).toContain('data-terminal-id="term-1" aria-hidden="true"');
+    expect(markup).toContain('data-terminal-id="term-2" data-display-mode="scaled-preview"');
   });
   it('uses the standard context-menu items for both right-click and the footer action', () => {
     const markup = String(
