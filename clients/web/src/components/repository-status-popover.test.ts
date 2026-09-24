@@ -97,10 +97,10 @@ describe('RepositoryStatusPopover', () => {
   it('renders value cells, selectable views, and iconic file status in a master-detail layout', () => {
     const markup = String(RepositoryStatusPopover({ status: status(), view: 'staged' }));
     for (const text of [
-      '<dt>Branch</dt><dd>main',
-      '<dt>Upstream</dt><dd>origin/main',
-      '<dt>Ahead</dt>',
-      '<dt>Behind</dt>',
+      '<span class="kui-value-table__label">Branch</span></dt><dd>main',
+      '<span class="kui-value-table__label">Upstream</span></dt><dd>origin/main',
+      '<span class="kui-value-table__label">Ahead</span>',
+      '<span class="kui-value-table__label">Behind</span>',
       'Staged',
       'Unstaged',
       'Untracked',
@@ -108,6 +108,7 @@ describe('RepositoryStatusPopover', () => {
       'Commits',
     ])
       expect(markup).toContain(text);
+    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(4);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-component="list-header"');
     expect(markup.match(/data-component="list-item"/g)).toHaveLength(7);
@@ -207,9 +208,11 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toMatch(
       /kui-toolbar__trailing[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/,
     );
-    // The DialogHeader actions group carries the localized actionsLabel for assistive tech (HS2-M4X0WS).
-    expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Repository actions"/);
-    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
+    expect(markup).toMatch(
+      /kui-toolbar__trailing"><div[^>]*aria-label="Repository comparison"[\s\S]*<\/div><div[^>]*aria-label="Repository refresh"/,
+    );
+    expect(markup).not.toMatch(/kui-toolbar__trailing"><div[^>]*data-component="toolbar-control-group"[^>]*><div/);
+    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(3);
     const popoverCss = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
     expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);
   });

@@ -428,10 +428,24 @@ test('represents the shared repository-status composition in the UX catalog', as
   const dialog = page.locator('[data-component="repository-status-popover"]');
   await expect(dialog).toBeVisible();
   const compare = dialog.getByRole('button', { name: 'Compare two commits' }),
-    refresh = dialog.getByRole('button', { name: 'Refresh repository status' });
+    refresh = dialog.getByRole('button', { name: 'Refresh repository status' }),
+    headingActions = dialog.locator('.app-heading .kui-toolbar__trailing');
   expect(await refresh.evaluate((node) => getComputedStyle(node).color)).toBe(
     await compare.evaluate((node) => getComputedStyle(node).color),
   );
+  await expect(dialog.locator('.kui-value-table__row')).toHaveCount(4);
+  await expect(headingActions.locator(':scope > [data-component="toolbar-control-group"]')).toHaveCount(2);
+  await expect(
+    headingActions.locator(
+      ':scope > [data-component="toolbar-control-group"] > [data-component="toolbar-control-group"]',
+    ),
+  ).toHaveCount(0);
+  expect(
+    await headingActions.evaluate((node) => {
+      const groups = [...node.children].map((child) => child.getBoundingClientRect());
+      return groups[1].left - groups[0].right;
+    }),
+  ).toBe(8);
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
   await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');
   await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);
@@ -484,6 +498,8 @@ test('represents the shared repository-status composition in the UX catalog', as
   await expect(dialog).toHaveAttribute('data-state', 'conflicted');
   await page.screenshot({ path: '/private/tmp/hs2-s6f817-repository-scenario-settings.png', fullPage: true });
   await page.locator('[data-action="toggle-settings"]').click();
+  await dialog.getByRole('button', { name: /Unstaged 2/ }).click();
+  await dialog.screenshot({ path: '/private/tmp/hs2-72z7cb-repository-status-wide.png' });
   await dialog.getByRole('button', { name: /Staged 2/ }).click();
   await expect(dialog).toHaveAttribute('data-view', 'staged');
   const file = dialog.locator('[data-action="select-repository-file"]').first(),
@@ -506,8 +522,21 @@ test('represents the shared repository-status composition in the UX catalog', as
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(dialog.locator('aside')).toHaveCSS('padding', '16px');
   await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '16px');
+  await expect(dialog.locator('[aria-label="Repository identity"] dd').first()).toHaveCSS('white-space', 'normal');
+  expect(
+    await dialog
+      .locator('[aria-label="Repository identity"] dd')
+      .first()
+      .evaluate((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        return range.getClientRects().length;
+      }),
+  ).toBe(1);
   await dialog.screenshot({ path: '/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png' });
   await dialog.screenshot({ path: '/private/tmp/hs2-4y6sm9-repository-status-narrow.png' });
+  await dialog.getByRole('button', { name: /Unstaged 2/ }).click();
+  await dialog.screenshot({ path: '/private/tmp/hs2-72z7cb-repository-status-narrow.png' });
 });
 
 test('contains the embedded repository status dialog and header actions (HS2-MCHTAW)', async ({ page }) => {

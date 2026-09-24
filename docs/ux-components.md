@@ -143,9 +143,10 @@ Supporting components:
   to the retained title and summary ids. `heading.css` owns only the icon tone and summary
   alignment, while Kerf owns row/control geometry. The framework-neutral Dev Review
   overlay emits the same Toolbar/ToolbarText anatomy and imports its canonical styles.
-  `ValueTable` supplies borderless metadata cells with inset separators. These compositions
-  use APIs available in beta.24 and do not depend on the removed upstream heading wrapper
-  (HS2-AGDJ6E).
+  `ValueTable` supplies the bordered metadata surface while `ValueTableRow` supplies aligned
+  label/value geometry and inset separators; consumers do not hand-author raw definition-list
+  rows. These compositions use APIs available in beta.24 and do not depend on the removed
+  upstream heading wrapper (HS2-AGDJ6E, HS2-72Z7CB).
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.

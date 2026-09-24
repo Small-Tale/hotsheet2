@@ -2378,8 +2378,11 @@ copies relative or absolute paths, opens the file, or reveals it with host-speci
 Finder/File Explorer/file-manager wording. The server re-reads status and validates repository containment before any host
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
-Value groups have no outer border, use text-aligned inset row separators, and retain a
-visible gap between repository identity and synchronization groups. The master/detail
+Value groups render each fact through the shared `ValueTableRow` contract, producing the
+canonical bordered surface, aligned label/value columns, and inset row separators while
+retaining a visible gap between repository identity and synchronization groups. Compare
+and Refresh remain separate sibling toolbar groups with the toolbar's standard gap rather
+than nesting inside one fused group (HS2-72Z7CB). The master/detail
 surface uses 24px roomy pane and viewport insets, 16px between homogeneous value groups
 and for constrained pane insets, 8px inside empty/menu-row groups, and 4px for connected
 path metadata and menu framing. Shared adjacent `ListItem` view rows remain gapless below

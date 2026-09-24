@@ -8,7 +8,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { ValueTable } from '@kerfjs/ui/value-table';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import {
   ArrowDown,
   ArrowUp,
@@ -141,7 +141,7 @@ export function RepositoryStatusPopover({
   const actions = (
     <>
       {comparison && !recoveryStep && (
-        <ToolbarControlGroup buttonAppearance="push" single>
+        <ToolbarControlGroup label="Repository comparison" buttonAppearance="push" single>
           <button
             type="button"
             data-action="toggle-repository-comparison"
@@ -153,7 +153,7 @@ export function RepositoryStatusPopover({
           </button>
         </ToolbarControlGroup>
       )}
-      <ToolbarControlGroup single>
+      <ToolbarControlGroup label="Repository refresh" single>
         <button
           type="button"
           class="repository-status-popover__refresh"
@@ -210,7 +210,7 @@ export function RepositoryStatusPopover({
               />
             </>
           }
-          trailing={<ToolbarControlGroup label="Repository actions">{actions}</ToolbarControlGroup>}
+          trailing={actions}
         />
         <p class="app-heading__summary">
           {recoveryStep === 'initialize'
@@ -225,30 +225,28 @@ export function RepositoryStatusPopover({
         <div class="repository-status-popover__layout">
           <aside>
             <ValueTable className="repository-status-popover__values" label="Repository identity">
-              <div>
-                <dt>Branch</dt>
-                <dd>{branch}</dd>
-              </div>
-              <div>
-                <dt>Upstream</dt>
-                <dd>{upstream}</dd>
-              </div>
+              <ValueTableRow label="Branch" value={branch} />
+              <ValueTableRow label="Upstream" value={upstream} />
             </ValueTable>
             <ValueTable className="repository-status-popover__values" label="Repository synchronization">
-              <div>
-                <dt>Ahead</dt>
-                <dd>
-                  <LucideIcon icon={ArrowUp} name="arrow-up" />
-                  {status.ahead}
-                </dd>
-              </div>
-              <div>
-                <dt>Behind</dt>
-                <dd>
-                  <LucideIcon icon={ArrowDown} name="arrow-down" />
-                  {status.behind}
-                </dd>
-              </div>
+              <ValueTableRow
+                label="Ahead"
+                value={
+                  <>
+                    <LucideIcon icon={ArrowUp} name="arrow-up" />
+                    {status.ahead}
+                  </>
+                }
+              />
+              <ValueTableRow
+                label="Behind"
+                value={
+                  <>
+                    <LucideIcon icon={ArrowDown} name="arrow-down" />
+                    {status.behind}
+                  </>
+                }
+              />
             </ValueTable>
             <nav aria-label="Repository views">
               <ListHeader label="Views" />

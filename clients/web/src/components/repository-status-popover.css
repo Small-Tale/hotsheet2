@@ -245,7 +245,7 @@
     height: calc(100vh - 2 * var(--kui-space-xs));
   }
   .repository-status-popover__layout {
-    grid-template-columns: minmax(remify(240px), 40%) minmax(0, 1fr);
+    grid-template-columns: minmax(remify(240px), 55%) minmax(0, 1fr);
   }
   .repository-status-popover__layout > aside,
   .repository-status-popover__detail {
