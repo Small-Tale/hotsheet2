@@ -96,6 +96,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly trashCleanupDaysByProject: Signal<Record<string, number>>;
   readonly resetProgressiveTicketRendering: () => void;
   readonly viewMode: Signal<WorkspaceViewMode>;
+  readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
   readonly refreshProviderConnections: (current?: Project) => Promise<void>;
   readonly refreshTerminalSettings: (current?: Project) => Promise<void>;
@@ -187,6 +188,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     trashCleanupDaysByProject,
     resetProgressiveTicketRendering,
     viewMode,
+    refreshProject,
     setSettingsCategory,
     refreshProviderConnections,
     refreshTerminalSettings,
@@ -695,6 +697,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     resetProgressiveTicketRendering();
     viewMode.value = mode;
     persistWorkspacePreferences();
+    if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
     finishTiming();
   });
   delegate(document.body, 'click', '[data-action="select-settings-category"]', (_event, target) => {

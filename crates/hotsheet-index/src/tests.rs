@@ -434,6 +434,77 @@ fn keyset_paging_matches_the_file_scan_and_is_exclusive() {
     };
     assert!(ix.query(&stale).unwrap().is_empty());
     assert!(ops::query(&store, &stale).unwrap().is_empty());
+
+    // Descending pages use the inverse keyset comparison and remain index/file-scan equivalent.
+    let descending_after_first = TicketQuery {
+        descending: true,
+        page_after: Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2")),
+        ..Default::default()
+    };
+    let idx_rows = ix.query(&descending_after_first).unwrap();
+    assert_eq!(
+        ordered(&idx_rows),
+        vec![
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1".to_string(),
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0".to_string(),
+        ]
+    );
+    assert_eq!(
+        ordered(&idx_rows),
+        ops::query(&store, &descending_after_first)
+            .unwrap()
+            .into_iter()
+            .map(|ticket| ticket.id.to_string())
+            .collect::<Vec<_>>()
+    );
+
+    // Workspace sorts use a mixed total order: directed primary key, recent-first
+    // secondary key, then ascending id. Its descending keyset must walk that same order.
+    let priority_descending = TicketQuery {
+        sort: SortKey::Priority,
+        descending: true,
+        ..Default::default()
+    };
+    let full = ix.query(&priority_descending).unwrap();
+    assert_eq!(
+        ordered(&full),
+        ops::query(&store, &priority_descending)
+            .unwrap()
+            .into_iter()
+            .map(|ticket| ticket.id.to_string())
+            .collect::<Vec<_>>()
+    );
+    let after_priority_first = TicketQuery {
+        page_after: Some(ulid(&full[0].id)),
+        ..priority_descending
+    };
+    assert_eq!(
+        ordered(&ix.query(&after_priority_first).unwrap()),
+        ordered(&full[1..])
+    );
+
+    // The mixed-order cursor predicate remains grouped with structured filters; its OR
+    // branches must not leak rows from another status into later pages.
+    let open_after_priority_first = TicketQuery {
+        status: Some(Status::NotStarted),
+        sort: SortKey::Priority,
+        descending: true,
+        page_after: Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1")),
+        ..Default::default()
+    };
+    let filtered = ix.query(&open_after_priority_first).unwrap();
+    assert_eq!(
+        ordered(&filtered),
+        vec!["01ARZ3NDEKTSV4RRFFQ69G5FB0".to_string()]
+    );
+    assert_eq!(
+        ordered(&filtered),
+        ops::query(&store, &open_after_priority_first)
+            .unwrap()
+            .into_iter()
+            .map(|ticket| ticket.id.to_string())
+            .collect::<Vec<_>>()
+    );
 }
 
 /// A fixture exercising blocked/review/moved/date filters, + the index-vs-file-scan parity.

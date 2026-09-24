@@ -872,24 +872,51 @@ impl Index {
         // cursor row, so the row-value comparison is type-exact; a missing cursor row makes
         // the subquery NULL → an empty page (matching the ops::query file-scan path).
         if let Some(cursor) = q.page_after {
-            wheres.push(format!(
-                "({order}, t.id) > (SELECT {order}, t.id FROM tickets t \
-                 WHERE t.id = ? AND t.store_id = ?)"
-            ));
-            args.push(Box::new(cursor.to_string()));
-            args.push(Box::new(self.store_id.clone()));
+            if matches!(q.sort, SortKey::Priority | SortKey::Status | SortKey::Title) {
+                let primary_comparison = if q.descending { "<" } else { ">" };
+                let cursor_primary =
+                    format!("SELECT {order} FROM tickets t WHERE t.id = ? AND t.store_id = ?");
+                let cursor_updated =
+                    "SELECT t.updated_at FROM tickets t WHERE t.id = ? AND t.store_id = ?";
+                let cursor_id = "SELECT t.id FROM tickets t WHERE t.id = ? AND t.store_id = ?";
+                wheres.push(format!(
+                    "(({order} {primary_comparison} ({cursor_primary})) OR \
+                     ({order} = ({cursor_primary}) AND t.updated_at < ({cursor_updated})) OR \
+                     ({order} = ({cursor_primary}) AND t.updated_at = ({cursor_updated}) \
+                      AND t.id > ({cursor_id})))"
+                ));
+                for _ in 0..6 {
+                    args.push(Box::new(cursor.to_string()));
+                    args.push(Box::new(self.store_id.clone()));
+                }
+            } else {
+                let comparison = if q.descending { "<" } else { ">" };
+                wheres.push(format!(
+                    "({order}, t.id) {comparison} (SELECT {order}, t.id FROM tickets t \
+                     WHERE t.id = ? AND t.store_id = ?)"
+                ));
+                args.push(Box::new(cursor.to_string()));
+                args.push(Box::new(self.store_id.clone()));
+            }
         }
 
         let limit = match q.limit {
             Some(n) => format!(" LIMIT {n}"),
             None => String::new(),
         };
+        let direction = if q.descending { " DESC" } else { "" };
+        let order_clause = if matches!(q.sort, SortKey::Priority | SortKey::Status | SortKey::Title)
+        {
+            format!("{order}{direction}, t.updated_at DESC, t.id")
+        } else {
+            format!("{order}{direction}, t.id{direction}")
+        };
         let sql = format!(
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed,t.legacy_number \
-             FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
+             FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
 

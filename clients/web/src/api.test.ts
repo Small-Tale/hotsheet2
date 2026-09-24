@@ -446,7 +446,11 @@ describe('ticket search transport', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify(page), { status: 200 }));
     await expect(
-      new Api('/api').checkoutTicketPage('folder with spaces', 200, '0.01ARZ3NDEKTSV4RRFFQ69G5FAV', { open: true }),
+      new Api('/api').checkoutTicketPage('folder with spaces', 200, '0.01ARZ3NDEKTSV4RRFFQ69G5FAV', {
+        open: true,
+        sort: 'updated',
+        direction: 'descending',
+      }),
     ).resolves.toEqual(page);
     const target = fetchMock.mock.calls[0][0];
     expect(typeof target).toBe('string');
@@ -456,6 +460,8 @@ describe('ticket search transport', () => {
     expect(requested.searchParams.get('page_size')).toBe('200');
     expect(requested.searchParams.get('cursor')).toBe('0.01ARZ3NDEKTSV4RRFFQ69G5FAV');
     expect(requested.searchParams.get('open')).toBe('true');
+    expect(requested.searchParams.get('sort')).toBe('updated');
+    expect(requested.searchParams.get('direction')).toBe('descending');
     expect(requested.searchParams.get('summary_days')?.split(',')).toHaveLength(8);
     fetchMock.mockRestore();
   });

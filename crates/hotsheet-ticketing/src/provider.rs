@@ -438,6 +438,9 @@ pub fn filter_provider_ticket_page(
         crate::SortKey::Status => format!("{:?}", left.status).cmp(&format!("{:?}", right.status)),
         crate::SortKey::Title => left.title.cmp(&right.title),
     });
+    if query.descending {
+        tickets.reverse();
+    }
     if let Some(limit) = query.limit {
         tickets.truncate(limit);
     }

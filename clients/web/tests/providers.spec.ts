@@ -5827,6 +5827,43 @@ test('orders equal status priority and title groups by most recently updated', a
   }
 });
 
+test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', async ({ page }) => {
+  const pageQueries: URLSearchParams[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && url.pathname.endsWith('/tickets') && url.searchParams.has('page_size'))
+      pageQueries.push(url.searchParams);
+  });
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect
+    .poll(() => pageQueries.some((query) => query.get('sort') === 'updated' && query.get('direction') === 'descending'))
+    .toBe(true);
+
+  const sort = page.locator('wa-select[name="workspace-sort"]');
+  await sort.click();
+  await sort.locator('wa-option[value="priority"]').click();
+  await expect
+    .poll(() => pageQueries.some((query) => query.get('sort') === 'priority' && query.get('direction') === 'ascending'))
+    .toBe(true);
+  const updatedRequestsBeforeBoard = pageQueries.filter(
+    (query) => query.get('sort') === 'updated' && query.get('direction') === 'descending',
+  ).length;
+  await page.getByLabel('Columns view').click();
+  await expect
+    .poll(
+      () =>
+        pageQueries.filter((query) => query.get('sort') === 'updated' && query.get('direction') === 'descending')
+          .length,
+    )
+    .toBeGreaterThan(updatedRequestsBeforeBoard);
+  await page.screenshot({ path: '/private/tmp/hs2-x23me4-sorted-columns-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.screenshot({ path: '/private/tmp/hs2-x23me4-sorted-columns-narrow.png', fullPage: true });
+});
+
 test('contains and centers inspector tabs while showing labels only when they fit (HS2-WKGMN4)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);

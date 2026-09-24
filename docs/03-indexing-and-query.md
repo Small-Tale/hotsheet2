@@ -195,7 +195,8 @@ query(filter, sort, text?, paging) -> TicketRow[]
   of truth. `blocked_by` edges remain indexed dependency context, but never create a
   blocked state without visible explanatory text.
 - **sort:** priority-then-recency (the worklist order), created, updated, title;
-  ULID gives a free chronological default.
+  ULID gives a free chronological default. Queries accept ascending or descending order;
+  priority/status/title retain recent-first then stable-id tie breakers in either direction.
 - **text:** an FTS5 `MATCH` over slug/title/tags/details/notes, joined with the structured
   filter in one SQL statement.
 - **projection:** a query returns compact `TicketRow`s. The Markdown `details` body
@@ -212,10 +213,10 @@ query(filter, sort, text?, paging) -> TicketRow[]
   hard cap, never a silent default — a caller asks for it explicitly.
 - **paging:** keyset pagination for large stores — the general form of `limit`
   (HS2-TCDTCH, **built**). A `page_after=<ULID>` cursor returns only the rows that
-  sort **strictly after** that ticket in the current `(sort, id)` total order, so a
+  sort **strictly after** that ticket in the current total order, so a
   client pages a big store without SQL `OFFSET`. The index does it as a type-exact
-  row-value comparison — `(order, t.id) > (SELECT order, id FROM the cursor row)` —
-  and the serverless file-scan slices the sorted list after the cursor position; both
+  direction-aware comparison (including the mixed primary/recent-first/id order used by
+  workspace sorts), and the serverless file-scan slices the sorted list after the cursor position; both
   paths return an **empty page** for a stale cursor (a ULID no longer in the store),
   so the client restarts from the top. To page, pass the last row's ULID as the next
   `page_after`. The CLI (`ls --page-after <slug|ULID>`) accepts a slug for convenience.

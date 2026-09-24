@@ -52,6 +52,7 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly searchQuery: Signal<string>;
   readonly searchTokens: Signal<InlineSearchToken[]>;
   readonly scheduleTicketSearch: () => void;
+  readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   readonly sort: { value: WorkspaceSort };
   readonly sortDirection: { value: WorkspaceSortDirection };
   readonly resetProgressiveTicketRendering: () => void;
@@ -101,6 +102,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     searchQuery,
     searchTokens,
     scheduleTicketSearch,
+    refreshProject,
     sort,
     sortDirection,
     resetProgressiveTicketRendering,
@@ -222,6 +224,8 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     sort.value = next.sort;
     sortDirection.value = next.direction;
     persistWorkspacePreferences();
+    if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
+    else void refreshProject({ showLoading: false });
   });
   delegate(document.body, 'wa-select', '.workspace-header__overflow', (event) => {
     const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
@@ -258,6 +262,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       resetProgressiveTicketRendering();
       viewMode.value = mode;
       persistWorkspacePreferences();
+      if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
       return;
     }
     if (action === 'set-workspace-sort') {
@@ -268,6 +273,8 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       sort.value = next.sort;
       sortDirection.value = next.direction;
       persistWorkspacePreferences();
+      if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
+      else void refreshProject({ showLoading: false });
     }
   });
   delegate(document.body, 'click', '[data-action="expand-ticket-composer"]', (_event, target) => {

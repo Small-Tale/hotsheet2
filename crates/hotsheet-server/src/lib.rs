@@ -8340,6 +8340,8 @@ struct ListParams {
     /// Comma-separated attachment filename patterns; `*` is a wildcard.
     attachment: Option<String>,
     sort: Option<String>,
+    /// Sort direction for bounded checkout pages (`ascending` or `descending`).
+    direction: Option<String>,
     limit: Option<usize>,
     /// Opt into the bounded checkout page envelope. Capped to protect server and browser.
     page_size: Option<usize>,
@@ -8388,6 +8390,16 @@ impl ListParams {
                 .parse::<SortKey>()
                 .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))?,
             None => SortKey::default(),
+        };
+        let descending = match self.direction.as_deref() {
+            None | Some("ascending") => false,
+            Some("descending") => true,
+            Some(other) => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid direction '{other}'"),
+                ));
+            }
         };
         // `me` → the store's git user.email; a `me` that can't be resolved is an error, not a
         // silent match-everyone (docs/10 §10.3).
@@ -8461,6 +8473,7 @@ impl ListParams {
                 })
                 .unwrap_or_default(),
             sort,
+            descending,
             limit: self.limit,
             page_after,
         })

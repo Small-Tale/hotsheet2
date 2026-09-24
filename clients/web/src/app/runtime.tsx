@@ -1545,6 +1545,7 @@ export async function startHotSheetWebClient() {
     resetProgressiveTicketRendering();
     viewMode.value = mode;
     persistWorkspacePreferences();
+    if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
   }
   function selectTerminalRailProject(next: string) {
     if (next === selectedProjectId.value || !projects.value.some((item) => item.id === next)) return;
@@ -1978,6 +1979,10 @@ export async function startHotSheetWebClient() {
   type EffectiveTicketSearch = ReturnType<typeof effectiveSearch>;
   const searchSignature = () => JSON.stringify([searchQuery.value.trim(), searchTokens.value]);
   const searchScopeQuery = (view: TicketView) => (customTicketViewKey(view) ? {} : ticketViewQuery(view));
+  function sortedTicketQuery(query: CheckoutTicketQuery): CheckoutTicketQuery {
+    const active = activeWorkspaceSort();
+    return { ...query, sort: active.sort, direction: active.sortDirection };
+  }
   function matchedSearchRows(rows: WireTicketRow[], effective: EffectiveTicketSearch) {
     const advanced = usesAdvancedSearchExpression(effective.text),
       matched = advanced ? filterAdvancedSearchResults(rows, effective.text, 'all', []) : rows,
@@ -1989,7 +1994,11 @@ export async function startHotSheetWebClient() {
   function searchRequest(effective: EffectiveTicketSearch, view: TicketView): CheckoutTicketQuery {
     const advanced = usesAdvancedSearchExpression(effective.text),
       serverTokens = usesBooleanSearchExpression(effective.text) ? [] : effective.tokens;
-    return { ...searchScopeQuery(view), text: advanced ? '' : effective.text, ...tokenQuery(serverTokens) };
+    return sortedTicketQuery({
+      ...searchScopeQuery(view),
+      text: advanced ? '' : effective.text,
+      ...tokenQuery(serverTokens),
+    });
   }
   function activeSidebarSearchCount(state: SidebarSearchCounts) {
     const active = sidebarSearchCounts.value;
@@ -2605,7 +2614,7 @@ export async function startHotSheetWebClient() {
     const active = () => generation === projectRefreshGeneration && project()?.id === current.id;
     try {
       const client = new Api(current.apiPath),
-        query = ticketViewQuery(selectedView.value);
+        query = sortedTicketQuery(ticketViewQuery(selectedView.value));
       const [index, repositoryResult] = await Promise.all([
         loadProjectTicketRefresh(client, current.id, query),
         client
@@ -2758,7 +2767,7 @@ export async function startHotSheetWebClient() {
     if (!target) return;
     boardColumnLoading.value = { ...boardColumnLoading.value, [columnId]: true };
     try {
-      const query = { ...ticketViewQuery(view), status: target.status };
+      const query = sortedTicketQuery({ ...ticketViewQuery(view), status: target.status });
       const page = await new Api(current.apiPath).checkoutTicketPage(
         current.id,
         BOARD_COLUMN_PAGE_SIZE,
@@ -2827,10 +2836,12 @@ export async function startHotSheetWebClient() {
           continue;
         }
         const result = await client
-          .checkoutTicketPage(current.id, Math.max(BOARD_COLUMN_PAGE_SIZE, want), undefined, {
-            ...ticketViewQuery(view),
-            status,
-          })
+          .checkoutTicketPage(
+            current.id,
+            Math.max(BOARD_COLUMN_PAGE_SIZE, want),
+            undefined,
+            sortedTicketQuery({ ...ticketViewQuery(view), status }),
+          )
           .catch(() => undefined);
         if (result) {
           rows = appendUniqueTicketRows(rows, result.items);

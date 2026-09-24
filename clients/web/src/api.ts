@@ -175,6 +175,8 @@ export interface CheckoutTicketQuery {
   completed_before?: string;
   verified_after?: string;
   verified_before?: string;
+  sort?: 'updated' | 'priority' | 'title' | 'status';
+  direction?: 'ascending' | 'descending';
 }
 export interface CheckoutTicketCounts {
   total: number;

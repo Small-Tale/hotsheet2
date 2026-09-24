@@ -2951,6 +2951,31 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
         .collect::<std::collections::HashSet<_>>();
     assert_eq!(ids.len(), 4);
 
+    let descending = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{checkout_id}/tickets?page_size=2&sort=id&direction=descending"
+                ),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let descending_ids = descending["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    let mut expected_descending = ids.iter().copied().collect::<Vec<_>>();
+    expected_descending.sort_unstable_by(|left, right| right.cmp(left));
+    assert_eq!(descending_ids, expected_descending[..2]);
+    assert!(descending.get("next_cursor").is_some());
+
     let queue = body_json(
         router
             .oneshot(authed(

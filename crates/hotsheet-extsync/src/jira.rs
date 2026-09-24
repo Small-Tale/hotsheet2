@@ -360,6 +360,9 @@ impl TicketProvider for JiraProvider {
             SortKey::Status => format!("{:?}", a.status).cmp(&format!("{:?}", b.status)),
             SortKey::Title => a.title.cmp(&b.title),
         });
+        if query.descending {
+            tickets.reverse();
+        }
         if let Some(limit) = query.limit {
             tickets.truncate(limit);
         }
@@ -390,10 +393,12 @@ impl TicketProvider for JiraProvider {
         {
             return self.unsupported("requested query filter");
         }
-        if !matches!(
-            query.sort,
-            SortKey::Id | SortKey::Created | SortKey::Updated
-        ) {
+        if query.descending
+            || !matches!(
+                query.sort,
+                SortKey::Id | SortKey::Created | SortKey::Updated
+            )
+        {
             let mut unbounded = query.clone();
             unbounded.limit = None;
             unbounded.page_after = None;

@@ -153,6 +153,8 @@ pub struct TicketQuery {
     /// Case-insensitive filename glob patterns. `*` matches any run of characters.
     pub attachment_patterns: Vec<String>,
     pub sort: SortKey,
+    /// Reverse the total `(sort key, id)` order while preserving deterministic pagination.
+    pub descending: bool,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
     /// Keyset cursor: return only rows that sort **strictly after** the ticket with this
@@ -242,7 +244,7 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
-    sort_tickets(&mut tickets, q.sort);
+    sort_tickets(&mut tickets, q.sort, q.descending);
     // Keyset: drop everything up to and including the cursor row (HS2-TCDTCH). A missing
     // cursor id yields an empty page — the client restarts from the top.
     if let Some(cursor) = q.page_after {
@@ -311,40 +313,56 @@ fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
             .any(|attachment| attachment.filename.to_lowercase().contains(needle_lower))
 }
 
-fn sort_tickets(tickets: &mut [Ticket], key: SortKey) {
-    // Every arm breaks ties by `id` last, so the order is total and deterministic — the same
-    // `ORDER BY {col}, t.id` the index uses. Keyset pagination (`page_after`) relies on this.
+fn sort_tickets(tickets: &mut [Ticket], key: SortKey, descending: bool) {
+    // Every order is total and deterministic, matching the index. Workspace-facing categorical
+    // sorts keep recent-first ties regardless of their primary direction.
     match key {
-        SortKey::Id => tickets.sort_by_key(|t| t.id),
+        SortKey::Id => tickets.sort_by(|a, b| {
+            let order = a.id.cmp(&b.id);
+            if descending { order.reverse() } else { order }
+        }),
         SortKey::Created => tickets.sort_by(|a, b| {
-            a.created_at
+            let order = a
+                .created_at
                 .as_str()
                 .cmp(b.created_at.as_str())
-                .then(a.id.cmp(&b.id))
+                .then(a.id.cmp(&b.id));
+            if descending { order.reverse() } else { order }
         }),
         SortKey::Updated => tickets.sort_by(|a, b| {
-            a.updated_at
+            let order = a
+                .updated_at
                 .as_str()
                 .cmp(b.updated_at.as_str())
-                .then(a.id.cmp(&b.id))
+                .then(a.id.cmp(&b.id));
+            if descending { order.reverse() } else { order }
         }),
         SortKey::Priority => tickets.sort_by(|a, b| {
-            priority_rank(a.priority)
-                .cmp(&priority_rank(b.priority))
-                .then(a.id.cmp(&b.id))
+            directed_order(
+                priority_rank(a.priority).cmp(&priority_rank(b.priority)),
+                descending,
+            )
+            .then_with(|| b.updated_at.as_str().cmp(a.updated_at.as_str()))
+            .then(a.id.cmp(&b.id))
         }),
         SortKey::Status => tickets.sort_by(|a, b| {
-            (a.status as u8)
-                .cmp(&(b.status as u8))
+            directed_order((a.status as u8).cmp(&(b.status as u8)), descending)
+                .then_with(|| b.updated_at.as_str().cmp(a.updated_at.as_str()))
                 .then(a.id.cmp(&b.id))
         }),
         SortKey::Title => tickets.sort_by(|a, b| {
-            a.title
-                .to_lowercase()
-                .cmp(&b.title.to_lowercase())
-                .then(a.id.cmp(&b.id))
+            directed_order(
+                a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                descending,
+            )
+            .then_with(|| b.updated_at.as_str().cmp(a.updated_at.as_str()))
+            .then(a.id.cmp(&b.id))
         }),
     }
+}
+
+fn directed_order(order: std::cmp::Ordering, descending: bool) -> std::cmp::Ordering {
+    if descending { order.reverse() } else { order }
 }
 
 /// A ticket in a workflow-open state (not terminal/hidden).

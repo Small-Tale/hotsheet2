@@ -518,6 +518,9 @@ impl TicketProvider for GitHubProvider {
             SortKey::Status => format!("{:?}", a.status).cmp(&format!("{:?}", b.status)),
             SortKey::Title => a.title.cmp(&b.title),
         });
+        if query.descending {
+            tickets.reverse();
+        }
         if let Some(limit) = query.limit {
             tickets.truncate(limit);
         }
@@ -550,7 +553,7 @@ impl TicketProvider for GitHubProvider {
                 capability: "requested query filter",
             });
         }
-        if !matches!(query.sort, SortKey::Id | SortKey::Created) {
+        if query.descending || !matches!(query.sort, SortKey::Id | SortKey::Created) {
             let mut unbounded = query.clone();
             unbounded.limit = None;
             unbounded.page_after = None;

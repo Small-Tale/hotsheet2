@@ -651,6 +651,11 @@ and identity-less legacy entries remain conservatively blocking.
   downloading every ticket. Continuation pages append without duplicating overlapping
   provider rows, and the action disappears when the cursor is exhausted. SQL aggregate counts keep the
   sidebar and background project tabs authoritative even when most rows are not resident.
+  Every initial and continuation request carries the active list/board sort field and direction;
+  switching sort or switching between independently sorted list and board modes refreshes the bounded
+  page. The server applies that same total order before the page boundary, so a newer or higher-priority
+  ticket cannot disappear merely because the browser locally sorted an arbitrary ID-ordered subset
+  (HS2-X23ME4).
   The aggregate also carries the exact Verified total, allowing Queue columns to derive
   absolute Not Started, Started, Completed, and Verified counts rather than capping their
   headings at the currently loaded page; Backlog and Archive use their absolute aggregates.
