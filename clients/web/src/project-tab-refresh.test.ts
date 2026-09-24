@@ -73,6 +73,44 @@ describe('project tab refresh coordination', () => {
     expect(publishBackground.mock.calls.map(([target]) => target.id).sort()).toEqual(['beta', 'gamma']);
   });
 
+  it('starts a successor drain when an invalidation arrives as the current drain settles', async () => {
+    const outcomes: Array<{ refreshes: number; settled: number }> = [];
+    for (let depth = 0; depth < 10; depth += 1) {
+      let settled = 0;
+      const refreshActive = vi.fn(async () => {
+        if (refreshActive.mock.calls.length !== 1) return;
+        const requestAfterMicrotasks = (remaining: number) => {
+          if (remaining > 0)
+            queueMicrotask(() => {
+              requestAfterMicrotasks(remaining - 1);
+            });
+          else
+            for (let repeat = 0; repeat < (depth === 4 ? 3 : 1); repeat += 1)
+              void coordinator.request({ id: 'alpha' }).then(() => {
+                settled += 1;
+              });
+        };
+        requestAfterMicrotasks(depth);
+      });
+      const coordinator = createProjectTabRefreshCoordinator({
+        waitUntilSafe: async () => undefined,
+        activeProjectId: () => 'alpha',
+        isOpen: () => true,
+        refreshActive,
+        loadBackground: vi.fn(),
+        publishBackground: vi.fn(),
+      });
+
+      await coordinator.request({ id: 'alpha' });
+      for (let flush = 0; flush < 12; flush += 1) await Promise.resolve();
+      outcomes.push({ refreshes: refreshActive.mock.calls.length, settled });
+    }
+
+    expect(outcomes).toEqual(
+      Array.from({ length: 10 }, (_, depth) => ({ refreshes: 2, settled: depth === 4 ? 3 : 1 })),
+    );
+  });
+
   it('rejects an obsolete background response after project activation or closure', async () => {
     let active = 'alpha';
     let open = true;

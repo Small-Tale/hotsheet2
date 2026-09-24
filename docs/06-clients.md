@@ -1307,7 +1307,11 @@ and identity-less legacy entries remain conservatively blocking.
   the selected inspector ticket. Background reconciliation is silent: it does not toggle
   the foreground loading surface. While a metadata select popup is open, ticket refreshes
   are coalesced and deferred until the popup closes, so the application never hides and
-  reopens the user's active chooser. Project switches abort the previous poll. Network failure retries
+  reopens the user's active chooser. The per-project coordinator also closes the drain-tail
+  handoff atomically: an invalidation arriving after the current batch empties but before its
+  runner settles always starts a successor drain, and every request promise settles only after
+  its coalesced authoritative refresh. This prevents a ticket from remaining absent until an
+  unrelated search merges it into client state (HS2-SJGRTK). Project switches abort the previous poll. Network failure retries
   with a fresh cursor and bounded exponential backoff without refreshing on every
   failure; the first successful reconnect reconciles once. The server-side project
   bridge retains legacy query authentication for `/ws/poll`, so a newer browser client
