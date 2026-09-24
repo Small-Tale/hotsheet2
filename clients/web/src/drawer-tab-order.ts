@@ -56,6 +56,17 @@ export function drawerTabFocusRequestStillOwned(
   return current === scheduled || current === body;
 }
 
+/** Return the keyboard-input surface for the drawer's currently selected live item. */
+export function selectedDrawerInput(drawer: ParentNode): HTMLElement | undefined {
+  return (
+    drawer.querySelector<HTMLElement>('[data-component="terminal-session"]:not([hidden]) .xterm-helper-textarea') ??
+    drawer.querySelector<HTMLElement>(
+      '[data-component="ai-conversation"] textarea[name="conversation-draft"]:not(:disabled)',
+    ) ??
+    undefined
+  );
+}
+
 export type DrawerTabCloseAction = 'close' | 'close-others' | 'close-right' | 'close-left' | 'close-all';
 
 export function drawerTabCloseIds(ids: readonly string[], activeId: string, action: DrawerTabCloseAction): string[] {

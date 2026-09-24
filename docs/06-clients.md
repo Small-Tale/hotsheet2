@@ -1783,7 +1783,10 @@ plugin-discovered provider, model, and compatible effort; AI shells use the real
 `connect` launch path rather than treating the provider id as a shell command. A dedicated
 xterm viewport receives focus as soon as it
 mounts, allowing immediate typing without an extra click; this is a one-shot request that
-does not make later refreshes steal focus. Project and terminal tabs share one pill-tab primitive, with
+does not make later refreshes steal focus. Opening the drawer also focuses its remembered
+terminal or writable AI-chat composer, and explicitly activating any live drawer tab returns
+focus to that surface, including an already-mounted terminal, unless the user moves focus
+elsewhere before the deferred render settles. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking
 project, terminal, and AI-chat tabs offer Close Tab, Close Other Tabs, directional close,
 and Close All Tabs. Drawer close ranges use the complete remembered mixed order, so each

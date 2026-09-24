@@ -514,7 +514,9 @@ for the complete selected shadow and keyboard focus ring at both ends. Project t
 same-strip pointer drag reordering. Terminal and AI-chat tabs share one project-scoped
 device-local order and can drag across kinds or move with Alt+Shift+Left/Right; closing the
 selected drawer tab transfers focus to the nearest live mixed-kind neighbor. Project and
-drawer order persist across reloads. The Add action remains
+drawer order persist across reloads. Opening the drawer focuses the selected terminal or
+writable AI-chat composer by default; clicking a live drawer tab likewise transfers keyboard
+focus into its terminal/chat input while yielding to any newer explicit focus action. The Add action remains
 vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →

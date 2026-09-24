@@ -151,6 +151,7 @@ import {
   loadDrawerTabOrder,
   orderedDrawerTabIds,
   saveDrawerTabOrder,
+  selectedDrawerInput,
 } from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createCommandsController } from '../features/commands';
@@ -1137,6 +1138,18 @@ export async function startHotSheetWebClient() {
       }),
     );
   }
+  function focusDrawerInput(projectId: string) {
+    const scheduled = document.activeElement;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const drawer = [...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(
+            (item) => item.dataset.projectId === projectId,
+          ),
+          input = drawer ? selectedDrawerInput(drawer) : undefined;
+        if (input && drawerTabFocusRequestStillOwned(scheduled, document.activeElement, document.body)) input.focus();
+      }),
+    );
+  }
   async function refreshTerminalDashboard() {
     const generation = ++terminalDashboardGeneration,
       openProjects = [...projects.value];
@@ -1190,12 +1203,17 @@ export async function startHotSheetWebClient() {
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function observeTerminalDrawer(){queueMicrotask(()=>{terminalDrawerObserver?.disconnect();if(!terminalDrawerVisible.value)return;const target=document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content');if(!target)return;terminalDrawerObserver=new ResizeObserver(entries=>{if(appRegionResizeDrag?.id==='app-terminal-drawer')return;const rect=entries[0]?.contentRect;if(rect)updateTerminalDrawerBounds(target,rect)});terminalDrawerObserver.observe(target)})}
+  function requestDrawerInputFocus(projectId: string, id: string, chat: DrawerAIChat | undefined) {
+    if (id === 'grid') return;
+    if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
+    focusDrawerInput(projectId);
+  }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current&&terminalDrawerChatsByProject.value[current.id]?.some(item=>item.id===terminalDrawerSelected.value);if(current&&terminalDrawerSelected.value!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:terminalDrawerSelected.value};terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
+  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===terminalDrawerSelected.value):undefined;if(current)requestDrawerInputFocus(current.id,terminalDrawerSelected.value,chat);terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function selectDrawerItem(id:string){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(current&&id!=='grid'&&!chat)pendingTerminalFocus={projectId:current.id,terminalId:id};if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current)localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id)}
+  function selectDrawerItem(id:string){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current){localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id);requestDrawerInputFocus(current.id,id,chat)}}
   function openTerminalInProject(key: string) {
     const session = terminalSession(key);
     if (!session) return;

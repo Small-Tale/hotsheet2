@@ -3115,7 +3115,11 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await page.screenshot({ path: '/private/tmp/hs2-586bvq-terminal-drawer-collapsed.png', fullPage: true });
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+  const reopenedDrawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(reopenedDrawer).toBeVisible();
+  await expect(
+    reopenedDrawer.locator('[data-component="terminal-session"]:not([hidden]) .xterm-helper-textarea'),
+  ).toBeFocused();
   await page.screenshot({ path: '/private/tmp/hs2-586bvq-terminal-drawer-short.png', fullPage: true });
 });
 
@@ -3149,6 +3153,7 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   await codex.click();
   const firstViewport = drawer.locator('[data-terminal-id="codex-main"][data-display-mode="interactive"]');
   await expect(firstViewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(firstViewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect(firstViewport).not.toHaveAttribute('data-grid-size', '80x24');
   await expect
     .poll(async () => (await claimsFor('codex-main')).at(-1)?.at(-1))
@@ -3363,6 +3368,13 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     .poll(() => page.evaluate(() => (window as unknown as { __drawerAILaunch?: unknown }).__drawerAILaunch))
     .toEqual({ projectId: 'demo-checkout', kind: 'ai-chat', provider: 'claude', model: 'claude-sonnet' });
   const composer = conversation.getByLabel('Message Claude');
+  await expect(composer).toBeFocused();
+  await create.focus();
+  await drawer.getByRole('tab', { name: 'Claude chat' }).click();
+  await expect(composer).toBeFocused();
+  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await expect(composer).toBeFocused();
   await composer.fill('What time is it in California?');
   await composer.press('Enter');
   const response = conversation.getByText(

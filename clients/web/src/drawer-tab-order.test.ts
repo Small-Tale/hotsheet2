@@ -10,6 +10,7 @@ import {
   parseDrawerTabOrder,
   reorderDrawerTabIds,
   saveDrawerTabOrder,
+  selectedDrawerInput,
 } from './drawer-tab-order';
 
 describe('drawer tab ordering', () => {
@@ -37,6 +38,22 @@ describe('drawer tab ordering', () => {
     expect(drawerTabFocusRequestStillOwned(scheduled, scheduled, body)).toBe(true);
     expect(drawerTabFocusRequestStillOwned(scheduled, body, body)).toBe(true);
     expect(drawerTabFocusRequestStillOwned(scheduled, newFocus, body)).toBe(false);
+  });
+
+  it('finds the selected terminal or writable chat input without focusing inactive surfaces', () => {
+    const terminal = {} as HTMLElement,
+      chat = {} as HTMLElement,
+      terminalDrawer = {
+        querySelector: (selector: string) => (selector.includes('terminal-session') ? terminal : null),
+      } as unknown as ParentNode,
+      chatDrawer = {
+        querySelector: (selector: string) => (selector.includes('ai-conversation') ? chat : null),
+      } as unknown as ParentNode,
+      gridDrawer = { querySelector: () => null } as unknown as ParentNode;
+
+    expect(selectedDrawerInput(terminalDrawer)).toBe(terminal);
+    expect(selectedDrawerInput(chatDrawer)).toBe(chat);
+    expect(selectedDrawerInput(gridDrawer)).toBeUndefined();
   });
 
   it('selects the nearest live tab after a close, preferring the right neighbor', () => {
