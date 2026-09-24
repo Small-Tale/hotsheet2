@@ -3,12 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from './terminal-viewport-runtime';
 
 const allocated = vi.hoisted(() => ({
+  proposed: { cols: 80, rows: 24 },
   terminals: [] as Array<{
     dispose: ReturnType<typeof vi.fn>;
     render: ReturnType<typeof vi.fn>;
     input: ReturnType<typeof vi.fn>;
+    registerMarker: ReturnType<typeof vi.fn>;
+    resize: ReturnType<typeof vi.fn>;
     reset: ReturnType<typeof vi.fn>;
+    scrollToLine: ReturnType<typeof vi.fn>;
     write: ReturnType<typeof vi.fn>;
+    buffer: { active: { baseY: number; cursorY: number; viewportY: number } };
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -18,8 +23,15 @@ vi.mock('@xterm/xterm', () => ({
     dispose = vi.fn();
     render = vi.fn();
     input = vi.fn();
+    registerMarker = vi.fn(() => ({ line: 8, dispose: vi.fn() }));
+    resize = vi.fn((cols: number, rows: number) => {
+      this.cols = cols;
+      this.rows = rows;
+    });
     reset = vi.fn();
+    scrollToLine = vi.fn();
     write = vi.fn();
+    buffer = { active: { baseY: 20, cursorY: 3, viewportY: 20 } };
     constructor() {
       allocated.terminals.push(this);
     }
@@ -36,6 +48,9 @@ vi.mock('@xterm/xterm', () => ({
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     dispose() {}
+    proposeDimensions() {
+      return allocated.proposed;
+    }
   },
 }));
 vi.mock('@xterm/addon-webgl', () => ({
@@ -67,6 +82,7 @@ let throwSocket = false,
 
 beforeEach(() => {
   allocated.terminals.length = 0;
+  allocated.proposed = { cols: 80, rows: 24 };
   resize.length = 0;
   intersections.length = 0;
   sockets.length = 0;
@@ -204,5 +220,34 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     sockets.at(-1)!.dispatchEvent(new MessageEvent('message', { data: new ArrayBuffer(0) }));
     expect([...terminal.write.mock.calls[4][0]]).toEqual(reset);
     dispose();
+  });
+
+  it('ignores repeated size heartbeats and anchors a scrolled viewport across a real resize (HS2-CJBZPW)', () => {
+    const { viewport } = element();
+    mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' });
+    const terminal = allocated.terminals[0],
+      size = (cols: number, rows: number) =>
+        sockets[0].dispatchEvent(
+          new MessageEvent('message', {
+            data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'viewer' }),
+          }),
+        );
+    terminal.buffer.active = { baseY: 40, cursorY: 4, viewportY: 12 };
+    size(80, 24);
+    expect(terminal.resize).not.toHaveBeenCalled();
+    expect(terminal.registerMarker).not.toHaveBeenCalled();
+
+    allocated.proposed = { cols: 100, rows: 30 };
+    size(100, 30);
+    expect(terminal.registerMarker).toHaveBeenCalledWith(-32);
+    expect(terminal.resize).toHaveBeenCalledWith(100, 30);
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(8);
+    expect(terminal.registerMarker.mock.results[0].value.dispose).toHaveBeenCalledTimes(1);
+
+    terminal.buffer.active = { baseY: 40, cursorY: 4, viewportY: 40 };
+    allocated.proposed = { cols: 120, rows: 35 };
+    size(120, 35);
+    expect(terminal.resize).toHaveBeenCalledWith(120, 35);
+    expect(terminal.registerMarker).toHaveBeenCalledTimes(1);
   });
 });

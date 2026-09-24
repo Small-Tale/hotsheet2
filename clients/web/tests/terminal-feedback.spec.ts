@@ -489,6 +489,68 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
   expect(detailRequests).toHaveLength(0);
 });
 
+test('keeps a scrolled terminal anchored while animated output and size heartbeats arrive (HS2-CJBZPW)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+  await tile.click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    terminal = magnified.locator('[data-display-mode="interactive"]'),
+    rows = terminal.locator('.xterm-rows > div'),
+    visibleRows = () => rows.allTextContents();
+  await expect(terminal).toHaveAttribute('data-connection', 'connected');
+  await terminal.evaluate(() => {
+    const socket = (
+      window as unknown as {
+        __terminalFeedbackSockets: Array<EventTarget & { url: string }>;
+      }
+    ).__terminalFeedbackSockets
+      .filter((item) => item.url.includes('/terminals/nano/attach'))
+      .at(-1)!;
+    const output = Array.from({ length: 160 }, (_, index) => `history line ${String(index).padStart(3, '0')}\r\n`).join(
+      '',
+    );
+    socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+  });
+  await expect.poll(async () => (await visibleRows()).join('\n')).toContain('history line 159');
+  await terminal.hover();
+  await page.mouse.wheel(0, -600);
+  await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 159');
+  const anchoredRows = await visibleRows(),
+    grid = (await terminal.getAttribute('data-grid-size'))!.split('x').map(Number);
+  await terminal.evaluate((_element, [cols, rows]) => {
+    const socket = (
+      window as unknown as {
+        __terminalFeedbackSockets: Array<EventTarget & { url: string }>;
+      }
+    ).__terminalFeedbackSockets
+      .filter((item) => item.url.includes('/terminals/nano/attach'))
+      .at(-1)!;
+    for (let frame = 0; frame < 12; frame += 1) {
+      socket.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'another-viewer' }),
+        }),
+      );
+      const output = `\r\u001b[2Kprocessing ${'.'.repeat((frame % 3) + 1)}`;
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+    }
+  }, grid);
+  await expect.poll(visibleRows).toEqual(anchoredRows);
+  await page.screenshot({ path: '/private/tmp/hs2-cjbzpw-scrollback-wide.png', fullPage: true });
+
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 159');
+  await page.screenshot({ path: '/private/tmp/hs2-cjbzpw-scrollback-narrow.png', fullPage: true });
+});
+
 test('keeps current terminal geometry through the complete drawer dashboard round trip', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);

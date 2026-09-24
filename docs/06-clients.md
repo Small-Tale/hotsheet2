@@ -2046,6 +2046,11 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast
   viewer never pins the PTY to its size forever. This is the piece HS1 never had.
 - The server broadcasts the resulting `ptySize` to **all** viewers, so everyone
   agrees on the real size and each renders within its own viewport (§6.7.4).
+- A client treats a repeated `ptySize` that matches its current local grid as metadata,
+  not a resize request. A genuine local-grid change keeps a marker on the reader's visible
+  top line and restores that line after xterm reflows. Animated command output and steady
+  size heartbeats therefore cannot pull a user who scrolled into history back to the live
+  cursor (**HS2-CJBZPW**).
 
 ### 6.7.3 The sizing policy: interaction-follows, with hysteresis
 

@@ -46,6 +46,20 @@ function terminalReplacementPayload(value: Uint8Array<ArrayBuffer>): Uint8Array<
   return replacement;
 }
 
+function resizeTerminalPreservingScroll(terminal: Terminal, cols: number, rows: number): void {
+  if (terminal.cols === cols && terminal.rows === rows) return;
+  const buffer = terminal.buffer.active,
+    marker =
+      buffer.viewportY < buffer.baseY
+        ? terminal.registerMarker(buffer.viewportY - buffer.baseY - buffer.cursorY)
+        : undefined;
+  terminal.resize(cols, rows);
+  if (marker) {
+    if (marker.line >= 0) terminal.scrollToLine(marker.line);
+    marker.dispose();
+  }
+}
+
 function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () => void {
   const cleanups: Array<() => void> = [];
   const dispose = () => {
@@ -544,7 +558,7 @@ function initializeTerminalViewport(
         serverSize = size.pty_size;
         const drivenByViewer = size.driven_by === viewerId;
         const local = claimDimensions();
-        terminal.resize(local.cols, local.rows);
+        resizeTerminalPreservingScroll(terminal, local.cols, local.rows);
         element.dataset.driving = String(drivenByViewer);
         element.dataset.ptySize = `${size.pty_size.cols}x${size.pty_size.rows}`;
         element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
