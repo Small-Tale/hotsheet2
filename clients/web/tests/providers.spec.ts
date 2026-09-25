@@ -16269,3 +16269,69 @@ test('keeps terminal visibility anchored through interrupted close, resize, and 
     await expect(select.locator('[part="listbox"]')).toBeHidden();
   }
 });
+
+test('keeps Add project beside the last project tab and New ticket at the far edge until tabs overflow', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let opened = 0;
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    if (root.startsWith('/work/extra-')) {
+      const name = root.slice('/work/'.length);
+      return route.fulfill({
+        status: 201,
+        json: { ...project, id: name, root, name, apiPath: `/__hotsheet/project-api/${name}` },
+      });
+    }
+    return route.fulfill({ status: 201, json: project });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) =>
+    route.fulfill({ json: { path: `/work/extra-project-with-a-long-name-${++opened}` } }),
+  );
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add project' }).click();
+  const tabs = page.locator('.project-tab-bar [role="tab"]'),
+    add = page.getByRole('button', { name: 'Add project' }),
+    launcher = page.locator('.project-tab-bar [data-component="quick-ticket-composer-launcher"]'),
+    strip = page.locator('.project-tab-bar .kui-tab-bar__tabs');
+  await expect(tabs).toHaveCount(2);
+  await expect(launcher).toBeVisible();
+  const geometry = () =>
+    page.evaluate(() => {
+      const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect(),
+        tabList = [...document.querySelectorAll('.project-tab-bar [role="tab"]')],
+        stripElement = document.querySelector('.project-tab-bar .kui-tab-bar__tabs')!;
+      return {
+        lastTabRight: tabList.at(-1)!.getBoundingClientRect().right,
+        stripRight: stripElement.getBoundingClientRect().right,
+        overflowing: stripElement.scrollWidth > stripElement.clientWidth + 1,
+        add: rect('.project-tab-bar [data-action="choose-project"]'),
+        launcher: rect('.project-tab-bar [data-component="quick-ticket-composer-launcher"]'),
+        bar: rect('.app-shell__main > .project-tab-bar'),
+      };
+    });
+  let box = await geometry();
+  expect(box.overflowing).toBe(false);
+  // Few tabs: + follows the last tab closely, and New ticket holds the far edge.
+  expect(box.add.left - box.lastTabRight).toBeGreaterThanOrEqual(0);
+  expect(box.add.left - box.lastTabRight).toBeLessThan(24);
+  expect(box.launcher.left - box.add.right).toBeGreaterThan(48);
+  expect(box.bar.right - box.launcher.right).toBeLessThan(24);
+  expect(Math.abs(box.add.top + box.add.height / 2 - (box.launcher.top + box.launcher.height / 2))).toBeLessThan(2);
+  await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-few-tabs-wide.png' });
+
+  // Many tabs: the strip shrinks and scrolls; + moves beside New ticket and neither is clipped.
+  for (let index = 0; index < 8; index += 1) await add.click();
+  await expect(tabs).toHaveCount(10);
+  box = await geometry();
+  expect(box.overflowing).toBe(true);
+  expect(box.add.left).toBeGreaterThanOrEqual(box.stripRight);
+  expect(box.launcher.left - box.add.right).toBeLessThan(24);
+  expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
+  await expect(strip).toBeVisible();
+  await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
+});

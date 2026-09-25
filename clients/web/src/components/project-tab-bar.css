@@ -32,6 +32,19 @@
 .project-tab-bar__actions {
   gap: var(--kui-space-xs);
 }
+/* Desktop: Kerf's adjacent placement shrink-wraps the tabs, and the trailing group grows into the
+   remaining width so Add-project (+) sits right after the last tab while the workspace action
+   (New ticket…) holds the far edge. When tabs overflow, the trailing group keeps its content width
+   and the tabs shrink and scroll, bringing + beside the workspace action (HS2-NE8JBS). */
+.project-tab-bar .kui-tab-bar__trailing,
+.kui-tab-bar.project-tab-bar .project-tab-bar__actions {
+  flex: 1 0 auto;
+}
+.project-tab-bar__workspace-action {
+  display: flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
 .project-tab-bar__modes {
   gap: var(--kui-space-2xs);
 }

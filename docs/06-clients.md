@@ -219,7 +219,9 @@ and identity-less legacy entries remain conservatively blocking.
   On non-mobile project tabs, the current ticket view, notification view, or settings
   category replaces the redundant project name in the compact main-toolbar title. The
   separate large page-header row is omitted, and the ticket-view action moves to the far
-  trailing edge of ProjectTabBar beside Add project. Workspace Grid and Cross-project
+  trailing edge of ProjectTabBar. Add project stays immediately after the last project tab;
+  only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
+  ticket-view action (HS2-NE8JBS). Workspace Grid and Cross-project
   Stats retain their existing main-toolbar titles. Mobile retains its two compact project
   and view rows, including the New ticket action in the view row (HS2-9R1F91).
 

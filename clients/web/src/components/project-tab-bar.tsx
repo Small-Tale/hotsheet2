@@ -64,7 +64,7 @@ export function ProjectTabBar({
       <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project">
         <LucideIcon icon={Plus} name="plus" />
       </wa-button>
-      {!mobile && workspaceAction}
+      {!mobile && workspaceAction && <div class="project-tab-bar__workspace-action">{workspaceAction}</div>}
     </div>
   );
   if (mobile) {
@@ -118,7 +118,9 @@ export function ProjectTabBar({
       // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
       // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
       activation="manual"
-      trailingPlacement={workspaceAction ? 'separate' : 'adjacent'}
+      // Add-project stays beside the last tab; the workspace action is pushed to the far edge
+      // inside the growing trailing group (HS2-NE8JBS).
+      trailingPlacement="adjacent"
       leading={modes}
       trailing={actions}
     >

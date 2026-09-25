@@ -300,8 +300,15 @@ describe('application shell components', () => {
         workspaceAction: 'new-ticket' as never,
       }),
     );
-    expect(desktop).toContain('data-trailing-placement="separate"');
-    expect(desktop).toMatch(/project-tab-bar__actions[^]*data-action="choose-project"[^]*new-ticket/);
+    // Add-project stays adjacent to the tabs; the workspace action is pushed to the far edge
+    // inside the growing trailing group (HS2-NE8JBS).
+    expect(desktop).toContain('data-trailing-placement="adjacent"');
+    expect(desktop).toMatch(
+      /project-tab-bar__actions[^]*data-action="choose-project"[^]*project-tab-bar__workspace-action">new-ticket/,
+    );
+    const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.project-tab-bar \.kui-tab-bar__trailing,[^{]*\{[^}]*flex: 1 0 auto;/);
+    expect(css).toMatch(/\.project-tab-bar__workspace-action \{[^}]*margin-inline-start: auto;/);
     const mobile = String(
       ProjectTabBar({
         mobile: true,

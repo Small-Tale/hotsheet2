@@ -4290,7 +4290,20 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
-  const tabBar = page.locator('.project-tab-bar');
+  const tabBar = page.locator('.project-tab-bar').first();
+  // Workspace-action variant: + stays beside the last tab while the workspace action holds the far
+  // edge of the bar (HS2-NE8JBS).
+  const withAction = page.getByRole('navigation', { name: 'Open projects with workspace action' });
+  const actionGeometry = await withAction.evaluate((bar) => {
+    const tabs = bar.querySelector('.kui-tab-bar__tabs')!.getBoundingClientRect(),
+      add = bar.querySelector('[data-action="choose-project"]')!.getBoundingClientRect(),
+      action = bar.querySelector('.project-tab-bar__workspace-action')!.getBoundingClientRect(),
+      edge = bar.getBoundingClientRect();
+    return { addGap: add.left - tabs.right, actionGap: action.left - add.right, edgeGap: edge.right - action.right };
+  });
+  expect(actionGeometry.addGap).toBeLessThan(24);
+  expect(actionGeometry.actionGap).toBeGreaterThan(48);
+  expect(actionGeometry.edgeGap).toBeLessThan(24);
   await expect(tabBar).toHaveCSS('padding', '4px 8px');
   await expect(tabBar).toHaveCSS('gap', '4px');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
