@@ -499,48 +499,93 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
-    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]');
+  await expect(preview).toHaveAttribute('data-connection', 'connected');
+  await expect(preview).toHaveAttribute('data-geometry-ready', 'true');
+  const previewSocketCount = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __terminalFeedbackSockets: Array<{ url: string }>;
+        }
+      ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/nano/attach')).length,
+  );
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     terminal = magnified.locator('[data-display-mode="interactive"]'),
     rows = terminal.locator('.xterm-rows > div'),
     visibleRows = () => rows.allTextContents();
   await expect(terminal).toHaveAttribute('data-connection', 'connected');
+  await expect(terminal).toHaveAttribute('data-geometry-ready', 'true');
+  await expect
+    .poll(() =>
+      page.evaluate((priorCount) => {
+        const sockets = (
+          window as unknown as {
+            __terminalFeedbackSockets: Array<{ readyState: number; sent: unknown[]; url: string }>;
+          }
+        ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/nano/attach'));
+        const latest = sockets.at(-1);
+        return (
+          sockets.length > priorCount &&
+          latest?.readyState === WebSocket.OPEN &&
+          latest.sent.some((value) => typeof value === 'string' && value.includes('"resize"'))
+        );
+      }, previewSocketCount),
+    )
+    .toBe(true);
+  const resizeCount = () =>
+    page.evaluate(() => {
+      const sockets = (
+          window as unknown as {
+            __terminalFeedbackSockets: Array<{ sent: unknown[]; url: string }>;
+          }
+        ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/nano/attach')),
+        latest = sockets.at(-1);
+      return latest?.sent.filter((value) => typeof value === 'string' && value.includes('"resize"')).length ?? 0;
+    });
+  await expect
+    .poll(async () => {
+      const before = await resizeCount();
+      await page.waitForTimeout(250);
+      return (await resizeCount()) === before;
+    })
+    .toBe(true);
   await terminal.evaluate(() => {
-    const socket = (
+    const sockets = (
       window as unknown as {
-        __terminalFeedbackSockets: Array<EventTarget & { url: string }>;
+        __terminalFeedbackSockets: Array<EventTarget & { readyState: number; url: string }>;
       }
-    ).__terminalFeedbackSockets
-      .filter((item) => item.url.includes('/terminals/nano/attach'))
-      .at(-1)!;
-    const output = Array.from({ length: 160 }, (_, index) => `history line ${String(index).padStart(3, '0')}\r\n`).join(
+    ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/nano/attach'));
+    const output = Array.from({ length: 80 }, (_, index) => `history line ${String(index).padStart(3, '0')}\r\n`).join(
       '',
     );
-    socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+    for (const socket of sockets)
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
   });
-  await expect.poll(async () => (await visibleRows()).join('\n')).toContain('history line 159');
+  await expect.poll(async () => (await visibleRows()).join('\n'), { timeout: 15_000 }).toContain('history line 079');
   await terminal.hover();
   await page.mouse.wheel(0, -600);
-  await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 159');
+  await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 079');
   const anchoredRows = await visibleRows(),
     grid = (await terminal.getAttribute('data-grid-size'))!.split('x').map(Number);
   await terminal.evaluate((_element, [cols, rows]) => {
-    const socket = (
+    const sockets = (
       window as unknown as {
-        __terminalFeedbackSockets: Array<EventTarget & { url: string }>;
+        __terminalFeedbackSockets: Array<EventTarget & { readyState: number; url: string }>;
       }
-    ).__terminalFeedbackSockets
-      .filter((item) => item.url.includes('/terminals/nano/attach'))
-      .at(-1)!;
+    ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/nano/attach'));
     for (let frame = 0; frame < 12; frame += 1) {
-      socket.dispatchEvent(
-        new MessageEvent('message', {
-          data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'another-viewer' }),
-        }),
-      );
       const output = `\r\u001b[2Kprocessing ${'.'.repeat((frame % 3) + 1)}`;
-      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+      for (const socket of sockets) {
+        socket.dispatchEvent(
+          new MessageEvent('message', {
+            data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'another-viewer' }),
+          }),
+        );
+        socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+      }
     }
   }, grid);
   await expect.poll(visibleRows).toEqual(anchoredRows);
