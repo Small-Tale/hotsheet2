@@ -91,10 +91,15 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   const catalogShell = page.locator('[data-component="catalog"]'),
     reviewToggle = page.locator('[data-action="toggle-dev-review"]');
   await expect(catalogShell).toBeVisible();
-  await expect(page.locator('.hs-dev-review')).toBeVisible();
-  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+  // Dev Review is opt-in (HS2-TCACFR): off by default, the toggle opts in and back out through the URL.
+  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   await reviewToggle.click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false');
+  await expect(page).toHaveURL('/ux-demo?dev-review=1');
+  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.hs-dev-review')).toBeVisible();
+  await reviewToggle.click();
+  await expect(page).toHaveURL('/ux-demo');
   await expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation', { name: 'UX components components' });
@@ -110,7 +115,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalog.getByText('Ticket workspace · List', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   await catalog.getByRole('button', { name: /TicketRow/ }).click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
   const catalogTop = await page
@@ -131,7 +136,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();
   await expect(relationships.getByText('Uses', { exact: true })).toBeVisible();
   await relationships.getByText('TagChip', { exact: true }).click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=tag-chip');
+  await expect(page).toHaveURL('/ux-demo?component=tag-chip');
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   const collapse = page.getByRole('button', { name: 'Collapse UX components catalog' });
   await collapse.click();
@@ -395,7 +400,7 @@ test('renders keyboard shortcut rows edge-to-edge without a transparent left gut
 
 test('reopens dialog demos and keeps Feedback above the modal top layer', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=hs1-migration-dialog');
+  await page.goto('/ux-demo?component=hs1-migration-dialog&dev-review=1');
   const migration = page.locator('[data-component="hs1-migration-dialog"]');
   await expect(migration).toHaveJSProperty('open', true);
   const feedback = page.locator('.hs-dev-review__feedback');

@@ -1299,7 +1299,7 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
 }
 
 const devReviewTestTitles = new Set([
-  'activates Dev Review by default and preserves its desktop/mobile lifecycle',
+  'activates Dev Review when opted in and preserves its desktop/mobile lifecycle',
   'honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)',
   'does not report intentional render bursts during remembered-project startup',
   'suppresses interaction-bound render bursts but reports a storm that persists afterward',
@@ -1307,21 +1307,23 @@ const devReviewTestTitles = new Set([
   'switches large ticket views without cloning every row into motion ghosts',
 ]);
 
+// Dev Review is opt-in (HS2-TCACFR): only the Dev Review tests below opt in, unless their URL already
+// chooses a value (such as the explicit opt-out test).
 test.beforeEach(async ({ page }, testInfo) => {
-  if (devReviewTestTitles.has(testInfo.title)) return;
+  if (!devReviewTestTitles.has(testInfo.title)) return;
   await page.addInitScript(() => {
     if (
       (location.protocol === 'http:' || location.protocol === 'https:') &&
       !new URLSearchParams(location.search).has('dev-review')
     ) {
       const url = new URL(location.href);
-      url.searchParams.set('dev-review', 'false');
+      url.searchParams.set('dev-review', '1');
       history.replaceState(null, '', url);
     }
   });
 });
 
-test('activates Dev Review by default and preserves its desktop/mobile lifecycle', async ({ page }) => {
+test('activates Dev Review when opted in and preserves its desktop/mobile lifecycle', async ({ page }) => {
   let submission: { actorRole: string; attachments: Array<{ filename: string; mimeType: string }> } | undefined;
   await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
     submission = route.request().postDataJSON();
@@ -1364,6 +1366,21 @@ test('activates Dev Review by default and preserves its desktop/mobile lifecycle
   ).toBe(true);
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('.hs-dev-review')).toBeVisible();
+});
+
+test('keeps Dev Review off by default in development (HS2-TCACFR)', async ({ page }) => {
+  let submissions = 0;
+  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
+    submissions += 1;
+    await route.fulfill({ status: 201, json: { slug: 'HS2-UNEXPECTED' } });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Open project' })).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Feedback' })).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.has('dev-review')).toBe(false);
+  expect(submissions).toBe(0);
 });
 
 test('honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)', async ({ page }) => {

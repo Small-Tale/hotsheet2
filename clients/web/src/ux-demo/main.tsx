@@ -1021,8 +1021,8 @@ const setDevReview = async (active: boolean) => {
   devReviewController = undefined;
   devReviewOn.value = active;
   const url = new URL(location.href);
-  if (active) url.searchParams.delete('dev-review');
-  else url.searchParams.set('dev-review', 'false');
+  if (active) url.searchParams.set('dev-review', '1');
+  else url.searchParams.delete('dev-review');
   history.replaceState(null, '', url);
   if (active)
     devReviewController = await import('../dev-review').then(({ installDevReview }) =>

@@ -12,10 +12,12 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 
 ## Interaction contract
 
-- The main application and UX Demo enable a very small fixed `Feedback` launcher in the
-  top-right top layer for every development build. It stays above application dialogs so
-  those surfaces can be selected and reported. `?dev-review=false` is the sole explicit
-  opt-out; production builds never include the tool. The visible overlay is desktop-only: it
+- The main application and UX Demo offer a very small fixed `Feedback` launcher in the
+  top-right top layer in development builds. It is **opt-in** (HS2-TCACFR): add
+  `?dev-review` (or `?dev-review=1`) to the URL to enable it; without the parameter, or with
+  `?dev-review=false`/`0`, the tool stays off. The UX Demo's Dev Review toggle adds or removes
+  the parameter. When enabled it stays above application dialogs so those surfaces can be
+  selected and reported. Production builds never include the tool. The visible overlay is desktop-only: it
   is removed below the mobile breakpoint (`isMobileViewport`) and re-installed on resize back to
   desktop, since it clutters a small screen and its modifier-gated review interactions do not
   apply there. The headless UI-stability diagnostics remain installed regardless of viewport.
@@ -80,9 +82,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   root renders within two seconds trigger an automatic diagnostic ticket. Reports are
   rate-limited to one per minute so a genuine thrash cannot create its own request
   storm. Those unattended uploads carry `actor.role: system`; captures and files submitted
-  through the person-operated feedback dialog carry `actor.role: human`. The explicit
-  `?dev-review=false` development opt-out disables both the visible overlay and this hidden
-  automatic recorder/reporter, so automated review sessions cannot file incidental tickets.
+  through the person-operated feedback dialog carry `actor.role: human`. Leaving Dev
+  Review off (the default) disables both the visible overlay and this hidden automatic
+  recorder/reporter, so ordinary and automated sessions cannot file incidental tickets.
 - Either Close or Cancel returns to the still-active annotation session. Successful
   submission clears and exits the session.
 
@@ -109,9 +111,9 @@ server, Tauri command, test fake, or another ticket-provider-aware bridge.
 
 ## UX demo and security boundary
 
-Open the main application or `/ux-demo` normally while running the Vite development
-server. Use `?dev-review=false` when either development entry point's overlay must be
-disabled; the UX Demo preserves that opt-out while navigating components. Both
+Open the main application or `/ux-demo` with `?dev-review` while running the Vite
+development server to enable the overlay; either entry point stays clean without it. The
+UX Demo preserves the opt-in while navigating components. Both
 development entry points post to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.

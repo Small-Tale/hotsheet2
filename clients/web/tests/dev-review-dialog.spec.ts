@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 // The framework-neutral overlay uses the canonical Toolbar/ToolbarText anatomy with app-owned supporting copy.
 test('dev-review new-ticket dialog uses the canonical Toolbar heading anatomy', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/');
+  await page.goto('/?dev-review=1');
   const tool = page.locator('.hs-dev-review');
   await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
   await tool.getByRole('button', { name: 'Feedback' }).click();
