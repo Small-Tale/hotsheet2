@@ -255,10 +255,24 @@ query(filter, sort, text?, paging) -> TicketRow[]
   Callers: the web client's copy-drag title de-duplication reads the destination through
   title-only cursor pages (`Api.checkoutTicketRowsPaged`), and its slug lookup and
   duplicate-target search pass an explicit `limit=500`. MCP `hotsheet_query` forwards
-  `page_size` and `cursor` for server-backed checkout queries and returns the page envelope;
-  the serverless backend applies the same 500-row bound and rejects `page_size`/`cursor`
-  (checkout cursor pages need the server's merge). Store-level `/tickets` reads without a
-  checkout keep `limit` + `page_after`.
+  `page_size` and `cursor` for checkout queries and returns the page envelope. Store-level
+  `/tickets` reads without a checkout keep `limit` + `page_after`.
+
+  **Shared merge, with or without a server (HS2-JVF20F).** The batched k-way merge, the
+  `v2.` cursor codec, the filter fingerprint, and the `{items, next_cursor, counts}` envelope
+  live in `hotsheet_ticketing::checkout_page`; each caller supplies only a per-source fetch
+  (a bounded batch strictly after a `MergeKey`). The server fetches from its SQLite indexes
+  and provider adapters; the serverless MCP backend (`CoreBackend`) fetches by file scan
+  with `TicketQuery::after_key`, re-sorting each scan by the shared comparator before
+  cutting the batch, and computes counts from each store's summary. Serverless pages
+  therefore apply the same 1–500 `page_size` bound, the same staleness rules, and the same
+  zero-filled seven-day `completion_trend`. Source keys are `git:{connection id}` and
+  `provider:{connection id}`, so a cursor started on one side continues on the other
+  whenever the checkout's source set matches. The serverless backend reads only a
+  checkout's git stores, so for a checkout with hosted-provider sources its cursors differ
+  in source set and are rejected as stale by the server (and vice versa) rather than
+  reinterpreted. Rows keep their `store` field: the hosted store id on the server, the
+  store path serverlessly.
 
 - **Continuation under concurrent mutation (decided HS2-ZYW6K8; built HS2-74H84S):**
   checkout cursors are _value-keyset continuations_, not snapshots. The server keeps no

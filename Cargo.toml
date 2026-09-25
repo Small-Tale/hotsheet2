@@ -70,3 +70,4 @@ hotsheet-aitools = { path = "crates/hotsheet-aitools" }
 hotsheet-terminals = { path = "crates/hotsheet-terminals" }
 hotsheet-tls = { path = "crates/hotsheet-tls" }
 hotsheet-extsync = { path = "crates/hotsheet-extsync" }
+hotsheet-mcp = { path = "crates/hotsheet-mcp" }

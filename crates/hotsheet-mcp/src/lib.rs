@@ -87,7 +87,7 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Checkout queries return at most 500 rows: an uncapped checkout query matching more fails, so pass limit (at most 500) or page with page_size + cursor (server-backed).",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Checkout queries return at most 500 rows: an uncapped checkout query matching more fails, so pass limit (at most 500) or page with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -109,7 +109,7 @@ fn tools_list() -> Value {
                 "updated_before": str_prop("only tickets updated at/before this ISO-8601 time"),
                 "sort": str_prop("id|created|updated|priority|status|title"),
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500 for checkout queries" },
-                "page_size": { "type": "integer", "description": "checkout queries only (requires a running server): return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
+                "page_size": { "type": "integer", "description": "checkout queries only: return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
                 "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
                 "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
@@ -631,8 +631,9 @@ mod core_backend {
             }
         }
 
-        #[cfg(test)]
-        pub(crate) fn with_checkout_registry(
+        /// Resolve checkouts through this registry instead of `${HOTSHEET_HOME}`'s.
+        #[must_use]
+        pub fn with_checkout_registry(
             mut self,
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
         ) -> Self {
@@ -694,6 +695,159 @@ mod core_backend {
         }
     }
 
+    impl CoreBackend {
+        /// One bounded checkout page over file scans (HS2-JVF20F): the same shared value-
+        /// keyset merge, v2 cursor, and `{items, next_cursor, counts}` envelope the server
+        /// returns, so a serverless agent can page a whole checkout. Cursors interchange
+        /// with the server's whenever the checkout's source set matches (git stores only).
+        fn checkout_page(
+            &self,
+            checkout: &hotsheet_ticketing::checkouts::Checkout,
+            stores: &[FsStore],
+            query: &[(String, String)],
+        ) -> Result<Value, BackendError> {
+            use hotsheet_ticketing::checkout_order::{
+                self, AfterKey, CHECKOUT_READ_MAX_ROWS, MergeKey,
+            };
+            use hotsheet_ticketing::checkout_page;
+            let get = |key: &str| {
+                query
+                    .iter()
+                    .find(|(name, _)| name == key)
+                    .map(|(_, value)| value.as_str())
+            };
+            let page_size = match get("page_size") {
+                None => return Err(bad_request("cursor requires page_size")),
+                Some(raw) => raw
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|size| (1..=CHECKOUT_READ_MAX_ROWS).contains(size))
+                    .ok_or_else(|| {
+                        bad_request(format!(
+                            "page_size must be between 1 and {CHECKOUT_READ_MAX_ROWS}"
+                        ))
+                    })?,
+            };
+            let order = build_query(query, self.store.root())?;
+            let filters = checkout_page::filter_fingerprint(&order, None);
+            let connections = stores
+                .iter()
+                .map(hotsheet_ticketing::git_connection_id)
+                .collect::<Vec<_>>();
+            let source_keys = connections
+                .iter()
+                .map(|connection| checkout_page::git_source_key(connection))
+                .collect::<Vec<_>>();
+            // Validate the cursor before paying for counts.
+            checkout_page::decode_cursor(
+                get("cursor"),
+                &source_keys,
+                order.sort,
+                order.descending,
+                &filters,
+            )?;
+            let now = OffsetDateTime::now_utc();
+            let now_text = now
+                .format(&time::format_description::well_known::Rfc3339)
+                .map_err(|error| bad_request(error.to_string()))?;
+            let day_starts = checkout_page::completion_day_starts(get("summary_days"), now)?;
+            let mut counts = checkout_page::CheckoutTicketCounts::for_days(&day_starts);
+            for (store, connection) in stores.iter().zip(&connections) {
+                counts.add(
+                    GitProvider::new(connection.clone(), store.clone())
+                        .summary(&now_text, &day_starts)
+                        .map_err(|error| bad_request(error.to_string()))?,
+                );
+            }
+            let compact = wants_compact(query);
+            let fields = query_fields(query);
+            let contexts = auto_context::effective(&checkout.settings())
+                .map_err(|e| bad_request(e.to_string()))?;
+            let fetch = |request: checkout_page::SourceFetch<'_>| {
+                let store = &stores[request.source];
+                let connection = &connections[request.source];
+                let mut source_query = build_query(query, store.root())?;
+                source_query.limit = None;
+                source_query.page_after = None;
+                source_query.after_key = request.after.cloned().map(|key| AfterKey {
+                    key,
+                    connection_id: connection.clone(),
+                });
+                // A file scan sorts by its own order; re-sort by the shared checkout order
+                // (ASCII title folding, qualified tiebreakers) before cutting the batch.
+                let mut rows = ops::query(store, &source_query)
+                    .map_err(store_err)?
+                    .iter()
+                    .map(|ticket| {
+                        let mut row = if compact {
+                            TicketRow::compact(ticket)
+                        } else {
+                            TicketRow::from(ticket)
+                        };
+                        row.set_connection(connection);
+                        (MergeKey::from_row(&row), row)
+                    })
+                    .collect::<Vec<_>>();
+                rows.sort_by(|(left, _), (right, _)| {
+                    checkout_order::compare(left, right, order.sort, order.descending)
+                });
+                let exhausted = rows.len() <= request.want;
+                let store_path = store.root().to_string_lossy().into_owned();
+                let rows = rows
+                    .into_iter()
+                    .take(request.want)
+                    .map(|(key, mut row)| {
+                        row.add_auto_context(&contexts);
+                        let mut value = to_value(&row);
+                        hotsheet_ticketing::wire::project_fields(
+                            std::slice::from_mut(&mut value),
+                            &fields,
+                        );
+                        if let Some(object) = value.as_object_mut() {
+                            object.insert("store".into(), Value::String(store_path.clone()));
+                        }
+                        checkout_page::SourceRow {
+                            key,
+                            resume: None,
+                            value: Some(value),
+                        }
+                    })
+                    .collect();
+                Ok::<_, BackendError>(checkout_page::SourceBatch { rows, exhausted })
+            };
+            let page = checkout_page::merge_page(
+                &source_keys,
+                get("cursor"),
+                order.sort,
+                order.descending,
+                &filters,
+                page_size,
+                fetch,
+            )?;
+            Ok(to_value(&checkout_page::CheckoutTicketPage {
+                items: page.items,
+                next_cursor: page.next_cursor,
+                counts,
+            }))
+        }
+    }
+
+    impl From<hotsheet_ticketing::checkout_page::CheckoutPageError> for BackendError {
+        fn from(error: hotsheet_ticketing::checkout_page::CheckoutPageError) -> Self {
+            use hotsheet_ticketing::checkout_page::CheckoutPageError;
+            let status = match error {
+                CheckoutPageError::StaleCursor
+                | CheckoutPageError::InvalidCursor
+                | CheckoutPageError::InvalidSummaryDays => 400,
+                CheckoutPageError::NonAdvancing | CheckoutPageError::Internal(_) => 500,
+            };
+            BackendError {
+                status: Some(status),
+                message: error.to_string(),
+            }
+        }
+    }
+
     impl Backend for CoreBackend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
             if path == "/providers" {
@@ -723,10 +877,7 @@ mod core_backend {
                             .iter()
                             .any(|(key, _)| key == "page_size" || key == "cursor")
                         {
-                            return Err(bad_request(
-                                "checkout page_size/cursor paging requires a running Hot Sheet server; \
-                                 use limit (at most 500) or per-store page_after",
-                            ));
+                            return self.checkout_page(&checkout, &stores, query);
                         }
                         let order = build_query(query, self.store.root())?;
                         let max = hotsheet_ticketing::checkout_order::CHECKOUT_READ_MAX_ROWS;
@@ -1943,8 +2094,13 @@ mod tests {
         assert_eq!(implicit.status, Some(400));
         assert!(implicit.message.contains("more than 500 tickets match"));
         assert_eq!(get(&[("limit", "501")]).unwrap_err().status, Some(400));
-        assert_eq!(get(&[("page_size", "10")]).unwrap_err().status, Some(400));
-        assert_eq!(get(&[("cursor", "v2.00")]).unwrap_err().status, Some(400));
+        // HS2-JVF20F: page_size pages serverlessly; a bare cursor still needs page_size.
+        let paged = get(&[("page_size", "10")]).unwrap();
+        assert_eq!(paged["items"].as_array().unwrap().len(), 10);
+        assert_eq!(paged["counts"]["total"], 501);
+        let bare = get(&[("cursor", "v2.00")]).unwrap_err();
+        assert_eq!(bare.status, Some(400));
+        assert_eq!(bare.message, "cursor requires page_size");
         let capped = get(&[("limit", "500"), ("sort", "title")]).unwrap();
         let capped = capped.as_array().unwrap();
         assert_eq!(capped.len(), 500);
@@ -1956,6 +2112,143 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    /// HS2-JVF20F: the serverless backend pages a multi-store checkout with the shared
+    /// value-keyset merge, so a whole checkout is reachable without a running server.
+    #[test]
+    fn corebackend_pages_a_multi_store_checkout_through_the_query_tool() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let mut stores = Vec::new();
+        for (prefix, titles) in [
+            ("AAA", ["delta", "Alpha", "golf", "echo"].as_slice()),
+            ("BBB", ["charlie", "Bravo", "foxtrot"].as_slice()),
+        ] {
+            let store_root = root.path().join(format!("{prefix}.hs2"));
+            let store = FsStore::init(&store_root, &StoreMetadata::new(prefix)).unwrap();
+            for title in titles {
+                ops::create(
+                    &store,
+                    hotsheet_model::Ulid::new(),
+                    prefix,
+                    hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
+                    hotsheet_ticketing::NewTicket {
+                        title: (*title).into(),
+                        tags: vec!["t".into()],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            }
+            stores.push(store_root);
+        }
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(&checkout_root, Some("project"), None, stores.clone())
+            .unwrap();
+        let backend =
+            CoreBackend::new(FsStore::open(&stores[0]).unwrap()).with_checkout_registry(registry);
+        let query = |args: Value| -> Value {
+            let mut args = args;
+            args["checkout"] = Value::from(checkout.id.clone());
+            let response = handle_message(
+                &req(
+                    "tools/call",
+                    json!({ "name": "hotsheet_query", "arguments": args }),
+                ),
+                &backend,
+            )
+            .unwrap();
+            let text = response["result"]["content"][0]["text"].as_str().unwrap();
+            serde_json::from_str(text).unwrap_or_else(|_| json!({ "error": text }))
+        };
+
+        // Walk the whole checkout two rows at a time in global title order.
+        let mut titles = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut pages = 0;
+        loop {
+            let mut args = json!({ "sort": "title", "page_size": 2, "fields": "title" });
+            if let Some(cursor) = &cursor {
+                args["cursor"] = Value::from(cursor.clone());
+            }
+            let page = query(args);
+            assert_eq!(page["counts"]["total"], 7, "{page}");
+            for item in page["items"].as_array().unwrap() {
+                assert!(item["store"].as_str().unwrap().ends_with(".hs2"));
+                titles.push(item["title"].as_str().unwrap().to_owned());
+            }
+            pages += 1;
+            match page["next_cursor"].as_str() {
+                Some(next) => cursor = Some(next.to_owned()),
+                None => break,
+            }
+        }
+        assert_eq!(
+            titles,
+            [
+                "Alpha", "Bravo", "charlie", "delta", "echo", "foxtrot", "golf"
+            ]
+        );
+        assert_eq!(pages, 4);
+
+        // Mutating the last emitted row between pages neither skips nor repeats rows.
+        let first = query(json!({ "sort": "title", "page_size": 3 }));
+        let cursor = first["next_cursor"].as_str().unwrap().to_owned();
+        let last = first["items"][2]["id"].as_str().unwrap().to_owned();
+        let store = FsStore::open(std::path::Path::new(
+            first["items"][2]["store"].as_str().unwrap(),
+        ))
+        .unwrap();
+        let mut ticket = ops::resolve(&store, &last).unwrap().unwrap();
+        ticket.title = "zulu".into();
+        store.write_ticket(&ticket).unwrap();
+        let rest = query(json!({ "sort": "title", "page_size": 10, "cursor": cursor }));
+        let rest = rest["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["title"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(rest, ["delta", "echo", "foxtrot", "golf", "zulu"]);
+
+        // A cursor is bound to its filters, sort, and size bounds.
+        let stale =
+            query(json!({ "sort": "title", "page_size": 2, "tags": "t", "cursor": cursor }));
+        assert!(
+            stale["error"]
+                .as_str()
+                .unwrap()
+                .contains("stale checkout ticket cursor")
+        );
+        let resorted = query(json!({ "sort": "id", "page_size": 2, "cursor": cursor }));
+        assert!(
+            resorted["error"]
+                .as_str()
+                .unwrap()
+                .contains("stale checkout ticket cursor")
+        );
+        for size in [0, 501] {
+            let invalid = query(json!({ "page_size": size }));
+            assert!(
+                invalid["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("page_size must be between 1 and 500"),
+                "{invalid}"
+            );
+        }
+        let garbage = query(json!({ "page_size": 2, "cursor": "v2.zz" }));
+        assert!(
+            garbage["error"]
+                .as_str()
+                .unwrap()
+                .contains("invalid checkout ticket cursor")
         );
     }
 

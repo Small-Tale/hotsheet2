@@ -9697,3 +9697,103 @@ async fn unpaged_checkout_arrays_are_bounded_and_flag_truncation() {
     assert_eq!(pages, 2);
     assert_eq!(titles.len(), 501);
 }
+
+/// HS2-JVF20F: the server and the serverless MCP backend share one checkout merge and
+/// cursor codec, so a traversal started on either continues on the other when the
+/// checkout's source set matches.
+#[tokio::test]
+async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
+    use hotsheet_mcp::Backend as _;
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let router = app(st.with_checkout_registry(&registry_path));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    for title in ["echo", "Alpha", "delta", "Charlie", "bravo"] {
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(&serde_json::json!({"title":title}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    let serverless = hotsheet_mcp::CoreBackend::new(FsStore::open(&ticket_store).unwrap())
+        .with_checkout_registry(hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            &registry_path,
+        ));
+    let mcp_page = |cursor: Option<&str>| {
+        let mut pairs = vec![
+            ("sort".to_owned(), "title".to_owned()),
+            ("page_size".to_owned(), "2".to_owned()),
+        ];
+        if let Some(cursor) = cursor {
+            pairs.push(("cursor".to_owned(), cursor.to_owned()));
+        }
+        serverless
+            .get(&format!("/checkouts/{checkout_id}/tickets"), &pairs)
+            .unwrap()
+    };
+    let titles = |page: &serde_json::Value| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["title"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let server_page = |cursor: Option<String>| {
+        let router = router.clone();
+        let uri = format!(
+            "/checkouts/{checkout_id}/tickets?sort=title&page_size=2{}",
+            cursor.map(|c| format!("&cursor={c}")).unwrap_or_default()
+        );
+        async move {
+            let response = router.oneshot(authed("GET", &uri, None)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            body_json(response).await
+        }
+    };
+
+    // Server → serverless → server.
+    let first = server_page(None).await;
+    let second = mcp_page(first["next_cursor"].as_str());
+    let third = server_page(second["next_cursor"].as_str().map(str::to_owned)).await;
+    assert_eq!(
+        first["counts"], second["counts"],
+        "both sides count the same checkout"
+    );
+    assert!(third.get("next_cursor").is_none());
+    let walked = [titles(&first), titles(&second), titles(&third)].concat();
+    assert_eq!(walked, ["Alpha", "bravo", "Charlie", "delta", "echo"]);
+
+    // Serverless → server → serverless.
+    let first = mcp_page(None);
+    let second = server_page(first["next_cursor"].as_str().map(str::to_owned)).await;
+    let third = mcp_page(second["next_cursor"].as_str());
+    assert!(third.get("next_cursor").is_none());
+    assert_eq!(
+        [titles(&first), titles(&second), titles(&third)].concat(),
+        walked
+    );
+}

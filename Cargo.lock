@@ -866,6 +866,7 @@ dependencies = [
  "hotsheet-aitools",
  "hotsheet-extsync",
  "hotsheet-index",
+ "hotsheet-mcp",
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-terminals",
