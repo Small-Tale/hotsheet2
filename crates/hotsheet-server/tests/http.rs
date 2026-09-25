@@ -9871,3 +9871,91 @@ async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
         walked
     );
 }
+
+/// HS2-3JEFQT: store-level unpaged lists (`GET /tickets`, `GET /stores/{id}/tickets`) share
+/// the 500-row bound: implicit overflow fails, an explicit `limit` truncates with
+/// `x-hotsheet-truncated`, and `limit` + `page_after` keyset paging reaches every row.
+#[tokio::test]
+async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("BIG")).unwrap();
+    for index in 0..501 {
+        hotsheet_ticketing::ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "BIG",
+            hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: if index == 7 {
+                    "needle ticket".into()
+                } else {
+                    format!("bulk ticket {index:03}")
+                },
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let store_id = hotsheet_ticketing::git_connection_id(&store);
+    let router = app(AppState::new(store, SECRET.into()).unwrap());
+    let get = |uri: String| {
+        let router = router.clone();
+        async move { router.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+    for base in ["/tickets".to_owned(), format!("/stores/{store_id}/tickets")] {
+        let implicit = get(base.clone()).await;
+        assert_eq!(implicit.status(), StatusCode::BAD_REQUEST, "{base}");
+        let message = body_json(implicit).await["error"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(message.contains("more than 500 tickets match"), "{message}");
+        assert!(message.contains("page_after"), "{message}");
+        let too_large = get(format!("{base}?limit=501")).await;
+        assert_eq!(too_large.status(), StatusCode::BAD_REQUEST, "{base}");
+
+        let narrow = get(format!("{base}?text=needle")).await;
+        assert_eq!(narrow.status(), StatusCode::OK);
+        assert!(narrow.headers().get("x-hotsheet-truncated").is_none());
+        assert_eq!(body_json(narrow).await.as_array().unwrap().len(), 1);
+        let exact = get(format!("{base}?limit=1&text=needle")).await;
+        assert!(exact.headers().get("x-hotsheet-truncated").is_none());
+        assert_eq!(
+            body_json(get(format!("{base}?limit=0")).await).await,
+            serde_json::json!([])
+        );
+
+        // Explicit limits truncate and flag it; page_after keysets reach every row.
+        let mut ids = std::collections::HashSet::new();
+        let mut after: Option<String> = None;
+        let mut pages = 0;
+        loop {
+            let response = get(format!(
+                "{base}?limit=200&sort=id&fields=id{}",
+                after
+                    .as_deref()
+                    .map(|id| format!("&page_after={id}"))
+                    .unwrap_or_default()
+            ))
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let truncated = response.headers().get("x-hotsheet-truncated").is_some();
+            let rows = body_json(response).await;
+            let rows = rows.as_array().unwrap();
+            pages += 1;
+            for row in rows {
+                assert!(ids.insert(row["id"].as_str().unwrap().to_owned()));
+            }
+            if !truncated {
+                break;
+            }
+            assert_eq!(rows.len(), 200);
+            after = rows
+                .last()
+                .map(|row| row["id"].as_str().unwrap().to_owned());
+        }
+        assert_eq!(ids.len(), 501, "{base}");
+        assert_eq!(pages, 3, "{base}");
+    }
+}

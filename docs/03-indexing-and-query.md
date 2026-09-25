@@ -211,6 +211,21 @@ query(filter, sort, text?, paging) -> TicketRow[]
 - **limit:** an optional `limit` caps the number of rows returned (applied after
   sort, as a SQL `LIMIT` in the index and a truncate in the serverless scan). It is a
   hard cap, never a silent default — a caller asks for it explicitly.
+- **bounded store lists (HS2-3JEFQT):** every unpaged store-level list — server
+  `GET /tickets` and `GET /stores/{id}/tickets`, and MCP `hotsheet_query` without
+  `checkout` through either backend — follows the same 500-row contract as checkout reads
+  (`ops::StoreReadBound`, `STORE_READ_MAX_ROWS`):
+  - without `limit`, a read that would return more than 500 rows fails with
+    `400 more than 500 tickets match; pass limit (at most 500) and page with page_after`;
+  - `limit` above 500 is `400`;
+  - an explicit `limit` accepts truncation; the server flags omitted rows with
+    `x-hotsheet-truncated: true` (the MCP tool, which returns only the row array, relies
+    on the caller's explicit `limit` and a full page as the signal to continue).
+
+  The CLI `ls` is intentionally unbounded: it reads the local index directly and streams
+  rows to a terminal rather than serializing one response, and it already offers
+  `--limit` and `--page-after`. The web client does not use store-level lists.
+
 - **paging:** keyset pagination for large stores — the general form of `limit`
   (HS2-TCDTCH, **built**). A `page_after=<ULID>` cursor returns only the rows that
   sort **strictly after** that ticket in the current total order, so a

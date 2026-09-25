@@ -170,6 +170,68 @@ pub struct TicketQuery {
     pub after_key: Option<crate::checkout_order::AfterKey>,
 }
 
+/// Most rows one unpaged store-level list may return (HS2-3JEFQT) — the same ceiling as a
+/// checkout read. Larger reads page with `limit` + `page_after`.
+pub const STORE_READ_MAX_ROWS: usize = crate::checkout_order::CHECKOUT_READ_MAX_ROWS;
+
+/// Why an unpaged store-level list was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum StoreReadBoundError {
+    #[error(
+        "limit must be at most {STORE_READ_MAX_ROWS}; page larger reads with limit and page_after"
+    )]
+    LimitTooLarge,
+    #[error(
+        "more than {STORE_READ_MAX_ROWS} tickets match; pass limit (at most {STORE_READ_MAX_ROWS}) and page with page_after"
+    )]
+    TooManyRows,
+}
+
+/// The bounded-response contract for an unpaged store-level list (HS2-3JEFQT).
+///
+/// Without a caller `limit`, a read that would exceed [`STORE_READ_MAX_ROWS`] fails rather
+/// than serializing the whole store; an explicit `limit` (at most the bound) accepts
+/// truncation, which [`StoreReadBound::finish`] reports so the caller can flag it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StoreReadBound {
+    explicit: Option<usize>,
+}
+
+impl StoreReadBound {
+    /// Validate a caller's `limit`.
+    ///
+    /// # Errors
+    /// [`StoreReadBoundError::LimitTooLarge`] when `limit` exceeds the bound.
+    pub fn new(limit: Option<usize>) -> Result<Self, StoreReadBoundError> {
+        if limit.is_some_and(|limit| limit > STORE_READ_MAX_ROWS) {
+            return Err(StoreReadBoundError::LimitTooLarge);
+        }
+        Ok(Self { explicit: limit })
+    }
+
+    /// The row count to fetch: one past the cap, so overflow is detectable.
+    #[must_use]
+    pub fn fetch_limit(self) -> usize {
+        self.explicit.unwrap_or(STORE_READ_MAX_ROWS) + 1
+    }
+
+    /// Cut fetched rows to the cap. Returns whether rows were omitted.
+    ///
+    /// # Errors
+    /// [`StoreReadBoundError::TooManyRows`] when an implicit read overflowed.
+    pub fn finish<T>(self, rows: &mut Vec<T>) -> Result<bool, StoreReadBoundError> {
+        let cap = self.explicit.unwrap_or(STORE_READ_MAX_ROWS);
+        if rows.len() <= cap {
+            return Ok(false);
+        }
+        if self.explicit.is_none() {
+            return Err(StoreReadBoundError::TooManyRows);
+        }
+        rows.truncate(cap);
+        Ok(true)
+    }
+}
+
 /// Run a query: read the store, filter, sort, and (if set) cap to `limit`.
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
@@ -1772,6 +1834,39 @@ mod tests {
             }
         }
         store.read_ticket(&ticket.id).unwrap()
+    }
+
+    #[test]
+    fn store_read_bound_fails_implicit_overflow_and_flags_explicit_truncation() {
+        assert_eq!(
+            StoreReadBound::new(Some(STORE_READ_MAX_ROWS + 1)),
+            Err(StoreReadBoundError::LimitTooLarge)
+        );
+        let implicit = StoreReadBound::new(None).unwrap();
+        assert_eq!(implicit.fetch_limit(), STORE_READ_MAX_ROWS + 1);
+        let mut rows = vec![0; STORE_READ_MAX_ROWS];
+        assert_eq!(implicit.finish(&mut rows), Ok(false));
+        rows.push(0);
+        assert_eq!(
+            implicit.finish(&mut rows),
+            Err(StoreReadBoundError::TooManyRows)
+        );
+        let explicit = StoreReadBound::new(Some(2)).unwrap();
+        assert_eq!(explicit.fetch_limit(), 3);
+        let mut rows = vec![1, 2, 3];
+        assert_eq!(explicit.finish(&mut rows), Ok(true));
+        assert_eq!(rows, [1, 2]);
+        let mut rows = vec![1, 2];
+        assert_eq!(explicit.finish(&mut rows), Ok(false));
+        let zero = StoreReadBound::new(Some(0)).unwrap();
+        let mut rows = vec![1];
+        assert_eq!(zero.finish(&mut rows), Ok(true));
+        assert!(rows.is_empty());
+        assert!(
+            StoreReadBoundError::TooManyRows
+                .to_string()
+                .contains("page_after")
+        );
     }
 
     #[test]

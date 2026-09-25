@@ -1779,30 +1779,58 @@ async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value>
 async fn list_tickets(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Response, ApiError> {
+    let entry = state.default_entry();
+    list_entry_tickets(&entry, &multistore::store_url_id(&state.store), params)
+}
+
+impl From<ops::StoreReadBoundError> for ApiError {
+    fn from(error: ops::StoreReadBoundError) -> Self {
+        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+    }
+}
+
+/// One store's unpaged list, served from its index under the bounded-response contract
+/// (HS2-3JEFQT): at most `STORE_READ_MAX_ROWS` rows, an implicit overflow fails with 400,
+/// and an explicit `limit` truncates with `x-hotsheet-truncated: true`. Larger reads page
+/// with `limit` + `page_after`.
+fn list_entry_tickets(
+    entry: &StoreEntry,
+    connection_id: &str,
+    params: ListParams,
+) -> Result<Response, ApiError> {
     let compact = params.compact.unwrap_or(true);
     let fields = parse_fields(&params.fields);
-    let query = params.into_query(state.store.root())?;
-    let mut rows = state
+    let mut query = params.into_query(entry.store.root())?;
+    let bound = ops::StoreReadBound::new(query.limit)?;
+    query.limit = Some(bound.fetch_limit());
+    let mut rows = entry
         .index
         .lock()
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
         .query(&query)?;
-    let connection_id = multistore::store_url_id(&state.store);
+    let truncated = bound.finish(&mut rows)?;
     for row in &mut rows {
-        row.set_connection(&connection_id);
+        row.set_connection(connection_id);
     }
     if compact {
         for row in &mut rows {
             row.make_compact();
         }
     }
-    let contexts = auto_context::effective(&Settings::new(state.store.root()))
+    let contexts = auto_context::effective(&Settings::new(entry.store.root()))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     for row in &mut rows {
         row.add_auto_context(&contexts);
     }
-    Ok(Json(rows_to_json(rows, &fields)))
+    let mut response = Json(rows_to_json(rows, &fields)).into_response();
+    if truncated {
+        response.headers_mut().insert(
+            TRUNCATED_HEADER,
+            axum::http::HeaderValue::from_static("true"),
+        );
+    }
+    Ok(response)
 }
 
 async fn get_ticket(
@@ -5532,38 +5560,17 @@ async fn add_store(
 }
 
 /// `GET /stores/{store_id}/tickets` — the store-scoped list, served from that store's own
-/// index. Unknown id → 404.
+/// index under the same bound as `GET /tickets`. Unknown id → 404.
 async fn list_store_tickets(
     State(state): State<AppState>,
     Path(store_id): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Response, ApiError> {
     let entry = state
         .host
         .get(&store_id)
         .ok_or_else(|| ApiError::not_found(&store_id))?;
-    let compact = params.compact.unwrap_or(true);
-    let fields = parse_fields(&params.fields);
-    let query = params.into_query(entry.store.root())?;
-    let mut rows = entry
-        .index
-        .lock()
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
-        .query(&query)?;
-    for row in &mut rows {
-        row.set_connection(&store_id);
-    }
-    if compact {
-        for row in &mut rows {
-            row.make_compact();
-        }
-    }
-    let contexts = auto_context::effective(&Settings::new(entry.store.root()))
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    for row in &mut rows {
-        row.add_auto_context(&contexts);
-    }
-    Ok(Json(rows_to_json(rows, &fields)))
+    list_entry_tickets(&entry, &store_id, params)
 }
 
 // The write logic is store-generic: it operates on a `StoreEntry` so the unprefixed

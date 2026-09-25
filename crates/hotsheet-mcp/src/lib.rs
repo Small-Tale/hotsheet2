@@ -87,7 +87,7 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Checkout queries return at most 500 rows: an uncapped checkout query matching more fails, so pass limit (at most 500) or page with page_size + cursor (served with or without a running server).",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -108,7 +108,7 @@ fn tools_list() -> Value {
                 "updated_after": str_prop("only tickets updated at/after this ISO-8601 time"),
                 "updated_before": str_prop("only tickets updated at/before this ISO-8601 time"),
                 "sort": str_prop("id|created|updated|priority|status|title"),
-                "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500 for checkout queries" },
+                "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500" },
                 "page_size": { "type": "integer", "description": "checkout queries only: return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
                 "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
                 "counts": { "type": "boolean", "description": "checkout pages only: false returns counts as null, skipping a full summary read per page (use when walking every page)" },
@@ -835,6 +835,39 @@ mod core_backend {
         }
     }
 
+    impl CoreBackend {
+        /// This store's rows for `q` (a file scan, capped only by `q.limit`), compact
+        /// unless `compact=false`, with the optional `fields=` projection (HS2-GY3GWT).
+        fn store_rows(
+            &self,
+            q: &TicketQuery,
+            query: &[(String, String)],
+        ) -> Result<Vec<Value>, BackendError> {
+            let compact = wants_compact(query);
+            let contexts = auto_context::effective(&self.settings())
+                .map_err(|e| bad_request(e.to_string()))?;
+            let connection = hotsheet_ticketing::git_connection_id(&self.store);
+            let rows: Vec<TicketRow> = ops::query(&self.store, q)
+                .map_err(store_err)?
+                .iter()
+                .map(|t| {
+                    let mut row = if compact {
+                        TicketRow::compact(t)
+                    } else {
+                        TicketRow::from(t)
+                    };
+                    row.add_auto_context(&contexts);
+                    row.set_connection(&connection);
+                    row
+                })
+                .collect();
+            let fields = query_fields(query);
+            let mut vals: Vec<Value> = rows.iter().map(to_value).collect();
+            hotsheet_ticketing::wire::project_fields(&mut vals, &fields);
+            Ok(vals)
+        }
+    }
+
     impl From<hotsheet_ticketing::checkout_page::CheckoutPageError> for BackendError {
         fn from(error: hotsheet_ticketing::checkout_page::CheckoutPageError) -> Self {
             use hotsheet_ticketing::checkout_page::CheckoutPageError;
@@ -898,18 +931,18 @@ mod core_backend {
                         let mut all = Vec::new();
                         for store in stores {
                             let backend = self.for_checkout(store.clone(), checkout.clone());
-                            if let Value::Array(rows) = backend.get("/tickets", &source_query)? {
-                                for mut row in rows {
-                                    if let Some(obj) = row.as_object_mut() {
-                                        obj.insert(
-                                            "store".into(),
-                                            Value::String(
-                                                store.root().to_string_lossy().into_owned(),
-                                            ),
-                                        );
-                                    }
-                                    all.push(row);
+                            // Each source reads at most one row past the checkout cap; the
+                            // merged result is bounded below with checkout-specific errors.
+                            let mut source = build_query(&source_query, store.root())?;
+                            source.limit = Some(order.limit.unwrap_or(max + 1));
+                            for mut row in backend.store_rows(&source, &source_query)? {
+                                if let Some(obj) = row.as_object_mut() {
+                                    obj.insert(
+                                        "store".into(),
+                                        Value::String(store.root().to_string_lossy().into_owned()),
+                                    );
                                 }
+                                all.push(row);
                             }
                         }
                         let mut all = hotsheet_ticketing::checkout_order::merge_rows(
@@ -960,28 +993,15 @@ mod core_backend {
                     .map_err(checkout_err);
             }
             if path == "/tickets" {
-                let q = build_query(query, self.store.root())?;
-                let compact = wants_compact(query);
-                let contexts = auto_context::effective(&self.settings())
+                // The bounded-response contract for an unpaged store list (HS2-3JEFQT).
+                let mut q = build_query(query, self.store.root())?;
+                let bound =
+                    ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
+                q.limit = Some(bound.fetch_limit());
+                let mut vals = self.store_rows(&q, query)?;
+                bound
+                    .finish(&mut vals)
                     .map_err(|e| bad_request(e.to_string()))?;
-                let rows: Vec<TicketRow> = ops::query(&self.store, &q)
-                    .map_err(store_err)?
-                    .iter()
-                    .map(|t| {
-                        let mut row = if compact {
-                            TicketRow::compact(t)
-                        } else {
-                            TicketRow::from(t)
-                        };
-                        row.add_auto_context(&contexts);
-                        row.set_connection(&hotsheet_ticketing::git_connection_id(&self.store));
-                        row
-                    })
-                    .collect();
-                // Optional leaner projection (fields=slug,status,…) — HS2-GY3GWT.
-                let fields = query_fields(query);
-                let mut vals: Vec<Value> = rows.iter().map(to_value).collect();
-                hotsheet_ticketing::wire::project_fields(&mut vals, &fields);
                 return Ok(Value::Array(vals));
             }
             if let Some(id) = ticket_id(path) {
@@ -2275,6 +2295,72 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("invalid checkout ticket cursor")
+        );
+    }
+
+    /// HS2-3JEFQT: the serverless store-level query applies the same 500-row bound as the
+    /// server and pages with page_after.
+    #[test]
+    fn corebackend_store_query_is_bounded_and_pages_with_page_after() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("BIG")).unwrap();
+        for index in 0..501 {
+            ops::create(
+                &store,
+                hotsheet_model::Ulid::new(),
+                "BIG",
+                hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
+                hotsheet_ticketing::NewTicket {
+                    title: format!("ticket {index:03}"),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let backend = CoreBackend::new(store);
+        let get = |pairs: &[(&str, &str)]| {
+            let pairs = pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<Vec<_>>();
+            backend.get("/tickets", &pairs)
+        };
+        let implicit = get(&[]).unwrap_err();
+        assert_eq!(implicit.status, Some(400));
+        assert!(implicit.message.contains("more than 500 tickets match"));
+        assert!(implicit.message.contains("page_after"));
+        assert_eq!(get(&[("limit", "501")]).unwrap_err().status, Some(400));
+        assert_eq!(
+            get(&[("text", "ticket 007")])
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        let first = get(&[("limit", "500"), ("sort", "id"), ("fields", "id")]).unwrap();
+        let first = first.as_array().unwrap();
+        assert_eq!(first.len(), 500);
+        let last = first[499]["id"].as_str().unwrap();
+        let rest = get(&[("limit", "500"), ("sort", "id"), ("page_after", last)]).unwrap();
+        assert_eq!(rest.as_array().unwrap().len(), 1);
+
+        // Through the MCP tool, an uncapped store query fails explicitly instead of
+        // returning every row.
+        let response = handle_message(
+            &req(
+                "tools/call",
+                json!({ "name": "hotsheet_query", "arguments": {} }),
+            ),
+            &backend,
+        )
+        .unwrap();
+        assert_eq!(response["result"]["isError"], true);
+        assert!(
+            response["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("more than 500 tickets match")
         );
     }
 
