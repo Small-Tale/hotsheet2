@@ -92,50 +92,74 @@ pub fn run_setup_in(
         return Err(SetupError::NoneDetected);
     }
 
-    setup_plugins(store_path, project_dir, plugins)
+    setup_plugins(store_path, project_dir, plugins, None)
 }
 
 /// Refresh every tool that is currently detected or already has a Hot Sheet managed
 /// instruction block. This is the idempotent project-open/startup path: it repairs partial
 /// setup and updates bundled assets without requiring the client to know tool-specific files.
+///
+/// Refresh also reconciles **shared** instruction sections (HS2-329EED): a shared section's
+/// served-tool list is rebuilt from the tools in this refresh, and a shared section whose
+/// every listed tool is now disabled (or no longer installed as a plugin) is removed.
 pub fn refresh_setup_in(
     store_path: &Path,
     project_dir: &Path,
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[std::path::PathBuf],
 ) -> Result<Vec<SetupReport>, SetupError> {
-    let plugins = all_plugins(plugin_dirs)
+    let all = all_plugins(plugin_dirs);
+    let mut reconcile_targets: Vec<String> = Vec::new();
+    for plugin in &all {
+        let target = &plugin.manifest.instructions.target;
+        if crate::is_safe_rel_path(target) && !reconcile_targets.contains(target) {
+            reconcile_targets.push(target.clone());
+        }
+    }
+    let plugins = all
         .into_iter()
         .filter(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())))
         .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
         .collect::<Vec<_>>();
     if plugins.is_empty() {
+        // Nothing to set up, but a shared section whose sharers were all disabled is removed.
+        let run_ids = HashSet::new();
+        for target in &reconcile_targets {
+            write_instruction_target(project_dir, target, &[], Some(&run_ids))?;
+        }
         return Ok(Vec::new());
     }
-    setup_plugins(store_path, project_dir, plugins)
+    setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))
 }
 
 fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
     let marker = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
-    std::fs::read_to_string(project_dir.join(&plugin.manifest.instructions.target))
-        .is_ok_and(|contents| contents.contains(&marker))
-        || plugin
-            .skill()
-            .is_some_and(|(target, _)| project_dir.join(target).is_file())
+    let target = &plugin.manifest.instructions.target;
+    std::fs::read_to_string(project_dir.join(target)).is_ok_and(|contents| {
+        contents.contains(&marker)
+            || parse_shared_section(&contents, &shared_section_key(target))
+                .is_some_and(|shared| shared.tools.iter().any(|tool| tool == plugin.id()))
+    }) || plugin
+        .skill()
+        .is_some_and(|(target, _)| project_dir.join(target).is_file())
 }
 
+/// Write every plugin's artifacts. `refresh_targets` is `Some` on the refresh path: it names
+/// every instruction target known to the plugin registry and makes this run's tool set
+/// authoritative for shared-section membership. Explicit setup (`None`) only ever adds
+/// tools to an existing shared section.
 fn setup_plugins(
     store_path: &Path,
     project_dir: &Path,
     plugins: Vec<Plugin>,
+    refresh_targets: Option<&[String]>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     // Absolute store path so the MCP `--path` works from wherever the tool launches.
     let store_abs = store_path
         .canonicalize()
         .map_err(|_| SetupError::NoStore(store_path.display().to_string()))?;
 
-    let mut reports = Vec::new();
-    for p in plugins {
+    for p in &plugins {
         let bad = p.unsafe_targets();
         if !bad.is_empty() {
             return Err(SetupError::UnsafeTargets {
@@ -143,16 +167,50 @@ fn setup_plugins(
                 targets: bad.join(", "),
             });
         }
-        let preserve_installed_workflow = installed_workflow_requires_preservation(project_dir, &p);
+    }
+
+    let preserved: Vec<bool> = plugins
+        .iter()
+        .map(|p| installed_workflow_requires_preservation(project_dir, p))
+        .collect();
+    let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
+    let membership = refresh_targets.map(|_| &run_ids);
+
+    // Instruction targets first, grouped so tools sharing one file (e.g. AGENTS.md) can be
+    // served by one shared section instead of byte-identical per-tool copies.
+    let mut targets: Vec<&str> = Vec::new();
+    for (p, preserve) in plugins.iter().zip(&preserved) {
+        let target = p.manifest.instructions.target.as_str();
+        if !preserve && !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    for target in &targets {
+        let writers: Vec<&Plugin> = plugins
+            .iter()
+            .zip(&preserved)
+            .filter(|(p, preserve)| !**preserve && p.manifest.instructions.target == *target)
+            .map(|(p, _)| p)
+            .collect();
+        write_instruction_target(project_dir, target, &writers, membership)?;
+    }
+    for target in refresh_targets.unwrap_or_default() {
+        if !targets.contains(&target.as_str()) {
+            write_instruction_target(project_dir, target, &[], membership)?;
+        }
+    }
+
+    let mut reports = Vec::new();
+    for (p, preserve_installed_workflow) in plugins.iter().zip(preserved) {
         let mut wrote = Vec::new();
         if !preserve_installed_workflow {
-            wrote.push(write_instructions(project_dir, &p)?);
-            if let Some(skill) = write_skill(project_dir, &p)? {
+            wrote.push(p.manifest.instructions.target.clone());
+            if let Some(skill) = write_skill(project_dir, p)? {
                 wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
             }
         }
-        wrote.push(write_mcp(project_dir, &store_abs, &p)?);
-        if let Some(hook) = write_hooks(project_dir, &p)? {
+        wrote.push(write_mcp(project_dir, &store_abs, p)?);
+        if let Some(hook) = write_hooks(project_dir, p)? {
             wrote.push(hook); // absent when no native interactive adapter is declared
         }
         reports.push(SetupReport {
@@ -197,6 +255,24 @@ fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> 
             INSTRUCTIONS_VERSION_PREFIX,
         )
     }) {
+        return true;
+    }
+    // A shared section in the same file is this tool's installed instructions too (it
+    // serves, or would serve, every sharer of the file), so the same newer/equal-divergent
+    // rules apply to its body — the served-tool list line is membership, not content.
+    let shared_key = shared_section_key(&plugin.manifest.instructions.target);
+    if instructions
+        .as_deref()
+        .and_then(|contents| parse_shared_section(contents, &shared_key))
+        .is_some_and(|shared| {
+            marked_artifact_requires_preservation(
+                &shared.body,
+                plugin.instructions_body().trim_end(),
+                bundled_instruction_version,
+                INSTRUCTIONS_VERSION_PREFIX,
+            )
+        })
+    {
         return true;
     }
     plugin.skill().is_some_and(|(target, bundled)| {
@@ -294,33 +370,213 @@ fn executable_extensions() -> Vec<String> {
     }
 }
 
-fn write_instructions(project: &Path, p: &Plugin) -> Result<String, SetupError> {
-    let rel = &p.manifest.instructions.target;
+/// Write one instruction file's Hot Sheet sections for `writers` (the non-preserved tools
+/// in this run that target it), merge-safe. See [`render_instruction_target`].
+fn write_instruction_target(
+    project: &Path,
+    rel: &str,
+    writers: &[&Plugin],
+    refresh_members: Option<&HashSet<String>>,
+) -> Result<(), SetupError> {
     let target = project.join(rel);
-    let begin = format!("<!-- BEGIN hotsheet:{} -->", p.id());
-    let end = format!("<!-- END hotsheet:{} -->", p.id());
-    let block = format!("{begin}\n{}\n{end}", p.instructions_body().trim_end());
-    let existing = std::fs::read_to_string(&target).unwrap_or_default();
-    write_file(
-        &target,
-        &replace_or_append_block(&existing, &begin, &end, &block),
-    )?;
-    Ok(rel.clone())
+    let existing = std::fs::read_to_string(&target).ok();
+    if writers.is_empty() && existing.is_none() {
+        return Ok(()); // never create a file just to reconcile it
+    }
+    let existing = existing.unwrap_or_default();
+    let tools: Vec<(&str, &str)> = writers
+        .iter()
+        .map(|p| (p.id(), p.instructions_body()))
+        .collect();
+    let rendered = render_instruction_target(&existing, rel, &tools, refresh_members);
+    if rendered == existing {
+        return Ok(());
+    }
+    write_file(&target, &rendered)
 }
 
-/// Replace the region between the markers (inclusive) with `block`, or append it if the
-/// markers aren't present. Preserves everything outside the block.
-fn replace_or_append_block(existing: &str, begin: &str, end: &str, block: &str) -> String {
-    if let (Some(bi), Some(ei)) = (existing.find(begin), existing.find(end)) {
-        if ei >= bi {
-            let end_full = ei + end.len();
-            return format!("{}{block}{}", &existing[..bi], &existing[end_full..]);
+/// The Hot Sheet managed sections of one instruction file (HS2-329EED), as a pure function
+/// of its current contents.
+///
+/// * `tools` — `(id, bundled body)` for each tool writing this file in this run.
+/// * `refresh_members` — `Some(run ids)` on the refresh path: a shared section's served list
+///   keeps only tools in the run (dropping disabled/unknown ones). `None` (explicit setup)
+///   never drops an existing member.
+///
+/// When every writer carries a byte-identical body and there are at least two writers (or
+/// the file already has a shared section), the writers are served by **one shared section**
+/// `hotsheet:<target-key>` that lists them; their per-tool sections are migrated into it (at
+/// the first one's position) and removed. Writers whose bodies differ keep per-tool sections
+/// and leave any shared section's served list. A shared section with no remaining members is
+/// removed. Everything outside the managed markers is preserved.
+fn render_instruction_target(
+    existing: &str,
+    target: &str,
+    tools: &[(&str, &str)],
+    refresh_members: Option<&HashSet<String>>,
+) -> String {
+    let key = shared_section_key(target);
+    let shared = parse_shared_section(existing, &key);
+    let mut members: std::collections::BTreeSet<String> = shared
+        .as_ref()
+        .map(|s| s.tools.iter().cloned().collect())
+        .unwrap_or_default();
+    if let Some(run) = refresh_members {
+        members.retain(|id| run.contains(id));
+    }
+    let body = tools.first().map(|(_, body)| body.trim_end());
+    let identical = tools
+        .iter()
+        .all(|(_, candidate)| Some(candidate.trim_end()) == body);
+    let use_shared = identical && (tools.len() >= 2 || (!tools.is_empty() && shared.is_some()));
+    let mut out = existing.to_string();
+
+    if use_shared {
+        let body = body.unwrap_or_default();
+        members.extend(tools.iter().map(|(id, _)| (*id).to_string()));
+        let block = shared_block(&key, &members, body);
+        if let Some(shared) = &shared {
+            out.replace_range(shared.start..shared.end, &block);
+        } else if let Some((start, end)) = tools
+            .iter()
+            .filter_map(|(id, _)| find_block(&out, &begin_marker(id), &end_marker(id)))
+            .min()
+        {
+            out.replace_range(start..end, &block);
+        } else {
+            out = append_block(&out, &block);
+        }
+        for (id, _) in tools {
+            while let Some(range) = find_block(&out, &begin_marker(id), &end_marker(id)) {
+                out = remove_range(&out, range);
+            }
+        }
+        return out;
+    }
+
+    for (id, body) in tools {
+        let (begin, end) = (begin_marker(id), end_marker(id));
+        let block = format!("{begin}\n{}\n{end}", body.trim_end());
+        out = match find_block(&out, &begin, &end) {
+            Some((start, finish)) => {
+                format!("{}{block}{}", &out[..start], &out[finish..])
+            }
+            None => append_block(&out, &block),
+        };
+        members.remove(*id);
+    }
+    if let Some(shared) = parse_shared_section(&out, &key) {
+        if members.is_empty() {
+            out = remove_range(&out, (shared.start, shared.end));
+        } else if !tools.is_empty() {
+            // Only rewrite membership when this run touched the file; a no-writer refresh
+            // leaves a still-served (possibly newer, preserved) section byte-for-byte alone.
+            let block = shared_block(&key, &members, &shared.body);
+            out.replace_range(shared.start..shared.end, &block);
         }
     }
+    out
+}
+
+fn begin_marker(id: &str) -> String {
+    format!("<!-- BEGIN hotsheet:{id} -->")
+}
+
+fn end_marker(id: &str) -> String {
+    format!("<!-- END hotsheet:{id} -->")
+}
+
+const SHARED_TOOLS_PREFIX: &str = "<!-- hotsheet-shared-section: ";
+
+/// The shared-section key for an instruction target: its path lowercased with every run of
+/// non-alphanumerics folded to `-` (`AGENTS.md` → `agents-md`).
+fn shared_section_key(target: &str) -> String {
+    let mut key = String::new();
+    for ch in target.chars() {
+        if ch.is_ascii_alphanumeric() {
+            key.push(ch.to_ascii_lowercase());
+        } else if !key.ends_with('-') && !key.is_empty() {
+            key.push('-');
+        }
+    }
+    key.trim_end_matches('-').to_string()
+}
+
+fn shared_block(key: &str, members: &std::collections::BTreeSet<String>, body: &str) -> String {
+    let tools = members.iter().cloned().collect::<Vec<_>>().join(", ");
+    format!(
+        "{}\n{SHARED_TOOLS_PREFIX}{tools} -->\n{}\n{}",
+        begin_marker(key),
+        body.trim_end(),
+        end_marker(key)
+    )
+}
+
+/// An installed shared section: its byte range, the tools it lists, and its body (the
+/// content between the served-tools line and the END marker).
+#[derive(Debug, PartialEq)]
+struct SharedSection {
+    start: usize,
+    end: usize,
+    tools: Vec<String>,
+    body: String,
+}
+
+fn parse_shared_section(contents: &str, key: &str) -> Option<SharedSection> {
+    let (begin, end) = (begin_marker(key), end_marker(key));
+    let (start, finish) = find_block(contents, &begin, &end)?;
+    let inner = &contents[start + begin.len()..finish - end.len()];
+    let inner = inner.strip_prefix('\n').unwrap_or(inner);
+    let (tools, body) = match inner
+        .strip_prefix(SHARED_TOOLS_PREFIX)
+        .map(|rest| rest.split_once('\n').unwrap_or((rest, "")))
+    {
+        Some((line, body)) => (
+            line.trim_end()
+                .strip_suffix("-->")
+                .unwrap_or(line)
+                .split(',')
+                .map(str::trim)
+                .filter(|tool| !tool.is_empty())
+                .map(String::from)
+                .collect(),
+            body,
+        ),
+        None => (Vec::new(), inner),
+    };
+    Some(SharedSection {
+        start,
+        end: finish,
+        tools,
+        body: body.strip_suffix('\n').unwrap_or(body).to_string(),
+    })
+}
+
+/// The byte range of the first `begin`..`end` block (inclusive of both markers).
+fn find_block(contents: &str, begin: &str, end: &str) -> Option<(usize, usize)> {
+    let start = contents.find(begin)?;
+    let finish = contents[start..].find(end)? + start + end.len();
+    Some((start, finish))
+}
+
+fn append_block(existing: &str, block: &str) -> String {
     if existing.trim().is_empty() {
         format!("{block}\n")
     } else {
         format!("{}\n\n{block}\n", existing.trim_end())
+    }
+}
+
+/// Remove a managed block, collapsing only the blank lines that separated it from its
+/// neighbours so the surrounding user content keeps its shape.
+fn remove_range(contents: &str, (start, end): (usize, usize)) -> String {
+    let head = contents[..start].trim_end_matches(['\n', '\r']);
+    let tail = contents[end..].trim_start_matches(['\n', '\r']);
+    match (head.is_empty(), tail.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => tail.to_string(),
+        (false, true) => format!("{head}\n"),
+        (false, false) => format!("{head}\n\n{tail}"),
     }
 }
 
@@ -710,6 +966,379 @@ args = ["--path", "{store}"]
 "#,
         )
         .unwrap();
+    }
+
+    /// A fixture tool `id` targeting `AGENTS.md` with the given versioned instruction body.
+    fn sharing_tool(root: &Path, id: &str, instructions: &str, version: u64) {
+        let plugin = root.join(id);
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(
+            plugin.join("instructions.md"),
+            format!("<!-- hotsheet-instructions-version: {version} -->\n{instructions}"),
+        )
+        .unwrap();
+        std::fs::write(
+            plugin.join("SKILL.md"),
+            format!("<!-- hotsheet-skill-version: {version} -->\n{id} skill\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!(
+                r#"
+id = "{id}"
+display_name = "{id}"
+product_name = "{id} tool"
+tier = "cli-agent"
+[detection]
+binaries = ["definitely-not-installed-hotsheet-{id}"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[skills]
+target = ".{id}/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".{id}/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+"#
+            ),
+        )
+        .unwrap();
+    }
+
+    struct Sharing {
+        store: tempfile::TempDir,
+        project: tempfile::TempDir,
+        plugins: tempfile::TempDir,
+    }
+
+    impl Sharing {
+        /// Three fixture tools (`alpha`, `beta`, `gamma`) sharing one identical body.
+        fn new() -> Self {
+            let fixture = Self {
+                store: tempfile::tempdir().unwrap(),
+                project: tempfile::tempdir().unwrap(),
+                plugins: tempfile::tempdir().unwrap(),
+            };
+            for id in ["alpha", "beta", "gamma"] {
+                sharing_tool(fixture.plugins.path(), id, "shared instructions\n", 8);
+            }
+            fixture
+        }
+
+        fn refresh(&self, enabled: &[&str]) -> Vec<SetupReport> {
+            let enabled: HashSet<String> = enabled.iter().map(|id| id.to_string()).collect();
+            refresh_setup_in(
+                self.store.path(),
+                self.project.path(),
+                Some(&enabled),
+                &[self.plugins.path().to_path_buf()],
+            )
+            .unwrap()
+        }
+
+        fn setup(&self, tool: &str) -> Vec<SetupReport> {
+            run_setup_in(
+                self.store.path(),
+                self.project.path(),
+                Some(tool),
+                false,
+                None,
+                &[self.plugins.path().to_path_buf()],
+            )
+            .unwrap()
+        }
+
+        fn agents(&self) -> String {
+            std::fs::read_to_string(self.project.path().join("AGENTS.md")).unwrap_or_default()
+        }
+
+        fn write_agents(&self, contents: &str) {
+            std::fs::write(self.project.path().join("AGENTS.md"), contents).unwrap();
+        }
+    }
+
+    const SHARED_BODY: &str = "<!-- hotsheet-instructions-version: 8 -->\nshared instructions";
+
+    fn shared(tools: &str) -> String {
+        format!(
+            "<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{SHARED_BODY}\n<!-- END hotsheet:agents-md -->"
+        )
+    }
+
+    fn per_tool(id: &str, body: &str) -> String {
+        format!("<!-- BEGIN hotsheet:{id} -->\n{body}\n<!-- END hotsheet:{id} -->")
+    }
+
+    #[test]
+    fn shared_section_keys_fold_the_target_path() {
+        assert_eq!(shared_section_key("AGENTS.md"), "agents-md");
+        assert_eq!(
+            shared_section_key(".github/copilot-instructions.md"),
+            "github-copilot-instructions-md"
+        );
+        assert_eq!(shared_section_key("docs//AI--RULES.md"), "docs-ai-rules-md");
+    }
+
+    #[test]
+    fn shared_sections_round_trip_through_the_parser() {
+        let members = ["beta".to_string(), "alpha".to_string()]
+            .into_iter()
+            .collect();
+        let block = shared_block("agents-md", &members, "line one\nline two\n");
+        let contents = format!("Intro\n\n{block}\n\nOutro\n");
+        let parsed = parse_shared_section(&contents, "agents-md").unwrap();
+        assert_eq!(parsed.tools, ["alpha", "beta"]);
+        assert_eq!(parsed.body, "line one\nline two");
+        assert_eq!(&contents[parsed.start..parsed.end], block);
+
+        // A hand-written section without a served-tools line parses as unowned content.
+        let bare = "<!-- BEGIN hotsheet:agents-md -->\nbody\n<!-- END hotsheet:agents-md -->";
+        let parsed = parse_shared_section(bare, "agents-md").unwrap();
+        assert!(parsed.tools.is_empty());
+        assert_eq!(parsed.body, "body");
+    }
+
+    #[test]
+    fn identical_bodies_migrate_per_tool_copies_into_one_shared_section() {
+        let existing = format!(
+            "# Project\n\nUser rules.\n\n{}\n\nMiddle user text.\n\n{}\n\n{}\n\nTrailing user text.\n",
+            per_tool("alpha", "stale alpha"),
+            per_tool("beta", "stale beta"),
+            per_tool("gamma", "stale gamma"),
+        );
+        let tools = [
+            ("alpha", "shared body\n"),
+            ("beta", "shared body\n"),
+            ("gamma", "shared body\n"),
+        ];
+        let rendered = render_instruction_target(&existing, "AGENTS.md", &tools, None);
+        assert_eq!(
+            rendered,
+            "# Project\n\nUser rules.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: alpha, beta, gamma -->\nshared body\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\nTrailing user text.\n"
+        );
+        assert_eq!(
+            render_instruction_target(&rendered, "AGENTS.md", &tools, None),
+            rendered,
+            "a second render is a byte-level no-op"
+        );
+    }
+
+    #[test]
+    fn differing_bodies_keep_per_tool_sections_and_retire_the_shared_one() {
+        let existing = format!("User text.\n\n{}\n", shared("alpha, beta"));
+        let rendered = render_instruction_target(
+            &existing,
+            "AGENTS.md",
+            &[("alpha", "alpha body\n"), ("beta", "beta body\n")],
+            None,
+        );
+        assert_eq!(
+            rendered,
+            format!(
+                "User text.\n\n{}\n\n{}\n",
+                per_tool("alpha", "alpha body"),
+                per_tool("beta", "beta body")
+            )
+        );
+
+        // A member not rewritten in this run keeps the shared section alive (membership only).
+        let existing = format!("User text.\n\n{}\n", shared("alpha, beta, gamma"));
+        let rendered = render_instruction_target(
+            &existing,
+            "AGENTS.md",
+            &[("alpha", "alpha body\n"), ("beta", "beta body\n")],
+            None,
+        );
+        assert!(rendered.contains(&shared("gamma")));
+        assert!(rendered.contains(&per_tool("alpha", "alpha body")));
+    }
+
+    #[test]
+    fn a_single_tool_in_a_clean_file_keeps_its_per_tool_section() {
+        let rendered = render_instruction_target("", "CLAUDE.md", &[("claude", "body\n")], None);
+        assert_eq!(rendered, format!("{}\n", per_tool("claude", "body")));
+    }
+
+    #[test]
+    fn refresh_migrates_sharing_tools_and_is_byte_idempotent() {
+        let fixture = Sharing::new();
+        fixture.write_agents(&format!(
+            "User text.\n\n{}\n\n{}\n\n{}\n",
+            per_tool("alpha", "stale"),
+            per_tool("beta", "stale"),
+            per_tool("gamma", "stale")
+        ));
+        let reports = fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(
+            fixture.agents(),
+            format!("User text.\n\n{}\n", shared("alpha, beta, gamma"))
+        );
+        assert!(reports.iter().all(|report| report.wrote[0] == "AGENTS.md"));
+        for id in ["alpha", "beta", "gamma"] {
+            assert!(
+                fixture
+                    .project
+                    .path()
+                    .join(format!(".{id}/SKILL.md"))
+                    .is_file()
+            );
+        }
+
+        let first = std::fs::read(fixture.project.path().join("AGENTS.md")).unwrap();
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(
+            std::fs::read(fixture.project.path().join("AGENTS.md")).unwrap(),
+            first
+        );
+    }
+
+    #[test]
+    fn disabling_and_re_enabling_sharers_walks_the_membership_transitions() {
+        let fixture = Sharing::new();
+        fixture.write_agents(&format!(
+            "User text.\n\n{}\n\n{}\n\n{}\n\nFooter.\n",
+            per_tool("alpha", "stale"),
+            per_tool("beta", "stale"),
+            per_tool("gamma", "stale")
+        ));
+        let expect = |tools: &str| format!("User text.\n\n{}\n\nFooter.\n", shared(tools));
+
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(fixture.agents(), expect("alpha, beta, gamma"));
+        // Disable one sharer: the section stays for the others.
+        fixture.refresh(&["alpha", "beta"]);
+        assert_eq!(fixture.agents(), expect("alpha, beta"));
+        // Down to one sharer: still one shared section, not a per-tool re-split.
+        fixture.refresh(&["alpha"]);
+        assert_eq!(fixture.agents(), expect("alpha"));
+        fixture.refresh(&["alpha"]);
+        assert_eq!(fixture.agents(), expect("alpha"));
+        // No sharer remains: the section is removed and user content keeps its shape.
+        assert!(fixture.refresh(&["unrelated"]).is_empty());
+        assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
+        assert!(fixture.refresh(&["unrelated"]).is_empty());
+        assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
+        // Re-enable two (their skills mark them as previously managed): recreated once.
+        fixture.refresh(&["gamma", "beta"]);
+        assert_eq!(
+            fixture.agents(),
+            format!("User text.\n\nFooter.\n\n{}\n", shared("beta, gamma"))
+        );
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        let settled = format!(
+            "User text.\n\nFooter.\n\n{}\n",
+            shared("alpha, beta, gamma")
+        );
+        assert_eq!(fixture.agents(), settled);
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(fixture.agents(), settled);
+    }
+
+    #[test]
+    fn mixed_shared_and_per_tool_sections_converge_to_one_shared_section() {
+        let fixture = Sharing::new();
+        fixture.write_agents(&format!(
+            "{}\n\nUser text.\n\n{}\n\n{}\n\n{}\n",
+            per_tool("beta", "stale beta"),
+            shared("alpha"),
+            per_tool("gamma", "stale gamma"),
+            // A duplicated per-tool copy (e.g. from a hand merge) is migrated too.
+            per_tool("gamma", "older gamma"),
+        ));
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(
+            fixture.agents(),
+            format!("User text.\n\n{}\n", shared("alpha, beta, gamma"))
+        );
+    }
+
+    #[test]
+    fn explicit_setup_joins_an_existing_shared_section_without_dropping_members() {
+        let fixture = Sharing::new();
+        fixture.setup("alpha");
+        assert_eq!(
+            fixture.agents(),
+            format!("{}\n", per_tool("alpha", SHARED_BODY))
+        );
+
+        fixture.write_agents(&format!("User text.\n\n{}\n", shared("beta, gamma")));
+        fixture.setup("alpha");
+        assert_eq!(
+            fixture.agents(),
+            format!("User text.\n\n{}\n", shared("alpha, beta, gamma"))
+        );
+        // Explicit setup of a member again is a no-op; it never removes the others.
+        fixture.setup("beta");
+        assert_eq!(
+            fixture.agents(),
+            format!("User text.\n\n{}\n", shared("alpha, beta, gamma"))
+        );
+    }
+
+    #[test]
+    fn a_newer_installed_shared_section_is_preserved_for_every_sharer() {
+        let fixture = Sharing::new();
+        let installed = "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: alpha, beta -->\n<!-- hotsheet-instructions-version: 9 -->\nnewer shared instructions\n<!-- END hotsheet:agents-md -->\n";
+        fixture.write_agents(installed);
+        // Stale per-tool copy for a sharer does not unfreeze the newer shared section.
+        let with_stale = format!("{installed}\n{}\n", per_tool("gamma", "stale"));
+        fixture.write_agents(&with_stale);
+
+        let reports = fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(fixture.agents(), with_stale);
+        for report in &reports {
+            assert_eq!(report.wrote.len(), 1, "only MCP maintenance: {report:?}");
+        }
+        for id in ["alpha", "beta", "gamma"] {
+            assert!(
+                !fixture
+                    .project
+                    .path()
+                    .join(format!(".{id}/SKILL.md"))
+                    .exists()
+            );
+        }
+    }
+
+    #[test]
+    fn equal_version_shared_sections_preserve_customized_bodies_but_not_membership_changes() {
+        let fixture = Sharing::new();
+        let customized = "<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: alpha, beta, gamma -->\n<!-- hotsheet-instructions-version: 8 -->\nproject-customized instructions\n<!-- END hotsheet:agents-md -->\n";
+        fixture.write_agents(customized);
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(fixture.agents(), customized);
+
+        // Same body, only the served-list line differs (unsorted, stale spacing): the list is
+        // membership, not content, so the section is ours to normalize.
+        fixture.write_agents(&format!("{}\n", shared("gamma,alpha")));
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert_eq!(fixture.agents(), format!("{}\n", shared("alpha, gamma")));
+    }
+
+    #[test]
+    fn an_older_shared_section_upgrades_in_place() {
+        let fixture = Sharing::new();
+        fixture.write_agents("Top.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: alpha, beta -->\n<!-- hotsheet-instructions-version: 7 -->\nolder\n<!-- END hotsheet:agents-md -->\n\nBottom.\n");
+        fixture.refresh(&["alpha", "beta"]);
+        assert_eq!(
+            fixture.agents(),
+            format!("Top.\n\n{}\n\nBottom.\n", shared("alpha, beta"))
+        );
+    }
+
+    #[test]
+    fn reconciling_without_sharers_never_creates_or_rewrites_unrelated_files() {
+        let fixture = Sharing::new();
+        assert!(fixture.refresh(&["unrelated"]).is_empty());
+        assert!(!fixture.project.path().join("AGENTS.md").exists());
+        fixture.write_agents("Only user text.\n");
+        assert!(fixture.refresh(&["unrelated"]).is_empty());
+        assert_eq!(fixture.agents(), "Only user text.\n");
     }
 
     #[test]

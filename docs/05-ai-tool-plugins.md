@@ -78,6 +78,46 @@ artifacts still upgrade normally. Bundled skill versions are checked against
 the current shared adapters, and Windows detection honors command wrappers from `PATHEXT`,
 so freshness does not silently skip npm-installed tools or replace a newer workflow with an
 older bundle.
+
+**Shared instruction sections (HS2-329EED).** Several tools can read the same instruction
+file — Codex, Antigravity, and OpenCode all read `AGENTS.md`. When the tools being set up
+for one file carry byte-identical instruction bodies, setup writes **one shared section**
+instead of one copy per tool:
+
+```markdown
+<!-- BEGIN hotsheet:agents-md -->
+<!-- hotsheet-shared-section: antigravity, codex, opencode -->
+…the shared instruction body…
+<!-- END hotsheet:agents-md -->
+```
+
+- The section key is the target path lowercased with non-alphanumeric runs folded to `-`
+  (`AGENTS.md` → `agents-md`). The second line lists the served tool ids, sorted; it is
+  membership, not content.
+- A shared section is used once two or more tools write the file, or when the file already
+  has one. A single tool writing a clean file (Claude's `CLAUDE.md`) keeps its per-tool
+  `hotsheet:<tool>` section, so nothing churns for unshared files.
+- Setup and refresh **migrate** existing per-tool copies of the writing tools into the
+  shared section — placed where the existing shared section or the first per-tool copy was,
+  otherwise appended — and remove those copies, including duplicates. Content outside the
+  managed markers is preserved, and a second run is a byte-level no-op.
+- Membership: explicit `setup <tool>` only adds that tool to an existing shared section. On
+  `setup --refresh` and the server's project-open refresh, the served list is rebuilt from the
+  refreshed tools. A tool listed in a shared section counts as previously managed, so
+  disabling one sharer (removing it from `enabled_plugins`) drops it from the list while the
+  section stays for the others. When no listed tool remains enabled, refresh removes the
+  section. Re-enabling a tool that still has managed artifacts (its skill) recreates it.
+  Disabled tools' *per-tool* sections are still left in place, as before.
+- Version preservation applies to the shared section's **body**. For every tool targeting
+  the file, a newer shared body, or an equal-version body whose bytes differ, freezes that
+  tool's instruction/skill bundle — even when it also has a stale per-tool copy — exactly
+  like the per-tool rules above. Older and unversioned shared bodies upgrade in place.
+- If the tools writing one file have **different** bodies (for example a third-party plugin
+  with its own instructions, or a version-skewed plugin tree), each keeps a per-tool section.
+  Those tools leave any existing shared section's served list, and a shared section left
+  with no members is removed. Bundled first-party bodies are identical by construction
+  (`every_plugin_shares_one_instruction_body`), so they always share.
+
 In the source-backed web development bridge, the compiled CLI reports a digest of all
 embedded setup assets and the bridge independently hashes the live `plugins/` tree. A
 missing or mismatched digest refuses project setup with a rebuild command before any

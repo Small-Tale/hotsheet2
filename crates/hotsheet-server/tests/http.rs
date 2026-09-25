@@ -2391,6 +2391,89 @@ args = ["--path", "{store}"]
 }
 
 #[tokio::test]
+async fn opening_project_migrates_per_tool_copies_into_one_shared_section() {
+    // HS2-329EED: the project-open refresh runs the same core writer as `setup --refresh`,
+    // so tools sharing AGENTS.md with identical bodies converge on one shared section.
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    std::fs::write(
+        checkout.join("AGENTS.md"),
+        "User instructions.\n\n<!-- BEGIN hotsheet:first -->\nstale\n<!-- END hotsheet:first -->\n\n<!-- BEGIN hotsheet:second -->\nstale\n<!-- END hotsheet:second -->\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ticket_store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["first","second"]}"#,
+    )
+    .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    for id in ["first", "second"] {
+        let dir = plugins.path().join(id);
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(
+            dir.join("instructions.md"),
+            "Shared managed instructions.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("manifest.toml"),
+            format!(
+                r#"
+id = "{id}"
+display_name = "{id}"
+product_name = "{id} tool"
+tier = "cli-agent"
+[detection]
+binaries = ["definitely-not-installed-hotsheet-{id}"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".{id}/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+"#
+            ),
+        )
+        .unwrap();
+    }
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+
+    let opened = application
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let expected = "User instructions.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: first, second -->\nShared managed instructions.\n<!-- END hotsheet:agents-md -->\n";
+    for _ in 0..100 {
+        let settled = std::fs::read_to_string(checkout.join("AGENTS.md"))
+            .is_ok_and(|text| text == expected)
+            && checkout.join(".second/mcp.json").is_file();
+        if settled {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        std::fs::read_to_string(checkout.join("AGENTS.md")).unwrap(),
+        expected
+    );
+}
+
+#[tokio::test]
 async fn opening_project_regenerates_its_worklist_after_responding() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

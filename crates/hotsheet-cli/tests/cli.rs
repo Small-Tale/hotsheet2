@@ -337,6 +337,90 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
 }
 
 #[test]
+fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let enable = |tools: &str| {
+        std::fs::write(
+            store.join("hotsheet-settings.json"),
+            format!(r#"{{"enabled_plugins":[{tools}]}}"#),
+        )
+        .unwrap();
+        // Settings migrate into the project on the first refresh; keep both in step.
+        let project_settings = project.join(".hotsheet2/settings.json");
+        if project_settings.is_file() {
+            let mut settings: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&project_settings).unwrap()).unwrap();
+            settings["enabled_plugins"] = serde_json::from_str(&format!("[{tools}]")).unwrap();
+            std::fs::write(&project_settings, settings.to_string()).unwrap();
+        }
+    };
+    enable(r#""codex","antigravity","opencode""#);
+    // The pre-HS2-329EED layout: one byte-identical copy per tool around user content.
+    std::fs::write(
+        project.join("AGENTS.md"),
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\nstale\n<!-- END hotsheet:codex -->\n\n\
+         <!-- BEGIN hotsheet:antigravity -->\nstale\n<!-- END hotsheet:antigravity -->\n\n\
+         Middle user text.\n\n\
+         <!-- BEGIN hotsheet:opencode -->\nstale\n<!-- END hotsheet:opencode -->\n",
+    )
+    .unwrap();
+
+    let refresh = || {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .arg("setup")
+            .arg("--refresh")
+            .arg("--project")
+            .arg(&project)
+            .assert()
+            .success();
+    };
+    let body = include_str!("../../../plugins/codex/instructions.md").trim_end();
+    let expected = |tools: &str| {
+        format!(
+            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n"
+        )
+    };
+
+    refresh();
+    let migrated = std::fs::read(project.join("AGENTS.md")).unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&migrated),
+        expected("antigravity, codex, opencode")
+    );
+    refresh();
+    assert_eq!(
+        std::fs::read(project.join("AGENTS.md")).unwrap(),
+        migrated,
+        "a second refresh is a byte-level no-op"
+    );
+
+    // Disabling sharers keeps the section while any remains.
+    enable(r#""codex""#);
+    refresh();
+    assert_eq!(
+        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+        expected("codex")
+    );
+    refresh();
+    assert_eq!(
+        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+        expected("codex")
+    );
+}
+
+#[test]
 fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");
