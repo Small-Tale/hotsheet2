@@ -1,4 +1,4 @@
-import { expect, type Page, type Route, test } from '@playwright/test';
+import { expect, type Page, type Route, test, type WebSocketRoute } from '@playwright/test';
 
 const projects = {
   alpha: {
@@ -43,16 +43,52 @@ type FixtureTicket = ReturnType<typeof row> & {
   claim_lease_expires_at?: string;
 };
 
+const ticketPage = (tickets: FixtureTicket[]) => {
+  const active = tickets.filter(
+    (ticket) =>
+      ticket.claimed_by &&
+      ticket.claim_lease_expires_at &&
+      Date.parse(ticket.claim_lease_expires_at) > Date.now() &&
+      (ticket.status === 'not_started' || ticket.status === 'started'),
+  ).length;
+  return {
+    items: tickets,
+    counts: {
+      total: tickets.length,
+      queued: tickets.length,
+      backlog: 0,
+      archive: 0,
+      trash: 0,
+      open: tickets.length,
+      up_next: tickets.filter((ticket) => ticket.up_next).length,
+      active,
+      started: tickets.filter((ticket) => ticket.status === 'started').length,
+      completed_today: 0,
+      completion_trend: [],
+    },
+  };
+};
+
 async function installProjects(page: Page) {
   const rows: Record<string, FixtureTicket[]> = {
     'alpha-project': [row('ALPHA1', 'Alpha')],
     'beta-project': [row('BETA01', 'Beta')],
   };
-  const pollWaiters = new Map<string, Route[]>();
-  const handshaken = new Set<string>();
-  const cursor = new Map<string, number>();
+  const sockets = new Map<string, WebSocketRoute[]>(),
+    cursor = new Map<string, number>();
   let holdBetaRefresh = false;
   let heldBetaTickets: Route | undefined;
+
+  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', (socket) => {
+    const projectId = decodeURIComponent(new URL(socket.url()).pathname.match(/project-api\/([^/]+)/)?.[1] ?? '');
+    sockets.set(projectId, [...(sockets.get(projectId) ?? []), socket]);
+    socket.onClose(() => {
+      sockets.set(
+        projectId,
+        (sockets.get(projectId) ?? []).filter((candidate) => candidate !== socket),
+      );
+    });
+  });
 
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -66,13 +102,8 @@ async function installProjects(page: Page) {
     const projectId = path.match(/project-api\/([^/]+)/)?.[1],
       tickets = projectId ? (rows[projectId] ?? []) : [];
     if (path.endsWith('/ws/poll') && projectId) {
-      if (!handshaken.has(projectId)) {
-        handshaken.add(projectId);
-        cursor.set(projectId, 1);
-        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
-      }
-      pollWaiters.set(projectId, [...(pollWaiters.get(projectId) ?? []), route]);
-      return;
+      cursor.set(projectId, cursor.get(projectId) ?? 1);
+      return route.fulfill({ json: { cursor: cursor.get(projectId), events: [], overflow: false } });
     }
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -131,7 +162,7 @@ async function installProjects(page: Page) {
         holdBetaRefresh = false;
         return;
       }
-      return route.fulfill({ json: tickets });
+      return route.fulfill({ json: ticketPage(tickets) });
     }
     const ticketId = path.match(/\/tickets\/([^/]+)$/)?.[1];
     if (ticketId && request.method() === 'GET') {
@@ -154,14 +185,13 @@ async function installProjects(page: Page) {
   });
 
   const emit = async (projectId: string, kind: string) => {
-    await expect.poll(() => pollWaiters.get(projectId)?.length ?? 0).toBeGreaterThan(0);
-    const [waiter, ...remaining] = pollWaiters.get(projectId)!;
-    pollWaiters.set(projectId, remaining);
+    await expect.poll(() => sockets.get(projectId)?.length ?? 0).toBeGreaterThan(0);
     const next = (cursor.get(projectId) ?? 1) + 1;
     cursor.set(projectId, next);
-    await waiter.fulfill({
-      json: { cursor: next, events: [{ store: 'git', kind, id: 'ticket', slug: 'HS2-BETA01' }], overflow: false },
-    });
+    sockets
+      .get(projectId)!
+      .at(-1)!
+      .send(JSON.stringify({ cursor: next, store: 'git', kind, id: 'ticket', slug: 'HS2-BETA01' }));
   };
 
   return {
@@ -174,7 +204,7 @@ async function installProjects(page: Page) {
       await expect.poll(() => Boolean(heldBetaTickets)).toBe(true);
       const held = heldBetaTickets!;
       heldBetaTickets = undefined;
-      await held.fulfill({ json: rows[projects.beta.id] });
+      await held.fulfill({ json: ticketPage(rows[projects.beta.id]) });
     },
   };
 }
@@ -220,12 +250,24 @@ test('refreshes non-active project tab counts and live-work state while preservi
   await expect(alphaTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
   await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-qbnrzy-background-project-tab-wide.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-wide.png', fullPage: true });
 
-  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.setViewportSize({ width: 1100, height: 700 });
   // The label projects the Up Next count (2 here); the ring's segment count projects the 1 active ticket.
   await expect(betaTab.locator('.project-tab__work-count')).toHaveText('2');
-  await page.screenshot({ path: '/private/tmp/hs2-qbnrzy-background-project-tab-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-narrow.png', fullPage: true });
+  await betaTab.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-narrow-detail.png' });
+
+  fixture.rows[projects.beta.id] = fixture.rows[projects.beta.id].map((ticket) =>
+    ticket.id === 'BETA01' ? { ...ticket, claim_lease_expires_at: new Date(Date.now() + 500).toISOString() } : ticket,
+  );
+  await fixture.emit(projects.beta.id, 'renewed');
+  await expect(betaTab.locator('.project-tab__activity-ring')).toBeVisible();
+  await expect(betaTab.locator('.project-tab__work')).toHaveAttribute('aria-label', '2 Up Next tickets', {
+    timeout: 5_000,
+  });
+  await expect(betaTab.locator('.project-tab__activity-ring')).toHaveCount(0);
+  await expect(alphaTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
 
   fixture.holdNextBetaRefresh();
   await betaTab.getByRole('tab').click();

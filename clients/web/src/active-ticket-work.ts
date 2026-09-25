@@ -1,4 +1,4 @@
-import type { TicketRow } from './api';
+import type { CheckoutTicketCounts, TicketRow } from './api';
 import { isUpNextTicket } from './ticket-views';
 
 type ClaimState = Pick<TicketRow, 'claimed_by' | 'claim_lease_expires_at'> & Pick<Partial<TicketRow>, 'status'>;
@@ -28,4 +28,16 @@ export function projectTabTicketState(
     if (isTicketActivelyWorkedOn(ticket, now)) activeTicketCount += 1;
   }
   return { upNextCount, activeTicketCount };
+}
+
+/** Keep an authoritative aggregate honest when known cached claims expire without a server event. */
+export function applyKnownActiveTicketExpiries(
+  counts: CheckoutTicketCounts,
+  tickets: readonly TicketRow[],
+  before: number,
+  now: number,
+): CheckoutTicketCounts {
+  const previous = projectTabTicketState(tickets, before).activeTicketCount,
+    current = projectTabTicketState(tickets, now).activeTicketCount;
+  return current === previous ? counts : { ...counts, active: Math.max(0, counts.active + current - previous) };
 }

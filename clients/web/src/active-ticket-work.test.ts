@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTicketActivelyWorkedOn, nextActiveTicketExpiry, projectTabTicketState } from './active-ticket-work';
+import {
+  applyKnownActiveTicketExpiries,
+  isTicketActivelyWorkedOn,
+  nextActiveTicketExpiry,
+  projectTabTicketState,
+} from './active-ticket-work';
 import type { TicketRow } from './api';
 
 describe('active ticket work', () => {
@@ -76,5 +81,41 @@ describe('active ticket work', () => {
         now,
       ),
     ).toEqual({ upNextCount: 2, activeTicketCount: 1 });
+  });
+
+  it('decrements an exact aggregate when a cached claim expires without losing uncached active work', () => {
+    const claimed = {
+      connection_id: 'git',
+      native_id: '01',
+      qualified_id: 'git:01',
+      id: '01',
+      slug: 'HS2-ONE',
+      title: 'Claimed',
+      status: 'started',
+      up_next: true,
+      feedback_needed: false,
+      tags: [],
+      blocked_by: [],
+      claimed_by: 'codex',
+      claim_lease_expires_at: '2026-09-02T12:01:00Z',
+      claim_count: 1,
+    } satisfies TicketRow;
+    const counts = {
+      total: 300,
+      queued: 300,
+      backlog: 0,
+      archive: 0,
+      open: 300,
+      up_next: 250,
+      active: 4,
+      started: 4,
+      completed_today: 0,
+    };
+
+    expect(applyKnownActiveTicketExpiries(counts, [claimed], now, Date.parse('2026-09-02T12:01:00Z'))).toEqual({
+      ...counts,
+      active: 3,
+    });
+    expect(applyKnownActiveTicketExpiries(counts, [claimed], now, now)).toBe(counts);
   });
 });

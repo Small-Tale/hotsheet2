@@ -7,7 +7,12 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
 
-import { isTicketActivelyWorkedOn, nextActiveTicketExpiry, projectTabTicketState } from '../active-ticket-work';
+import {
+  applyKnownActiveTicketExpiries,
+  isTicketActivelyWorkedOn,
+  nextActiveTicketExpiry,
+  projectTabTicketState,
+} from '../active-ticket-work';
 import {
   collectMatchingSearchPages,
   filterAdvancedSearchResults,
@@ -1940,14 +1945,33 @@ export async function startHotSheetWebClient() {
     projectTabClaimClock.value = now;
     activeTicketCount.value = projectTicketCounts(selectedProjectId.value).active;
     const next = nextActiveTicketExpiry(openProjectRows, now);
-    if (next !== undefined)
+    if (next !== undefined) {
+      const expiringProjects = projects.value.filter(
+        (item) => nextActiveTicketExpiry(projectTabTicketRows(item.id), now) === next,
+      );
       claimLeaseExpiryTimer = window.setTimeout(
         () => {
           claimLeaseExpiryTimer = undefined;
-          scheduleClaimLeaseExpiry();
+          const expiredAt = Date.now(),
+            adjusted = { ...ticketCountsByProject.value };
+          for (const current of expiringProjects) {
+            if (!Object.hasOwn(adjusted, current.id)) continue;
+            adjusted[current.id] = applyKnownActiveTicketExpiries(
+              adjusted[current.id],
+              projectTabTicketRows(current.id),
+              now,
+              expiredAt,
+            );
+          }
+          ticketCountsByProject.value = adjusted;
+          projectTabClaimClock.value = expiredAt;
+          void Promise.allSettled(expiringProjects.map((current) => projectTabRefresh.request(current))).finally(
+            scheduleClaimLeaseExpiry,
+          );
         },
         Math.max(1, next - now + 25),
       );
+    }
   }
 
   function visibleTickets() {

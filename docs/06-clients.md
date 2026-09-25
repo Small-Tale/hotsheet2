@@ -1520,9 +1520,12 @@ view layer is new work.
   simultaneous active claim (capped at 8 drawn segments for legibility; the accessible
   label still reports the true active count), while the center label always projects the Up Next count
   (so it can read `0` while work is active); the ring's segment count is the only axis that
-  tracks active claims (HS2-3TGYER). Each open project's existing long-poll stream reconciles
-  those cached rows after ticket, claim, renew, and release events even when the project is
-  not selected; the indicator never waits for a tab activation to become current. A
+  tracks active claims (HS2-3TGYER). Each open project's replay-safe WebSocket-first stream
+  reconciles those cached rows after ticket, claim, renew, and release events even when the
+  project is not selected; the indicator never waits for a tab activation to become current.
+  Because lease expiry is a passage of time rather than a server mutation, the client also
+  decrements the known aggregate at the expiry boundary and immediately requests an authoritative
+  background snapshot (HS2-MV7S1Y). A
   closeable local tab's empty trailing reserve subtracts
   the selector gap already present beside the label, keeping that label geometrically
   centered in the complete pill rather than balancing the close control twice.
