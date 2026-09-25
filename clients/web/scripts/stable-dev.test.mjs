@@ -85,6 +85,93 @@ describe('stable dev snapshot', () => {
     expect(await pruneStaleSnapshots(resolve(parent, 'missing'))).toEqual([]);
   });
 
+  /** Deterministic timers plus a fake Vite child for the shutdown paths (HS2-4SSWV5). */
+  function shutdownHarness({ ppid = 500 } = {}) {
+    const intervals = new Map(),
+      timeouts = new Map();
+    let next = 0;
+    const timers = {
+      setInterval: (callback) => {
+        next += 1;
+        intervals.set(next, callback);
+        return next;
+      },
+      clearInterval: (id) => intervals.delete(id),
+      setTimeout: (callback) => {
+        next += 1;
+        timeouts.set(next, callback);
+        return next;
+      },
+      clearTimeout: (id) => timeouts.delete(id),
+    };
+    const processHost = Object.assign(new EventEmitter(), { ppid, execPath: 'node' });
+    const child = Object.assign(new EventEmitter(), { signals: [] });
+    child.kill = (signal) => {
+      child.signals.push(signal);
+      return true;
+    };
+    let started;
+    const childStarted = new Promise((resolveStarted) => {
+      started = resolveStarted;
+    });
+    const running = runStableDev({
+      sourceRoot: '/work/web',
+      temporaryRoot: '/tmp/runtime',
+      environment: {},
+      processHost,
+      timers,
+      createSnapshot: async () => '/tmp/runtime/hotsheet-web-stable-test',
+      removeSnapshot: async () => undefined,
+      pruneSnapshots: async () => [],
+      spawnChild: () => {
+        started();
+        return child;
+      },
+      log: () => undefined,
+    });
+    return { running, childStarted, child, processHost, intervals, timeouts };
+  }
+
+  it('shuts Vite down when its parent disappears and force-kills a child that ignores SIGTERM', async () => {
+    const harness = shutdownHarness();
+    await harness.childStarted;
+    expect(harness.intervals.size).toBe(1);
+    const [check] = harness.intervals.values();
+    check();
+    expect(harness.child.signals).toEqual([], 'the parent is still alive');
+    harness.processHost.ppid = 1;
+    check();
+    check();
+    expect(harness.child.signals).toEqual(['SIGTERM']);
+    const [force] = harness.timeouts.values();
+    force();
+    expect(harness.child.signals).toEqual(['SIGTERM', 'SIGKILL']);
+    harness.child.emit('close', null, 'SIGKILL');
+    expect(await harness.running).toBe(143);
+    expect(harness.intervals.size).toBe(0);
+    expect(harness.timeouts.size).toBe(0);
+  });
+
+  it('cancels the force kill when Vite exits promptly after a signal', async () => {
+    const harness = shutdownHarness();
+    await harness.childStarted;
+    harness.processHost.emit('SIGINT');
+    expect(harness.child.signals).toEqual(['SIGINT']);
+    expect(harness.timeouts.size).toBe(1);
+    harness.child.emit('close', null, 'SIGINT');
+    expect(await harness.running).toBe(130);
+    expect(harness.timeouts.size).toBe(0);
+    expect(harness.child.signals).toEqual(['SIGINT']);
+  });
+
+  it('does not watch a parent it never had', async () => {
+    const harness = shutdownHarness({ ppid: 1 });
+    await harness.childStarted;
+    expect(harness.intervals.size).toBe(0);
+    harness.child.emit('close', 0, null);
+    expect(await harness.running).toBe(0);
+  });
+
   it('preserves the original repository root for every snapshot-side bridge', () => {
     const environment = stableDevEnvironment('/work/hotsheet2/clients/web', '/tmp/stable-snapshot', {});
     expect(environment.HOTSHEET_REPO_ROOT).toBe('/work/hotsheet2');

@@ -242,7 +242,11 @@ and identity-less legacy entries remain conservatively blocking.
   files not accessed for three days, and cloned snapshot files keep their source's old access
   time, so modules Vite had not read yet (such as the lazily imported Dev Review entry)
   disappeared from a running snapshot and were served as `index.html` (HS2-ZJ6VN3). Each
-  snapshot records its owning process, and startup prunes snapshots whose owner has exited. The running app retains the
+  snapshot records its owning process, and startup prunes snapshots whose owner has exited. The launcher
+  also exits, stopping Vite, when the process that started it dies without signalling it
+  (it notices the reparenting with a local check, no network request), and force-kills a
+  Vite child that ignores the shutdown signal after five seconds (HS2-4SSWV5), so an
+  interrupted test runner or terminal never leaves orphaned dev servers behind. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
   snapshot. Generated package-local `target` output is excluded from the snapshot just

@@ -112,20 +112,40 @@ export async function runStableDev({
   pruneSnapshots = pruneStaleSnapshots,
   spawnChild = spawn,
   log = console.log,
+  timers = globalThis,
+  parentCheckMs = 1000,
+  forceKillAfterMs = 5000,
 } = {}) {
   let stoppingSignal;
   let snapshotRoot;
   let child;
+  let forceKill;
+  const stop = (signal) => {
+    if (stoppingSignal) return;
+    stoppingSignal = signal;
+    if (!child) return;
+    child.kill(signal);
+    // A Vite child that ignores the signal must not outlive this launcher (HS2-4SSWV5).
+    forceKill = timers.setTimeout(() => child.kill('SIGKILL'), forceKillAfterMs);
+    forceKill?.unref?.();
+  };
   const signalHandlers = new Map();
   for (const signal of ['SIGINT', 'SIGTERM']) {
-    const handler = () => {
-      if (stoppingSignal) return;
-      stoppingSignal = signal;
-      child?.kill(signal);
-    };
+    const handler = () => stop(signal);
     signalHandlers.set(signal, handler);
     processHost.on(signal, handler);
   }
+  // When the process that started this launcher dies without signalling it (a killed test
+  // runner or terminal), the OS reparents it. Notice that with a local-only check — no network
+  // request — and shut Vite down instead of serving forever as an orphan (HS2-4SSWV5).
+  const originalParent = processHost.ppid;
+  const parentWatch =
+    Number.isInteger(originalParent) && originalParent > 1
+      ? timers.setInterval(() => {
+          if (processHost.ppid !== originalParent) stop('SIGTERM');
+        }, parentCheckMs)
+      : undefined;
+  parentWatch?.unref?.();
 
   try {
     await pruneSnapshots(temporaryRoot).catch(() => []);
@@ -149,6 +169,8 @@ export async function runStableDev({
     const exitSignal = stoppingSignal ?? result.signal;
     return result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
   } finally {
+    if (parentWatch !== undefined) timers.clearInterval(parentWatch);
+    if (forceKill !== undefined) timers.clearTimeout(forceKill);
     try {
       if (snapshotRoot) await removeSnapshot(snapshotRoot);
     } finally {

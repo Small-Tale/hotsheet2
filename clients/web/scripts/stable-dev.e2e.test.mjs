@@ -30,11 +30,26 @@ function captureChildOutput(child) {
   return () => output;
 }
 
-async function stopChild(child) {
+async function stopChild(child, { forceAfterMs = 10_000 } = {}) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolveExit) => child.once('exit', resolveExit));
   child.kill('SIGTERM');
-  await exited;
+  // One hung server must not stall the suite or survive it (HS2-4SSWV5).
+  const force = setTimeout(() => child.kill('SIGKILL'), forceAfterMs);
+  try {
+    await exited;
+  } finally {
+    clearTimeout(force);
+  }
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
 }
 
 async function waitForSource(url, { child, output = () => '', timeoutMs = 30_000 } = {}) {
@@ -96,6 +111,61 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
     expect(remainingSnapshots).toEqual([]);
   }
 }, 45_000);
+
+it('exits with its Vite child when the process that started it dies (HS2-4SSWV5)', async () => {
+  const fixture = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-e2e-'));
+  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+  const port = await availablePort();
+  await mkdir(resolve(fixture, 'src'));
+  await writeFile(resolve(fixture, 'package.json'), '{"type":"module"}');
+  await writeFile(resolve(fixture, 'index.html'), '<script type="module" src="/src/main.js"></script>');
+  await writeFile(resolve(fixture, 'src/main.js'), 'window.snapshot = "orphan";');
+  await symlink(resolve(webRoot, 'node_modules'), resolve(fixture, 'node_modules'), 'dir');
+  // A stand-in test runner: it starts stable-dev, reports its pid, and is then killed without
+  // any chance to clean up, exactly like an interrupted runner.
+  const runner = spawn(
+    process.execPath,
+    [
+      '-e',
+      `const { spawn } = require('node:child_process');
+       const child = spawn(process.execPath, process.argv.slice(1), { stdio: 'ignore' });
+       console.log(child.pid);
+       setInterval(() => {}, 1000);`,
+      resolve(webRoot, 'scripts/stable-dev.mjs'),
+      '--port',
+      String(port),
+      '--strictPort',
+    ],
+    {
+      env: {
+        ...process.env,
+        HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
+        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  let stablePid;
+  try {
+    stablePid = await new Promise((resolvePid, reject) => {
+      runner.stdout.once('data', (chunk) => resolvePid(Number(String(chunk).trim())));
+      runner.once('exit', () => reject(new Error('runner exited before starting stable-dev')));
+    });
+    expect(await waitForSource(`http://127.0.0.1:${port}/src/main.js`)).toContain('orphan');
+    runner.kill('SIGKILL');
+    const deadline = Date.now() + 20_000;
+    while (processAlive(stablePid) && Date.now() < deadline) await new Promise((wait) => setTimeout(wait, 100));
+    expect(processAlive(stablePid)).toBe(false);
+    // Vite went with it: the port no longer serves.
+    await expect(fetch(`http://127.0.0.1:${port}/src/main.js`)).rejects.toThrow();
+    expect(await readdir(runtimeTemp)).toEqual([]);
+  } finally {
+    if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
+    if (stablePid && processAlive(stablePid)) process.kill(stablePid, 'SIGKILL');
+    await rm(fixture, { recursive: true, force: true });
+    await rm(runtimeTemp, { recursive: true, force: true });
+  }
+}, 60_000);
 
 it('does not reload when a later route first imports another dependency', async () => {
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
