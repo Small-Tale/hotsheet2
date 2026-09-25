@@ -235,6 +235,27 @@ query(filter, sort, text?, paging) -> TicketRow[]
   `hotsheet_ticketing::checkout_order` comparator, applies `limit` to the checkout-wide
   result, and projects `fields` only after merging. The serverless MCP backend merges
   multi-store checkouts the same way (HS2-M0YTB6).
+- **Continuation under concurrent mutation (decided HS2-ZYW6K8; implementation pending):**
+  checkout cursors are *value-keyset continuations*, not snapshots. The server keeps no
+  per-cursor snapshot or retained result set, so memory stays bounded and cursors stay
+  stateless across restarts and hosts. Instead, a continuation resumes strictly after the
+  last emitted row's **sort-key values** in the shared `checkout_order` total order, and
+  it guarantees:
+  - every row that exists with an unchanged sort key across the whole traversal is
+    emitted exactly once, whatever else is inserted, edited, or purged;
+  - a row inserted, or whose sort key changes, during traversal appears only if its
+    current key sorts after the cursor, so it may appear twice or not at all; clients
+    de-duplicate by `qualified_id` and rely on live WebSocket updates to reconcile edits;
+  - editing or purging the boundary row never ends or rewinds a source;
+  - `counts` describe the current request, not the traversal's start;
+  - a cursor is rejected when the source set, sort, direction, or effective filter set
+    changed.
+
+  Gaps today: local sources resume from the boundary row's *current* sort values
+  (`page_after` identity lookup), provider fallbacks and GitHub/GitLab page numbers are
+  offsets, and cursors do not yet bind filters. Tracked by `HS2-74H84S` (value keysets),
+  `HS2-BGZ0NY` (batch provider reads in the merge), and `HS2-Z1TQ7Z` (filter-bound
+  cursors).
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).
