@@ -8500,6 +8500,50 @@ async fn checkout_pages_globally_merge_local_and_provider_sources_across_continu
         .unwrap();
     assert_eq!(source.status(), StatusCode::OK);
 
+    // The unpaged array shares the page merge order; `limit` caps the checkout-wide
+    // result, and a `fields` projection keeps order and the source `store` (HS2-M0YTB6).
+    for (query, expected) in [
+        (
+            "sort=title",
+            &[
+                "Alpha remote",
+                "Bravo local",
+                "Charlie remote",
+                "Delta local",
+            ][..],
+        ),
+        (
+            "sort=title&limit=3",
+            &["Alpha remote", "Bravo local", "Charlie remote"][..],
+        ),
+        (
+            "sort=title&direction=descending&limit=2&fields=title",
+            &["Delta local", "Charlie remote"][..],
+        ),
+    ] {
+        let rows = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/{checkout_id}/tickets?{query}"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let rows = rows.as_array().unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|row| row["title"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            expected,
+            "{query}"
+        );
+        assert!(rows.iter().all(|row| row["store"].is_string()), "{query}");
+    }
+
     let first = body_json(
         router
             .clone()

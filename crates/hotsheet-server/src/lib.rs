@@ -23,7 +23,6 @@ pub mod tls;
 pub mod tts;
 pub mod turn_stream;
 
-use std::cmp::Ordering as CmpOrdering;
 use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -43,6 +42,7 @@ use hotsheet_model::{
     CloseReason, NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
+use hotsheet_ticketing::checkout_order::{self, MergeKey};
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
@@ -3531,6 +3531,10 @@ fn checkout_entries(
     Ok(entries)
 }
 
+/// List a checkout's tickets. `page_size` selects the bounded page envelope with a
+/// continuation cursor; otherwise the response is a plain array capped by `limit`,
+/// the shape MCP `hotsheet_query` and client search/lookup use. Both shapes share one
+/// global order across every local and hosted-provider source (HS2-M0YTB6).
 async fn list_checkout_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
@@ -3545,11 +3549,19 @@ async fn list_checkout_tickets(
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let contexts = auto_context::effective(&checkout.settings())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let compact = params.compact.unwrap_or(true);
+    let fields = parse_fields(&params.fields);
+    let limit = params.limit;
+    // A source's own top-`limit` rows are sufficient for the global top-`limit`. The
+    // `has_commit` post-filter can discard rows, so it reads each source uncapped.
+    let mut source_params = params.clone();
+    if params.has_commit.is_some() {
+        source_params.limit = None;
+    }
+    let merge_query = params.clone().into_query(state.store.root())?;
     let mut result = Vec::new();
     for (store_id, entry) in checkout_entries(&state, &reference)? {
-        let compact = params.compact.unwrap_or(true);
-        let fields = parse_fields(&params.fields);
-        let query = params.clone().into_query(entry.store.root())?;
+        let query = source_params.clone().into_query(entry.store.root())?;
         let mut rows = entry
             .index
             .lock()
@@ -3557,20 +3569,16 @@ async fn list_checkout_tickets(
             .query(&query)?;
         for row in &mut rows {
             row.set_connection(&store_id);
-        }
-        if compact {
-            for row in &mut rows {
+            if compact {
                 row.make_compact();
             }
-        }
-        for row in &mut rows {
             row.add_auto_context(&contexts);
         }
-        let values = rows_to_json(rows, &fields)
+        for mut value in rows_to_json(rows, &[])
             .as_array()
             .cloned()
-            .unwrap_or_default();
-        for mut value in values {
+            .unwrap_or_default()
+        {
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("store".into(), serde_json::Value::String(store_id.clone()));
             }
@@ -3583,10 +3591,13 @@ async fn list_checkout_tickets(
         .filter(|source| source.provider != "git")
     {
         let provider = provider_for(&state, &source.connection_id)?;
-        let query = params.clone().into_query(state.store.root())?;
+        let query = source_params.clone().into_query(state.store.root())?;
         for mut ticket in provider.query(&query).map_err(provider_transfer_error)? {
             ticket.auto_context =
                 auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
+            if compact {
+                ticket.details.clear();
+            }
             let mut value = serde_json::to_value(ticket).map_err(|error| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             })?;
@@ -3612,6 +3623,16 @@ async fn list_checkout_tickets(
                 .and_then(serde_json::Value::as_str)
                 .is_some_and(|slug| matches.contains(slug) == want)
         });
+    }
+    // Project only after merging so the sort keys are still present.
+    let mut result =
+        checkout_order::merge_rows(result, merge_query.sort, merge_query.descending, limit);
+    for value in &mut result {
+        let store = value.get("store").cloned();
+        hotsheet_ticketing::wire::project_fields(std::slice::from_mut(value), &fields);
+        if let (Some(store), Some(object)) = (store, value.as_object_mut()) {
+            object.insert("store".into(), store);
+        }
     }
     Ok(Json(serde_json::Value::Array(result)))
 }
@@ -3704,69 +3725,8 @@ struct CheckoutMergeCursor {
 #[derive(Debug, Clone)]
 struct CheckoutMergeItem {
     value: serde_json::Value,
-    native_id: String,
-    qualified_id: String,
-    title: String,
-    created_at: String,
-    updated_at: String,
-    priority_rank: u8,
-    status_rank: u8,
+    key: MergeKey,
     next: CheckoutSourceCursor,
-}
-
-fn checkout_priority_rank(value: Option<&str>) -> u8 {
-    match value {
-        Some("highest") => 0,
-        Some("high") => 1,
-        Some("default") => 2,
-        Some("low") => 3,
-        Some("lowest") => 4,
-        _ => u8::MAX,
-    }
-}
-
-fn checkout_status_rank(value: Option<&str>) -> u8 {
-    match value {
-        Some("not_started") => 0,
-        Some("started") => 1,
-        Some("completed") => 2,
-        Some("verified") => 3,
-        Some("backlog") => 4,
-        Some("archive") => 5,
-        Some("deleted") => 6,
-        Some("moved") => 7,
-        _ => u8::MAX,
-    }
-}
-
-fn checkout_ticket_order(
-    left: &CheckoutMergeItem,
-    right: &CheckoutMergeItem,
-    sort: SortKey,
-    descending: bool,
-) -> CmpOrdering {
-    let directed = |order: CmpOrdering| {
-        if descending { order.reverse() } else { order }
-    };
-    match sort {
-        SortKey::Id => directed(left.native_id.cmp(&right.native_id))
-            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
-        SortKey::Created => directed(left.created_at.cmp(&right.created_at))
-            .then_with(|| directed(left.native_id.cmp(&right.native_id)))
-            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
-        SortKey::Updated => directed(left.updated_at.cmp(&right.updated_at))
-            .then_with(|| directed(left.native_id.cmp(&right.native_id)))
-            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
-        SortKey::Priority => directed(left.priority_rank.cmp(&right.priority_rank))
-            .then_with(|| right.updated_at.cmp(&left.updated_at))
-            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
-        SortKey::Status => directed(left.status_rank.cmp(&right.status_rank))
-            .then_with(|| right.updated_at.cmp(&left.updated_at))
-            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
-        SortKey::Title => directed(left.title.to_lowercase().cmp(&right.title.to_lowercase()))
-            .then_with(|| right.updated_at.cmp(&left.updated_at))
-            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
-    }
 }
 
 fn checkout_sort_name(sort: SortKey) -> &'static str {
@@ -3853,45 +3813,8 @@ fn decode_checkout_page_cursor(
 #[cfg(test)]
 mod checkout_pagination_tests {
     use super::{
-        CheckoutMergeItem, CheckoutSourceCursor, SortKey, checkout_ticket_order,
-        decode_checkout_page_cursor, encode_checkout_page_cursor,
+        CheckoutSourceCursor, SortKey, decode_checkout_page_cursor, encode_checkout_page_cursor,
     };
-    use std::cmp::Ordering;
-
-    fn item(id: &str, title: &str, updated_at: &str, priority_rank: u8) -> CheckoutMergeItem {
-        CheckoutMergeItem {
-            value: serde_json::Value::Null,
-            native_id: id.into(),
-            qualified_id: id.into(),
-            title: title.into(),
-            created_at: "2026-09-01T00:00:00Z".into(),
-            updated_at: updated_at.into(),
-            priority_rank,
-            status_rank: 0,
-            next: CheckoutSourceCursor::default(),
-        }
-    }
-
-    #[test]
-    fn categorical_merge_order_keeps_recent_first_stable_ties() {
-        let older = item("git:2", "Same", "2026-09-01T00:00:00Z", 1);
-        let newer = item("provider:1", "same", "2026-09-02T00:00:00Z", 1);
-        assert_eq!(
-            checkout_ticket_order(&newer, &older, SortKey::Title, false),
-            Ordering::Less
-        );
-        assert_eq!(
-            checkout_ticket_order(&newer, &older, SortKey::Priority, true),
-            Ordering::Less,
-            "descending changes only the categorical primary key"
-        );
-        let same_time = item("git:1", "Same", "2026-09-02T00:00:00Z", 1);
-        assert_eq!(
-            checkout_ticket_order(&same_time, &newer, SortKey::Title, false),
-            Ordering::Less,
-            "qualified identity is the cross-source final tiebreaker"
-        );
-    }
 
     #[test]
     fn merge_cursor_round_trips_every_source_and_rejects_a_changed_source_set() {
@@ -4083,13 +4006,15 @@ fn list_checkout_ticket_page(
                 }
                 row.set_connection(store_id);
                 let item = CheckoutMergeItem {
-                    native_id: row.native_id.clone(),
-                    qualified_id: row.qualified_id.clone(),
-                    title: row.title.clone(),
-                    created_at: row.created_at.clone().unwrap_or_default(),
-                    updated_at: row.updated_at.clone().unwrap_or_default(),
-                    priority_rank: checkout_priority_rank(row.priority.as_deref()),
-                    status_rank: checkout_status_rank(row.status.as_deref()),
+                    key: MergeKey {
+                        native_id: row.native_id.clone(),
+                        qualified_id: row.qualified_id.clone(),
+                        title: row.title.clone(),
+                        created_at: row.created_at.clone().unwrap_or_default(),
+                        updated_at: row.updated_at.clone().unwrap_or_default(),
+                        priority_rank: checkout_order::priority_rank(row.priority.as_deref()),
+                        status_rank: checkout_order::status_rank(row.status.as_deref()),
+                    },
                     next: CheckoutSourceCursor {
                         key: cursor.key.clone(),
                         after: Some(next_after),
@@ -4172,13 +4097,15 @@ fn list_checkout_ticket_page(
             ticket.auto_context =
                 auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
             let item = CheckoutMergeItem {
-                native_id: ticket.native_id.clone(),
-                qualified_id: ticket.qualified_id.clone(),
-                title: ticket.title.clone(),
-                created_at: ticket.created_at.clone(),
-                updated_at: ticket.updated_at.clone(),
-                priority_rank: ticket.priority as u8,
-                status_rank: ticket.status as u8,
+                key: MergeKey {
+                    native_id: ticket.native_id.clone(),
+                    qualified_id: ticket.qualified_id.clone(),
+                    title: ticket.title.clone(),
+                    created_at: ticket.created_at.clone(),
+                    updated_at: ticket.updated_at.clone(),
+                    priority_rank: ticket.priority as u8,
+                    status_rank: ticket.status as u8,
+                },
                 next: CheckoutSourceCursor {
                     key: cursor.key.clone(),
                     after: next_after.clone(),
@@ -4215,7 +4142,9 @@ fn list_checkout_ticket_page(
             .iter()
             .enumerate()
             .filter_map(|(index, item)| item.as_ref().map(|item| (index, item)))
-            .min_by(|(_, left), (_, right)| checkout_ticket_order(left, right, sort, descending))
+            .min_by(|(_, left), (_, right)| {
+                checkout_order::compare(&left.key, &right.key, sort, descending)
+            })
             .map(|(index, _)| index)
         else {
             break;

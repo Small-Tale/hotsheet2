@@ -229,6 +229,12 @@ query(filter, sort, text?, paging) -> TicketRow[]
   order, including recent-first `updated_at` and stable qualified-identity ties for priority,
   status, and title sorts. Continuations therefore resume the same global order instead of
   concatenating independently sorted source pages (HS2-2BDSRK).
+  Without `page_size`, the checkout route returns a plain row array (the shape MCP
+  `hotsheet_query` and client search/lookup use) in that same global order: each source
+  contributes at most `limit` rows, the server merges them with the shared
+  `hotsheet_ticketing::checkout_order` comparator, applies `limit` to the checkout-wide
+  result, and projects `fields` only after merging. The serverless MCP backend merges
+  multi-store checkouts the same way (HS2-M0YTB6).
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

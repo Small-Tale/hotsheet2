@@ -712,10 +712,18 @@ mod core_backend {
                 if let Some((checkout, suffix)) = reference.split_once("/tickets") {
                     let (checkout, stores) = self.checkout_context(checkout)?;
                     if suffix.is_empty() {
+                        // Read every store unprojected, merge into one checkout-wide
+                        // order, cap by `limit`, then project (HS2-M0YTB6).
+                        let order = build_query(query, self.store.root())?;
+                        let source_query = query
+                            .iter()
+                            .filter(|(key, _)| key != "fields")
+                            .cloned()
+                            .collect::<Vec<_>>();
                         let mut all = Vec::new();
                         for store in stores {
                             let backend = self.for_checkout(store.clone(), checkout.clone());
-                            if let Value::Array(rows) = backend.get("/tickets", query)? {
+                            if let Value::Array(rows) = backend.get("/tickets", &source_query)? {
                                 for mut row in rows {
                                     if let Some(obj) = row.as_object_mut() {
                                         obj.insert(
@@ -727,6 +735,23 @@ mod core_backend {
                                     }
                                     all.push(row);
                                 }
+                            }
+                        }
+                        let mut all = hotsheet_ticketing::checkout_order::merge_rows(
+                            all,
+                            order.sort,
+                            order.descending,
+                            order.limit,
+                        );
+                        let fields = query_fields(query);
+                        for row in &mut all {
+                            let store = row.get("store").cloned();
+                            hotsheet_ticketing::wire::project_fields(
+                                std::slice::from_mut(row),
+                                &fields,
+                            );
+                            if let (Some(store), Some(obj)) = (store, row.as_object_mut()) {
+                                obj.insert("store".into(), store);
                             }
                         }
                         return Ok(Value::Array(all));
@@ -1930,6 +1955,64 @@ mod tests {
         );
         assert_eq!(second_ticket["auto_context"][0]["text"], "second project");
         assert_eq!(store_ticket["auto_context"][0]["text"], "legacy store");
+    }
+
+    #[test]
+    fn corebackend_multi_store_checkout_query_merges_globally_before_limit_and_fields() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let mut store_roots = Vec::new();
+        for (prefix, titles) in [("AA", ["Bravo", "Delta"]), ("BB", ["Alpha", "Charlie"])] {
+            let store_root = root.path().join(format!("{prefix}.hs2"));
+            let store = FsStore::init(&store_root, &StoreMetadata::new(prefix)).unwrap();
+            for title in titles {
+                ops::create(
+                    &store,
+                    hotsheet_model::Ulid::new(),
+                    prefix,
+                    hotsheet_model::Timestamp::new("2026-09-11T00:00:00Z"),
+                    hotsheet_ticketing::NewTicket {
+                        title: title.into(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            }
+            store_roots.push(store_root);
+        }
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(&checkout_root, Some("project"), None, store_roots.clone())
+            .unwrap();
+        let backend = CoreBackend::new(FsStore::open(&store_roots[0]).unwrap())
+            .with_checkout_registry(registry);
+        let titles = |query: &[(&str, &str)]| {
+            let pairs = query
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<Vec<_>>();
+            let rows = backend
+                .get(&format!("/checkouts/{}/tickets", checkout.id), &pairs)
+                .unwrap();
+            let rows = rows.as_array().unwrap().clone();
+            assert!(rows.iter().all(|row| row["store"].is_string()), "{rows:?}");
+            rows.iter()
+                .map(|row| row["title"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            titles(&[("sort", "title")]),
+            ["Alpha", "Bravo", "Charlie", "Delta"]
+        );
+        assert_eq!(
+            titles(&[("sort", "title"), ("limit", "3"), ("fields", "title")]),
+            ["Alpha", "Bravo", "Charlie"],
+            "limit caps the checkout-wide order, not each store"
+        );
     }
 
     /// Call a tool and return the parsed JSON the agent would see (or the error text).

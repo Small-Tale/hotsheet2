@@ -12,6 +12,7 @@ pub mod activity;
 pub mod activity_distillation;
 pub mod analytics;
 pub mod annotation_activity;
+pub mod checkout_order;
 pub mod distclaim;
 pub mod distwork;
 pub mod identity;
