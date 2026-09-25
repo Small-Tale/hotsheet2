@@ -134,6 +134,18 @@
       "rules": ["KUI-L011"],
       "target": "src/ux-demo/style.css",
       "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "mobile-side-panel-safe-area-composition",
+      "rules": ["KUI-L004"],
+      "target": "src/components/app-shell.tsx",
+      "rationale": "The mobile shell deliberately composes safe-area padding on its app-owned sidebar and inspector content inside Kerf overlay regions."
+    },
+    {
+      "id": "mobile-side-panel-viewport-height",
+      "rules": ["KUI-L005"],
+      "target": "src/components/mobile-side-panels.css",
+      "rationale": "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap."
     }
   ]
 }

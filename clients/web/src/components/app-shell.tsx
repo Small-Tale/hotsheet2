@@ -1,5 +1,6 @@
 import '@kerfjs/ui/floating-toolbar.css';
 import './app-shell.css';
+import './mobile-side-panels.css';
 
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';

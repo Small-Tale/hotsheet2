@@ -1,0 +1,15 @@
+/* Kerf's generic overlay cap is intentionally 85vh. Mobile navigation panels are app-level
+   surfaces instead: paint them through the complete dynamic viewport (including safe areas), then
+   inset only their interactive content away from device cutouts and the home indicator. */
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-presentation='overlay'][data-axis='horizontal'] {
+  max-height: 100dvh;
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] .project-sidebar {
+  padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom);
+  padding-inline-start: var(--hotsheet-safe-area-left);
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
+  min-height: 0;
+  padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom);
+  padding-inline-end: var(--hotsheet-safe-area-right);
+}

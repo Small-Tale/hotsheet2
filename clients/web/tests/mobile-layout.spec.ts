@@ -137,6 +137,8 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   await openDemoProject(page, true);
   await page.evaluate(() => {
     document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '48px');
+    // ResizableRegion owns its restore control and consumes Kerf's component-safe-area contract.
+    document.documentElement.style.setProperty(['--kui', 'safe-area-block-end'].join('-'), '48px');
   });
   const restore = page.getByRole('button', { name: 'Show terminal drawer' }),
     restoreToolbar = page.locator('.app-shell__terminal-drawer-restore');
@@ -277,6 +279,64 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-single-column.png', fullPage: true });
+});
+
+test('mobile side panels cover the terminal drawer and pad interactive content inside safe areas (HS2-3BVWME)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page, true);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--hotsheet-safe-area-top', '13px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-right', '11px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '37px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-left', '7px');
+  });
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    sidebarRegion = page.locator('.kui-resizable-region[data-region-id="app-sidebar"]'),
+    inspectorRegion = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect(sidebarRegion).toHaveAttribute('data-collapsed', 'false');
+  await expect(sidebarRegion.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect
+    .poll(() =>
+      sidebarRegion.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, viewportBottom: innerHeight };
+      }),
+    )
+    .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
+  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-top', '13px');
+  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-bottom', '37px');
+  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-left', '7px');
+  await page.screenshot({
+    path: '/private/tmp/hs2-3bvwme-mobile-sidebar-full-height.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+
+  await page.locator('.app-shell__scrim').click({ position: { x: 380, y: 400 } });
+  await page.locator('[data-ticket-slug="HS2-M1"]').click();
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'false');
+  await expect(inspectorRegion.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect
+    .poll(() =>
+      inspectorRegion.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, viewportBottom: innerHeight };
+      }),
+    )
+    .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
+  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-top', '13px');
+  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-bottom', '37px');
+  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-right', '11px');
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await page.screenshot({
+    path: '/private/tmp/hs2-3bvwme-mobile-inspector-full-height.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
 });
 
 test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays without changing desktop preferences (HS2-KN79XP)', async ({

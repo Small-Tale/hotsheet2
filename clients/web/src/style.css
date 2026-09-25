@@ -1,8 +1,10 @@
 @import './components/cursor-semantics.css';
 
 :root {
+  --hotsheet-safe-area-top: env(safe-area-inset-top, 0px);
   --hotsheet-safe-area-right: env(safe-area-inset-right, 0px);
   --hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --hotsheet-safe-area-left: env(safe-area-inset-left, 0px);
   font-family:
     Inter,
     ui-sans-serif,

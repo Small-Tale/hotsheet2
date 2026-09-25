@@ -185,7 +185,10 @@ and identity-less legacy entries remain conservatively blocking.
   transcript, and composer remain inside the mobile center column (HS2-KTW27J). The workspace and
   inspector keep independent scrolling, and
   overlay controls remain accessible (HS2-JBTPNR). The production root uses the dynamic viewport height rather than
-  iOS Safari's larger layout viewport. The terminal-drawer restore and workspace-grid zoom controls
+  iOS Safari's larger layout viewport. Mobile project and inspector overlays paint through the
+  full dynamic viewport—including over an open terminal drawer—instead of inheriting Kerf's generic
+  85vh popover cap. Their white surfaces extend into device safe areas while padding interactive
+  content away from the top, side, and bottom insets (HS2-3BVWME). The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or
   retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the

@@ -25,6 +25,7 @@ import { AppTabContextMenu } from './project-tab-context-menu';
 describe('application shell components', () => {
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
+    const mobileSidePanelCss = readFileSync(new URL('./mobile-side-panels.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
@@ -33,9 +34,19 @@ describe('application shell components', () => {
     expect(css).toContainSource(
       ".app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] { position: absolute; }",
     );
-    expect(css).not.toContain('--kui-safe-area-');
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
+    expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
+    expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
+    expect(mobileSidePanelCss).toMatchSource(
+      /data-presentation="overlay"\]\[data-axis="horizontal"\] \{ max-height: 100dvh;/,
+    );
+    expect(mobileSidePanelCss).toContainSource(
+      '.project-sidebar { padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom); padding-inline-start: var(--hotsheet-safe-area-left); }',
+    );
+    expect(mobileSidePanelCss).toContainSource(
+      '.ticket-inspector { min-height: 0; padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom); padding-inline-end: var(--hotsheet-safe-area-right); }',
+    );
   });
 
   it('clips the shell without making it a focus-scroll owner while preserving workspace scrolling (HS2-JBTPNR)', () => {

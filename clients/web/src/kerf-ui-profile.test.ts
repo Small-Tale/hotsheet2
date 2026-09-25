@@ -15,19 +15,35 @@ interface KerfDoctorConfig {
 }
 
 describe('Kerf application UI profile', () => {
-  it('limits exceptions to exact Web Awesome shadow-part boundaries', () => {
+  it('limits exceptions to exact reviewed integration boundaries', () => {
     const profile = JSON.parse(
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(22);
-    for (const exception of profile.exceptions) {
+    expect(profile.exceptions).toHaveLength(24);
+    for (const exception of profile.exceptions.slice(0, 22)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
       expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.css$/);
       expect(exception.target).not.toMatch(/[?*]|\.\./);
       expect(exception.rationale).toContain('Web Awesome shadow parts');
     }
+    expect(profile.exceptions.slice(22)).toEqual([
+      {
+        id: 'mobile-side-panel-safe-area-composition',
+        rules: ['KUI-L004'],
+        target: 'src/components/app-shell.tsx',
+        rationale:
+          'The mobile shell deliberately composes safe-area padding on its app-owned sidebar and inspector content inside Kerf overlay regions.',
+      },
+      {
+        id: 'mobile-side-panel-viewport-height',
+        rules: ['KUI-L005'],
+        target: 'src/components/mobile-side-panels.css',
+        rationale:
+          "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap.",
+      },
+    ]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {
