@@ -17,6 +17,9 @@ describe('HS1 migration presentation', () => {
     );
     expect(css).toMatchSource(/\.kui-state-banner__copy[^}]*gap:var\(--kui-space-2xs\)/);
     expect(css).not.toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*display:grid/);
+    expect(css).toMatchSource(
+      /\.hs1-migration-dialog \.kui-value-table__row code \{[^}]*font-size:var\(--wa-font-size-xs\)/,
+    );
   });
 
   it('asks only where to store tickets and describes the complete import', () => {
@@ -37,6 +40,7 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('name="hs1-ticket-store"');
     expect(markup).toContain('/work/demo/.hotsheet/db');
     expect(markup).toContain('PostgreSQL');
+    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(4);
     expect(markup).not.toContain('provider');
   });
   it('shows honest indeterminate progress for the multi-stage import', () => {
@@ -55,6 +59,7 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('label="Importing Hot Sheet 1 project"');
     expect(markup).toContain('copying attachments');
     expect(markup).toContain('disabled');
+    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(3);
   });
   it('keeps a dismissed import available from a polite informational StateBanner', () => {
     const markup = String(Hs1MigrationBanner({ databasePath: '/work/demo/.hotsheet/db' }));

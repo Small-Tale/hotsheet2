@@ -608,7 +608,9 @@ and identity-less legacy entries remain conservatively blocking.
   source revision, client revision, both protocol ranges, and server start time when the
   authenticated handshake supplied them. Missing values are labeled rather than guessed.
   The dialog uses the same shared divider-free icon/title/subtitle header and borderless
-  inset-separator value table as repository status. Because this metadata is safely recoverable, the
+  inset-separator value table as repository status. Every metadata entry is a canonical
+  `ValueTableRow`, so shared row semantics, wrapping, and separator geometry apply in production,
+  migration, and catalog surfaces. Because this metadata is safely recoverable, the
   native popover is dismissed by clicking outside or pressing Escape and has no redundant
   Close button. Every compatibility and recovery state is represented in `/ux-demo`.
   Recovery guidance distinguishes safe compatible skew, stale local source, old client,

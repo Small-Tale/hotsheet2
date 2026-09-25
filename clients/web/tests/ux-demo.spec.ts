@@ -427,9 +427,10 @@ test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)', async ({
       };
     }),
   ).toEqual({ dialogGap: '24px', introGap: '16px', introCopyTop: '4px', destinationGap: '8px', footerGap: '8px' });
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-hs1-dialog-wide.png' });
+  await page.screenshot({ path: '/private/tmp/hs2-1yabz8-hs1-dialog-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-hs1-dialog-narrow.png' });
+  await expect(dialog.locator('.kui-value-table__row')).toHaveCount(4);
+  await page.screenshot({ path: '/private/tmp/hs2-1yabz8-hs1-dialog-narrow.png' });
 });
 
 test('represents the shared repository-status composition in the UX catalog', async ({ page }) => {
@@ -659,6 +660,14 @@ test('represents every server-build details state with shared dialog geometry', 
   await expect(header).toBeVisible();
   await expect(header).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
+  const rows = dialog.locator('.kui-value-table__row');
+  await expect(rows).toHaveCount(6);
+  expect(
+    await rows.nth(1).evaluate((node) => {
+      const before = getComputedStyle(node, '::before');
+      return { border: before.borderTopWidth, left: before.left, right: before.right };
+    }),
+  ).toEqual({ border: '1px', left: '8px', right: '8px' });
   await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0);
   await page.locator('[data-action="toggle-settings"]').click();
   const scenario = page
@@ -689,10 +698,10 @@ test('represents every server-build details state with shared dialog geometry', 
   await settingsTrigger.evaluate((node) => {
     (node as HTMLElement).hidden = true;
   });
-  await dialog.screenshot({ path: '/private/tmp/hs2-0fe73q-connection-details-wide-after.png' });
+  await dialog.screenshot({ path: '/private/tmp/hs2-1yabz8-connection-details-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(header).toHaveCSS('border-bottom-width', '0px');
-  await dialog.screenshot({ path: '/private/tmp/hs2-0fe73q-connection-details-narrow-after.png' });
+  await dialog.screenshot({ path: '/private/tmp/hs2-1yabz8-connection-details-narrow.png' });
 });
 
 test('represents the production terminal dashboard and its shared context menu in the UX catalog', async ({ page }) => {
@@ -1074,6 +1083,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(dialog).toHaveJSProperty('open', false);
   await show.click();
   await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog.locator('.kui-value-table__row')).toHaveCount(4);
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',

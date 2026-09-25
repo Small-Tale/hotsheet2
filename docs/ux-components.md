@@ -145,8 +145,9 @@ Supporting components:
   overlay emits the same Toolbar/ToolbarText anatomy and imports its canonical styles.
   `ValueTable` supplies the bordered metadata surface while `ValueTableRow` supplies aligned
   label/value geometry and inset separators; consumers do not hand-author raw definition-list
-  rows. These compositions use APIs available in beta.24 and do not depend on the removed
-  upstream heading wrapper (HS2-AGDJ6E, HS2-72Z7CB).
+  rows; the connection-details, HS1 migration, and catalog compositions all use that row
+  contract directly (HS2-1YABZ8). These compositions use APIs available in beta.24 and do
+  not depend on the removed upstream heading wrapper (HS2-AGDJ6E, HS2-72Z7CB).
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.

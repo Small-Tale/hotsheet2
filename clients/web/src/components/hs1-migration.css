@@ -17,6 +17,9 @@
   margin: var(--kui-space-2xs) 0 0;
   color: var(--wa-color-neutral-on-quiet);
 }
+.hs1-migration-dialog .kui-value-table__row code {
+  font-size: var(--wa-font-size-xs);
+}
 .hs1-migration-dialog__destination {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

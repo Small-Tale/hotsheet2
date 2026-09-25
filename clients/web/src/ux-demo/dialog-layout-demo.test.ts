@@ -5,6 +5,7 @@ import {
   Hs1MigrationDialogDemo,
   hs1MigrationDialogDemoOpen,
   openHs1MigrationDialogDemo,
+  ValueTableDemo,
 } from './dialog-layout-demo';
 
 describe('dialog UX demos', () => {
@@ -20,5 +21,9 @@ describe('dialog UX demos', () => {
     expect(String(Hs1MigrationDialogDemo())).toContain('data-action="open-hs1-migration-demo"');
     openHs1MigrationDialogDemo();
     expect(hs1MigrationDialogDemoOpen.value).toBe(true);
+  });
+
+  it('renders catalog metadata through canonical value-table rows', () => {
+    expect(String(ValueTableDemo()).match(/class="kui-value-table__row"/g)).toHaveLength(3);
   });
 });

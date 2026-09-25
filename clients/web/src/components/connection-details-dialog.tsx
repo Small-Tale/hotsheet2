@@ -6,7 +6,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { ValueTable } from '@kerfjs/ui/value-table';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { ServerCog } from 'lucide';
 
 import type { CompatibilityAssessment, CompatibilityRange } from '../compatibility';
@@ -82,38 +82,21 @@ export function ConnectionDetailsDialog({
       </div>
       <div class="connection-details-dialog__body">
         <ValueTable className="connection-details-dialog__metadata" label="Client and server build metadata">
-          <div>
-            <dt>Running server version</dt>
-            <dd>{valueOrUnavailable(server?.application_version)}</dd>
-          </div>
-          <div>
-            <dt>Running server build</dt>
-            <dd>
-              <code>{valueOrUnavailable(server?.build_revision)}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Current server source</dt>
-            <dd>
-              <code>{valueOrUnavailable(server?.source_revision)}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Client build</dt>
-            <dd>
-              <code>{valueOrUnavailable(assessment.clientRevision)}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Protocol ranges</dt>
-            <dd>
-              Client {range(assessment.clientProtocol)} · Server {range(server?.protocol)}
-            </dd>
-          </div>
-          <div>
-            <dt>Server started</dt>
-            <dd>{startedLabel}</dd>
-          </div>
+          <ValueTableRow label="Running server version" value={valueOrUnavailable(server?.application_version)} />
+          <ValueTableRow
+            label="Running server build"
+            value={<code>{valueOrUnavailable(server?.build_revision)}</code>}
+          />
+          <ValueTableRow
+            label="Current server source"
+            value={<code>{valueOrUnavailable(server?.source_revision)}</code>}
+          />
+          <ValueTableRow label="Client build" value={<code>{valueOrUnavailable(assessment.clientRevision)}</code>} />
+          <ValueTableRow
+            label="Protocol ranges"
+            value={`Client ${range(assessment.clientProtocol)} · Server ${range(server?.protocol)}`}
+          />
+          <ValueTableRow label="Server started" value={startedLabel} />
         </ValueTable>
         <section>
           <h3>What to do</h3>

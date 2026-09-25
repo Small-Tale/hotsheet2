@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { ValueTable } from '@kerfjs/ui/value-table';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { describe, expect, it } from 'vitest';
 
 import { ConnectionDetailsDialog } from './connection-details-dialog';
@@ -31,10 +31,11 @@ describe('dialog layout primitives', () => {
     expect(markup).toContain('app-heading__icon');
     expect(markup).not.toContain('role="heading"');
     const table = String(
-      ValueTable({ label: 'Build metadata', children: '<div><dt>Version</dt><dd>1</dd></div>' as never }),
+      ValueTable({ label: 'Build metadata', children: ValueTableRow({ label: 'Version', value: '1' }) }),
     );
     expect(table).toContain('data-component="value-table"');
     expect(table).toContain('aria-label="Build metadata"');
+    expect(table).toContain('class="kui-value-table__row"');
     const css = readFileSync(resolve(import.meta.dirname, 'heading.css'), 'utf8');
     expect(css).not.toContain('border-bottom');
     expect(css).not.toContain('.kui-toolbar {');

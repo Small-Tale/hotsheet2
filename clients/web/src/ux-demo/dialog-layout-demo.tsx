@@ -5,7 +5,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { ValueTable } from '@kerfjs/ui/value-table';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { signal } from 'kerfjs';
 import { AppWindow, ServerCog } from 'lucide';
 
@@ -50,20 +50,9 @@ export function ValueTableDemo() {
       </div>
       <div class="dialog-layout-demo__body">
         <ValueTable label="Example metadata">
-          <div>
-            <dt>Version</dt>
-            <dd>0.1.0</dd>
-          </div>
-          <div>
-            <dt>Build</dt>
-            <dd>
-              <code>source-sha256:example</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Protocol</dt>
-            <dd>1–1</dd>
-          </div>
+          <ValueTableRow label="Version" value="0.1.0" />
+          <ValueTableRow label="Build" value={<code>source-sha256:example</code>} />
+          <ValueTableRow label="Protocol" value="1–1" />
         </ValueTable>
       </div>
     </section>

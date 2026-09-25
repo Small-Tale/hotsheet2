@@ -39,6 +39,7 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).toContain('class="dialog-surface connection-details-dialog"');
     expect(markup).toContain('data-component="heading"');
     expect(markup).toContain('data-component="value-table"');
+    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(6);
     expect(markup).not.toContain('>Close</button>');
     expect(markup).not.toContain('connection-details-dialog__footer');
     expect(connectionRecoveryGuidance(stale)).toContain('cargo build -p hotsheet-server');
@@ -48,7 +49,7 @@ describe('ConnectionDetailsDialog', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/__body \{[^}]*gap: var\(--kui-space-l\);[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatch(
-      /__metadata > div \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
+      /__metadata > \.kui-value-table__row \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
     );
   });
 

@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
-import { ValueTable } from '@kerfjs/ui/value-table';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
 import { migrationCounter, type MigrationJob, migrationPercent, migrationPhaseLabel } from '../migration-progress';
@@ -45,32 +45,10 @@ export function Hs1MigrationDialog({
           </div>
         </div>
         <ValueTable label="Detected Hot Sheet 1 source">
-          <div>
-            <dt>Project</dt>
-            <dd>
-              <code>{projectRoot}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Data folder</dt>
-            <dd>
-              <code>{sourcePath}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Database</dt>
-            <dd>
-              <code>{databasePath}</code>
-            </dd>
-          </div>
-          {postgresVersion ? (
-            <div>
-              <dt>PostgreSQL</dt>
-              <dd>{postgresVersion}</dd>
-            </div>
-          ) : (
-            <></>
-          )}
+          <ValueTableRow label="Project" value={<code>{projectRoot}</code>} />
+          <ValueTableRow label="Data folder" value={<code>{sourcePath}</code>} />
+          <ValueTableRow label="Database" value={<code>{databasePath}</code>} />
+          {postgresVersion ? <ValueTableRow label="PostgreSQL" value={postgresVersion} /> : <></>}
         </ValueTable>
         <div class="hs1-migration-dialog__destination">
           <wa-input
