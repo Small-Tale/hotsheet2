@@ -503,19 +503,32 @@ export class TurnStreamReplayGuard {
   }
 }
 export const encodeAttachmentFilename = (filename: string) => encodeURIComponent(filename);
+export interface ApiOptions {
+  /**
+   * Whether this client's requests drive the global server-busy indicator (default true). Silent
+   * background revalidation of an already-painted project (a warm project tab switch or a background
+   * tab refresh) passes false so it never flashes the busy bars or loading-activity label (HS2-AZZ9TF).
+   */
+  trackBusy?: boolean;
+}
 export class Api {
+  private readonly trackBusy: boolean;
   constructor(
     private origin = '',
     private secret = '',
-  ) {}
+    options: ApiOptions = {},
+  ) {
+    this.trackBusy = options.trackBusy ?? true;
+  }
   // `trackBusy` defaults to true so ordinary loads and mutations drive the server-busy indicator.
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
-  private async request<T>(path: string, init: RequestInit = {}, trackBusy = true): Promise<T> {
+  private async request<T>(path: string, init: RequestInit = {}, trackRequest = true): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set('X-Hotsheet-Secret', this.secret);
     if (!(init.body instanceof FormData) && !headers.has('Content-Type'))
       headers.set('Content-Type', 'application/json');
+    const trackBusy = trackRequest && this.trackBusy;
     if (trackBusy) beginServerRequest(describeServerRequest(init.method ?? 'GET', path));
     try {
       const response = await fetch(`${this.origin}${path}`, { ...init, headers });

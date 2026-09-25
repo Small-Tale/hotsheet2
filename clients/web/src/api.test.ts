@@ -1,6 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Api, encodeAttachmentFilename, turnStreamEvents, TurnStreamReplayGuard } from './api';
+import { serverInFlightCount } from './server-busy';
+
+describe('server-busy tracking option (HS2-AZZ9TF)', () => {
+  it('tracks ordinary requests but leaves quiet background clients off the busy indicator', async () => {
+    let release: (() => void) | undefined;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = () => {
+            resolve(new Response('[]', { status: 200 }));
+          };
+        }),
+    );
+    try {
+      const loud = new Api('/api').aiTools();
+      expect(serverInFlightCount()).toBe(1);
+      release!();
+      await loud;
+      expect(serverInFlightCount()).toBe(0);
+      const quiet = new Api('/api', '', { trackBusy: false }).terminals();
+      expect(fetchMock).toHaveBeenLastCalledWith('/api/terminals', expect.anything());
+      expect(serverInFlightCount()).toBe(0);
+      release!();
+      await expect(quiet).resolves.toEqual([]);
+      expect(serverInFlightCount()).toBe(0);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
 
 describe('attachment filename transport', () => {
   it('encodes macOS screenshot names as an ASCII-safe header value', () => {

@@ -457,10 +457,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
-  async function refreshProviderConnections(current = dependencies.project()) {
+  async function refreshProviderConnections(current = dependencies.project(), quiet = false) {
     if (!current) return;
     try {
-      const connections = await new Api(current.apiPath).connections();
+      const connections = await new Api(current.apiPath, '', { trackBusy: !quiet }).connections();
       if (dependencies.project()?.id !== current.id) return;
       providerConnections.value = connections;
       providerSettingsError.value = '';

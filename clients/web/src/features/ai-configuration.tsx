@@ -55,6 +55,12 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     manualModelDialog = signal<ManualModelDialogState | undefined>(undefined);
   let manualModelDialogShown = false;
   let aiConfigurationProjectId = '';
+  // Per-project AI tool inventory + defaults so a warm project tab switch restores them without a
+  // blocking refetch (HS2-AZZ9TF). The runtime drops entries when a project closes or is LRU-evicted.
+  const aiConfigurationByProject = new Map<string, { tools: AiToolDescriptor[]; defaults: AiToolDefaults }>();
+  // Bumped by forgetAiConfiguration so a request that was in flight when its project closed or was
+  // evicted cannot re-populate the cache afterwards.
+  const aiConfigurationEpochs = new Map<string, number>();
 
   function aiToolLabel(tool: string) {
     return (
@@ -312,10 +318,15 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
   async function refreshAiConfiguration(current = project(), refresh = false) {
     if (!current) return;
     aiSettingsLoading.value = true;
+    const epoch = aiConfigurationEpochs.get(current.id) ?? 0;
     try {
       const client = new Api(current.apiPath),
         tools = await client.aiTools(refresh),
         defaults = await client.aiSettings();
+      // A late answer for a project the user already left is still that project's configuration:
+      // keep it warm for the next switch back, but never apply it to the active project.
+      if ((aiConfigurationEpochs.get(current.id) ?? 0) === epoch)
+        aiConfigurationByProject.set(current.id, { tools, defaults });
       if (project()?.id !== current.id) return;
       aiTools.value = tools;
       aiDefaults.value = defaults;
@@ -330,6 +341,28 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     }
   }
 
+  /**
+   * Apply a project's cached AI tool inventory and defaults, if any, without a network request.
+   * Returns whether the project's configuration is now current (HS2-AZZ9TF).
+   */
+  function restoreAiConfiguration(current: Project): boolean {
+    if (aiConfigurationProjectId === current.id) return true;
+    const cached = aiConfigurationByProject.get(current.id);
+    if (!cached) return false;
+    aiTools.value = cached.tools;
+    aiDefaults.value = cached.defaults;
+    aiConfigurationProjectId = current.id;
+    aiSettingsMessage.value = '';
+    aiSettingsLoading.value = false;
+    return true;
+  }
+
+  /** Drop a project's cached AI configuration (closed or evicted from the warm-project LRU). */
+  function forgetAiConfiguration(projectId: string) {
+    aiConfigurationByProject.delete(projectId);
+    aiConfigurationEpochs.set(projectId, (aiConfigurationEpochs.get(projectId) ?? 0) + 1);
+  }
+
   async function saveAiDefaults(value: AiToolDefaults) {
     const current = project();
     if (!current) return;
@@ -337,6 +370,8 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     aiSettingsMessage.value = 'Saving…';
     try {
       const saved = await new Api(current.apiPath).saveAiSettings(value);
+      const cachedConfiguration = aiConfigurationByProject.get(current.id);
+      if (cachedConfiguration) aiConfigurationByProject.set(current.id, { ...cachedConfiguration, defaults: saved });
       if (project()?.id !== current.id) return;
       aiDefaults.value = saved;
       aiSettingsMessage.value = 'Saved locally.';
@@ -374,6 +409,8 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     restoreCommandEditorAfterManualModel,
     aiLaunchConfiguration,
     refreshAiConfiguration,
+    restoreAiConfiguration,
+    forgetAiConfiguration,
     saveAiDefaults,
     conversationAiSelection,
     get manualModelDialogShown() {

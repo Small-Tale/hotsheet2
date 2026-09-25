@@ -334,7 +334,8 @@ and identity-less legacy entries remain conservatively blocking.
   is apparent without hunting for a spinner (HS2-MW1V3M). It is a `position:fixed` overlay that
   allocates no layout space, is inert to the pointer and assistive technology, and is driven by
   the count of in-flight authenticated server requests — **idle long-poll event streams are
-  excluded** so a quiet app reads as idle, and a short linger after the last request settles
+  excluded** so a quiet app reads as idle, as is silent background revalidation of an
+  already-painted warm project (see _Warm project tabs_, HS2-AZZ9TF), and a short linger after the last request settles
   keeps rapid bursts from flickering. Each bar is 3px wide with a 2px gap and scales from 1px to
   4px on a staggered cycle; the bar count fills the viewport width and is recomputed only on an
   actual (debounced) window resize. Animation honors `prefers-reduced-motion`.
@@ -870,6 +871,32 @@ and identity-less legacy entries remain conservatively blocking.
   project's counts, completion history, view, or repository state. A first visit with no cache
   uses an empty target projection during the normal loading state. Closing a project evicts its
   rows, page cursor, and exact count summary so reopening cannot flash a stale snapshot.
+
+  **Warm project tabs (HS2-AZZ9TF).** Recently used projects stay _warm_ so frequent tab
+  switching is instant. A bounded least-recently-used set (default 8 projects, including the
+  active one; `clients/web/src/project-warm-cache.ts`) keeps each warm project's ticket rows,
+  page cursor, repository/corrupt/command projection, and AI tool inventory + defaults resident.
+  Switching to a warm project:
+
+  - paints entirely from memory, with no ticket loading placeholder;
+  - restores its cached AI tool inventory rather than refetching it (only the open Settings → AI
+    page forces an authoritative reload);
+  - skips the all-project terminal dashboard reload when that project's terminal group is
+    already loaded (terminal create/close still refresh it explicitly);
+  - revalidates tickets, commands, shared views, and the single-project settings projection
+    _silently_: those requests do not drive the global busy bars or the optional
+    loading-activity label, so a warm switch never announces "Loading AI tools", "Preparing
+    terminals", or similar.
+
+  Background tab refreshes driven by each project's live change stream are silent too, and load
+  the collection of the project's remembered view (not always the queue), so the cached rows are
+  the ones it will show. Startup stays active-only (see the remembered-project startup rules
+  above): a project becomes warm on its first visit, or when a live-refreshed background
+  snapshot fits spare warm capacity; that first visit is an ordinary cold load. Activating a
+  project beyond the bound evicts the least recently used warm project's resident projection
+  (its tab counts and live stream stay); that project's next activation is a normal cold load
+  with the loading state. Leaving a cold project before its first load finishes does not cache
+  its empty placeholder as a warm projection.
 
   Drive is a production control, not demo-only state. Its split-button label reflects the
   machine-local default provider discovered from drivable plugin manifests. The arrow opens

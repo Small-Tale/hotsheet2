@@ -216,6 +216,7 @@ import {
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import { appendUniqueTicketRows, loadProjectTicketRefresh, type ProjectTicketRefresh } from '../project-ticket-refresh';
+import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
@@ -343,6 +344,9 @@ export async function startHotSheetWebClient() {
     searchMatchKeys?: Set<string>;
   }
   const projectProjectionById = signal<Record<string, CachedProjectProjection>>({});
+  // Bounded LRU of projects whose loaded projection stays resident so tab switches paint instantly and
+  // revalidate silently; evicted projects fall back to a cold (loading) activation (HS2-AZZ9TF).
+  const warmProjects = createProjectWarmCache();
   const projectCloseDialog = signal<ProjectCloseDialogState | undefined>(undefined);
   const ticketLinkChoice = signal<TicketLinkChoice | undefined>(undefined);
   let pendingProjectCloseIds: string[] = [];
@@ -1391,7 +1395,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
+  function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id);warmProjects.forget(id);aiConfigurationController.forgetAiConfiguration(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
   function projectCloseResources(projectId: string): ProjectCloseResource[] {
     const terminals = (terminalGroups.value.find((group) => group.projectId === projectId)?.sessions ?? [])
       .filter((session) => session.alive)
@@ -1706,6 +1710,9 @@ export async function startHotSheetWebClient() {
   function cacheActiveProjectProjection() {
     const id = selectedProjectId.value;
     if (!id || !projects.value.some((item) => item.id === id)) return;
+    // Leaving a cold project before its first load finished must not cache its empty placeholder as
+    // a warm projection: the next activation would paint "No tickets" instead of loading (HS2-AZZ9TF).
+    if (loading.value && !Object.hasOwn(ticketRowsByProject.value, id)) return;
     ticketRowsByProject.value = { ...ticketRowsByProject.value, [id]: tickets.value };
     ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [id]: ticketNextCursor.value };
     projectProjectionById.value = {
@@ -1722,7 +1729,25 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function activateOpenProject(next:string):{project:Project;generation:number;cached:boolean}|undefined{const nextProject=projects.value.find(item=>item.id===next);if(!nextProject)return;projectTabRefresh.activate(next);const finishTiming=beginInteractionTiming('project-change',{project:next});persistProjectSessionNow();cacheActiveProjectProjection();resetTicketComposer(false);resetProgressiveTicketRendering();resetBoardColumnPages();const rows=ticketRowsByProject.value[next],cached=rows!==undefined,projection=projectProjectionById.value[next],stored=loadProjectWorkspaceSession(localStorage,next),generation=++projectActivationGeneration,live=new Set(rows?.map(ticket=>ticket.slug)??[]),selection=stored?.selectedTicketSlugs.filter(slug=>live.has(slug))??[],drawerActivation=terminalDrawerActivation(localStorage,next);batch(()=>{selectedProjectRestoreRoot.value='';selectedProjectId.value=drawerActivation.projectId;terminalDrawerSelected.value=drawerActivation.selectedId;tickets.value=rows??[];ticketNextCursor.value=ticketCursorsByProject.value[next];ticketCollectionState.value=undefined;corruptTickets.value=projection?.corruptTickets??[];repository.value=projection?.repository??null;repositoryError.value=projection?.repositoryError??'';commandDefinitions.value=projection?.commandDefinitions??[];commandRuns.value=projection?.commandRuns??[];commandSettingsEditingId.value=undefined;selectedView.value=stored?.selectedView==='errors'&&!projection?.corruptTickets.length?'all':stored?.selectedView??'all';searchOpen.value=stored?.searchOpen??false;searchQuery.value=stored?.searchQuery??'';searchMatchKeys.value=projection?.searchMatchKeys;selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=selection;ticketSelectionAnchor=selection[0];error.value='';loading.value=!cached});scheduleClaimLeaseExpiry();saveActiveProjectRoot(localStorage,nextProject.root);finishTiming();return{project:nextProject,generation,cached}}
+  function activateOpenProject(next:string):{project:Project;generation:number;cached:boolean}|undefined{const nextProject=projects.value.find(item=>item.id===next);if(!nextProject)return;projectTabRefresh.activate(next);const finishTiming=beginInteractionTiming('project-change',{project:next});persistProjectSessionNow();cacheActiveProjectProjection();resetTicketComposer(false);resetProgressiveTicketRendering();resetBoardColumnPages();const rows=ticketRowsByProject.value[next],cached=rows!==undefined,projection=projectProjectionById.value[next],stored=loadProjectWorkspaceSession(localStorage,next),generation=++projectActivationGeneration,live=new Set(rows?.map(ticket=>ticket.slug)??[]),selection=stored?.selectedTicketSlugs.filter(slug=>live.has(slug))??[],drawerActivation=terminalDrawerActivation(localStorage,next);batch(()=>{selectedProjectRestoreRoot.value='';selectedProjectId.value=drawerActivation.projectId;terminalDrawerSelected.value=drawerActivation.selectedId;tickets.value=rows??[];ticketNextCursor.value=ticketCursorsByProject.value[next];ticketCollectionState.value=undefined;corruptTickets.value=projection?.corruptTickets??[];repository.value=projection?.repository??null;repositoryError.value=projection?.repositoryError??'';commandDefinitions.value=projection?.commandDefinitions??[];commandRuns.value=projection?.commandRuns??[];commandSettingsEditingId.value=undefined;selectedView.value=stored?.selectedView==='errors'&&!projection?.corruptTickets.length?'all':stored?.selectedView??'all';searchOpen.value=stored?.searchOpen??false;searchQuery.value=stored?.searchQuery??'';searchMatchKeys.value=projection?.searchMatchKeys;selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=selection;ticketSelectionAnchor=selection[0];error.value='';loading.value=!cached});markProjectWarm(next);aiConfigurationController.restoreAiConfiguration(nextProject);scheduleClaimLeaseExpiry();saveActiveProjectRoot(localStorage,nextProject.root);finishTiming();return{project:nextProject,generation,cached}}
+  /** Mark a project most recently used and drop the resident projection of any LRU-evicted project. */
+  function markProjectWarm(id: string) {
+    const evicted = warmProjects.touch(id).filter((item) => item !== selectedProjectId.value);
+    if (!evicted.length) return;
+    const drop = new Set(evicted);
+    const keep = <Value,>(record: Record<string, Value>) =>
+      Object.fromEntries(Object.entries(record).filter(([key]) => !drop.has(key)));
+    batch(() => {
+      ticketRowsByProject.value = keep(ticketRowsByProject.value);
+      ticketCursorsByProject.value = keep(ticketCursorsByProject.value);
+      projectProjectionById.value = keep(projectProjectionById.value);
+    });
+    for (const item of evicted) aiConfigurationController.forgetAiConfiguration(item);
+  }
+  /** Whether the all-project terminal dashboard snapshot already holds this project's group. */
+  function terminalGroupLoaded(projectId: string) {
+    return terminalGroups.value.some((group) => group.projectId === projectId);
+  }
   async function refreshActivatedProject(
     activation: { project: Project; generation: number; cached: boolean },
     includeTerminals: boolean,
@@ -1734,27 +1759,38 @@ export async function startHotSheetWebClient() {
     }
     const firstActivation = projectsPendingActivation.has(current.id);
     if (firstActivation) presentOpenedProjectSetup(current);
+    // Settings projections are single-project signals, so they are always reloaded for the new project;
+    // outside the Settings view that reload is invisible background work and must not flash the busy UI.
     const category = settingsCategory(),
+      settingsQuiet = cached && viewMode.value !== 'settings',
       settingsRefresh =
         category === 'sources'
-          ? refreshProviderConnections(current)
+          ? refreshProviderConnections(current, settingsQuiet)
           : category === 'terminals'
-            ? refreshTerminalSettings(current)
+            ? refreshTerminalSettings(current, settingsQuiet)
             : category === 'lifecycle'
-              ? refreshTrashSettings(current)
+              ? refreshTrashSettings(current, settingsQuiet)
               : Promise.resolve(),
+      // A warm project restores its cached AI tool inventory at activation; only a cold project (or the
+      // open AI settings page, which wants an authoritative answer) loads it here (HS2-AZZ9TF).
       aiRefresh =
-        category === 'ai' || aiConfigurationController.aiConfigurationProjectId !== current.id
+        (category === 'ai' && viewMode.value === 'settings') ||
+        !aiConfigurationController.restoreAiConfiguration(current)
           ? refreshAiConfiguration(current)
-          : Promise.resolve();
+          : Promise.resolve(),
+      // A cached activation revalidates silently: the rows are already painted and kept current by the
+      // project's live change stream, so the switch must not show loading or the busy indicator.
+      quiet = cached;
     await Promise.all([
-      refreshProject({ showLoading: !cached }),
-      refreshCommands(current),
-      refreshCustomViews(current),
+      refreshProject({ showLoading: !cached, quiet }),
+      refreshCommands(current, quiet),
+      refreshCustomViews(current, quiet),
       settingsRefresh,
       aiRefresh,
-      ...(firstActivation ? [refreshDriveConnections(current, true)] : []),
-      ...(includeTerminals ? [refreshTerminalDashboard()] : []),
+      ...(firstActivation ? [refreshDriveConnections(current, true, quiet)] : []),
+      // The terminal dashboard snapshot spans every open project; switching tabs only needs a load when
+      // this project's group has never been loaded (terminal creation/close refresh it explicitly).
+      ...(includeTerminals && !terminalGroupLoaded(current.id) ? [refreshTerminalDashboard()] : []),
     ]);
     if (generation !== projectActivationGeneration || project()?.id !== current.id) return;
     await restoreProjectSession(current, generation);
@@ -2634,14 +2670,17 @@ export async function startHotSheetWebClient() {
     }
   }
 
-  async function refreshProject({ showLoading = true }: { showLoading?: boolean } = {}) {
+  async function refreshProject({
+    showLoading = true,
+    quiet = false,
+  }: { showLoading?: boolean; quiet?: boolean } = {}) {
     const current = project(),
       generation = ++projectRefreshGeneration;
     if (!current) return;
     if (showLoading) loading.value = true;
     const active = () => generation === projectRefreshGeneration && project()?.id === current.id;
     try {
-      const client = new Api(current.apiPath),
+      const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         query = sortedTicketQuery(ticketViewQuery(selectedView.value));
       const [index, repositoryResult] = await Promise.all([
         loadProjectTicketRefresh(client, current.id, query),
@@ -2654,6 +2693,7 @@ export async function startHotSheetWebClient() {
           })),
       ]);
       if (!active()) return;
+      markProjectWarm(current.id);
       const mergedTickets = index.tickets
           ? mergeRetainedCreatedRows(index.tickets, pendingCreatedTickets.retain(current.id, index.tickets))
           : undefined,
@@ -2903,9 +2943,18 @@ export async function startHotSheetWebClient() {
     refreshActive: async (target) => {
       if (project()?.id === target.id) await refreshProject({ showLoading: false });
     },
-    loadBackground: async (target) => loadProjectTicketRefresh(new Api(target.apiPath), target.id),
+    // Background tab refreshes are invisible work: they load the collection the project will show when
+    // reactivated (its remembered view) without driving the busy indicator (HS2-AZZ9TF).
+    loadBackground: async (target) =>
+      loadProjectTicketRefresh(
+        new Api(target.apiPath, '', { trackBusy: false }),
+        target.id,
+        sortedTicketQuery(ticketViewQuery(loadProjectWorkspaceSession(localStorage, target.id)?.selectedView ?? 'all')),
+      ),
     publishBackground: (target, snapshot) => {
-      if (snapshot.tickets)
+      // Rows stay resident only for warm projects (spare LRU capacity admits a live-refreshed background one); counts
+      // for tab badges are always kept.
+      if (snapshot.tickets && warmProjects.admit(target.id)) {
         ticketRowsByProject.value = {
           ...ticketRowsByProject.value,
           [target.id]: mergeRetainedCreatedRows(
@@ -2913,6 +2962,8 @@ export async function startHotSheetWebClient() {
             pendingCreatedTickets.retain(target.id, snapshot.tickets),
           ),
         };
+        ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [target.id]: snapshot.nextCursor };
+      }
       if (snapshot.ticketCounts) {
         ticketCountsByProject.value = { ...ticketCountsByProject.value, [target.id]: snapshot.ticketCounts };
         recordAuthoritativeTicketTrend(target.id, snapshot.ticketCounts);
@@ -2931,11 +2982,11 @@ export async function startHotSheetWebClient() {
   async function queueCorruptTicketRepair(key:string){const current=project(),ticket=corruptTickets.value.find(item=>corruptTicketKey(item)===key);if(!current||!ticket||ticket.error_code==='upgrade_required'||corruptRecovery.value[key]?.pending)return;setCorruptRecovery(key,{pending:'repair'});try{const created=await new Api(current.apiPath).createCorruptTicketRepair(current.id,ticket.path);setCorruptRecovery(key,{});showToast(`Queued ${created.slug} for AI repair.`);if(project()?.id===current.id)await refreshProject({showLoading:false})}catch(reason){setCorruptRecovery(key,{message:reason instanceof Error?reason.message:String(reason),failed:true})}}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function refreshCommands(current=project()){const generation=++commandRefreshGeneration;if(!current)return;const active=()=>generation===commandRefreshGeneration&&project()?.id===current.id;try{const client=new Api(current.apiPath),previous=JSON.stringify(commandDefinitions.value,null,2),[definitions,runs]=await Promise.all([client.commands(),client.commandRuns()]);if(!active())return;commandDefinitions.value=definitions;commandRuns.value=runs;const projection=projectProjectionById.value[current.id];projectProjectionById.value={...projectProjectionById.value,[current.id]:{corruptTickets:projection?.corruptTickets??corruptTickets.value,repository:projection?.repository??repository.value,repositoryError:projection?.repositoryError??repositoryError.value,commandDefinitions:definitions,commandRuns:runs}};const draft=commandSettingsDraftsByProject.value[current.id];if(viewMode.value!=='settings'||draft===undefined||draft===previous)setCommandSettingsDraft(current.id,JSON.stringify(definitions,null,2));setCommandSettingsMessage(current.id,'')}catch(reason){if(active())setCommandSettingsMessage(current.id,reason instanceof Error?reason.message:String(reason))}}
-  async function refreshCustomViews(current = project()) {
+  async function refreshCommands(current=project(),quiet=false){const generation=++commandRefreshGeneration;if(!current)return;const active=()=>generation===commandRefreshGeneration&&project()?.id===current.id;try{const client=new Api(current.apiPath,'',{trackBusy:!quiet}),previous=JSON.stringify(commandDefinitions.value,null,2),[definitions,runs]=await Promise.all([client.commands(),client.commandRuns()]);if(!active())return;commandDefinitions.value=definitions;commandRuns.value=runs;const projection=projectProjectionById.value[current.id];projectProjectionById.value={...projectProjectionById.value,[current.id]:{corruptTickets:projection?.corruptTickets??corruptTickets.value,repository:projection?.repository??repository.value,repositoryError:projection?.repositoryError??repositoryError.value,commandDefinitions:definitions,commandRuns:runs}};const draft=commandSettingsDraftsByProject.value[current.id];if(viewMode.value!=='settings'||draft===undefined||draft===previous)setCommandSettingsDraft(current.id,JSON.stringify(definitions,null,2));setCommandSettingsMessage(current.id,'')}catch(reason){if(active())setCommandSettingsMessage(current.id,reason instanceof Error?reason.message:String(reason))}}
+  async function refreshCustomViews(current = project(), quiet = false) {
     if (!current) return;
     try {
-      const views = await new Api(current.apiPath).customViews();
+      const views = await new Api(current.apiPath, '', { trackBusy: !quiet }).customViews();
       if (!projects.value.some((item) => item.id === current.id)) return;
       customViewsByProject.value = { ...customViewsByProject.value, [current.id]: views };
       if (project()?.id !== current.id) return;
@@ -2950,7 +3001,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function refreshDriveConnections(current=project(),restoreDrawerTabs=false){if(!current)return;if(project()?.id===current.id&&aiConfigurationController.aiConfigurationProjectId!==current.id)void refreshAiConfiguration(current);try{const client=new Api(current.apiPath),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
+  async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
   function replaceConversationStates(states: Record<string, ConversationState>) {
     conversationStates.value = states;
     try {
@@ -3080,10 +3131,10 @@ export async function startHotSheetWebClient() {
       }));
     }
   }
-  async function refreshTerminalSettings(current = project()) {
+  async function refreshTerminalSettings(current = project(), quiet = false) {
     if (!current) return;
     try {
-      const value = await new Api(current.apiPath).terminalSettings();
+      const value = await new Api(current.apiPath, '', { trackBusy: !quiet }).terminalSettings();
       if (project()?.id !== current.id) return;
       inheritGlobalShellHistory.value = value.inherit_global_shell_history;
       terminalSettingsMessage.value = '';
@@ -3092,11 +3143,11 @@ export async function startHotSheetWebClient() {
         terminalSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
-  async function refreshTrashSettings(current = project()) {
+  async function refreshTrashSettings(current = project(), quiet = false) {
     if (!current) return;
     trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [current.id]: 'Loading…' };
     try {
-      const value = await new Api(current.apiPath).trashSettings(current.id);
+      const value = await new Api(current.apiPath, '', { trackBusy: !quiet }).trashSettings(current.id);
       if (project()?.id !== current.id) return;
       trashCleanupDaysByProject.value = { ...trashCleanupDaysByProject.value, [current.id]: value.trash_cleanup_days };
       trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [current.id]: '' };

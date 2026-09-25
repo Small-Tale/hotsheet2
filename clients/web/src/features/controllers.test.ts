@@ -348,6 +348,77 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(state.ai.aiConfigurationProjectId).toBe('b');
   });
 
+  it('restores cached per-project AI configuration on A→B→A without refetching (HS2-AZZ9TF)', async () => {
+    const state = chatOwners();
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      const owner = url.includes('/api/b/') ? 'b' : 'a';
+      if (url.includes('ai-tools')) return json([{ id: `${owner}-tool`, display_name: `${owner} tool`, models: [] }]);
+      return json({ tool: `${owner}-tool` });
+    });
+    const activate = (id: string) => {
+      state.active.value = project(id);
+      state.selectedProjectId.value = id;
+    };
+    activate('a');
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(false);
+    await state.ai.refreshAiConfiguration();
+    activate('b');
+    expect(state.ai.restoreAiConfiguration(project('b'))).toBe(false);
+    await state.ai.refreshAiConfiguration();
+    const calls = fetchMock.mock.calls.length;
+
+    activate('a');
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(true);
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(state.ai.aiToolOptions()).toEqual([{ id: 'a-tool', label: 'a tool' }]);
+    expect(state.ai.aiConfigurationProjectId).toBe('a');
+    // Restoring the already-current project is a no-op that still reports current.
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(true);
+    activate('b');
+    expect(state.ai.restoreAiConfiguration(project('b'))).toBe(true);
+    expect(state.ai.aiDefaults.value.tool).toBe('b-tool');
+    expect(fetchMock.mock.calls.length).toBe(calls);
+
+    // Eviction forgets the cache: the next activation must load again.
+    state.ai.forgetAiConfiguration('a');
+    activate('a');
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(false);
+    await state.ai.refreshAiConfiguration();
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it('keeps a late answer warm for its own project but drops it after the project is forgotten', async () => {
+    const state = chatOwners(),
+      lateA = deferred<Response>(),
+      lateC = deferred<Response>();
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      if (url === '/api/a/ai-tools') return lateA.promise;
+      if (url === '/api/c/ai-tools') return lateC.promise;
+      const owner = url.match(/\/api\/(\w)\//)?.[1] ?? 'x';
+      if (url.includes('ai-tools')) return json([{ id: `${owner}-tool`, display_name: `${owner} tool`, models: [] }]);
+      return json({ tool: `${owner}-tool` });
+    });
+    const first = state.ai.refreshAiConfiguration(project('a'));
+    const third = state.ai.refreshAiConfiguration(project('c'));
+    state.active.value = project('b');
+    state.selectedProjectId.value = 'b';
+    await state.ai.refreshAiConfiguration();
+    lateA.resolve(json([{ id: 'a-tool', display_name: 'a tool', models: [] }]));
+    await first;
+    state.ai.forgetAiConfiguration('c');
+    lateC.resolve(json([{ id: 'c-tool', display_name: 'c tool', models: [] }]));
+    await third;
+    expect(state.ai.aiDefaults.value.tool).toBe('b-tool');
+    state.active.value = project('a');
+    state.selectedProjectId.value = 'a';
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(true);
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(state.ai.restoreAiConfiguration(project('c'))).toBe(false);
+  });
+
   it('selects ranges, cancels a pending export destination, then opens a fresh replacement conversation', async () => {
     const state = chatOwners(),
       { archive } = state;

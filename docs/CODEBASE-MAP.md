@@ -90,6 +90,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
+    src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
     src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics
