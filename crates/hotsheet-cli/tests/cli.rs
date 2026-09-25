@@ -1418,6 +1418,22 @@ fn init_new_ls_show_edit_close_flow() {
         .success()
         .stdout(predicate::str::contains("close_reason: completed"))
         .stdout(predicate::str::contains("closed_at:"));
+
+    // HS2-N11T22: "works as designed" is a first-class close reason; unknown ones list it.
+    hs(p)
+        .args(["close", &slug, "--reason", "works_as_designed"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("close_reason: works_as_designed"));
+    hs(p)
+        .args(["close", &slug, "--reason", "working"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("works_as_designed"));
 }
 
 #[test]

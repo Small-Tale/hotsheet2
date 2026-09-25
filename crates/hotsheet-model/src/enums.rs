@@ -49,6 +49,8 @@ pub enum CloseReason {
     NotPlanned,
     Duplicate,
     Obsolete,
+    /// The reported behavior is intended; nothing needs to change (HS2-N11T22).
+    WorksAsDesigned,
 }
 
 /// The kind of a note (`docs/02` §2.6). `FeedbackDraft` is stored **locally**
@@ -106,6 +108,7 @@ mod tests {
             CloseReason::NotPlanned,
             CloseReason::Duplicate,
             CloseReason::Obsolete,
+            CloseReason::WorksAsDesigned,
         ] {
             let s = serde_json::to_string(&r).unwrap();
             assert_eq!(serde_json::from_str::<CloseReason>(&s).unwrap(), r);

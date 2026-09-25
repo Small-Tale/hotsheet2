@@ -2,6 +2,7 @@ import { browserRandomId } from './browser-id';
 import type { ServerCompatibility } from './compatibility';
 import { prioritiesToWire } from './priority-wire';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
+import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
 
 export type Capabilities = Record<
@@ -114,7 +115,7 @@ export interface Checkout {
   sources?: CheckoutSource[];
   default_source?: string;
 }
-export type TicketCloseReason = 'completed' | 'not_planned' | 'duplicate' | 'obsolete';
+export type { TicketCloseReason } from './ticket-close';
 export interface TicketRow {
   connection_id: string;
   native_id: string;

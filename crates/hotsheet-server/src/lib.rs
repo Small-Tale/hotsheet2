@@ -8325,7 +8325,7 @@ struct ListParams {
     text: Option<String>,
     up_next: Option<bool>,
     open: Option<bool>,
-    /// Filter by close reason (completed|not_planned|duplicate|obsolete).
+    /// Filter by close reason (completed|not_planned|duplicate|obsolete|works_as_designed).
     close_reason: Option<String>,
     /// `true` = only closed tickets; `false` = only tickets with no close reason.
     closed: Option<bool>,

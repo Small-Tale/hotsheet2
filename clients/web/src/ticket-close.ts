@@ -1,4 +1,4 @@
-export type TicketCloseReason = 'completed' | 'not_planned' | 'duplicate' | 'obsolete';
+export type TicketCloseReason = 'completed' | 'not_planned' | 'duplicate' | 'obsolete' | 'works_as_designed';
 
 export interface DuplicateTarget {
   id: string;
@@ -36,6 +36,7 @@ export const TICKET_CLOSE_REASON_CHOICES: ReadonlyArray<{ value: TicketCloseReas
   { value: 'not_planned', label: 'Not planned' },
   { value: 'duplicate', label: 'Duplicate' },
   { value: 'obsolete', label: 'Obsolete' },
+  { value: 'works_as_designed', label: 'Works as designed' },
 ];
 
 export function duplicateTargetKey(target: Pick<DuplicateTarget, 'projectId' | 'qualifiedId'>): string {

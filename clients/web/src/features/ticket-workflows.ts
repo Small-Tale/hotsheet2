@@ -46,6 +46,7 @@ import {
   duplicateTargetKey,
   parseDuplicateReference,
   resolveDuplicateReferenceTarget,
+  ticketCloseReasonLabel,
   validateTicketClose,
 } from '../ticket-close';
 import {
@@ -1336,7 +1337,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function submitTicketClose(){const state=ticketCloseDialog.value,current=projects.value.find(item=>item.id===state?.source.projectId);if(!state||!current||state.submitting)return;const validation=validateTicketClose(state.reason,state.source,state.selected);if(validation){ticketCloseDialog.value={...state,error:validation};return}ticketCloseDialog.value={...state,submitting:true,error:''};try{const result=await new Api(current.apiPath).closeCheckoutTicket(current.id,state.source.qualifiedId,state.reason,state.selected?duplicateReference(state.selected):undefined);if(project()?.id!==current.id)return;await refreshProject();presentTicket(result.ticket);closeTicketCloseDialog();showToast(state.reason==='duplicate'?`${state.source.slug} marked as a duplicate of ${state.selected!.slug}.`:`${state.source.slug} closed as ${state.reason.replace('_',' ')}.`)}catch(reason){const active=ticketCloseDialog.value;if(active)ticketCloseDialog.value={...active,submitting:false,error:reason instanceof Error?reason.message:String(reason)}}}
+  async function submitTicketClose(){const state=ticketCloseDialog.value,current=projects.value.find(item=>item.id===state?.source.projectId);if(!state||!current||state.submitting)return;const validation=validateTicketClose(state.reason,state.source,state.selected);if(validation){ticketCloseDialog.value={...state,error:validation};return}ticketCloseDialog.value={...state,submitting:true,error:''};try{const result=await new Api(current.apiPath).closeCheckoutTicket(current.id,state.source.qualifiedId,state.reason,state.selected?duplicateReference(state.selected):undefined);if(project()?.id!==current.id)return;await refreshProject();presentTicket(result.ticket);closeTicketCloseDialog();showToast(state.reason==='duplicate'?`${state.source.slug} marked as a duplicate of ${state.selected!.slug}.`:`${state.source.slug} closed as ${ticketCloseReasonLabel(state.reason)?.toLowerCase()??state.reason}.`)}catch(reason){const active=ticketCloseDialog.value;if(active)ticketCloseDialog.value={...active,submitting:false,error:reason instanceof Error?reason.message:String(reason)}}}
   async function openDuplicateTarget(id: string) {
     const reference = parseDuplicateReference(id);
     if (reference) {

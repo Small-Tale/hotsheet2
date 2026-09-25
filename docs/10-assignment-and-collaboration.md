@@ -134,6 +134,6 @@ continues to work without it.
 
 - The `assignees` / `review_requests` fields + shared/local tiering: [02](02-ticket-storage.md) §2.5, §2.11
 - **Close reasons** — the other collaboration-motivated field (why a shared ticket
-  was closed: completed / not_planned / duplicate): [02](02-ticket-storage.md) §2.6a
+  was closed: completed / not_planned / duplicate / obsolete / works_as_designed): [02](02-ticket-storage.md) §2.6a
 - Machine claim/lease: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7
 - Attention delivery via sync + push: [02](02-ticket-storage.md) §2.12, [08-distributed-and-remote.md](08-distributed-and-remote.md)

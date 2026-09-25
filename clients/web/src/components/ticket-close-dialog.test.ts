@@ -42,7 +42,7 @@ describe('TicketCloseDialog', () => {
         state: { source, reason: 'duplicate', query: 'canon', candidates: [source, target, sameSlug] },
       }),
     );
-    for (const reason of ['completed', 'not_planned', 'duplicate', 'obsolete'])
+    for (const reason of ['completed', 'not_planned', 'duplicate', 'obsolete', 'works_as_designed'])
       expect(markup).toContain(`value="${reason}"`);
     expect(markup).toContain('data-action="select-ticket-close-target" data-item-id="beta::git-beta%3Atarget"');
     expect(markup).not.toContain('data-item-id="alpha::git-alpha%3Asource"');

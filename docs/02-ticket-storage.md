@@ -254,7 +254,7 @@ completed_at: null
 verified_at: null
 # close outcome (set when the ticket is closed; see §2.6a)
 closed_at: null
-close_reason: null # completed | not_planned | duplicate | obsolete
+close_reason: null # completed | not_planned | duplicate | obsolete | works_as_designed
 duplicate_of: null # exact ticket reference; required when close_reason == duplicate
 # coordination (optional; omitted when unclaimed)
 claimed_by: worker-1
@@ -374,9 +374,14 @@ inline-append conflicts survive the merge driver in practice (they shouldn't).
 Three frontmatter fields record the **outcome** of a close, distinct from the
 workflow `status`:
 
-- **`close_reason`** — `completed | not_planned | duplicate | obsolete`
+- **`close_reason`** — `completed | not_planned | duplicate | obsolete | works_as_designed`
   (extensible). `completed` = the work was done; `not_planned` = deliberately won't
-  do it; `duplicate` = the same as another ticket; `obsolete` = no longer relevant.
+  do it; `duplicate` = the same as another ticket; `obsolete` = no longer relevant;
+  `works_as_designed` = the reported behavior is intended, so nothing changes (HS2-N11T22,
+  the conventional "As Designed" resolution). Providers without a matching native reason map
+  it to their closest equivalent (GitHub: `not_planned`). Adding a value is a pre-release
+  format change (docs/19 §19.1): a reader built before it treats such a ticket as invalid,
+  so restart servers and CLIs before closing tickets with it.
 - **`duplicate_of`** — an exact ticket reference, **required when**
   `close_reason == duplicate`. Legacy and headless same-store writes use the target's
   globally unique ULID. Cross-project/provider writes use

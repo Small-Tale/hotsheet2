@@ -67,8 +67,10 @@ describe('structured ticket close outcomes', () => {
 
   it('presents every persisted close reason in human language', () => {
     expect(
-      ['completed', 'not_planned', 'duplicate', 'obsolete'].map((value) => ticketCloseReasonLabel(value as never)),
-    ).toEqual(['Completed', 'Not planned', 'Duplicate', 'Obsolete']);
+      ['completed', 'not_planned', 'duplicate', 'obsolete', 'works_as_designed'].map((value) =>
+        ticketCloseReasonLabel(value as never),
+      ),
+    ).toEqual(['Completed', 'Not planned', 'Duplicate', 'Obsolete', 'Works as designed']);
   });
 
   it('resolves readable duplicate targets even when they are absent from loaded ticket pages', async () => {

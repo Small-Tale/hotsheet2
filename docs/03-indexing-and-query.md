@@ -100,7 +100,7 @@ CREATE TABLE tickets (
   priority      TEXT,                 -- highest|high|default|low|lowest
   status        TEXT,                 -- not_started|started|completed|verified|backlog|archive|deleted|moved
   moved_to_store TEXT,                -- set only on a 'moved' tombstone (§2.13) → redirect target
-  close_reason  TEXT,                 -- completed|not_planned|duplicate|obsolete (§2.6a); NULL = open
+  close_reason  TEXT,                 -- completed|not_planned|duplicate|obsolete|works_as_designed (§2.6a); NULL = open
   duplicate_of  TEXT,                 -- qualified project/source/native ref, or a legacy bare ULID
   closed_at     TEXT,
   up_next       INTEGER NOT NULL DEFAULT 0,

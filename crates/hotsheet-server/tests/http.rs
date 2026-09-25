@@ -5353,6 +5353,29 @@ async fn create_get_update_close_and_query() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(body_json(resp).await["close_reason"], "completed");
 
+    // HS2-N11T22: "works as designed" closes and filters like every other reason.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/close"),
+            Some(r#"{"reason":"works_as_designed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["close_reason"], "works_as_designed");
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/tickets?close_reason=works_as_designed",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await.as_array().unwrap().len(), 1);
+
     // query with filters
     let resp = app
         .clone()

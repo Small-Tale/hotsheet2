@@ -136,6 +136,16 @@ describe('TicketInspector', () => {
     expect(editing).toContain('data-edit-on-double-click="true"');
   });
 
+  it('names every non-duplicate close outcome in human language (HS2-N11T22)', () => {
+    const outcome = (closeReason: 'not_planned' | 'obsolete' | 'works_as_designed') =>
+      /data-close-reason="[^"]+"[^>]*>\s*<span>([^<]+)<\/span>/u.exec(
+        String(TicketInspector({ ...base, closeReason })),
+      )?.[1];
+    expect(outcome('not_planned')).toBe('Closed as not planned');
+    expect(outcome('obsolete')).toBe('Closed as obsolete');
+    expect(outcome('works_as_designed')).toBe('Closed as works as designed');
+  });
+
   it('shows a feedback-needed banner only when the ticket is waiting on the user', () => {
     expect(String(TicketInspector({ ...base }))).not.toContain('ticket-inspector__feedback');
     const waiting = String(TicketInspector({ ...base, feedbackNeeded: true }));

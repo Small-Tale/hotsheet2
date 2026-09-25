@@ -25,6 +25,7 @@ import {
 import type { CodeReview, DuplicateBacklink, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
+import { ticketCloseReasonLabel } from '../ticket-close';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
@@ -283,7 +284,7 @@ export function TicketInspector({
       )}
       {closeReason && closeReason !== 'duplicate' && (
         <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>
-          <span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span>
+          <span>Closed as {ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}</span>
         </div>
       )}
       {closeReason === 'duplicate' &&

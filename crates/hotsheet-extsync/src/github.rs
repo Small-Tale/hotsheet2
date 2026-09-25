@@ -790,12 +790,7 @@ impl TicketProvider for GitHubProvider {
         reason: CloseReason,
         _duplicate_of: Option<String>,
     ) -> Result<ApiTicket, ProviderError> {
-        let state_reason = match reason {
-            CloseReason::NotPlanned | CloseReason::Obsolete | CloseReason::Duplicate => {
-                "not_planned"
-            }
-            CloseReason::Completed => "completed",
-        };
+        let state_reason = github_state_reason(reason);
         let response = self.request(
             "PATCH",
             &self.endpoint(&format!("issues/{native_id}")),
@@ -1043,9 +1038,35 @@ fn strip_note_marker(body: String) -> String {
         .to_string()
 }
 
+/// GitHub records only `completed` or `not_planned`; every Hot Sheet reason that means
+/// "no change was made" (not planned, duplicate, obsolete, works as designed) closes as
+/// `not_planned`.
+fn github_state_reason(reason: CloseReason) -> &'static str {
+    match reason {
+        CloseReason::Completed => "completed",
+        CloseReason::NotPlanned
+        | CloseReason::Obsolete
+        | CloseReason::Duplicate
+        | CloseReason::WorksAsDesigned => "not_planned",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn close_reasons_map_to_githubs_two_state_reasons() {
+        assert_eq!(github_state_reason(CloseReason::Completed), "completed");
+        for reason in [
+            CloseReason::NotPlanned,
+            CloseReason::Duplicate,
+            CloseReason::Obsolete,
+            CloseReason::WorksAsDesigned,
+        ] {
+            assert_eq!(github_state_reason(reason), "not_planned", "{reason:?}");
+        }
+    }
     use std::collections::VecDeque;
     use std::sync::Mutex;
 

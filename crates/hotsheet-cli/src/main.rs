@@ -264,7 +264,7 @@ enum Cmd {
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
         id: String,
-        /// completed | not_planned | duplicate | obsolete.
+        /// completed | not_planned | duplicate | obsolete | works_as_designed.
         #[arg(long)]
         reason: String,
         /// The duplicate target (slug or ULID); required when reason=duplicate.
@@ -795,7 +795,7 @@ struct LsFilters {
     /// Only open tickets (not completed/verified/deleted/archived/moved).
     #[arg(long)]
     open: bool,
-    /// Only tickets closed with this reason (completed|not_planned|duplicate|obsolete).
+    /// Only tickets closed with this reason (completed|not_planned|duplicate|obsolete|works_as_designed).
     #[arg(long = "close-reason")]
     close_reason: Option<String>,
     /// Only tickets that have a close reason set.
@@ -3799,7 +3799,10 @@ fn parse_close_reason(s: &str) -> Result<CloseReason> {
         "not_planned" => CloseReason::NotPlanned,
         "duplicate" => CloseReason::Duplicate,
         "obsolete" => CloseReason::Obsolete,
-        other => bail!("invalid close reason '{other}' (completed|not_planned|duplicate|obsolete)"),
+        "works_as_designed" => CloseReason::WorksAsDesigned,
+        other => bail!(
+            "invalid close reason '{other}' (completed|not_planned|duplicate|obsolete|works_as_designed)"
+        ),
     })
 }
 

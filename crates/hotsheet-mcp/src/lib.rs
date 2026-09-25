@@ -96,7 +96,7 @@ fn tools_list() -> Value {
                 "text": str_prop("substring across title/details/notes"),
                 "up_next": { "type": "boolean" },
                 "open": { "type": "boolean" },
-                "close_reason": str_prop("filter by close reason (completed|not_planned|duplicate|obsolete)"),
+                "close_reason": str_prop("filter by close reason (completed|not_planned|duplicate|obsolete|works_as_designed)"),
                 "closed": { "type": "boolean", "description": "true = only closed tickets (a close_reason is set); false = only tickets with none" },
                 "assignee": str_prop("filter to tickets assigned to this person (git email, or 'me' for your git identity)"),
                 "review_requested": str_prop("filter to tickets with a review request for this person (git email, or 'me')"),
@@ -156,10 +156,10 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_close",
-            "description": "Record a close outcome (completed|not_planned|duplicate|obsolete).",
+            "description": "Record a close outcome (completed|not_planned|duplicate|obsolete|works_as_designed).",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
-                "reason": str_prop("completed|not_planned|duplicate|obsolete"),
+                "reason": str_prop("completed|not_planned|duplicate|obsolete|works_as_designed"),
                 "duplicate_of": str_prop("required when reason=duplicate")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id", "reason"] }

@@ -16089,6 +16089,69 @@ test('opens a distinct terminal for each shell command even when a create is sti
   await expect.poll(() => posted).toEqual(['npm run lint', 'npm test']);
 });
 
+test('closes a ticket as works as designed through the real server (HS2-N11T22)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Search ignores archived tickets',
+      category: 'bug',
+    });
+    await mockProject(page);
+    // Only project discovery is a fixture; the close request, persistence, and projection are the real server's.
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    // Capabilities come from the real server so its connection id matches the real ticket rows.
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const row = page.locator(`[data-ticket-slug="${created.slug}"]`).first();
+    await row.click();
+    await row.click({ button: 'right' });
+    await page.getByRole('menu', { name: 'Ticket actions' }).getByText('Close ticket…').click();
+    const dialog = page.locator('[data-component="ticket-close-dialog"]').last();
+    await expect(dialog).toHaveJSProperty('open', true);
+    const reason = dialog.locator('wa-select[name="ticket-close-reason"]');
+    await reason.click();
+    const option = reason.locator('wa-option[value="works_as_designed"]');
+    await expect(option).toHaveText('Works as designed');
+    await option.click();
+    await expect(reason).toHaveJSProperty('value', 'works_as_designed');
+    await expect(reason).toHaveJSProperty('open', false);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: '/private/tmp/claude/hs2-n11t22-close-dialog.png' });
+    await dialog.getByRole('button', { name: 'Close ticket' }).click();
+    await expect
+      .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).close_reason)
+      .toBe('works_as_designed');
+    await page.locator('[data-ticket-slug]').filter({ hasText: created.title }).first().click();
+    const outcome = page.locator('[data-component="ticket-inspector"] [data-close-reason="works_as_designed"]');
+    await expect(outcome).toHaveText('Closed as works as designed');
+    await expect(page.locator('.app-toast')).toContainText(`${created.slug} closed as works as designed.`);
+    await page.screenshot({ path: '/private/tmp/claude/hs2-n11t22-closed-outcome.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
 test('loads board columns independently from the real server (HS2-HNZZHC)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();
