@@ -418,6 +418,32 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
         std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
         expected("codex")
     );
+
+    // HS2-FKC8VN: a disabled tool's per-tool section leaves too. Claude writes CLAUDE.md
+    // alone (a per-tool section); once it is excluded, refresh removes only that section.
+    let claude_body = include_str!("../../../plugins/claude/instructions.md").trim_end();
+    std::fs::write(
+        project.join("CLAUDE.md"),
+        format!(
+            "# Project rules\n\n<!-- BEGIN hotsheet:claude -->\n{claude_body}\n<!-- END hotsheet:claude -->\n\nMore rules.\n"
+        ),
+    )
+    .unwrap();
+    refresh();
+    assert_eq!(
+        std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+        "# Project rules\n\nMore rules.\n"
+    );
+    refresh();
+    assert_eq!(
+        std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+        "# Project rules\n\nMore rules.\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+        expected("codex"),
+        "an enabled tool is untouched"
+    );
 }
 
 #[test]

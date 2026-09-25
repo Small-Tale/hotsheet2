@@ -116,20 +116,65 @@ pub fn refresh_setup_in(
             reconcile_targets.push(target.clone());
         }
     }
-    let plugins = all
+    // Tools the project explicitly left out of `enabled_plugins` (HS2-FKC8VN). Without an
+    // enabled list nothing is excluded: refresh then only ever adds or repairs.
+    let (plugins, excluded): (Vec<_>, Vec<_>) = all
         .into_iter()
-        .filter(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())))
+        .partition(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())));
+    let plugins = plugins
+        .into_iter()
         .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
         .collect::<Vec<_>>();
-    if plugins.is_empty() {
+    let reports = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
         let run_ids = HashSet::new();
         for target in &reconcile_targets {
             write_instruction_target(project_dir, target, &[], Some(&run_ids))?;
         }
-        return Ok(Vec::new());
+        Vec::new()
+    } else {
+        setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))?
+    };
+    remove_disabled_tool_sections(project_dir, &excluded)?;
+    Ok(reports)
+}
+
+/// Remove the per-tool `hotsheet:<id>` instruction section of every tool the project
+/// disabled, so disabled-tool guidance leaves per-tool and shared layouts alike
+/// (HS2-FKC8VN). The same ownership rule as refresh applies: a section written by a newer
+/// Hot Sheet, or an equal-version section the project customized, is preserved. The file
+/// is never created, and content outside the managed markers is untouched.
+fn remove_disabled_tool_sections(project: &Path, disabled: &[Plugin]) -> Result<(), SetupError> {
+    for plugin in disabled {
+        let rel = &plugin.manifest.instructions.target;
+        if !crate::is_safe_rel_path(rel) {
+            continue;
+        }
+        let path = project.join(rel);
+        let Ok(existing) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+        let bundled_block = format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
+        let bundled_version =
+            marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+        let mut out = existing.clone();
+        while let Some((start, finish)) = find_block(&out, &begin, &end) {
+            if marked_artifact_requires_preservation(
+                &out[start..finish],
+                &bundled_block,
+                bundled_version,
+                INSTRUCTIONS_VERSION_PREFIX,
+            ) {
+                break;
+            }
+            out = remove_range(&out, (start, finish));
+        }
+        if out != existing {
+            write_file(&path, &out)?;
+        }
     }
-    setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))
+    Ok(())
 }
 
 fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
@@ -1237,6 +1282,111 @@ args = ["--path", "{{store}}"]
         assert_eq!(fixture.agents(), settled);
         fixture.refresh(&["alpha", "beta", "gamma"]);
         assert_eq!(fixture.agents(), settled);
+    }
+
+    /// HS2-FKC8VN: a disabled tool's per-tool section leaves on refresh, like a shared
+    /// section's member does, and returns when the tool is re-enabled.
+    #[test]
+    fn disabling_a_per_tool_writer_removes_its_section_and_re_enabling_restores_it() {
+        let fixture = Sharing::new();
+        // `delta` writes AGENTS.md with a different body, so nothing shares while it is
+        // enabled and every tool keeps a per-tool section.
+        sharing_tool(fixture.plugins.path(), "delta", "delta instructions\n", 8);
+        let delta = per_tool(
+            "delta",
+            "<!-- hotsheet-instructions-version: 8 -->\ndelta instructions",
+        );
+        fixture.write_agents("User text.\n");
+        for tool in ["alpha", "beta", "delta"] {
+            fixture.setup(tool);
+        }
+        fixture.refresh(&["alpha", "beta", "delta"]);
+        let enabled = fixture.agents();
+        assert_eq!(
+            enabled,
+            format!(
+                "User text.\n\n{}\n\n{}\n\n{delta}\n",
+                per_tool("alpha", SHARED_BODY),
+                per_tool("beta", SHARED_BODY)
+            )
+        );
+
+        // Disable delta: its per-tool section leaves, and the identical sharers now share.
+        fixture.refresh(&["alpha", "beta"]);
+        let without_delta = format!("User text.\n\n{}\n", shared("alpha, beta"));
+        assert_eq!(fixture.agents(), without_delta);
+        fixture.refresh(&["alpha", "beta"]);
+        assert_eq!(
+            fixture.agents(),
+            without_delta,
+            "a repeated refresh is a byte-level no-op"
+        );
+
+        // Disabling everything leaves only the user's content.
+        fixture.refresh(&[]);
+        assert_eq!(fixture.agents(), "User text.\n");
+        fixture.refresh(&[]);
+        assert_eq!(fixture.agents(), "User text.\n");
+
+        // Re-enabling (their skills mark them as previously managed) restores guidance.
+        fixture.refresh(&["delta"]);
+        assert_eq!(fixture.agents(), format!("User text.\n\n{delta}\n"));
+        fixture.refresh(&["alpha", "beta", "delta"]);
+        let restored = fixture.agents();
+        assert!(restored.contains(&delta), "{restored}");
+        assert!(
+            restored.contains(&per_tool("alpha", SHARED_BODY)),
+            "{restored}"
+        );
+        assert!(
+            restored.contains(&per_tool("beta", SHARED_BODY)),
+            "{restored}"
+        );
+        fixture.refresh(&["alpha", "beta", "delta"]);
+        assert_eq!(fixture.agents(), restored);
+    }
+
+    #[test]
+    fn disabled_tool_sections_written_by_a_newer_writer_or_customized_are_preserved() {
+        let fixture = Sharing::new();
+        sharing_tool(fixture.plugins.path(), "delta", "delta instructions\n", 8);
+        let newer = per_tool("delta", "<!-- hotsheet-instructions-version: 9 -->\nnewer");
+        let customized = per_tool(
+            "delta",
+            "<!-- hotsheet-instructions-version: 8 -->\nproject-edited",
+        );
+        for installed in [&newer, &customized] {
+            let contents = format!("User text.\n\n{installed}\n");
+            fixture.write_agents(&contents);
+            fixture.refresh(&["alpha"]);
+            assert_eq!(fixture.agents(), contents, "{installed}");
+        }
+        // An older section of a disabled tool is Hot Sheet's to remove.
+        fixture.write_agents(&format!(
+            "User text.\n\n{}\n\nFooter.\n",
+            per_tool("delta", "<!-- hotsheet-instructions-version: 3 -->\nolder")
+        ));
+        fixture.refresh(&["alpha"]);
+        assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
+    }
+
+    #[test]
+    fn without_an_enabled_list_refresh_never_removes_a_per_tool_section() {
+        let fixture = Sharing::new();
+        let contents = format!("User text.\n\n{}\n", per_tool("alpha", "stale"));
+        fixture.write_agents(&contents);
+        refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            None,
+            &[fixture.plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        let refreshed = fixture.agents();
+        assert!(
+            refreshed.contains(&per_tool("alpha", SHARED_BODY)),
+            "{refreshed}"
+        );
     }
 
     #[test]

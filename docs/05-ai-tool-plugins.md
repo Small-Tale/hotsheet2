@@ -108,7 +108,13 @@ instead of one copy per tool:
   disabling one sharer (removing it from `enabled_plugins`) drops it from the list while the
   section stays for the others. When no listed tool remains enabled, refresh removes the
   section. Re-enabling a tool that still has managed artifacts (its skill) recreates it.
-  Disabled tools' _per-tool_ sections are still left in place, as before.
+  A disabled tool's _per-tool_ section leaves the same way (HS2-FKC8VN): when
+  `enabled_plugins` is set and excludes a tool, refresh removes that tool's
+  `hotsheet:<tool>` section while preserving everything outside the markers, and re-enabling
+  it writes the section back. The usual ownership rule applies: a section written by a
+  newer Hot Sheet, or an equal-version section the project customized, is kept. With no
+  `enabled_plugins` setting nothing counts as disabled, so refresh never removes a
+  per-tool section. Disabled tools' skill files and MCP entries are left in place.
 - Version preservation applies to the shared section's **body**. For every tool targeting
   the file, a newer shared body, or an equal-version body whose bytes differ, freezes that
   tool's instruction/skill bundle — even when it also has a stale per-tool copy — exactly
