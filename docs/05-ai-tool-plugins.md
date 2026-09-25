@@ -60,7 +60,11 @@ byte-level no-op, and managed instruction markers remain the boundary around con
 Hot Sheet may replace. Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
 `.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized
 with their canonical shared workflows; refresh replaces a stale Hot Sheet adapter while
-preserving unrelated user-authored skills and instruction content. Instruction blocks and
+preserving unrelated user-authored skills and instruction content. The worklist skill and the
+instruction block share one commit/push policy (HS2-N3FEJS): every ticket gets at least one
+commit, ideally unique to it, whose message names its slug, while pushing follows each
+repository's own push/PR/review conventions. Neither artifact requires or forbids pushing
+on its own, so a repository that batches pushes is never told to push after every ticket. Instruction blocks and
 skills carry numeric workflow-version markers. Before refreshing either artifact, setup
 re-reads both installed targets and compares each marker with its bundled counterpart. If
 either installed half is newer, setup preserves both as one workflow bundle while
