@@ -876,6 +876,10 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
+  await expect(exitFocus).toBeVisible();
+  await exitFocus.click();
+  await expect(exitFocus).toBeHidden();
   await expect(dedicated).toHaveAttribute('data-renderer', 'dom');
   await expect(dedicated.locator('canvas')).toHaveCount(0);
   await expect.poll(() => dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
@@ -886,17 +890,42 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   const scale = Number(await dedicated.getAttribute('data-physical-scale'));
   expect(scale).toBeGreaterThan(0);
   expect(scale).toBeLessThan(1);
-  const contained = await dedicated.evaluate((element) => {
+  const geometry = await dedicated.evaluate((element) => {
     const screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
-      viewport = element.getBoundingClientRect();
-    return (
-      screen.left >= viewport.left - 1 &&
-      screen.top >= viewport.top - 1 &&
-      screen.right <= viewport.right + 1 &&
-      screen.bottom <= viewport.bottom + 1
-    );
+      viewport = element.getBoundingClientRect(),
+      xterm = element.querySelector<HTMLElement>('.xterm')!.getBoundingClientRect(),
+      xtermViewport = element.querySelector<HTMLElement>('.xterm-viewport')!.getBoundingClientRect(),
+      scrollbar = element.querySelector<HTMLElement>('.scrollbar.vertical')!.getBoundingClientRect(),
+      contentRight = viewport.right - parseFloat(getComputedStyle(element).paddingRight);
+    return {
+      contained:
+        screen.left >= viewport.left - 1 &&
+        screen.top >= viewport.top - 1 &&
+        screen.right <= viewport.right + 1 &&
+        screen.bottom <= viewport.bottom + 1,
+      xtermRightError: Math.abs(contentRight - xterm.right),
+      xtermViewportRightError: Math.abs(contentRight - xtermViewport.right),
+      scrollbarRightError: Math.abs(contentRight - scrollbar.right),
+    };
   });
-  expect(contained).toBe(true);
+  expect(geometry.contained).toBe(true);
+  expect(geometry.xtermRightError).toBeLessThanOrEqual(1);
+  expect(geometry.xtermViewportRightError).toBeLessThanOrEqual(1);
+  expect(geometry.scrollbarRightError).toBeLessThanOrEqual(1);
+  await dedicated.evaluate(() => {
+    const sockets = (
+        window as unknown as {
+          __terminalFeedbackSockets: Array<EventTarget & { readyState: number; url: string }>;
+        }
+      ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/terminal-new/attach')),
+      output = Array.from({ length: 120 }, (_, index) => `scrollback line ${index}\r\n`).join('');
+    for (const socket of sockets)
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+  });
+  await dedicated.hover();
+  await page.mouse.wheel(0, -800);
+  await expect(dedicated.locator('.scrollbar.vertical')).toHaveClass(/visible/);
+  await page.screenshot({ path: '/private/tmp/hs2-qbmvfq-mobile-scrollbar-right-edge.png', fullPage: true });
   await dedicated.screenshot({ path: '/private/tmp/hs2-s708s3-mobile-dedicated-80xm.png', scale: 'css' });
   await context.close();
 });

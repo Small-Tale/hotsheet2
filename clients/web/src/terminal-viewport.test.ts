@@ -18,6 +18,7 @@ import {
   terminalBrowserWebSocketUrl,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalInverseScalePercent,
   terminalPhysicalScale,
   terminalPreviewScale,
   terminalReconnectDelay,
@@ -99,6 +100,13 @@ describe('terminal viewport protocol', () => {
     expect(terminalFittedFontSize(13, 1.05)).toBeCloseTo(13.65);
     expect(terminalFittedFontSize(8, 0.25)).toBe(4);
     expect(terminalFittedFontSize(Number.NaN, 1)).toBe(4);
+  });
+  it('expands a scaled mobile xterm layout so its scrollbar paints at the visible edge (HS2-QBMVFQ)', () => {
+    expect(terminalInverseScalePercent(0.5)).toBe('200%');
+    expect(terminalInverseScalePercent(0.8)).toBe('125%');
+    expect(terminalInverseScalePercent(1)).toBe('100%');
+    expect(terminalInverseScalePercent(0)).toBe('100%');
+    expect(terminalInverseScalePercent(Number.NaN)).toBe('100%');
   });
   it('does not duplicate deep scrollback into read-only dashboard previews', () => {
     expect([TERMINAL_PREVIEW_SCROLLBACK, TERMINAL_MAGNIFIED_SCROLLBACK, TERMINAL_DEDICATED_SCROLLBACK]).toEqual([

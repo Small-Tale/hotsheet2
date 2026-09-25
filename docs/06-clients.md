@@ -2153,7 +2153,9 @@ small (80 columns on a ~390px screen), which is the deliberate trade for consist
 The magnified/full-screen terminal drops its 5:3 aspect and fills the screen. The dedicated
 drawer terminal applies the same fixed-80-column DOM render path within the drawer's available
 height. Both resize the PTY to 80×M, width-fit the physical grid, and reclaim sizing with the
-final measured row count rather than the provisional 80×24 size. Read-only grid preview tiles
+final measured row count rather than the provisional 80×24 size. The xterm layout root expands by
+the inverse of that physical scale, keeping its vertical scrollbar on the visible right edge instead
+of stranding it inside the terminal (HS2-QBMVFQ). Read-only grid preview tiles
 deliberately remain uniform 80×24, 5:3 cards: they are glanceable non-input surfaces, not the
 phone's interactive terminal.
 

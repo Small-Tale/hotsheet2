@@ -20,6 +20,7 @@ import {
   TERMINAL_RESIZE_SETTLE_MS,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalInverseScalePercent,
   terminalPhysicalScale,
   terminalPreviewScale,
   terminalReconnectDelay,
@@ -405,8 +406,10 @@ function initializeTerminalViewport(
       mobileGridRows = rows;
       terminal.element.style.transformOrigin = 'top left';
       terminal.element.style.transform = `scale(${scale})`;
-      terminal.element.style.width = '';
-      terminal.element.style.height = '';
+      // CSS transforms change paint geometry, not layout geometry. Give xterm's root the inverse
+      // layout size so its viewport and vertical scrollbar still reach the visible right edge.
+      terminal.element.style.width = terminalInverseScalePercent(scale);
+      terminal.element.style.height = terminalInverseScalePercent(scale);
       element.dataset.scale = String(scale);
       element.dataset.physicalScale = String(scale);
       element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${rows}`;

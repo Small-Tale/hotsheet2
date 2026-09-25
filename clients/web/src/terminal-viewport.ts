@@ -123,6 +123,11 @@ export function terminalPhysicalScale(
   return Math.min(targetWidth / screenWidth, targetHeight / screenHeight);
 }
 
+export function terminalInverseScalePercent(physicalScale: number): string {
+  if (!Number.isFinite(physicalScale) || physicalScale <= 0) return '100%';
+  return `${100 / physicalScale}%`;
+}
+
 export function terminalFittedFontSize(current: number, physicalScale: number): number {
   if (!Number.isFinite(current) || !Number.isFinite(physicalScale) || current <= 0 || physicalScale <= 0) return 4;
   return Math.max(4, current * physicalScale);
