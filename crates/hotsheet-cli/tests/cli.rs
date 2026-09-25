@@ -2167,9 +2167,16 @@ fn exact_claim_accepts_slug_and_ulid_and_starts_without_changing_retry_count() {
         .assert()
         .success()
         .stdout(predicate::str::contains("status: completed"))
-        .stdout(predicate::str::contains("claimed_by").not())
-        .stdout(predicate::str::contains("claim_lease_expires_at").not())
-        .stdout(predicate::str::contains("worker_label").not());
+        // The live claim fields are cleared; the append-only `claim_history` entries
+        // (indented) legitimately keep the worker label that was claimed with.
+        .stdout(predicate::function(|stdout: &str| {
+            stdout.lines().all(|line| {
+                !["claimed_by:", "claim_lease_expires_at:", "worker_label:"]
+                    .iter()
+                    .any(|field| line.starts_with(field))
+            })
+        }))
+        .stdout(predicate::str::contains("worker_label: Codex"));
 }
 
 #[test]
