@@ -163,6 +163,11 @@ pub struct TicketQuery {
     /// client pages a large store without `OFFSET` (docs/03 §3.5, HS2-TCDTCH). If the cursor
     /// ticket no longer exists, the page is empty (the client should restart from the top).
     pub page_after: Option<Ulid>,
+    /// Value-keyset continuation (HS2-74H84S): only rows sorting strictly after this key in
+    /// the shared `checkout_order` total order. Unlike `page_after`, it never depends on a
+    /// boundary row still existing or keeping its sort values, so editing or purging the
+    /// last emitted row cannot end or rewind a traversal.
+    pub after_key: Option<crate::checkout_order::AfterKey>,
 }
 
 /// Run a query: read the store, filter, sort, and (if set) cap to `limit`.
@@ -244,6 +249,19 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
+    if let Some(after) = &q.after_key {
+        tickets.retain(|ticket| {
+            let mut row = crate::wire::TicketRow::from(ticket);
+            row.set_connection(&after.connection_id);
+            crate::checkout_order::compare(
+                &crate::checkout_order::MergeKey::from_row(&row),
+                &after.key,
+                q.sort,
+                q.descending,
+            )
+            .is_gt()
+        });
+    }
     sort_tickets(&mut tickets, q.sort, q.descending);
     // Keyset: drop everything up to and including the cursor row (HS2-TCDTCH). A missing
     // cursor id yields an empty page — the client restarts from the top.

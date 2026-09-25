@@ -1346,3 +1346,163 @@ fn assignee_facet_and_claimed_filters() {
         .unwrap();
     assert_eq!(unclaimed.len(), 2);
 }
+
+/// Value-keyset reads (HS2-74H84S) must select exactly the rows that
+/// `checkout_order::compare` places strictly after an arbitrary key — including keys whose
+/// row was edited or purged, and keys from another source that tie on every sort value —
+/// so the checkout merge can resume every source from one global key.
+#[test]
+fn value_keyset_matches_the_checkout_order_for_every_sort_and_arbitrary_keys() {
+    use hotsheet_ticketing::checkout_order::{AfterKey, MergeKey, compare};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    // Deliberate ties: shared timestamps, priorities, case-folded titles, and statuses.
+    let seeds = [
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+            "2026-08-19T00:00:00Z",
+            "beta",
+            Priority::High,
+            Status::NotStarted,
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            "2026-08-19T00:00:00Z",
+            "Beta",
+            Priority::High,
+            Status::Started,
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+            "2026-08-18T00:00:00Z",
+            "alpha",
+            Priority::Low,
+            Status::NotStarted,
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+            "2026-08-20T00:00:00Z",
+            "Élan",
+            Priority::High,
+            Status::Backlog,
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB4",
+            "2026-08-19T00:00:00Z",
+            "zeta",
+            Priority::Default,
+            Status::NotStarted,
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB5",
+            "2026-08-18T00:00:00Z",
+            "BETA",
+            Priority::Default,
+            Status::Started,
+        ),
+    ];
+    for (id, now, title, priority, status) in seeds {
+        ops::create(
+            &store,
+            ulid(id),
+            "HS",
+            Timestamp::new(now),
+            NewTicket {
+                title: title.into(),
+                category: "task".into(),
+                priority,
+                status,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let index = Index::open_in_memory("s1").unwrap();
+    index.rebuild_from_store(&store).unwrap();
+
+    let keyed = |rows: Vec<TicketRow>| {
+        rows.into_iter()
+            .map(|mut row| {
+                row.set_connection("store-m");
+                MergeKey::from_row(&row)
+            })
+            .collect::<Vec<_>>()
+    };
+    for sort in [
+        SortKey::Id,
+        SortKey::Created,
+        SortKey::Updated,
+        SortKey::Priority,
+        SortKey::Status,
+        SortKey::Title,
+    ] {
+        for descending in [false, true] {
+            let base = TicketQuery {
+                sort,
+                descending,
+                ..Default::default()
+            };
+            let full = keyed(index.query(&base).unwrap());
+            let mut expected_order = full.clone();
+            expected_order.sort_by(|left, right| compare(left, right, sort, descending));
+            assert_eq!(
+                full, expected_order,
+                "index order is checkout order: {sort:?} {descending}"
+            );
+
+            // Probe with every row's own key, the same values under a lower and a higher
+            // foreign connection (cross-source ties), and edited copies (the boundary row's
+            // sort values changed since it was emitted).
+            let mut probes = Vec::new();
+            for key in &full {
+                probes.push(key.clone());
+                for connection in ["a-store", "z-store"] {
+                    probes.push(MergeKey {
+                        qualified_id: format!("{connection}:{}", key.native_id),
+                        ..key.clone()
+                    });
+                }
+                probes.push(MergeKey {
+                    updated_at: "2026-08-19T00:00:00.5Z".into(),
+                    created_at: "2026-08-19T00:00:00.5Z".into(),
+                    native_id: format!("{}X", key.native_id),
+                    qualified_id: format!("store-m:{}X", key.native_id),
+                    ..key.clone()
+                });
+            }
+            for probe in probes {
+                let query = TicketQuery {
+                    after_key: Some(AfterKey {
+                        key: probe.clone(),
+                        connection_id: "store-m".into(),
+                    }),
+                    ..base.clone()
+                };
+                let expected = full
+                    .iter()
+                    .filter(|key| compare(key, &probe, sort, descending).is_gt())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    keyed(index.query(&query).unwrap()),
+                    expected,
+                    "index {sort:?} descending={descending} after {probe:?}"
+                );
+                let scanned = ops::query(&store, &query)
+                    .unwrap()
+                    .into_iter()
+                    .map(|ticket| ticket.id.to_string())
+                    .collect::<HashSet<_>>();
+                assert_eq!(
+                    scanned,
+                    expected
+                        .iter()
+                        .map(|key| key.native_id.clone())
+                        .collect::<HashSet<_>>(),
+                    "file scan {sort:?} descending={descending} after {probe:?}"
+                );
+            }
+        }
+    }
+}

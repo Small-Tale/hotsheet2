@@ -23,6 +23,7 @@ pub mod tls;
 pub mod tts;
 pub mod turn_stream;
 
+use std::collections::{HashSet, VecDeque};
 use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -42,7 +43,7 @@ use hotsheet_model::{
     CloseReason, NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
-use hotsheet_ticketing::checkout_order::{self, MergeKey};
+use hotsheet_ticketing::checkout_order::{self, AfterKey, MergeKey};
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
@@ -3705,11 +3706,14 @@ struct CheckoutTicketPage {
     counts: CheckoutTicketCounts,
 }
 
+/// One source's continuation state. Positions are value keysets (HS2-74H84S): every source
+/// resumes strictly after the cursor's `last` key, so `resume` is only a provider-owned hint
+/// positioned at or before that key and `exhausted` skips sources that had no further rows.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CheckoutSourceCursor {
     key: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    after: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resume: Option<String>,
     #[serde(default)]
     exhausted: bool,
 }
@@ -3722,6 +3726,9 @@ struct CheckoutMergeCursor {
     /// Canonical fingerprint of the effective filter set the positions were computed for.
     #[serde(default)]
     filters: String,
+    /// Sort-key values of the last emitted row (the global value keyset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last: Option<MergeKey>,
     sources: Vec<CheckoutSourceCursor>,
 }
 
@@ -3729,8 +3736,19 @@ struct CheckoutMergeCursor {
 struct CheckoutMergeItem {
     value: serde_json::Value,
     key: MergeKey,
-    next: CheckoutSourceCursor,
+    resume: Option<String>,
 }
+
+/// Per-request merge state for one source: a bounded buffer of fetched rows plus the key
+/// (and provider hint) of the last row fetched, which the next batch resumes after.
+struct CheckoutSourceState {
+    cursor: CheckoutSourceCursor,
+    fetch_after: Option<MergeKey>,
+    fetch_resume: Option<String>,
+    buffer: VecDeque<CheckoutMergeItem>,
+}
+
+const CHECKOUT_CURSOR_VERSION: u8 = 2;
 
 fn checkout_sort_name(sort: SortKey) -> &'static str {
     match sort {
@@ -3755,6 +3773,7 @@ fn checkout_filter_fingerprint(query: &TicketQuery, has_commit: Option<bool>) ->
     canonical.descending = false;
     canonical.limit = None;
     canonical.page_after = None;
+    canonical.after_key = None;
     canonical.tags.sort();
     canonical.tags.dedup();
     canonical.attachment_patterns.sort();
@@ -3768,17 +3787,19 @@ fn encode_checkout_page_cursor(
     sort: SortKey,
     descending: bool,
     filters: &str,
+    last: Option<&MergeKey>,
 ) -> Result<String, ApiError> {
     let bytes = serde_json::to_vec(&CheckoutMergeCursor {
-        version: 1,
+        version: CHECKOUT_CURSOR_VERSION,
         sort: checkout_sort_name(sort).into(),
         descending,
         filters: filters.into(),
+        last: last.cloned(),
         sources: sources.to_vec(),
     })
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(format!(
-        "v1.{}",
+        "v{CHECKOUT_CURSOR_VERSION}.{}",
         bytes
             .iter()
             .map(|byte| format!("{byte:02x}"))
@@ -3786,39 +3807,46 @@ fn encode_checkout_page_cursor(
     ))
 }
 
+/// Decode a checkout cursor into the last emitted key and every source's state. A cursor
+/// from an older format, or one computed for another source set, sort, direction, or
+/// filter set, is rejected as stale rather than silently reinterpreted.
 fn decode_checkout_page_cursor(
     value: Option<&str>,
     source_keys: &[String],
     sort: SortKey,
     descending: bool,
     filters: &str,
-) -> Result<Vec<CheckoutSourceCursor>, ApiError> {
+) -> Result<(Option<MergeKey>, Vec<CheckoutSourceCursor>), ApiError> {
     let Some(value) = value else {
-        return Ok(source_keys
-            .iter()
-            .map(|key| CheckoutSourceCursor {
-                key: key.clone(),
-                ..Default::default()
-            })
-            .collect());
-    };
-    let hex = value
-        .strip_prefix("v1.")
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
-    if hex.len() % 2 != 0 {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid checkout ticket cursor",
+        return Ok((
+            None,
+            source_keys
+                .iter()
+                .map(|key| CheckoutSourceCursor {
+                    key: key.clone(),
+                    ..Default::default()
+                })
+                .collect(),
         ));
+    };
+    let stale = || ApiError::new(StatusCode::BAD_REQUEST, "stale checkout ticket cursor");
+    let invalid = || ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor");
+    if value.starts_with("v1.") {
+        return Err(stale());
+    }
+    let hex = value
+        .strip_prefix(&format!("v{CHECKOUT_CURSOR_VERSION}."))
+        .ok_or_else(invalid)?;
+    if hex.len() % 2 != 0 {
+        return Err(invalid());
     }
     let bytes = (0..hex.len())
         .step_by(2)
         .map(|index| u8::from_str_radix(&hex[index..index + 2], 16))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
-    let cursor = serde_json::from_slice::<CheckoutMergeCursor>(&bytes)
-        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
-    if cursor.version != 1
+        .map_err(|_| invalid())?;
+    let cursor = serde_json::from_slice::<CheckoutMergeCursor>(&bytes).map_err(|_| invalid())?;
+    if cursor.version != CHECKOUT_CURSOR_VERSION
         || cursor.sort != checkout_sort_name(sort)
         || cursor.descending != descending
         || cursor.filters != filters
@@ -3829,18 +3857,15 @@ fn decode_checkout_page_cursor(
             .zip(source_keys)
             .any(|(source, key)| &source.key != key)
     {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "stale checkout ticket cursor",
-        ));
+        return Err(stale());
     }
-    Ok(cursor.sources)
+    Ok((cursor.last, cursor.sources))
 }
 
 #[cfg(test)]
 mod checkout_pagination_tests {
     use super::{
-        CheckoutSourceCursor, ListParams, SortKey, checkout_filter_fingerprint,
+        CheckoutSourceCursor, ListParams, MergeKey, SortKey, checkout_filter_fingerprint,
         decode_checkout_page_cursor, encode_checkout_page_cursor,
     };
 
@@ -3889,59 +3914,96 @@ mod checkout_pagination_tests {
         let sources = vec![
             CheckoutSourceCursor {
                 key: "git:local".into(),
-                after: Some("01ARZ3NDEKTSV4RRFFQ69G5FAV".into()),
+                resume: None,
                 exhausted: false,
             },
             CheckoutSourceCursor {
                 key: "provider:remote".into(),
-                after: None,
+                resume: Some("https://api.example/issues?page=3".into()),
                 exhausted: true,
             },
         ];
-        let encoded =
-            encode_checkout_page_cursor(&sources, SortKey::Priority, true, "filters-a").unwrap();
-        let decoded = decode_checkout_page_cursor(
+        let last = MergeKey {
+            native_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+            qualified_id: "local:01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+            title: "Boundary".into(),
+            updated_at: "2026-09-01T00:00:00Z".into(),
+            ..Default::default()
+        };
+        let keys = ["git:local".to_string(), "provider:remote".to_string()];
+        let encoded = encode_checkout_page_cursor(
+            &sources,
+            SortKey::Priority,
+            true,
+            "filters-a",
+            Some(&last),
+        )
+        .unwrap();
+        assert!(encoded.starts_with("v2."));
+        let (decoded_last, decoded) = decode_checkout_page_cursor(
             Some(&encoded),
-            &["git:local".into(), "provider:remote".into()],
+            &keys,
             SortKey::Priority,
             true,
             "filters-a",
         )
         .unwrap();
+        assert_eq!(decoded_last, Some(last), "the value keyset round-trips");
         assert_eq!(decoded.len(), 2);
-        assert_eq!(decoded[0].after, sources[0].after);
+        assert_eq!(decoded[1].resume, sources[1].resume);
         assert!(decoded[1].exhausted);
-        assert!(
-            decode_checkout_page_cursor(
-                Some(&encoded),
-                &["git:local".into(), "provider:renamed".into()],
+        let stale = |result: Result<_, super::ApiError>| {
+            let error = result.unwrap_err();
+            assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+            assert_eq!(error.message, "stale checkout ticket cursor");
+        };
+        stale(decode_checkout_page_cursor(
+            Some(&encoded),
+            &["git:local".into(), "provider:renamed".into()],
+            SortKey::Priority,
+            true,
+            "filters-a",
+        ));
+        stale(decode_checkout_page_cursor(
+            Some(&encoded),
+            &keys,
+            SortKey::Priority,
+            true,
+            "filters-b",
+        ));
+        stale(decode_checkout_page_cursor(
+            Some(&encoded),
+            &keys,
+            SortKey::Title,
+            true,
+            "filters-a",
+        ));
+        stale(decode_checkout_page_cursor(
+            Some(&encoded),
+            &keys,
+            SortKey::Priority,
+            false,
+            "filters-a",
+        ));
+        // Row-identity cursors from before value keysets cannot be reinterpreted.
+        stale(decode_checkout_page_cursor(
+            Some("v1.7b7d"),
+            &keys,
+            SortKey::Priority,
+            true,
+            "filters-a",
+        ));
+        for garbage in ["v2.zz", "v2.abc", "v2.7b7d", "nonsense"] {
+            let error = decode_checkout_page_cursor(
+                Some(garbage),
+                &keys,
                 SortKey::Priority,
                 true,
-                "filters-a"
+                "filters-a",
             )
-            .is_err()
-        );
-        assert!(
-            decode_checkout_page_cursor(
-                Some(&encoded),
-                &["git:local".into(), "provider:remote".into()],
-                SortKey::Priority,
-                true,
-                "filters-b"
-            )
-            .is_err(),
-            "a cursor is bound to its effective filter set"
-        );
-        assert!(
-            decode_checkout_page_cursor(
-                Some(&encoded),
-                &["git:local".into(), "provider:remote".into()],
-                SortKey::Title,
-                true,
-                "filters-a"
-            )
-            .is_err()
-        );
+            .unwrap_err();
+            assert_eq!(error.message, "invalid checkout ticket cursor", "{garbage}");
+        }
     }
 }
 
@@ -4013,7 +4075,7 @@ fn list_checkout_ticket_page(
     let sort = merge_query.sort;
     let descending = merge_query.descending;
     let filters = checkout_filter_fingerprint(&merge_query, params.has_commit);
-    let mut source_cursors = decode_checkout_page_cursor(
+    let (mut last, source_cursors) = decode_checkout_page_cursor(
         params.cursor.as_deref(),
         &source_keys,
         sort,
@@ -4043,194 +4105,152 @@ fn list_checkout_ticket_page(
         );
     }
 
+    let state_ref = state;
     let compact = params.compact.unwrap_or(true);
     let fields = parse_fields(&params.fields);
-    let mut items = Vec::with_capacity(page_size);
-    let load_head = |source_index: usize,
-                     cursor: &mut CheckoutSourceCursor|
-     -> Result<Option<CheckoutMergeItem>, ApiError> {
-        if cursor.exhausted {
+    // Batched `has_commit` evaluation: one repository scan per fetched batch, not per row.
+    let commit_filter = |slugs: Vec<String>| -> Result<Option<HashSet<String>>, ApiError> {
+        if params.has_commit.is_none() || slugs.is_empty() {
             return Ok(None);
         }
-        if source_index < entries.len() {
-            let (store_id, entry) = &entries[source_index];
-            loop {
+        match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs) {
+            Ok(matches) => Ok(Some(matches)),
+            Err(code_review::CodeReviewError::NotRepository) => Ok(Some(HashSet::new())),
+            Err(error) => Err(code_review_api_error(error)),
+        }
+    };
+    let keeps = |matches: &Option<HashSet<String>>, slug: &str| {
+        params
+            .has_commit
+            .is_none_or(|want| matches.as_ref().is_some_and(|set| set.contains(slug)) == want)
+    };
+    // Refill one source's buffer with a bounded batch of rows strictly after the last row
+    // it fetched (a value keyset, HS2-74H84S). Rows removed by post-filters still advance
+    // the source, and a batch is one index query or one provider keyset read (HS2-BGZ0NY).
+    let fill = |source_index: usize,
+                state: &mut CheckoutSourceState,
+                want: usize|
+     -> Result<(), ApiError> {
+        while state.buffer.is_empty() && !state.cursor.exhausted {
+            if source_index < entries.len() {
+                let (store_id, entry) = &entries[source_index];
                 let mut query = params.clone().into_query(entry.store.root())?;
-                query.limit = Some(1);
-                query.page_after = cursor
-                    .after
-                    .as_deref()
-                    .map(Ulid::from_string)
-                    .transpose()
-                    .map_err(|_| {
-                        ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
-                    })?;
-                let row = entry
+                query.limit = Some(want);
+                query.page_after = None;
+                query.after_key = state.fetch_after.clone().map(|key| AfterKey {
+                    key,
+                    connection_id: store_id.clone(),
+                });
+                let rows = entry
                     .index
                     .lock()
                     .map_err(|_| {
                         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned")
                     })?
-                    .query(&query)?
-                    .into_iter()
-                    .next();
-                let Some(mut row) = row else {
-                    cursor.exhausted = true;
-                    return Ok(None);
-                };
-                let next_after = row.id.clone();
-                if let Some(want) = params.has_commit {
-                    let matches = match code_review::slugs_with_commits(
-                        FsPath::new(&checkout.root),
-                        std::slice::from_ref(&row.slug),
-                    ) {
-                        Ok(matches) => matches,
-                        Err(code_review::CodeReviewError::NotRepository) => Default::default(),
-                        Err(error) => return Err(code_review_api_error(error)),
-                    };
-                    if matches.contains(&row.slug) != want {
-                        cursor.after = Some(next_after);
+                    .query(&query)?;
+                state.cursor.exhausted = rows.len() < want;
+                let matches = commit_filter(rows.iter().map(|row| row.slug.clone()).collect())?;
+                for mut row in rows {
+                    row.set_connection(store_id);
+                    let key = MergeKey::from_row(&row);
+                    state.fetch_after = Some(key.clone());
+                    if !keeps(&matches, &row.slug) {
                         continue;
                     }
-                }
-                row.set_connection(store_id);
-                let item = CheckoutMergeItem {
-                    key: MergeKey {
-                        native_id: row.native_id.clone(),
-                        qualified_id: row.qualified_id.clone(),
-                        title: row.title.clone(),
-                        created_at: row.created_at.clone().unwrap_or_default(),
-                        updated_at: row.updated_at.clone().unwrap_or_default(),
-                        priority_rank: checkout_order::priority_rank(row.priority.as_deref()),
-                        status_rank: checkout_order::status_rank(row.status.as_deref()),
-                    },
-                    next: CheckoutSourceCursor {
-                        key: cursor.key.clone(),
-                        after: Some(next_after),
-                        exhausted: false,
-                    },
-                    value: {
-                        if compact {
-                            row.make_compact();
-                        }
-                        row.add_auto_context(&contexts);
-                        let mut value = serde_json::to_value(row).map_err(|error| {
-                            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-                        })?;
-                        if let Some(object) = value.as_object_mut() {
-                            object.insert("store".into(), store_id.clone().into());
-                        }
-                        hotsheet_ticketing::wire::project_fields(
-                            std::slice::from_mut(&mut value),
-                            &fields,
-                        );
-                        value
-                    },
-                };
-                return Ok(Some(item));
-            }
-        }
-
-        let source = external_sources[source_index - entries.len()];
-        let provider = provider_for(state, &source.connection_id)?;
-        let mut query = params.clone().into_query(state.store.root())?;
-        query.limit = None;
-        query.page_after = None;
-        loop {
-            let page = provider
-                .query_page(&query, cursor.after.as_deref(), 1)
-                .map_err(provider_transfer_error)?;
-            let next_after = page.next_cursor;
-            let Some(mut ticket) = page.items.into_iter().next() else {
-                if let Some(next) = next_after {
-                    if cursor.after.as_deref() == Some(next.as_str()) {
-                        return Err(ApiError::new(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "provider returned a non-advancing ticket cursor",
-                        ));
-                    }
-                    cursor.after = Some(next);
-                    continue;
-                }
-                cursor.exhausted = true;
-                return Ok(None);
-            };
-            if let Some(want) = params.has_commit {
-                let matches = match code_review::slugs_with_commits(
-                    FsPath::new(&checkout.root),
-                    std::slice::from_ref(&ticket.slug),
-                ) {
-                    Ok(matches) => matches,
-                    Err(code_review::CodeReviewError::NotRepository) => Default::default(),
-                    Err(error) => return Err(code_review_api_error(error)),
-                };
-                if matches.contains(&ticket.slug) != want {
-                    match next_after {
-                        Some(next) if cursor.after.as_deref() != Some(next.as_str()) => {
-                            cursor.after = Some(next);
-                            continue;
-                        }
-                        Some(_) => {
-                            return Err(ApiError::new(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "provider returned a non-advancing ticket cursor",
-                            ));
-                        }
-                        None => {
-                            cursor.exhausted = true;
-                            return Ok(None);
-                        }
-                    }
-                }
-            }
-            ticket.auto_context =
-                auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
-            let item = CheckoutMergeItem {
-                key: MergeKey {
-                    native_id: ticket.native_id.clone(),
-                    qualified_id: ticket.qualified_id.clone(),
-                    title: ticket.title.clone(),
-                    created_at: ticket.created_at.clone(),
-                    updated_at: ticket.updated_at.clone(),
-                    priority_rank: ticket.priority as u8,
-                    status_rank: ticket.status as u8,
-                },
-                next: CheckoutSourceCursor {
-                    key: cursor.key.clone(),
-                    after: next_after.clone(),
-                    exhausted: next_after.is_none(),
-                },
-                value: {
                     if compact {
-                        ticket.details.clear();
+                        row.make_compact();
                     }
-                    let mut value = serde_json::to_value(ticket).map_err(|error| {
+                    row.add_auto_context(&contexts);
+                    let mut value = serde_json::to_value(row).map_err(|error| {
                         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                     })?;
                     if let Some(object) = value.as_object_mut() {
-                        object.insert("store".into(), source.connection_id.clone().into());
+                        object.insert("store".into(), store_id.clone().into());
                     }
                     hotsheet_ticketing::wire::project_fields(
                         std::slice::from_mut(&mut value),
                         &fields,
                     );
-                    value
-                },
-            };
-            return Ok(Some(item));
+                    state.buffer.push_back(CheckoutMergeItem {
+                        value,
+                        key,
+                        resume: None,
+                    });
+                }
+                continue;
+            }
+            let source = external_sources[source_index - entries.len()];
+            let provider = provider_for(state_ref, &source.connection_id)?;
+            let query = params.clone().into_query(state_ref.store.root())?;
+            let page = provider
+                .query_after(
+                    &hotsheet_ticketing::unbounded_query(&query),
+                    state.fetch_after.as_ref(),
+                    state.fetch_resume.as_deref(),
+                    want,
+                )
+                .map_err(provider_transfer_error)?;
+            if page.items.is_empty() && !page.exhausted {
+                return Err(ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider returned a non-advancing keyset page",
+                ));
+            }
+            state.cursor.exhausted = page.exhausted;
+            let matches = commit_filter(
+                page.items
+                    .iter()
+                    .map(|item| item.ticket.slug.clone())
+                    .collect(),
+            )?;
+            for item in page.items {
+                let mut ticket = item.ticket;
+                let key = MergeKey::from_ticket(&ticket);
+                state.fetch_after = Some(key.clone());
+                state.fetch_resume.clone_from(&item.resume);
+                if !keeps(&matches, &ticket.slug) {
+                    continue;
+                }
+                ticket.auto_context =
+                    auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
+                if compact {
+                    ticket.details.clear();
+                }
+                let mut value = serde_json::to_value(ticket).map_err(|error| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                })?;
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("store".into(), source.connection_id.clone().into());
+                }
+                hotsheet_ticketing::wire::project_fields(std::slice::from_mut(&mut value), &fields);
+                state.buffer.push_back(CheckoutMergeItem {
+                    value,
+                    key,
+                    resume: item.resume,
+                });
+            }
         }
+        Ok(())
     };
 
-    let mut heads = source_cursors
-        .iter_mut()
-        .enumerate()
-        .map(|(source_index, cursor)| load_head(source_index, cursor))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut sources = source_cursors
+        .into_iter()
+        .map(|cursor| CheckoutSourceState {
+            fetch_after: last.clone(),
+            fetch_resume: cursor.resume.clone(),
+            cursor,
+            buffer: VecDeque::new(),
+        })
+        .collect::<Vec<_>>();
+    for (source_index, source) in sources.iter_mut().enumerate() {
+        fill(source_index, source, page_size)?;
+    }
+    let mut items = Vec::with_capacity(page_size);
     while items.len() < page_size {
-        let Some(source_index) = heads
+        let Some(source_index) = sources
             .iter()
             .enumerate()
-            .filter_map(|(index, item)| item.as_ref().map(|item| (index, item)))
+            .filter_map(|(index, source)| source.buffer.front().map(|item| (index, item)))
             .min_by(|(_, left), (_, right)| {
                 checkout_order::compare(&left.key, &right.key, sort, descending)
             })
@@ -4238,17 +4258,35 @@ fn list_checkout_ticket_page(
         else {
             break;
         };
-        let item = heads[source_index]
-            .take()
+        let source = &mut sources[source_index];
+        let item = source
+            .buffer
+            .pop_front()
             .expect("selected checkout merge head");
-        source_cursors[source_index] = item.next;
+        source.cursor.resume = item.resume;
+        last = Some(item.key);
         items.push(item.value);
-        heads[source_index] = load_head(source_index, &mut source_cursors[source_index])?;
+        if source.buffer.is_empty() && items.len() < page_size {
+            fill(source_index, source, page_size - items.len())?;
+        }
     }
-    let next_cursor = heads
+    // A continuation exists only when some source still has a row after `last`.
+    for (source_index, source) in sources.iter_mut().enumerate() {
+        fill(source_index, source, 1)?;
+    }
+    let next_cursor = sources
         .iter()
-        .any(Option::is_some)
-        .then(|| encode_checkout_page_cursor(&source_cursors, sort, descending, &filters))
+        .any(|source| !source.buffer.is_empty())
+        .then(|| {
+            let cursors = sources
+                .iter()
+                .map(|source| CheckoutSourceCursor {
+                    exhausted: source.buffer.is_empty(),
+                    ..source.cursor.clone()
+                })
+                .collect::<Vec<_>>();
+            encode_checkout_page_cursor(&cursors, sort, descending, &filters, last.as_ref())
+        })
         .transpose()?;
     serde_json::to_value(CheckoutTicketPage {
         items,
@@ -8822,6 +8860,7 @@ impl ListParams {
             descending,
             limit: self.limit,
             page_after,
+            after_key: None,
         })
     }
 }

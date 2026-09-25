@@ -11,6 +11,7 @@ use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Tim
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::checkout_order::{self, MergeKey};
 use crate::ops::{self, NewTicket, TicketPatch, TicketQuery};
 use crate::wire::{ApiAttachment, ApiTicket};
 use crate::{FsStore, OpError, StoreError};
@@ -375,6 +376,146 @@ pub struct ProviderTicketPage {
     pub next_cursor: Option<String>,
 }
 
+/// One row of a value-keyset provider read (HS2-74H84S). `resume` is a provider-owned hint
+/// positioned at or before this row; passing it back lets the adapter skip rows it already
+/// scanned, but adapters must stay correct when the hint is stale.
+#[derive(Debug, Clone)]
+pub struct ProviderKeysetItem {
+    pub ticket: ApiTicket,
+    pub resume: Option<String>,
+}
+
+/// A bounded value-keyset read: rows strictly after the requested key, in checkout order.
+/// `exhausted` means no further matching row existed after the last returned item.
+#[derive(Debug, Clone, Default)]
+pub struct ProviderKeysetPage {
+    pub items: Vec<ProviderKeysetItem>,
+    pub exhausted: bool,
+}
+
+fn after_matches(ticket: &ApiTicket, after: Option<&MergeKey>, query: &TicketQuery) -> bool {
+    after.is_none_or(|after| {
+        checkout_order::compare(
+            &MergeKey::from_ticket(ticket),
+            after,
+            query.sort,
+            query.descending,
+        )
+        .is_gt()
+    })
+}
+
+/// Value-keyset page over a complete provider result (the fallback for providers or sorts
+/// without a native keyset): keep rows strictly after `after`, in checkout order.
+#[must_use]
+pub fn keyset_page_from_rows(
+    rows: Vec<ApiTicket>,
+    query: &TicketQuery,
+    after: Option<&MergeKey>,
+    limit: usize,
+) -> ProviderKeysetPage {
+    let mut rows = rows
+        .into_iter()
+        .filter(|ticket| after_matches(ticket, after, query))
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        checkout_order::compare(
+            &MergeKey::from_ticket(left),
+            &MergeKey::from_ticket(right),
+            query.sort,
+            query.descending,
+        )
+    });
+    let exhausted = rows.len() <= limit;
+    rows.truncate(limit);
+    ProviderKeysetPage {
+        items: rows
+            .into_iter()
+            .map(|ticket| ProviderKeysetItem {
+                ticket,
+                resume: None,
+            })
+            .collect(),
+        exhausted,
+    }
+}
+
+/// Value-keyset page over native pages already ordered by the checkout order for `query`.
+///
+/// `fetch(cursor)` returns one native page (unfiltered rows plus the next native cursor);
+/// `None` is the first page. The walk starts at `resume` (the native cursor of the page that
+/// held the last consumed row), drops rows at or before `after`, and applies provider-neutral
+/// filters. Page cursors are positional, so an earlier deletion can shift unconsumed rows onto
+/// earlier pages: when the resumed page's first row already sorts after `after` (or the page
+/// vanished), the walk restarts from the first page. Rows are therefore never skipped or
+/// repeated, whatever else was inserted or deleted.
+pub fn keyset_page_from_native_pages(
+    query: &TicketQuery,
+    after: Option<&MergeKey>,
+    resume: Option<&str>,
+    limit: usize,
+    mut fetch: impl FnMut(Option<&str>) -> Result<(Vec<ApiTicket>, Option<String>), ProviderError>,
+) -> Result<ProviderKeysetPage, ProviderError> {
+    let mut cursor = resume.map(str::to_owned);
+    let mut first_fetch = true;
+    let mut items = Vec::new();
+    loop {
+        let (rows, next) = fetch(cursor.as_deref())?;
+        if first_fetch && cursor.is_some() {
+            first_fetch = false;
+            let resumed_past_key = match (after, rows.first()) {
+                (_, None) => true,
+                (Some(_), Some(head)) => after_matches(head, after, query),
+                (None, Some(_)) => false,
+            };
+            if resumed_past_key {
+                cursor = None;
+                continue;
+            }
+        }
+        first_fetch = false;
+        let rows = rows
+            .into_iter()
+            .filter(|ticket| after_matches(ticket, after, query))
+            .collect::<Vec<_>>();
+        for ticket in filter_provider_ticket_page(rows, query) {
+            if items.len() == limit {
+                return Ok(ProviderKeysetPage {
+                    items,
+                    exhausted: false,
+                });
+            }
+            items.push(ProviderKeysetItem {
+                ticket,
+                resume: cursor.clone(),
+            });
+        }
+        match next {
+            Some(next) if cursor.as_deref() != Some(next.as_str()) => {
+                if items.len() == limit {
+                    return Ok(ProviderKeysetPage {
+                        items,
+                        exhausted: false,
+                    });
+                }
+                cursor = Some(next);
+            }
+            Some(_) => {
+                return Err(ProviderError::Conflict {
+                    ticket: String::new(),
+                    message: "provider returned a non-advancing ticket cursor".into(),
+                });
+            }
+            None => {
+                return Ok(ProviderKeysetPage {
+                    items,
+                    exhausted: true,
+                });
+            }
+        }
+    }
+}
+
 /// Apply provider-neutral filters to one bounded native page. Adapters remain responsible
 /// for rejecting fields their native records cannot represent and for requesting a stable
 /// native ordering before calling this helper.
@@ -436,6 +577,16 @@ pub fn filter_provider_ticket_page(
     tickets
 }
 
+/// The query without paging or keyset limits, for adapters that read a complete result.
+#[must_use]
+pub fn unbounded_query(query: &TicketQuery) -> TicketQuery {
+    let mut unbounded = query.clone();
+    unbounded.limit = None;
+    unbounded.page_after = None;
+    unbounded.after_key = None;
+    unbounded
+}
+
 /// Total provider order used by adapters and checkout-level k-way pagination. Categorical
 /// directions affect only their primary key; ties stay recent-first and then use qualified
 /// identity so different providers cannot compare equal.
@@ -461,11 +612,12 @@ pub fn compare_provider_tickets(
         crate::SortKey::Status => directed((left.status as u8).cmp(&(right.status as u8)))
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
-        crate::SortKey::Title => {
-            directed(left.title.to_lowercase().cmp(&right.title.to_lowercase()))
-                .then_with(|| right.updated_at.cmp(&left.updated_at))
-                .then_with(|| left.qualified_id.cmp(&right.qualified_id))
-        }
+        crate::SortKey::Title => directed(
+            crate::checkout_order::title_fold(&left.title)
+                .cmp(&crate::checkout_order::title_fold(&right.title)),
+        )
+        .then_with(|| right.updated_at.cmp(&left.updated_at))
+        .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
     }
 }
 
@@ -562,6 +714,24 @@ pub trait TicketProvider: Send + Sync {
             items: rows[offset.min(rows.len())..end].to_vec(),
             next_cursor: (end < rows.len()).then(|| end.to_string()),
         })
+    }
+    /// Value-keyset read (HS2-74H84S): up to `limit` rows sorting strictly after `after` in
+    /// the shared `checkout_order` total order. `resume` is a hint from a previous
+    /// [`ProviderKeysetItem`]; implementations must remain correct when it is stale, so
+    /// inserts, edits, and deletions elsewhere never skip or repeat an unchanged row.
+    fn query_after(
+        &self,
+        query: &TicketQuery,
+        after: Option<&MergeKey>,
+        _resume: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderKeysetPage, ProviderError> {
+        Ok(keyset_page_from_rows(
+            self.query(&unbounded_query(query))?,
+            query,
+            after,
+            limit,
+        ))
     }
     /// Aggregate navigation counts without requiring the host to retain provider rows.
     fn summary(
@@ -1512,6 +1682,156 @@ mod tests {
             Some(reference)
         );
         assert!(ProjectTicketRef::from_qualified("01ARZ3NDEKTSV4RRFFQ69G5FC0").is_none());
+    }
+
+    /// Seven provider tickets in creation order, for keyset helper tests.
+    fn created_rows() -> Vec<ApiTicket> {
+        let (_dir, provider) = git_provider();
+        for index in 1..=7 {
+            provider
+                .create(
+                    ctx(Ulid::new(), &format!("2026-08-26T00:0{index}:00Z")),
+                    ProviderDraft {
+                        title: format!("ticket {index}"),
+                        category: "task".into(),
+                        priority: Priority::Default,
+                        status: Status::NotStarted,
+                        details: String::new(),
+                        tags: vec![],
+                        up_next: false,
+                        blocked_by: vec![],
+                        transfer: None,
+                    },
+                )
+                .unwrap();
+        }
+        provider
+            .query(&TicketQuery {
+                sort: crate::SortKey::Created,
+                ..Default::default()
+            })
+            .unwrap()
+    }
+
+    fn titles(page: &ProviderKeysetPage) -> Vec<String> {
+        page.items
+            .iter()
+            .map(|item| item.ticket.title.clone())
+            .collect()
+    }
+
+    /// Serve `rows` as native pages of two, with `page:N` cursors, counting fetches.
+    fn native_pages(
+        rows: &[ApiTicket],
+        fetches: &std::cell::Cell<usize>,
+        cursor: Option<&str>,
+    ) -> Result<(Vec<ApiTicket>, Option<String>), ProviderError> {
+        fetches.set(fetches.get() + 1);
+        let page = cursor.map_or(0, |cursor| {
+            cursor["page:".len()..].parse::<usize>().unwrap()
+        });
+        let start = (page * 2).min(rows.len());
+        let end = (start + 2).min(rows.len());
+        Ok((
+            rows[start..end].to_vec(),
+            (end < rows.len()).then(|| format!("page:{}", page + 1)),
+        ))
+    }
+
+    #[test]
+    fn full_scan_keyset_pages_resume_strictly_after_a_value() {
+        let rows = created_rows();
+        let query = TicketQuery {
+            sort: crate::SortKey::Created,
+            ..Default::default()
+        };
+        let first = keyset_page_from_rows(rows.clone(), &query, None, 3);
+        assert_eq!(titles(&first), ["ticket 1", "ticket 2", "ticket 3"]);
+        assert!(!first.exhausted);
+        let last = MergeKey::from_ticket(&first.items[2].ticket);
+        // The boundary row is gone and an earlier row was deleted: the rest still follows.
+        let shifted = rows
+            .iter()
+            .filter(|row| row.title != "ticket 3" && row.title != "ticket 1")
+            .cloned()
+            .collect::<Vec<_>>();
+        let rest = keyset_page_from_rows(shifted, &query, Some(&last), 10);
+        assert_eq!(
+            titles(&rest),
+            ["ticket 4", "ticket 5", "ticket 6", "ticket 7"]
+        );
+        assert!(rest.exhausted);
+        let exact = keyset_page_from_rows(rows, &query, Some(&last), 4);
+        assert!(
+            exact.exhausted,
+            "exactly `limit` remaining rows exhausts the source"
+        );
+    }
+
+    #[test]
+    fn native_keyset_pages_use_a_valid_hint_and_restart_from_a_stale_one() {
+        let rows = created_rows();
+        let query = TicketQuery {
+            sort: crate::SortKey::Created,
+            ..Default::default()
+        };
+        let fetches = std::cell::Cell::new(0);
+        let first = keyset_page_from_native_pages(&query, None, None, 3, |cursor| {
+            native_pages(&rows, &fetches, cursor)
+        })
+        .unwrap();
+        assert_eq!(titles(&first), ["ticket 1", "ticket 2", "ticket 3"]);
+        assert!(!first.exhausted);
+        assert_eq!(first.items[2].resume.as_deref(), Some("page:1"));
+        let last = MergeKey::from_ticket(&first.items[2].ticket);
+
+        // A valid hint skips earlier pages entirely.
+        fetches.set(0);
+        let resumed =
+            keyset_page_from_native_pages(&query, Some(&last), Some("page:1"), 10, |cursor| {
+                native_pages(&rows, &fetches, cursor)
+            })
+            .unwrap();
+        assert_eq!(
+            titles(&resumed),
+            ["ticket 4", "ticket 5", "ticket 6", "ticket 7"]
+        );
+        assert!(resumed.exhausted);
+        assert_eq!(fetches.get(), 3, "pages 1..=3, never page 0");
+
+        // Two earlier deletions move the successor before the hinted page: restart.
+        let shifted = rows[2..].to_vec();
+        fetches.set(0);
+        let restarted =
+            keyset_page_from_native_pages(&query, Some(&last), Some("page:1"), 10, |cursor| {
+                native_pages(&shifted, &fetches, cursor)
+            })
+            .unwrap();
+        assert_eq!(
+            titles(&restarted),
+            ["ticket 4", "ticket 5", "ticket 6", "ticket 7"]
+        );
+        assert_eq!(fetches.get(), 4, "stale page, then pages 0..=2");
+
+        // A hinted page that no longer exists also restarts instead of ending the source.
+        let short = rows[..4].to_vec();
+        let vanished =
+            keyset_page_from_native_pages(&query, Some(&last), Some("page:5"), 10, |cursor| {
+                native_pages(&short, &fetches, cursor)
+            })
+            .unwrap();
+        assert_eq!(titles(&vanished), ["ticket 4"]);
+        assert!(vanished.exhausted);
+
+        // A provider whose cursor does not advance is an error, not an endless loop.
+        let repeating = keyset_page_from_native_pages(&query, None, None, 10, |_| {
+            Ok((vec![], Some("page:0".into())))
+        });
+        assert!(matches!(repeating, Err(ProviderError::Conflict { .. })));
+        let stuck = keyset_page_from_native_pages(&query, None, Some("page:0"), 10, |_| {
+            Ok((rows[..1].to_vec(), Some("page:0".into())))
+        });
+        assert!(matches!(stuck, Err(ProviderError::Conflict { .. })));
     }
 
     #[test]

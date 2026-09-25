@@ -4,12 +4,16 @@ use std::sync::Arc;
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderTicketPage,
-    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, compare_provider_tickets,
-    filter_provider_ticket_page,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
+    ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
+    checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
+    keyset_page_from_native_pages, keyset_page_from_rows, unbounded_query,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+/// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
+const NATIVE_KEYSET_PAGE: usize = 100;
 
 const API_VERSION: &str = "2022-11-28";
 
@@ -367,6 +371,31 @@ impl GitHubProvider {
         }
     }
 
+    /// Reject filters the native page API cannot evaluate (shared by paged reads).
+    fn check_query_filters(&self, query: &TicketQuery) -> Result<(), ProviderError> {
+        if query.text.is_some()
+            || query.review_requested.is_some()
+            || query.review_by.is_some()
+            || query.claimed.is_some()
+            || query.blocked.is_some()
+            || query.page_after.is_some()
+            || query.up_next_only
+            || query.completed_after.is_some()
+            || query.completed_before.is_some()
+            || query.verified_after.is_some()
+            || query.verified_before.is_some()
+            || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
+            || !query.attachment_patterns.is_empty()
+        {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.config.connection_id.clone(),
+                capability: "requested query filter",
+            });
+        }
+        Ok(())
+    }
+
     fn issue_page(
         &self,
         cursor: Option<&str>,
@@ -526,26 +555,7 @@ impl TicketProvider for GitHubProvider {
         cursor: Option<&str>,
         limit: usize,
     ) -> Result<ProviderTicketPage, ProviderError> {
-        if query.text.is_some()
-            || query.review_requested.is_some()
-            || query.review_by.is_some()
-            || query.claimed.is_some()
-            || query.blocked.is_some()
-            || query.page_after.is_some()
-            || query.up_next_only
-            || query.completed_after.is_some()
-            || query.completed_before.is_some()
-            || query.verified_after.is_some()
-            || query.verified_before.is_some()
-            || query.has_attachment.is_some()
-            || query.has_media_annotation.is_some()
-            || !query.attachment_patterns.is_empty()
-        {
-            return Err(ProviderError::Unsupported {
-                connection_id: self.config.connection_id.clone(),
-                capability: "requested query filter",
-            });
-        }
+        self.check_query_filters(query)?;
         if query.descending || !matches!(query.sort, SortKey::Id | SortKey::Created) {
             let mut unbounded = query.clone();
             unbounded.limit = None;
@@ -576,6 +586,38 @@ impl TicketProvider for GitHubProvider {
                 query,
             ),
             next_cursor,
+        })
+    }
+
+    /// Value keyset (HS2-74H84S). Only ascending creation order is natively keyset-safe:
+    /// GitHub orders issue numbers numerically while the checkout `id` order compares
+    /// native ids as strings, so every other sort resumes over the full filtered result.
+    fn query_after(
+        &self,
+        query: &TicketQuery,
+        after: Option<&MergeKey>,
+        resume: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderKeysetPage, ProviderError> {
+        if query.descending || query.sort != SortKey::Created {
+            return Ok(keyset_page_from_rows(
+                self.query(&unbounded_query(query))?,
+                query,
+                after,
+                limit,
+            ));
+        }
+        self.check_query_filters(query)?;
+        keyset_page_from_native_pages(query, after, resume, limit, |cursor| {
+            let (issues, next) =
+                self.issue_page(cursor, query.updated_after.as_deref(), NATIVE_KEYSET_PAGE)?;
+            Ok((
+                issues
+                    .into_iter()
+                    .map(|issue| self.api_ticket(issue, vec![]))
+                    .collect(),
+                next,
+            ))
         })
     }
 

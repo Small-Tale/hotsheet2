@@ -6,11 +6,16 @@
 //! global order instead of source-by-source concatenation (HS2-2BDSRK, HS2-M0YTB6).
 
 use crate::SortKey;
+use crate::wire::{ApiTicket, TicketRow};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
 
 /// The sortable projection of one ticket row from any checkout source.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// It is also the value-keyset continuation position (HS2-74H84S): a checkout cursor records
+/// the last emitted row's key, and every source resumes strictly after it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeKey {
     pub native_id: String,
     pub qualified_id: String,
@@ -37,6 +42,51 @@ impl MergeKey {
             status_rank: status_rank(Some(text("status"))),
         }
     }
+
+    /// Key of an indexed local row, after `TicketRow::set_connection`.
+    #[must_use]
+    pub fn from_row(row: &TicketRow) -> Self {
+        Self {
+            native_id: row.native_id.clone(),
+            qualified_id: row.qualified_id.clone(),
+            title: row.title.clone(),
+            created_at: row.created_at.clone().unwrap_or_default(),
+            updated_at: row.updated_at.clone().unwrap_or_default(),
+            priority_rank: priority_rank(row.priority.as_deref()),
+            status_rank: status_rank(row.status.as_deref()),
+        }
+    }
+
+    /// Key of a provider ticket.
+    #[must_use]
+    pub fn from_ticket(ticket: &ApiTicket) -> Self {
+        Self {
+            native_id: ticket.native_id.clone(),
+            qualified_id: ticket.qualified_id.clone(),
+            title: ticket.title.clone(),
+            created_at: ticket.created_at.clone(),
+            updated_at: ticket.updated_at.clone(),
+            priority_rank: ticket.priority as u8,
+            status_rank: ticket.status as u8,
+        }
+    }
+}
+
+/// A value-keyset predicate for one source read (HS2-74H84S): return only rows sorting
+/// strictly after `key` in [`compare`] order. `connection_id` is the queried source's
+/// connection, which forms its rows' qualified ids (`{connection_id}:{native_id}`) for the
+/// final cross-source tiebreaker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AfterKey {
+    pub key: MergeKey,
+    pub connection_id: String,
+}
+
+/// Fold a title for case-insensitive ordering. ASCII-only, matching SQLite's built-in
+/// `lower()` used by the index, so local SQL keysets and in-memory merges agree exactly.
+#[must_use]
+pub fn title_fold(title: &str) -> String {
+    title.to_ascii_lowercase()
 }
 
 /// Rank a wire priority name in `Priority` declaration order; unknown sorts last.
@@ -91,7 +141,7 @@ pub fn compare(left: &MergeKey, right: &MergeKey, sort: SortKey, descending: boo
         SortKey::Status => directed(left.status_rank.cmp(&right.status_rank))
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
-        SortKey::Title => directed(left.title.to_lowercase().cmp(&right.title.to_lowercase()))
+        SortKey::Title => directed(title_fold(&left.title).cmp(&title_fold(&right.title)))
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
     }
@@ -199,6 +249,38 @@ mod tests {
         assert_eq!(titles(&by_priority), ["Charlie", "Delta"]);
         let reversed = merge_rows(rows, SortKey::Title, true, Some(0));
         assert!(reversed.is_empty(), "limit=0 returns no rows");
+    }
+
+    #[test]
+    fn title_order_folds_ascii_case_only_matching_the_sqlite_index() {
+        let upper = key("1", "BETA", "2026-09-01T00:00:00Z", 0);
+        let lower = key("2", "alpha", "2026-09-01T00:00:00Z", 0);
+        let accented = key("3", "Élan", "2026-09-01T00:00:00Z", 0);
+        assert_eq!(
+            compare(&lower, &upper, SortKey::Title, false),
+            Ordering::Less
+        );
+        // SQLite's built-in lower() leaves non-ASCII bytes alone, so neither side folds É.
+        assert_eq!(title_fold("Élan"), "Élan");
+        assert_eq!(
+            compare(&upper, &accented, SortKey::Title, false),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn key_round_trips_through_serde_for_cursors() {
+        let original = key(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "Title",
+            "2026-09-01T00:00:00Z",
+            3,
+        );
+        let encoded = serde_json::to_string(&original).unwrap();
+        assert_eq!(
+            serde_json::from_str::<MergeKey>(&encoded).unwrap(),
+            original
+        );
     }
 
     #[test]

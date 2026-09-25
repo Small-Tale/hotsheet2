@@ -8425,22 +8425,26 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
         "<https://api.github.com/repos/acme/repo/issues?page2>; rel=\"next\"".into(),
     );
     let transport = Arc::new(FakeGitHub {
-        responses: Mutex::new(
-            vec![
+        responses: Mutex::new({
+            let both = || {
                 github_response(
                     200,
                     serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
-                ),
+                )
+            };
+            // Page 1: summary, one keyset batch that follows the provider's link
+            // cursor, then a one-row probe for a continuation. Page 2: summary and one
+            // batch resumed strictly after the first page's last key (HS2-74H84S).
+            vec![
+                both(),
                 first_page,
                 github_response(200, serde_json::json!([github_issue(2, "second")])),
-                github_response(
-                    200,
-                    serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
-                ),
-                github_response(200, serde_json::json!([github_issue(2, "second")])),
+                both(),
+                both(),
+                both(),
             ]
-            .into(),
-        ),
+            .into()
+        }),
         requests: Mutex::new(Vec::new()),
     });
     let app = app(st
@@ -8468,7 +8472,7 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
     assert_eq!(first["items"][0]["native_id"], "1");
     assert_eq!(first["counts"]["total"], 2);
     let cursor = first["next_cursor"].as_str().unwrap();
-    assert!(cursor.starts_with("v1."));
+    assert!(cursor.starts_with("v2."));
     let second = body_json(
         app.oneshot(authed(
             "GET",
@@ -9219,4 +9223,365 @@ async fn a_corrupt_ticket_file_does_not_block_opening_the_project() {
             .ends_with("01ARZ3NDEKTSV4RRFFQ69G5FAV.md")
     );
     assert!(!corrupt[0]["error"].as_str().unwrap().is_empty());
+}
+
+/// Drive a checkout ticket route and decode the JSON response.
+async fn checkout_call(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let body = body.map(|value| value.to_string());
+    let response = router
+        .clone()
+        .oneshot(authed(method, uri, body.as_deref()))
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "{method} {uri}: {}",
+        response.status()
+    );
+    body_json(response).await
+}
+
+/// Value-keyset continuations (HS2-74H84S): for every sort and direction, mutate the store
+/// between pages — edit the boundary row's sort key, purge it, insert rows on both sides of
+/// the cursor, and move another row across the boundary — interleaved across continuations.
+/// Every row that exists unchanged for the whole traversal must be emitted exactly once, and
+/// a boundary edit or purge must never end or rewind the traversal.
+#[tokio::test]
+async fn checkout_value_keyset_continuations_survive_interleaved_mutations() {
+    for (sort, direction) in [
+        ("updated", "ascending"),
+        ("updated", "descending"),
+        ("title", "ascending"),
+        ("title", "descending"),
+        ("priority", "descending"),
+        ("status", "ascending"),
+        ("created", "ascending"),
+        ("id", "descending"),
+    ] {
+        let (_primary, st) = state();
+        let workspace = tempfile::tempdir().unwrap();
+        let checkout = workspace.path().join("app");
+        std::fs::create_dir(&checkout).unwrap();
+        FsStore::init(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
+        let registry = tempfile::tempdir().unwrap();
+        let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+        let opened = checkout_call(
+            &router,
+            "POST",
+            "/projects/open",
+            Some(serde_json::json!({"root":checkout})),
+        )
+        .await;
+        let base = format!("/checkouts/{}", opened["checkout"]["id"].as_str().unwrap());
+        let priorities = ["high", "default", "low"];
+        let statuses = ["not_started", "started", "backlog"];
+        let mut ids = Vec::new();
+        for index in 0..12 {
+            let created = checkout_call(
+                &router,
+                "POST",
+                &format!("{base}/tickets"),
+                Some(serde_json::json!({
+                    "title": format!("{} ticket {index:02}", ["alpha", "Bravo", "charlie"][index % 3]),
+                    "priority": priorities[index % 3],
+                    "status": statuses[index % 3],
+                })),
+            )
+            .await;
+            ids.push(created["id"].as_str().unwrap().to_owned());
+        }
+        let mut touched = std::collections::HashSet::new();
+        let mut seen = std::collections::HashMap::<String, usize>::new();
+        let mut cursor: Option<String> = None;
+        let mut step = 0;
+        loop {
+            let uri = format!(
+                "{base}/tickets?page_size=2&sort={sort}&direction={direction}{}",
+                cursor
+                    .as_deref()
+                    .map(|cursor| format!("&cursor={cursor}"))
+                    .unwrap_or_default()
+            );
+            let page = checkout_call(&router, "GET", &uri, None).await;
+            let rows = page["items"].as_array().unwrap();
+            for row in rows {
+                *seen
+                    .entry(row["id"].as_str().unwrap().to_owned())
+                    .or_default() += 1;
+            }
+            let Some(next) = page["next_cursor"].as_str() else {
+                break;
+            };
+            cursor = Some(next.to_owned());
+            let boundary = rows.last().unwrap()["id"].as_str().unwrap().to_owned();
+            // Rotate through the mutation kinds so they interleave across continuations.
+            match step % 4 {
+                0 => {
+                    // Edit the boundary row: every sort key it has changes.
+                    checkout_call(
+                        &router,
+                        "PATCH",
+                        &format!("{base}/tickets/{boundary}"),
+                        Some(serde_json::json!({"title":"zzz edited","priority":"lowest","status":"started"})),
+                    )
+                    .await;
+                    touched.insert(boundary);
+                }
+                1 => {
+                    // Purge the boundary row entirely.
+                    checkout_call(
+                        &router,
+                        "PATCH",
+                        &format!("{base}/tickets/{boundary}"),
+                        Some(serde_json::json!({"status":"deleted"})),
+                    )
+                    .await;
+                    checkout_call(&router, "POST", &format!("{base}/trash/empty"), None).await;
+                    touched.insert(boundary);
+                }
+                2 => {
+                    // Insert rows that sort before and after the cursor.
+                    for title in ["aaa inserted", "zzzz inserted"] {
+                        let created = checkout_call(
+                            &router,
+                            "POST",
+                            &format!("{base}/tickets"),
+                            Some(serde_json::json!({"title":title,"priority":"highest"})),
+                        )
+                        .await;
+                        touched.insert(created["id"].as_str().unwrap().to_owned());
+                    }
+                }
+                _ => {
+                    // Move a not-yet-emitted row across the boundary.
+                    if let Some(other) = ids
+                        .iter()
+                        .find(|id| !seen.contains_key(*id) && !touched.contains(*id))
+                        .cloned()
+                    {
+                        checkout_call(
+                            &router,
+                            "PATCH",
+                            &format!("{base}/tickets/{other}"),
+                            Some(serde_json::json!({"title":"aaaa moved","priority":"highest","status":"not_started"})),
+                        )
+                        .await;
+                        touched.insert(other);
+                    }
+                }
+            }
+            step += 1;
+            assert!(step < 64, "{sort} {direction}: traversal did not terminate");
+        }
+        for id in ids.iter().filter(|id| !touched.contains(*id)) {
+            assert_eq!(
+                seen.get(id).copied().unwrap_or_default(),
+                1,
+                "{sort} {direction}: unchanged row {id} must be emitted exactly once"
+            );
+        }
+        assert!(
+            seen.values().all(|count| *count <= 2),
+            "{sort} {direction}: a mutated row appears at most twice"
+        );
+        assert!(
+            step >= 3,
+            "{sort} {direction}: mutations interleaved across continuations"
+        );
+    }
+}
+
+/// A stateful GitHub fake that serves the current issue list in native pages of
+/// `page_size`, advertises `rel="next"` links, and counts every request, so tests can mutate
+/// the remote between continuations and assert provider read volume.
+struct PagedGitHub {
+    issues: Mutex<Vec<serde_json::Value>>,
+    page_size: usize,
+    requests: std::sync::atomic::AtomicUsize,
+}
+
+impl PagedGitHub {
+    fn new(numbers: impl IntoIterator<Item = u64>, page_size: usize) -> Self {
+        Self {
+            issues: Mutex::new(
+                numbers
+                    .into_iter()
+                    .map(|number| github_issue(number, &format!("issue {number}")))
+                    .collect(),
+            ),
+            page_size,
+            requests: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn request_count(&self) -> usize {
+        self.requests.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl GitHubTransport for PagedGitHub {
+    fn request(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        _: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        self.requests
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(method, "GET", "{url}");
+        let (base, page) = match url.rsplit_once("&page=") {
+            Some((base, page)) => (base.to_owned(), page.parse::<usize>().unwrap()),
+            None => (url.to_owned(), 1),
+        };
+        let issues = self.issues.lock().unwrap();
+        let start = (page - 1) * self.page_size;
+        let end = (start + self.page_size).min(issues.len());
+        let mut response = github_response(
+            200,
+            serde_json::Value::Array(issues.get(start..end).unwrap_or_default().to_vec()),
+        );
+        if end < issues.len() {
+            response.headers.insert(
+                "link".into(),
+                format!("<{base}&page={}>; rel=\"next\"", page + 1),
+            );
+        }
+        Ok(response)
+    }
+}
+
+async fn paged_github_checkout(
+    transport: Arc<PagedGitHub>,
+) -> (
+    axum::Router,
+    tempfile::TempDir,
+    tempfile::TempDir,
+    tempfile::TempDir,
+) {
+    let (primary, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-paged", "acme/repo", "fixture-token"),
+            transport,
+        ))));
+    checkout_call(
+        &router,
+        "POST",
+        "/checkouts",
+        Some(serde_json::json!({
+            "root": checkout.path(),
+            "alias": "paged",
+            "sources": [{"connection_id":"github-paged","provider":"github","locator":"acme/repo"}],
+            "default_source": "github-paged"
+        })),
+    )
+    .await;
+    (router, primary, checkout, registry)
+}
+
+fn native_ids(page: &serde_json::Value) -> Vec<String> {
+    page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["native_id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// HS2-BGZ0NY: one checkout page reads a provider source in bounded batches. A 25-row page
+/// costs one summary walk plus one keyset walk (three native pages each), not one full
+/// provider read per emitted row, for both the native and full-scan keyset paths.
+#[tokio::test]
+async fn checkout_pages_batch_provider_reads_instead_of_requerying_per_row() {
+    for sort in ["created", "title", "id"] {
+        let transport = Arc::new(PagedGitHub::new(1..=25, 10));
+        let (router, _primary, _checkout, _registry) =
+            paged_github_checkout(transport.clone()).await;
+        let page = checkout_call(
+            &router,
+            "GET",
+            &format!("/checkouts/paged/tickets?page_size=25&sort={sort}"),
+            None,
+        )
+        .await;
+        assert_eq!(page["items"].as_array().unwrap().len(), 25, "{sort}");
+        assert!(page.get("next_cursor").is_none(), "{sort}");
+        assert_eq!(
+            transport.request_count(),
+            6,
+            "{sort}: summary (3 native pages) + one batched keyset read (3 native pages)"
+        );
+    }
+}
+
+/// HS2-74H84S: provider continuations resume by sort-key value. Deleting or inserting rows
+/// before the cursor shifts native page positions, so a stale page hint must neither skip
+/// nor repeat unchanged rows — on the native (`created`) path and the full-scan path.
+#[tokio::test]
+async fn provider_continuations_survive_rows_shifting_before_the_cursor() {
+    for sort in ["created", "title"] {
+        for mutation in ["delete-before", "insert-before", "delete-boundary"] {
+            let transport = Arc::new(PagedGitHub::new(1..=7, 2));
+            let (router, _primary, _checkout, _registry) =
+                paged_github_checkout(transport.clone()).await;
+            let uri = format!("/checkouts/paged/tickets?page_size=3&sort={sort}");
+            let first = checkout_call(&router, "GET", &uri, None).await;
+            let first_ids = native_ids(&first);
+            assert_eq!(first_ids.len(), 3, "{sort} {mutation}");
+            let cursor = first["next_cursor"].as_str().unwrap().to_owned();
+            {
+                let mut issues = transport.issues.lock().unwrap();
+                match mutation {
+                    "delete-before" => {
+                        // Two deletions shift the cursor's successor onto an earlier
+                        // native page than the stored resume hint.
+                        issues.retain(|issue| {
+                            !first_ids[..2]
+                                .iter()
+                                .any(|id| issue["number"] == id.parse::<u64>().unwrap())
+                        });
+                    }
+                    "insert-before" => issues.insert(0, github_issue(0, "aaa inserted")),
+                    _ => {
+                        issues.retain(|issue| {
+                            issue["number"] != first_ids[2].parse::<u64>().unwrap()
+                        });
+                    }
+                }
+            }
+            let mut rest = Vec::new();
+            let mut next = Some(cursor);
+            while let Some(cursor) = next {
+                let page =
+                    checkout_call(&router, "GET", &format!("{uri}&cursor={cursor}"), None).await;
+                rest.extend(native_ids(&page));
+                next = page["next_cursor"].as_str().map(str::to_owned);
+            }
+            let mut all = first_ids.clone();
+            all.extend(rest.iter().cloned());
+            let mut expected = (1..=7).map(|n| n.to_string()).collect::<Vec<_>>();
+            if sort == "title" {
+                expected.sort_by_key(|id| format!("issue {id}"));
+            }
+            let remaining = expected
+                .iter()
+                .filter(|id| !first_ids.contains(id))
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(
+                rest, remaining,
+                "{sort} {mutation}: every unchanged row exactly once"
+            );
+            assert_eq!(all.len(), 7, "{sort} {mutation}");
+        }
+    }
 }

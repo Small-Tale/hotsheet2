@@ -220,13 +220,22 @@ query(filter, sort, text?, paging) -> TicketRow[]
   paths return an **empty page** for a stale cursor (a ULID no longer in the store),
   so the client restarts from the top. To page, pass the last row's ULID as the next
   `page_after`. The CLI (`ls --page-after <slug|ULID>`) accepts a slug for convenience.
+  `page_after` is a **row-identity** keyset for one store: it re-reads the boundary row's
+  *current* sort values, so editing that row's sort key under a traversal can skip or repeat
+  rows, and purging it ends the traversal (empty page). That hazard is accepted for this
+  single-store convenience surface (decided HS2-74H84S); callers that need mutation-safe
+  continuation use the checkout `cursor` below, whose value keysets never depend on the
+  boundary row. `TicketQuery::after_key` exposes the same value keyset to the index and the
+  serverless file scan.
   Checkout/browser collection reads use the higher-level `page_size` + opaque `cursor`
   contract. Each response is capped at 500 compact rows and includes constant-memory SQL
   aggregates for navigation counts; callers must explicitly request another page, so a
   100K or 1M checkout is never serialized into one response or eagerly retained by the UI.
-  A versioned checkout cursor records every local and hosted-provider source position. The
-  server keeps one bounded head per source and performs a k-way merge in the requested total
-  order, including recent-first `updated_at` and stable qualified-identity ties for priority,
+  A versioned checkout cursor (`v2.`) records the last emitted row's sort-key values plus
+  each source's exhaustion flag and optional provider resume hint. The server reads each
+  source in bounded batches (about `page_size` rows: one index query or one provider keyset
+  read per refill, with `has_commit` evaluated once per batch, HS2-BGZ0NY) and performs a
+  k-way merge over those buffers in the requested total order, including recent-first `updated_at` and stable qualified-identity ties for priority,
   status, and title sorts. Continuations therefore resume the same global order instead of
   concatenating independently sorted source pages (HS2-2BDSRK).
   Without `page_size`, the checkout route returns a plain row array (the shape MCP
@@ -235,7 +244,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
   `hotsheet_ticketing::checkout_order` comparator, applies `limit` to the checkout-wide
   result, and projects `fields` only after merging. The serverless MCP backend merges
   multi-store checkouts the same way (HS2-M0YTB6).
-- **Continuation under concurrent mutation (decided HS2-ZYW6K8; implementation pending):**
+- **Continuation under concurrent mutation (decided HS2-ZYW6K8; built HS2-74H84S):**
   checkout cursors are *value-keyset continuations*, not snapshots. The server keeps no
   per-cursor snapshot or retained result set, so memory stays bounded and cursors stay
   stateless across restarts and hosts. Instead, a continuation resumes strictly after the
@@ -254,10 +263,20 @@ query(filter, sort, text?, paging) -> TicketRow[]
     as `tags` sorted and de-duplicated, and paging/ordering parameters excluded), so an
     equivalent query in a different parameter order continues (HS2-Z1TQ7Z, **built**).
 
-  Gaps today: local sources resume from the boundary row's *current* sort values
-  (`page_after` identity lookup), and provider fallbacks and GitHub/GitLab page numbers
-  are offsets. Tracked by `HS2-74H84S` (value keysets) and `HS2-BGZ0NY` (batch provider
-  reads in the merge).
+  How sources resume (HS2-74H84S):
+  - **Local stores** use `TicketQuery::after_key`, an exact SQL predicate that mirrors
+    `checkout_order::compare` term by term, including the `{connection}:{id}` qualified-id
+    tiebreaker against keys from other sources. Title order folds ASCII case only, matching
+    SQLite's built-in `lower()`, so SQL keysets and the in-memory merge agree byte for byte.
+  - **Providers** implement `TicketProvider::query_after(query, after, resume, limit)`. The
+    default reads the full filtered result and keeps rows strictly after the key. GitHub and
+    GitLab walk native pages for ascending `created` order, and Jira for ascending
+    `created`/`updated`; they resume from the hinted native page, drop rows at or before the
+    key, and restart from the first page when the hinted page is gone or already starts
+    after the key (earlier deletions shifted rows back). Their `id` order is numeric
+    natively but string-ordered in the checkout comparator, so `id` and every other sort
+    use the full-scan keyset.
+  - A pre-value-keyset `v1.` cursor is rejected as stale; the client restarts from the top.
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

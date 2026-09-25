@@ -900,6 +900,77 @@ impl Index {
             }
         }
 
+        // Value keyset (HS2-74H84S): rows strictly after a sort-key *value* in the shared
+        // `checkout_order::compare` order, so the boundary row may be edited or purged
+        // without ending or rewinding the traversal. Mirrors `compare` term by term:
+        // chronological/id sorts tie on native then qualified identity in the requested
+        // direction; categorical sorts tie recent-first, then ascending qualified identity.
+        // Qualified ids are `{connection}:{id}` and compare bytewise, like Rust strings.
+        if let Some(after) = &q.after_key {
+            let key = &after.key;
+            let qualified = "(? || t.id)";
+            let prefix = format!("{}:", after.connection_id);
+            let c = if q.descending { "<" } else { ">" };
+            match q.sort {
+                SortKey::Id => {
+                    wheres.push(format!("(t.id {c} ? OR (t.id = ? AND {qualified} {c} ?))"));
+                    args.push(Box::new(key.native_id.clone()));
+                    args.push(Box::new(key.native_id.clone()));
+                    args.push(Box::new(prefix));
+                    args.push(Box::new(key.qualified_id.clone()));
+                }
+                SortKey::Created | SortKey::Updated => {
+                    let (column, value) = if q.sort == SortKey::Created {
+                        ("coalesce(t.created_at,'')", &key.created_at)
+                    } else {
+                        ("coalesce(t.updated_at,'')", &key.updated_at)
+                    };
+                    wheres.push(format!(
+                        "({column} {c} ? OR ({column} = ? AND t.id {c} ?) OR \
+                         ({column} = ? AND t.id = ? AND {qualified} {c} ?))"
+                    ));
+                    args.push(Box::new(value.clone()));
+                    args.push(Box::new(value.clone()));
+                    args.push(Box::new(key.native_id.clone()));
+                    args.push(Box::new(value.clone()));
+                    args.push(Box::new(key.native_id.clone()));
+                    args.push(Box::new(prefix));
+                    args.push(Box::new(key.qualified_id.clone()));
+                }
+                SortKey::Priority | SortKey::Status | SortKey::Title => {
+                    let primary = match q.sort {
+                        SortKey::Priority => "t.priority_rank",
+                        SortKey::Status => "t.status_rank",
+                        _ => "lower(t.title)",
+                    };
+                    let bound = if q.sort == SortKey::Title {
+                        "lower(?)"
+                    } else {
+                        "?"
+                    };
+                    let updated = "coalesce(t.updated_at,'')";
+                    wheres.push(format!(
+                        "({primary} {c} {bound} OR ({primary} = {bound} AND {updated} < ?) OR \
+                         ({primary} = {bound} AND {updated} = ? AND {qualified} > ?))"
+                    ));
+                    let primary_value = || -> Box<dyn rusqlite::ToSql> {
+                        match q.sort {
+                            SortKey::Priority => Box::new(i64::from(key.priority_rank)),
+                            SortKey::Status => Box::new(i64::from(key.status_rank)),
+                            _ => Box::new(key.title.clone()),
+                        }
+                    };
+                    args.push(primary_value());
+                    args.push(primary_value());
+                    args.push(Box::new(key.updated_at.clone()));
+                    args.push(primary_value());
+                    args.push(Box::new(key.updated_at.clone()));
+                    args.push(Box::new(prefix));
+                    args.push(Box::new(key.qualified_id.clone()));
+                }
+            }
+        }
+
         let limit = match q.limit {
             Some(n) => format!(" LIMIT {n}"),
             None => String::new(),

@@ -51,10 +51,11 @@ pub use ports::{Clock, Rng};
 pub use provider::{
     GitProvider, MutationContext, NotWorkingReport, ProjectTicketRef, ProviderCapabilities,
     ProviderConfigRegistry, ProviderConnection, ProviderDescriptor, ProviderDraft, ProviderError,
-    ProviderEvidence, ProviderPatch, ProviderRegistry, ProviderTicketPage, ProviderTicketSummary,
-    TicketProvider, TicketRef, TransferError, TransferOutcome, TransferProvenance,
-    compare_provider_tickets, copy_between, filter_provider_ticket_page, git_connection_id,
-    move_between,
+    ProviderEvidence, ProviderKeysetItem, ProviderKeysetPage, ProviderPatch, ProviderRegistry,
+    ProviderTicketPage, ProviderTicketSummary, TicketProvider, TicketRef, TransferError,
+    TransferOutcome, TransferProvenance, compare_provider_tickets, copy_between,
+    filter_provider_ticket_page, git_connection_id, keyset_page_from_native_pages,
+    keyset_page_from_rows, move_between, unbounded_query,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
