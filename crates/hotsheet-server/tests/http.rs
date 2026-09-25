@@ -2856,7 +2856,9 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
         ("Second", "started", false),
         ("Third", "backlog", false),
     ] {
-        let body = serde_json::json!({"title":title,"status":status,"up_next":up_next}).to_string();
+        let body =
+            serde_json::json!({"title":title,"status":status,"up_next":up_next,"tags":["a","b"]})
+                .to_string();
         assert_eq!(
             router
                 .clone()
@@ -2950,6 +2952,50 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
         .map(|row| row["id"].as_str().unwrap())
         .collect::<std::collections::HashSet<_>>();
     assert_eq!(ids.len(), 4);
+
+    // A cursor is bound to its effective filter set (HS2-Z1TQ7Z): reusing it after the
+    // filters change is rejected, while an equivalent reordered filter set continues.
+    for changed in ["collection=queue", "text=Third", "tags=b", "up_next=true"] {
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2&{changed}&cursor={cursor}"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{changed}");
+        assert_eq!(
+            body_json(response).await["error"],
+            "stale checkout ticket cursor"
+        );
+    }
+    let tagged = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&tags=a,b"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let tagged_cursor = tagged["next_cursor"].as_str().unwrap();
+    let reordered = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!(
+                "/checkouts/{checkout_id}/tickets?tags=b,a&page_size=1&cursor={tagged_cursor}"
+            ),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reordered.status(), StatusCode::OK);
 
     let descending = body_json(
         router

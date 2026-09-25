@@ -248,14 +248,16 @@ query(filter, sort, text?, paging) -> TicketRow[]
     de-duplicate by `qualified_id` and rely on live WebSocket updates to reconcile edits;
   - editing or purging the boundary row never ends or rewinds a source;
   - `counts` describe the current request, not the traversal's start;
-  - a cursor is rejected when the source set, sort, direction, or effective filter set
-    changed.
+  - a cursor is rejected (`400 stale checkout ticket cursor`) when the source set, sort,
+    direction, or effective filter set changed. The filter binding is a canonical
+    fingerprint of the parsed filters (after `me` resolution, with set-valued filters such
+    as `tags` sorted and de-duplicated, and paging/ordering parameters excluded), so an
+    equivalent query in a different parameter order continues (HS2-Z1TQ7Z, **built**).
 
   Gaps today: local sources resume from the boundary row's *current* sort values
-  (`page_after` identity lookup), provider fallbacks and GitHub/GitLab page numbers are
-  offsets, and cursors do not yet bind filters. Tracked by `HS2-74H84S` (value keysets),
-  `HS2-BGZ0NY` (batch provider reads in the merge), and `HS2-Z1TQ7Z` (filter-bound
-  cursors).
+  (`page_after` identity lookup), and provider fallbacks and GitHub/GitLab page numbers
+  are offsets. Tracked by `HS2-74H84S` (value keysets) and `HS2-BGZ0NY` (batch provider
+  reads in the merge).
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

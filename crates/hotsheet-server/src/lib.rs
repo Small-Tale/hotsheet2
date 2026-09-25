@@ -3719,6 +3719,9 @@ struct CheckoutMergeCursor {
     version: u8,
     sort: String,
     descending: bool,
+    /// Canonical fingerprint of the effective filter set the positions were computed for.
+    #[serde(default)]
+    filters: String,
     sources: Vec<CheckoutSourceCursor>,
 }
 
@@ -3740,15 +3743,37 @@ fn checkout_sort_name(sort: SortKey) -> &'static str {
     }
 }
 
+/// Canonical fingerprint of a checkout page's effective filters (HS2-Z1TQ7Z).
+///
+/// Ordering fields (`sort`, `descending`) are bound separately, and paging fields
+/// (`limit`, `page_after`) are excluded. Set-valued filters are sorted and de-duplicated so
+/// equivalent query strings in a different parameter order share a fingerprint.
+fn checkout_filter_fingerprint(query: &TicketQuery, has_commit: Option<bool>) -> String {
+    use sha2::{Digest, Sha256};
+    let mut canonical = query.clone();
+    canonical.sort = SortKey::default();
+    canonical.descending = false;
+    canonical.limit = None;
+    canonical.page_after = None;
+    canonical.tags.sort();
+    canonical.tags.dedup();
+    canonical.attachment_patterns.sort();
+    canonical.attachment_patterns.dedup();
+    let text = format!("{canonical:?}|has_commit={has_commit:?}");
+    format!("{:x}", Sha256::digest(text.as_bytes()))[..32].to_string()
+}
+
 fn encode_checkout_page_cursor(
     sources: &[CheckoutSourceCursor],
     sort: SortKey,
     descending: bool,
+    filters: &str,
 ) -> Result<String, ApiError> {
     let bytes = serde_json::to_vec(&CheckoutMergeCursor {
         version: 1,
         sort: checkout_sort_name(sort).into(),
         descending,
+        filters: filters.into(),
         sources: sources.to_vec(),
     })
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
@@ -3766,6 +3791,7 @@ fn decode_checkout_page_cursor(
     source_keys: &[String],
     sort: SortKey,
     descending: bool,
+    filters: &str,
 ) -> Result<Vec<CheckoutSourceCursor>, ApiError> {
     let Some(value) = value else {
         return Ok(source_keys
@@ -3795,6 +3821,7 @@ fn decode_checkout_page_cursor(
     if cursor.version != 1
         || cursor.sort != checkout_sort_name(sort)
         || cursor.descending != descending
+        || cursor.filters != filters
         || cursor.sources.len() != source_keys.len()
         || cursor
             .sources
@@ -3813,8 +3840,49 @@ fn decode_checkout_page_cursor(
 #[cfg(test)]
 mod checkout_pagination_tests {
     use super::{
-        CheckoutSourceCursor, SortKey, decode_checkout_page_cursor, encode_checkout_page_cursor,
+        CheckoutSourceCursor, ListParams, SortKey, checkout_filter_fingerprint,
+        decode_checkout_page_cursor, encode_checkout_page_cursor,
     };
+
+    fn fingerprint(query: &str) -> String {
+        let params: ListParams = serde_urlencoded_params(query);
+        let has_commit = params.has_commit;
+        let query = params.into_query(std::path::Path::new(".")).unwrap();
+        checkout_filter_fingerprint(&query, has_commit)
+    }
+
+    fn serde_urlencoded_params(query: &str) -> ListParams {
+        let uri: axum::http::Uri = format!("/?{query}").parse().unwrap();
+        axum::extract::Query::<ListParams>::try_from_uri(&uri)
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn filter_fingerprint_ignores_order_and_paging_but_binds_every_filter() {
+        let base = fingerprint("tags=a,b&status=started&text=x");
+        assert_eq!(base, fingerprint("text=x&tags=b,a,a&status=started"));
+        assert_eq!(
+            base,
+            fingerprint(
+                "tags=a,b&status=started&text=x&sort=title&direction=descending&limit=3&page_size=9&cursor=v1.00"
+            ),
+            "ordering is bound separately; paging parameters are not filters"
+        );
+        assert_eq!(fingerprint(""), fingerprint("tags=&attachment="));
+        for changed in [
+            "tags=a&status=started&text=x",
+            "tags=a,b&status=completed&text=x",
+            "tags=a,b&status=started&text=y",
+            "tags=a,b&status=started&text=x&up_next=true",
+            "tags=a,b&status=started&text=x&has_commit=true",
+            "tags=a,b&status=started&text=x&has_commit=false",
+            "tags=a,b&status=started&text=x&updated_after=2026-01-01",
+            "tags=a,b&status=started&text=x&collection=queue",
+        ] {
+            assert_ne!(base, fingerprint(changed), "{changed}");
+        }
+    }
 
     #[test]
     fn merge_cursor_round_trips_every_source_and_rejects_a_changed_source_set() {
@@ -3830,12 +3898,14 @@ mod checkout_pagination_tests {
                 exhausted: true,
             },
         ];
-        let encoded = encode_checkout_page_cursor(&sources, SortKey::Priority, true).unwrap();
+        let encoded =
+            encode_checkout_page_cursor(&sources, SortKey::Priority, true, "filters-a").unwrap();
         let decoded = decode_checkout_page_cursor(
             Some(&encoded),
             &["git:local".into(), "provider:remote".into()],
             SortKey::Priority,
             true,
+            "filters-a",
         )
         .unwrap();
         assert_eq!(decoded.len(), 2);
@@ -3846,7 +3916,8 @@ mod checkout_pagination_tests {
                 Some(&encoded),
                 &["git:local".into(), "provider:renamed".into()],
                 SortKey::Priority,
-                true
+                true,
+                "filters-a"
             )
             .is_err()
         );
@@ -3854,8 +3925,20 @@ mod checkout_pagination_tests {
             decode_checkout_page_cursor(
                 Some(&encoded),
                 &["git:local".into(), "provider:remote".into()],
+                SortKey::Priority,
+                true,
+                "filters-b"
+            )
+            .is_err(),
+            "a cursor is bound to its effective filter set"
+        );
+        assert!(
+            decode_checkout_page_cursor(
+                Some(&encoded),
+                &["git:local".into(), "provider:remote".into()],
                 SortKey::Title,
-                true
+                true,
+                "filters-a"
             )
             .is_err()
         );
@@ -3929,8 +4012,14 @@ fn list_checkout_ticket_page(
     let merge_query = params.clone().into_query(state.store.root())?;
     let sort = merge_query.sort;
     let descending = merge_query.descending;
-    let mut source_cursors =
-        decode_checkout_page_cursor(params.cursor.as_deref(), &source_keys, sort, descending)?;
+    let filters = checkout_filter_fingerprint(&merge_query, params.has_commit);
+    let mut source_cursors = decode_checkout_page_cursor(
+        params.cursor.as_deref(),
+        &source_keys,
+        sort,
+        descending,
+        &filters,
+    )?;
 
     let now = OffsetDateTime::now_utc();
     let now_text = now
@@ -4159,7 +4248,7 @@ fn list_checkout_ticket_page(
     let next_cursor = heads
         .iter()
         .any(Option::is_some)
-        .then(|| encode_checkout_page_cursor(&source_cursors, sort, descending))
+        .then(|| encode_checkout_page_cursor(&source_cursors, sort, descending, &filters))
         .transpose()?;
     serde_json::to_value(CheckoutTicketPage {
         items,
