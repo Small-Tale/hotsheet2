@@ -1,27 +1,14 @@
 .trash-settings {
-  display: grid;
   max-width: remify(544px);
-  gap: var(--kui-space-l);
 }
-.trash-settings header,
-.trash-settings footer {
-  display: grid;
-  gap: var(--kui-space-xs);
-}
-.trash-settings h2,
-.trash-settings p {
+.trash-settings .kui-text {
   margin: 0;
 }
-.trash-settings header p {
-  color: var(--wa-color-neutral-on-quiet);
+.trash-settings header .kui-text[data-tone='quiet'] {
   line-height: 1.5;
 }
 .trash-settings wa-input {
   max-width: remify(256px);
-}
-.trash-settings footer {
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
 }
 .trash-settings footer [role='status'] {
   color: var(--wa-color-neutral-on-quiet);

@@ -1,12 +1,4 @@
-.bulk-ticket-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
-}
 .bulk-ticket-dialog__choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--kui-space-xs);
   margin-block: var(--kui-space-m);
 }
 .bulk-ticket-dialog__choices button {

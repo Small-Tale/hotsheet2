@@ -1,17 +1,7 @@
 .manual-model-dialog {
   --width: min(remify(448px), calc(100vw - remify(32px)));
 }
-.manual-model-dialog__form {
-  display: grid;
-  gap: var(--kui-space-l);
-}
-.manual-model-dialog__form > p {
+.manual-model-dialog__form > .kui-text {
   margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
   line-height: 1.45;
-}
-.manual-model-dialog__form footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
 }

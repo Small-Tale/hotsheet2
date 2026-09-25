@@ -1,6 +1,7 @@
 import './provider-setup-form.css';
 import './flow-back-button.css';
 
+import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronLeft } from 'lucide';
 
@@ -90,7 +91,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
           )}
         </section>
       )}
-      <div class="provider-setup-form__grid">
+      <Grid className="provider-setup-form__grid" columns={2} gap="m">
         <label>
           Connection ID
           <input
@@ -171,7 +172,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
           <input name="make-default" type="checkbox" checked={connection?.default ?? true} /> Use as the default ticket
           source <span>New tickets will be created here.</span>
         </label>
-      </div>
+      </Grid>
       {error && (
         <p class="provider-setup-form__error" role="alert">
           {error}

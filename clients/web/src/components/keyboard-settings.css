@@ -1,14 +1,5 @@
 .keyboard-settings {
-  display: grid;
-  gap: var(--kui-space-l);
   padding: var(--kui-space-m);
-}
-.keyboard-settings__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--kui-space-m);
-  flex-wrap: wrap;
 }
 .keyboard-settings__intro {
   max-width: remify(672px);
@@ -44,10 +35,6 @@
   width: remify(14.4px);
   height: remify(14.4px);
 }
-.keyboard-settings__group {
-  display: grid;
-  gap: var(--kui-space-2xs);
-}
 .keyboard-settings__group-title {
   margin: 0 0 var(--kui-space-2xs);
   color: var(--wa-color-neutral-on-quiet);
@@ -67,10 +54,6 @@
   background: var(--wa-color-surface-default);
 }
 .keyboard-settings__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--kui-space-m);
   min-height: remify(52px);
   margin: 0;
   padding: var(--kui-space-xs);
@@ -83,10 +66,12 @@
 .keyboard-settings__row[data-capturing='true'] {
   background: var(--wa-color-brand-fill-quiet);
 }
+.keyboard-settings__row-layout,
 .keyboard-settings__meta {
-  display: grid;
-  gap: var(--kui-space-2xs);
   min-width: 0;
+}
+.keyboard-settings__row-layout {
+  width: 100%;
 }
 .keyboard-settings__label {
   color: var(--wa-color-text-normal);
@@ -111,9 +96,6 @@
   height: remify(12.8px);
 }
 .keyboard-settings__controls {
-  display: flex;
-  align-items: center;
-  gap: var(--kui-space-2xs);
   flex: none;
 }
 /* Clean, uniform chip matching the adjacent action buttons — the WA native `kbd` keycap treatment
@@ -188,7 +170,7 @@
   font-weight: 600;
 }
 @media (max-width: remify(544px)) {
-  .keyboard-settings__row {
+  .keyboard-settings__row-layout {
     align-items: flex-start;
     flex-direction: column;
     gap: var(--kui-space-2xs);

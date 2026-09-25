@@ -2,10 +2,7 @@ wa-dialog[data-project-dialog] {
   --width: min(remify(768px), calc(100vw - 2 * var(--kui-space-m)));
 }
 .project-dialog {
-  display: grid;
   min-width: 0;
-  gap: var(--kui-space-m);
-  grid-template-columns: minmax(0, 1fr);
   width: 100%;
 }
 .project-dialog__path {
@@ -23,15 +20,9 @@ wa-dialog[data-project-dialog] {
   width: remify(16px);
   height: remify(16px);
 }
-.project-dialog > p {
+.project-dialog > .kui-text {
   margin: 0;
   line-height: 1.5;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.project-dialog footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
 }
 .project-dialog__error:empty {
   display: none;

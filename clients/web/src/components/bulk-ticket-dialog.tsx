@@ -3,6 +3,8 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './bulk-ticket-dialog.css';
 
+import { Row } from '@kerfjs/ui/row';
+
 export type BulkTicketDialogState =
   | { kind: 'tag'; mode: 'add' | 'remove'; count: number; choices: string[] }
   | { kind: 'delete'; count: number }
@@ -23,12 +25,14 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
           </p>
         )}
         <div slot="footer" class="bulk-ticket-dialog__actions">
-          <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined" disabled={state.busy}>
-            Cancel
-          </wa-button>
-          <wa-button data-action="confirm-empty-trash" variant="danger" disabled={state.busy}>
-            {state.busy ? 'Emptying…' : 'Empty Trash'}
-          </wa-button>
+          <Row hAlign="right" vAlign="middle" gap="xs">
+            <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined" disabled={state.busy}>
+              Cancel
+            </wa-button>
+            <wa-button data-action="confirm-empty-trash" variant="danger" disabled={state.busy}>
+              {state.busy ? 'Emptying…' : 'Empty Trash'}
+            </wa-button>
+          </Row>
         </div>
       </wa-dialog>
     );
@@ -43,12 +47,14 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
           Deleted tickets leave the active project views. This action can be undone with the standard Undo shortcut.
         </p>
         <div slot="footer" class="bulk-ticket-dialog__actions">
-          <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined">
-            Cancel
-          </wa-button>
-          <wa-button data-action="confirm-bulk-delete" variant="danger">
-            Delete {state.count} ticket{state.count === 1 ? '' : 's'}
-          </wa-button>
+          <Row hAlign="right" vAlign="middle" gap="xs">
+            <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined">
+              Cancel
+            </wa-button>
+            <wa-button data-action="confirm-bulk-delete" variant="danger">
+              Delete {state.count} ticket{state.count === 1 ? '' : 's'}
+            </wa-button>
+          </Row>
         </div>
       </wa-dialog>
     );
@@ -63,21 +69,23 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
         <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus></wa-input>
         {!adding && state.choices.length > 0 && (
           <div class="bulk-ticket-dialog__choices" aria-label="Tags in selection">
-            {state.choices.map((tag) => (
-              <button type="button" data-action="choose-bulk-tag" data-tag={tag}>
-                {tag}
-              </button>
-            ))}
+            <Row gap="xs" wrap>
+              {state.choices.map((tag) => (
+                <button type="button" data-action="choose-bulk-tag" data-tag={tag}>
+                  {tag}
+                </button>
+              ))}
+            </Row>
           </div>
         )}
-        <div class="bulk-ticket-dialog__actions">
+        <Row className="bulk-ticket-dialog__actions" hAlign="right" vAlign="middle" gap="xs">
           <wa-button type="button" data-action="cancel-bulk-ticket-action" appearance="outlined">
             Cancel
           </wa-button>
           <wa-button type="submit" variant="brand">
             {adding ? 'Add tag' : 'Remove tag'}
           </wa-button>
-        </div>
+        </Row>
       </form>
     </wa-dialog>
   );

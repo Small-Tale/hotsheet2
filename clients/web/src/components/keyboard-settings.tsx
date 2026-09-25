@@ -1,6 +1,8 @@
 import './keyboard-settings.css';
 
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Pencil, RotateCcw, TriangleAlert, X } from 'lucide';
 
 import {
@@ -29,118 +31,124 @@ export interface KeyboardSettingsProps {
 export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSettingsProps) {
   const hasOverrides = Object.keys(overrides).length > 0;
   return (
-    <section class="keyboard-settings" data-component="keyboard-settings" aria-label="Keyboard shortcuts">
-      <header class="keyboard-settings__header">
-        <p class="keyboard-settings__intro">
-          Rebind the command shortcuts below, including the ticket clipboard and select-all. Fixed ARIA navigation
-          shortcuts (list arrows, tab and gallery navigation, activation, and dismissal) are shown for reference and use
-          platform conventions. Changes are saved on this device.
-        </p>
-        <button
-          type="button"
-          class="keyboard-settings__reset-all"
-          data-action="reset-all-shortcuts"
-          disabled={!hasOverrides}
-        >
-          <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-          Reset all to defaults
-        </button>
-      </header>
-      {KEYBOARD_SHORTCUT_GROUPS.map((group) => {
-        const shortcuts = KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.group === group);
-        if (!shortcuts.length) return undefined;
-        return (
-          <div class="keyboard-settings__group">
-            <h3 class="keyboard-settings__group-title">{group}</h3>
-            <ul class="keyboard-settings__list">
-              {shortcuts.map((shortcut) => {
-                const chord = resolveChord(shortcut.id, overrides);
-                const capturing = capturingId === shortcut.id;
-                const overridden = shortcut.editable && Boolean(overrides[shortcut.id]);
-                const conflict =
-                  shortcut.editable && !capturing && chord
-                    ? findChordConflict(shortcut.id, chord, overrides, apple)
-                    : undefined;
-                return (
-                  <li
-                    class="keyboard-settings__row"
-                    data-shortcut-id={shortcut.id}
-                    data-editable={String(shortcut.editable)}
-                    data-capturing={String(capturing)}
-                    data-overridden={String(overridden)}
-                  >
-                    <div class="keyboard-settings__meta">
-                      <span class="keyboard-settings__label">{shortcut.label}</span>
-                      <span class="keyboard-settings__description">{shortcut.description}</span>
-                      {conflict && (
-                        <span class="keyboard-settings__conflict" role="status">
-                          <LucideIcon icon={TriangleAlert} name="triangle-alert" />
-                          Also used by “{conflict.label}”
-                        </span>
-                      )}
-                    </div>
-                    <div class="keyboard-settings__controls">
-                      {capturing ? (
-                        <button
-                          type="button"
-                          class="keyboard-settings__capture"
-                          data-shortcut-capture={shortcut.id}
-                          aria-label={`Recording new shortcut for ${shortcut.label}. Press a key combination, or Escape to cancel.`}
-                        >
-                          Press keys…
-                        </button>
-                      ) : (
-                        <kbd class="keyboard-settings__chord">{formatChord(chord, apple)}</kbd>
-                      )}
-                      {shortcut.editable ? (
-                        capturing ? (
-                          <button
-                            type="button"
-                            class="keyboard-settings__action"
-                            data-action="cancel-shortcut-capture"
-                            aria-label={`Cancel editing ${shortcut.label}`}
-                            title="Cancel"
-                          >
-                            <LucideIcon icon={X} name="x" />
-                          </button>
-                        ) : (
-                          <>
+    <section data-component="keyboard-settings" aria-label="Keyboard shortcuts">
+      <List className="keyboard-settings" gap="l">
+        <header>
+          <Row className="keyboard-settings__header" hAlign="space-between" vAlign="top" gap="m" wrap>
+            <p class="keyboard-settings__intro">
+              Rebind the command shortcuts below, including the ticket clipboard and select-all. Fixed ARIA navigation
+              shortcuts (list arrows, tab and gallery navigation, activation, and dismissal) are shown for reference and
+              use platform conventions. Changes are saved on this device.
+            </p>
+            <button
+              type="button"
+              class="keyboard-settings__reset-all"
+              data-action="reset-all-shortcuts"
+              disabled={!hasOverrides}
+            >
+              <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+              Reset all to defaults
+            </button>
+          </Row>
+        </header>
+        {KEYBOARD_SHORTCUT_GROUPS.map((group) => {
+          const shortcuts = KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.group === group);
+          if (!shortcuts.length) return undefined;
+          return (
+            <List className="keyboard-settings__group" gap="2xs">
+              <h3 class="keyboard-settings__group-title">{group}</h3>
+              <ul class="keyboard-settings__list">
+                {shortcuts.map((shortcut) => {
+                  const chord = resolveChord(shortcut.id, overrides);
+                  const capturing = capturingId === shortcut.id;
+                  const overridden = shortcut.editable && Boolean(overrides[shortcut.id]);
+                  const conflict =
+                    shortcut.editable && !capturing && chord
+                      ? findChordConflict(shortcut.id, chord, overrides, apple)
+                      : undefined;
+                  return (
+                    <li
+                      class="keyboard-settings__row"
+                      data-shortcut-id={shortcut.id}
+                      data-editable={String(shortcut.editable)}
+                      data-capturing={String(capturing)}
+                      data-overridden={String(overridden)}
+                    >
+                      <Row className="keyboard-settings__row-layout" hAlign="space-between" vAlign="middle" gap="m">
+                        <List className="keyboard-settings__meta" gap="2xs">
+                          <span class="keyboard-settings__label">{shortcut.label}</span>
+                          <span class="keyboard-settings__description">{shortcut.description}</span>
+                          {conflict && (
+                            <span class="keyboard-settings__conflict" role="status">
+                              <LucideIcon icon={TriangleAlert} name="triangle-alert" />
+                              Also used by “{conflict.label}”
+                            </span>
+                          )}
+                        </List>
+                        <Row className="keyboard-settings__controls" vAlign="middle" gap="2xs">
+                          {capturing ? (
                             <button
                               type="button"
-                              class="keyboard-settings__action"
-                              data-action="edit-shortcut"
-                              data-shortcut-id={shortcut.id}
-                              aria-label={`Change shortcut for ${shortcut.label}`}
-                              title="Change shortcut"
+                              class="keyboard-settings__capture"
+                              data-shortcut-capture={shortcut.id}
+                              aria-label={`Recording new shortcut for ${shortcut.label}. Press a key combination, or Escape to cancel.`}
                             >
-                              <LucideIcon icon={Pencil} name="pencil" />
+                              Press keys…
                             </button>
-                            <button
-                              type="button"
-                              class="keyboard-settings__action"
-                              data-action="reset-shortcut"
-                              data-shortcut-id={shortcut.id}
-                              disabled={!overridden}
-                              aria-label={`Reset ${shortcut.label} to its default`}
-                              title="Reset to default"
-                            >
-                              <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-                            </button>
-                          </>
-                        )
-                      ) : (
-                        <span class="keyboard-settings__fixed" title="Fixed system shortcut">
-                          System
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
-      })}
+                          ) : (
+                            <kbd class="keyboard-settings__chord">{formatChord(chord, apple)}</kbd>
+                          )}
+                          {shortcut.editable ? (
+                            capturing ? (
+                              <button
+                                type="button"
+                                class="keyboard-settings__action"
+                                data-action="cancel-shortcut-capture"
+                                aria-label={`Cancel editing ${shortcut.label}`}
+                                title="Cancel"
+                              >
+                                <LucideIcon icon={X} name="x" />
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  class="keyboard-settings__action"
+                                  data-action="edit-shortcut"
+                                  data-shortcut-id={shortcut.id}
+                                  aria-label={`Change shortcut for ${shortcut.label}`}
+                                  title="Change shortcut"
+                                >
+                                  <LucideIcon icon={Pencil} name="pencil" />
+                                </button>
+                                <button
+                                  type="button"
+                                  class="keyboard-settings__action"
+                                  data-action="reset-shortcut"
+                                  data-shortcut-id={shortcut.id}
+                                  disabled={!overridden}
+                                  aria-label={`Reset ${shortcut.label} to its default`}
+                                  title="Reset to default"
+                                >
+                                  <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+                                </button>
+                              </>
+                            )
+                          ) : (
+                            <span class="keyboard-settings__fixed" title="Fixed system shortcut">
+                              System
+                            </span>
+                          )}
+                        </Row>
+                      </Row>
+                    </li>
+                  );
+                })}
+              </ul>
+            </List>
+          );
+        })}
+      </List>
     </section>
   );
 }

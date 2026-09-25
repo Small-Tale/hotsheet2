@@ -72,11 +72,17 @@ describe('project dialogs', () => {
   });
 
   it('uses canonical dialog, field-group, and connected-item spacing', () => {
+    const localMarkup = String(ProjectDialog({ open: true, root: '.', error: '' }));
+    const remoteMarkup = String(RemoteProjectDialog({ open: true, checkouts: [] }));
     const css = readFileSync(resolve(import.meta.dirname, 'project-dialog.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/\.project-dialog \{[^}]*gap: var\(--kui-space-m\)/);
+    expect(localMarkup).toContain('data-component="list"');
+    expect(localMarkup).toContain('--_kui-list-gap:var(--kui-space-m)');
+    expect(localMarkup).toContain('data-component="row"');
+    expect(localMarkup).toContain('data-h-align="right"');
+    expect(remoteMarkup).toContain('data-component="list"');
+    expect(remoteMarkup).toContain('--_kui-list-gap:var(--kui-space-m)');
     expect(css).toMatch(/\.project-dialog__path \{[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.project-dialog footer \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.remote-project-dialog__list \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatch(/\.remote-project-dialog__copy \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).not.toContain('--kui-layout-inline-margin:');

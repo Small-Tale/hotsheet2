@@ -271,12 +271,14 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   const remote = page.locator('[data-remote-project-dialog]'),
     surface = remote.locator('.remote-project-dialog');
   await expect(surface).toBeVisible();
+  await expect(surface).toHaveAttribute('data-component', 'list');
+  await expect(remote.locator('[data-component="row"]')).toHaveCount(1);
   const spacing = await page.evaluate(() => {
     const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
     return {
       dialogGap: style('.project-dialog').gap,
       pathGap: style('.project-dialog__path').gap,
-      footerGap: style('.project-dialog footer').gap,
+      footerGap: style('.project-dialog footer [data-component="row"]').gap,
       listGap: style('.remote-project-dialog__list').gap,
       itemGap: style('.remote-project-dialog__copy').gap,
       itemPadding: style('.remote-project-dialog__list .kui-list-item').padding,
@@ -298,6 +300,51 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
   expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-dialog-remote-narrow.png' });
+});
+
+test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+
+  await page.goto('/ux-demo?component=manual-model-dialog&dev-review=false');
+  const manual = page.locator('[data-component="manual-model-dialog"]');
+  await expect(manual).toHaveJSProperty('open', true);
+  await expect(manual.locator('[data-component="list"]')).toHaveCount(1);
+  await expect(manual.locator('[data-component="row"]')).toHaveCount(1);
+  await expect(manual.locator('[data-component="spacer"]')).toHaveAttribute('data-flex', 'true');
+  const manualSurface = manual.locator('[part~="dialog"]');
+  await expect(manualSurface).toBeVisible();
+  await manualSurface.screenshot({
+    path: '/private/tmp/hs2-s3bxc0-manual-model-wide.png',
+    animations: 'disabled',
+  });
+
+  await page.goto('/ux-demo?component=trash-settings&dev-review=false');
+  const trash = page.locator('[data-component="trash-settings"]');
+  await expect(trash.locator('[data-component="list"]')).toHaveCount(2);
+  await expect(trash.locator('[data-component="row"]')).toHaveCount(1);
+
+  await page.goto('/ux-demo?component=keyboard-settings&dev-review=false');
+  const keyboard = page.locator('[data-component="keyboard-settings"]');
+  await expect(keyboard.locator(':scope > [data-component="list"]')).toHaveCount(1);
+  await expect(keyboard.locator('li[data-shortcut-id] [data-component="row"]').first()).toBeVisible();
+
+  await page.goto('/ux-demo?component=provider-setup-form&dev-review=false');
+  const provider = page.locator('[data-component="provider-setup-form"]');
+  const grid = provider.locator('[data-component="grid"]');
+  await expect(grid).toHaveAttribute('data-columns', '2');
+  const wideColumns = await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+  expect(wideColumns).toBe(2);
+  await provider.screenshot({ path: '/private/tmp/hs2-s3bxc0-provider-wide.png', animations: 'disabled' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() => grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length))
+    .toBe(1);
+  const narrowBox = await provider.boundingBox();
+  expect(narrowBox).not.toBeNull();
+  expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
+  expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
+  await provider.screenshot({ path: '/private/tmp/hs2-s3bxc0-provider-narrow.png', animations: 'disabled' });
 });
 
 test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)', async ({ page }) => {

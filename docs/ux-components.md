@@ -1658,3 +1658,12 @@ application layout: responsive shell/toolbar placement, bounded master-detail pa
 domain-specific source rows, and container-dependent truncation. Kerf beta.49 has no
 prop that expresses those host-layout constraints, so they remain visible as review
 findings instead of being hidden by profile exceptions.
+
+The follow-on layout pass moves the shared vertical rhythm and action alignment in the
+manual-model, saved-view, bulk-ticket, project, trash, keyboard, and provider-setup
+surfaces to Kerf `List`, `Row`, `Text`, `Grid`, and `Spacer` primitives. Forms and dialog
+hosts keep their native semantics, keyboard shortcut collections remain semantic
+`ul`/`li` lists, and Web Awesome footer slots remain on their required host elements.
+Application CSS still owns responsive column collapse, project path input/action tracks,
+and shortcut-row geometry because those policies are asymmetric or container-dependent
+rather than reusable Kerf component configuration (HS2-S3BXC0).

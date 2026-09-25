@@ -15,6 +15,10 @@ describe('KeyboardSettings', () => {
   it('lists every shortcut grouped, with editable rows editable and fixed rows marked System', () => {
     const markup = String(KeyboardSettings({ overrides: {}, capturingId: undefined, apple: true }));
     expect(markup).toContain('data-component="keyboard-settings"');
+    expect(markup).toContain('data-component="list"');
+    expect(markup).toContain('--_kui-list-gap:var(--kui-space-l)');
+    expect(markup).toContain('data-component="row"');
+    expect(markup).toContain('data-wrap="true"');
     for (const shortcut of KEYBOARD_SHORTCUTS) expect(markup).toContain(`data-shortcut-id="${shortcut.id}"`);
     for (const group of ['Global', 'Tickets', 'Navigation &amp; tabs', 'Media gallery'])
       expect(markup).toContain(`>${group}</h3>`);

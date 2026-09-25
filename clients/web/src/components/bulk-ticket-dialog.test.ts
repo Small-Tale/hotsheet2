@@ -12,6 +12,8 @@ describe('BulkTicketDialog', () => {
     );
     expect(remove).toContain('label="Remove tag — 2 selected"');
     expect(remove).toContain('data-action="choose-bulk-tag" data-tag="bug"');
+    expect(remove).toContain('data-component="row"');
+    expect(remove).toContain('data-wrap="true"');
   });
 
   it('requires explicit confirmation for deletion', () => {
@@ -19,6 +21,8 @@ describe('BulkTicketDialog', () => {
     expect(markup).toContain('label="Delete 2 tickets?"');
     expect(markup).toContain('data-action="confirm-bulk-delete"');
     expect(markup).toContain('Delete 2 tickets');
+    expect(markup).toContain('data-component="row"');
+    expect(markup).toContain('data-h-align="right"');
   });
 
   it('warns that emptying Trash is permanent and exposes busy and error states', () => {

@@ -1,19 +1,9 @@
 .saved-view-dialog {
   --width: min(remify(512px), calc(100vw - remify(32px)));
 }
-.saved-view-dialog__form {
-  display: grid;
-  gap: var(--kui-space-l);
-}
-.saved-view-dialog__form > p {
+.saved-view-dialog__form > .kui-text {
   margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
   line-height: 1.45;
-}
-.saved-view-dialog__form footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
 }
 .saved-view-dialog__error {
   color: var(--wa-color-danger-on-quiet) !important;

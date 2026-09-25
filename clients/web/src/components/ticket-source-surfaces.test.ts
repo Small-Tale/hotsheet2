@@ -44,6 +44,9 @@ describe('ticket source surfaces', () => {
     expect(auth).toContain('Waiting for GitHub…');
     expect(auth).toContain('ABCD');
     expect(auth).toContain('Try again');
+    expect(auth).toContain('data-component="grid"');
+    expect(auth).toContain('data-columns="2"');
+    expect(auth).toContain('--_kui-grid-gap:var(--kui-space-m)');
     const remote = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
@@ -88,6 +91,7 @@ describe('ticket source surfaces', () => {
 
   it('owns source and provider styles outside the global stylesheet', () => {
     const global = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+    const provider = readFileSync(new URL('./provider-setup-form.css', import.meta.url), 'utf8');
     for (const selector of [
       'data-ticket-source-setup-dialog',
       '.ticket-source-setup',
@@ -98,8 +102,9 @@ describe('ticket source surfaces', () => {
     expect(readFileSync(new URL('./ticket-source-setup-dialog.css', import.meta.url), 'utf8')).toContain(
       'data-ticket-source-setup-dialog',
     );
-    expect(readFileSync(new URL('./provider-setup-form.css', import.meta.url), 'utf8')).toContain(
-      '.provider-setup-form',
+    expect(provider).toContain('.provider-setup-form');
+    expect(provider).toMatch(
+      /@media \(max-width: remify\(768px\)\) \{\s*\.provider-setup-form__grid\[data-component='grid'\] \{\s*grid-template-columns: 1fr;/,
     );
     expect(readFileSync(new URL('./ticket-sources-settings.css', import.meta.url), 'utf8')).toContain(
       '.ticket-provider-settings',

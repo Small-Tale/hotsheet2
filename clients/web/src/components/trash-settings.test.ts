@@ -12,5 +12,9 @@ describe('TrashSettings', () => {
     expect(markup).toContain('The default is 30 days');
     expect(markup).toContain('Git history keeps every purged ticket file');
     expect(markup).toContain('Saved for this project.');
+    expect(markup).toContain('data-component="list"');
+    expect(markup).toContain('--_kui-list-gap:var(--kui-space-l)');
+    expect(markup).toContain('data-component="row"');
+    expect(markup).toContain('data-component="text"');
   });
 });
