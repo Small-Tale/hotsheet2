@@ -42,6 +42,9 @@ pub enum CheckoutPageError {
     /// `summary_days` was not eight ascending RFC 3339 boundaries.
     #[error("summary_days must contain eight ascending RFC 3339 day boundaries")]
     InvalidSummaryDays,
+    /// `counts` was neither `true` nor `false`.
+    #[error("counts must be true or false")]
+    InvalidCounts,
     /// The clock or cursor could not be serialized.
     #[error("{0}")]
     Internal(String),
@@ -418,7 +421,21 @@ pub struct CheckoutTicketPage {
     pub items: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
-    pub counts: CheckoutTicketCounts,
+    /// Navigation counts, or an explicit `null` when the caller passed `counts=false`
+    /// (HS2-VPEAM4): walkers that ignore counts skip a full summary read per page.
+    pub counts: Option<CheckoutTicketCounts>,
+}
+
+/// Parse the `counts` page parameter: absent or `true` computes counts, `false` omits them.
+///
+/// # Errors
+/// [`CheckoutPageError::InvalidCounts`] for any other value.
+pub fn wants_counts(value: Option<&str>) -> Result<bool, CheckoutPageError> {
+    match value {
+        None | Some("true") => Ok(true),
+        Some("false") => Ok(false),
+        Some(_) => Err(CheckoutPageError::InvalidCounts),
+    }
 }
 
 /// The eight day boundaries (seven local days plus tomorrow's start) the completion trend
@@ -690,6 +707,19 @@ mod tests {
                 "{garbage}"
             );
         }
+    }
+
+    #[test]
+    fn counts_parameter_is_an_explicit_boolean_and_omitted_counts_serialize_as_null() {
+        assert_eq!(wants_counts(None), Ok(true));
+        assert_eq!(wants_counts(Some("true")), Ok(true));
+        assert_eq!(wants_counts(Some("false")), Ok(false));
+        assert_eq!(
+            wants_counts(Some("0")),
+            Err(CheckoutPageError::InvalidCounts)
+        );
+        let page = serde_json::to_value(CheckoutTicketPage::default()).unwrap();
+        assert_eq!(page, json!({ "items": [], "counts": null }));
     }
 
     #[test]

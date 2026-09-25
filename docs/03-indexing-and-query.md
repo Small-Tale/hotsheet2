@@ -252,8 +252,16 @@ query(filter, sort, text?, paging) -> TicketRow[]
     flags omitted rows with the `x-hotsheet-truncated: true` response header;
   - `cursor` without `page_size` is rejected; whole-checkout readers page instead.
 
+  **Skipping counts (HS2-VPEAM4).** Every page computes `counts` by default, and a
+  hosted-provider source computes its summary with a full provider walk. A caller that
+  ignores counts passes `counts=false`: the page then carries an explicit `"counts": null`
+  (never a stale or partial object) and no source summary is read. Any other `counts` value
+  is `400`. `counts` is not a filter, so it does not change the cursor fingerprint. Whole-
+  checkout walkers (`Api.checkoutTicketRowsPaged`, MCP `hotsheet_query` walks with
+  `counts: false`) use it; the web list's own pages keep counts.
+
   Callers: the web client's copy-drag title de-duplication reads the destination through
-  title-only cursor pages (`Api.checkoutTicketRowsPaged`), and its slug lookup and
+  title-only, count-free cursor pages (`Api.checkoutTicketRowsPaged`), and its slug lookup and
   duplicate-target search pass an explicit `limit=500`. MCP `hotsheet_query` forwards
   `page_size` and `cursor` for checkout queries and returns the page envelope. Store-level
   `/tickets` reads without a checkout keep `limit` + `page_after`.

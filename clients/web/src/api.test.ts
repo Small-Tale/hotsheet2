@@ -504,8 +504,8 @@ describe('ticket search transport', () => {
 describe('bounded whole-checkout reads', () => {
   it('pages every row through cursors with a projection instead of one unpaged response', async () => {
     const pages = [
-      { items: [{ slug: 'A-1', title: 'One' }], next_cursor: 'v2.first', counts: {} },
-      { items: [{ slug: 'A-2', title: 'Two' }], counts: {} },
+      { items: [{ slug: 'A-1', title: 'One' }], next_cursor: 'v2.first', counts: null },
+      { items: [{ slug: 'A-2', title: 'Two' }], counts: null },
     ];
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -518,6 +518,9 @@ describe('bounded whole-checkout reads', () => {
       expect(url.pathname).toBe('/api/checkouts/demo/tickets');
       expect(url.searchParams.get('page_size')).toBe('500');
       expect(url.searchParams.get('fields')).toBe('title');
+      // Counts are ignored by the walk, so every page opts out of them (HS2-VPEAM4).
+      expect(url.searchParams.get('counts')).toBe('false');
+      expect(url.searchParams.has('summary_days')).toBe(false);
     }
     expect(urls[0].searchParams.has('cursor')).toBe(false);
     expect(urls[1].searchParams.get('cursor')).toBe('v2.first');
@@ -528,11 +531,24 @@ describe('bounded whole-checkout reads', () => {
       .spyOn(globalThis, 'fetch')
       .mockImplementation(() =>
         Promise.resolve(
-          new Response(JSON.stringify({ items: [], next_cursor: 'v2.same', counts: {} }), { status: 200 }),
+          new Response(JSON.stringify({ items: [], next_cursor: 'v2.same', counts: null }), { status: 200 }),
         ),
       );
     await expect(new Api('/api').checkoutTicketRowsPaged('demo')).rejects.toThrow('repeated cursor');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
+  });
+  it('keeps counts and summary days on ordinary checkout pages', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ items: [], counts: { total: 0 } }), { status: 200 }));
+    await new Api('/api').checkoutTicketPage('demo', 50, 'v2.next', { sort: 'title' });
+    const url = new URL(fetchMock.mock.calls[0][0] as string, 'http://host');
+    expect(url.searchParams.get('page_size')).toBe('50');
+    expect(url.searchParams.get('cursor')).toBe('v2.next');
+    expect(url.searchParams.get('sort')).toBe('title');
+    expect(url.searchParams.get('summary_days')?.split(',')).toHaveLength(8);
+    expect(url.searchParams.has('counts')).toBe(false);
     fetchMock.mockRestore();
   });
   it('sends an explicit unpaged limit that accepts truncation', async () => {

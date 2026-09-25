@@ -111,6 +111,7 @@ fn tools_list() -> Value {
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500 for checkout queries" },
                 "page_size": { "type": "integer", "description": "checkout queries only: return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
                 "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
+                "counts": { "type": "boolean", "description": "checkout pages only: false returns counts as null, skipping a full summary read per page (use when walking every page)" },
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
                 "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
@@ -496,6 +497,7 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "limit",
         "page_size",
         "cursor",
+        "counts",
         "page_after",
         "fields",
         "compact",
@@ -751,8 +753,9 @@ mod core_backend {
                 .format(&time::format_description::well_known::Rfc3339)
                 .map_err(|error| bad_request(error.to_string()))?;
             let day_starts = checkout_page::completion_day_starts(get("summary_days"), now)?;
+            let with_counts = checkout_page::wants_counts(get("counts"))?;
             let mut counts = checkout_page::CheckoutTicketCounts::for_days(&day_starts);
-            for (store, connection) in stores.iter().zip(&connections) {
+            for (store, connection) in stores.iter().zip(&connections).filter(|_| with_counts) {
                 counts.add(
                     GitProvider::new(connection.clone(), store.clone())
                         .summary(&now_text, &day_starts)
@@ -827,7 +830,7 @@ mod core_backend {
             Ok(to_value(&checkout_page::CheckoutTicketPage {
                 items: page.items,
                 next_cursor: page.next_cursor,
-                counts,
+                counts: with_counts.then_some(counts),
             }))
         }
     }
@@ -838,7 +841,8 @@ mod core_backend {
             let status = match error {
                 CheckoutPageError::StaleCursor
                 | CheckoutPageError::InvalidCursor
-                | CheckoutPageError::InvalidSummaryDays => 400,
+                | CheckoutPageError::InvalidSummaryDays
+                | CheckoutPageError::InvalidCounts => 400,
                 CheckoutPageError::NonAdvancing | CheckoutPageError::Internal(_) => 500,
             };
             BackendError {
@@ -2216,6 +2220,28 @@ mod tests {
             .map(|item| item["title"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(rest, ["delta", "echo", "foxtrot", "golf", "zulu"]);
+
+        // HS2-VPEAM4: counts=false returns an explicit null and still pages.
+        let uncounted = query(json!({ "sort": "title", "page_size": 4, "counts": false }));
+        assert!(uncounted["counts"].is_null(), "{uncounted}");
+        assert_eq!(uncounted["items"].as_array().unwrap().len(), 4);
+        let rest = query(json!({
+            "sort": "title", "page_size": 4, "counts": false,
+            "cursor": uncounted["next_cursor"].as_str().unwrap()
+        }));
+        assert_eq!(rest["items"].as_array().unwrap().len(), 3);
+        assert!(rest["counts"].is_null());
+        let bad = backend
+            .get(
+                &format!("/checkouts/{}/tickets", checkout.id),
+                &[
+                    ("page_size".to_owned(), "2".to_owned()),
+                    ("counts".to_owned(), "maybe".to_owned()),
+                ],
+            )
+            .unwrap_err();
+        assert_eq!(bad.status, Some(400));
+        assert_eq!(bad.message, "counts must be true or false");
 
         // A cursor is bound to its filters, sort, and size bounds.
         let stale =

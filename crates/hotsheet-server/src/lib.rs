@@ -3604,7 +3604,8 @@ impl From<checkout_page::CheckoutPageError> for ApiError {
         let status = match error {
             CheckoutPageError::StaleCursor
             | CheckoutPageError::InvalidCursor
-            | CheckoutPageError::InvalidSummaryDays => StatusCode::BAD_REQUEST,
+            | CheckoutPageError::InvalidSummaryDays
+            | CheckoutPageError::InvalidCounts => StatusCode::BAD_REQUEST,
             CheckoutPageError::NonAdvancing | CheckoutPageError::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -3691,12 +3692,13 @@ fn list_checkout_ticket_page(
             format!("page_size must be between 1 and {CHECKOUT_READ_MAX_ROWS}"),
         ));
     }
+    let with_counts = params.counts.unwrap_or(true);
     let (items, next_cursor, counts) =
-        merge_checkout_page(state, reference, &params, page_size, true)?;
+        merge_checkout_page(state, reference, &params, page_size, with_counts)?;
     serde_json::to_value(checkout_page::CheckoutTicketPage {
         items,
         next_cursor,
-        counts,
+        counts: with_counts.then_some(counts),
     })
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
@@ -8355,6 +8357,9 @@ struct ListParams {
     cursor: Option<String>,
     /// Eight comma-separated RFC 3339 local-day boundaries for exact seven-day summaries.
     summary_days: Option<String>,
+    /// Checkout pages only: `counts=false` skips the navigation counts (returned as `null`),
+    /// so whole-checkout walkers avoid a provider summary walk per page (HS2-VPEAM4).
+    counts: Option<bool>,
     /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
     page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.

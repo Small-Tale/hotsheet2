@@ -201,6 +201,29 @@ export interface CheckoutTicketPage {
   next_cursor?: string;
   counts: CheckoutTicketCounts;
 }
+/** A checkout page requested with `counts=false`: the server returns `counts: null`. */
+export interface CheckoutTicketRowsPage {
+  items: TicketRow[];
+  next_cursor?: string;
+  counts: null;
+}
+
+function checkoutPageParams(
+  pageSize: number,
+  cursor: string | undefined,
+  query: CheckoutTicketQuery,
+  withCounts: boolean,
+): URLSearchParams {
+  const params = new URLSearchParams({ page_size: String(pageSize) });
+  if (withCounts) params.set('summary_days', completionDayStarts().join(','));
+  else params.set('counts', 'false');
+  if (cursor) params.set('cursor', cursor);
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === '' || (key === 'text' && typeof value === 'string' && !value.trim())) continue;
+    params.set(key, key === 'text' && typeof value === 'string' ? value.trim() : String(value));
+  }
+  return params;
+}
 export interface CorruptTicket {
   store: string;
   store_path: string;
@@ -572,26 +595,24 @@ export class Api {
     const suffix = params.size ? `?${params}` : '';
     return this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets${suffix}`);
   };
-  checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) => {
-    const params = new URLSearchParams({ page_size: String(pageSize), summary_days: completionDayStarts().join(',') });
-    if (cursor) params.set('cursor', cursor);
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === '' || (key === 'text' && typeof value === 'string' && !value.trim()))
-        continue;
-      params.set(key, key === 'text' && typeof value === 'string' ? value.trim() : String(value));
-    }
-    return this.request<CheckoutTicketPage>(`/checkouts/${encodeURIComponent(checkout)}/tickets?${params}`);
-  };
+  checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) =>
+    this.request<CheckoutTicketPage>(
+      `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(pageSize, cursor, query, true)}`,
+    );
   /**
    * Every matching checkout row, read through bounded cursor pages rather than one unpaged
-   * response, which the server caps at 500 rows (HS2-CYXS0N).
+   * response, which the server caps at 500 rows (HS2-CYXS0N). Pages pass `counts=false`
+   * because the walk ignores counts, which would otherwise cost a full provider summary
+   * read per page (HS2-VPEAM4).
    */
   checkoutTicketRowsPaged = async (checkout: string, query: CheckoutTicketQuery = {}) => {
     const rows: TicketRow[] = [],
       seen = new Set<string>();
     let cursor: string | undefined;
     do {
-      const page = await this.checkoutTicketPage(checkout, 500, cursor, query);
+      const page = await this.request<CheckoutTicketRowsPage>(
+        `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(500, cursor, query, false)}`,
+      );
       rows.push(...page.items);
       cursor = page.next_cursor;
       if (cursor !== undefined) {

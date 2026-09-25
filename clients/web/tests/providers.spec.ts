@@ -14162,6 +14162,8 @@ test('drops selected tickets on another project tab to copy them there', async (
     .filter((url) => url.searchParams.get('fields') === 'title');
   expect(dedupeReads.length).toBeGreaterThan(0);
   expect(dedupeReads.every((url) => url.searchParams.get('page_size') === '500')).toBe(true);
+  // The walk ignores counts, so it opts out of the per-page summary read (HS2-VPEAM4).
+  expect(dedupeReads.every((url) => url.searchParams.get('counts') === 'false')).toBe(true);
   expect(destinationReads.every((url) => url.searchParams.has('page_size') || url.searchParams.has('text'))).toBe(true);
   expect(creates.map((create) => create.status)).toEqual(['not_started', 'not_started']);
   await expect(page.locator('.app-toast')).toContainText('2 tickets copied to other.');

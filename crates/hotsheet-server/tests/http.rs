@@ -9523,6 +9523,80 @@ async fn checkout_pages_batch_provider_reads_instead_of_requerying_per_row() {
     }
 }
 
+/// HS2-VPEAM4: `counts=false` skips the provider summary walk on every page, so a
+/// whole-checkout walker pays only its keyset reads; counts are an explicit `null`.
+#[tokio::test]
+async fn checkout_pages_without_counts_skip_the_provider_summary_walk() {
+    let transport = Arc::new(PagedGitHub::new(1..=25, 10));
+    let (router, _primary, _checkout, _registry) = paged_github_checkout(transport.clone()).await;
+    let first = checkout_call(
+        &router,
+        "GET",
+        "/checkouts/paged/tickets?page_size=12&sort=created&counts=false",
+        None,
+    )
+    .await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 12);
+    assert!(first["counts"].is_null(), "{first}");
+    let after_first = transport.request_count();
+    let mut next = first["next_cursor"].as_str().map(str::to_owned);
+    let mut rows = 12;
+    while let Some(cursor) = next {
+        let page = checkout_call(
+            &router,
+            "GET",
+            &format!(
+                "/checkouts/paged/tickets?page_size=12&sort=created&counts=false&cursor={cursor}"
+            ),
+            None,
+        )
+        .await;
+        assert!(page["counts"].is_null());
+        rows += page["items"].as_array().unwrap().len();
+        next = page["next_cursor"].as_str().map(str::to_owned);
+    }
+    assert_eq!(rows, 25);
+    let without_counts = transport.request_count();
+
+    // The same walk with counts pays a 3-native-page summary walk on every page.
+    let counted = Arc::new(PagedGitHub::new(1..=25, 10));
+    let (router, _primary, _checkout, _registry) = paged_github_checkout(counted.clone()).await;
+    let first = checkout_call(
+        &router,
+        "GET",
+        "/checkouts/paged/tickets?page_size=12&sort=created",
+        None,
+    )
+    .await;
+    assert_eq!(first["counts"]["total"], 25);
+    assert_eq!(counted.request_count(), after_first + 3);
+    let mut next = first["next_cursor"].as_str().map(str::to_owned);
+    let mut pages = 1;
+    while let Some(cursor) = next {
+        let page = checkout_call(
+            &router,
+            "GET",
+            &format!("/checkouts/paged/tickets?page_size=12&sort=created&cursor={cursor}"),
+            None,
+        )
+        .await;
+        assert_eq!(page["counts"]["total"], 25);
+        pages += 1;
+        next = page["next_cursor"].as_str().map(str::to_owned);
+    }
+    assert_eq!(counted.request_count(), without_counts + 3 * pages);
+
+    let response = router
+        .oneshot(authed(
+            "GET",
+            "/checkouts/paged/tickets?page_size=12&counts=maybe",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 /// HS2-74H84S: provider continuations resume by sort-key value. Deleting or inserting rows
 /// before the cursor shifts native page positions, so a stale page hint must neither skip
 /// nor repeat unchanged rows — on the native (`created`) path and the full-scan path.
