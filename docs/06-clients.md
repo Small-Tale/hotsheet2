@@ -235,7 +235,14 @@ and identity-less legacy entries remain conservatively blocking.
   version lifecycle.
 
 - **Stable local development by default.** `npm run dev` in `clients/web` copies the
-  package into a temporary snapshot and starts Vite there. The running app retains the
+  package into a snapshot and starts Vite there. Snapshots live in the per-user cache
+  directory (`~/Library/Caches/hotsheet-web-stable` on macOS, `$XDG_CACHE_HOME` or
+  `~/.cache` on Linux, `%LOCALAPPDATA%` on Windows; `HOTSHEET_WEB_STABLE_TEMP_ROOT`
+  overrides it), never the OS temporary directory. macOS's daily `$TMPDIR` sweep deletes
+  files not accessed for three days, and cloned snapshot files keep their source's old access
+  time, so modules Vite had not read yet (such as the lazily imported Dev Review entry)
+  disappeared from a running snapshot and were served as `index.html` (HS2-ZJ6VN3). Each
+  snapshot records its owning process, and startup prunes snapshots whose owner has exited. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
   snapshot. Generated package-local `target` output is excluded from the snapshot just
