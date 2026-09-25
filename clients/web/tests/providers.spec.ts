@@ -14331,6 +14331,19 @@ test('keeps the new-ticket composer open when it is opened right after a project
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
   page,
 }) => {
+  const dragAfter = async (source: Locator, target: Locator) => {
+    const bounds = (await target.boundingBox())!,
+      dataTransfer = await page.evaluateHandle(() => new DataTransfer()),
+      event = {
+        dataTransfer,
+        clientX: bounds.x + bounds.width - 1,
+        clientY: bounds.y + bounds.height / 2,
+      };
+    await source.dispatchEvent('dragstart', event);
+    await target.dispatchEvent('dragover', event);
+    await target.dispatchEvent('drop', event);
+    await source.dispatchEvent('dragend', event);
+  };
   await page.setViewportSize({ width: 1100, height: 840 });
   await mockProject(page);
   await page.route('**/__hotsheet/projects/open', (route) => {
@@ -14351,7 +14364,7 @@ test('reorders project and terminal tabs while preserving project order and comp
   const projectTabs = page.locator('[data-tab-kind="project"]'),
     projectNames = () => projectTabs.locator('.kui-app-tab__name').allTextContents();
   await expect.poll(projectNames).toEqual(['demo', 'other']);
-  await projectTabs.nth(0).dragTo(projectTabs.nth(1), { targetPosition: { x: 70, y: 16 } });
+  await dragAfter(projectTabs.nth(0), projectTabs.nth(1));
   await expect.poll(projectNames).toEqual(['other', 'demo']);
   await expect(
     page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]')),
@@ -14391,7 +14404,7 @@ test('reorders project and terminal tabs while preserving project order and comp
     terminalTabs = drawer.locator('[data-tab-kind="terminal"]'),
     terminalNames = () => terminalTabs.getByRole('tab').allTextContents();
   await expect.poll(terminalNames).toEqual(['Codex Main', 'Tests']);
-  await terminalTabs.nth(0).dragTo(terminalTabs.nth(1), { targetPosition: { x: 90, y: 16 } });
+  await dragAfter(terminalTabs.nth(0), terminalTabs.nth(1));
   await expect.poll(terminalNames).toEqual(['Tests', 'Codex Main']);
   await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
