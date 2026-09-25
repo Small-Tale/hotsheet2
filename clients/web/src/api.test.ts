@@ -501,6 +501,51 @@ describe('ticket search transport', () => {
   });
 });
 
+describe('bounded whole-checkout reads', () => {
+  it('pages every row through cursors with a projection instead of one unpaged response', async () => {
+    const pages = [
+      { items: [{ slug: 'A-1', title: 'One' }], next_cursor: 'v2.first', counts: {} },
+      { items: [{ slug: 'A-2', title: 'Two' }], counts: {} },
+    ];
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify(pages.shift()), { status: 200 })));
+    const rows = await new Api('/api').checkoutTicketRowsPaged('demo', { fields: 'title' });
+    expect(rows.map((row) => row.title)).toEqual(['One', 'Two']);
+    const urls = fetchMock.mock.calls.map(([url]) => new URL(url as string, 'http://host'));
+    expect(urls).toHaveLength(2);
+    for (const url of urls) {
+      expect(url.pathname).toBe('/api/checkouts/demo/tickets');
+      expect(url.searchParams.get('page_size')).toBe('500');
+      expect(url.searchParams.get('fields')).toBe('title');
+    }
+    expect(urls[0].searchParams.has('cursor')).toBe(false);
+    expect(urls[1].searchParams.get('cursor')).toBe('v2.first');
+    fetchMock.mockRestore();
+  });
+  it('rejects a server that repeats a cursor instead of looping forever', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ items: [], next_cursor: 'v2.same', counts: {} }), { status: 200 }),
+        ),
+      );
+    await expect(new Api('/api').checkoutTicketRowsPaged('demo')).rejects.toThrow('repeated cursor');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
+  });
+  it('sends an explicit unpaged limit that accepts truncation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 200 }));
+    await new Api('/api').checkoutTickets('demo', { text: 'HS2-QQRY00', compact: true, limit: 500 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/checkouts/demo/tickets?text=HS2-QQRY00&compact=true&limit=500',
+      expect.any(Object),
+    );
+    fetchMock.mockRestore();
+  });
+});
+
 describe('checkout bulk update transport', () => {
   it('sends every selected ticket through one batch request', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 200 }));

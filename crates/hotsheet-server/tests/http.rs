@@ -9585,3 +9585,115 @@ async fn provider_continuations_survive_rows_shifting_before_the_cursor() {
         }
     }
 }
+
+/// HS2-CYXS0N: the unpaged checkout array is bounded. An implicit read that would exceed
+/// 500 rows fails explicitly, an explicit `limit` truncates with `x-hotsheet-truncated`,
+/// and whole-checkout callers page with `page_size` + `cursor` instead.
+#[tokio::test]
+async fn unpaged_checkout_arrays_are_bounded_and_flag_truncation() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("big");
+    let ticket_store = workspace.path().join("big.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    let store = FsStore::init(&ticket_store, &StoreMetadata::new("BIG")).unwrap();
+    for index in 0..501 {
+        hotsheet_ticketing::ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "BIG",
+            hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: if index == 7 {
+                    "needle ticket".into()
+                } else {
+                    format!("bulk ticket {index:03}")
+                },
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = checkout_call(
+        &router,
+        "POST",
+        "/projects/open",
+        Some(serde_json::json!({"root":checkout})),
+    )
+    .await;
+    let base = format!(
+        "/checkouts/{}/tickets",
+        opened["checkout"]["id"].as_str().unwrap()
+    );
+    let get = |uri: String| {
+        let router = router.clone();
+        async move { router.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+
+    let implicit = get(base.clone()).await;
+    assert_eq!(implicit.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(implicit).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("more than 500 tickets match")
+    );
+    for invalid in ["limit=501", "cursor=v2.00"] {
+        let response = get(format!("{base}?{invalid}")).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{invalid}");
+    }
+
+    let capped = get(format!("{base}?limit=500&sort=title&fields=title")).await;
+    assert_eq!(capped.status(), StatusCode::OK);
+    assert_eq!(capped.headers()["x-hotsheet-truncated"], "true");
+    let capped = body_json(capped).await;
+    let capped = capped.as_array().unwrap();
+    assert_eq!(capped.len(), 500);
+    assert_eq!(capped[0]["title"], "bulk ticket 000");
+    assert!(capped.iter().all(|row| row["store"].is_string()));
+
+    let narrow = get(format!("{base}?text=needle")).await;
+    assert_eq!(narrow.status(), StatusCode::OK);
+    assert!(narrow.headers().get("x-hotsheet-truncated").is_none());
+    assert_eq!(body_json(narrow).await.as_array().unwrap().len(), 1);
+    let exact = get(format!("{base}?limit=5&text=needle")).await;
+    assert!(exact.headers().get("x-hotsheet-truncated").is_none());
+    assert_eq!(
+        body_json(get(format!("{base}?limit=0")).await).await,
+        serde_json::json!([])
+    );
+
+    // Whole-checkout readers page instead; projected page rows keep their `store`.
+    let mut titles = std::collections::HashSet::new();
+    let mut cursor: Option<String> = None;
+    let mut pages = 0;
+    loop {
+        let page = checkout_call(
+            &router,
+            "GET",
+            &format!(
+                "{base}?page_size=500&fields=title{}",
+                cursor
+                    .as_deref()
+                    .map(|cursor| format!("&cursor={cursor}"))
+                    .unwrap_or_default()
+            ),
+            None,
+        )
+        .await;
+        pages += 1;
+        for row in page["items"].as_array().unwrap() {
+            assert!(row["store"].is_string());
+            titles.insert(row["title"].as_str().unwrap().to_owned());
+        }
+        cursor = page["next_cursor"].as_str().map(str::to_owned);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(pages, 2);
+    assert_eq!(titles.len(), 501);
+}

@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
 
+/// Most rows one checkout read may return, paged or unpaged (HS2-CYXS0N). Larger reads
+/// page with `page_size` + `cursor`; an unpaged read that would exceed it fails explicitly.
+pub const CHECKOUT_READ_MAX_ROWS: usize = 500;
+
 /// The sortable projection of one ticket row from any checkout source.
 ///
 /// It is also the value-keyset continuation position (HS2-74H84S): a checkout cursor records

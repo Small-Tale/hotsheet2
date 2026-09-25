@@ -897,9 +897,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               sourceApi.checkoutTicket(drag.source.id, ticket.id).then((result) => result.ticket),
             ),
           ),
-          destination.id === drag.source.id
-            ? Promise.resolve(tickets.value)
-            : destinationApi.checkoutTickets(destination.id),
+          // De-duplicate against every destination title, not just loaded rows, via
+          // bounded pages instead of one whole-checkout response (HS2-CYXS0N).
+          destinationApi.checkoutTicketRowsPaged(destination.id, { fields: 'title' }),
         ]),
         titles = destinationRows.map((ticket) => ticket.title);
       for (const source of sources) {
@@ -1303,7 +1303,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       void Promise.allSettled(
         projects.value.map(async (project) => ({
           project,
-          rows: await new Api(project.apiPath).checkoutTickets(project.id, { text: query, compact: true }),
+          rows: await new Api(project.apiPath).checkoutTickets(project.id, { text: query, compact: true, limit: 500 }),
         })),
       ).then((results) => {
         const active = ticketCloseDialog.value;

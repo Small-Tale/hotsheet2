@@ -2402,7 +2402,11 @@ export async function startHotSheetWebClient() {
       results = await Promise.allSettled(
         candidates.map(async (item) => ({
           project: item,
-          tickets: await new Api(item.apiPath).checkoutTickets(item.id, { text: reference.slug, compact: true }),
+          tickets: await new Api(item.apiPath).checkoutTickets(item.id, {
+            text: reference.slug,
+            compact: true,
+            limit: 500,
+          }),
         })),
       ),
       linkProjects = results.flatMap((result) =>

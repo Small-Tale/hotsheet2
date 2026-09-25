@@ -3536,106 +3536,65 @@ fn checkout_entries(
 /// continuation cursor; otherwise the response is a plain array capped by `limit`,
 /// the shape MCP `hotsheet_query` and client search/lookup use. Both shapes share one
 /// global order across every local and hosted-provider source (HS2-M0YTB6).
+/// Response header set when an explicitly `limit`ed unpaged checkout array omitted
+/// further matching rows (HS2-CYXS0N).
+const TRUNCATED_HEADER: &str = "x-hotsheet-truncated";
+
+/// `GET /checkouts/{reference}/tickets`. With `page_size` it returns the bounded page
+/// envelope. Without it, a plain row array in the same global order, bounded by
+/// `CHECKOUT_READ_MAX_ROWS` (HS2-CYXS0N): a caller's explicit `limit` truncates, flagged by
+/// `x-hotsheet-truncated: true`, while an implicit read that would exceed the bound fails
+/// with 400 so a large checkout is never serialized into one response or silently cut.
 async fn list_checkout_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<axum::response::Response, ApiError> {
     if params.page_size.is_some() {
-        return list_checkout_ticket_page(&state, &reference, params).map(Json);
+        return list_checkout_ticket_page(&state, &reference, params)
+            .map(|page| Json(page).into_response());
     }
-    let checkout = state
-        .checkout_registry
-        .resolve(&reference)
-        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
-    let contexts = auto_context::effective(&checkout.settings())
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let compact = params.compact.unwrap_or(true);
-    let fields = parse_fields(&params.fields);
-    let limit = params.limit;
-    // A source's own top-`limit` rows are sufficient for the global top-`limit`. The
-    // `has_commit` post-filter can discard rows, so it reads each source uncapped.
-    let mut source_params = params.clone();
-    if params.has_commit.is_some() {
-        source_params.limit = None;
+    if params.cursor.is_some() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "cursor requires page_size",
+        ));
     }
-    let merge_query = params.clone().into_query(state.store.root())?;
-    let mut result = Vec::new();
-    for (store_id, entry) in checkout_entries(&state, &reference)? {
-        let query = source_params.clone().into_query(entry.store.root())?;
-        let mut rows = entry
-            .index
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
-            .query(&query)?;
-        for row in &mut rows {
-            row.set_connection(&store_id);
-            if compact {
-                row.make_compact();
-            }
-            row.add_auto_context(&contexts);
+    let cap = match params.limit {
+        None => CHECKOUT_READ_MAX_ROWS,
+        Some(limit) if limit <= CHECKOUT_READ_MAX_ROWS => limit,
+        Some(_) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "limit must be at most {CHECKOUT_READ_MAX_ROWS}; page larger reads with page_size and cursor"
+                ),
+            ));
         }
-        for mut value in rows_to_json(rows, &[])
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-        {
-            if let Some(obj) = value.as_object_mut() {
-                obj.insert("store".into(), serde_json::Value::String(store_id.clone()));
-            }
-            result.push(value);
-        }
+    };
+    if cap == 0 {
+        // Still validate the checkout and query even though no row is wanted.
+        merge_checkout_page(&state, &reference, &params, 1, false)?;
+        return Ok(Json(serde_json::Value::Array(Vec::new())).into_response());
     }
-    for source in checkout
-        .sources
-        .iter()
-        .filter(|source| source.provider != "git")
-    {
-        let provider = provider_for(&state, &source.connection_id)?;
-        let query = source_params.clone().into_query(state.store.root())?;
-        for mut ticket in provider.query(&query).map_err(provider_transfer_error)? {
-            ticket.auto_context =
-                auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
-            if compact {
-                ticket.details.clear();
-            }
-            let mut value = serde_json::to_value(ticket).map_err(|error| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-            })?;
-            if let Some(object) = value.as_object_mut() {
-                object.insert("store".into(), source.connection_id.clone().into());
-            }
-            result.push(value);
-        }
+    let (items, next_cursor, _) = merge_checkout_page(&state, &reference, &params, cap, false)?;
+    let truncated = next_cursor.is_some();
+    if truncated && params.limit.is_none() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "more than {CHECKOUT_READ_MAX_ROWS} tickets match; pass limit (at most {CHECKOUT_READ_MAX_ROWS}) or page with page_size and cursor"
+            ),
+        ));
     }
-    if let Some(want) = params.has_commit {
-        let slugs = result
-            .iter()
-            .filter_map(|value| value.get("slug")?.as_str().map(str::to_owned))
-            .collect::<Vec<_>>();
-        let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs) {
-            Ok(matches) => matches,
-            Err(code_review::CodeReviewError::NotRepository) => Default::default(),
-            Err(error) => return Err(code_review_api_error(error)),
-        };
-        result.retain(|value| {
-            value
-                .get("slug")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|slug| matches.contains(slug) == want)
-        });
+    let mut response = Json(serde_json::Value::Array(items)).into_response();
+    if truncated {
+        response.headers_mut().insert(
+            TRUNCATED_HEADER,
+            axum::http::HeaderValue::from_static("true"),
+        );
     }
-    // Project only after merging so the sort keys are still present.
-    let mut result =
-        checkout_order::merge_rows(result, merge_query.sort, merge_query.descending, limit);
-    for value in &mut result {
-        let store = value.get("store").cloned();
-        hotsheet_ticketing::wire::project_fields(std::slice::from_mut(value), &fields);
-        if let (Some(store), Some(object)) = (store, value.as_object_mut()) {
-            object.insert("store".into(), store);
-        }
-    }
-    Ok(Json(serde_json::Value::Array(result)))
+    Ok(response)
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -4038,18 +3997,40 @@ fn completion_day_starts(
         .collect()
 }
 
+use hotsheet_ticketing::checkout_order::CHECKOUT_READ_MAX_ROWS;
+
 fn list_checkout_ticket_page(
     state: &AppState,
     reference: &str,
     params: ListParams,
 ) -> Result<serde_json::Value, ApiError> {
     let page_size = params.page_size.unwrap_or(200);
-    if page_size == 0 || page_size > 500 {
+    if page_size == 0 || page_size > CHECKOUT_READ_MAX_ROWS {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "page_size must be between 1 and 500",
+            format!("page_size must be between 1 and {CHECKOUT_READ_MAX_ROWS}"),
         ));
     }
+    let (items, next_cursor, counts) =
+        merge_checkout_page(state, reference, &params, page_size, true)?;
+    serde_json::to_value(CheckoutTicketPage {
+        items,
+        next_cursor,
+        counts,
+    })
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+}
+
+/// One bounded page of the checkout-wide merge: at most `page_size` rows in the global
+/// order, the continuation cursor when a row remains, and (when requested) exact counts.
+/// Both the paged envelope and the capped unpaged array read through here.
+fn merge_checkout_page(
+    state: &AppState,
+    reference: &str,
+    params: &ListParams,
+    page_size: usize,
+    with_counts: bool,
+) -> Result<(Vec<serde_json::Value>, Option<String>, CheckoutTicketCounts), ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(reference)
@@ -4089,7 +4070,7 @@ fn list_checkout_ticket_page(
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     let day_starts = completion_day_starts(params.summary_days.as_deref(), now)?;
     let mut counts = CheckoutTicketCounts::default();
-    for (_, entry) in &entries {
+    for (_, entry) in entries.iter().filter(|_| with_counts) {
         let summary = entry
             .index
             .lock()
@@ -4097,7 +4078,7 @@ fn list_checkout_ticket_page(
             .summary(&now_text, &day_starts)?;
         counts.add(summary);
     }
-    for source in &external_sources {
+    for source in external_sources.iter().filter(|_| with_counts) {
         counts.add_provider(
             provider_for(state, &source.connection_id)?
                 .summary(&now_text, &day_starts)
@@ -4164,13 +4145,14 @@ fn list_checkout_ticket_page(
                     let mut value = serde_json::to_value(row).map_err(|error| {
                         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                     })?;
-                    if let Some(object) = value.as_object_mut() {
-                        object.insert("store".into(), store_id.clone().into());
-                    }
+                    // Project first: every checkout row keeps its source `store`.
                     hotsheet_ticketing::wire::project_fields(
                         std::slice::from_mut(&mut value),
                         &fields,
                     );
+                    if let Some(object) = value.as_object_mut() {
+                        object.insert("store".into(), store_id.clone().into());
+                    }
                     state.buffer.push_back(CheckoutMergeItem {
                         value,
                         key,
@@ -4219,10 +4201,10 @@ fn list_checkout_ticket_page(
                 let mut value = serde_json::to_value(ticket).map_err(|error| {
                     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                 })?;
+                hotsheet_ticketing::wire::project_fields(std::slice::from_mut(&mut value), &fields);
                 if let Some(object) = value.as_object_mut() {
                     object.insert("store".into(), source.connection_id.clone().into());
                 }
-                hotsheet_ticketing::wire::project_fields(std::slice::from_mut(&mut value), &fields);
                 state.buffer.push_back(CheckoutMergeItem {
                     value,
                     key,
@@ -4288,12 +4270,7 @@ fn list_checkout_ticket_page(
             encode_checkout_page_cursor(&cursors, sort, descending, &filters, last.as_ref())
         })
         .transpose()?;
-    serde_json::to_value(CheckoutTicketPage {
-        items,
-        next_cursor,
-        counts,
-    })
-    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+    Ok((items, next_cursor, counts))
 }
 
 #[derive(Serialize)]

@@ -14124,10 +14124,13 @@ test('drops selected tickets on another project tab to copy them there', async (
       });
     return route.fulfill({ status: 201, json: project });
   });
+  const destinationReads: URL[] = [];
   page.on('request', (request) => {
-    const path = new URL(request.url()).pathname;
+    const url = new URL(request.url()),
+      path = url.pathname;
     if (request.method() === 'POST' && path.includes('/checkouts/other-checkout/tickets'))
       creates.push(request.postDataJSON());
+    if (request.method() === 'GET' && path.endsWith('/checkouts/other-checkout/tickets')) destinationReads.push(url);
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
@@ -14149,8 +14152,17 @@ test('drops selected tickets on another project tab to copy them there', async (
   });
   const destination = page.locator('[data-ticket-drop-project="other-checkout"]');
   await expect(destination).toHaveAttribute('data-dragging-ticket', 'true');
+  const readsBeforeDrop = destinationReads.length;
   await destination.dispatchEvent('drop');
   await expect.poll(() => creates.length).toBe(2);
+  // Title de-duplication reads the destination through bounded title-only pages, never
+  // one unpaged whole-checkout array (HS2-CYXS0N).
+  const dedupeReads = destinationReads
+    .slice(readsBeforeDrop)
+    .filter((url) => url.searchParams.get('fields') === 'title');
+  expect(dedupeReads.length).toBeGreaterThan(0);
+  expect(dedupeReads.every((url) => url.searchParams.get('page_size') === '500')).toBe(true);
+  expect(destinationReads.every((url) => url.searchParams.has('page_size') || url.searchParams.has('text'))).toBe(true);
   expect(creates.map((create) => create.status)).toEqual(['not_started', 'not_started']);
   await expect(page.locator('.app-toast')).toContainText('2 tickets copied to other.');
   await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');

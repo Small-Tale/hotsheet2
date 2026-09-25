@@ -87,7 +87,7 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results.",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Checkout queries return at most 500 rows: an uncapped checkout query matching more fails, so pass limit (at most 500) or page with page_size + cursor (server-backed).",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -108,7 +108,9 @@ fn tools_list() -> Value {
                 "updated_after": str_prop("only tickets updated at/after this ISO-8601 time"),
                 "updated_before": str_prop("only tickets updated at/before this ISO-8601 time"),
                 "sort": str_prop("id|created|updated|priority|status|title"),
-                "limit": { "type": "integer", "description": "cap the number of rows returned (after sort)" },
+                "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500 for checkout queries" },
+                "page_size": { "type": "integer", "description": "checkout queries only (requires a running server): return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
+                "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
                 "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
@@ -492,6 +494,8 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "updated_before",
         "sort",
         "limit",
+        "page_size",
+        "cursor",
         "page_after",
         "fields",
         "compact",
@@ -713,8 +717,24 @@ mod core_backend {
                     let (checkout, stores) = self.checkout_context(checkout)?;
                     if suffix.is_empty() {
                         // Read every store unprojected, merge into one checkout-wide
-                        // order, cap by `limit`, then project (HS2-M0YTB6).
+                        // order, cap by `limit`, then project (HS2-M0YTB6). The same
+                        // 500-row bound as the server applies (HS2-CYXS0N).
+                        if query
+                            .iter()
+                            .any(|(key, _)| key == "page_size" || key == "cursor")
+                        {
+                            return Err(bad_request(
+                                "checkout page_size/cursor paging requires a running Hot Sheet server; \
+                                 use limit (at most 500) or per-store page_after",
+                            ));
+                        }
                         let order = build_query(query, self.store.root())?;
+                        let max = hotsheet_ticketing::checkout_order::CHECKOUT_READ_MAX_ROWS;
+                        if order.limit.is_some_and(|limit| limit > max) {
+                            return Err(bad_request(format!(
+                                "limit must be at most {max}; page larger reads with page_size and cursor"
+                            )));
+                        }
                         let source_query = query
                             .iter()
                             .filter(|(key, _)| key != "fields")
@@ -741,8 +761,13 @@ mod core_backend {
                             all,
                             order.sort,
                             order.descending,
-                            order.limit,
+                            Some(order.limit.unwrap_or(max + 1)),
                         );
+                        if order.limit.is_none() && all.len() > max {
+                            return Err(bad_request(format!(
+                                "more than {max} tickets match; pass limit (at most {max}) or page with page_size and cursor"
+                            )));
+                        }
                         let fields = query_fields(query);
                         for row in &mut all {
                             let store = row.get("store").cloned();
@@ -1851,6 +1876,87 @@ mod tests {
         assert!(call.starts_with("GET /tickets"));
         assert!(call.contains("status"));
         assert!(call.contains("started"));
+    }
+
+    #[test]
+    fn query_tool_forwards_checkout_paging_to_the_server() {
+        let backend = FakeBackend::default();
+        handle_message(
+            &req(
+                "tools/call",
+                json!({ "name": "hotsheet_query", "arguments": {
+                    "checkout": "web", "page_size": 50, "cursor": "v2.abc"
+                } }),
+            ),
+            &backend,
+        );
+        let call = backend.calls.borrow()[0].clone();
+        assert!(call.starts_with("GET /checkouts/web/tickets"), "{call}");
+        assert!(call.contains("page_size") && call.contains("50"), "{call}");
+        assert!(call.contains("cursor") && call.contains("v2.abc"), "{call}");
+    }
+
+    /// HS2-CYXS0N: the serverless checkout query applies the server's 500-row bound and
+    /// rejects cursor paging it cannot serve instead of silently returning everything.
+    #[test]
+    fn corebackend_checkout_query_is_bounded_like_the_server() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let store_root = root.path().join("BIG.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("BIG")).unwrap();
+        for index in 0..501 {
+            ops::create(
+                &store,
+                hotsheet_model::Ulid::new(),
+                "BIG",
+                hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
+                hotsheet_ticketing::NewTicket {
+                    title: format!("ticket {index:03}"),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &checkout_root,
+                Some("project"),
+                None,
+                vec![store_root.clone()],
+            )
+            .unwrap();
+        let backend =
+            CoreBackend::new(FsStore::open(&store_root).unwrap()).with_checkout_registry(registry);
+        let path = format!("/checkouts/{}/tickets", checkout.id);
+        let get = |pairs: &[(&str, &str)]| {
+            let pairs = pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<Vec<_>>();
+            backend.get(&path, &pairs)
+        };
+        let implicit = get(&[]).unwrap_err();
+        assert_eq!(implicit.status, Some(400));
+        assert!(implicit.message.contains("more than 500 tickets match"));
+        assert_eq!(get(&[("limit", "501")]).unwrap_err().status, Some(400));
+        assert_eq!(get(&[("page_size", "10")]).unwrap_err().status, Some(400));
+        assert_eq!(get(&[("cursor", "v2.00")]).unwrap_err().status, Some(400));
+        let capped = get(&[("limit", "500"), ("sort", "title")]).unwrap();
+        let capped = capped.as_array().unwrap();
+        assert_eq!(capped.len(), 500);
+        assert_eq!(capped[0]["title"], "ticket 000");
+        assert_eq!(
+            get(&[("text", "ticket 007")])
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]

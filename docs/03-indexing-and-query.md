@@ -221,7 +221,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
   so the client restarts from the top. To page, pass the last row's ULID as the next
   `page_after`. The CLI (`ls --page-after <slug|ULID>`) accepts a slug for convenience.
   `page_after` is a **row-identity** keyset for one store: it re-reads the boundary row's
-  *current* sort values, so editing that row's sort key under a traversal can skip or repeat
+  _current_ sort values, so editing that row's sort key under a traversal can skip or repeat
   rows, and purging it ends the traversal (empty page). That hazard is accepted for this
   single-store convenience surface (decided HS2-74H84S); callers that need mutation-safe
   continuation use the checkout `cursor` below, whose value keysets never depend on the
@@ -239,13 +239,29 @@ query(filter, sort, text?, paging) -> TicketRow[]
   status, and title sorts. Continuations therefore resume the same global order instead of
   concatenating independently sorted source pages (HS2-2BDSRK).
   Without `page_size`, the checkout route returns a plain row array (the shape MCP
-  `hotsheet_query` and client search/lookup use) in that same global order: each source
-  contributes at most `limit` rows, the server merges them with the shared
-  `hotsheet_ticketing::checkout_order` comparator, applies `limit` to the checkout-wide
-  result, and projects `fields` only after merging. The serverless MCP backend merges
-  multi-store checkouts the same way (HS2-M0YTB6).
+  `hotsheet_query` and client search/lookup use) in that same global order: the server runs
+  the same batched merge with the shared `hotsheet_ticketing::checkout_order` comparator,
+  applies `limit` to the checkout-wide result, and projects `fields` only after merging
+  (every row keeps its source `store`). The serverless MCP backend merges multi-store
+  checkouts the same way (HS2-M0YTB6).
+  The unpaged array is **bounded** by `CHECKOUT_READ_MAX_ROWS` (500), the same ceiling as a
+  page (HS2-CYXS0N):
+  - without `limit`, a read that would return more than 500 rows fails with
+    `400 more than 500 tickets match; …` rather than serializing the whole checkout;
+  - an explicit `limit` (at most 500; larger is `400`) accepts truncation, and the server
+    flags omitted rows with the `x-hotsheet-truncated: true` response header;
+  - `cursor` without `page_size` is rejected; whole-checkout readers page instead.
+
+  Callers: the web client's copy-drag title de-duplication reads the destination through
+  title-only cursor pages (`Api.checkoutTicketRowsPaged`), and its slug lookup and
+  duplicate-target search pass an explicit `limit=500`. MCP `hotsheet_query` forwards
+  `page_size` and `cursor` for server-backed checkout queries and returns the page envelope;
+  the serverless backend applies the same 500-row bound and rejects `page_size`/`cursor`
+  (checkout cursor pages need the server's merge). Store-level `/tickets` reads without a
+  checkout keep `limit` + `page_after`.
+
 - **Continuation under concurrent mutation (decided HS2-ZYW6K8; built HS2-74H84S):**
-  checkout cursors are *value-keyset continuations*, not snapshots. The server keeps no
+  checkout cursors are _value-keyset continuations_, not snapshots. The server keeps no
   per-cursor snapshot or retained result set, so memory stays bounded and cursors stay
   stateless across restarts and hosts. Instead, a continuation resumes strictly after the
   last emitted row's **sort-key values** in the shared `checkout_order` total order, and
@@ -277,6 +293,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
     natively but string-ordered in the checkout comparator, so `id` and every other sort
     use the full-scan keyset.
   - A pre-value-keyset `v1.` cursor is rejected as stale; the client restarts from the top.
+
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

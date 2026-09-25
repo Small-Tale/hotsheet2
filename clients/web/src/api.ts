@@ -177,6 +177,10 @@ export interface CheckoutTicketQuery {
   verified_before?: string;
   sort?: 'updated' | 'priority' | 'title' | 'status';
   direction?: 'ascending' | 'descending';
+  /** Comma-separated row projection; `slug` and the source `store` are always kept. */
+  fields?: string;
+  /** Unpaged reads only: explicit cap (at most 500) that accepts a truncated result. */
+  limit?: number;
 }
 export interface CheckoutTicketCounts {
   total: number;
@@ -577,6 +581,25 @@ export class Api {
       params.set(key, key === 'text' && typeof value === 'string' ? value.trim() : String(value));
     }
     return this.request<CheckoutTicketPage>(`/checkouts/${encodeURIComponent(checkout)}/tickets?${params}`);
+  };
+  /**
+   * Every matching checkout row, read through bounded cursor pages rather than one unpaged
+   * response, which the server caps at 500 rows (HS2-CYXS0N).
+   */
+  checkoutTicketRowsPaged = async (checkout: string, query: CheckoutTicketQuery = {}) => {
+    const rows: TicketRow[] = [],
+      seen = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = await this.checkoutTicketPage(checkout, 500, cursor, query);
+      rows.push(...page.items);
+      cursor = page.next_cursor;
+      if (cursor !== undefined) {
+        if (seen.has(cursor)) throw new Error('Checkout pagination returned a repeated cursor.');
+        seen.add(cursor);
+      }
+    } while (cursor !== undefined);
+    return rows;
   };
   checkoutCorruptTickets = (checkout: string) =>
     this.request<CorruptTicket[]>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
