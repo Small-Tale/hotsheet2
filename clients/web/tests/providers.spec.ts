@@ -15422,9 +15422,35 @@ test('preserves list and every board-column scroll position across ticket mutati
   const listTarget = page.locator('[data-component="ticket-list-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
   await listTarget.scrollIntoViewIfNeeded();
-  const listBefore = await workspace.evaluate((node) => node.scrollTop);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  const contextPoint = await listTarget.evaluate((target) => {
+      const bounds = target.getBoundingClientRect(),
+        owner = target.closest<HTMLElement>('[data-ticket-scroll-owner="workspace"]')!,
+        ownerBounds = owner.getBoundingClientRect();
+      return {
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+        visible: bounds.top >= ownerBounds.top && bounds.bottom <= ownerBounds.bottom,
+      };
+    }),
+    listBefore = await workspace.evaluate((node) => node.scrollTop);
   expect(listBefore).toBeGreaterThan(0);
-  await listTarget.click({ button: 'right' });
+  expect(contextPoint.visible).toBe(true);
+  await listTarget.dispatchEvent('contextmenu', {
+    button: 2,
+    buttons: 2,
+    clientX: contextPoint.x,
+    clientY: contextPoint.y,
+  });
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
   await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
   await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${listSlug}"]`)).toHaveAttribute(
