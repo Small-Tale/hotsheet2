@@ -3403,10 +3403,59 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     { exact: true },
   );
   await expect(response).toHaveCount(1);
-  await conversation.screenshot({ path: '/private/tmp/hs2-qfwhgc-claude-single-response-wide.png' });
+  await conversation.screenshot({ path: '/private/tmp/hs2-ktw27j-claude-single-response-wide.png' });
+  await drawer.screenshot({ path: '/private/tmp/hs2-ktw27j-drawer-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+  await expect.poll(() => page.evaluate(() => scrollX)).toBe(0);
   await expect(response).toHaveCount(1);
-  await conversation.screenshot({ path: '/private/tmp/hs2-qfwhgc-claude-single-response-narrow.png' });
+  const content = drawer.locator('.terminal-drawer__content');
+  await expect
+    .poll(() =>
+      content.evaluate((owner) => {
+        const bounds = owner.getBoundingClientRect();
+        return (
+          bounds.left >= 0 &&
+          bounds.right <= innerWidth &&
+          [
+            ...owner.querySelectorAll<HTMLElement>(
+              '[data-component="ai-conversation"], .ai-conversation__embedded-header, .ai-conversation__transcript, .ai-conversation__composer',
+            ),
+          ].every((element) => {
+            const box = element.getBoundingClientRect();
+            return box.left >= bounds.left && box.right <= bounds.right;
+          })
+        );
+      }),
+    )
+    .toBe(true);
+  await expect.poll(() => conversation.evaluate((node) => node.scrollLeft)).toBe(0);
+  await expect
+    .poll(() =>
+      conversation.evaluate((node) => {
+        const scrolled: Array<{ className: string; scrollLeft: number }> = [];
+        for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement)
+          if (ancestor.scrollLeft)
+            scrolled.push({ className: ancestor.className || ancestor.tagName, scrollLeft: ancestor.scrollLeft });
+        return scrolled;
+      }),
+    )
+    .toEqual([]);
+  await expect
+    .poll(() =>
+      conversation.evaluate((node) => {
+        const bounds = node.getBoundingClientRect();
+        return [...node.querySelectorAll<HTMLElement>('*')]
+          .filter((element) => {
+            const box = element.getBoundingClientRect();
+            return box.width > 0 && (box.left < bounds.left || box.right > bounds.right);
+          })
+          .map((element) => element.className || element.tagName);
+      }),
+    )
+    .toEqual([]);
+  await conversation.screenshot({ path: '/private/tmp/hs2-ktw27j-claude-single-response-narrow.png' });
+  await drawer.screenshot({ path: '/private/tmp/hs2-ktw27j-drawer-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.screenshot({ path: '/private/tmp/hs2-0fr30w-terminal-drawer-ai-chat.png', fullPage: true });
   await drawer.locator('[data-tab-kind="ai-chat"]').hover();

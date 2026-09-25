@@ -52,6 +52,7 @@ describe('application shell components', () => {
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: remify\(1024px\)/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: remify\(600px\)/);
+    expect(productionCss).toMatch(/html,\s*body,\s*#app \{[^}]*overflow: clip/);
     expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(
       /@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.kui-resizable-region[^{}]*display: none/,

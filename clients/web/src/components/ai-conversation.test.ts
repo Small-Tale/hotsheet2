@@ -194,6 +194,12 @@ describe('AIConversation', () => {
     expect(markup).toContain('The tool turn failed.');
   });
 
+  it('lets embedded conversations shrink within a narrow drawer', () => {
+    expect(css).toMatch(
+      /\.ai-conversation--embedded \{[^}]*width: 100%[^}]*min-width: 0[^}]*max-width: 100%[^}]*height: 100%[^}]*overflow: clip[^}]*box-sizing: border-box/,
+    );
+  });
+
   it('only offers persisted ticket feedback when the composition has a ticket note target', () => {
     const message = { id: 'answer', role: 'assistant' as const, content: 'Done.', status: 'completed' as const };
     expect(
@@ -279,7 +285,7 @@ describe('AIConversation', () => {
   });
   it('floats one bordered growing composer over a padded scrolling transcript', () => {
     expect(css).toMatch(
-      /\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: hidden[^}]*flex-direction: column/,
+      /\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: clip[^}]*flex-direction: column/,
     );
     expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*flex: 1 1 0/);
     expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/);

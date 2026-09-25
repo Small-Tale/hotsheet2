@@ -179,9 +179,11 @@ and identity-less legacy entries remain conservatively blocking.
   stay in sync (HS2-ZK51WP). AppShell expresses that switch through Kerf
   `ResizableRegion.presentation` rather than reimplementing overlay geometry; the same
   component policy owns its hidden resize handle, width cap, shadow, and collapsed hit testing.
-  The shell clips offscreen panels without becoming a scroll
-  container: opening, clearing, and typing in search must not pan the whole workspace, including
-  across desktop/mobile resize. The workspace and inspector keep independent scrolling, and
+  The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
+  clearing, and typing in search must not pan the whole workspace, including across desktop/mobile
+  resize. Embedded AI conversations also opt into flex shrink containment so their header,
+  transcript, and composer remain inside the mobile center column (HS2-KTW27J). The workspace and
+  inspector keep independent scrolling, and
   overlay controls remain accessible (HS2-JBTPNR). The production root uses the dynamic viewport height rather than
   iOS Safari's larger layout viewport. The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
