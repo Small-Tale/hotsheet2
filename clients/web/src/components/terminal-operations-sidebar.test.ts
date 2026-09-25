@@ -52,12 +52,13 @@ describe('TerminalOperationsSidebar', () => {
   });
 
   it('aligns the group ListHeader label with the ProjectSummary content on one gutter (HS2-RSJ796)', () => {
+    const markup = String(TerminalOperationsSidebar({ projects }));
     const css = readFileSync(new URL('./terminal-operations-sidebar.css', import.meta.url), 'utf8');
-    // Zero kerf's own inline margin + title padding so the header label is not indented past the
-    // chart bars; both then share the single --kui-space-s wrapper inset.
-    expect(css).toMatch(
-      /terminal-operations-sidebar__group > \.kui-list-header \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: 0;[^}]*padding-inline: var\(--kui-space-s\)/,
-    );
+    expect(markup).toContain('class="terminal-operations-sidebar__group-heading"><header class="kui-list-header"');
+    expect(markup).toContain('data-inline="true"');
+    expect(css).toMatch(/terminal-operations-sidebar__group-heading \{[^}]*padding-inline: var\(--kui-space-s\)/);
+    expect(css).not.toContain('--kui-layout-inline-margin');
+    expect(css).not.toContain('--kui-layout-item-padding');
     expect(css).toMatch(/terminal-operations-sidebar__group > \.project-summary \{[^}]*padding: var\(--kui-space-s\)/);
   });
 });

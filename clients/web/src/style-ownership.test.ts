@@ -17,7 +17,6 @@ describe('global stylesheet ownership', () => {
       ['provider setup', 'provider-setup-form.css', ['.provider-setup-form']],
       ['ticket-source settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
       ['settings workspace', 'settings-workspace.css', ['.project-settings']],
-      ['terminal rename', 'terminal-rename-dialog.css', ['.terminal-rename']],
       ['notification inspector', 'notification-inspector.css', ['.notification-inspector-empty']],
     ] as const;
     for (const [name, file, selectors] of ownership) {

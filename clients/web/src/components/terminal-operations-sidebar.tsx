@@ -62,7 +62,9 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
       <List gap="m">
         {groups.map((group) => (
           <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
-            <ListHeader label={group.name} />
+            <div class="terminal-operations-sidebar__group-heading">
+              <ListHeader label={group.name} inline />
+            </div>
             <ProjectSummary
               completedToday={group.completedToday}
               inProgress={group.inProgress}

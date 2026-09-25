@@ -21,7 +21,8 @@ describe('content components', () => {
   it('offers the visible Add note action when the note list is empty', () => {
     const markup = String(TicketNotes({ notes: [] }));
     expect(markup).toContain('No notes added.');
-    expect(markup).toContain('class="kui-list-inset-text kui-list-inset-text--horizontal ticket-notes__empty-inset"');
+    expect(markup).toContain('class="kui-list-inset-text ticket-notes__empty-inset"');
+    expect(markup).toContain('data-component="list-inset-text" data-sides="rl"');
     expect(markup).toContain('class="kui-list-item ticket-notes__add"');
     expect(markup).toContain(
       '<span class="kui-list-item__label"><span class="kui-list-item__primary-label">Add note</span></span>',
@@ -191,9 +192,8 @@ describe('content components', () => {
     );
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain(
-      '<h2 class="kui-list-header__label" aria-label="Notes, 1 note">Notes</h2><span class="kui-list-header__count" aria-hidden="true">1</span>',
-    );
+    expect(markup).toContain('aria-label="Notes, 1 note" class="kui-text kui-list-header__label"');
+    expect(markup).toContain('<span class="kui-list-header__count" aria-hidden="true">1</span>');
     expect(markup).toContain('data-has-count="true"');
     expect(markup).toContain('<wa-dialog');
     expect(markup).toContain('label="Read and edit HS2-TEST"');

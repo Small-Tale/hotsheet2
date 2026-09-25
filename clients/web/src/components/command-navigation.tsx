@@ -94,6 +94,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
               {group && (
                 <ListHeader
                   label={group}
+                  density="compact"
                   action="toggle-command-section"
                   actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
                   expanded={groupExpanded}

@@ -20,12 +20,9 @@
   padding-bottom: var(--kui-space-m);
   border-bottom: 1px solid var(--wa-color-surface-border);
 }
-/* Align the kerf ListHeader label with the ProjectSummary content below it on one shared
-   --kui-space-s gutter. Kerf's own inline margin + title padding otherwise stack on top of this
-   wrapper inset, pushing the label ~17px further right than the chart bars (HS2-RSJ796). */
-.terminal-operations-sidebar__group > .kui-list-header {
-  --kui-layout-inline-margin: 0;
-  --kui-layout-item-padding: 0;
+/* The beta.49 inline ListHeader removes its own outer box so this application wrapper is the
+   single gutter owner shared with ProjectSummary (HS2-RSJ796, HS2-737H3X). */
+.terminal-operations-sidebar__group-heading {
   padding-inline: var(--kui-space-s);
 }
 .terminal-operations-sidebar__group > .project-summary {

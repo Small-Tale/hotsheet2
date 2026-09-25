@@ -236,6 +236,7 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
 });
 
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-dialog');
   await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', false);
   await expect(page.locator('[data-remote-project-dialog]')).toContainText('/work/demo');
@@ -243,9 +244,18 @@ test('represents the application states extracted from main.tsx in the UX catalo
 
   await page.goto('/ux-demo?component=terminal-rename-dialog');
   const rename = page.locator('[data-terminal-rename-dialog]');
+  const renameSurface = rename.locator('[part~="dialog"]');
   await expect(rename).toHaveJSProperty('open', true);
   await expect(rename.getByRole('textbox', { name: 'Terminal name' })).toHaveJSProperty('value', 'Development');
-  await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-terminal-rename.png', fullPage: true });
+  await expect(renameSurface).toBeVisible();
+  await renameSurface.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-rename-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/ux-demo?component=terminal-rename-dialog');
+  const narrowRename = page.locator('[data-terminal-rename-dialog]');
+  await expect(narrowRename).toHaveJSProperty('open', true);
+  const narrowRenameSurface = narrowRename.locator('[part~="dialog"]');
+  await expect(narrowRenameSurface).toBeVisible();
+  await narrowRenameSurface.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-rename-narrow.png' });
 
   await page.goto('/ux-demo?component=app-empty-state');
   await expect(page.getByRole('heading', { name: 'Open a Hot Sheet project' })).toBeVisible();
@@ -742,8 +752,10 @@ test('represents aggregate and per-project terminal operations in the UX catalog
   await expect(hotsheet.locator('[data-background-bar="5"]')).toHaveAttribute('style', '--bar-height:100%');
   await expect(hotsheet.locator('[data-bar="4"]')).toHaveAttribute('style', '--bar-height:56%');
   await expect(kerf.locator('[data-bar="5"]')).toHaveAttribute('style', '--bar-height:56%');
-  await page.screenshot({ path: '/private/tmp/hs2-mh8qn2-terminal-operations-green-aggregate.png', fullPage: true });
-  await sidebar.screenshot({ path: '/private/tmp/hs2-hph6c5-operations-comparison-demo.png' });
+  await sidebar.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-operations-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sidebar).toBeVisible();
+  await sidebar.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-operations-narrow.png' });
 });
 
 test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {
@@ -3111,7 +3123,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const categoryLabelHeight = await inspector
     .locator('wa-select[name="inspector-category"]')
     .evaluate((node) => node.shadowRoot!.querySelector('[part~="form-control-label"]')!.getBoundingClientRect().height);
-  expect(sectionRhythm[1].headerHeight).toBeCloseTo(categoryLabelHeight, 1);
+  expect(sectionRhythm[1].headerHeight).toBeCloseTo(categoryLabelHeight + 16, 1);
   expect(sectionRhythm[2].headerHeight).toBeCloseTo(44, 1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
@@ -3177,13 +3189,15 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(page.locator('[data-component="ticket-reader"]')).toBeVisible();
 });
 
-test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9)', async ({ page }) => {
+test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9, HS2-737H3X)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');
   const review = page.locator('[data-component="ticket-code-review"]').first();
   await expect(review).toBeVisible();
   const spacing = await review.evaluate((node) => {
-    const heading = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__heading')!),
+    const heading = getComputedStyle(
+        node.querySelector<HTMLElement>('.ticket-code-review__header .kui-toolbar__leading')!,
+      ),
       evidence = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence')!),
       evidenceItem = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence-grid span')!),
       range = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range')!),
@@ -3204,7 +3218,7 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     };
   });
   expect(spacing).toEqual({
-    headingGap: '4px',
+    headingGap: '8px',
     evidenceMargin: '16px',
     evidencePadding: '8px',
     evidenceItemGap: '4px',
@@ -3215,7 +3229,7 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     commitGap: '8px',
     summaryGap: '4px',
   });
-  await review.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-code-review-wide.png' });
+  await review.screenshot({ path: '/private/tmp/hs2-737h3x-ticket-code-review-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(() =>
@@ -3225,7 +3239,7 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
       }),
     )
     .toBe(true);
-  await review.screenshot({ path: '/private/tmp/hs2-4y6sm9-ticket-code-review-narrow.png' });
+  await review.screenshot({ path: '/private/tmp/hs2-737h3x-ticket-code-review-narrow.png' });
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
@@ -3982,9 +3996,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const menuHeaderLefts = await sidebar
     .locator('[data-component="list-header"]')
-    .evaluateAll((headers) =>
-      headers.map((header) => header.querySelector('.kui-list-header__label')!.getBoundingClientRect().left),
-    );
+    .evaluateAll((headers) => headers.map((header) => header.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(4);
   for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left - menuHeaderLefts[0])).toBeLessThan(1);
   const viewActionAlignment = await sidebar.evaluate((node) => {

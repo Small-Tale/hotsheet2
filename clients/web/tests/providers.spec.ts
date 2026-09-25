@@ -7008,10 +7008,12 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   expect(iconBox.x - rowBox.x).toBeLessThanOrEqual(10);
   expect(labelBox.x - iconBox.x - iconBox.width).toBeGreaterThanOrEqual(7);
   expect(labelBox.x - iconBox.x - iconBox.width).toBeLessThanOrEqual(9);
-  // The Views section header title indents deeper than the row rail.
-  expect(titleBox.x - side.x).toBeGreaterThan(rowBox.x - side.x);
-  expect(titleBox.x - side.x).toBeGreaterThanOrEqual(16);
-  expect(titleBox.x - side.x).toBeLessThanOrEqual(18);
+  // Beta.49's Text wrapper owns the title's standard 8px content padding. Its box stays on the
+  // shared rail while the visible label retains the deeper content inset.
+  rail(titleBox.x - side.x);
+  const titlePadding = await viewsTitle.evaluate((node) => Number.parseFloat(getComputedStyle(node).paddingLeft));
+  expect(titleBox.x + titlePadding - side.x).toBeGreaterThanOrEqual(16);
+  expect(titleBox.x + titlePadding - side.x).toBeLessThanOrEqual(18);
   // The Codex chat and Hide-terminals controls are 44px touch targets; the kerf ListHeader Add-view
   // action is a smaller icon button — its hit-target size is questioned in HS2-EWF7TM.
   expect(chatBox.width).toBeCloseTo(44, 0);
@@ -8428,7 +8430,10 @@ test('aligns Status controls without duplicating badge insets and preserves sele
         return {
           badgeInset: selected.left - control.left,
           labelInset:
-            label.left - categoryLabel.left - Number.parseFloat(getComputedStyle(categoryLabelNode).paddingLeft),
+            label.left +
+            Number.parseFloat(getComputedStyle(statusField.querySelector('h2')!).paddingLeft) -
+            categoryLabel.left -
+            Number.parseFloat(getComputedStyle(categoryLabelNode).paddingLeft),
           fieldGap: row.getBoundingClientRect().top - label.bottom,
           categoryGap: control.top - categoryLabel.bottom,
           rowPadding: rowStyle.padding,
@@ -8668,13 +8673,17 @@ test('aligns the empty Notes text and preserves Add note before the first note e
   const expectEmptyNotes = async (surface: Locator, name: string) => {
     const notes = surface.locator('[data-component="ticket-notes"]');
     await notes.scrollIntoViewIfNeeded();
-    await expect(notes.locator('[data-component="list-inset-text"]')).toHaveClass(/kui-list-inset-text--horizontal/);
+    await expect(notes.locator('[data-component="list-inset-text"]')).toHaveAttribute('data-sides', 'rl');
     await expect(notes.locator('.ticket-notes__empty')).toHaveText('No notes added.');
     const geometry = await notes.evaluate((node) => {
-      const label = node.querySelector('h2')!.getBoundingClientRect(),
+      const labelNode = node.querySelector('h2')!,
+        label = labelNode.getBoundingClientRect(),
         empty = node.querySelector('.ticket-notes__empty')!.getBoundingClientRect(),
         inset = getComputedStyle(node.querySelector('[data-component="list-inset-text"]')!);
-      return { textInset: empty.left - label.left, paddingBlock: [inset.paddingTop, inset.paddingBottom] };
+      return {
+        textInset: empty.left - label.left - Number.parseFloat(getComputedStyle(labelNode).paddingLeft),
+        paddingBlock: [inset.paddingTop, inset.paddingBottom],
+      };
     });
     expect(geometry.textInset).toBeCloseTo(0, 1);
     expect(geometry.paddingBlock).toEqual(['0px', '0px']);
@@ -8732,25 +8741,33 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await notesHeader.screenshot({ path: '/private/tmp/hs2-fycazc-notes-count-wide.png' });
   const geometry = await info.evaluate((node) => {
     const style = getComputedStyle(node),
-      detailsHeading = node
-        .querySelector<HTMLElement>('.ticket-inspector__details-section [data-component="list-header"] h2')!
-        .getBoundingClientRect(),
+      detailsHeadingNode = node.querySelector<HTMLElement>(
+        '.ticket-inspector__details-section [data-component="list-header"] h2',
+      )!,
+      detailsHeading = detailsHeadingNode.getBoundingClientRect(),
       detailsText = node
         .querySelector<HTMLElement>('.ticket-inspector__details-section .markdown-preview p')!
         .getBoundingClientRect(),
       blockIcon = node
         .querySelector<HTMLElement>('.ticket-inspector__block-action .kui-list-item__icon')!
         .getBoundingClientRect(),
-      notesHeading = node
-        .querySelector<HTMLElement>('[data-component="ticket-notes"] [data-component="list-header"] h2')!
-        .getBoundingClientRect(),
+      notesHeadingNode = node.querySelector<HTMLElement>(
+        '[data-component="ticket-notes"] [data-component="list-header"] h2',
+      )!,
+      notesHeading = notesHeadingNode.getBoundingClientRect(),
       noteText = node
         .querySelector<HTMLElement>('[data-component="note-card"] .markdown-preview p')!
         .getBoundingClientRect();
     return {
       leftGutter: style.paddingLeft,
       rightGutter: style.paddingRight,
-      lefts: [detailsHeading.left, detailsText.left, blockIcon.left, notesHeading.left, noteText.left],
+      lefts: [
+        detailsHeading.left + Number.parseFloat(getComputedStyle(detailsHeadingNode).paddingLeft),
+        detailsText.left,
+        blockIcon.left,
+        notesHeading.left + Number.parseFloat(getComputedStyle(notesHeadingNode).paddingLeft),
+        noteText.left,
+      ],
     };
   });
   expect(geometry.leftGutter).toBe('0px');

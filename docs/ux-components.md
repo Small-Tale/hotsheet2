@@ -432,7 +432,7 @@ and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Shee
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.
 Hot Sheet pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` together at
-5.0.0-beta.35 and treats the strengthened declaration unions introduced in beta.22 as
+5.0.0-beta.49 and treats the strengthened declaration unions introduced in beta.22 as
 integration requirements: Select adapters
 choose one accessible-name branch, while ListHeader compositions choose a complete
 passive or action branch. This keeps disabled/read-only surfaces semantically passive
@@ -1616,3 +1616,20 @@ demos and production flows.
 
 The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
 examples using the package component unchanged, including explicit edge dividers.
+
+### Kerf beta.49 configuration-first adoption
+
+Beta.49 adds first-class `Text`, `Grid`, and `Spacer` components, baseline-aware
+`Row`, side-selectable text/control insets, and `ListHeader.inline`. Hot Sheet treats
+those as component configuration rather than invitations to reproduce their geometry
+in product CSS. The initial adoption removes the terminal rename stylesheet, replaces
+Code Review's custom equal-column grid and heading wrapper with `Grid` and canonical
+`ToolbarText`, projects nested command-heading density through `ListHeader`, and uses
+the inline header presentation for terminal-operation summaries. The note empty state
+also moves from the deprecated `horizontalOnly` alias to `sides="rl"`.
+
+Responsive column-count changes, asymmetric tracks, ticket-state visuals, and other
+domain semantics remain application-owned. Remaining legacy shadow-part, private-token,
+and hand-written layout migrations are tracked separately so each can retain behavioral
+and visual coverage rather than becoming an unreviewed package-upgrade rewrite
+(HS2-737H3X; follow-ups HS2-06GDW3, HS2-S3BXC0, HS2-HD1SCC).

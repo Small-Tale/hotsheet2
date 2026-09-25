@@ -82,7 +82,7 @@ export function TicketNotes({
         </List>
       ) : (
         !composing && (
-          <ListInsetText horizontalOnly className="ticket-notes__empty-inset">
+          <ListInsetText sides="rl" className="ticket-notes__empty-inset">
             <p class="ticket-notes__empty">No notes added.</p>
           </ListInsetText>
         )

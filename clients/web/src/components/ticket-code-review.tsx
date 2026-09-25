@@ -1,8 +1,10 @@
 import './ticket-code-review.css';
 
+import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import {
   CircleHelp,
   ExternalLink,
@@ -53,12 +55,12 @@ export function TicketCodeReview({
 }: TicketCodeReviewProps) {
   const enabled = Boolean(review?.difftool);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
-  const heading = (
-    <div class="ticket-code-review__heading">
-      <h2>{title}</h2>
-      {review?.difftool && <span>Opens in {review.difftool}</span>}
-    </div>
-  );
+  const heading = [
+    <ToolbarText text={title} size="xlarge" headingLevel={2} />,
+    review?.difftool ? (
+      <ToolbarText text={`Opens in ${review.difftool}`} size="small" className="ticket-code-review__difftool" />
+    ) : undefined,
+  ];
   return (
     <div
       class={`${embedded ? '' : 'ticket-inspector__content '}ticket-code-review`}
@@ -83,7 +85,7 @@ export function TicketCodeReview({
                 aria-label="Open change evidence"
               >
                 <h3>Change evidence</h3>
-                <div class="ticket-code-review__evidence-grid">
+                <Grid className="ticket-code-review__evidence-grid" columns={2} gap="xs">
                   <span>
                     <LucideIcon icon={FileText} name="file-text" />
                     <strong>{review.summary.files.docs}</strong> docs
@@ -102,7 +104,7 @@ export function TicketCodeReview({
                       <strong>{review.summary.files.other}</strong> other
                     </span>
                   )}
-                </div>
+                </Grid>
                 <p data-tests-modified={review.summary.tests_modified > 0 ? 'true' : 'false'}>
                   {review.summary.tests_added} new test file{review.summary.tests_added === 1 ? '' : 's'} ·{' '}
                   {review.summary.tests_modified} existing test file{review.summary.tests_modified === 1 ? '' : 's'}{' '}

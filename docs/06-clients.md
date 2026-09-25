@@ -744,7 +744,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
-  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.35.
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.49.
   The client follows the package's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode
@@ -781,6 +781,19 @@ and identity-less legacy entries remain conservatively blocking.
   (HS2-ZMN977). The web client and spike also pin the beta.24 ESLint plugin,
   retaining the existing recommended rules while adopting its safe, explicit-only
   bundled assistant-configuration update behavior.
+
+  Beta.49 begins the next configuration-first pass (HS2-737H3X). The terminal rename
+  form delegates its vertical and action-row geometry to `List` and `Row`, removing its
+  component stylesheet. Code Review composes its heading from canonical
+  `ToolbarText` entries and its equal evidence columns from the new `Grid` primitive;
+  only its application-owned narrow one-column policy remains in CSS. Nested command
+  headings select `ListHeader`'s compact density instead of forcing a private height,
+  terminal operations uses `ListHeader.inline` instead of overriding header margin and
+  padding tokens, and note empty-state insets use the shared physical `sides` contract.
+  The package's new `Text`, `Spacer`, Row baseline/inset configuration, Grid, and
+  contrast-safe Web Awesome surface/badge contracts are the preferred vocabulary for
+  subsequent migrations; product-specific semantics, responsive policy, and
+  asymmetric layout remain application-owned.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
@@ -1589,7 +1602,7 @@ the narrow closed control, so checkmarks and complete group names remain visible
 Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
 The contract for that shared lifecycle keeps the latest open/close request authoritative
 across interrupted animations and viewport changes; a previous close cannot hide a
-reopened menu or return its geometry to the origin. Kerf beta.35 retains the lifecycle
+reopened menu or return its geometry to the origin. Kerf beta.49 retains the lifecycle
 installer shipped in beta.34's immutable npm artifact, and the production regression
 exercises repeated interrupted close, resize, and reopen sequences at wide and narrow
 widths. Consumers do not add popup delays or positioning repairs. The dialog's

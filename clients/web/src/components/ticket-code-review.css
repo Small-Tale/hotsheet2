@@ -3,18 +3,8 @@
   min-height: remify(40.4px);
   padding: 0;
 }
-.ticket-code-review__heading {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: var(--kui-space-2xs);
-}
-.ticket-code-review__heading h2 {
-  margin: 0;
-}
-.ticket-code-review__heading span {
+.ticket-code-review__difftool {
   color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
   white-space: nowrap;
 }
 .ticket-code-review__evidence {
@@ -44,11 +34,6 @@
 .ticket-code-review__evidence h3 {
   margin: 0 0 var(--kui-space-xs);
   font-size: var(--wa-font-size-s);
-}
-.ticket-code-review__evidence-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--kui-space-xs);
 }
 .ticket-code-review__evidence-grid span {
   display: flex;
@@ -328,11 +313,7 @@
   }
 }
 @container (max-width: remify(352px)) {
-  .ticket-code-review__heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .ticket-code-review__heading span {
+  .ticket-code-review__difftool {
     white-space: normal;
   }
   .ticket-code-review__evidence-grid {

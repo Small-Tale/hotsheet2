@@ -6,9 +6,6 @@
   display: grid;
   gap: var(--kui-space-2xs);
 }
-.command-navigation__group > .kui-list-header {
-  min-height: remify(23.2px);
-}
 .command-navigation__command {
   min-height: remify(40px);
   font-weight: 650;

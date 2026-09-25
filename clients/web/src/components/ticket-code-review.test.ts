@@ -44,9 +44,14 @@ const review: CodeReview = {
 
 describe('TicketCodeReview', () => {
   it('uses canonical review-region spacing while keeping row and action geometry explicit', () => {
+    const markup = String(TicketCodeReview({ review }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/__heading \{[^}]*gap: var\(--kui-space-2xs\)/);
+    expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge"');
+    expect(markup).toContain('role="heading" aria-level="2"');
+    expect(markup).toContain(
+      'class="kui-toolbar-text ticket-code-review__difftool" data-component="toolbar-text" data-size="small"',
+    );
     expect(css).toMatchSource(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(
@@ -137,6 +142,8 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('<strong>3</strong> tests');
     expect(markup).toContain('2 new test files · 1 existing test file modified');
     expect(markup).toContain('data-tests-modified="true"');
+    expect(markup).toContain('class="kui-grid ticket-code-review__evidence-grid"');
+    expect(markup).toContain('data-columns="2"');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatch(/__evidence \{[^}]*height: auto;[^}]*overflow: hidden;[^}]*box-sizing: border-box;/);
     expect(css).toContainSource('.ticket-code-review__evidence-grid { grid-template-columns: 1fr; }');
@@ -168,7 +175,8 @@ describe('TicketCodeReview', () => {
       }),
     );
     expect(markup).not.toContain('ticket-inspector__content');
-    expect(markup).toContain('<h2>Commits</h2>');
+    expect(markup).toContain('role="heading" aria-level="2"');
+    expect(markup).toContain('<span class="kui-toolbar-text__text">Commits</span>');
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-lucide="git-compare"');
     expect(markup).toContain('Select the <strong>B</strong> side');

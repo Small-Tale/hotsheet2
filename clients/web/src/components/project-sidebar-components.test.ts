@@ -242,6 +242,7 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('class="kui-list command-navigation__items"');
     expect(markup).toContain('data-scrollable="false"');
     expect(markup).toContain('data-action="toggle-command-section"');
+    expect(markup).toContain('data-density="compact"');
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
     const css = readFileSync(new URL('./command-navigation.css', import.meta.url), 'utf8');
     expect(css).toContainSource(
