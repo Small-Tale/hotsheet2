@@ -224,6 +224,11 @@ query(filter, sort, text?, paging) -> TicketRow[]
   contract. Each response is capped at 500 compact rows and includes constant-memory SQL
   aggregates for navigation counts; callers must explicitly request another page, so a
   100K or 1M checkout is never serialized into one response or eagerly retained by the UI.
+  A versioned checkout cursor records every local and hosted-provider source position. The
+  server keeps one bounded head per source and performs a k-way merge in the requested total
+  order, including recent-first `updated_at` and stable qualified-identity ties for priority,
+  status, and title sorts. Continuations therefore resume the same global order instead of
+  concatenating independently sorted source pages (HS2-2BDSRK).
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

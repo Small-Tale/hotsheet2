@@ -659,7 +659,9 @@ and identity-less legacy entries remain conservatively blocking.
   switching sort or switching between independently sorted list and board modes refreshes the bounded
   page. The server applies that same total order before the page boundary, so a newer or higher-priority
   ticket cannot disappear merely because the browser locally sorted an arbitrary ID-ordered subset
-  (HS2-X23ME4).
+  (HS2-X23ME4). For checkouts with multiple local or hosted-provider sources, the opaque cursor tracks
+  every source and the server k-way merges their bounded heads; initial and continuation pages therefore
+  remain globally ordered, including recent-first categorical ties (HS2-2BDSRK).
   The aggregate also carries the exact Verified total, allowing Queue columns to derive
   absolute Not Started, Started, Completed, and Verified counts rather than capping their
   headings at the currently loaded page; Backlog and Archive use their absolute aggregates.

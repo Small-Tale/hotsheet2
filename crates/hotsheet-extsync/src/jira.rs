@@ -4,7 +4,8 @@ use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Tim
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderTicketPage,
-    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, filter_provider_ticket_page,
+    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, compare_provider_tickets,
+    filter_provider_ticket_page,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -352,17 +353,9 @@ impl TicketProvider for JiraProvider {
                     .is_none_or(|value| ticket.updated_at.as_str() <= value)
             })
             .collect::<Vec<_>>();
-        tickets.sort_by(|a, b| match query.sort {
-            SortKey::Id => a.native_id.cmp(&b.native_id),
-            SortKey::Created => a.created_at.cmp(&b.created_at),
-            SortKey::Updated => a.updated_at.cmp(&b.updated_at),
-            SortKey::Priority => priority_rank(a.priority).cmp(&priority_rank(b.priority)),
-            SortKey::Status => format!("{:?}", a.status).cmp(&format!("{:?}", b.status)),
-            SortKey::Title => a.title.cmp(&b.title),
+        tickets.sort_by(|left, right| {
+            compare_provider_tickets(left, right, query.sort, query.descending)
         });
-        if query.descending {
-            tickets.reverse();
-        }
         if let Some(limit) = query.limit {
             tickets.truncate(limit);
         }
@@ -766,15 +759,6 @@ fn priority_name(value: Priority) -> &'static str {
         Priority::Default => "Medium",
         Priority::High => "High",
         Priority::Highest => "Highest",
-    }
-}
-fn priority_rank(value: Priority) -> u8 {
-    match value {
-        Priority::Highest => 0,
-        Priority::High => 1,
-        Priority::Default => 2,
-        Priority::Low => 3,
-        Priority::Lowest => 4,
     }
 }
 fn text_to_adf(text: &str) -> Value {

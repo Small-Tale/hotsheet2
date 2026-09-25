@@ -8386,6 +8386,7 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
                     serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
                 ),
                 first_page,
+                github_response(200, serde_json::json!([github_issue(2, "second")])),
                 github_response(
                     200,
                     serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
@@ -8421,7 +8422,7 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
     assert_eq!(first["items"][0]["native_id"], "1");
     assert_eq!(first["counts"]["total"], 2);
     let cursor = first["next_cursor"].as_str().unwrap();
-    assert!(cursor.ends_with("issues?page2"));
+    assert!(cursor.starts_with("v1."));
     let second = body_json(
         app.oneshot(authed(
             "GET",
@@ -8433,6 +8434,114 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
     )
     .await;
     assert_eq!(second["items"][0]["native_id"], "2");
+    assert!(second.get("next_cursor").is_none());
+}
+
+#[tokio::test]
+async fn checkout_pages_globally_merge_local_and_provider_sources_across_continuations() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    let ticket_store = workspace.path().join("mixed.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("MIX")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let remote_rows = serde_json::json!([
+        github_issue(11, "Alpha remote"),
+        github_issue(12, "Charlie remote")
+    ]);
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            (0..12)
+                .map(|_| github_response(200, remote_rows.clone()))
+                .collect(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            transport,
+        ))));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    for title in ["Bravo local", "Delta local"] {
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(&serde_json::json!({"title":title}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    let source = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/sources/github-mixed"),
+            Some(r#"{"provider":"github","locator":"acme/repo","make_default":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(source.status(), StatusCode::OK);
+
+    let first = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2&sort=title"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        first["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["title"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["Alpha remote", "Bravo local"]
+    );
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let second = body_json(
+        router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2&sort=title&cursor={cursor}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        second["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["title"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["Charlie remote", "Delta local"]
+    );
     assert!(second.get("next_cursor").is_none());
 }
 

@@ -23,6 +23,7 @@ pub mod tls;
 pub mod tts;
 pub mod turn_stream;
 
+use std::cmp::Ordering as CmpOrdering;
 use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -3683,17 +3684,259 @@ struct CheckoutTicketPage {
     counts: CheckoutTicketCounts,
 }
 
-fn checkout_page_cursor(value: Option<&str>) -> Result<(usize, Option<String>), ApiError> {
-    let Some(value) = value else {
-        return Ok((0, None));
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+struct CheckoutSourceCursor {
+    key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    after: Option<String>,
+    #[serde(default)]
+    exhausted: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CheckoutMergeCursor {
+    version: u8,
+    sort: String,
+    descending: bool,
+    sources: Vec<CheckoutSourceCursor>,
+}
+
+#[derive(Debug, Clone)]
+struct CheckoutMergeItem {
+    value: serde_json::Value,
+    native_id: String,
+    qualified_id: String,
+    title: String,
+    created_at: String,
+    updated_at: String,
+    priority_rank: u8,
+    status_rank: u8,
+    next: CheckoutSourceCursor,
+}
+
+fn checkout_priority_rank(value: Option<&str>) -> u8 {
+    match value {
+        Some("highest") => 0,
+        Some("high") => 1,
+        Some("default") => 2,
+        Some("low") => 3,
+        Some("lowest") => 4,
+        _ => u8::MAX,
+    }
+}
+
+fn checkout_status_rank(value: Option<&str>) -> u8 {
+    match value {
+        Some("not_started") => 0,
+        Some("started") => 1,
+        Some("completed") => 2,
+        Some("verified") => 3,
+        Some("backlog") => 4,
+        Some("archive") => 5,
+        Some("deleted") => 6,
+        Some("moved") => 7,
+        _ => u8::MAX,
+    }
+}
+
+fn checkout_ticket_order(
+    left: &CheckoutMergeItem,
+    right: &CheckoutMergeItem,
+    sort: SortKey,
+    descending: bool,
+) -> CmpOrdering {
+    let directed = |order: CmpOrdering| {
+        if descending { order.reverse() } else { order }
     };
-    let (source, after) = value
-        .split_once('.')
+    match sort {
+        SortKey::Id => directed(left.native_id.cmp(&right.native_id))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        SortKey::Created => directed(left.created_at.cmp(&right.created_at))
+            .then_with(|| directed(left.native_id.cmp(&right.native_id)))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        SortKey::Updated => directed(left.updated_at.cmp(&right.updated_at))
+            .then_with(|| directed(left.native_id.cmp(&right.native_id)))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        SortKey::Priority => directed(left.priority_rank.cmp(&right.priority_rank))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        SortKey::Status => directed(left.status_rank.cmp(&right.status_rank))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        SortKey::Title => directed(left.title.to_lowercase().cmp(&right.title.to_lowercase()))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+    }
+}
+
+fn checkout_sort_name(sort: SortKey) -> &'static str {
+    match sort {
+        SortKey::Id => "id",
+        SortKey::Created => "created",
+        SortKey::Updated => "updated",
+        SortKey::Priority => "priority",
+        SortKey::Status => "status",
+        SortKey::Title => "title",
+    }
+}
+
+fn encode_checkout_page_cursor(
+    sources: &[CheckoutSourceCursor],
+    sort: SortKey,
+    descending: bool,
+) -> Result<String, ApiError> {
+    let bytes = serde_json::to_vec(&CheckoutMergeCursor {
+        version: 1,
+        sort: checkout_sort_name(sort).into(),
+        descending,
+        sources: sources.to_vec(),
+    })
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(format!(
+        "v1.{}",
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+}
+
+fn decode_checkout_page_cursor(
+    value: Option<&str>,
+    source_keys: &[String],
+    sort: SortKey,
+    descending: bool,
+) -> Result<Vec<CheckoutSourceCursor>, ApiError> {
+    let Some(value) = value else {
+        return Ok(source_keys
+            .iter()
+            .map(|key| CheckoutSourceCursor {
+                key: key.clone(),
+                ..Default::default()
+            })
+            .collect());
+    };
+    let hex = value
+        .strip_prefix("v1.")
         .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
-    let source = source
-        .parse::<usize>()
+    if hex.len() % 2 != 0 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid checkout ticket cursor",
+        ));
+    }
+    let bytes = (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16))
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
-    Ok((source, (after != "-").then(|| after.to_owned())))
+    let cursor = serde_json::from_slice::<CheckoutMergeCursor>(&bytes)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
+    if cursor.version != 1
+        || cursor.sort != checkout_sort_name(sort)
+        || cursor.descending != descending
+        || cursor.sources.len() != source_keys.len()
+        || cursor
+            .sources
+            .iter()
+            .zip(source_keys)
+            .any(|(source, key)| &source.key != key)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "stale checkout ticket cursor",
+        ));
+    }
+    Ok(cursor.sources)
+}
+
+#[cfg(test)]
+mod checkout_pagination_tests {
+    use super::{
+        CheckoutMergeItem, CheckoutSourceCursor, SortKey, checkout_ticket_order,
+        decode_checkout_page_cursor, encode_checkout_page_cursor,
+    };
+    use std::cmp::Ordering;
+
+    fn item(id: &str, title: &str, updated_at: &str, priority_rank: u8) -> CheckoutMergeItem {
+        CheckoutMergeItem {
+            value: serde_json::Value::Null,
+            native_id: id.into(),
+            qualified_id: id.into(),
+            title: title.into(),
+            created_at: "2026-09-01T00:00:00Z".into(),
+            updated_at: updated_at.into(),
+            priority_rank,
+            status_rank: 0,
+            next: CheckoutSourceCursor::default(),
+        }
+    }
+
+    #[test]
+    fn categorical_merge_order_keeps_recent_first_stable_ties() {
+        let older = item("git:2", "Same", "2026-09-01T00:00:00Z", 1);
+        let newer = item("provider:1", "same", "2026-09-02T00:00:00Z", 1);
+        assert_eq!(
+            checkout_ticket_order(&newer, &older, SortKey::Title, false),
+            Ordering::Less
+        );
+        assert_eq!(
+            checkout_ticket_order(&newer, &older, SortKey::Priority, true),
+            Ordering::Less,
+            "descending changes only the categorical primary key"
+        );
+        let same_time = item("git:1", "Same", "2026-09-02T00:00:00Z", 1);
+        assert_eq!(
+            checkout_ticket_order(&same_time, &newer, SortKey::Title, false),
+            Ordering::Less,
+            "qualified identity is the cross-source final tiebreaker"
+        );
+    }
+
+    #[test]
+    fn merge_cursor_round_trips_every_source_and_rejects_a_changed_source_set() {
+        let sources = vec![
+            CheckoutSourceCursor {
+                key: "git:local".into(),
+                after: Some("01ARZ3NDEKTSV4RRFFQ69G5FAV".into()),
+                exhausted: false,
+            },
+            CheckoutSourceCursor {
+                key: "provider:remote".into(),
+                after: None,
+                exhausted: true,
+            },
+        ];
+        let encoded = encode_checkout_page_cursor(&sources, SortKey::Priority, true).unwrap();
+        let decoded = decode_checkout_page_cursor(
+            Some(&encoded),
+            &["git:local".into(), "provider:remote".into()],
+            SortKey::Priority,
+            true,
+        )
+        .unwrap();
+        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded[0].after, sources[0].after);
+        assert!(decoded[1].exhausted);
+        assert!(
+            decode_checkout_page_cursor(
+                Some(&encoded),
+                &["git:local".into(), "provider:renamed".into()],
+                SortKey::Priority,
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            decode_checkout_page_cursor(
+                Some(&encoded),
+                &["git:local".into(), "provider:remote".into()],
+                SortKey::Title,
+                true
+            )
+            .is_err()
+        );
+    }
 }
 
 fn completion_day_starts(
@@ -3751,13 +3994,20 @@ fn list_checkout_ticket_page(
         .iter()
         .filter(|source| source.provider != "git")
         .collect::<Vec<_>>();
-    let (mut source_index, mut after) = checkout_page_cursor(params.cursor.as_deref())?;
-    if source_index > entries.len() + external_sources.len() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "stale checkout ticket cursor",
-        ));
-    }
+    let source_keys = entries
+        .iter()
+        .map(|(store_id, _)| format!("git:{store_id}"))
+        .chain(
+            external_sources
+                .iter()
+                .map(|source| format!("provider:{}", source.connection_id)),
+        )
+        .collect::<Vec<_>>();
+    let merge_query = params.clone().into_query(state.store.root())?;
+    let sort = merge_query.sort;
+    let descending = merge_query.descending;
+    let mut source_cursors =
+        decode_checkout_page_cursor(params.cursor.as_deref(), &source_keys, sort, descending)?;
 
     let now = OffsetDateTime::now_utc();
     let now_text = now
@@ -3784,126 +4034,204 @@ fn list_checkout_ticket_page(
     let compact = params.compact.unwrap_or(true);
     let fields = parse_fields(&params.fields);
     let mut items = Vec::with_capacity(page_size);
-    let mut next_cursor = None;
-    while source_index < entries.len() && items.len() < page_size {
-        let (store_id, entry) = &entries[source_index];
-        let remaining = page_size - items.len();
-        let mut query = params.clone().into_query(entry.store.root())?;
-        query.limit = Some(remaining + 1);
-        query.page_after = after
-            .as_deref()
-            .map(Ulid::from_string)
-            .transpose()
-            .map_err(|_| {
-                ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
-            })?;
-        let mut rows = entry
-            .index
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
-            .query(&query)?;
-        let scanned_has_more = rows.len() > remaining;
-        let scanned_last_id = rows
-            .get(remaining.saturating_sub(1))
-            .and_then(|row| Ulid::from_string(&row.id).ok());
-
-        if let Some(want) = params.has_commit {
-            let slugs = rows.iter().map(|row| row.slug.clone()).collect::<Vec<_>>();
-            let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs)
-            {
-                Ok(matches) => matches,
-                Err(code_review::CodeReviewError::NotRepository) => Default::default(),
-                Err(error) => return Err(code_review_api_error(error)),
-            };
-            rows.retain(|row| matches.contains(&row.slug) == want);
+    let load_head = |source_index: usize,
+                     cursor: &mut CheckoutSourceCursor|
+     -> Result<Option<CheckoutMergeItem>, ApiError> {
+        if cursor.exhausted {
+            return Ok(None);
         }
-
-        rows.truncate(remaining);
-        for row in &mut rows {
-            row.set_connection(store_id);
-            if compact {
-                row.make_compact();
+        if source_index < entries.len() {
+            let (store_id, entry) = &entries[source_index];
+            loop {
+                let mut query = params.clone().into_query(entry.store.root())?;
+                query.limit = Some(1);
+                query.page_after = cursor
+                    .after
+                    .as_deref()
+                    .map(Ulid::from_string)
+                    .transpose()
+                    .map_err(|_| {
+                        ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
+                    })?;
+                let row = entry
+                    .index
+                    .lock()
+                    .map_err(|_| {
+                        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned")
+                    })?
+                    .query(&query)?
+                    .into_iter()
+                    .next();
+                let Some(mut row) = row else {
+                    cursor.exhausted = true;
+                    return Ok(None);
+                };
+                let next_after = row.id.clone();
+                if let Some(want) = params.has_commit {
+                    let matches = match code_review::slugs_with_commits(
+                        FsPath::new(&checkout.root),
+                        std::slice::from_ref(&row.slug),
+                    ) {
+                        Ok(matches) => matches,
+                        Err(code_review::CodeReviewError::NotRepository) => Default::default(),
+                        Err(error) => return Err(code_review_api_error(error)),
+                    };
+                    if matches.contains(&row.slug) != want {
+                        cursor.after = Some(next_after);
+                        continue;
+                    }
+                }
+                row.set_connection(store_id);
+                let item = CheckoutMergeItem {
+                    native_id: row.native_id.clone(),
+                    qualified_id: row.qualified_id.clone(),
+                    title: row.title.clone(),
+                    created_at: row.created_at.clone().unwrap_or_default(),
+                    updated_at: row.updated_at.clone().unwrap_or_default(),
+                    priority_rank: checkout_priority_rank(row.priority.as_deref()),
+                    status_rank: checkout_status_rank(row.status.as_deref()),
+                    next: CheckoutSourceCursor {
+                        key: cursor.key.clone(),
+                        after: Some(next_after),
+                        exhausted: false,
+                    },
+                    value: {
+                        if compact {
+                            row.make_compact();
+                        }
+                        row.add_auto_context(&contexts);
+                        let mut value = serde_json::to_value(row).map_err(|error| {
+                            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                        })?;
+                        if let Some(object) = value.as_object_mut() {
+                            object.insert("store".into(), store_id.clone().into());
+                        }
+                        hotsheet_ticketing::wire::project_fields(
+                            std::slice::from_mut(&mut value),
+                            &fields,
+                        );
+                        value
+                    },
+                };
+                return Ok(Some(item));
             }
-            row.add_auto_context(&contexts);
         }
-        let mut values = rows_to_json(rows, &fields)
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        for value in &mut values {
-            if let Some(object) = value.as_object_mut() {
-                object.insert("store".into(), store_id.clone().into());
-            }
-        }
-        items.extend(values);
-        if scanned_has_more {
-            next_cursor = scanned_last_id.map(|id| format!("{source_index}.{id}"));
-            break;
-        }
-        source_index += 1;
-        after = None;
-    }
-    while next_cursor.is_none()
-        && source_index < entries.len() + external_sources.len()
-        && items.len() < page_size
-    {
+
         let source = external_sources[source_index - entries.len()];
         let provider = provider_for(state, &source.connection_id)?;
-        let query = params.clone().into_query(state.store.root())?;
-        let page = provider
-            .query_page(&query, after.as_deref(), page_size - items.len())
-            .map_err(provider_transfer_error)?;
-        let provider_cursor = page.next_cursor;
-        let mut rows = page.items;
-        if let Some(want) = params.has_commit {
-            let slugs = rows
-                .iter()
-                .map(|ticket| ticket.slug.clone())
-                .collect::<Vec<_>>();
-            let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs)
-            {
-                Ok(matches) => matches,
-                Err(code_review::CodeReviewError::NotRepository) => Default::default(),
-                Err(error) => return Err(code_review_api_error(error)),
+        let mut query = params.clone().into_query(state.store.root())?;
+        query.limit = None;
+        query.page_after = None;
+        loop {
+            let page = provider
+                .query_page(&query, cursor.after.as_deref(), 1)
+                .map_err(provider_transfer_error)?;
+            let next_after = page.next_cursor;
+            let Some(mut ticket) = page.items.into_iter().next() else {
+                if let Some(next) = next_after {
+                    if cursor.after.as_deref() == Some(next.as_str()) {
+                        return Err(ApiError::new(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "provider returned a non-advancing ticket cursor",
+                        ));
+                    }
+                    cursor.after = Some(next);
+                    continue;
+                }
+                cursor.exhausted = true;
+                return Ok(None);
             };
-            rows.retain(|ticket| matches.contains(&ticket.slug) == want);
-        }
-        for ticket in &mut rows {
+            if let Some(want) = params.has_commit {
+                let matches = match code_review::slugs_with_commits(
+                    FsPath::new(&checkout.root),
+                    std::slice::from_ref(&ticket.slug),
+                ) {
+                    Ok(matches) => matches,
+                    Err(code_review::CodeReviewError::NotRepository) => Default::default(),
+                    Err(error) => return Err(code_review_api_error(error)),
+                };
+                if matches.contains(&ticket.slug) != want {
+                    match next_after {
+                        Some(next) if cursor.after.as_deref() != Some(next.as_str()) => {
+                            cursor.after = Some(next);
+                            continue;
+                        }
+                        Some(_) => {
+                            return Err(ApiError::new(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "provider returned a non-advancing ticket cursor",
+                            ));
+                        }
+                        None => {
+                            cursor.exhausted = true;
+                            return Ok(None);
+                        }
+                    }
+                }
+            }
             ticket.auto_context =
                 auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
+            let item = CheckoutMergeItem {
+                native_id: ticket.native_id.clone(),
+                qualified_id: ticket.qualified_id.clone(),
+                title: ticket.title.clone(),
+                created_at: ticket.created_at.clone(),
+                updated_at: ticket.updated_at.clone(),
+                priority_rank: ticket.priority as u8,
+                status_rank: ticket.status as u8,
+                next: CheckoutSourceCursor {
+                    key: cursor.key.clone(),
+                    after: next_after.clone(),
+                    exhausted: next_after.is_none(),
+                },
+                value: {
+                    if compact {
+                        ticket.details.clear();
+                    }
+                    let mut value = serde_json::to_value(ticket).map_err(|error| {
+                        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                    })?;
+                    if let Some(object) = value.as_object_mut() {
+                        object.insert("store".into(), source.connection_id.clone().into());
+                    }
+                    hotsheet_ticketing::wire::project_fields(
+                        std::slice::from_mut(&mut value),
+                        &fields,
+                    );
+                    value
+                },
+            };
+            return Ok(Some(item));
         }
-        for ticket in rows {
-            let mut value = serde_json::to_value(ticket).map_err(|error| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-            })?;
-            if let Some(object) = value.as_object_mut() {
-                object.insert("store".into(), source.connection_id.clone().into());
-            }
-            items.push(value);
-        }
-        if items.len() >= page_size {
-            if let Some(cursor) = provider_cursor {
-                next_cursor = Some(format!("{source_index}.{cursor}"));
-            } else {
-                source_index += 1;
-                after = None;
-            }
-        } else if let Some(cursor) = provider_cursor {
-            if after.as_deref() == Some(cursor.as_str()) {
-                return Err(ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "provider returned a non-advancing ticket cursor",
-                ));
-            }
-            after = Some(cursor);
-        } else {
-            source_index += 1;
-            after = None;
-        }
+    };
+
+    let mut heads = source_cursors
+        .iter_mut()
+        .enumerate()
+        .map(|(source_index, cursor)| load_head(source_index, cursor))
+        .collect::<Result<Vec<_>, _>>()?;
+    while items.len() < page_size {
+        let Some(source_index) = heads
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| item.as_ref().map(|item| (index, item)))
+            .min_by(|(_, left), (_, right)| checkout_ticket_order(left, right, sort, descending))
+            .map(|(index, _)| index)
+        else {
+            break;
+        };
+        let item = heads[source_index]
+            .take()
+            .expect("selected checkout merge head");
+        source_cursors[source_index] = item.next;
+        items.push(item.value);
+        heads[source_index] = load_head(source_index, &mut source_cursors[source_index])?;
     }
-    if next_cursor.is_none() && source_index < entries.len() + external_sources.len() {
-        next_cursor = Some(format!("{source_index}.-"));
-    }
+    let next_cursor = heads
+        .iter()
+        .any(Option::is_some)
+        .then(|| encode_checkout_page_cursor(&source_cursors, sort, descending))
+        .transpose()?;
     serde_json::to_value(CheckoutTicketPage {
         items,
         next_cursor,

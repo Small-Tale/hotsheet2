@@ -51,8 +51,9 @@ pub use provider::{
     GitProvider, MutationContext, NotWorkingReport, ProjectTicketRef, ProviderCapabilities,
     ProviderConfigRegistry, ProviderConnection, ProviderDescriptor, ProviderDraft, ProviderError,
     ProviderEvidence, ProviderPatch, ProviderRegistry, ProviderTicketPage, ProviderTicketSummary,
-    TicketProvider, TicketRef, TransferError, TransferOutcome, TransferProvenance, copy_between,
-    filter_provider_ticket_page, git_connection_id, move_between,
+    TicketProvider, TicketRef, TransferError, TransferOutcome, TransferProvenance,
+    compare_provider_tickets, copy_between, filter_provider_ticket_page, git_connection_id,
+    move_between,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

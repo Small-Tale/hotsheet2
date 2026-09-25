@@ -428,32 +428,44 @@ pub fn filter_provider_ticket_page(
                 .as_deref()
                 .is_none_or(|value| ticket.updated_at.as_str() <= value)
     });
-    tickets.sort_by(|left, right| match query.sort {
-        crate::SortKey::Id => left.native_id.cmp(&right.native_id),
-        crate::SortKey::Created => left.created_at.cmp(&right.created_at),
-        crate::SortKey::Updated => left.updated_at.cmp(&right.updated_at),
-        crate::SortKey::Priority => {
-            provider_priority_rank(left.priority).cmp(&provider_priority_rank(right.priority))
-        }
-        crate::SortKey::Status => format!("{:?}", left.status).cmp(&format!("{:?}", right.status)),
-        crate::SortKey::Title => left.title.cmp(&right.title),
-    });
-    if query.descending {
-        tickets.reverse();
-    }
+    tickets
+        .sort_by(|left, right| compare_provider_tickets(left, right, query.sort, query.descending));
     if let Some(limit) = query.limit {
         tickets.truncate(limit);
     }
     tickets
 }
 
-fn provider_priority_rank(priority: Priority) -> u8 {
-    match priority {
-        Priority::Highest => 0,
-        Priority::High => 1,
-        Priority::Default => 2,
-        Priority::Low => 3,
-        Priority::Lowest => 4,
+/// Total provider order used by adapters and checkout-level k-way pagination. Categorical
+/// directions affect only their primary key; ties stay recent-first and then use qualified
+/// identity so different providers cannot compare equal.
+pub fn compare_provider_tickets(
+    left: &ApiTicket,
+    right: &ApiTicket,
+    sort: crate::SortKey,
+    descending: bool,
+) -> std::cmp::Ordering {
+    let directed = |order: std::cmp::Ordering| {
+        if descending { order.reverse() } else { order }
+    };
+    match sort {
+        crate::SortKey::Id => directed(left.native_id.cmp(&right.native_id))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        crate::SortKey::Created => directed(left.created_at.cmp(&right.created_at))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        crate::SortKey::Updated => directed(left.updated_at.cmp(&right.updated_at))
+            .then_with(|| directed(left.qualified_id.cmp(&right.qualified_id))),
+        crate::SortKey::Priority => directed((left.priority as u8).cmp(&(right.priority as u8)))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        crate::SortKey::Status => directed((left.status as u8).cmp(&(right.status as u8)))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        crate::SortKey::Title => {
+            directed(left.title.to_lowercase().cmp(&right.title.to_lowercase()))
+                .then_with(|| right.updated_at.cmp(&left.updated_at))
+                .then_with(|| left.qualified_id.cmp(&right.qualified_id))
+        }
     }
 }
 
@@ -1550,6 +1562,44 @@ mod tests {
             ),
             (3, 2, 1, 2, 1, 0, 1)
         );
+    }
+
+    #[test]
+    fn provider_categorical_pages_keep_recent_first_ties() {
+        let (_dir, provider) = git_provider();
+        for (title, at) in [
+            ("same title", "2026-08-26T00:00:00Z"),
+            ("Same Title", "2026-08-27T00:00:00Z"),
+        ] {
+            provider
+                .create(
+                    ctx(Ulid::new(), at),
+                    ProviderDraft {
+                        title: title.into(),
+                        category: "task".into(),
+                        priority: Priority::High,
+                        status: Status::Started,
+                        details: String::new(),
+                        tags: vec![],
+                        up_next: false,
+                        blocked_by: vec![],
+                        transfer: None,
+                    },
+                )
+                .unwrap();
+        }
+        let mut query = TicketQuery {
+            sort: crate::SortKey::Title,
+            ..TicketQuery::default()
+        };
+        let rows =
+            filter_provider_ticket_page(provider.query(&TicketQuery::default()).unwrap(), &query);
+        assert_eq!(rows[0].updated_at, "2026-08-27T00:00:00Z");
+        query.sort = crate::SortKey::Priority;
+        query.descending = true;
+        let rows =
+            filter_provider_ticket_page(provider.query(&TicketQuery::default()).unwrap(), &query);
+        assert_eq!(rows[0].updated_at, "2026-08-27T00:00:00Z");
     }
 
     #[test]
