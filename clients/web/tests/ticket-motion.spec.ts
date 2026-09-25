@@ -68,11 +68,9 @@ test('naturally phases an exact-height arrival without changing internal contain
     await new Promise((resolve) => {
       setTimeout(resolve, 190);
     });
-    const fadeOpacity = Number.parseFloat(getComputedStyle(ghost).opacity),
-      settledTop = retained.getBoundingClientRect().top;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 140);
-    });
+    const fadeOpacity = Number.parseFloat(getComputedStyle(ghost).opacity);
+    await motion.waitForTicketMotionSettled();
+    const settledTop = retained.getBoundingClientRect().top;
     return {
       beforeTop,
       finalTop,
@@ -138,9 +136,7 @@ test('naturally fades a departure before collapsing its exact outer-wrapper spac
       setTimeout(resolve, 150);
     });
     const collapseTop = retained.getBoundingClientRect().top;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 190);
-    });
+    await motion.waitForTicketMotionSettled();
     return {
       beforeTop,
       finalTop,
@@ -203,9 +199,7 @@ test('naturally moves a container overlay while both columns reflow together', a
     const ghostMid = ghost.getBoundingClientRect(),
       sourceMid = sourceSibling.getBoundingClientRect().top,
       destinationMid = destinationSibling.getBoundingClientRect().top;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 170);
-    });
+    await motion.waitForTicketMotionSettled();
     return {
       sourceStart,
       sourceFinal,
