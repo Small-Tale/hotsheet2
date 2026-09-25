@@ -751,6 +751,10 @@ and identity-less legacy entries remain conservatively blocking.
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
   Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.49.
+  The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
+  in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
+  against an exact no-regression error/review budget, while executable browser evaluation
+  stays opt-in and requires an explicitly supplied trusted URL (HS2-HD1SCC).
   The client follows the package's stricter component
   contracts: every shared `Select` supplies exactly one accessible naming mode, and
   `ListHeader` callers render an explicit passive, disclosure, or trailing-action mode

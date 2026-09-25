@@ -45,6 +45,8 @@ coverage/
 **/test-results/
 /playwright-report/
 **/playwright-report/
+**/.kerf-cache/
+**/kerf-ui-evidence/
 .nyc_output/
 
 # --- Diagram scratch (committed SVGs stay; local PNG previews don't) ---

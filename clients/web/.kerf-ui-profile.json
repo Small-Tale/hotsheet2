@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@kerfjs/ui/ai/application-ui-profile.schema.json",
   "schemaVersion": 1,
-  "scope": "directory",
+  "scope": "workspace",
   "exceptions": [
     {
       "id": "web-awesome-ai-conversation-parts",

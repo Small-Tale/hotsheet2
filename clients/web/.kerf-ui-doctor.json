@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/@kerfjs/ui/doctor/config.schema.json",
+  "schemaVersion": 1,
+  "mode": "full",
+  "stages": {
+    "catalog": true,
+    "typescript": true,
+    "eslint": true,
+    "analyzer": true,
+    "browser": false
+  },
+  "cache": true,
+  "suppressions": []
+}

@@ -92,6 +92,7 @@ jobs:
           npm ci
           npm run lint
           npm run typecheck
+          npm run ui:doctor
           npm run test:unit
           npm run build
 

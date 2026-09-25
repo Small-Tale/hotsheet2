@@ -4,6 +4,8 @@
 **/playwright-report
 **/test-results
 **/target
+**/.kerf-cache
+**/kerf-ui-evidence
 /.git
 /.agents
 /.claude

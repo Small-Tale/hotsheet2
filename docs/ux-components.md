@@ -1667,3 +1667,28 @@ hosts keep their native semantics, keyboard shortcut collections remain semantic
 Application CSS still owns responsive column collapse, project path input/action tracks,
 and shortcut-row geometry because those policies are asymmetric or container-dependent
 rather than reusable Kerf component configuration (HS2-S3BXC0).
+
+### Kerf UI doctor baseline
+
+The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
+`.kerf-ui-doctor.json`. The profile contains exact `KUI-L011` exceptions only for the
+22 stylesheets that customize documented Web Awesome shadow parts; the analyzer still
+reports those 63 suppressed findings with their rationale. The doctor runs catalog,
+TypeScript, isolated Kerf ESLint, and analyzer stages in full mode with a content cache.
+Browser evaluation remains disabled unless a developer explicitly supplies a trusted
+URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
+
+`npm run ui:doctor` is the repeatable local and CI gate. Its checked-in baseline accepts
+debt reduction, but fails for a new diagnostic id or any increase within these current
+error and review classes:
+
+| Severity | Accepted beta.49 baseline                                                           |
+| -------- | ----------------------------------------------------------------------------------- |
+| error    | `KUI-L017` 1; `KUI-L101` 3; `KUI-L102` 8; `KUI-L201` 22; `KUI-L202` 5; `KUI-L203` 1 |
+| review   | `KUI-L004` 81; `KUI-L005` 54; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1            |
+
+The 40 accepted errors are separately tracked by composition-contract
+`HS2-N377DC`, private-anatomy/token `HS2-M3TDYP`, and exceptional-spacing
+`HS2-S2GYTF`. The 177 review findings remain visible because they describe intentional
+application geometry that should be reconsidered as Kerf gains public configuration;
+they are budgeted rather than hidden by broad suppressions (HS2-HD1SCC).

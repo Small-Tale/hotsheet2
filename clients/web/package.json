@@ -11,6 +11,8 @@
     "lint": "npm run format:check && eslint . --max-warnings 0 && npm run catalog:check",
     "catalog:sync": "node scripts/sync-component-catalog-extension.mjs",
     "catalog:check": "node scripts/sync-component-catalog-extension.mjs --check",
+    "ui:doctor": "node scripts/check-kerf-ui-doctor.mjs",
+    "ui:doctor:raw": "kerf-ui-doctor --full",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
