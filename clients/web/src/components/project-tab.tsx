@@ -122,7 +122,7 @@ export function ProjectTab({
       </span>
     ) : busy ? (
       <span class="project-tab__busy">
-        <LoadingSpinner label="Project busy" />
+        <LoadingSpinner className="project-tab__busy-spinner" label="Project busy" />
       </span>
     ) : disconnected ? (
       <LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />

@@ -36,21 +36,19 @@
   max-height: min(remify(544px), calc(100vh - remify(288px)));
   grid-template-columns: minmax(remify(224px), remify(288px)) minmax(0, 1fr);
 }
-.project-close-dialog__layout > aside {
+.project-close-dialog__resources {
   min-width: 0;
   padding: var(--kui-space-xs);
   overflow: auto;
   border-right: 1px solid var(--wa-color-surface-border);
   background: var(--wa-color-surface-default);
 }
-.project-close-dialog__layout > aside nav {
+.project-close-dialog__resources nav {
   display: grid;
   gap: var(--kui-space-none);
 }
-.project-close-dialog__layout > aside .kui-list-item__trailing {
+.project-close-dialog__resource-kind {
   max-width: remify(128px);
-}
-.project-close-dialog__layout > aside .kui-list-item__count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -160,7 +158,7 @@
     grid-template-columns: 1fr;
     grid-template-rows: minmax(remify(112px), remify(160px)) minmax(remify(192px), 1fr);
   }
-  .project-close-dialog__layout > aside {
+  .project-close-dialog__resources {
     border-right: 0;
     border-bottom: 1px solid var(--wa-color-surface-border);
   }

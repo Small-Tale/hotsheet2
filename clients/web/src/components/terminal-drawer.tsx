@@ -99,6 +99,8 @@ export function TerminalDrawer({
         selected={selected === 'grid'}
         closable={false}
         className="terminal-drawer__grid-tab"
+        presentation="icon-only"
+        size="compact"
         selectAction="select-drawer-item"
         leading={<LucideIcon icon={LayoutGrid} name="layout-grid" />}
       />,
@@ -112,6 +114,8 @@ export function TerminalDrawer({
               selected={selected === session.id}
               draggable
               className="terminal-tab"
+              size="compact"
+              labelMaxWidth={144}
               selectAction="select-drawer-item"
               closeAction="close-terminal-tab"
               closeIcon={<LucideIcon icon={X} name="x" />}
@@ -128,6 +132,8 @@ export function TerminalDrawer({
             selected={selected === chat.id}
             draggable
             className="ai-chat-tab"
+            size="compact"
+            labelMaxWidth={144}
             selectAction="select-drawer-item"
             closeAction="close-ai-chat-tab"
             closeIcon={<LucideIcon icon={X} name="x" />}

@@ -12,12 +12,14 @@
 }
 .command-navigation__command:not([data-command-palette='transparent']) {
   --kui-list-item-color: var(--hs-command-on);
-  --kui-list-item-background: var(--command-color);
   --kui-list-item-hover-background: var(--command-color);
-  --kui-list-item-hover-border: transparent;
   --kui-list-item-selected-color: var(--hs-command-on);
   --kui-list-item-selected-background: var(--command-color);
-  --kui-list-item-selected-border: transparent;
+  border-color: transparent;
+  background: var(--command-color);
+}
+.command-navigation__command:not([data-command-palette='transparent']):is(:hover, [aria-pressed='true']) {
+  border-color: transparent;
 }
 .command-navigation__command[data-command-palette='blue'] {
   --command-color: var(--hs-command-blue);

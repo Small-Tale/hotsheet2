@@ -23,9 +23,6 @@ body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-.demo-shell {
-  --kui-catalog-content-measure: remify(1120px);
-}
 .demo-shell--settings-open {
   width: calc(100% - min(remify(432px), calc(100vw - remify(32px))));
 }

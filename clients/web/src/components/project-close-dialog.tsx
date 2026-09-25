@@ -150,7 +150,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
       )}
       {hasResources ? (
         <div class="project-close-dialog__layout" aria-busy={String(busy)}>
-          <aside aria-label="Running terminals and AI chats">
+          <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
             <ListHeader label="Running items" />
             {state.resources.length ? (
               <nav>
@@ -171,7 +171,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
                       }
                       label={resource.name}
                       trailing={
-                        <small class="kui-list-item__count">
+                        <small class="project-close-dialog__resource-kind">
                           {terminal ? 'Terminal' : resource.tool} · {resource.busy ? 'Busy' : 'Running'}
                         </small>
                       }

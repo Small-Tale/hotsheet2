@@ -48,6 +48,14 @@ const status = (patch: Partial<RepositoryStatus> = {}): RepositoryStatus => ({
 });
 
 describe('RepositoryStatusPopover', () => {
+  it('assigns scroll ownership directly to the master and detail regions', () => {
+    const markup = String(RepositoryStatusPopover({ status: status() }));
+    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
+    expect(markup).toContain('<aside class="repository-status-popover__navigation">');
+    expect(css).toMatch(/\.repository-status-popover__navigation \{[^}]*overflow: auto/);
+    expect(css).not.toMatch(/\.repository-status-popover__layout > aside/);
+  });
+
   it('classifies every repository state without hiding orthogonal counts', () => {
     expect(repositoryStatusState(status({ staged: 0, unstaged: 0, untracked: 0, conflicted: 0 }))).toBe('clean');
     expect(repositoryStatusState(status({ conflicted: 0 }))).toBe('dirty');
@@ -134,14 +142,14 @@ describe('RepositoryStatusPopover', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-l\)/);
-    expect(css).toMatch(/__layout > aside \{[^}]*padding: var\(--kui-space-l\)/);
+    expect(css).toMatch(/__navigation \{[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatchSource(/__values \+ \.repository-status-popover__values \{ margin-top: var\(--kui-space-m\)/);
     expect(css).toMatchSource(/nav \{ display: grid; gap: var\(--kui-space-none\)/);
     expect(css).toMatchSource(/nav > \.kui-list-header \{ margin-bottom: var\(--kui-space-2xs\)/);
     expect(css).toMatch(
       /__context-menu button \{[^}]*padding: 0 var\(--kui-space-m\);[^}]*grid-template-columns: remify\(16px\)[^}]*gap: var\(--kui-space-xs\)/,
     );
-    expect(css).toMatchSource(/__layout > aside, \.repository-status-popover__detail \{ padding: var\(--kui-space-m\)/);
+    expect(css).toMatchSource(/__navigation, \.repository-status-popover__detail \{ padding: var\(--kui-space-m\)/);
   });
 
   it('uses the canonical Git status letter for every file change kind', () => {
@@ -223,10 +231,11 @@ describe('RepositoryStatusPopover', () => {
     );
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('data-button-appearance="push"');
+    expect(markup).toContain('data-size="compact"');
     expect(markup).not.toContain('cancel-repository-comparison');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatchSource(/__compare-banner \{[^}]*grid-template-columns: auto minmax\(0,1fr\) auto/);
-    expect(css).toMatch(/__compare-banner \.kui-toolbar-control-group \{[^}]*width: max-content/);
+    expect(css).toMatch(/__compare-banner \[data-component='toolbar-control-group'\] \{[^}]*justify-self: start/);
     expect(css).toMatch(/__compare-open \{[^}]*grid-column: 3/);
   });
 

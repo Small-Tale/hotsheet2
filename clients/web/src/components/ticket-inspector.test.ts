@@ -263,8 +263,9 @@ describe('TicketInspector', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    const markup = String(TicketInspector({ ...base }));
     expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tab \{[^}]*min-width: 0;[^}]*flex: 1 1 0/);
+    expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
     expect(panelCss).toContainSource('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
@@ -281,14 +282,15 @@ describe('TicketInspector', () => {
   it('contains equal full-width tab targets inside one compact inspector gutter (HS2-WKGMN4)', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const markup = String(TicketInspector({ ...base }));
     expect(inspectorCss).toMatch(
-      /\.kui-tab-bar\.ticket-inspector__tabs \{[^}]*width: auto;[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*padding: 0/,
+      /\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\)/,
     );
-    expect(inspectorCss).toMatch(/\.kui-app-tab\.ticket-inspector__tab \{[^}]*min-width: 0;[^}]*flex: 1 1 0/);
+    expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
+    expect(markup).toMatch(/ticket-inspector__tab[^>]*data-presentation="segmented"[^>]*data-size="compact"/);
     expect(inspectorCss).toMatch(
       /\.ticket-inspector__tab \.kui-app-tab__select \{[^}]*flex: 1;[^}]*justify-content: center/,
     );
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \.kui-tab-bar__tabs \{[^}]*padding: var\(--kui-space-2xs\)/);
     expect(panelCss).toMatch(
       /\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
     );

@@ -67,9 +67,6 @@
   flex: 0 1 auto;
   gap: var(--kui-space-xs);
 }
-.terminal-drawer__views .kui-app-tab {
-  height: remify(32px);
-}
 .terminal-drawer__views .kui-tab-bar__trailing {
   gap: var(--kui-space-xs);
   flex: 1 1 auto;
@@ -79,15 +76,6 @@
   z-index: 2;
   left: 0;
   background: var(--wa-color-surface-default);
-}
-.terminal-drawer__grid-tab .kui-app-tab__name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
 }
 .terminal-drawer__rail > button,
 .terminal-drawer__create,
@@ -105,9 +93,6 @@
   cursor: pointer;
   gap: var(--kui-space-2xs);
   font: inherit;
-}
-.terminal-drawer__rail .terminal-tab .kui-app-tab__name {
-  max-width: remify(144px);
 }
 .terminal-drawer__rail .terminal-tab i {
   width: remify(7.2px);

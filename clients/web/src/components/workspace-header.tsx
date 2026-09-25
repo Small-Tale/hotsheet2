@@ -374,10 +374,16 @@ export function WorkspaceControls({
           value={sort}
           choices={sortChoices}
           disabled={projectActionsDisabled}
+          selectedPresentation="icon-only"
           renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
         />
       </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
+      <ToolbarControlGroup
+        className="workspace-header__utility-group"
+        label="View actions"
+        selectedChrome="outline"
+        selectedTone="pop"
+      >
         <button
           type="button"
           class="workspace-header__up-next-button"

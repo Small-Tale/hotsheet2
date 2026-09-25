@@ -156,8 +156,9 @@ describe('ProjectCloseDialog', () => {
     expect(css).toMatchSource(
       /__intro \{[^}]*padding:var\(--kui-space-m\) var\(--kui-space-l\)[^}]*gap:var\(--kui-space-m\)/,
     );
-    expect(css).toMatchSource(/__layout > aside \{[^}]*padding:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/aside nav \{ display:grid; gap:var\(--kui-space-none\)/);
+    expect(css).toMatchSource(/__resources \{[^}]*padding:var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/__resources nav \{ display:grid; gap:var\(--kui-space-none\)/);
+    expect(css).not.toContain('.kui-list-item__count');
     expect(css).toMatchSource(/__terminal \.terminal-tile__viewport-frame \{[^}]*inset:var\(--kui-space-l\)/);
     expect(css).toMatchSource(/__consequences \{ padding:var\(--kui-space-m\) var\(--kui-space-l\) 0/);
     expect(css).toMatchSource(/__actions \{[^}]*gap:var\(--kui-space-xs\)/);

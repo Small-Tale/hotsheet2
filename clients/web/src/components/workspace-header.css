@@ -49,17 +49,6 @@
   padding: 0;
   border-radius: var(--wa-border-radius-pill);
 }
-/* The star carries selection state; native group buttons retain canonical hover/focus chrome. */
-.workspace-header__up-next-button {
-  --kui-toolbar-control-selected-border: transparent;
-  --kui-toolbar-control-selected-color: inherit;
-  --kui-toolbar-control-selected-background: transparent;
-  --kui-toolbar-control-selected-shadow: none;
-}
-.workspace-header__up-next-button:hover:not(:disabled) {
-  --kui-toolbar-control-selected-border: var(--kui-toolbar-control-border);
-  --kui-toolbar-control-selected-background: var(--kui-toolbar-control-hover-background);
-}
 .workspace-header__utility-group > button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -137,14 +126,7 @@ wa-button.workspace-header__text-action::part(base) {
   inset-inline-end: remify(3.2px);
 }
 .workspace-header__sort .kui-select__custom-selected {
-  width: remify(16px);
-  height: remify(16px);
   color: var(--kui-toolbar-control-color);
-  flex: none;
-}
-.workspace-header__sort .kui-select__custom-selected svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .workspace-header__search-group {
   position: relative;

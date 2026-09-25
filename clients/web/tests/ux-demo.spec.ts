@@ -458,6 +458,7 @@ test('represents the shared repository-status composition in the UX catalog', as
     }),
   ).toBe(8);
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog.locator('.repository-status-popover__navigation')).toHaveCSS('overflow', 'auto');
   await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');
   await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);
   const paneSpacing = await dialog.evaluate((node) => {
@@ -942,6 +943,8 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await expect(star).toHaveAttribute('aria-pressed', 'mixed');
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'true');
+    if (component === 'workspace-header')
+      await demo.screenshot({ path: '/private/tmp/hs2-06gdw3-workspace-selected.png', animations: 'disabled' });
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'false');
     await demo.getByRole('button', { name: 'More actions for selected tickets' }).click();
@@ -2171,6 +2174,8 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('[data-component="workspace-header"]');
   await expect(header).toContainText('Hot Sheet 2');
+  await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-chrome', 'outline');
+  await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-tone', 'pop');
   const sortIcon = header.locator('.workspace-header__sort .kui-select__custom-selected'),
     idleViewIcon = header.getByRole('button', { name: 'Columns view' }),
     quietIconColor = await idleViewIcon.evaluate((node) => getComputedStyle(node).color);
@@ -2980,7 +2985,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     titleMargin: ['4px', '16px'],
     tabsMargin: ['8px', '8px'],
     tabsPadding: '0px',
-    tabRailPadding: '4px',
+    tabRailPadding: '1px',
     tabGap: '4px',
   });
   await page.keyboard.press('Escape');
@@ -3814,6 +3819,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeGreaterThan(8);
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeLessThan(11);
   await expect(views.getByRole('button', { name: /Queue/ })).toHaveAttribute('aria-current', 'page');
+  await expect(views.locator('.view-navigation__count').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
   await expect(views.getByRole('button', { name: /Queue/ })).not.toHaveAttribute('aria-current', 'page');
@@ -3836,6 +3842,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     'background-color',
     'rgb(20, 184, 166)',
   );
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
   await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS(
     'background-color',
     'rgb(249, 115, 22)',
@@ -5310,6 +5317,7 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   const projectClose = page.locator('[data-component="project-close-dialog"]');
   await expect(projectClose).toHaveJSProperty('open', true);
   await expect(projectClose).toHaveAttribute('data-has-resources', 'true');
+  await expect(projectClose.locator('.project-close-dialog__resources')).toHaveCSS('overflow', 'auto');
   // The selected AI-chat resource renders its embedded conversation preview.
   await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
   await expect(projectClose).toContainText('Kerf');

@@ -46,10 +46,6 @@
   min-width: 0;
   gap: var(--kui-space-xs);
 }
-.project-sidebar__drive-row > .kui-select {
-  width: remify(88px);
-  flex: none;
-}
 .project-sidebar__drive-row .drive-control {
   min-width: 0;
   flex: 1;

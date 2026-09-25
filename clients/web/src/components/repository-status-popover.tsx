@@ -223,7 +223,7 @@ export function RepositoryStatusPopover({
       {recoveryStep && <RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError} />}
       {status && !recoveryStep && (
         <div class="repository-status-popover__layout">
-          <aside>
+          <aside class="repository-status-popover__navigation">
             <ValueTable className="repository-status-popover__values" label="Repository identity">
               <ValueTableRow label="Branch" value={branch} />
               <ValueTableRow label="Upstream" value={upstream} />
@@ -439,7 +439,7 @@ export function ChangeEvidenceDialog({
         <p class="app-heading__summary">Files changed across the ticket's complete commit range</p>
       </div>
       <div class="repository-status-popover__layout change-evidence-dialog__layout">
-        <aside>
+        <aside class="repository-status-popover__navigation">
           <nav aria-label="Change evidence views">
             <ListHeader label="Views" />
             {evidenceViews.map((item) => (

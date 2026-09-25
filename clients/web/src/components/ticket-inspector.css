@@ -127,29 +127,11 @@
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
-.kui-tab-bar.ticket-inspector__tabs {
-  width: auto;
-  min-width: 0;
-  min-height: 0;
+.ticket-inspector__tabs {
   margin: 0 var(--kui-space-xs) var(--kui-space-xs);
-  padding: 0;
-  background: transparent;
-  gap: 0;
 }
-.ticket-inspector__tabs .kui-tab-bar__tabs {
-  height: auto;
-  padding: var(--kui-space-2xs);
-  border: 0;
-  border-radius: remify(8.8px);
-  background: var(--wa-color-neutral-fill-normal);
-  overflow: hidden;
-}
-.kui-app-tab.ticket-inspector__tab {
-  width: auto;
-  min-width: 0;
-  height: remify(36px);
+.ticket-inspector__tab {
   border-radius: remify(6.4px);
-  flex: 1 1 0;
 }
 .ticket-inspector__tab .kui-app-tab__select {
   flex: 1;

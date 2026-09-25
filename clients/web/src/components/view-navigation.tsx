@@ -63,7 +63,7 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
             count =
               item.countLoading || item.count !== undefined ? (
                 <small
-                  class="kui-list-item__count"
+                  class="view-navigation__count"
                   data-attention={String(Boolean(item.attention))}
                   data-search-count={item.searchCount ? 'true' : undefined}
                   aria-label={

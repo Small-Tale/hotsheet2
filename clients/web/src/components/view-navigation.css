@@ -23,12 +23,12 @@
   outline: 2px solid var(--wa-color-brand-border-normal);
   outline-offset: -2px;
 }
-.view-navigation .kui-list-item__count {
+.view-navigation__count {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
   font-variant-numeric: tabular-nums;
 }
-.view-navigation .kui-list-item__count[data-attention='true'] {
+.view-navigation__count[data-attention='true'] {
   color: var(--hs-ticket-state-needs-review);
   font-weight: 700;
 }
@@ -65,16 +65,16 @@
   width: remify(14.4px);
   height: remify(14.4px);
 }
-.view-navigation .kui-list-item__count {
+.view-navigation__count {
   display: inline-flex;
   align-items: center;
   gap: var(--kui-space-2xs);
 }
-.view-navigation .kui-list-item__count svg {
+.view-navigation__count svg {
   width: remify(9.92px);
   height: remify(9.92px);
 }
-.view-navigation .kui-list-item__count[aria-label='Searching this view'] svg {
+.view-navigation__count[aria-label='Searching this view'] svg {
   animation: view-navigation-count-spin 0.8s linear infinite;
 }
 @keyframes view-navigation-count-spin {

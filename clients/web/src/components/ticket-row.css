@@ -187,7 +187,7 @@
   color: var(--hs-ticket-state-up-next);
   flex: none;
 }
-.ticket-list-row__claim .kui-loading-spinner {
+.ticket-list-row__claim-spinner {
   width: 100%;
   height: 100%;
 }

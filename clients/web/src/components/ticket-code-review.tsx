@@ -125,7 +125,7 @@ export function TicketCodeReview({
                     Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
                   </span>
                 </div>
-                <ToolbarControlGroup label="Comparison side">
+                <ToolbarControlGroup label="Comparison side" size="compact">
                   <button
                     type="button"
                     data-action="set-repository-comparison-side"

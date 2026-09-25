@@ -19,7 +19,7 @@
   height: remify(16px);
   place-items: center;
 }
-.project-tab__busy .kui-loading-spinner {
+.project-tab__busy-spinner {
   width: remify(12.8px);
   height: remify(12.8px);
 }

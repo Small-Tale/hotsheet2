@@ -305,6 +305,8 @@ export function TicketInspector({
         label="Ticket inspector sections"
         className="ticket-inspector__tabs"
         activation="automatic"
+        allocation="fill"
+        presentation="inspector"
       >
         {tabs.map((tab) => (
           <AppTab
@@ -314,6 +316,8 @@ export function TicketInspector({
             closable={false}
             selectAction="set-inspector-tab"
             className="ticket-inspector__tab"
+            presentation="segmented"
+            size="compact"
             rootAttributes={{ 'data-inspector-tab': tab.id }}
             leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
             trailing={

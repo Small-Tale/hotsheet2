@@ -1637,3 +1637,24 @@ domain semantics remain application-owned. Remaining legacy shadow-part, private
 and hand-written layout migrations are tracked separately so each can retain behavioral
 and visual coverage rather than becoming an unreviewed package-upgrade rewrite
 (HS2-737H3X; follow-ups HS2-06GDW3, HS2-S3BXC0, HS2-HD1SCC).
+
+Hot Sheet does not reach through Kerf's private descendant classes or assign its
+uncataloged tokens. Product-specific list metadata uses application-owned classes,
+command colors use application-owned root declarations, and toolbar selection uses
+`ToolbarControlGroup`'s public `selectedChrome` and `selectedTone` configuration.
+Each bounded master/detail surface declares its navigation and detail scroll owners
+directly. Exact analyzer exceptions are reserved for documented Web Awesome shadow
+parts, which remain an intentional external-component boundary rather than a Kerf
+extension point (HS2-06GDW3).
+
+The beta.49 forced-geometry review was also checked case by case. Supported recurring
+geometry now comes from component configuration: terminal tabs use `size`,
+`presentation`, and `labelMaxWidth`; inspector tabs use `presentation` and
+`allocation`; the workspace sort uses `selectedPresentation`; comparison controls use
+the compact toolbar-control size; and the project strip uses adjacent trailing-action
+placement. Spinner and empty-state sizing is attached to product-owned classes rather
+than Kerf descendants. The remaining analyzer review findings are intentional
+application layout: responsive shell/toolbar placement, bounded master-detail panes,
+domain-specific source rows, and container-dependent truncation. Kerf beta.49 has no
+prop that expresses those host-layout constraints, so they remain visible as review
+findings instead of being hidden by profile exceptions.

@@ -1,6 +1,4 @@
 .app-shell {
-  --kui-safe-area-inline-end: var(--hotsheet-safe-area-right);
-  --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom);
   display: flex;
   width: 100%;
   min-width: remify(1024px);

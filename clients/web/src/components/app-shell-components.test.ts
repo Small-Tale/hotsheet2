@@ -33,9 +33,7 @@ describe('application shell components', () => {
     expect(css).toContainSource(
       ".app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] { position: absolute; }",
     );
-    expect(css).toMatchSource(
-      /\.app-shell \{ --kui-safe-area-inline-end: var\(--hotsheet-safe-area-right\); --kui-safe-area-block-end: var\(--hotsheet-safe-area-bottom\);/,
-    );
+    expect(css).not.toContain('--kui-safe-area-');
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
   });
@@ -257,9 +255,11 @@ describe('application shell components', () => {
     expect(barCss).toMatch(
       /\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*padding: var\(--kui-space-2xs\);/,
     );
-    // The tabs strip does not stretch, so the trailing Add-project (+) follows the tabs rather than
+    // Kerf's adjacent placement keeps the trailing Add-project (+) beside the tabs rather than
     // sitting far-right (HS2-HV52WR).
-    expect(barCss).toMatch(/\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*flex: 0 1 auto/);
+    expect(
+      String(ProjectTabBar({ tabs: [{ id: 'focus', name: 'Focus', location: 'local', selected: true }] })),
+    ).toContain('data-trailing-placement="adjacent"');
   });
 
   it('composes tabs with add and overflow actions', () => {

@@ -114,6 +114,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
+    expect(markup).toMatch(
+      /workspace-header__utility-group[^>]*data-selected-chrome="outline"[^>]*data-selected-tone="pop"/,
+    );
     const beforeOverflow = markup.slice(0, markup.indexOf('<wa-dropdown class="workspace-header__overflow"'));
     expect(beforeOverflow).toMatch(/name="workspace-sort"[^>]*disabled/);
     expect(
@@ -371,8 +374,9 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has(.workspace-header__sort[open]) { outline: var(--wa-focus-ring)',
     );
     expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*outline: none/);
+    expect(markup).toMatch(/workspace-header__sort[^>]*data-selected-presentation="icon-only"/);
     expect(headerCss).toContainSource(
-      '.workspace-header__sort .kui-select__custom-selected { width: remify(16px); height: remify(16px); color: var(--kui-toolbar-control-color);',
+      '.workspace-header__sort .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
     expect(headerCss).toContainSource(

@@ -168,11 +168,11 @@ describe('ProjectSidebar component slice', () => {
         ],
       }),
     );
-    expect(markup.match(/class="kui-list-item__count"/g)).toHaveLength(2);
+    expect(markup.match(/class="view-navigation__count"/g)).toHaveLength(2);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
-    expect(markup).toMatch(/aria-current="page"[\s\S]*class="kui-list-item__count"/);
+    expect(markup).toMatch(/aria-current="page"[\s\S]*class="view-navigation__count"/);
     expect(markup).not.toContain('disabled');
     const searching = String(
       ViewNavigation({
@@ -251,6 +251,10 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toContainSource(
       ".command-navigation__command:not([data-command-palette='transparent']) { --kui-list-item-color: var(--hs-command-on);",
     );
+    expect(css).toContainSource('border-color:transparent;background:var(--command-color)');
+    expect(css).not.toContain('--kui-list-item-background');
+    expect(css).not.toContain('--kui-list-item-hover-border');
+    expect(css).not.toContain('--kui-list-item-selected-border');
   });
 
   it('shows half-opacity type icons for idle shell and AI commands', () => {

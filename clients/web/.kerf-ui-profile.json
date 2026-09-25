@@ -1,0 +1,139 @@
+{
+  "$schema": "./node_modules/@kerfjs/ui/ai/application-ui-profile.schema.json",
+  "schemaVersion": 1,
+  "scope": "directory",
+  "exceptions": [
+    {
+      "id": "web-awesome-ai-conversation-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ai-conversation.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-app-shell-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/app-shell.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-conversation-export-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/conversation-export-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-cursor-semantics-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/cursor-semantics.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-drive-options-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/drive-options-menu.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-not-working-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/not-working-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-project-close-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/project-close-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-project-dialog-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/project-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-project-tabs-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/project-tab-bar.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-quick-ticket-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/quick-ticket-composer.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-tag-chip-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/tag-chip.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-terminal-dashboard-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/terminal-dashboard.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-terminal-rail-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/terminal-ticket-rail.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-terminal-visibility-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/terminal-visibility-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-close-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-close-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-inspector-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-inspector-panel.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-link-choice-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-link-choice-dialog.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-reader-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-reader.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-row-menu-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-row-context-menu.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ticket-status-menu-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/ticket-status-menu.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-workspace-header-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/components/workspace-header.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    },
+    {
+      "id": "web-awesome-ux-demo-parts",
+      "rules": ["KUI-L011"],
+      "target": "src/ux-demo/style.css",
+      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+    }
+  ]
+}

@@ -15,7 +15,7 @@
   min-width: 0;
   min-height: 0;
 }
-.ticket-list__tickets:has(> .kui-empty-state) {
+.ticket-list__tickets:has(> .ticket-empty-state) {
   min-height: remify(288px);
 }
 .ticket-list__diagnostics > .corrupt-ticket-row:first-child {

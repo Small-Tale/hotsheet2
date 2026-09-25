@@ -66,7 +66,7 @@ function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
-      <LoadingSpinner label={label} />
+      <LoadingSpinner className="ticket-list-row__claim-spinner" label={label} />
     </span>
   );
 }

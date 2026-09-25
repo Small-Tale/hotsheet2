@@ -21,7 +21,7 @@
   height: calc(100% - remify(78.4px));
   grid-template-columns: remify(432px) minmax(0, 1fr);
 }
-.repository-status-popover__layout > aside {
+.repository-status-popover__navigation {
   min-width: 0;
   padding: var(--kui-space-l);
   overflow: auto;
@@ -247,7 +247,7 @@
   .repository-status-popover__layout {
     grid-template-columns: minmax(remify(240px), 55%) minmax(0, 1fr);
   }
-  .repository-status-popover__layout > aside,
+  .repository-status-popover__navigation,
   .repository-status-popover__detail {
     padding: var(--kui-space-m);
   }

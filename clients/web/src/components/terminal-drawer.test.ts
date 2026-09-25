@@ -74,10 +74,10 @@ describe('TerminalDrawer', () => {
     expect(rule).toContain('margin: calc(var(--kui-space-2xs) * -1)');
   });
   it('sizes terminal names from their content instead of reserving icon-width name space', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8'),
-      rule = css.match(/\.terminal-drawer__rail \.terminal-tab \.kui-app-tab__name \{([^}]+)\}/)?.[1] ?? '';
-    expect(rule).toContain('max-width: remify(144px)');
-    expect(rule).not.toContain('min-width');
+    const markup = render();
+    expect(markup).toContain('class="kui-app-tab terminal-tab"');
+    expect(markup).toContain('style="--kui-app-tab-label-max-width:144px"');
+    expect(markup).toContain('data-size="compact"');
   });
   it('renders one automatic Kerf tab bar with draggable terminal tabs before its trailing actions', () => {
     const markup = render();

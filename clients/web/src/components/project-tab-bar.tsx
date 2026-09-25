@@ -109,6 +109,7 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project',
       // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
       // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
       activation="manual"
+      trailingPlacement="adjacent"
       leading={modes}
       trailing={actions}
     >
