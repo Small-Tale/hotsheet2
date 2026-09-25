@@ -87,6 +87,7 @@ instead of one copy per tool:
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
+
 …the shared instruction body…
 <!-- END hotsheet:agents-md -->
 ```
@@ -107,7 +108,7 @@ instead of one copy per tool:
   disabling one sharer (removing it from `enabled_plugins`) drops it from the list while the
   section stays for the others. When no listed tool remains enabled, refresh removes the
   section. Re-enabling a tool that still has managed artifacts (its skill) recreates it.
-  Disabled tools' *per-tool* sections are still left in place, as before.
+  Disabled tools' _per-tool_ sections are still left in place, as before.
 - Version preservation applies to the shared section's **body**. For every tool targeting
   the file, a newer shared body, or an equal-version body whose bytes differ, freezes that
   tool's instruction/skill bundle — even when it also has a stale per-tool copy — exactly
