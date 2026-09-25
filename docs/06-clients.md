@@ -682,9 +682,15 @@ and identity-less legacy entries remain conservatively blocking.
   every column that has fewer loaded rows than its absolute total offers its own Load more control —
   rather than a single global cursor whose one continuation landed in whichever column happened to hold
   the last loaded row. The loaded rows still live in one flat union, so selection, the inspector,
-  mutations, and cross-column drag are unaffected. A background refresh restores each column the user has
-  paged past the baseline back to its loaded length in one commit, so an external change does not reset a
-  column's pagination (single-collection Backlog/Archive/Trash boards and search keep the global cursor).
+  mutations, and cross-column drag are unaffected. **Columns also load independently from the start**
+  (HS2-HNZZHC): the board never splits one global page across columns. Every status column reads its own
+  first page of 100 rows in the active sort (only the first request carries counts; the rest pass
+  `counts=false`), so a short column shows all of its tickets immediately and never a lone Load more,
+  and each Load more reads that column's next 100. A refresh (live change, tab reactivation, list↔board
+  switch) reloads each column back to its loaded length in one commit, in pages of at most 500, so an
+  external change does not reset a column's pagination. Warm project tabs keep their column cursors with
+  their rows. Crossing the mobile breakpoint on the board reloads, because mobile lists one global page.
+  Single-collection Backlog/Archive/Trash boards and search keep the global cursor.
   A column pages an _ordered list_ of statuses, not just one: when the **Hide Verified column** setting
   merges Verified into Completed, that column exhausts its `completed` stream and then continues into
   `verified`, so verified rows beyond the initial global page stay reachable through its own Load more

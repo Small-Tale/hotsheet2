@@ -612,6 +612,11 @@ export class Api {
     this.request<CheckoutTicketPage>(
       `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(pageSize, cursor, query, true)}`,
     );
+  /** One checkout page without counts (`counts=false`, HS2-VPEAM4), for callers that already hold them. */
+  checkoutTicketRowsPage = (checkout: string, pageSize: number, cursor?: string, query: CheckoutTicketQuery = {}) =>
+    this.request<CheckoutTicketRowsPage>(
+      `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(pageSize, cursor, query, false)}`,
+    );
   /**
    * Every matching checkout row, read through bounded cursor pages rather than one unpaged
    * response, which the server caps at 500 rows (HS2-CYXS0N). Pages pass `counts=false`
@@ -623,9 +628,7 @@ export class Api {
       seen = new Set<string>();
     let cursor: string | undefined;
     do {
-      const page = await this.request<CheckoutTicketRowsPage>(
-        `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(500, cursor, query, false)}`,
-      );
+      const page = await this.checkoutTicketRowsPage(checkout, 500, cursor, query);
       rows.push(...page.items);
       cursor = page.next_cursor;
       if (cursor !== undefined) {

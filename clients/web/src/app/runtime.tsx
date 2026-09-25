@@ -215,7 +215,13 @@ import {
 } from '../project-drive';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
-import { appendUniqueTicketRows, loadProjectTicketRefresh, type ProjectTicketRefresh } from '../project-ticket-refresh';
+import {
+  appendUniqueTicketRows,
+  BOARD_COLUMN_PAGE_SIZE,
+  type BoardRefreshSpec,
+  loadProjectTicketRefresh,
+  type ProjectTicketRefresh,
+} from '../project-ticket-refresh';
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
@@ -512,6 +518,9 @@ export async function startHotSheetWebClient() {
     boardColumnPages.value = {};
     boardColumnLoading.value = {};
   }
+  // Warm projects keep their board column cursors with their rows, so a warm switch restores columns
+  // exactly instead of re-paging from the top (HS2-HNZZHC).
+  const boardPagesByProject = signal<Record<string, Record<string, BoardColumnPage>>>({});
   const ticketPageQuery = signal<CheckoutTicketQuery>({ collection: 'queue' });
   const INITIAL_TICKET_RENDER_COUNT = 40,
     TICKET_RENDER_CHUNK = 160;
@@ -1049,13 +1058,22 @@ export async function startHotSheetWebClient() {
     const active = () =>
       generation === ticketCollectionGeneration && project()?.id === current.id && selectedView.value === view;
     try {
-      const index = await loadProjectTicketRefresh(new Api(current.apiPath), current.id, query);
+      // Board columns page in the active sort so each column's cursor continues its own order; the list keeps
+      // its view query, which its continuation cursor is bound to.
+      const board = boardRefreshSpec(view, current.id),
+        index = await loadProjectTicketRefresh(
+          new Api(current.apiPath),
+          current.id,
+          board ? sortedTicketQuery(query) : query,
+          board,
+        );
       if (!active()) return;
       if (index.tickets) {
         const mergedTickets = mergeRetainedCreatedRows(
           index.tickets,
           pendingCreatedTickets.retain(current.id, index.tickets),
         );
+        boardColumnPages.value = index.boardPages ?? {};
         ticketPageQuery.value = query;
         tickets.value = mergedTickets;
         ticketNextCursor.value = index.nextCursor;
@@ -1395,7 +1413,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id);warmProjects.forget(id);aiConfigurationController.forgetAiConfiguration(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
+  function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id);warmProjects.forget(id);aiConfigurationController.forgetAiConfiguration(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));boardPagesByProject.value=Object.fromEntries(Object.entries(boardPagesByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
   function projectCloseResources(projectId: string): ProjectCloseResource[] {
     const terminals = (terminalGroups.value.find((group) => group.projectId === projectId)?.sessions ?? [])
       .filter((session) => session.alive)
@@ -1715,6 +1733,7 @@ export async function startHotSheetWebClient() {
     if (loading.value && !Object.hasOwn(ticketRowsByProject.value, id)) return;
     ticketRowsByProject.value = { ...ticketRowsByProject.value, [id]: tickets.value };
     ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [id]: ticketNextCursor.value };
+    boardPagesByProject.value = { ...boardPagesByProject.value, [id]: boardColumnPages.value };
     projectProjectionById.value = {
       ...projectProjectionById.value,
       [id]: {
@@ -1729,7 +1748,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function activateOpenProject(next:string):{project:Project;generation:number;cached:boolean}|undefined{const nextProject=projects.value.find(item=>item.id===next);if(!nextProject)return;projectTabRefresh.activate(next);const finishTiming=beginInteractionTiming('project-change',{project:next});persistProjectSessionNow();cacheActiveProjectProjection();resetTicketComposer(false);resetProgressiveTicketRendering();resetBoardColumnPages();const rows=ticketRowsByProject.value[next],cached=rows!==undefined,projection=projectProjectionById.value[next],stored=loadProjectWorkspaceSession(localStorage,next),generation=++projectActivationGeneration,live=new Set(rows?.map(ticket=>ticket.slug)??[]),selection=stored?.selectedTicketSlugs.filter(slug=>live.has(slug))??[],drawerActivation=terminalDrawerActivation(localStorage,next);batch(()=>{selectedProjectRestoreRoot.value='';selectedProjectId.value=drawerActivation.projectId;terminalDrawerSelected.value=drawerActivation.selectedId;tickets.value=rows??[];ticketNextCursor.value=ticketCursorsByProject.value[next];ticketCollectionState.value=undefined;corruptTickets.value=projection?.corruptTickets??[];repository.value=projection?.repository??null;repositoryError.value=projection?.repositoryError??'';commandDefinitions.value=projection?.commandDefinitions??[];commandRuns.value=projection?.commandRuns??[];commandSettingsEditingId.value=undefined;selectedView.value=stored?.selectedView==='errors'&&!projection?.corruptTickets.length?'all':stored?.selectedView??'all';searchOpen.value=stored?.searchOpen??false;searchQuery.value=stored?.searchQuery??'';searchMatchKeys.value=projection?.searchMatchKeys;selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=selection;ticketSelectionAnchor=selection[0];error.value='';loading.value=!cached});markProjectWarm(next);aiConfigurationController.restoreAiConfiguration(nextProject);scheduleClaimLeaseExpiry();saveActiveProjectRoot(localStorage,nextProject.root);finishTiming();return{project:nextProject,generation,cached}}
+  function activateOpenProject(next:string):{project:Project;generation:number;cached:boolean}|undefined{const nextProject=projects.value.find(item=>item.id===next);if(!nextProject)return;projectTabRefresh.activate(next);const finishTiming=beginInteractionTiming('project-change',{project:next});persistProjectSessionNow();cacheActiveProjectProjection();resetTicketComposer(false);resetProgressiveTicketRendering();resetBoardColumnPages();const rows=ticketRowsByProject.value[next],cached=rows!==undefined,projection=projectProjectionById.value[next],stored=loadProjectWorkspaceSession(localStorage,next),generation=++projectActivationGeneration,live=new Set(rows?.map(ticket=>ticket.slug)??[]),selection=stored?.selectedTicketSlugs.filter(slug=>live.has(slug))??[],drawerActivation=terminalDrawerActivation(localStorage,next);batch(()=>{selectedProjectRestoreRoot.value='';selectedProjectId.value=drawerActivation.projectId;terminalDrawerSelected.value=drawerActivation.selectedId;tickets.value=rows??[];ticketNextCursor.value=ticketCursorsByProject.value[next];boardColumnPages.value=boardPagesByProject.value[next]??{};ticketCollectionState.value=undefined;corruptTickets.value=projection?.corruptTickets??[];repository.value=projection?.repository??null;repositoryError.value=projection?.repositoryError??'';commandDefinitions.value=projection?.commandDefinitions??[];commandRuns.value=projection?.commandRuns??[];commandSettingsEditingId.value=undefined;selectedView.value=stored?.selectedView==='errors'&&!projection?.corruptTickets.length?'all':stored?.selectedView??'all';searchOpen.value=stored?.searchOpen??false;searchQuery.value=stored?.searchQuery??'';searchMatchKeys.value=projection?.searchMatchKeys;selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=selection;ticketSelectionAnchor=selection[0];error.value='';loading.value=!cached});markProjectWarm(next);aiConfigurationController.restoreAiConfiguration(nextProject);scheduleClaimLeaseExpiry();saveActiveProjectRoot(localStorage,nextProject.root);finishTiming();return{project:nextProject,generation,cached}}
   /** Mark a project most recently used and drop the resident projection of any LRU-evicted project. */
   function markProjectWarm(id: string) {
     const evicted = warmProjects.touch(id).filter((item) => item !== selectedProjectId.value);
@@ -1740,6 +1759,7 @@ export async function startHotSheetWebClient() {
     batch(() => {
       ticketRowsByProject.value = keep(ticketRowsByProject.value);
       ticketCursorsByProject.value = keep(ticketCursorsByProject.value);
+      boardPagesByProject.value = keep(boardPagesByProject.value);
       projectProjectionById.value = keep(projectProjectionById.value);
     });
     for (const item of evicted) aiConfigurationController.forgetAiConfiguration(item);
@@ -1919,6 +1939,9 @@ export async function startHotSheetWebClient() {
     const mobile = isMobileViewport(window.innerWidth);
     if (mobile !== viewportMobile.value) {
       viewportMobile.value = mobile;
+      // Board columns load per status on desktop but the mobile layout lists one global page, so crossing
+      // the breakpoint on the board reloads the matching row shape (HS2-HNZZHC).
+      if (viewMode.value === 'board') void refreshProject({ showLoading: false, quiet: true });
       if (!mobile) {
         mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
         exitMobileTerminalFocus();
@@ -2681,9 +2704,11 @@ export async function startHotSheetWebClient() {
     const active = () => generation === projectRefreshGeneration && project()?.id === current.id;
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
-        query = sortedTicketQuery(ticketViewQuery(selectedView.value));
+        view = selectedView.value,
+        query = sortedTicketQuery(ticketViewQuery(view)),
+        board = boardRefreshSpec(view, current.id, { rows: tickets.value, pages: boardColumnPages.value });
       const [index, repositoryResult] = await Promise.all([
-        loadProjectTicketRefresh(client, current.id, query),
+        loadProjectTicketRefresh(client, current.id, query, board),
         client
           .repositoryStatus(current.id)
           .then((status) => ({ status, error: '' }))
@@ -2708,19 +2733,12 @@ export async function startHotSheetWebClient() {
         // on the first base page — and an autosave edit's own change event would keep re-triggering that,
         // yanking focus out of the field being edited (HS2-6AXG6Z). Leave the rows and selection to the
         // trailing refreshTicketSearch, which merges results and preserves selection.
-        if (!searchActive) {
-          let finalTickets: WireTicketRow[] = mergedTickets;
-          // Restore user-expanded board columns to their loaded length before committing, so a background refresh
-          // doesn't reset a column's pagination to the baseline (HS2-8NBGBX). Computed then set once — no flash.
-          if (viewMode.value === 'board' && !viewportMobile.value && isPerColumnBoardView(selectedView.value, false)) {
-            const restored = await fetchExpandedBoardColumnRows(current, selectedView.value, mergedTickets);
-            if (!active()) return;
-            if (restored) {
-              finalTickets = restored.rows;
-              boardColumnPages.value = restored.pages;
-            }
-          }
-          ticketPageQuery.value = query;
+        if (!searchActive && selectedView.value === view) {
+          const finalTickets: WireTicketRow[] = mergedTickets;
+          // Board columns load independently and restore any column the user had paged to its loaded length
+          // in the same refresh, so the commit below is one assignment with no collapse-then-expand flash
+          // (HS2-8NBGBX, HS2-HNZZHC). A list refresh leaves no per-column pages behind.
+          boardColumnPages.value = index.boardPages ?? {};
           tickets.value = finalTickets;
           ticketNextCursor.value = index.nextCursor;
           ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: finalTickets };
@@ -2810,7 +2828,31 @@ export async function startHotSheetWebClient() {
       if (project()?.id === current.id) ticketPageLoading.value = false;
     }
   }
-  const BOARD_COLUMN_PAGE_SIZE = 100;
+  /**
+   * The per-column board refresh for `view` in `projectId`, or undefined when that workspace is not a
+   * per-column board (list mode, mobile, search, or a single-collection view). `loaded` is the board's
+   * current rows and column pages: every column the board already paged asks for its loaded row count
+   * back, so a refresh keeps an expanded column instead of collapsing it (HS2-HNZZHC).
+   */
+  function boardRefreshSpec(
+    view: TicketView,
+    projectId = selectedProjectId.value,
+    loaded?: { rows: readonly WireTicketRow[]; pages: Record<string, BoardColumnPage> },
+  ): BoardRefreshSpec | undefined {
+    if (viewMode.value !== 'board' || viewportMobile.value) return undefined;
+    if (!isPerColumnBoardView(view, projectId === selectedProjectId.value && workspaceSearchActive())) return undefined;
+    const hideVerified = hideVerifiedByProject.value[projectId] ?? false,
+      columns = ['not-started', 'started', 'completed', ...(hideVerified ? [] : ['verified'])].map((id) => ({
+        id,
+        statuses: boardColumnStatuses(id, hideVerified),
+      })),
+      wants: Record<string, number> = {};
+    if (loaded)
+      for (const column of columns)
+        if (Object.hasOwn(loaded.pages, column.id))
+          for (const status of column.statuses) wants[status] = countTicketsForStatus(loaded.rows, status);
+    return { columns, wants };
+  }
   function countTicketsForStatus(rows: readonly WireTicketRow[], status: string) {
     let total = 0;
     for (const ticket of rows) if ((ticket.status ?? 'not_started') === status) total += 1;
@@ -2868,60 +2910,6 @@ export async function startHotSheetWebClient() {
       if (project()?.id === current.id) boardColumnLoading.value = { ...boardColumnLoading.value, [columnId]: false };
     }
   }
-  // A background refresh replaces the flat baseline page, which would collapse any board column the user
-  // had paged past the baseline (the reported symptom). This fetches each expanded column back up to the
-  // length it had and returns the merged rows + updated per-column pages, so the caller can set the final
-  // state in one assignment (no collapse-then-expand flash). Only columns the user explicitly paged are
-  // restored (HS2-8NBGBX). Returns undefined when there is nothing to restore.
-  async function fetchExpandedBoardColumnRows(
-    current: Project,
-    view: TicketView,
-    baseRows: readonly WireTicketRow[],
-  ): Promise<{ rows: WireTicketRow[]; pages: Record<string, BoardColumnPage> } | undefined> {
-    const hideVerified = hideVerifiedColumn(),
-      previousRows = tickets.value,
-      client = new Api(current.apiPath);
-    const columnStatuses = (columnId: string) => boardColumnStatuses(columnId, hideVerified);
-    const loadedAcross = (rows: readonly WireTicketRow[], statuses: readonly string[]) =>
-      statuses.reduce((sum, status) => sum + countTicketsForStatus(rows, status), 0);
-    // A column is expanded (needs restoring) when the user had paged it past what the fresh baseline
-    // reloads. Each of its status streams is refetched only when its own rows shrank versus baseline,
-    // so the merged Completed column restores `completed` and `verified` independently (HS2-F2N4ZN).
-    const expanded = Object.entries(boardColumnPages.value).filter(([columnId]) => {
-      const statuses = columnStatuses(columnId);
-      return statuses.length && loadedAcross(previousRows, statuses) > loadedAcross(baseRows, statuses);
-    });
-    if (!expanded.length) return undefined;
-    let rows = [...baseRows];
-    const pages = { ...boardColumnPages.value };
-    for (const [columnId, page] of expanded) {
-      const statuses = columnStatuses(columnId),
-        streams: Record<string, { cursor?: string; exhausted?: boolean }> = {};
-      for (const status of statuses) {
-        const want = countTicketsForStatus(previousRows, status);
-        if (want <= countTicketsForStatus(baseRows, status)) {
-          streams[status] = page.streams?.[status] ?? {};
-          continue;
-        }
-        const result = await client
-          .checkoutTicketPage(
-            current.id,
-            Math.max(BOARD_COLUMN_PAGE_SIZE, want),
-            undefined,
-            sortedTicketQuery({ ...ticketViewQuery(view), status }),
-          )
-          .catch(() => undefined);
-        if (result) {
-          rows = appendUniqueTicketRows(rows, result.items);
-          streams[status] = { cursor: result.next_cursor, exhausted: !result.next_cursor };
-        } else streams[status] = page.streams?.[status] ?? {};
-      }
-      // prettier-ignore
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      pages[columnId]={loaded:loadedAcross(rows,statuses),exhausted:statuses.every(status=>streams[status]?.exhausted===true),streams};
-    }
-    return { rows, pages };
-  }
   const projectTabRefresh = createProjectTabRefreshCoordinator<Project, ProjectTicketRefresh>({
     waitUntilSafe: async () => {
       for (let open = openSelect(); open; open = openSelect())
@@ -2945,12 +2933,17 @@ export async function startHotSheetWebClient() {
     },
     // Background tab refreshes are invisible work: they load the collection the project will show when
     // reactivated (its remembered view) without driving the busy indicator (HS2-AZZ9TF).
-    loadBackground: async (target) =>
-      loadProjectTicketRefresh(
+    loadBackground: async (target) => {
+      const view = loadProjectWorkspaceSession(localStorage, target.id)?.selectedView ?? 'all',
+        rows = ticketRowsByProject.value[target.id] as WireTicketRow[] | undefined,
+        pages = boardPagesByProject.value[target.id] as Record<string, BoardColumnPage> | undefined;
+      return loadProjectTicketRefresh(
         new Api(target.apiPath, '', { trackBusy: false }),
         target.id,
-        sortedTicketQuery(ticketViewQuery(loadProjectWorkspaceSession(localStorage, target.id)?.selectedView ?? 'all')),
-      ),
+        sortedTicketQuery(ticketViewQuery(view)),
+        boardRefreshSpec(view, target.id, rows && pages ? { rows, pages } : undefined),
+      );
+    },
     publishBackground: (target, snapshot) => {
       // Rows stay resident only for warm projects (spare LRU capacity admits a live-refreshed background one); counts
       // for tab badges are always kept.
@@ -2963,6 +2956,7 @@ export async function startHotSheetWebClient() {
           ),
         };
         ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [target.id]: snapshot.nextCursor };
+        boardPagesByProject.value = { ...boardPagesByProject.value, [target.id]: snapshot.boardPages ?? {} };
       }
       if (snapshot.ticketCounts) {
         ticketCountsByProject.value = { ...ticketCountsByProject.value, [target.id]: snapshot.ticketCounts };

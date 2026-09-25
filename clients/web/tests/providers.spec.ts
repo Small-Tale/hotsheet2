@@ -11539,63 +11539,69 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
   await page.screenshot({ path: '/private/tmp/hs2-q9yq2b-load-more.png', fullPage: true });
 });
 
-test('paginates each board column independently so a short column is not starved by a long one (HS2-8NBGBX)', async ({
+/** Serve one status stream the way the server does: `page_size` rows after the numeric offset cursor. */
+function boardStatusPage(rows: readonly object[], url: URL, counts: object) {
+  const size = Number(url.searchParams.get('page_size') ?? 200),
+    start = Number(url.searchParams.get('cursor') ?? 0),
+    end = start + size,
+    body: Record<string, unknown> = {
+      items: rows.slice(start, end),
+      counts: url.searchParams.get('counts') === 'false' ? null : counts,
+    };
+  if (end < rows.length) body.next_cursor = String(end);
+  return body;
+}
+
+test('loads each board column independently, 100 rows at a time in the active sort (HS2-8NBGBX, HS2-HNZZHC)', async ({
   page,
 }) => {
   await mockProject(page);
-  // Whole-checkout totals: Not Started 205 (open-started), Started 20, Completed 20 (queued-open-verified), Verified 15.
+  // Whole-checkout totals: Not Started 205 (open-started), Started 4, Completed 169 (queued-open-verified), Verified 2.
   const counts = {
-    total: 275,
-    queued: 260,
-    backlog: 10,
-    archive: 5,
-    open: 225,
+    total: 380,
+    queued: 380,
+    backlog: 0,
+    archive: 0,
+    open: 209,
     up_next: 0,
     active: 0,
-    started: 20,
-    verified: 15,
+    started: 4,
+    verified: 2,
     completed_today: 0,
   };
-  const make = (status: string, prefix: string, count: number, from = 0) =>
+  const make = (status: string, prefix: string, count: number) =>
     Array.from({ length: count }, (_, i) => ({
       ...row,
-      id: `${prefix}-${from + i}`,
-      native_id: `${prefix}-${from + i}`,
-      qualified_id: `git-local:${prefix}-${from + i}`,
-      slug: `HS2-${prefix}${String(from + i).padStart(3, '0')}`,
-      title: `${status} ticket ${from + i + 1}`,
+      id: `${prefix}-${i}`,
+      native_id: `${prefix}-${i}`,
+      qualified_id: `git-local:${prefix}-${i}`,
+      slug: `HS2-${prefix}${String(i).padStart(3, '0')}`,
+      title: `${status} ticket ${i + 1}`,
       status,
       up_next: false,
     }));
-  const notStarted = make('not_started', 'NS', 205),
-    started = make('started', 'ST', 20),
-    completed = make('completed', 'CP', 20),
-    verified = make('verified', 'VF', 15);
-  const statusRequests: string[] = [];
+  const streams: Record<string, ReturnType<typeof make>> = {
+    not_started: make('not_started', 'NS', 205),
+    started: make('started', 'ST', 4),
+    completed: make('completed', 'CP', 169),
+    verified: make('verified', 'VF', 2),
+  };
+  const boardRequests: URL[] = [];
+  let globalBoardRequests = 0;
   await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
     const request = route.request(),
       url = new URL(request.url());
     if (request.method() !== 'GET') return route.fallback();
-    const status = url.searchParams.get('status'),
-      cursor = url.searchParams.get('cursor');
+    const status = url.searchParams.get('status');
     if (status) {
-      statusRequests.push(cursor ? `${status}:${cursor}` : status);
-      // Per-column status page. Not Started paginates (100 then the rest); the others fit in one page.
-      if (status === 'not_started')
-        return route.fulfill({
-          json:
-            cursor === 'ns-100'
-              ? { items: notStarted.slice(100), counts }
-              : { items: notStarted.slice(0, 100), next_cursor: 'ns-100', counts },
-        });
-      if (status === 'started') return route.fulfill({ json: { items: started, counts } });
-      if (status === 'completed') return route.fulfill({ json: { items: completed, counts } });
-      if (status === 'verified') return route.fulfill({ json: { items: verified, counts } });
+      boardRequests.push(url);
+      return route.fulfill({ json: boardStatusPage(streams[status] ?? [], url, counts) });
     }
-    // Initial global page arrives starved: mostly Completed, only a couple Not Started (the reported bug).
+    // The list's global page is starved: mostly Completed. The board must never rely on it.
+    if (url.searchParams.has('page_size')) globalBoardRequests += 1;
     return route.fulfill({
       json: {
-        items: [...notStarted.slice(0, 2), ...started.slice(0, 4), ...completed.slice(0, 10), ...verified.slice(0, 5)],
+        items: [...streams.completed.slice(0, 150), ...streams.not_started.slice(0, 2)],
         next_cursor: 'after-200',
         counts,
       },
@@ -11605,37 +11611,61 @@ test('paginates each board column independently so a short column is not starved
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-CP000"]')).toBeVisible();
+  const listRequests = globalBoardRequests;
   await page.getByLabel('Columns view').click();
   const board = page.locator('[data-component="ticket-board"]');
   const column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true });
+  const columnRows = (name: string) => column(name).locator('[data-ticket-slug]');
   const columnMore = (name: string) => column(name).getByRole('button', { name: 'Load more tickets' });
-  // Every column shows its absolute lifecycle total even though few rows loaded.
   await expect(column('Not Started').getByLabel('205 tickets')).toBeVisible();
-  await expect(column('Started').getByLabel('20 tickets')).toBeVisible();
-  await expect(column('Completed').getByLabel('20 tickets')).toBeVisible();
-  await expect(column('Verified').getByLabel('15 tickets')).toBeVisible();
-  // Each partial column offers its OWN Load more — the short Not Started column is not starved.
-  await expect(columnMore('Not Started')).toBeVisible();
-  await expect(columnMore('Started')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-8nbgbx-per-column-load-more-wide.png', fullPage: true });
+  await expect(column('Started').getByLabel('4 tickets')).toBeVisible();
+  await expect(column('Completed').getByLabel('169 tickets')).toBeVisible();
+  await expect(column('Verified').getByLabel('2 tickets')).toBeVisible();
+  // Short columns show all of their tickets immediately and never a lone Load more (the reported bug).
+  await expect(columnRows('Started')).toHaveCount(4);
+  await expect(columnRows('Verified')).toHaveCount(2);
+  await expect(columnMore('Started')).toHaveCount(0);
+  await expect(columnMore('Verified')).toHaveCount(0);
+  // Long columns load their own first page of 100 and offer more.
+  await expect(page.locator('[data-ticket-slug="HS2-CP099"]')).toBeAttached();
+  await expect(page.locator('[data-ticket-slug="HS2-CP100"]')).toHaveCount(0);
+  await expect(columnMore('Not Started')).toBeAttached();
+  await expect(columnMore('Completed')).toBeAttached();
+  expect(globalBoardRequests).toBe(listRequests);
+  const initial = boardRequests.filter((url) => !url.searchParams.has('cursor'));
+  expect(new Set(initial.map((url) => url.searchParams.get('status')))).toEqual(
+    new Set(['not_started', 'started', 'completed', 'verified']),
+  );
+  for (const url of initial) {
+    expect(url.searchParams.get('page_size')).toBe('100');
+    expect(url.searchParams.get('collection')).toBe('queue');
+    expect(url.searchParams.get('sort')).toBeTruthy();
+  }
+  // One request carries counts; the other columns skip them.
+  expect(initial.filter((url) => url.searchParams.get('counts') !== 'false')).toHaveLength(1);
+  await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
+  await page.setViewportSize({ width: 1840, height: 1150 });
+  await page.screenshot({ path: '/private/tmp/claude/hs2-hnzzhc-board-columns-wide.png' });
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.screenshot({ path: '/private/tmp/claude/hs2-hnzzhc-board-columns-narrow.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Loading Not Started pages ONLY its status; the others are untouched.
+  // Loading Not Started pages only its own status stream from its own cursor.
+  const before = boardRequests.length;
   await columnMore('Not Started').scrollIntoViewIfNeeded();
   await columnMore('Not Started').click();
-  await expect(page.locator('[data-ticket-slug="HS2-NS050"]')).toBeVisible();
-  expect(statusRequests).toContain('not_started');
-  expect(statusRequests).not.toContain('started');
-  await expect(columnMore('Not Started')).toBeVisible(); // 100 of 205 — still more
-  await expect(columnMore('Started')).toBeVisible(); // untouched
-
-  // A different column pages independently.
-  await columnMore('Started').scrollIntoViewIfNeeded();
-  await columnMore('Started').click();
-  await expect(page.locator('[data-ticket-slug="HS2-ST019"]')).toBeVisible();
-  expect(statusRequests).toContain('started');
-  await expect(columnMore('Started')).toHaveCount(0); // 20 of 20 — fully loaded, no button
-  await expect(columnMore('Not Started')).toBeVisible(); // Not Started unaffected by Started paging
-  await page.screenshot({ path: '/private/tmp/hs2-8nbgbx-per-column-load-more-after.png', fullPage: true });
+  await expect(page.locator('[data-ticket-slug="HS2-NS199"]')).toBeAttached();
+  const more = boardRequests.slice(before);
+  expect(more.map((url) => `${url.searchParams.get('status')}:${url.searchParams.get('cursor')}`)).toEqual([
+    'not_started:100',
+  ]);
+  await expect(columnMore('Not Started')).toBeAttached(); // 200 of 205 — still more
+  await expect(columnMore('Completed')).toBeAttached(); // untouched
+  await columnMore('Not Started').click();
+  await expect(page.locator('[data-ticket-slug="HS2-NS204"]')).toBeAttached();
+  await expect(columnMore('Not Started')).toHaveCount(0);
+  await expect(columnRows('Started')).toHaveCount(4);
 });
 
 test('paginates the merged Completed column through completed then verified when Verified is hidden (HS2-F2N4ZN)', async ({
@@ -11646,34 +11676,36 @@ test('paginates the merged Completed column through completed then verified when
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.project.demo-checkout.hide-verified-column', 'true');
   });
-  // Whole-checkout totals: open 10 (5 not_started + 5 started); merged Completed = queued-open = 110 (80 completed + 30 verified).
+  // Whole-checkout totals: open 10 (5 not_started + 5 started); merged Completed = queued-open = 230 (150 completed + 80 verified).
   const counts = {
-    total: 130,
-    queued: 120,
+    total: 240,
+    queued: 240,
     backlog: 0,
     archive: 0,
     open: 10,
     up_next: 0,
     active: 0,
     started: 5,
-    verified: 30,
+    verified: 80,
     completed_today: 0,
   };
-  const make = (status: string, prefix: string, count: number, from = 0) =>
+  const make = (status: string, prefix: string, count: number) =>
     Array.from({ length: count }, (_, i) => ({
       ...row,
-      id: `${prefix}-${from + i}`,
-      native_id: `${prefix}-${from + i}`,
-      qualified_id: `git-local:${prefix}-${from + i}`,
-      slug: `HS2-${prefix}${String(from + i).padStart(3, '0')}`,
-      title: `${status} ticket ${from + i + 1}`,
+      id: `${prefix}-${i}`,
+      native_id: `${prefix}-${i}`,
+      qualified_id: `git-local:${prefix}-${i}`,
+      slug: `HS2-${prefix}${String(i).padStart(3, '0')}`,
+      title: `${status} ticket ${i + 1}`,
       status,
       up_next: false,
     }));
-  const notStarted = make('not_started', 'NS', 5),
-    started = make('started', 'ST', 5),
-    completed = make('completed', 'CP', 80),
-    verified = make('verified', 'VF', 30);
+  const streams: Record<string, ReturnType<typeof make>> = {
+    not_started: make('not_started', 'NS', 5),
+    started: make('started', 'ST', 5),
+    completed: make('completed', 'CP', 150),
+    verified: make('verified', 'VF', 80),
+  };
   const statusRequests: string[] = [];
   await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
     const request = route.request(),
@@ -11683,20 +11715,9 @@ test('paginates the merged Completed column through completed then verified when
       cursor = url.searchParams.get('cursor');
     if (status) {
       statusRequests.push(cursor ? `${status}:${cursor}` : status);
-      if (status === 'not_started') return route.fulfill({ json: { items: notStarted, counts } });
-      if (status === 'started') return route.fulfill({ json: { items: started, counts } });
-      // Both done in one page (no next_cursor), so each stream exhausts and the walk advances.
-      if (status === 'completed') return route.fulfill({ json: { items: completed, counts } });
-      if (status === 'verified') return route.fulfill({ json: { items: verified, counts } });
+      return route.fulfill({ json: boardStatusPage(streams[status] ?? [], url, counts) });
     }
-    // Starved initial global page: a handful of each, so the merged column starts partial.
-    return route.fulfill({
-      json: {
-        items: [...notStarted.slice(0, 2), ...started.slice(0, 2), ...completed.slice(0, 10), ...verified.slice(0, 5)],
-        next_cursor: 'after-200',
-        counts,
-      },
-    });
+    return route.fulfill({ json: { items: streams.completed.slice(0, 10), next_cursor: 'after-200', counts } });
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
@@ -11706,28 +11727,26 @@ test('paginates the merged Completed column through completed then verified when
   const board = page.locator('[data-component="ticket-board"]');
   const column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true });
   const completedMore = () => column('Completed').getByRole('button', { name: 'Load more tickets' });
-  // Verified is merged away; Completed carries the whole done total.
+  // Verified is merged away; Completed carries the whole done total and starts with 100 completed rows.
   await expect(column('Verified')).toHaveCount(0);
-  await expect(column('Completed').getByLabel('110 tickets')).toBeVisible();
-  await expect(completedMore()).toBeVisible();
-  // A verified ticket beyond the baseline is not loaded yet.
-  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toHaveCount(0);
-
-  // First Load more exhausts the `completed` stream. The column must STILL offer more, because
-  // verified rows remain — before HS2-F2N4ZN it stopped here, stranding the verified rows.
-  await completedMore().scrollIntoViewIfNeeded();
-  await completedMore().click();
-  await expect(page.locator('[data-ticket-slug="HS2-CP079"]')).toBeVisible();
-  expect(statusRequests).toContain('completed');
+  await expect(column('Completed').getByLabel('230 tickets')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-CP099"]')).toBeAttached();
+  await expect(completedMore()).toBeAttached();
   expect(statusRequests).not.toContain('verified');
-  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toHaveCount(0);
-  await expect(completedMore()).toBeVisible();
 
-  // Second Load more walks into the `verified` stream and completes the column.
+  // The next page finishes `completed`; the column must still offer more because verified rows remain.
   await completedMore().scrollIntoViewIfNeeded();
   await completedMore().click();
-  await expect(page.locator('[data-ticket-slug="HS2-VF020"]')).toBeVisible();
-  expect(statusRequests.indexOf('completed')).toBeLessThan(statusRequests.indexOf('verified'));
+  await expect(page.locator('[data-ticket-slug="HS2-CP149"]')).toBeAttached();
+  expect(statusRequests).toContain('completed:100');
+  expect(statusRequests).not.toContain('verified');
+  await expect(page.locator('[data-ticket-slug="HS2-VF000"]')).toHaveCount(0);
+  await expect(completedMore()).toBeAttached();
+
+  // Then it walks into the `verified` stream until the column is complete.
+  await completedMore().click();
+  await expect(page.locator('[data-ticket-slug="HS2-VF079"]')).toBeAttached();
+  expect(statusRequests.indexOf('completed:100')).toBeLessThan(statusRequests.indexOf('verified'));
   await expect(completedMore()).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
 });
@@ -14199,7 +14218,10 @@ test('switches already-open projects from cache within one frame and rejects sta
     claim_lease_expires_at: undefined,
   };
   let holdRefreshes = false;
-  const pending = new Map<string, import('@playwright/test').Route>();
+  // A board refresh reads each status column separately, so every held request of a project is released together.
+  const pending = new Map<string, Array<import('@playwright/test').Route>>();
+  const release = (key: string, json: unknown) =>
+    Promise.all(pending.get(key)!.map((route) => route.fulfill({ json })));
   await mockProject(page);
   await page.route('**/__hotsheet/projects/open', (route) => {
     const root = route.request().postDataJSON().root as string;
@@ -14223,7 +14245,8 @@ test('switches already-open projects from cache within one frame and rejects sta
       other = path.includes('/other-checkout/'),
       rows = other ? [otherRow, otherQueuedRow] : [row, notStartedRow];
     if (holdRefreshes) {
-      pending.set(other ? 'other' : 'demo', route);
+      const key = other ? 'other' : 'demo';
+      pending.set(key, [...(pending.get(key) ?? []), route]);
       return;
     }
     return route.fulfill({ json: rows });
@@ -14324,11 +14347,9 @@ test('switches already-open projects from cache within one frame and rejects sta
       () => (window as typeof window & { __projectSwitchTicketGhosts?: string[] }).__projectSwitchTicketGhosts,
     ),
   ).toEqual([]);
-  await pending
-    .get('other')!
-    .fulfill({ json: [{ ...otherRow, title: 'Other project refreshed ticket' }, otherQueuedRow] });
+  await release('other', [{ ...otherRow, title: 'Other project refreshed ticket' }, otherQueuedRow]);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
-  await pending.get('demo')!.fulfill({ json: [{ ...row, title: 'Stale demo response must stay hidden' }] });
+  await release('demo', [{ ...row, title: 'Stale demo response must stay hidden' }]);
   await page.waitForTimeout(100);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
   await expect(page.getByText('Stale demo response must stay hidden')).toHaveCount(0);
@@ -16066,6 +16087,59 @@ test('opens a distinct terminal for each shell command even when a create is sti
   releaseFirst();
   // The second shell command must still open its own terminal (not be dropped by the in-flight create).
   await expect.poll(() => posted).toEqual(['npm run lint', 'npm test']);
+});
+
+test('loads board columns independently from the real server (HS2-HNZZHC)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const create = async (title: string, status: string) => {
+      const created = await server.request<FullTicket>('/tickets', 'POST', { title, category: 'task' });
+      if (status !== 'not_started') await server.request(`/tickets/${created.id}`, 'PATCH', { status });
+    };
+    for (let index = 0; index < 105; index += 1) await create(`Done ${String(index).padStart(3, '0')}`, 'completed');
+    for (const title of ['Active one', 'Active two', 'Active three']) await create(title, 'started');
+    await create('Waiting one', 'not_started');
+    await mockProject(page);
+    // Only project discovery is a fixture; every ticket page (status filter, sort, counts=false) is the real server's.
+    const boardRequests: URL[] = [];
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      if (incoming.searchParams.has('status')) boardRequests.push(incoming);
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByLabel('Columns view').click();
+    const board = page.locator('[data-component="ticket-board"]'),
+      column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true }),
+      rows = (name: string) => column(name).locator('[data-ticket-slug]'),
+      more = (name: string) => column(name).getByRole('button', { name: 'Load more tickets' });
+    await expect(column('Started').getByLabel('3 tickets')).toBeVisible();
+    await expect(rows('Started')).toHaveCount(3);
+    await expect(more('Started')).toHaveCount(0);
+    await expect(rows('Not Started')).toHaveCount(1);
+    await expect(column('Completed').getByLabel('105 tickets')).toBeVisible();
+    await expect(more('Completed')).toBeAttached();
+    await expect.poll(() => column('Completed').locator('[data-ticket-slug]').count(), { timeout: 15_000 }).toBe(100);
+    expect(boardRequests.every((url) => url.searchParams.get('page_size') === '100')).toBe(true);
+    await more('Completed').scrollIntoViewIfNeeded();
+    await more('Completed').click();
+    await expect.poll(() => rows('Completed').count(), { timeout: 15_000 }).toBe(105);
+    await expect(more('Completed')).toHaveCount(0);
+  } finally {
+    await server.stop();
+  }
 });
 
 test('a quoting feedback reply clears Needs review through the real server (HS2-AVXYCB)', async ({ page }) => {
