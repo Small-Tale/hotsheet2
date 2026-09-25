@@ -23,6 +23,7 @@ export interface AppShellProps {
   sidebar?: SafeHtml;
   header: SafeHtml;
   headerActions?: SafeHtml;
+  projectTabAction?: SafeHtml;
   pageHeader?: SafeHtml;
   workspace: SafeHtml;
   composer?: SafeHtml;
@@ -53,6 +54,7 @@ export function AppShell({
   sidebar,
   header,
   headerActions,
+  projectTabAction,
   pageHeader,
   workspace,
   composer,
@@ -137,7 +139,7 @@ export function AppShell({
             </>
           }
         />
-        <ProjectTabBar tabs={tabs} mode={mode} mobile={mobile} />
+        <ProjectTabBar tabs={tabs} mode={mode} workspaceAction={projectTabAction} mobile={mobile} />
         {overlay}
         {banner}
         {pageHeader}

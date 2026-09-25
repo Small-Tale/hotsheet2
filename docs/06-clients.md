@@ -213,6 +213,12 @@ and identity-less legacy entries remain conservatively blocking.
   Kerf owns forwarding that name to the actual Web Awesome shadow control without adding a
   visible label or changing the compact geometry (HS2-Q6EM0B). The name survives project
   changes and switching between desktop tabs and the mobile Select.
+  On non-mobile project tabs, the current ticket view, notification view, or settings
+  category replaces the redundant project name in the compact main-toolbar title. The
+  separate large page-header row is omitted, and the ticket-view action moves to the far
+  trailing edge of ProjectTabBar beside Add project. Workspace Grid and Cross-project
+  Stats retain their existing main-toolbar titles. Mobile retains its two compact project
+  and view rows, including the New ticket action in the view row (HS2-9R1F91).
 
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,
@@ -483,7 +489,7 @@ and identity-less legacy entries remain conservatively blocking.
   navigation, media-gallery keys, control activation, and dismissal — remain non-rebindable
   **System** entries, since rebinding ARIA navigation would break screen-reader and platform
   expectations. Chords display platform-correctly (⌘ on Apple, Ctrl elsewhere). The
-  selected category names the shared page header; the workspace does not repeat that
+  selected category names the shared compact toolbar heading; the workspace does not repeat that
   heading, and the right region uses the same divider-free empty inspector placeholder
   as Notifications. Entering Settings preserves the ticket selection for returning to
   list/board, but that retained selection never changes the Settings placeholder semantics.

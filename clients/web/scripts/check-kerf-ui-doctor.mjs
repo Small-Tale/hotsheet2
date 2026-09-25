@@ -10,7 +10,7 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L101': 3,
     'KUI-L102': 8,
     'KUI-L201': 22,
-    'KUI-L202': 5,
+    'KUI-L202': 4,
     'KUI-L203': 1,
   },
   review: {

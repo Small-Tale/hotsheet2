@@ -4099,17 +4099,7 @@ export async function startHotSheetWebClient() {
         <MainShell
           tabs={tabs}
           mode="project"
-          header={<WorkspaceIdentity projectName={restoreFailure.name} />}
-          pageHeader={
-            <div class="app-heading" data-component="heading" data-has-icon="false">
-              <Toolbar
-                dividerSides=""
-                leading={
-                  <ToolbarText text="Project unavailable" id="workspace-page-title" size="xlarge" headingLevel={1} />
-                }
-              />
-            </div>
-          }
+          header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
           workspace={<ProjectRestoreError {...restoreFailure} />}
           inspectorVisible={false}
           overlay={popup}
@@ -4136,28 +4126,21 @@ export async function startHotSheetWebClient() {
           : []),
         ...customViewsFor(current.id).map((view) => ({ value: customTicketViewId(view.id), label: view.name })),
       ];
-    const desktopPageHeader = (
+    const workspaceTitle =
+      viewMode.value === 'notifications'
+        ? notificationViewTitle(notificationView.value)
+        : viewMode.value === 'settings'
+          ? settingsCategoryTitle(settingsCategory())
+          : customTicketViewKey(selectedView.value)
+            ? ticketViewTitle(selectedView.value)
+            : searchQuery.value.trim() || searchTokens.value.length
+              ? 'Search results'
+              : ticketViewTitle(selectedView.value);
+    const secondaryPageHeader = (
       <div class="app-heading" data-component="heading" data-has-icon="false">
         <Toolbar
           dividerSides=""
-          leading={
-            <ToolbarText
-              text={
-                viewMode.value === 'notifications'
-                  ? notificationViewTitle(notificationView.value)
-                  : viewMode.value === 'settings'
-                    ? settingsCategoryTitle(settingsCategory())
-                    : customTicketViewKey(selectedView.value)
-                      ? ticketViewTitle(selectedView.value)
-                      : searchQuery.value.trim() || searchTokens.value.length
-                        ? 'Search results'
-                        : ticketViewTitle(selectedView.value)
-              }
-              id="workspace-page-title"
-              size="xlarge"
-              headingLevel={1}
-            />
-          }
+          leading={<ToolbarText text={workspaceTitle} id="workspace-page-title" size="xlarge" headingLevel={1} />}
           trailing={
             !['settings', 'notifications'].includes(viewMode.value)
               ? ticketViewAction(selectedView.value, canCreate)
@@ -4166,8 +4149,8 @@ export async function startHotSheetWebClient() {
         />
       </div>
     );
-    const pageHeader =
-      viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value) ? (
+    const pageHeader = viewportMobile.value ? (
+      !['settings', 'notifications'].includes(viewMode.value) ? (
         <Toolbar
           className="app-shell__mobile-view-header"
           dividerSides=""
@@ -4184,8 +4167,9 @@ export async function startHotSheetWebClient() {
           trailing={ticketViewAction(selectedView.value, canCreate)}
         />
       ) : (
-        desktopPageHeader
-      );
+        secondaryPageHeader
+      )
+    ) : undefined;
     const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);
     return (
       <MainShell
@@ -4195,7 +4179,13 @@ export async function startHotSheetWebClient() {
         sidebar={<SidebarSurface {...sidebarSurfaceProps()} />}
         sidebarVisible={viewportMobile.value ? mobileOverlay.value.sidebar : sidebarVisible.value}
         sidebarSize={sidebarSize.value}
-        header={viewportMobile.value ? <></> : <WorkspaceIdentity projectName={current.name} />}
+        header={
+          viewportMobile.value ? (
+            <></>
+          ) : (
+            <WorkspaceIdentity projectName={workspaceTitle} id="workspace-page-title" headingLevel={1} />
+          )
+        }
         headerActions={
           <WorkspaceControls
             mode={viewportMobile.value && viewMode.value === 'board' ? 'list' : viewMode.value}
@@ -4217,6 +4207,11 @@ export async function startHotSheetWebClient() {
             }
             selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
           />
+        }
+        projectTabAction={
+          !viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
+            ? ticketViewAction(selectedView.value, canCreate)
+            : undefined
         }
         banner={
           <>

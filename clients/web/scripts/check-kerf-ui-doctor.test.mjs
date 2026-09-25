@@ -17,7 +17,7 @@ function report(overrides = {}) {
       { id: 'browser', status: 'skipped' },
     ],
     diagnostics,
-    summary: { errors: 40, review: 177, warnings: 1128, suppressed: 0 },
+    summary: { errors: 39, review: 177, warnings: 1128, suppressed: 0 },
     ...overrides,
   };
 }
@@ -25,7 +25,7 @@ function report(overrides = {}) {
 describe('Kerf UI doctor baseline', () => {
   it('accepts the classified error and review budget with browser evaluation disabled', () => {
     expect(assertKerfUiDoctorBaseline(report())).toEqual({
-      errors: 40,
+      errors: 39,
       review: 177,
       warnings: 1128,
       suppressed: 0,

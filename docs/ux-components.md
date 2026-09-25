@@ -508,7 +508,9 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   with controlled selected state. Their full dashboard surfaces remain tracked by
   HS2-2ZCN7K and HS2-38RJMK respectively.
 
-Global dashboard modes precede project tabs; Add follows the project strip. Tabs
+Global dashboard modes precede project tabs. Add follows the project strip when there is
+no ticket-view action; on desktop project views, Add and the current view action occupy the
+far trailing edge together. Tabs
 represent server/project connections rather than embedded stores. The strip uses
 Kerf's 4px tight-cluster rhythm around and between controls, with an 8px outer
 inline inset, while retaining its fixed 60px geometry. The component must tolerate
@@ -524,8 +526,11 @@ writable AI-chat composer by default; clicking a live drawer tab likewise transf
 focus into its terminal/chat input while yielding to any newer explicit focus action. The Add action remains
 vertically centered with the pills.
 
-In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
-PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's
+In desktop project mode the hierarchy is Toolbar(compact current-view heading +
+WorkspaceControls) → ProjectTabBar(current view action at the trailing edge) → connection
+banner → workspace. The redundant project-name heading and separate large PageHeader are
+absent. Global modes retain their established main-toolbar titles, while mobile retains
+its project Select and separate view Select/action row. TicketInspector is a root trailing region spanning the shell's
 full height and uses the same animated slide/collapse contract as the project sidebar;
 its panel-right control replaces a generic close glyph. Inspector tab
 icons never shrink, and compact inspectors switch to icon-only labels.
@@ -1684,10 +1689,10 @@ error and review classes:
 
 | Severity | Accepted beta.49 baseline                                                           |
 | -------- | ----------------------------------------------------------------------------------- |
-| error    | `KUI-L017` 1; `KUI-L101` 3; `KUI-L102` 8; `KUI-L201` 22; `KUI-L202` 5; `KUI-L203` 1 |
+| error    | `KUI-L017` 1; `KUI-L101` 3; `KUI-L102` 8; `KUI-L201` 22; `KUI-L202` 4; `KUI-L203` 1 |
 | review   | `KUI-L004` 81; `KUI-L005` 54; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1            |
 
-The 40 accepted errors are separately tracked by composition-contract
+The 39 accepted errors are separately tracked by composition-contract
 `HS2-N377DC`, private-anatomy/token `HS2-M3TDYP`, and exceptional-spacing
 `HS2-S2GYTF`. The 177 review findings remain visible because they describe intentional
 application geometry that should be reconsidered as Kerf gains public configuration;

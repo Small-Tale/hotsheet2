@@ -5,6 +5,7 @@ import './project-tab-bar.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { ArchiveRestore, ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
 import { ProjectTab, type ProjectTabProps } from './project-tab';
@@ -13,6 +14,7 @@ export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];
   label?: string;
   mode?: ProjectTabBarMode;
+  workspaceAction?: SafeHtml;
   /** Mobile: the horizontal tab strip does not fit a single narrow column, so the project tabs are
    * replaced with a project Select while the dashboard mode switcher and Add-project action remain
    * (HS2-4C5RM7). */
@@ -24,7 +26,13 @@ export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
  * host can route project reorders (main.tsx) separately from other tab bars. */
 export const PROJECT_TAB_BAR_ID = 'projects';
 
-export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project', mobile = false }: ProjectTabBarProps) {
+export function ProjectTabBar({
+  tabs,
+  label = 'Open projects',
+  mode = 'project',
+  workspaceAction,
+  mobile = false,
+}: ProjectTabBarProps) {
   const modes = (
     <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
       <button
@@ -56,6 +64,7 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project',
       <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project">
         <LucideIcon icon={Plus} name="plus" />
       </wa-button>
+      {!mobile && workspaceAction}
     </div>
   );
   if (mobile) {
@@ -109,7 +118,7 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project',
       // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
       // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
       activation="manual"
-      trailingPlacement="adjacent"
+      trailingPlacement={workspaceAction ? 'separate' : 'adjacent'}
       leading={modes}
       trailing={actions}
     >

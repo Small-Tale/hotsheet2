@@ -9869,6 +9869,59 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(page.getByRole('heading', { name: 'Cross-project stats' })).toBeVisible();
 });
 
+test('uses the compact workspace title and project-tab action on desktop while preserving mobile (HS2-9R1F91)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+
+  const shell = page.locator('[data-component="app-shell"]'),
+    mainToolbar = shell.locator('.app-shell__main > [data-component="toolbar"]').first(),
+    projectTabs = shell.locator('.project-tab-bar'),
+    title = page.locator('#workspace-page-title'),
+    launcher = page.getByRole('button', { name: 'New ticket…' });
+  await expect(title).toHaveText('Queue');
+  await expect(title).toHaveAttribute('data-size', 'large');
+  await expect(mainToolbar.locator('[data-component="workspace-identity"]')).toContainText('Queue');
+  await expect(shell.locator('.app-shell__main > .app-heading')).toHaveCount(0);
+  await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
+  const desktopGeometry = await projectTabs.evaluate((node) => {
+    const bar = node.getBoundingClientRect(),
+      action = node
+        .querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!
+        .getBoundingClientRect(),
+      selected = node.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!.getBoundingClientRect();
+    return {
+      trailingInset: bar.right - action.right,
+      centerDelta: Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
+    };
+  });
+  expect(desktopGeometry.trailingInset).toBeLessThanOrEqual(16);
+  expect(desktopGeometry.centerDelta).toBeLessThan(2);
+  const openProjectDialog = page.locator('[data-project-dialog]').locator('dialog');
+  await expect(openProjectDialog).toBeHidden();
+  await page.screenshot({ path: '/private/tmp/hs2-9r1f91-main-header-wide-final.png', fullPage: true });
+  await page.getByRole('button', { name: 'Hide project sidebar' }).click();
+
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect(page.locator('[data-component="workspace-identity"]')).toContainText('Workspace grid');
+  await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'demo' }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(projectTabs).toHaveClass(/project-tab-bar--mobile/);
+  await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
+  await expect(
+    shell.locator('.app-shell__mobile-view-header').getByRole('button', { name: 'New ticket…' }),
+  ).toHaveCount(1);
+  await expect(launcher).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-9r1f91-main-header-mobile-unchanged-final.png', fullPage: true });
+});
+
 test('keeps the priority select open when opened right after creating a ticket (HS2-43F14D)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

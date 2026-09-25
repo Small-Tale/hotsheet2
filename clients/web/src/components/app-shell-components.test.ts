@@ -282,6 +282,25 @@ describe('application shell components', () => {
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
   });
 
+  it('moves a desktop workspace action to the project-tab trailing edge without changing mobile', () => {
+    const desktop = String(
+      ProjectTabBar({
+        tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
+        workspaceAction: 'new-ticket' as never,
+      }),
+    );
+    expect(desktop).toContain('data-trailing-placement="separate"');
+    expect(desktop).toMatch(/project-tab-bar__actions[^]*data-action="choose-project"[^]*new-ticket/);
+    const mobile = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
+        workspaceAction: 'new-ticket' as never,
+      }),
+    );
+    expect(mobile).not.toContain('new-ticket');
+  });
+
   it('renders a project Select instead of the tab strip on mobile, keeping the mode switcher and add action (HS2-4C5RM7)', () => {
     const markup = String(
       ProjectTabBar({
@@ -499,6 +518,7 @@ describe('application shell components', () => {
         sidebar: 'side' as never,
         header: 'head' as never,
         headerActions: 'actions' as never,
+        projectTabAction: 'tab-action' as never,
         pageHeader: Toolbar({
           dividerSides: '',
           leading: ToolbarText({ text: 'All Tickets', id: 'all-tickets-title', size: 'xlarge', headingLevel: 1 }),
@@ -528,6 +548,8 @@ describe('application shell components', () => {
     expect(markup).toContain('role="heading" aria-level="1"');
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
+    expect(markup).toContain('class="project-tab-bar__actions"');
+    expect(markup).toContain('tab-action');
     expect(markup).toContain('data-component="toolbar"');
     expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));

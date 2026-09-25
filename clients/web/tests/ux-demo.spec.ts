@@ -4542,7 +4542,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     const identity = toolbarNode.querySelector('[data-component="workspace-identity"]')!.getBoundingClientRect();
     const controls = toolbarNode.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
-    const pageHeader = node.querySelector('.app-heading')!.getBoundingClientRect();
+    const workArea = node.querySelector('.app-shell__work-area')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
     return {
       shellTop: shellRect.top,
@@ -4556,7 +4556,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
       controlsRight: controls.right,
       tabsTop: tabs.top,
       tabsBottom: tabs.bottom,
-      pageHeaderTop: pageHeader.top,
+      workAreaTop: workArea.top,
       inspectorTop: inspector.top,
     };
   });
@@ -4574,8 +4574,12 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
-  expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
+  expect(shellHierarchy.workAreaTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
+  await expect(shell.locator('.app-shell__main > .app-heading')).toHaveCount(0);
+  await expect(shell.locator('#app-shell-demo-page-title')).toHaveText('Queue');
+  await expect(shell.locator('#app-shell-demo-page-title')).toHaveAttribute('data-size', 'large');
+  await expect(shell.locator('.project-tab-bar [data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
   await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-wide.png', fullPage: true });
   await expect(
     shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]'),

@@ -8,6 +8,7 @@ import {
   nextWorkspaceSort,
   WorkspaceControls,
   WorkspaceHeader,
+  WorkspaceIdentity,
   type WorkspaceSort,
   type WorkspaceSortDirection,
   workspaceSortTrigger,
@@ -17,6 +18,14 @@ import {
 } from './workspace-header';
 
 describe('WorkspaceHeader', () => {
+  it('projects a compact primary heading when the project view title moves into the main toolbar', () => {
+    const markup = String(WorkspaceIdentity({ projectName: 'Queue', id: 'workspace-page-title', headingLevel: 1 }));
+    expect(markup).toContain('data-component="workspace-identity"');
+    expect(markup).toContain('id="workspace-page-title"');
+    expect(markup).toContain('data-size="large"');
+    expect(markup).toContain('role="heading" aria-level="1"');
+    expect(markup).toContain('>Queue</span>');
+  });
   it('projects all modes, resets, and edits through canonical native segments', () => {
     const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
     for (const mode of ['list', 'board', 'notifications', 'settings', 'list', 'board'] satisfies WorkspaceViewMode[]) {

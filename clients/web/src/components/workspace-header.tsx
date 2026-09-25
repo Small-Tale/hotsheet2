@@ -75,10 +75,18 @@ export interface WorkspaceHeaderProps {
   listOnly?: boolean;
 }
 
-export function WorkspaceIdentity({ projectName }: { projectName: string }) {
+export function WorkspaceIdentity({
+  projectName,
+  id,
+  headingLevel,
+}: {
+  projectName: string;
+  id?: string;
+  headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+}) {
   return (
     <div class="workspace-header__identity" data-component="workspace-identity">
-      <ToolbarText text={projectName} size="large" />
+      <ToolbarText text={projectName} id={id} size="large" headingLevel={headingLevel} />
     </div>
   );
 }
