@@ -5,6 +5,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
+  ALargeSmall,
   Bot,
   FolderOpen,
   LayoutGrid,
@@ -53,6 +54,8 @@ export interface TerminalDrawerProps {
   createMenuOpen?: boolean;
   focusMode?: boolean;
   focusViewport?: MobileTerminalViewport;
+  /** Phone focus-mode text-size control state (columns + keyboard visibility); undefined off phones (HS2-ZSFAHF). */
+  focusTextSize?: MobileMagnifiedTerminal;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 
@@ -75,6 +78,7 @@ export function TerminalDrawer({
   createMenuOpen = false,
   focusMode = false,
   focusViewport,
+  focusTextSize,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -259,6 +263,19 @@ export function TerminalDrawer({
           />
         )}
       </div>
+      {focusMode && focusTextSize && (
+        <button
+          type="button"
+          class="terminal-drawer__focus-text-size"
+          data-action="cycle-mobile-terminal-columns"
+          data-columns={String(focusTextSize.columns)}
+          data-keyboard-visible={String(focusTextSize.keyboardVisible)}
+          aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
+          title="Change text size"
+        >
+          <LucideIcon icon={ALargeSmall} name="a-large-small" />
+        </button>
+      )}
       {focusMode && (
         <button
           type="button"

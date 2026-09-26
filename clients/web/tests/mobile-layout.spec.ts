@@ -232,6 +232,43 @@ test('gives a focused mobile terminal the visual viewport until explicit exit (H
   await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
 });
 
+test('exposes the phone text-size control in drawer focus mode, cycling with a toast and hiding under the keyboard (HS2-ZSFAHF)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const fake = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => fake });
+    (window as unknown as { __setVisualViewport: (height: number) => void }).__setVisualViewport = (height) => {
+      fake.height = height;
+      fake.dispatchEvent(new Event('resize'));
+    };
+  });
+  await openDemoProject(page, true);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  // The drawer focus mode now offers the same text-size control as the magnified terminal (HS2-ZSFAHF).
+  const textSize = drawer.getByRole('button', { name: /^Text size: \d+ columns/ });
+  await expect(textSize).toBeVisible();
+  await drawer.screenshot({ path: testInfo.outputPath('drawer-focus-text-size.png') });
+  const before = await textSize.getAttribute('data-columns');
+  await textSize.click();
+  await expect(page.locator('.app-toast')).toHaveText(/^Terminal text size: \d+ columns$/);
+  await expect(textSize).not.toHaveAttribute('data-columns', before!);
+  // Hidden while the virtual keyboard is presented, then shown again when it hides.
+  await page.evaluate(() => {
+    (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(420);
+  });
+  await expect(textSize).toBeHidden();
+  await page.evaluate(() => {
+    (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(844);
+  });
+  await expect(textSize).toBeVisible();
+});
+
 test('mobile viewport uses a single-column layout with overlay sidebars, one at a time (HS2-ZK51WP)', async ({
   page,
 }) => {

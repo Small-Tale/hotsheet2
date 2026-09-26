@@ -2222,7 +2222,10 @@ keyboard is hidden; keyboard visibility is inferred when the unscaled visual vie
 cycles **80 → 70 → 60 → 50 → 40 → 80** columns; the choice is persisted per browser
 (`hotsheet.terminals.mobile-columns`), applies to every phone-width 80×M terminal (magnified and
 dedicated drawer), and immediately refits the grid and PTY claim to the new *columns*×M. Wider
-viewports never render this chrome.
+viewports never render this chrome. The phone **dedicated drawer** terminal's focus mode carries
+the same text-size control (`a-large-small`) at the top-left, mirroring the top-right Exit pill and
+hidden while the keyboard is presented, so the size is adjustable there too, not only from a
+magnified terminal (HS2-ZSFAHF).
 
 ### 6.7.5 Escape hatch: a per-viewer _separate_ terminal
 

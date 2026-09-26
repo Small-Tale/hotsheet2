@@ -202,7 +202,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           ),
         };
       });
-    const focused = mobileTerminalFocus.value;
+    const focused = mobileTerminalFocus.value,
+      focusMode = focused.active && focused.terminalId === terminalDrawerSelected.value;
     return {
       projectId: current.id,
       projectName: current.name,
@@ -220,8 +221,11 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       message: terminalDashboardMessage.value,
       maximized: terminalDrawerMaximized.value,
       createMenuOpen: terminalDrawerCreateMenuOpen.value,
-      focusMode: focused.active && focused.terminalId === terminalDrawerSelected.value,
+      focusMode,
       focusViewport: focused.viewport,
+      // The phone focus-mode text-size control uses the same mobile geometry + columns as the
+      // magnified terminal; undefined off phones so the control never renders there (HS2-ZSFAHF).
+      focusTextSize: focusMode ? mobileMagnifiedTerminal() : undefined,
     };
   }
 

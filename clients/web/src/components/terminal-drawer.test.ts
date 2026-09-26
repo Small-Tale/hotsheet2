@@ -241,6 +241,37 @@ describe('TerminalDrawer', () => {
       ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: var(--terminal-focus-top); left: var(--terminal-focus-left); width: var(--terminal-focus-width); height: var(--terminal-focus-height);",
     );
     expect(css).toContain('env(safe-area-inset-top, 0px)');
+    // Off phones (no focusTextSize) the drawer focus mode shows only the Exit pill.
+    expect(markup).not.toContain('terminal-drawer__focus-text-size');
+  });
+  it('exposes the phone text-size control in drawer focus mode without an inline number (HS2-ZSFAHF)', () => {
+    const base = {
+      projectId: 'project',
+      projectName: 'Project',
+      sessions,
+      width: 390,
+      height: 492,
+      fitAcross: 2,
+      fitHigh: 2,
+      selectedId: 'one',
+      focusMode: true,
+      focusViewport: { left: 4, top: 18, width: 382, height: 492 },
+    } as const;
+    const markup = String(
+        TerminalDrawer({ ...base, focusTextSize: { viewport: base.focusViewport, keyboardVisible: false, columns: 60 } }),
+      ),
+      css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
+    // Same control contract as the magnified terminal: cycles columns, keeps the accessible name and
+    // data-columns, and reports the change with a toast (no inline number, HS2-89JZSN).
+    expect(markup).toContain('class="terminal-drawer__focus-text-size"');
+    expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
+    expect(markup).toContain('data-columns="60"');
+    expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
+    expect(markup).toContain('data-lucide="a-large-small"');
+    expect(markup).not.toContain('aria-hidden="true">60<');
+    // Hidden while the keyboard is presented.
+    expect(markup).toContain('data-keyboard-visible="false"');
+    expect(css).toMatchSource(".terminal-drawer__focus-text-size[data-keyboard-visible='true'] { display: none; }");
   });
   it('keeps project-drawer visibility local and offers no grouping controls', () => {
     const markup = render();
