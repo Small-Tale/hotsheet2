@@ -64,6 +64,7 @@ export function TicketReader({
       aria-label={label}
       without-header
       open={open || undefined}
+      data-controlled-open={String(open)}
       aria-hidden={open ? undefined : 'true'}
       inert={open ? undefined : true}
       style={style}

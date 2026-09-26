@@ -71,8 +71,10 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       }
     />
   ) : undefined;
+  // Kerf's Pane owns its footer's (safe-area) edges since beta.51, so the footer's own inset lives on
+  // this inner content box rather than on the pane footer (HS2-KMDJRH).
   const footer = (
-    <>
+    <div class="project-sidebar__footer-content">
       <p class="project-sidebar__work-summary" data-component="project-work-summary">
         {props.openCount} open, {props.upNextCount} up next, {props.activeCount} active
       </p>
@@ -105,7 +107,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
           <LucideIcon icon={MessageSquare} name="message-square" />
         </button>
       </div>
-    </>
+    </div>
   );
   return (
     <Pane

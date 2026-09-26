@@ -372,10 +372,10 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-view-mode="notifications"');
     expect(markup).toContain('Show Notifications (7 pending)');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
-    // Kerf's icon-only Select owns the trigger width (HS2-06GDW3); the group only centers it
-    // (KF-Y3YZBE workaround) instead of forcing a fixed 44px width (HS2-7DJPSG).
+    // Kerf's icon-only Select owns the trigger width and centers it in the single group (HS2-06GDW3,
+    // KF-Y3YZBE fixed in 5.0.0-beta.51), so the app sets neither a width nor a centering workaround.
     expect(headerCss).not.toContain('.workspace-header__sort {');
-    expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*justify-content: center/);
+    expect(headerCss).not.toContain('KF-Y3YZBE');
     // The single sort group owns the pill; the Select combobox stays transparent so it does not
     // draw a second, shorter pill that pokes out of the group's rounding (HS2-W3VD53).
     expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*background: transparent/);

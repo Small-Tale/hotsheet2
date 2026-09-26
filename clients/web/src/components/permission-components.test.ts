@@ -163,7 +163,7 @@ describe('permission presentation components', () => {
     );
     expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('class="kui-text kui-list-header__label"');
-    expect(markup).toContain('data-font="default">Notifications</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">Notifications</h2>');
     expect(markup).toContain('<nav aria-label="Notification views">');
     expect(markup).toContain('data-component="list"');
     expect(markup).not.toContain('divider-sides');

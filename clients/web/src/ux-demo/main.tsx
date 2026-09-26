@@ -49,6 +49,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
@@ -1018,7 +1019,7 @@ const applyCatalogTheme = () => {
   document.documentElement.dataset.theme = catalogTheme.value;
 };
 applyCatalogTheme();
-mount(root, DemoApp);
+mount(root, withControlledOpen(root, DemoApp));
 wireProjectDialogDemo(root);
 wireTokenSearchFields(root, {
   collapsible: { signals: { 'workspace-search': workspaceSearchOpen } },

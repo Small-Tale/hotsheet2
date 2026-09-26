@@ -43,6 +43,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
       data-terminal-visibility-name-dialog
       label={adding ? 'Add Visibility Group' : 'Rename Visibility Group'}
       open={Boolean(prompt)}
+      data-controlled-open={String(Boolean(prompt))}
     >
       <form class="terminal-visibility-name-dialog" data-action="submit-terminal-visibility-name">
         <wa-input
@@ -84,6 +85,7 @@ export function TerminalVisibilityDialog({
       label="Manage Workspace Visibility"
       aria-label="Manage Workspace Visibility"
       open={open}
+      data-controlled-open={String(open)}
     >
       <section class="terminal-visibility-dialog">
         <div class="terminal-visibility-dialog__toolbar">

@@ -31,7 +31,7 @@ export function ProjectDialog({
   recoveryBusy?: boolean;
 }) {
   return (
-    <wa-dialog data-project-dialog label="Open project" open={open}>
+    <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
       <form data-action="open-project-form">
         <List className="project-dialog" gap="m">
           <Text tone="quiet">
@@ -114,7 +114,7 @@ export function RemoteProjectDialog({
   error?: string;
 }) {
   return (
-    <wa-dialog data-remote-project-dialog label="Open a project" open={open}>
+    <wa-dialog data-remote-project-dialog label="Open a project" open={open} data-controlled-open={String(open)}>
       <List className="project-dialog remote-project-dialog" gap="m">
         <Text tone="quiet">
           Pick a project that is open on the Hot Sheet server. Browsing the server’s files isn’t available from another

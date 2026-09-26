@@ -29,7 +29,7 @@
   width: auto;
   margin-inline: var(--kui-space-xs);
 }
-.project-sidebar__footer {
+.project-sidebar__footer-content {
   display: grid;
   padding: var(--kui-space-xs);
   row-gap: var(--kui-space-xs);

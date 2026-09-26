@@ -798,7 +798,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
-  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.49.
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.51.
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
   against an exact no-regression error/review budget, while executable browser evaluation
@@ -978,6 +978,12 @@ and identity-less legacy entries remain conservatively blocking.
   capture phase and rejects events whose composed path belongs to an editable control or open
   dialog. It therefore resolves the original target before another action can synchronously morph
   that node, so submitting AI chat or closing a modal cannot queue a latent Create View dialog.
+  Controlled Web Awesome dialogs render `open={state}` plus `data-controlled-open={String(state)}`, and
+  one post-render pass (`src/controlled-open.ts`, wrapped around the app and UX-demo `mount`s) sets the
+  live `open` property to that state. Since Kerf 5.0.0-beta.51 (KF-900A8V) the morph keeps a live
+  custom-element `open` that a re-render omits (so unrelated renders no longer close a user-opened
+  popup), which means a controlled dialog would otherwise open but never close. Uncontrolled popups
+  carry no marker and keep that protection (HS2-KMDJRH).
   Saved-view opening uses the controlled dialog open state and native name autofocus. No delayed
   application callback may reclaim focus after the user selects the query or reopen a cancelled
   dialog. Create and Edit transitions synchronously project their initial name into the live

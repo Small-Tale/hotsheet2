@@ -1,4 +1,4 @@
-import { colorVar } from '@kerfjs/ui/css-values';
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { Select } from '@kerfjs/ui/select';
 
 import { DEFAULT_TICKET_CATEGORIES, type TicketCategoryPresentation } from './category-presentation';
@@ -22,7 +22,7 @@ function categoryColor(category: string) {
   )
     ? category.replaceAll('_', '-')
     : 'fallback';
-  return colorVar(`--hs-category-${token}`);
+  return foregroundColorVar(`--hs-category-${token}`);
 }
 
 export function TicketCategorySelect({

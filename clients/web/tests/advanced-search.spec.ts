@@ -299,8 +299,9 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.getByText(/No tickets match/)).toContainText('NOT tag:client AND parser');
   const inline = await geometry();
   expect(Number.parseFloat(inline.radius)).toBeCloseTo(Number.parseFloat(single.radius), 2);
-  expect(Math.abs(inline.mode.top - single.mode.top)).toBeLessThanOrEqual(4.1);
-  expect(Math.abs(inline.sort.top - single.sort.top)).toBeLessThanOrEqual(4.1);
+  // Peer controls stay exactly in place while the search wraps (HS2-W843B4; exact since HS2-KMDJRH).
+  expect(Math.abs(inline.mode.top - single.mode.top)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(inline.sort.top - single.sort.top)).toBeLessThanOrEqual(0.5);
   await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Edit tag client' }).click();
   await expect(inlineTag).toHaveCount(0);

@@ -7074,7 +7074,9 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   rail(side.x + side.width - rowBox.x - rowBox.width);
   rail(side.x + side.width - chatBox.x - chatBox.width);
   rail(side.x + side.width - hideBox.x - hideBox.width);
-  rail(side.x + side.width - viewActionBox.x - viewActionBox.width);
+  // Kerf 5.0.0-beta.51 centers a ListHeader action on the shared trailing toolbar-action axis
+  // (KF-NRB76K): the Add view action lines up under the sidebar's toolbar control, not the row edge.
+  expect(Math.abs(viewActionBox.x + viewActionBox.width / 2 - (hideBox.x + hideBox.width / 2))).toBeLessThanOrEqual(1);
   // Beta.24 owns the 18px icon slot, with the same content inset and label gap.
   expect(iconBox.width).toBeCloseTo(18, 0);
   expect(iconBox.x - rowBox.x).toBeGreaterThanOrEqual(8);
@@ -8805,7 +8807,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await expect(info.locator('[data-component="list-item"]')).toHaveCount(2);
   await expect(info.locator('.ticket-inspector__details-section [data-component="list-header"]')).toHaveText('Details');
   const notesHeader = info.locator('[data-component="ticket-notes"] [data-component="list-header"]'),
-    notesCount = notesHeader.locator('.kui-list-header__count');
+    notesCount = notesHeader.locator('.kui-badge');
   await expect(notesHeader).toContainText('Notes');
   await expect(notesHeader.locator('h2')).toHaveAttribute('aria-label', 'Notes, 3 notes');
   await expect(notesCount).toHaveText('3');

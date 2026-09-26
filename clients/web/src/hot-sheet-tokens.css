@@ -24,8 +24,12 @@
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
   /* Text/icon color for content on the always-yellow up-next fill; stays dark in every theme (HS2-TF43Y0). */
   --hs-ticket-state-up-next-on: #1a1a1a;
+  /* Priority icon colors are app-owned foreground tokens (Kerf's SelectChoice.color accepts only
+     foreground colors, KF-CW8DVX); urgent and low keep their Web Awesome loud hues. */
+  --hs-priority-urgent: var(--wa-color-danger-fill-loud);
   --hs-priority-high: #ff8d28;
   --hs-priority-default: #8e8e93;
+  --hs-priority-low: var(--wa-color-brand-fill-loud);
   --hs-category-task: #14b8a6;
   --hs-category-feature: #8b5cf6;
   --hs-category-bug: #ef4444;

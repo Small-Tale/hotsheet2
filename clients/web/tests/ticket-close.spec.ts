@@ -263,7 +263,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await page.locator('[data-ticket-slug="HS2-1S6DS9"]').click();
   const targetInspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
     backlinks = targetInspector.locator('[data-component="ticket-duplicate-backlinks"]'),
-    count = backlinks.locator('.kui-list-header__count');
+    count = backlinks.locator('.kui-list-header .kui-badge');
   await expect(backlinks.locator('h2')).toContainText('Duplicates');
   await expect(backlinks.locator('h2')).toHaveAttribute('aria-label', 'Duplicates, 2 duplicates');
   await expect(count).toHaveText('2');

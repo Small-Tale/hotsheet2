@@ -21,7 +21,7 @@ describe('TicketDuplicateBacklinks', () => {
       }),
     );
     expect(markup).toContain('class="kui-text kui-list-header__label"');
-    expect(markup).toContain('data-font="default">Duplicate of</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">Duplicate of</h2>');
     expect(markup).toContain('Beta · HS2-SAME');
     expect(markup).toContain('Canonical report');
     expect(markup).toContain('aria-label="Open duplicate target HS2-SAME from Beta"');
@@ -45,7 +45,7 @@ describe('TicketDuplicateBacklinks', () => {
       }),
     );
     expect(markup).toContain('aria-label="Duplicates, 2 duplicates" class="kui-text kui-list-header__label"');
-    expect(markup).toContain('<span class="kui-list-header__count" aria-hidden="true">2</span>');
+    expect(markup).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">2<\/span>/);
     expect(markup.match(/data-component="list-item"/g)).toHaveLength(2);
     expect(markup).toContain('Alpha · HS2-SAME');
     expect(markup).toContain('Beta · HS2-SAME');

@@ -39,6 +39,7 @@ export function NotWorkingDialog({
       label={title}
       aria-label={title}
       open={open}
+      data-controlled-open={String(Boolean(open))}
     >
       <form data-action="submit-not-working" class="not-working-dialog__form">
         {notesEnabled ? (

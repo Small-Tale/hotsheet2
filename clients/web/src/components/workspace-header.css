@@ -88,9 +88,6 @@ wa-button.workspace-header__text-action::part(base) {
 }
 .workspace-header__sort-group {
   border-radius: var(--wa-border-radius-pill);
-  /* Workaround for KF-Y3YZBE: Kerf left-aligns the fixed 32px icon-only Select inside the 44px
-     single group; center it until Kerf owns that composition. */
-  justify-content: center;
 }
 /* The single sort group already paints the pill container/background; keep the Select's own
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
@@ -139,6 +136,12 @@ wa-button.workspace-header__text-action::part(base) {
   height: auto;
   overflow: visible;
   align-self: flex-start;
+}
+/* A wrapping search field grows downward; its peer groups stay exactly where they sit on the single
+   line (HS2-W843B4). Every group shares the single-line group height, so top-aligning the row keeps
+   them in place instead of re-centering them against the taller field (HS2-KMDJRH). */
+.workspace-header__actions:has(> .workspace-header__search-group[data-expanded='true']) {
+  align-items: flex-start;
 }
 /* In Kerf's grouped TokenSearchField composition the control group owns the border,
    padding, and focus ring in both collapsed and expanded states. Only size and place

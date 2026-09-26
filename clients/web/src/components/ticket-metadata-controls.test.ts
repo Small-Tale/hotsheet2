@@ -36,7 +36,7 @@ describe('ticket metadata controls and inspector panels', () => {
       );
       expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
       expect(markup).toContain('class="kui-text kui-list-header__label"');
-      expect(markup).toContain('data-font="default">Details</h2>');
+      expect(markup).toContain('data-font="default" data-border="none">Details</h2>');
       expect(markup).toContain(`data-mode="${detailsMode}"`);
     }
     const readOnly = String(
@@ -103,12 +103,12 @@ describe('ticket metadata controls and inspector panels', () => {
     );
     expect(info).toContain('data-component="ticket-info-panel"');
     expect(info.match(/data-component="list-header"/g)).toHaveLength(4);
-    expect(info).toContain('data-font="default">Status</h2>');
+    expect(info).toContain('data-font="default" data-border="none">Status</h2>');
     expect(info).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     expect(info).toContain('name="inspector-category" label="Category"');
     expect(info).toContain('name="inspector-priority" label="Priority"');
-    expect(info).toContain('data-font="default">Details</h2>');
-    expect(info).toContain('data-font="default">Tags</h2>');
+    expect(info).toContain('data-font="default" data-border="none">Details</h2>');
+    expect(info).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(info).toMatch(
       /popoverTarget="ticket-tag-popover"[^>]*aria-controls="ticket-tag-popover"[^>]*aria-haspopup="dialog"[^>]*data-action="open-ticket-tag-popover"[^>]*aria-label="Add tag"/,
     );
@@ -126,7 +126,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text kui-list-header__label"');
-    expect(info).toContain('<span class="kui-list-header__count" aria-hidden="true">0</span>');
+    expect(info).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">0<\/span>/);
     expect(info).toContain('class="kui-list-item ticket-notes__add" data-component="list-item"');
     const blocked = String(
       TicketInfoPanel({
@@ -138,7 +138,7 @@ describe('ticket metadata controls and inspector panels', () => {
         blockedReason: 'Waiting',
       }),
     );
-    expect(blocked).toContain('data-font="default">Blocked reason</h2>');
+    expect(blocked).toContain('data-font="default" data-border="none">Blocked reason</h2>');
     expect(blocked).toContain('data-edit-blocked-reason="true"');
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');
@@ -156,7 +156,7 @@ describe('ticket metadata controls and inspector panels', () => {
         canAddNotes: false,
       }),
     );
-    expect(readOnly).toContain('data-font="default">Tags</h2>');
+    expect(readOnly).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(readOnly).not.toContain('data-action="open-ticket-tag-popover"');
     expect(readOnly).not.toContain('data-action="add-ticket-note"');
     expect(readOnly).toContain('aria-label="Status, Started"');

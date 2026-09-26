@@ -148,6 +148,7 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { withControlledOpen } from '../controlled-open';
 import { loadConversationStates, saveConversationStates } from '../conversation-persistence';
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
@@ -4643,7 +4644,7 @@ export async function startHotSheetWebClient() {
       </>
     );
   }
-  mount(appRoot, HotSheetApp);
+  mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
 
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);

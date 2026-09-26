@@ -6,10 +6,16 @@ test('sort hover stays within one centered pill surface', async ({ page }) => {
 
   const group = page.locator('.workspace-header__sort-group');
   const select = group.locator('.workspace-header__sort');
-  const idleBackground = await group.evaluate((node) => getComputedStyle(node).backgroundColor);
+  const comboboxBackground = () =>
+    select.evaluate((node) => {
+      const combobox = node.shadowRoot?.querySelector('[part~="combobox"]');
+      return combobox ? getComputedStyle(combobox).backgroundColor : 'missing';
+    });
 
   await select.hover();
-  await expect(group).toHaveCSS('background-color', idleBackground);
+  // Kerf 5.0.0-beta.51 lights the whole single-control group as one hover surface; the Select's own
+  // combobox must stay transparent so it never draws a second, offset pill inside it (HS2-KMDJRH).
+  await expect.poll(comboboxBackground).toBe('rgba(0, 0, 0, 0)');
   // Kerf's icon-only Select presentation owns the trigger width (HS2-06GDW3); it must stay
   // centered inside the single group surface rather than drawing its own offset pill.
   await expect(select).toHaveAttribute('data-selected-presentation', 'icon-only');

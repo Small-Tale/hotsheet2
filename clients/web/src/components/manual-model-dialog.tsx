@@ -24,6 +24,7 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
       label="Other model"
       aria-label="Other model"
       open={Boolean(state) || undefined}
+      data-controlled-open={String(Boolean(state))}
     >
       <form data-action="submit-manual-model">
         <List className="manual-model-dialog__form" gap="l">

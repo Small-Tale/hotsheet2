@@ -436,7 +436,7 @@ and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Shee
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.
 Hot Sheet pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` together at
-5.0.0-beta.49 and treats the strengthened declaration unions introduced in beta.22 as
+5.0.0-beta.51 and treats the strengthened declaration unions introduced in beta.22 as
 integration requirements: Select adapters
 choose one accessible-name branch, while ListHeader compositions choose a complete
 passive or action branch. This keeps disabled/read-only surfaces semantically passive
@@ -1627,6 +1627,37 @@ demos and production flows.
 
 The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
 examples using the package component unchanged, including explicit edge dividers.
+
+### Kerf beta.51 adoption
+
+Beta.51 (HS2-KMDJRH) changed four things Hot Sheet depends on:
+
+- **Custom-element `open` is user-agent-owned (KF-900A8V).** A re-render no longer removes a live
+  `open`, so controlled dialogs mark themselves with `data-controlled-open` and
+  `src/controlled-open.ts` drives the live state after each render. Uncontrolled popups keep the
+  new protection.
+- **`SelectChoice.color` accepts only foreground colors (KF-CW8DVX).** Category and priority
+  choices use `foregroundColorVar` over app-owned tokens; urgent and low priority gained
+  `--hs-priority-urgent` / `--hs-priority-low` aliases that keep their Web Awesome loud hues.
+- **Icon-only Select centering and caret (KF-Y3YZBE, KF-VAV2JT).** Kerf now centers the trigger in a
+  single-control group, so the app's centering workaround was removed; the whole single-control
+  pill is the hover surface.
+- **ListHeader markup and action axis.** Labels carry `data-border`, counts render as a quiet
+  `Badge`, and a header action is centered on the shared trailing toolbar-action axis (KF-NRB76K),
+  so the sidebar's Add view action lines up under the sidebar toolbar control.
+- **Explicit grouped search.** The token-search groups now declare `content="search"` and
+  `focusRing="halo"`, and their `TokenSearchField` uses `presentation="toolbar-group"`; beta.51
+  replaced the implicit `:has()` detection, without which the field drew a second border and lost
+  its focus halo.
+- **Pane edges are safe-area aware (KF-CZ3CBS).** The pane owns its header/content/footer inline
+  padding, so the project sidebar's footer inset moved to an inner `.project-sidebar__footer-content`
+  box instead of padding the pane footer itself.
+- **Catalog.** `CatalogExampleStack` now caps examples at a 736px measure; Hot Sheet's catalog lifts
+  it for its application-width compositions, and the catalog sidebar scrolls its pane content.
+
+The toolbar row now top-aligns while the search field is expanded, so the peer controls stay at
+exactly the same position as the field wraps (the HS2-W843B4 requirement, previously met only
+within 4px).
 
 ### Kerf beta.49 configuration-first adoption
 

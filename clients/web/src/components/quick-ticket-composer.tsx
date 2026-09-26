@@ -102,6 +102,7 @@ export function QuickTicketComposer({
       aria-hidden={expanded ? undefined : 'true'}
       inert={expanded ? undefined : true}
       open={expanded || undefined}
+      data-controlled-open={String(expanded)}
     >
       {expanded && (
         <form

@@ -40,6 +40,7 @@ export function SavedViewDialog({
       label={title}
       aria-label={title}
       open={open || undefined}
+      data-controlled-open={String(open)}
     >
       <form data-action="save-saved-view">
         <List className="saved-view-dialog__form" gap="l">
@@ -60,8 +61,14 @@ export function SavedViewDialog({
             <span>
               Search query <sup aria-hidden="true">*</sup>
             </span>
-            <ToolbarControlGroup className="workspace-header__search-group saved-view-dialog__query-field" expanded>
+            <ToolbarControlGroup
+              className="workspace-header__search-group saved-view-dialog__query-field"
+              expanded
+              content="search"
+              focusRing="halo"
+            >
               <TokenSearchField
+                presentation="toolbar-group"
                 id="saved-view-query"
                 label="Search query"
                 query={query}
@@ -116,6 +123,7 @@ export function SavedViewDeleteDialog({
       label="Delete View?"
       aria-label="Delete View?"
       open={open || undefined}
+      data-controlled-open={String(open)}
     >
       <List className="saved-view-dialog__form" gap="l">
         <Text tone="quiet">

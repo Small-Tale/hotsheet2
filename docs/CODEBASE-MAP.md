@@ -33,7 +33,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
-    src/project-startup.ts   #   Concurrent remembered-project preparation, bounded parallel retry, ordered registration, and single activation
+    src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
+    src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open`, since Kerf beta.51 no longer removes it on re-render
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
     src/app/runtime.tsx      #   Application runtime composition: project/cache/ticket orchestration and feature-controller integration

@@ -131,7 +131,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
         .evaluate((node) => node.getBoundingClientRect().top),
     )
     .toBeCloseTo(catalogTop, 0);
-  const relationships = page.locator('.kui-catalog__related-menu');
+  // Kerf 5.0.0-beta.51 renders catalog relationships as a Components dropdown (HS2-KMDJRH).
+  const relationships = page.locator('[data-catalog-related]');
   await relationships.getByRole('button', { name: /Component/ }).click();
   await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();
   await expect(relationships.getByText('Uses', { exact: true })).toBeVisible();
@@ -1133,7 +1134,8 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
   await expect(phone.nth(1)).toHaveAttribute('data-keyboard-visible', 'true');
   await expect(phone.nth(1).locator('.terminal-tile__footer')).toBeHidden();
   await stage.screenshot({ path: test.info().outputPath('hs2-wmn626-demo-variants.png') });
-  const relationships = page.locator('.kui-catalog__related-menu');
+  // Kerf 5.0.0-beta.51 renders catalog relationships as a Components dropdown (HS2-KMDJRH).
+  const relationships = page.locator('[data-catalog-related]');
   await relationships.getByRole('button', { name: /Component/ }).click();
   await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();
   await expect(relationships.getByText('TerminalDashboard', { exact: true })).toBeVisible();
@@ -1257,7 +1259,8 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(selection).toHaveCount(1);
   await expect(selection.locator('.hs-dev-review__handle')).toHaveCount(8);
   const beforeScroll = await selection.boundingBox();
-  const scroller = page.locator('.kui-catalog__sidebar nav');
+  // Kerf 5.0.0-beta.51's catalog sidebar is a Pane whose content region owns scrolling (HS2-KMDJRH).
+  const scroller = page.locator('.kui-catalog__sidebar .kui-pane__content');
   const initialScroll = await scroller.evaluate((node) => node.scrollTop);
   await scroller.evaluate((node) => {
     node.scrollBy(0, -80);
@@ -2639,7 +2642,8 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
         }
       : null;
   });
-  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 48, height: 40 });
+  // Kerf 5.0.0-beta.51 fits the popup trigger to its icon-plus-caret pill (KF-Y3YZBE).
+  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 44, height: 40 });
   const popupGroupWidth = await groups.nth(1).evaluate((node) => node.getBoundingClientRect().width);
   expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(4, 0);
   await popup.hover();
@@ -4105,14 +4109,17 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     .evaluateAll((headers) => headers.map((header) => header.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(4);
   for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left - menuHeaderLefts[0])).toBeLessThan(1);
+  // Kerf 5.0.0-beta.51 centers a ListHeader action on the shared trailing toolbar-action axis
+  // (KF-NRB76K): the Add view action sits under the sidebar toolbar control, not at the row edge.
   const viewActionAlignment = await sidebar.evaluate((node) => {
     const action = node
       .querySelector<HTMLElement>('.view-navigation [data-component="list-header"] button')!
       .getBoundingClientRect();
-    const item = node.querySelector<HTMLElement>('.view-navigation .kui-list-item')!.getBoundingClientRect();
-    return { actionRight: action.right, itemRight: item.right };
+    // The trailing toolbar-action axis: a 44px toolbar control inset by the shared 8px rail.
+    return { actionCenter: action.left + action.width / 2, axis: node.getBoundingClientRect().right - 8 - 22 };
   });
-  expect(Math.abs(viewActionAlignment.actionRight - viewActionAlignment.itemRight)).toBeLessThan(1);
+  // The demo pane's 1px edge separator shifts the axis by at most one pixel.
+  expect(Math.abs(viewActionAlignment.actionCenter - viewActionAlignment.axis)).toBeLessThanOrEqual(1.5);
   const alignedRows = await sidebar.evaluate((node) =>
     ['.repository-summary .kui-list-item', '.view-navigation .kui-list-item', '.command-navigation .kui-list-item']
       .map((selector) => node.querySelector(selector)!)
@@ -5139,9 +5146,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   ).toBe(true);
   await page.keyboard.press('Escape');
   await expect(presentation).toHaveJSProperty('open', false);
+  // Kerf 5.0.0-beta.51's catalog shows phase and recency as one status line (HS2-KMDJRH).
   await expect(
-    page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-catalog__tag'),
-  ).toContainText(['Feature floor', 'Now']);
+    page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-list-item__status'),
+  ).toHaveText(/^Feature floor · \S+/);
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
   await choose(presentation, 'popup');

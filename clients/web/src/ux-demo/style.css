@@ -30,6 +30,11 @@ body[data-resizing-project-sidebar='true'] {
   width: 100%;
   min-width: 0;
 }
+/* Kerf 5.0.0-beta.51 caps CatalogExampleStack at a 736px reading measure; Hot Sheet's catalog shows
+   application-width compositions (board, app shell, drawers), so its stage keeps the full canvas. */
+.demo-catalog-examples.kui-catalog-example-stack {
+  max-width: none;
+}
 .repository-status-demo {
   width: 100%;
   min-width: 0;

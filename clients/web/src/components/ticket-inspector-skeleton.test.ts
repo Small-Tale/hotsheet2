@@ -22,7 +22,7 @@ describe('TicketInspectorSkeleton', () => {
     // The metadata controls use the @kerfjs/ui native Select placeholder mode (real chrome, skeleton value).
     expect(markup.match(/kui-select--placeholder/g)).toHaveLength(3);
     expect(markup).toContain('class="kui-text kui-list-header__label"');
-    expect(markup).toContain('data-font="default">Status</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">Status</h2>');
     expect(markup).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     // Unknown value slots (title, details, note bodies, provenance) use the native Skeleton block.
     expect(markup).toContain('kui-skeleton');

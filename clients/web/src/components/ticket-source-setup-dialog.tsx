@@ -239,6 +239,7 @@ export function TicketSourceSetupDialog({
       label={detailLabel}
       with-footer
       open={Boolean(target)}
+      data-controlled-open={String(Boolean(target))}
     >
       <ContentTransition
         active={active}

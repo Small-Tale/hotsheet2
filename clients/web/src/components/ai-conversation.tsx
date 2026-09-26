@@ -490,6 +490,7 @@ export function AIConversation({
       data-selection-id={selectionId}
       label={`${tool} conversation`}
       open={open || undefined}
+      data-controlled-open={String(open)}
       light-dismiss
       without-header
       with-footer={!readOnly}

@@ -32,7 +32,12 @@ export function Hs1MigrationDialog({
   error,
 }: Hs1MigrationDialogProps) {
   return (
-    <wa-dialog data-component="hs1-migration-dialog" label="Import Hot Sheet 1 project" open={open}>
+    <wa-dialog
+      data-component="hs1-migration-dialog"
+      label="Import Hot Sheet 1 project"
+      open={open}
+      data-controlled-open={String(open)}
+    >
       <form class="hs1-migration-dialog" data-action="import-hs1-project">
         <div class="hs1-migration-dialog__intro">
           <LucideIcon icon={ArchiveRestore} name="archive-restore" />

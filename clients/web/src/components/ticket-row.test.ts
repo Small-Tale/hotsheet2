@@ -115,10 +115,10 @@ describe('TicketRow', () => {
         }),
       ),
     ).toEqual({
-      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'],
+      urgent: ['chevrons-up', 'var(--hs-priority-urgent)'],
       high: ['chevron-up', 'var(--hs-priority-high)'],
       default: ['minus', 'var(--hs-priority-default)'],
-      low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
+      low: ['chevron-down', 'var(--hs-priority-low)'],
     });
   });
 

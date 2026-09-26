@@ -23,8 +23,8 @@ describe('SettingsNavigation', () => {
       expect(markup).toContain(`data-lucide="${icon}"`);
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
     expect(markup).toContain('class="kui-text kui-list-header__label"');
-    expect(markup).toContain('data-font="default">Project Settings</h2>');
-    expect(markup).toContain('data-font="default">App Settings</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">Project Settings</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">App Settings</h2>');
     expect(markup).toContain('data-item-id="general"');
     expect(markup).toContain('data-item-id="keyboard"');
     expect(markup).toContain('data-lucide="keyboard"');

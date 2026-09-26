@@ -413,8 +413,15 @@ export function WorkspaceControls({
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
         </button>
       </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
+      <ToolbarControlGroup
+        className="workspace-header__search-group"
+        expanded={searchOpen}
+        single
+        content="search"
+        focusRing="halo"
+      >
         <TokenSearchField
+          presentation="toolbar-group"
           id="workspace-search"
           label="Search tickets"
           query={searchQuery}

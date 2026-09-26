@@ -88,8 +88,10 @@ describe('shared client theme', () => {
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
       '--hs-ticket-state-up-next-on',
+      '--hs-priority-urgent',
       '--hs-priority-high',
       '--hs-priority-default',
+      '--hs-priority-low',
       '--hs-category-task',
       '--hs-category-feature',
       '--hs-category-bug',
@@ -171,6 +173,9 @@ describe('shared client theme', () => {
     for (const declaration of [
       '--hs-priority-high: #ff8d28',
       '--hs-priority-default: #8e8e93',
+      // Foreground aliases for Kerf's CssForegroundColor-only SelectChoice.color (KF-CW8DVX).
+      '--hs-priority-urgent: var(--wa-color-danger-fill-loud)',
+      '--hs-priority-low: var(--wa-color-brand-fill-loud)',
       '--hs-ticket-state-needs-review: #cb30e0',
     ])
       expect(source).toContain(declaration);
