@@ -492,6 +492,31 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(12.8px);
 }
+.terminal-drawer-demos {
+  display: grid;
+  width: min(remify(1152px), 100%);
+  gap: var(--wa-space-l);
+}
+.terminal-drawer-focus-demo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wa-space-l);
+  align-items: flex-start;
+}
+.terminal-drawer-focus-demo h2 {
+  margin: 0 0 var(--wa-space-s);
+  font-size: var(--wa-font-size-s);
+}
+/* contain: paint makes this stage the containing block for the fixed focus surface and backdrop. */
+.terminal-drawer-focus-demo__stage {
+  position: relative;
+  width: remify(390px);
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(12.8px);
+  contain: paint;
+}
 .terminal-dashboard-demo {
   width: min(remify(1152px), 100%);
   height: remify(560px);

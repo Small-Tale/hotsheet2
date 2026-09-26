@@ -4294,6 +4294,47 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
     .screenshot({ path: '/private/tmp/hs2-9b7z7j-project-tab-segments-narrow.png' });
 });
 
+test('catalogs the drawer phone focus-mode text-size control with and without the keyboard (HS2-01D4JP)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await page.goto('/ux-demo?component=terminal-drawer');
+  const variants = page.locator('.terminal-drawer-focus-demo__variant');
+  await expect(variants).toHaveCount(2);
+  const shown = variants.nth(0),
+    underKeyboard = variants.nth(1),
+    control = shown.getByRole('button', { name: /^Text size: \d+ columns/ });
+  await expect(shown.locator('[data-component="terminal-drawer"]')).toHaveAttribute('data-focus-mode', 'true');
+  await expect(control).toBeVisible();
+  await expect(control).toHaveAttribute('data-columns', '60');
+  await expect(control).toHaveCSS('cursor', 'pointer');
+  await expect(shown.getByRole('button', { name: 'Exit terminal focus' })).toBeVisible();
+  await expect(underKeyboard.getByRole('button', { name: /^Text size/ })).toBeHidden();
+  await expect(underKeyboard.getByRole('button', { name: 'Exit terminal focus' })).toBeVisible();
+  // Each fixed focus surface (and its blackout backdrop) stays inside its stage instead of covering the page.
+  for (const variant of [shown, underKeyboard]) {
+    const contained = await variant.evaluate((node) => {
+      const stage = node.querySelector('.terminal-drawer-focus-demo__stage')!.getBoundingClientRect(),
+        drawer = node.querySelector('[data-component="terminal-drawer"]')!.getBoundingClientRect();
+      return (
+        drawer.left >= stage.left - 1 &&
+        drawer.top >= stage.top - 1 &&
+        drawer.right <= stage.right + 1 &&
+        drawer.bottom <= stage.bottom + 1
+      );
+    });
+    expect(contained).toBe(true);
+  }
+  await expect(page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]')).toBeVisible();
+  // The control cycles the column fixture; both variants share it.
+  await control.click();
+  await expect(control).toHaveAttribute('data-columns', '50');
+  await expect(control).toHaveAccessibleName('Text size: 50 columns. Change text size');
+  await page
+    .locator('.terminal-drawer-focus-demo')
+    .screenshot({ path: test.info().outputPath('drawer-focus-demo.png') });
+});
+
 test('catalogs shared application tabs and terminal-drawer tabs', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=app-tab');
@@ -4302,7 +4343,7 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   await expect(page.getByRole('tab', { name: /Project tab/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('button', { name: 'Close Terminal tab' })).toBeAttached();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer = page.locator('[data-component="terminal-drawer"]');
+  const terminalDrawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
   await expect(terminalDrawer).toBeVisible();
   await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
   await expect(terminalDrawer.getByRole('button', { name: 'Close Development' })).toBeAttached();

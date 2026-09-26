@@ -34,7 +34,7 @@
   position: absolute;
   z-index: 2;
   top: calc(var(--kui-space-xs) + env(safe-area-inset-top, 0px));
-  right: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-right));
+  right: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-right, 0px));
   display: inline-flex;
   min-height: remify(40px);
   padding: 0 var(--kui-space-s);
@@ -64,7 +64,7 @@
   position: absolute;
   z-index: 2;
   top: calc(var(--kui-space-xs) + env(safe-area-inset-top, 0px));
-  left: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-left));
+  left: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-left, 0px));
   display: inline-flex;
   width: remify(40px);
   height: remify(40px);

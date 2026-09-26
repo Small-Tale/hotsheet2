@@ -52,6 +52,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import {
   AIConversationDemo,
@@ -320,6 +321,7 @@ function updateDemoModifiedWhenPopupsClose(value: Record<string, string>): void 
 }
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
+const drawerFocusDemoColumns = signal(60);
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
@@ -702,32 +704,64 @@ function demoContent(item: DemoDefinition) {
         />
       </section>
     );
-  if (item.id === 'terminal-drawer')
-    return (
-      <section class="terminal-drawer-demo">
-        <TerminalDrawer
-          projectId="demo"
-          projectName="Demo project"
-          sessions={[
-            {
-              id: 'shell',
-              projectId: 'demo',
-              projectName: 'Demo project',
-              title: 'Development',
-              alive: true,
-              busy: true,
-              scrollback: 'npm run dev\nready on http://127.0.0.1',
-            },
-          ]}
-          width={900}
-          height={320}
-          fitAcross={2}
-          fitHigh={2}
-          selectedId="shell"
-          contextMenu={terminalDashboardContextMenu.value}
-        />
-      </section>
+  if (item.id === 'terminal-drawer') {
+    const shell = {
+      id: 'shell',
+      projectId: 'demo',
+      projectName: 'Demo project',
+      title: 'Development',
+      alive: true,
+      busy: true,
+      scrollback: 'npm run dev\nready on http://127.0.0.1',
+    };
+    // Phone focus mode is a fixed, viewport-sized surface; each stage contains it (and its blackout
+    // backdrop) so the variant can be inspected in place (HS2-01D4JP).
+    const focusVariant = (label: string, keyboardVisible: boolean, height: number) => (
+      <div class="terminal-drawer-focus-demo__variant">
+        <h2>{label}</h2>
+        <div class="terminal-drawer-focus-demo__stage" style={`height:${height}px`}>
+          <TerminalDrawer
+            projectId="demo"
+            projectName="Demo project"
+            sessions={[shell]}
+            width={390}
+            height={height}
+            fitAcross={2}
+            fitHigh={2}
+            selectedId="shell"
+            focusMode
+            focusViewport={{ left: 0, top: 0, width: 390, height }}
+            focusTextSize={{
+              viewport: { left: 0, top: 0, width: 390, height },
+              keyboardVisible,
+              columns: drawerFocusDemoColumns.value,
+            }}
+          />
+        </div>
+      </div>
     );
+    return (
+      <div class="terminal-drawer-demos">
+        <section class="terminal-drawer-demo">
+          <TerminalDrawer
+            projectId="demo"
+            projectName="Demo project"
+            sessions={[shell]}
+            width={900}
+            height={320}
+            fitAcross={2}
+            fitHigh={2}
+            selectedId="shell"
+            contextMenu={terminalDashboardContextMenu.value}
+          />
+        </section>
+        <section class="terminal-drawer-focus-demo" aria-label="Phone focus mode variants">
+          {focusVariant('Phone focus mode', false, 560)}
+          {focusVariant('Phone focus mode, keyboard presented', true, 360)}
+        </section>
+      </div>
+    );
+  }
   if (item.id === 'terminal-dashboard')
     return (
       <section class="terminal-dashboard-demo">
@@ -1245,6 +1279,10 @@ delegate(root, 'contextmenu', '[data-component="terminal-tile"]', (event, target
   event.preventDefault();
   const pointer = event as MouseEvent;
   showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
+});
+// The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
+delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {
+  drawerFocusDemoColumns.value = nextMobileTerminalColumns(drawerFocusDemoColumns.value);
 });
 delegate(root, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
   event.preventDefault();
