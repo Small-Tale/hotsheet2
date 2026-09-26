@@ -3044,7 +3044,14 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawerZoom).toHaveAttribute('data-component', 'floating-toolbar');
   const codexTile = drawer.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:codex-main"]');
   await codexTile.click({ button: 'right' });
-  await expect(drawer.getByRole('menu')).toHaveCount(0);
+  // The drawer grid offers the tile menu with Open only: terminal visibility (Hide) is scoped to
+  // the workspace dashboard (HS2-V2CCN6).
+  const drawerTileMenu = drawer.getByRole('menu');
+  await expect(drawerTileMenu).toBeVisible();
+  await expect(drawerTileMenu.getByText('Open')).toBeVisible();
+  await expect(drawerTileMenu.getByText('Hide Terminal')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(drawerTileMenu).toHaveCount(0);
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await expect(codexTile).toHaveCount(1);
