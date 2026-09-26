@@ -301,37 +301,41 @@ export function TicketInspector({
         inaccessibleProjects={duplicateBacklinkInaccessibleProjects}
       />
       {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
-      <TabBar
-        id={`ticket-inspector-${presentation}-${slug}`}
-        label="Ticket inspector sections"
-        className="ticket-inspector__tabs"
-        activation="automatic"
-        allocation="fill"
-        presentation="inspector"
-      >
-        {tabs.map((tab) => (
-          <AppTab
-            id={tab.id}
-            name={tab.label}
-            selected={activeTab === tab.id}
-            closable={false}
-            selectAction="set-inspector-tab"
-            className="ticket-inspector__tab"
-            presentation="segmented"
-            size="compact"
-            rootAttributes={{ 'data-inspector-tab': tab.id }}
-            leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
-            trailing={
-              tab.id === 'attachments' && attachments?.length ? (
-                <span class="ticket-inspector__tab-count">
-                  <span aria-hidden="true">{attachments.length}</span>
-                  <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
-                </span>
-              ) : undefined
-            }
-          />
-        ))}
-      </TabBar>
+      {/* The app owns the strip's outer inset; Kerf's TabBar is a full-width block, so an inset must
+          come from this frame's padding rather than a margin that would overflow (HS2-7DJPSG). */}
+      <div class="ticket-inspector__tabs-frame">
+        <TabBar
+          id={`ticket-inspector-${presentation}-${slug}`}
+          label="Ticket inspector sections"
+          className="ticket-inspector__tabs"
+          activation="automatic"
+          allocation="fill"
+          presentation="inspector"
+        >
+          {tabs.map((tab) => (
+            <AppTab
+              id={tab.id}
+              name={tab.label}
+              selected={activeTab === tab.id}
+              closable={false}
+              selectAction="set-inspector-tab"
+              className="ticket-inspector__tab"
+              presentation="segmented"
+              size="compact"
+              rootAttributes={{ 'data-inspector-tab': tab.id }}
+              leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+              trailing={
+                tab.id === 'attachments' && attachments?.length ? (
+                  <span class="ticket-inspector__tab-count">
+                    <span aria-hidden="true">{attachments.length}</span>
+                    <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
+                  </span>
+                ) : undefined
+              }
+            />
+          ))}
+        </TabBar>
+      </div>
       {activeTab === 'info' && (
         <TicketInfoPanel
           status={status}

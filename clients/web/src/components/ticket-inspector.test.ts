@@ -293,9 +293,12 @@ describe('TicketInspector', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     const markup = String(TicketInspector({ ...base }));
+    // The inset is frame padding: a margin on Kerf's full-width TabBar overflowed the inspector.
     expect(inspectorCss).toMatch(
-      /\.ticket-inspector__tabs \{[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-xs\)/,
+      /\.ticket-inspector__tabs-frame \{[^}]*padding: 0 var\(--kui-space-xs\) var\(--kui-space-xs\)/,
     );
+    expect(inspectorCss).not.toMatch(/\.ticket-inspector__tabs \{[^}]*margin/);
+    expect(markup).toMatch(/class="ticket-inspector__tabs-frame"><nav class="kui-tab-bar ticket-inspector__tabs"/);
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
     expect(markup).toMatch(/ticket-inspector__tab[^>]*data-presentation="segmented"[^>]*data-size="compact"/);
     expect(inspectorCss).toMatch(

@@ -7704,7 +7704,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     page
       .getByRole('button', { name: /Ticket errors/ })
       .locator('xpath=..')
-      .locator('.kui-list-item__count'),
+      .locator('.view-navigation__count'),
   ).toHaveText('1');
   await expect(corrupt).toHaveCount(0);
   await page.getByRole('button', { name: /Ticket errors/ }).click();
@@ -12006,7 +12006,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
   await expect(navigation.getByLabel('4 search results')).toBeVisible();
   expect(requests[0]).toBe('queue');
   await expect.poll(() => requests.slice(1).sort()).toEqual(['archive', 'backlog']);
-  const selectedCount = navigation.getByRole('button', { name: /Queue/ }).locator('.kui-list-item__count');
+  const selectedCount = navigation.getByRole('button', { name: /Queue/ }).locator('.view-navigation__count');
   await expect(selectedCount).toHaveAttribute('data-search-count', 'true');
   await page.getByLabel('Columns view').click();
   const board = page.locator('[data-component="ticket-board"]');
@@ -14812,23 +14812,38 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.evaluate(() => {
     localStorage.setItem(
       'hotsheet.project.demo-checkout.permission-automation',
-      JSON.stringify({ action: 'allow', delayMs: 15_000 }),
+      JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Auto-allow in');
+  // An installed clock keeps following wall time, so exact m:ss text races slow local runs (and a
+  // short delay could silently auto-allow mid-test). Use a 60s delay and assert the countdown only
+  // moves forward by at least the fast-forwarded amount.
+  const countdownSeconds = async () => {
+    const [minutes, seconds] = (await popup.locator('.permission-request-card__countdown').innerText())
+      .match(/(\d+):(\d{2})/)!
+      .slice(1)
+      .map(Number);
+    return minutes * 60 + seconds;
+  };
   await page.clock.fastForward(10_000);
-  await expect(popup).toContainText('0:05');
+  await expect.poll(countdownSeconds).toBeLessThanOrEqual(50);
+  expect(await countdownSeconds()).toBeGreaterThan(30);
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const automation = page.locator('wa-select[name="permission-automation-action"]');
-  await automation.click();
+  // The floating popup overlaps this form on desktop since the compact header (HS2-9R1F91), so open
+  // the Select through its public API; pointer reachability is tracked separately.
+  await automation.evaluate((select: HTMLElement & { show: () => Promise<void> }) => select.show());
   await expect(automation).toHaveJSProperty('open', true);
   await resetRenderMetrics(page);
+  const beforeTick = await countdownSeconds();
   await page.clock.fastForward(1_000);
-  await expect(popup).toContainText('0:04');
+  await expect.poll(countdownSeconds).toBeLessThanOrEqual(beforeTick - 1);
+  expect(await countdownSeconds()).toBeGreaterThan(0);
   await expect(automation).toHaveJSProperty('open', true);
   expect((await renderMetrics(page))?.passes).toBe(0);
   await page.keyboard.press('Escape');

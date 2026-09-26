@@ -88,9 +88,9 @@ wa-button.workspace-header__text-action::part(base) {
 }
 .workspace-header__sort-group {
   border-radius: var(--wa-border-radius-pill);
-}
-.workspace-header__sort {
-  width: remify(44px);
+  /* Workaround for KF-Y3YZBE: Kerf left-aligns the fixed 32px icon-only Select inside the 44px
+     single group; center it until Kerf owns that composition. */
+  justify-content: center;
 }
 /* The single sort group already paints the pill container/background; keep the Select's own
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes

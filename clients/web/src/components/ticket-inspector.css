@@ -127,8 +127,8 @@
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
-.ticket-inspector__tabs {
-  margin: 0 var(--kui-space-xs) var(--kui-space-xs);
+.ticket-inspector__tabs-frame {
+  padding: 0 var(--kui-space-xs) var(--kui-space-xs);
 }
 .ticket-inspector__tab {
   border-radius: remify(6.4px);

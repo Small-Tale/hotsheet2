@@ -258,7 +258,10 @@ describe('TerminalDrawer', () => {
       focusViewport: { left: 4, top: 18, width: 382, height: 492 },
     } as const;
     const markup = String(
-        TerminalDrawer({ ...base, focusTextSize: { viewport: base.focusViewport, keyboardVisible: false, columns: 60 } }),
+        TerminalDrawer({
+          ...base,
+          focusTextSize: { viewport: base.focusViewport, keyboardVisible: false, columns: 60 },
+        }),
       ),
       css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     // Same control contract as the magnified terminal: cycles columns, keeps the accessible name and

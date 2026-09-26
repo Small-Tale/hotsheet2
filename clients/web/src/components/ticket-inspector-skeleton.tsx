@@ -100,18 +100,20 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
         </div>
       </header>
       <div aria-hidden="true">
-        <TabBar id="ticket-inspector-loading" label="Ticket inspector sections" className="ticket-inspector__tabs">
-          {TABS.map((tab) => (
-            <AppTab
-              id={tab.id}
-              name={tab.label}
-              selected={tab.id === 'info'}
-              closable={false}
-              placeholder
-              leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
-            />
-          ))}
-        </TabBar>
+        <div class="ticket-inspector__tabs-frame">
+          <TabBar id="ticket-inspector-loading" label="Ticket inspector sections" className="ticket-inspector__tabs">
+            {TABS.map((tab) => (
+              <AppTab
+                id={tab.id}
+                name={tab.label}
+                selected={tab.id === 'info'}
+                closable={false}
+                placeholder
+                leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+              />
+            ))}
+          </TabBar>
+        </div>
       </div>
       <div class="ticket-inspector__content" aria-hidden="true">
         <section class="ticket-inspector__metadata" aria-label="Ticket metadata">

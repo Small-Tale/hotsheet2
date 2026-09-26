@@ -17,6 +17,9 @@
   height: 100%;
   margin-block: calc(var(--kui-space-2xs) * -1);
   padding: var(--kui-space-2xs);
+  /* When the strip overflows, focus/selection scrolling stops at the tab's border edge; reserve the
+     same inset so the focus ring of a tab scrolled into view at either end is not clipped. */
+  scroll-padding-inline: var(--kui-space-2xs);
   border: 0;
   border-radius: 0;
   background: transparent;

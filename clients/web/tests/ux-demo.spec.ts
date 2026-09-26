@@ -1159,7 +1159,9 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(dialog).toHaveJSProperty('open', false);
   await show.click();
   await expect(dialog).toHaveJSProperty('open', true);
-  await expect(dialog.locator('.kui-value-table__row')).toHaveCount(4);
+  // One Kerf ListItem per fixture item (Codex chat, AI, Development server); the dialog no longer
+  // composes a ValueTable whose header row made the old count 4.
+  await expect(dialog.locator('.terminal-visibility-dialog__row')).toHaveCount(3);
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -2225,7 +2227,9 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
       comboboxOutlineStyle: comboboxStyle.outlineStyle,
     };
   });
-  expect(geometry.width).toBeGreaterThan(geometry.height);
+  // The icon-only sort group (HS2-06GDW3) is as wide as it is tall, so a true pill is a circle:
+  // the ring must follow the fully rounded group rather than a rectangle.
+  expect(geometry.width).toBeGreaterThanOrEqual(geometry.height);
   expect(Number.parseFloat(geometry.radius)).toBeGreaterThan(geometry.height);
   expect(geometry).toMatchObject({
     outlineStyle: 'solid',
@@ -2237,7 +2241,7 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
     x = Math.max(0, box.x - 12),
     y = Math.max(0, box.y - 12);
   await page.screenshot({
-    path: '/private/tmp/hs2-m1df1d-pill-focus-ring-wide.png',
+    path: test.info().outputPath('hs2-m1df1d-pill-focus-ring-wide.png'),
     clip: { x, y, width: Math.min(360, 1280 - x), height: Math.min(360, 800 - y) },
   });
 });
@@ -3042,12 +3046,14 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
       const header = getComputedStyle(node.querySelector('.ticket-inspector__header')!),
         title = getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),
         tabs = getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),
+        tabsFrame = getComputedStyle(node.querySelector('.ticket-inspector__tabs-frame')!),
         tabRail = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),
         tabSelect = getComputedStyle(node.querySelector('.ticket-inspector__tab .kui-app-tab__select')!);
       return {
         headerBottom: header.paddingBottom,
         titleMargin: [title.marginTop, title.marginLeft],
         tabsMargin: [tabs.marginRight, tabs.marginBottom],
+        tabsInset: [tabsFrame.paddingLeft, tabsFrame.paddingRight, tabsFrame.paddingBottom],
         tabsPadding: tabs.paddingTop,
         tabRailPadding: tabRail.paddingTop,
         tabGap: tabSelect.gap,
@@ -3056,7 +3062,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   ).toEqual({
     headerBottom: '16px',
     titleMargin: ['4px', '16px'],
-    tabsMargin: ['8px', '8px'],
+    tabsMargin: ['0px', '0px'],
+    tabsInset: ['8px', '8px', '8px'],
     tabsPadding: '0px',
     tabRailPadding: '1px',
     tabGap: '4px',
@@ -3999,45 +4006,54 @@ test('keeps the AppShell terminal restore action inside the main column (HS2-3ZG
   await expect(restore).toBeVisible();
 });
 
-test('keeps workspace spacing and the new-ticket action in the page header', async ({ page }) => {
+test('keeps workspace spacing and the new-ticket action in the project tab bar', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=app-shell');
+  // HS2-9R1F91: desktop project views omit the separate page-header row; the view title lives in
+  // the compact main toolbar and the view action sits at the trailing edge of ProjectTabBar.
   const shell = page.locator('[data-component="app-shell"]'),
     workArea = shell.locator('.app-shell__work-area'),
     workspace = shell.locator('.app-shell__workspace'),
-    header = shell.locator('[data-component="heading"]');
+    header = shell.locator('.project-tab-bar');
   await expect(workArea).toHaveAttribute('data-has-composer', 'false');
+  await expect(shell.locator('[data-component="heading"]')).toHaveCount(0);
+  await expect(shell.locator('#app-shell-demo-page-title')).toHaveText('Queue');
   expect(
     await shell.evaluate((node) => {
       const workspace = node.querySelector<HTMLElement>('.app-shell__workspace')!,
-        header = node.querySelector<HTMLElement>('[data-component="heading"]')!,
-        title = header.querySelector('.kui-toolbar-text')!,
-        launcher = header.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,
-        tabs = node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,
-        content = node.querySelector<HTMLElement>('.ticket-inspector__content')!;
+        tabBar = node.querySelector<HTMLElement>('.project-tab-bar')!,
+        launcher = tabBar.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,
+        tabs = node.querySelector<HTMLElement>('.ticket-inspector__tabs-frame')!,
+        content = node.querySelector<HTMLElement>('.ticket-inspector__content')!,
+        bar = tabBar.getBoundingClientRect(),
+        action = launcher.getBoundingClientRect();
       return {
         workspacePaddingTop: getComputedStyle(workspace).paddingTop,
-        titleCenter: title.getBoundingClientRect().y + title.getBoundingClientRect().height / 2,
-        launcherCenter: launcher.getBoundingClientRect().y + launcher.getBoundingClientRect().height / 2,
-        tabsMarginBottom: getComputedStyle(tabs).marginBottom,
+        launcherInsideTabBar: action.top >= bar.top - 1 && action.bottom <= bar.bottom + 1,
+        launcherCenterOffset: Math.abs(action.top + action.height / 2 - (bar.top + bar.height / 2)),
+        launcherTrailing: bar.right - action.right < 64,
+        tabsMarginBottom: getComputedStyle(tabs).paddingBottom,
         contentPaddingTop: getComputedStyle(content).paddingTop,
-        tabsToContent: content.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom,
+        tabsToContent:
+          content.getBoundingClientRect().top -
+          node.querySelector<HTMLElement>('.ticket-inspector__tabs')!.getBoundingClientRect().bottom,
       };
     }),
   ).toEqual({
     workspacePaddingTop: '16px',
-    titleCenter: expect.any(Number),
-    launcherCenter: expect.any(Number),
+    launcherInsideTabBar: true,
+    launcherCenterOffset: expect.any(Number),
+    launcherTrailing: true,
     tabsMarginBottom: '8px',
     contentPaddingTop: '0px',
     tabsToContent: 8,
   });
-  const centers = await header.evaluate((node) => {
-    const title = node.querySelector('.kui-toolbar-text')!.getBoundingClientRect(),
-      button = node.querySelector('button')!.getBoundingClientRect();
-    return Math.abs(title.y + title.height / 2 - (button.y + button.height / 2));
+  const centerOffset = await header.evaluate((node) => {
+    const bar = node.getBoundingClientRect(),
+      action = node.querySelector('[data-component="quick-ticket-composer-launcher"]')!.getBoundingClientRect();
+    return Math.abs(action.top + action.height / 2 - (bar.top + bar.height / 2));
   });
-  expect(centers).toBeLessThan(1);
+  expect(centerOffset).toBeLessThan(1);
   await shell.getByRole('button', { name: 'Columns view' }).click();
   await expect(workspace).toHaveAttribute('data-presentation', 'edge-to-edge');
   expect(
@@ -4046,7 +4062,7 @@ test('keeps workspace spacing and the new-ticket action in the page header', asy
       boardTop: node.querySelector('.ticket-board')!.getBoundingClientRect().top - node.getBoundingClientRect().top,
     })),
   ).toEqual({ paddingTop: '16px', boardTop: 16 });
-  await page.screenshot({ path: '/private/tmp/hs2-f943hj-owned-spacing-wide.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('hs2-f943hj-owned-spacing-wide.png'), fullPage: true });
   await shell.getByRole('button', { name: 'Settings view' }).click();
   await expect(header.getByRole('button', { name: /New ticket/ })).toHaveCount(0);
   await expect(workspace).toHaveCSS('padding-top', '16px');
@@ -4068,7 +4084,7 @@ test('keeps workspace spacing and the new-ticket action in the page header', asy
     });
   });
   await expect(workspace).toHaveCSS('padding-top', '16px');
-  await page.screenshot({ path: '/private/tmp/hs2-f943hj-owned-spacing-narrow.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('hs2-f943hj-owned-spacing-narrow.png'), fullPage: true });
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {

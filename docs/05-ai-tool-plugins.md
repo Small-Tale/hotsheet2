@@ -115,17 +115,18 @@ instead of one copy per tool:
   the same way by `hotsheet setup` and the server's project-open refresh
   (`hotsheet_plugins::enabled_plugins_from_setting`):
 
-  | Setting value | Meaning |
-  | --- | --- |
-  | absent or `null` | no restriction — refresh only adds or repairs |
-  | `[]` | no tool enabled — refresh removes every tool's managed artifacts |
-  | `["codex", …]` | only the listed ids are enabled (non-string entries are ignored) |
-  | any other value (malformed) | treated as absent, so a corrupt setting never deletes setup |
+  | Setting value               | Meaning                                                          |
+  | --------------------------- | ---------------------------------------------------------------- |
+  | absent or `null`            | no restriction — refresh only adds or repairs                    |
+  | `[]`                        | no tool enabled — refresh removes every tool's managed artifacts |
+  | `["codex", …]`              | only the listed ids are enabled (non-string entries are ignored) |
+  | any other value (malformed) | treated as absent, so a corrupt setting never deletes setup      |
 
   With `[]`, `setup --detect` fails with a "no detected AI tool is enabled" error instead
   of "none detected", and `bootstrap` reports that nothing is enabled and still completes
   project/store setup. No Hot Sheet client or server writes `[]` as a default; the key is
   omitted until a project opts into a list. Explicit `setup <tool>` ignores the list.
+
 - **Disabled tools leave no managed artifacts (HS2-ZTGX6P).** Refresh also removes a
   disabled tool's other wholly Hot Sheet-owned artifacts, so it stops counting as
   previously managed and cannot be half re-enabled later:
@@ -144,6 +145,7 @@ instead of one copy per tool:
   enabled tool also declares is never removed. Re-enabling a detected tool makes the next
   refresh write the complete layout again; an undetected tool needs an explicit
   `hotsheet setup <tool>`, because nothing marks it as previously managed any more.
+
 - **Refresh reports what it removed (HS2-CAM9J5).** The core refresh returns a
   `RefreshReport`: the tools it set up, plus one `RemovalReport` per disabled tool that had
   something to remove, listing project-relative paths it `removed` (deleted outright) and
