@@ -296,6 +296,18 @@ impl Index {
         Ok(())
     }
 
+    /// Every indexed ticket row of this store (all statuses, Trash included) — the same
+    /// population a full store walk parses, answered without opening a ticket file. `GET
+    /// /health` falls back to it while its bounded store scan is still running (HS2-9PPDR1).
+    pub fn ticket_count(&self) -> Result<usize, IndexError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM tickets WHERE store_id=?1",
+            params![self.store_id],
+            |r| r.get(0),
+        )?;
+        Ok(usize::try_from(count).unwrap_or(0))
+    }
+
     /// The stored content hash for a ticket, or `None` if not indexed (change detection).
     pub fn content_hash(&self, id: &Ulid) -> Result<Option<String>, IndexError> {
         Ok(self

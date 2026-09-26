@@ -210,6 +210,16 @@ backend that receives 401/403 probes this marker so it can distinguish a bad HS2
 from an HS1/wrong-service endpoint instead of giving generic credential advice
 (HS2-8H8BQM).
 
+`/health` also reports the primary store's healthy `tickets` count and its unparseable
+`corrupt` files (HS2-PRVPCQ). That listing parses every ticket file, so it never runs on
+an async request thread and never makes the probe wait on a large or blocked store
+(HS2-9PPDR1): it runs single-flight on the blocking pool (concurrent probes share the scan
+in flight) and is awaited for at most 250 ms. The additive `listing` field says where the
+counts came from: `"fresh"` (a scan finished within the budget), `"cached"` (the scan is
+still running; these are the last completed scan's results), or `"index"` (no scan has
+completed yet; `tickets` is the index's row count and `corrupt` is empty). Every other
+field keeps its wire shape.
+
 A thin binary that wraps the core and is the **always-on service** every GUI talks
 to — **local use included**. It runs completely independently of any client (a
 chartered goal, made absolute by the maintainer 2026-08-19: there is no

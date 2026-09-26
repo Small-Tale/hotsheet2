@@ -11,6 +11,7 @@ pub mod commands;
 mod custom_views;
 pub mod dist_work_loop;
 pub mod github_app_config;
+mod health_scan;
 pub mod lifecycle;
 pub mod media;
 pub mod multistore;
@@ -165,6 +166,8 @@ pub struct AppState {
     /// Coordinates client-requested upgrades. Mutation admission closes atomically before
     /// quiescence is checked, so no new write or process launch can race a safe restart.
     lifecycle: Arc<LifecycleControl>,
+    /// Single-flight, bounded primary-store listing behind `GET /health` (HS2-9PPDR1).
+    health_scan: Arc<health_scan::HealthScan>,
 }
 
 type LocalWriteKey = (String, String, String);
@@ -300,6 +303,7 @@ impl AppState {
             )),
             client_drives: client_drive::ClientDriveManager::default(),
             lifecycle: Arc::new(LifecycleControl::default()),
+            health_scan: Arc::default(),
         }
     }
 
@@ -1637,26 +1641,85 @@ async fn require_secret(
 // ---- handlers --------------------------------------------------------------------
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
-    // Resilient enumeration (HS2-PRVPCQ): a single corrupt ticket file must not make the
-    // whole store un-openable. Count the healthy tickets and surface any unparseable files
-    // separately instead of hard-failing the project.
-    let listing = state.store.list_tickets_resilient()?;
     let metadata = state.store.metadata()?;
+    let (listing, source) = state.health_listing().await?;
     Ok(Json(serde_json::json!({
         "status": "ok",
         "generation": "hs2",
         "api_version": 1,
         "ticket_prefix": metadata.ticket_prefix,
         "store_schema": metadata.schema_version,
-        "tickets": listing.tickets.len(),
-        "corrupt": listing.corrupt.iter().map(|c| serde_json::json!({
-            "path": c.path.display().to_string(),
-            "id": c.id.map(|id| id.to_string()),
-            "slug": c.slug,
-            "error": c.error,
-            "error_code": c.error_code,
-        })).collect::<Vec<_>>()
+        "tickets": listing.tickets,
+        "corrupt": listing.corrupt,
+        "listing": source,
     })))
+}
+
+impl AppState {
+    /// The primary store's ticket count and corrupt files for `GET /health`.
+    ///
+    /// Resilient enumeration (HS2-PRVPCQ): a single corrupt ticket file must not make the
+    /// whole store un-openable, so healthy tickets are counted and unparseable files are
+    /// surfaced separately. That walk parses every ticket, so it runs on the blocking pool,
+    /// single-flight, and is awaited only for [`health_scan::HEALTH_SCAN_BUDGET`]
+    /// (HS2-9PPDR1): a large or blocked store never stalls the liveness probe. Past the
+    /// budget the answer is the last completed scan (`"cached"`), or, before any scan has
+    /// completed, the index's row count with no corrupt entries (`"index"`).
+    async fn health_listing(
+        &self,
+    ) -> Result<(Arc<health_scan::HealthListing>, &'static str), ApiError> {
+        use health_scan::{HealthListing, Resolution, ScanFailure};
+        let store = self.store.clone();
+        let resolution = self
+            .health_scan
+            .resolve(move || {
+                let listing = store.list_tickets_resilient().map_err(|error| {
+                    let error = ApiError::from(error);
+                    ScanFailure {
+                        status: error.status,
+                        message: error.message,
+                    }
+                })?;
+                Ok(Arc::new(HealthListing {
+                    tickets: listing.tickets.len(),
+                    corrupt: listing
+                        .corrupt
+                        .iter()
+                        .map(|c| {
+                            serde_json::json!({
+                                "path": c.path.display().to_string(),
+                                "id": c.id.map(|id| id.to_string()),
+                                "slug": c.slug,
+                                "error": c.error,
+                                "error_code": c.error_code,
+                            })
+                        })
+                        .collect(),
+                }))
+            })
+            .await;
+        match resolution {
+            Resolution::Fresh(Ok(listing)) => Ok((listing, "fresh")),
+            Resolution::Fresh(Err(failure)) => Err(ApiError::new(failure.status, failure.message)),
+            Resolution::Cached(listing) => Ok((listing, "cached")),
+            Resolution::Pending => {
+                let tickets = self
+                    .index
+                    .lock()
+                    .map_err(|_| {
+                        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned")
+                    })?
+                    .ticket_count()?;
+                Ok((
+                    Arc::new(HealthListing {
+                        tickets,
+                        corrupt: Vec::new(),
+                    }),
+                    "index",
+                ))
+            }
+        }
+    }
 }
 
 struct ActiveMutation(Arc<LifecycleControl>);

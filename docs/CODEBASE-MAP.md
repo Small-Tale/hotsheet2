@@ -203,6 +203,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ)
       src/request_performance_tests.rs # Detail/backlink/terminal-launch concurrency regressions (HS2-Y7W3Z4)
+      src/health_scan.rs     #   GET /health primary-store listing: single-flight blocking-pool scan awaited under a 250 ms budget, then the last completed scan or the index count (HS2-9PPDR1)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). locations() = cheap id+root mapping (no ticket parse) for hot paths; list() parses counts outside the stores lock so detail reads never serialize behind an all-stores scan (HS2-P6N7FR); summaries() = id+root+prefix with no ticket parse, used by GET /providers, while the counting list()/info() run on the blocking pool for GET/POST /stores (HS2-4XXRJP). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up) + ≤6-hourly purge_all_trash retention sweep (HS2-MWDR19)
       tests/broker_startup.rs # Real server subprocess with long configured home: private short socket, home-based state, terminal-preserving restart, isolated process cleanup
@@ -297,7 +298,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   loopback only). Queries go through the file-backed SQLite index (restored + reconciled
   on launch), with `ops` as the write path. Unauthenticated `/health` returns the HS2
   generation/API marker plus non-secret store prefix/schema so MCP clients can diagnose
-  wrong-secret vs. HS1/wrong-endpoint failures (HS2-8H8BQM).
+  wrong-secret vs. HS1/wrong-endpoint failures (HS2-8H8BQM); its ticket/corrupt listing is
+  a budgeted blocking-pool scan tagged `listing: fresh|cached|index` (HS2-9PPDR1).
 - **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
   headless default) **or** `--server <url> --secret <s>` (proxy a running server).
   Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project.

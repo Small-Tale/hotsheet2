@@ -91,6 +91,24 @@ fn rebuild_indexes_every_ticket() {
 }
 
 #[test]
+fn ticket_count_tracks_every_indexed_row_through_upsert_delete_and_rebuild() {
+    let (_d, store, ix) = seeded();
+    // Completed tickets count too: the count mirrors the full store walk.
+    assert_eq!(ix.ticket_count().unwrap(), 3);
+    let first = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    ix.delete(&first).unwrap();
+    assert_eq!(ix.ticket_count().unwrap(), 2);
+    // Deleting an absent row is a no-op; a rebuild restores the file-backed population.
+    ix.delete(&first).unwrap();
+    assert_eq!(ix.ticket_count().unwrap(), 2);
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(ix.ticket_count().unwrap(), 3);
+    // An empty index counts zero.
+    let other = Index::open_in_memory("s2").unwrap();
+    assert_eq!(other.ticket_count().unwrap(), 0);
+}
+
+#[test]
 fn reopened_ticket_projects_cleared_lifecycle_timestamps() {
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");

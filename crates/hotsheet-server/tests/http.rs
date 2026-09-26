@@ -611,6 +611,10 @@ async fn health_needs_no_secret() {
     assert_eq!(health["api_version"], 1);
     assert_eq!(health["ticket_prefix"], "HS");
     assert_eq!(health["store_schema"], STORE_SCHEMA_VERSION);
+    // A small store's resilient listing finishes inside the probe budget (HS2-9PPDR1).
+    assert_eq!(health["listing"], "fresh");
+    assert_eq!(health["tickets"], 0);
+    assert_eq!(health["corrupt"], serde_json::json!([]));
 }
 
 #[tokio::test]
@@ -1851,6 +1855,154 @@ fn providers_skip_ticket_parsing_and_a_stores_scan_does_not_stall_health() {
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!(
             "a request blocked on the planted ticket pipe: /providers parsed tickets or \
              /stores scanned on the request thread"
+        ),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("the request flow panicked (see the assertion output above)")
+        }
+    }
+}
+
+/// HS2-9PPDR1: `GET /health` never waits on a full primary-store ticket parse. The
+/// resilient listing runs single-flight on the blocking pool under a short budget; past it
+/// the probe answers from the index (before any scan completed) or the last completed
+/// scan. A named pipe planted in the primary store's ticket tree blocks every ticket parse
+/// until the test opens it, so the walk crosses pending -> fresh -> cached. The flow runs
+/// on a current-thread runtime with an outer deadline (see the `/providers` test above).
+#[cfg(unix)]
+#[test]
+fn health_answers_while_the_primary_store_scan_is_blocked() {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    let (dir, st) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let pipe_open = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    let flow_open = pipe_open.clone();
+    let flow_done = done.clone();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (flow_open, flow_done) = (flow_open.clone(), flow_done.clone());
+        let (outer_open, outer_done) = (flow_open.clone(), flow_done.clone());
+        runtime.block_on(async move {
+            let app = app(st);
+            for title in ["first", "second"] {
+                let body = serde_json::json!({ "title": title }).to_string();
+                let resp = app
+                    .clone()
+                    .oneshot(authed("POST", "/tickets", Some(&body)))
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::CREATED);
+            }
+            let fifo = plant_ticket_fifo(&store);
+
+            // While the pipe is held open, keep opening non-blocking writers so every
+            // blocked reader sees EOF; the empty file then reports as corrupt.
+            let unblocker_fifo = fifo.clone();
+            let unblocker_open = flow_open.clone();
+            let unblocker_done = flow_done.clone();
+            std::thread::spawn(move || {
+                while !unblocker_done.load(Ordering::Acquire) {
+                    if unblocker_open.load(Ordering::Acquire) {
+                        let _ = std::fs::OpenOptions::new()
+                            .write(true)
+                            .custom_flags(libc::O_NONBLOCK)
+                            .open(&unblocker_fifo);
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            });
+
+            let probe = |app: axum::Router| async move {
+                let started = Instant::now();
+                let resp = app
+                    .oneshot(
+                        Request::builder()
+                            .uri("/health")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                let health = body_json(resp).await;
+                assert_eq!(health["status"], "ok");
+                assert_eq!(health["ticket_prefix"], "HS");
+                (health, started.elapsed())
+            };
+
+            // Pending: no scan has ever completed, so the count comes from the index and
+            // no corrupt entries are claimed. Concurrent probes share the one blocked scan.
+            for _ in 0..3 {
+                let (health, elapsed) = probe(app.clone()).await;
+                assert_eq!(health["listing"], "index", "{health}");
+                assert_eq!(health["tickets"], 2);
+                assert_eq!(health["corrupt"], serde_json::json!([]));
+                assert!(elapsed < Duration::from_secs(2), "probe took {elapsed:?}");
+            }
+
+            // Fresh: once the pipe opens, the scan finishes and reports the pipe (an empty
+            // ticket file) as corrupt beside the two healthy tickets.
+            flow_open.store(true, Ordering::Release);
+            let mut fresh = None;
+            for _ in 0..100 {
+                let (health, _) = probe(app.clone()).await;
+                if health["listing"] == "fresh" {
+                    fresh = Some(health);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            let fresh = fresh.expect("a fresh listing once the pipe opens");
+            assert_eq!(fresh["tickets"], 2);
+            let corrupt = fresh["corrupt"].as_array().unwrap();
+            assert_eq!(corrupt.len(), 1, "{fresh}");
+            assert_eq!(
+                corrupt[0]["path"].as_str().unwrap(),
+                fifo.display().to_string()
+            );
+
+            // Cached: block the pipe again; the next scans hang, and the probe answers
+            // promptly from the last completed listing.
+            flow_open.store(false, Ordering::Release);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let mut cached = None;
+            for _ in 0..20 {
+                let (health, elapsed) = probe(app.clone()).await;
+                assert!(elapsed < Duration::from_secs(2), "probe took {elapsed:?}");
+                if health["listing"] == "cached" {
+                    cached = Some(health);
+                    break;
+                }
+            }
+            let cached = cached.expect("a cached listing while the scan is blocked");
+            assert_eq!(cached["tickets"], fresh["tickets"]);
+            assert_eq!(cached["corrupt"], fresh["corrupt"]);
+        });
+        // Release every leaked reader of the pipe, then stop without waiting for them.
+        outer_open.store(true, Ordering::Release);
+        std::thread::sleep(Duration::from_millis(50));
+        outer_done.store(true, Ordering::Release);
+        runtime.shutdown_background();
+        let _ = tx.send(Ok(()));
+    });
+
+    let outcome = rx.recv_timeout(Duration::from_secs(30));
+    pipe_open.store(true, Ordering::Release);
+    std::thread::sleep(Duration::from_millis(50));
+    done.store(true, Ordering::Release);
+    match outcome {
+        Ok(result) => result.unwrap(),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!(
+            "/health blocked on the planted ticket pipe: the resilient listing ran on the \
+             request thread or was awaited without a budget"
         ),
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
             panic!("the request flow panicked (see the assertion output above)")
