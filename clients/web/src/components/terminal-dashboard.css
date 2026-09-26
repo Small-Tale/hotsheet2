@@ -421,6 +421,17 @@
   backdrop-filter: none;
   place-items: stretch;
 }
+/* Black out the whole viewport behind the phone magnified terminal so the app never shows around
+   it, e.g. between the keyboard-shrunk terminal and the keyboard (HS2-SB1FSQ, like HS2-JQPRXV). The
+   backdrop lives in the overlay's own z-index stacking context, behind its terminal tile; the
+   desktop semi-transparent scrim is unchanged. */
+.terminal-dashboard__magnified[data-mobile='true']::before {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background: var(--hs-terminal-background);
+}
 .terminal-dashboard__magnified[data-mobile='true'][data-keyboard-visible='true'] {
   padding-bottom: 0;
 }

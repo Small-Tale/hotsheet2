@@ -238,6 +238,10 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     };
   });
   delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
+    // Only the desktop scrim dismisses on click-away. The phone overlay is a full-bleed terminal
+    // whose blackout backdrop and safe-area insets are not a scrim, and it has an explicit Close
+    // (HS2-SB1FSQ).
+    if (data(target).mobile === 'true') return;
     if (event.target === target) magnifiedTerminalKey.value = undefined;
   });
   delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {

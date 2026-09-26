@@ -1064,11 +1064,15 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
     await expect(viewport).toHaveAttribute('data-pty-size', new RegExp(`^${columns}x\\d+$`));
     expect(await page.evaluate(() => localStorage.getItem('hotsheet.terminals.mobile-columns'))).toBe(String(columns));
     if (columns === 40) {
-      const screen = await viewport.evaluate((element) => {
-        const box = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
-          frame = element.getBoundingClientRect();
-        return { left: box.left - frame.left, right: frame.right - box.right, scale: element.dataset.physicalScale };
-      });
+      const measure = () =>
+        viewport.evaluate((element) => {
+          const box = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+            frame = element.getBoundingClientRect();
+          return { left: box.left - frame.left, right: frame.right - box.right, scale: element.dataset.physicalScale };
+        });
+      // The grid-size attribute updates before the width-fit transform settles, so wait for the fit.
+      await expect.poll(async () => Math.abs((await measure()).left)).toBeLessThanOrEqual(1);
+      const screen = await measure();
       expect(Math.abs(screen.left)).toBeLessThanOrEqual(1);
       expect(Math.abs(screen.right)).toBeLessThanOrEqual(1);
       expect(Number(screen.scale)).toBeGreaterThan(1);
@@ -1097,6 +1101,18 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   await expect.poll(async () => (await magnified.boundingBox())?.height).toBe(500);
   await expect.poll(rowsOf).toBeLessThan(fullRows);
   await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+  // The app must not show in the gap between the shrunken terminal and the keyboard: a full-viewport
+  // terminal-colored backdrop covers it (HS2-SB1FSQ), and tapping it does not dismiss the terminal.
+  const gapHit = await magnified.evaluate((overlay) => {
+    const hit = document.elementFromPoint(195, 700);
+    return Boolean(hit && (hit === overlay || overlay.contains(hit)));
+  });
+  expect(gapHit).toBe(true);
+  expect(await magnified.evaluate((overlay) => getComputedStyle(overlay, '::before').backgroundColor)).toBe(
+    chrome.terminalBackground,
+  );
+  await page.mouse.click(195, 700);
+  await expect(magnified).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-keyboard.png') });
 
   // Dismissing the keyboard restores the full-height overlay and its toolbar.

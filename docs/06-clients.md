@@ -2218,7 +2218,9 @@ phone's interactive terminal.
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
 shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the
 terminal behind it. It is full-bleed on the terminal background color (no inset ring or dimmed
-scrim), pads for the device safe areas (dropping the bottom inset while the keyboard covers it),
+scrim), and a full-viewport backdrop in that color blacks out the app behind it, so nothing shows in
+a gap between the shrunken terminal and the keyboard. Unlike the desktop scrim, tapping the overlay
+outside the terminal never dismisses it; Close does (HS2-SB1FSQ). It pads for the device safe areas (dropping the bottom inset while the keyboard covers it),
 and clips rather than scrolls its scaled xterm root so a focus scroll or touch cannot pan the
 terminal sideways off screen. The card footer becomes a **top toolbar** carrying **Close**
 (Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small`; the
