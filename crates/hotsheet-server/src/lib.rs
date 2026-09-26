@@ -5608,20 +5608,28 @@ struct AddStoreBody {
 
 /// `POST /stores` — open a store at `path` (building its own in-memory index) and host it.
 /// Idempotent: registering an already-hosted store just returns it.
+///
+/// Hosting a new store opens and reconciles (or rebuilds) its index, which parses every
+/// ticket file, and the response counts the added store's tickets. Both run on the blocking
+/// pool, so registering a large store never occupies an async request thread (HS2-4XXRJP,
+/// HS2-GM4FR2).
 async fn add_store(
     State(state): State<AppState>,
     Json(body): Json<AddStoreBody>,
 ) -> Result<(StatusCode, Json<StoreInfo>), ApiError> {
-    let store = FsStore::open(&body.path)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let id = multistore::store_url_id(&store);
-    let newly = state.host_store(store)?;
-    // Count only the added store, off the request threads (HS2-4XXRJP).
-    let host = state.host.clone();
-    let info = tokio::task::spawn_blocking(move || host.info(&id))
-        .await
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "store vanished"))?;
+    let (newly, info) = tokio::task::spawn_blocking(move || {
+        let store = FsStore::open(&body.path)
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+        let id = multistore::store_url_id(&store);
+        let newly = state.host_store(store)?;
+        let info = state
+            .host
+            .info(&id)
+            .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "store vanished"))?;
+        Ok::<_, ApiError>((newly, info))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let code = if newly {
         StatusCode::CREATED
     } else {

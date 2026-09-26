@@ -1862,6 +1862,154 @@ fn providers_skip_ticket_parsing_and_a_stores_scan_does_not_stall_health() {
     }
 }
 
+/// HS2-GM4FR2: `POST /stores` builds the new store's index (a full ticket parse) on the
+/// blocking pool. A named pipe planted in the store before it is registered blocks that
+/// parse; `/health` and `GET /providers` keep answering, and two concurrent registrations
+/// of the same store resolve to one `201 Created` and one idempotent `200 OK` once the pipe
+/// opens. Runs on a current-thread runtime with an outer deadline (see the `/providers`
+/// test above), so a synchronous registration turns into a clean failure.
+#[cfg(unix)]
+#[test]
+fn registering_a_blocked_store_does_not_stall_other_requests() {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    let (_d, st) = state();
+    let second_dir = tempfile::tempdir().unwrap();
+    let second = FsStore::init(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let second_root = second.root().display().to_string();
+    let fifo = plant_ticket_fifo(&second);
+    let register_body = serde_json::json!({ "path": second_dir.path() }).to_string();
+    let release = Arc::new(AtomicBool::new(false));
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    let flow_release = release.clone();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let unblocker_release = flow_release.clone();
+        runtime.block_on(async move {
+            let app = app(st);
+            let first = tokio::spawn(app.clone().oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&register_body),
+            )));
+            let second_registration = tokio::spawn(app.clone().oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&register_body),
+            )));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(
+                !first.is_finished() && !second_registration.is_finished(),
+                "both registrations should still be waiting on the pipe"
+            );
+
+            // Other requests keep answering while the index build is blocked.
+            let health = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(health.status(), StatusCode::OK);
+            assert_eq!(body_json(health).await["status"], "ok");
+            let providers = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(
+                providers.as_array().unwrap().len(),
+                1,
+                "the blocked store is not hosted yet: {providers}"
+            );
+            assert!(!first.is_finished() && !second_registration.is_finished());
+
+            // Release the pipe: every reader sees EOF, so the empty file is skipped as
+            // corrupt and the store registers with zero healthy tickets.
+            std::thread::spawn(move || {
+                while !unblocker_release.load(Ordering::Acquire) {
+                    let _ = std::fs::OpenOptions::new()
+                        .write(true)
+                        .custom_flags(libc::O_NONBLOCK)
+                        .open(&fifo);
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            });
+            let mut statuses = Vec::new();
+            for registration in [first, second_registration] {
+                let resp = tokio::time::timeout(Duration::from_secs(10), registration)
+                    .await
+                    .expect("registration finishes once the pipe is released")
+                    .unwrap()
+                    .unwrap();
+                statuses.push(resp.status());
+                let info = body_json(resp).await;
+                assert_eq!(info["root"], second_root.as_str());
+                assert_eq!(info["prefix"], "BB");
+                assert_eq!(info["tickets"], 0);
+            }
+            statuses.sort();
+            assert_eq!(statuses, vec![StatusCode::OK, StatusCode::CREATED]);
+
+            // The store is now hosted exactly once.
+            let providers = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let providers = providers.as_array().unwrap();
+            assert_eq!(providers.len(), 2, "{providers:?}");
+            assert_eq!(
+                providers
+                    .iter()
+                    .filter(|p| p["locator"] == second_root.as_str())
+                    .count(),
+                1
+            );
+
+            // A missing path still fails as a bad request from the blocking task.
+            let missing = second_dir.path().join("does-not-exist");
+            let body = serde_json::json!({ "path": missing }).to_string();
+            let resp = app
+                .clone()
+                .oneshot(authed("POST", "/stores", Some(&body)))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        });
+        flow_release.store(true, Ordering::Release);
+        runtime.shutdown_background();
+        let _ = tx.send(Ok(()));
+    });
+
+    let outcome = rx.recv_timeout(Duration::from_secs(30));
+    release.store(true, Ordering::Release);
+    match outcome {
+        Ok(result) => result.unwrap(),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!(
+            "a request blocked on the planted ticket pipe: POST /stores built the index on \
+             the request thread"
+        ),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("the request flow panicked (see the assertion output above)")
+        }
+    }
+}
+
 /// HS2-9PPDR1: `GET /health` never waits on a full primary-store ticket parse. The
 /// resilient listing runs single-flight on the blocking pool under a short budget; past it
 /// the probe answers from the index (before any scan completed) or the last completed
