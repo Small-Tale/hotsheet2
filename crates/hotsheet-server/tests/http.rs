@@ -1707,6 +1707,157 @@ async fn providers_expose_capabilities_and_route_the_default_git_provider() {
     assert_eq!(listed[0]["qualified_id"], created["qualified_id"]);
 }
 
+/// Plant a named pipe where a ticket file belongs. Opening it for reading blocks until a
+/// writer appears, so a code path that parses tickets hangs on it deterministically.
+#[cfg(unix)]
+fn plant_ticket_fifo(store: &FsStore) -> std::path::PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    let path = store.ticket_path(&hotsheet_model::Ulid::new());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+    // SAFETY: `c_path` is a valid NUL-terminated path that outlives the call.
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+    path
+}
+
+/// HS2-4XXRJP: `/providers` is served from store metadata without opening a single ticket
+/// file, and the ticket-counting `/stores` scan runs off the request threads so `/health`
+/// answers while it is still in progress.
+///
+/// A named pipe planted in a hosted store's ticket tree makes any ticket parse block until
+/// the test releases it. The server runs on a **current-thread** runtime, so a synchronous
+/// scan on the request path would freeze every other request; the whole flow therefore
+/// runs on its own thread with an outer deadline, turning such a regression into a clean
+/// failure instead of a hung test.
+#[cfg(unix)]
+#[test]
+fn providers_skip_ticket_parsing_and_a_stores_scan_does_not_stall_health() {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    let (_d, st) = state();
+    let second_dir = tempfile::tempdir().unwrap();
+    let second = FsStore::init(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let second_root = second.root().display().to_string();
+    let register_body = serde_json::json!({ "path": second_dir.path() }).to_string();
+    let release = Arc::new(AtomicBool::new(false));
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    let flow_release = release.clone();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let unblocker_release = flow_release.clone();
+        runtime.block_on(async move {
+            let app = app(st);
+            let resp = app
+                .clone()
+                .oneshot(authed("POST", "/stores", Some(&register_body)))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CREATED);
+            let fifo = plant_ticket_fifo(&second);
+
+            // `/providers` answers with the same descriptors it always had, without
+            // touching the planted pipe.
+            let providers = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let providers = providers.as_array().unwrap();
+            assert_eq!(providers.len(), 2, "{providers:?}");
+            let hosted = providers
+                .iter()
+                .find(|p| p["locator"] == second_root.as_str())
+                .expect("registered store is listed as a provider");
+            assert_eq!(hosted["provider"], "git");
+            assert_eq!(hosted["display_name"], "BB git tickets");
+            assert_eq!(hosted["default"], false);
+            assert_eq!(hosted["capabilities"]["claims"], true);
+            let primary = providers
+                .iter()
+                .find(|p| p["locator"] != second_root.as_str())
+                .unwrap();
+            assert_eq!(primary["display_name"], "HS git tickets");
+            assert_eq!(primary["default"], true);
+
+            // Start a `/stores` scan; it blocks on the pipe inside its blocking task.
+            let scan = tokio::spawn(app.clone().oneshot(authed("GET", "/stores", None)));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(
+                !scan.is_finished(),
+                "the scan should still be waiting on the pipe"
+            );
+
+            // `/health` still answers while the scan is in flight.
+            let health = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(health.status(), StatusCode::OK);
+            assert_eq!(body_json(health).await["status"], "ok");
+            assert!(!scan.is_finished());
+
+            // Release every reader of the pipe (the scan, and any watcher that opened it):
+            // each non-blocking writer open unblocks the waiting readers, whose reads then
+            // see EOF, so the empty file is reported as corrupt and skipped.
+            std::thread::spawn(move || {
+                while !unblocker_release.load(Ordering::Acquire) {
+                    let _ = std::fs::OpenOptions::new()
+                        .write(true)
+                        .custom_flags(libc::O_NONBLOCK)
+                        .open(&fifo);
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            });
+            let resp = tokio::time::timeout(Duration::from_secs(10), scan)
+                .await
+                .expect("the scan finishes once the pipe is released")
+                .unwrap()
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let stores = body_json(resp).await;
+            let stores = stores.as_array().unwrap();
+            assert_eq!(stores.len(), 2);
+            let counted = stores
+                .iter()
+                .find(|s| s["root"] == second_root.as_str())
+                .unwrap();
+            assert_eq!(counted["prefix"], "BB");
+            assert_eq!(counted["tickets"], 0);
+        });
+        flow_release.store(true, Ordering::Release);
+        // Do not wait for a leaked blocking reader (e.g. a watcher) on shutdown.
+        runtime.shutdown_background();
+        let _ = tx.send(Ok(()));
+    });
+
+    let outcome = rx.recv_timeout(Duration::from_secs(30));
+    release.store(true, Ordering::Release);
+    match outcome {
+        Ok(result) => result.unwrap(),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!(
+            "a request blocked on the planted ticket pipe: /providers parsed tickets or \
+             /stores scanned on the request thread"
+        ),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("the request flow panicked (see the assertion output above)")
+        }
+    }
+}
+
 #[tokio::test]
 async fn checkout_registry_is_authenticated_and_resolvable() {
     let (_d, st) = state();

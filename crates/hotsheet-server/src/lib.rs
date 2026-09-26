@@ -525,13 +525,18 @@ impl AppState {
     }
 
     /// The `(url-id, root-path)` of every hosted store — the set the background sync loop
-    /// iterates.
+    /// iterates (sync, Trash purge, distributed work), sorted by id. Read from the store
+    /// registry alone: the loops open each store themselves, so parsing every ticket just
+    /// to enumerate roots was wasted work on every pass (HS2-4XXRJP).
     pub fn hosted_store_roots(&self) -> Vec<(String, String)> {
-        self.host
-            .list()
+        let mut roots: Vec<(String, String)> = self
+            .host
+            .locations()
             .into_iter()
-            .map(|s| (s.id, s.root))
-            .collect()
+            .map(|(id, root)| (id, root.display().to_string()))
+            .collect();
+        roots.sort_by(|a, b| a.0.cmp(&b.0));
+        roots
     }
 
     /// Effective automatic Trash retention for a hosted store. A store may be shared by
@@ -1984,9 +1989,15 @@ async fn post_announce(
 
 // ---- multi-store (HS2-87) --------------------------------------------------------
 
-/// `GET /stores` — the stores this machine server hosts.
-async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
-    Json(state.host.list())
+/// `GET /stores` — the stores this machine server hosts, with ticket counts. Counting
+/// parses every ticket in every store, so it runs on a blocking thread and never stalls
+/// `/health` or other requests (HS2-4XXRJP).
+async fn list_stores(State(state): State<AppState>) -> Result<Json<Vec<StoreInfo>>, ApiError> {
+    let host = state.host.clone();
+    tokio::task::spawn_blocking(move || host.list())
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2232,9 +2243,10 @@ async fn list_providers(
             .descriptors()
             .iter()
             .any(|descriptor| descriptor.default);
+    // Store metadata only — never a ticket parse (HS2-4XXRJP).
     let mut descriptors = state
         .host
-        .list()
+        .summaries()
         .into_iter()
         .map(|info| {
             let is_default = info.id == default_id && !external_default;
@@ -5541,11 +5553,11 @@ async fn add_store(
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let id = multistore::store_url_id(&store);
     let newly = state.host_store(store)?;
-    let info = state
-        .host
-        .list()
-        .into_iter()
-        .find(|s| s.id == id)
+    // Count only the added store, off the request threads (HS2-4XXRJP).
+    let host = state.host.clone();
+    let info = tokio::task::spawn_blocking(move || host.info(&id))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "store vanished"))?;
     let code = if newly {
         StatusCode::CREATED

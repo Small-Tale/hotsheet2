@@ -88,6 +88,47 @@ pub struct StoreInfo {
 }
 
 impl StoreInfo {
+    /// Count a store's healthy tickets. This parses **every** ticket file, so a caller on
+    /// an async request path must run it off the runtime (`spawn_blocking`).
+    fn counted(id: String, store: &FsStore) -> Self {
+        let HostedStore { id, root, prefix } = HostedStore::of(id, store);
+        Self {
+            id,
+            root,
+            prefix,
+            // Resilient count (HS2-PRVPCQ): a corrupt file used to zero the whole
+            // store's ticket count; count the healthy tickets instead.
+            tickets: store
+                .list_tickets_resilient()
+                .map(|l| l.tickets.len())
+                .unwrap_or(0),
+        }
+    }
+}
+
+/// A hosted store's identity and metadata, read **without parsing any ticket file**. This
+/// is everything `GET /providers` needs: one small metadata read per store instead of a
+/// parse of every ticket (HS2-4XXRJP).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostedStore {
+    pub id: String,
+    pub root: String,
+    pub prefix: String,
+}
+
+impl HostedStore {
+    fn of(id: String, store: &FsStore) -> Self {
+        Self {
+            id,
+            root: store.root().display().to_string(),
+            prefix: store
+                .metadata()
+                .map(|m| m.ticket_prefix)
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The built-in git provider descriptor for this store.
     pub fn provider_descriptor(&self, is_default: bool) -> hotsheet_ticketing::ProviderDescriptor {
         hotsheet_ticketing::ProviderDescriptor {
             connection_id: self.id.clone(),
@@ -162,38 +203,48 @@ impl StoreHost {
             .collect()
     }
 
-    /// A listing of the hosted stores (id, root, prefix, ticket count), sorted by id for
-    /// a deterministic response. The per-store ticket parse runs **after** the `stores`
-    /// lock is released (stores are cheap to clone) so counting tickets for `GET /stores`
-    /// never blocks concurrent detail reads (HS2-P6N7FR).
-    pub fn list(&self) -> Vec<StoreInfo> {
-        let entries: Vec<(String, FsStore)> = {
-            let Ok(map) = self.stores.lock() else {
-                return Vec::new();
-            };
-            map.iter()
-                .map(|(id, e)| (id.clone(), e.store.clone()))
-                .collect()
+    /// `(id, store)` clones sorted by id. Stores are cheap to clone, so later disk I/O
+    /// never holds the `stores` lock (HS2-P6N7FR).
+    fn snapshot(&self) -> Vec<(String, FsStore)> {
+        let Ok(map) = self.stores.lock() else {
+            return Vec::new();
         };
-        let mut out: Vec<StoreInfo> = entries
-            .into_iter()
-            .map(|(id, store)| StoreInfo {
-                id,
-                root: store.root().display().to_string(),
-                prefix: store
-                    .metadata()
-                    .map(|m| m.ticket_prefix)
-                    .unwrap_or_default(),
-                // Resilient count (HS2-PRVPCQ): a corrupt file used to zero the whole
-                // store's ticket count; count the healthy tickets instead.
-                tickets: store
-                    .list_tickets_resilient()
-                    .map(|l| l.tickets.len())
-                    .unwrap_or(0),
-            })
+        let mut entries: Vec<(String, FsStore)> = map
+            .iter()
+            .map(|(id, e)| (id.clone(), e.store.clone()))
             .collect();
-        out.sort_by(|a, b| a.id.cmp(&b.id));
-        out
+        drop(map);
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
+    }
+
+    /// Every hosted store's id, root, and prefix, sorted by id, with **no ticket parsing**.
+    /// `GET /providers` builds its descriptors from this, so its cost scales with the
+    /// number of stores rather than tickets and it cannot stall the request threads
+    /// (HS2-4XXRJP).
+    pub fn summaries(&self) -> Vec<HostedStore> {
+        self.snapshot()
+            .into_iter()
+            .map(|(id, store)| HostedStore::of(id, &store))
+            .collect()
+    }
+
+    /// A listing of the hosted stores (id, root, prefix, ticket count), sorted by id for
+    /// a deterministic response. This parses every ticket in every store, so it exists
+    /// only for `GET /stores`, which runs it on a blocking thread (HS2-4XXRJP). The parse
+    /// runs **after** the `stores` lock is released so it never blocks concurrent detail
+    /// reads (HS2-P6N7FR).
+    pub fn list(&self) -> Vec<StoreInfo> {
+        self.snapshot()
+            .into_iter()
+            .map(|(id, store)| StoreInfo::counted(id, &store))
+            .collect()
+    }
+
+    /// One hosted store's listing entry with its ticket count, parsing only that store.
+    pub fn info(&self, id: &str) -> Option<StoreInfo> {
+        let store = self.get(id)?.store;
+        Some(StoreInfo::counted(id.to_string(), &store))
     }
 
     /// How many stores are hosted.
@@ -291,5 +342,112 @@ mod tests {
         assert_eq!(list_ids, location_ids);
         assert!(host.get(&first_id).is_some());
         assert!(host.get(&second_id).is_some());
+    }
+
+    /// Plant a named pipe where a ticket file belongs. Opening it for reading blocks until
+    /// a writer appears, so any code path that tries to parse it hangs — a deterministic
+    /// "was a ticket file touched?" probe that no timing threshold can flake on.
+    #[cfg(unix)]
+    fn plant_ticket_fifo(store: &FsStore) -> PathBuf {
+        use std::os::unix::ffi::OsStrExt;
+        let path = store.ticket_path(&Ulid::new());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: `c_path` is a valid NUL-terminated path that outlives the call.
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+        path
+    }
+
+    fn create_ticket(store: &FsStore, prefix: &str) {
+        hotsheet_ticketing::ops::create(
+            store,
+            Ulid::new(),
+            prefix,
+            hotsheet_model::Timestamp::new("2026-09-26T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: "counted".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
+    // `summaries()` (what `GET /providers` uses) must never open a ticket file: with a
+    // pipe planted in the ticket tree it still answers, while the counting `list()` would
+    // block on it (HS2-4XXRJP).
+    #[cfg(unix)]
+    #[test]
+    fn summaries_never_touch_ticket_files() {
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first = FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+        let second = FsStore::init(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
+        create_ticket(&first, "ONE");
+        plant_ticket_fifo(&second);
+        let host = StoreHost::new();
+        let first_id = host.register(entry_for(first.clone()));
+        let second_id = host.register(entry_for(second.clone()));
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let probe = host.clone();
+        std::thread::spawn(move || tx.send(probe.summaries()).unwrap());
+        let summaries = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("summaries() opened a ticket file and blocked on the planted pipe");
+
+        let mut expected = vec![
+            HostedStore {
+                id: first_id.clone(),
+                root: first.root().display().to_string(),
+                prefix: "ONE".into(),
+            },
+            HostedStore {
+                id: second_id,
+                root: second.root().display().to_string(),
+                prefix: "TWO".into(),
+            },
+        ];
+        expected.sort_by(|a, b| a.id.cmp(&b.id));
+        assert_eq!(summaries, expected);
+        let descriptor = summaries
+            .iter()
+            .find(|s| s.id == first_id)
+            .unwrap()
+            .provider_descriptor(true);
+        assert_eq!(descriptor.display_name, "ONE git tickets");
+        assert_eq!(descriptor.locator, first.root().display().to_string());
+        assert!(descriptor.default);
+    }
+
+    // The counting paths still count: `list()` covers every store, `info()` only one.
+    #[test]
+    fn list_and_info_count_healthy_tickets() {
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first = FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+        let second = FsStore::init(second_dir.path(), &StoreMetadata::new("")).unwrap();
+        create_ticket(&first, "ONE");
+        create_ticket(&first, "ONE");
+        let host = StoreHost::new();
+        let first_id = host.register(entry_for(first));
+        let second_id = host.register(entry_for(second));
+
+        let listed = host.list();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.windows(2).all(|pair| pair[0].id < pair[1].id));
+        let first_info = host.info(&first_id).unwrap();
+        assert_eq!((first_info.prefix.as_str(), first_info.tickets), ("ONE", 2));
+        assert_eq!(host.info(&second_id).unwrap().tickets, 0);
+        assert!(host.info("missing").is_none());
+        let unnamed = host
+            .summaries()
+            .into_iter()
+            .find(|s| s.id == second_id)
+            .unwrap();
+        assert_eq!(
+            unnamed.provider_descriptor(false).display_name,
+            "Git tickets"
+        );
     }
 }

@@ -117,6 +117,12 @@ fallback until the provider-native reverse lookup tracked by HS2-A0PDBP exists (
 Terminal-open preparation also runs on the blocking pool, including plugin setup and
 model/effort discovery; a slow catalog lock or discovery subprocess cannot occupy an
 async worker needed by another client's detail read.
+`GET /providers` is built from each hosted store's id, root, and metadata prefix only; it
+never opens a ticket file, so its cost does not grow with ticket count. The ticket counts
+in `GET /stores` (and the single-store count returned by `POST /stores`) parse ticket files
+on the blocking pool, so a large store cannot stall `/health` or other requests. Background
+sync, Trash-purge, and distributed-work loops enumerate hosted roots without parsing
+tickets (HS2-4XXRJP).
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.
 Browser collection reads opt into a bounded envelope with `page_size=1..500` and resume
 with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and SQL-backed
