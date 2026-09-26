@@ -1044,6 +1044,8 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   // Text size cycles 80 → 70 → 60 → 50 → 40 → 80, refitting the PTY each time, and persists.
   for (const columns of [70, 60, 50, 40, 80]) {
     await textSize.click();
+    // The size button no longer shows the column count inline; a toast reports it (HS2-89JZSN).
+    await expect(page.locator('.app-toast')).toHaveText(`Terminal text size: ${columns} columns`);
     await expect(textSize).toHaveAttribute('data-columns', String(columns));
     await expect(textSize).toHaveAccessibleName(`Text size: ${columns} columns. Change text size`);
     await expect(viewport).toHaveAttribute('data-grid-size', new RegExp(`^${columns}x\\d+$`));

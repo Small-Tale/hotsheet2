@@ -125,6 +125,16 @@ describe('TerminalDashboard', () => {
     expect(magnified).toContain('data-mobile-grid-policy="80xm"');
     expect(magnified).not.toContain('data-grid-policy="dashboard-80x24"');
   });
+  it('shows the phone text-size control without an inline column number (HS2-89JZSN)', () => {
+    const session = groups[0].sessions[0],
+      mobile = { viewport: { left: 0, top: 0, width: 360, height: 640 }, keyboardVisible: false, columns: 60 },
+      markup = String(FixedAspectTerminalCard({ session, mode: 'magnified', mobile }));
+    // The control stays present and accessible; a toast reports the change instead of an inline number.
+    expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
+    expect(markup).toContain('data-columns="60"');
+    expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
+    expect(markup).not.toContain('aria-hidden="true">60<');
+  });
   it('keeps the smallest tile keyboard-focusable and makes its fitted magnified copy interactive', () => {
     const compact = String(TerminalDashboard({ groups, width: 900, height: 600, fitAcross: 7, fitHigh: 3 }));
     expect(compact).toContain('data-basis="high"');

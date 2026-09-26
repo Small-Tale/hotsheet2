@@ -253,7 +253,6 @@ function TerminalCard({
             title="Change text size"
           >
             <LucideIcon icon={ALargeSmall} name="a-large-small" />
-            <span aria-hidden="true">{mobile.columns}</span>
           </button>
         )}
         <button

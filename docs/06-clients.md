@@ -2214,8 +2214,9 @@ terminal behind it. It is full-bleed on the terminal background color (no inset 
 scrim), pads for the device safe areas (dropping the bottom inset while the keyboard covers it),
 and clips rather than scrolls its scaled xterm root so a focus scroll or touch cannot pan the
 terminal sideways off screen. The card footer becomes a **top toolbar** carrying **Close**
-(Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small` plus the
-current column count), the actions menu, and open-in-drawer. The toolbar is shown only while the
+(Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small`; the
+column count is not shown inline — a toast reports the new size on change, HS2-89JZSN), the
+actions menu, and open-in-drawer. The toolbar is shown only while the
 keyboard is hidden; keyboard visibility is inferred when the unscaled visual viewport is more than
 120px shorter than the layout viewport (pinch zoom is not mistaken for a keyboard). Text size
 cycles **80 → 70 → 60 → 50 → 40 → 80** columns; the choice is persisted per browser

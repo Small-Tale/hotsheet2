@@ -1696,6 +1696,8 @@ export async function startHotSheetWebClient() {
       nextMobileTerminalColumns(mobileTerminalColumns.peek()),
     );
     window.dispatchEvent(new CustomEvent(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT));
+    // The size button no longer shows the column count inline (HS2-89JZSN); a toast reports it.
+    showToast(`Terminal text size: ${mobileTerminalColumns.value} columns`);
   }
   function mobileMagnifiedTerminal() {
     if (!viewportMobile.value) return undefined;
