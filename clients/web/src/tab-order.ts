@@ -61,3 +61,24 @@ export function insertTabByRank<T>(
   if (before < 0) return [...items, next];
   return [...items.slice(0, before), next, ...items.slice(before)];
 }
+
+/**
+ * Merge ranked pending entries into an ordered list: each goes before the first item whose rank is
+ * greater or unknown, preserving the relative order of both inputs. Startup uses it to place
+ * still-opening project placeholders (and their remembered roots) at their remembered positions
+ * among registered projects (HS2-2BEJXD).
+ */
+export function interleaveByRank<T>(
+  items: readonly T[],
+  rankOf: (item: T) => number | undefined,
+  pending: readonly { rank: number; item: T }[],
+): T[] {
+  const queue = [...pending].sort((left, right) => left.rank - right.rank),
+    merged: T[] = [];
+  for (const item of items) {
+    const rank = rankOf(item);
+    while (queue.length && (rank === undefined || queue[0].rank < rank)) merged.push(queue.shift()!.item);
+    merged.push(item);
+  }
+  return [...merged, ...queue.map((entry) => entry.item)];
+}

@@ -85,13 +85,15 @@ describe('remembered project startup', () => {
     const pending = new Map(['alpha', 'beta', 'gamma'].map((root) => [root, deferred<ProjectOpenResult>()]));
     const fetch = vi.fn((root: string) => pending.get(root)!.promise);
     const state = callbacks(),
-      activeReady = vi.fn();
+      activeReady = vi.fn(),
+      settled = vi.fn();
     const restored = restoreRememberedProjects({
       ...state,
       roots: ['alpha', 'beta', 'alpha', 'gamma'],
       activeRoot: 'beta',
       fetch,
       activeReady,
+      settled,
     });
     expect(fetch.mock.calls.map(([root]) => root)).toEqual(['alpha', 'beta', 'gamma']);
     // gamma finishing first changes nothing; the active beta registers and activates alone.
@@ -102,19 +104,48 @@ describe('remembered project startup', () => {
     await vi.waitFor(() => {
       expect(activeReady).toHaveBeenCalledTimes(1);
     });
-    expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([['beta', 1]]);
+    expect([state.wire.mock.calls[0][0], state.wire.mock.calls[0][2]]).toEqual(['beta', 1]);
     expect(state.activate).toHaveBeenCalledExactlyOnceWith(project('beta'));
-    // The slow alpha still blocks the background registration, which then follows remembered order.
+    // gamma had already opened, so it registers right behind the active project without waiting for
+    // the slow alpha, whose placeholder stays pending (HS2-2BEJXD).
+    await vi.waitFor(() => {
+      expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([
+        ['beta', 1],
+        ['gamma', 2],
+      ]);
+    });
+    expect(settled.mock.calls).toEqual([['beta'], ['gamma']]);
     pending.get('alpha')!.resolve(success('alpha'));
     await restored;
     expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([
       ['beta', 1],
-      ['alpha', 0],
       ['gamma', 2],
+      ['alpha', 0],
     ]);
     expect(state.activate).toHaveBeenCalledTimes(1);
     expect(activeReady).toHaveBeenCalledTimes(1);
+    expect(settled.mock.calls).toEqual([['beta'], ['gamma'], ['alpha']]);
     expect(state.waitForRetry).not.toHaveBeenCalled();
+  });
+  it('settles a root that fails its retry exactly once, after the retry, and never settles a recovering root twice', async () => {
+    const state = callbacks(),
+      settled = vi.fn(),
+      attempts = new Map<string, number>();
+    await restoreRememberedProjects({
+      ...state,
+      roots: ['alpha', 'beta', 'gamma'],
+      activeRoot: 'beta',
+      settled,
+      fetch: async (root) => {
+        attempts.set(root, (attempts.get(root) ?? 0) + 1);
+        if (root === 'alpha') return failure(root);
+        if (root === 'gamma' && attempts.get(root) === 1) return failure(root);
+        return success(root);
+      },
+    });
+    expect(settled.mock.calls).toEqual([['beta'], ['alpha'], ['gamma']]);
+    expect(state.retainFailure.mock.calls.map(([root]) => root)).toEqual(['alpha', 'gamma', 'alpha']);
+    expect(state.waitForRetry).toHaveBeenCalledTimes(1);
   });
   it('falls back to the full pass when the active first attempt fails, announcing readiness once at the end', async () => {
     const state = callbacks(),

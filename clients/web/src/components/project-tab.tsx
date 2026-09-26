@@ -16,6 +16,11 @@ export interface ProjectTabProps {
   disconnected?: boolean;
   attention?: boolean;
   restoreFailure?: boolean;
+  /**
+   * A remembered project that is still opening in the background after startup revealed the active
+   * one (HS2-2BEJXD): a dormant placeholder tab (no select, close, or drag) with an opening spinner.
+   */
+  pending?: boolean;
   closable?: boolean;
   draggable?: boolean;
   notificationCount?: number;
@@ -71,6 +76,7 @@ export function ProjectTab({
   disconnected = false,
   attention = false,
   restoreFailure = false,
+  pending = false,
   closable = true,
   draggable = true,
   notificationCount = 0,
@@ -114,28 +120,32 @@ export function ProjectTab({
         <span aria-hidden="true">{notificationCount}</span>
       </span>
     ) : undefined;
-  const trailing =
-    work || notification ? (
-      <span class="project-tab__indicators">
-        {notification}
-        {work}
-      </span>
-    ) : busy ? (
-      <span class="project-tab__busy">
-        <LoadingSpinner className="project-tab__busy-spinner" label="Project busy" />
-      </span>
-    ) : disconnected ? (
-      <LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />
-    ) : attention ? (
-      <LucideIcon icon={CircleAlert} name="circle-alert" className="project-tab__state project-tab__state--attention" />
-    ) : undefined;
+  const trailing = pending ? (
+    <span class="project-tab__busy">
+      <LoadingSpinner className="project-tab__busy-spinner" label={`Opening ${name}`} />
+    </span>
+  ) : work || notification ? (
+    <span class="project-tab__indicators">
+      {notification}
+      {work}
+    </span>
+  ) : busy ? (
+    <span class="project-tab__busy">
+      <LoadingSpinner className="project-tab__busy-spinner" label="Project busy" />
+    </span>
+  ) : disconnected ? (
+    <LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />
+  ) : attention ? (
+    <LucideIcon icon={CircleAlert} name="circle-alert" className="project-tab__state project-tab__state--attention" />
+  ) : undefined;
   return (
     <AppTab
       id={id}
       name={name}
       selected={selected}
-      closable={closable}
-      draggable={draggable}
+      closable={closable && !pending}
+      draggable={draggable && !pending}
+      placeholder={pending}
       className="project-tab"
       selectAction="select-project-tab"
       closeAction="close-project-tab"
@@ -168,6 +178,7 @@ export function ProjectTab({
         'data-disconnected': String(disconnected),
         'data-attention': String(attention),
         'data-restore-failure': String(restoreFailure),
+        'data-pending': String(pending),
       }}
     />
   );

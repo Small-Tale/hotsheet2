@@ -146,6 +146,7 @@ export function ProjectTabDemo() {
         <ProjectTab id="selected" name="Selected local" location="local" selected />
         <ProjectTab id="remote" name="Remote project" location="remote" />
         <ProjectTab id="busy" name="Busy project" location="local" busy />
+        <ProjectTab id="pending" name="Still opening" location="local" pending />
         <ProjectTab id="active" name="Active queue" location="local" upNextCount={3} activeTicketCount={2} />
         <ProjectTab id="working" name="Active work" location="local" activeTicketCount={1} />
         <ProjectTab id="three" name="Three active" location="local" activeTicketCount={3} />
@@ -181,7 +182,7 @@ export function ProjectTabDemo() {
         <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
       </div>
       <p class="component-stage__event">
-        Selected, remote, busy, active queue, active work, attention, disconnected, and fixed states.
+        Selected, remote, busy, still opening, active queue, active work, attention, disconnected, and fixed states.
       </p>
     </section>
   );

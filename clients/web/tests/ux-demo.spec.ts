@@ -4185,7 +4185,13 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
-  await expect(tabStates).toHaveCount(15);
+  await expect(tabStates).toHaveCount(16);
+  // A still-opening remembered project is a dormant placeholder with a named opening spinner (HS2-2BEJXD).
+  const pendingTab = page.locator('[data-tab-kind="project"][data-pending="true"]');
+  await expect(pendingTab).toHaveCount(1);
+  await expect(pendingTab).toHaveAttribute('aria-busy', 'true');
+  await expect(pendingTab.getByRole('tab')).toBeDisabled();
+  await expect(pendingTab.getByRole('img', { name: 'Opening Still opening' })).toBeVisible();
   const measured = tabStates.filter({ hasText: 'Copying database' });
   await expect(measured.locator('.project-tab__operation')).toHaveAttribute(
     'aria-label',

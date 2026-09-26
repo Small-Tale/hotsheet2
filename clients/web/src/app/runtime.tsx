@@ -85,6 +85,7 @@ import {
 } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectRestoreError, projectRestoreTabId } from '../components/project-restore-error';
+import { type ProjectTabProps } from '../components/project-tab';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import {
@@ -233,7 +234,7 @@ import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
-import { applyRememberedTabOrder } from '../tab-order';
+import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { defaultTerminalName, parseTerminalNames, terminalNameKey } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
@@ -411,7 +412,11 @@ export async function startHotSheetWebClient() {
     ),
     terminalFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.fit-high')) || TERMINAL_GRID_DEFAULT_HIGH);
   const rememberedRoots = [...new Set(JSON.parse(localStorage.getItem('hotsheet.open-projects') || '[]') as string[])],
-    initialProjectRestorePending = signal(rememberedRoots.length > 0);
+    initialProjectRestorePending = signal(rememberedRoots.length > 0),
+    // Remembered roots still opening in the background after the active project was revealed (HS2-2BEJXD).
+    projectRestorePendingRoots = signal<readonly string[]>(rememberedRoots);
+  const pendingRestoreEntries = <T,>(item: (root: string) => T) =>
+    projectRestorePendingRoots.value.map((root) => ({ rank: rememberedRoots.indexOf(root), item: item(root) }));
   const initialTerminalDrawerVisible = localStorage.getItem('hotsheet.terminals.drawer-open') === 'true';
   const terminalDrawerVisible = signal(initialTerminalDrawerVisible),
     terminalDrawerMounted = signal(initialTerminalDrawerVisible),
@@ -904,6 +909,7 @@ export async function startHotSheetWebClient() {
     projectRestoreFailures,
     selectedProjectRestoreRoot,
     projectsPendingActivation,
+    projectRestoreRank,
     hs1SourceIdentity,
     retainProjectRestoreFailure,
     wireOpenedProject,
@@ -942,8 +948,16 @@ export async function startHotSheetWebClient() {
     void refreshTicketCollection(view);
   });
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
+  // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
   const currentRememberedProjectRoots = () => [
-    ...new Set([...projects.value.map((item) => item.root), ...projectRestoreFailures.value.map((item) => item.root)]),
+    ...new Set([
+      ...interleaveByRank(
+        projects.value.map((item) => ({ root: item.root, rank: projectRestoreRank(item.id) })),
+        (item) => item.rank,
+        pendingRestoreEntries((root) => ({ root, rank: undefined as number | undefined })),
+      ).map((item) => item.root),
+      ...projectRestoreFailures.value.map((item) => item.root),
+    ]),
   ];
   const settingsCategory = () => selectedSettingsCategory.value;
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
@@ -4139,8 +4153,7 @@ export async function startHotSheetWebClient() {
         !current.hs1CleanupEligible,
       );
     void projectTabClaimClock.value;
-    const tabs = [
-      ...projects.value.map((item) => {
+    const projectTabs = projects.value.map((item) => {
         const counts = projectTicketCounts(item.id),
           job = migrationJobsByRoot.value[item.root],
           backupUnverified = Boolean(
@@ -4164,6 +4177,22 @@ export async function startHotSheetWebClient() {
               : undefined,
         };
       }),
+      // Still-opening remembered projects sit at their remembered positions as dormant placeholders
+      // until they register or fail (HS2-2BEJXD).
+      rankedProjectTabs = interleaveByRank<{ tab: ProjectTabProps; rank?: number }>(
+        projectTabs.map((tab) => ({ tab, rank: projectRestoreRank(tab.id) })),
+        (entry) => entry.rank,
+        pendingRestoreEntries((root) => ({
+          tab: {
+            id: `pending:${root}`,
+            name: root.split('/').filter(Boolean).at(-1) ?? root,
+            location: 'local' as const,
+            pending: true,
+          },
+        })),
+      ).map((entry) => entry.tab);
+    const tabs = [
+      ...rankedProjectTabs,
       ...projectRestoreFailures.value.map((item) => ({
         id: projectRestoreTabId(item.root),
         name: item.name,
@@ -4977,6 +5006,9 @@ export async function startHotSheetWebClient() {
         },
         // Show the active project as soon as it is ready; the others keep restoring behind it
         // (HS2-X74D4B). Both reconciles are idempotent and run again once every project is registered.
+        settled: (root) => {
+          projectRestorePendingRoots.value = projectRestorePendingRoots.value.filter((item) => item !== root);
+        },
         activeReady: () => {
           initialProjectRestorePending.value = false;
           startPermissionUpdates();
@@ -4988,6 +5020,7 @@ export async function startHotSheetWebClient() {
     } finally {
       initialProjectRestoreComplete = true;
       initialProjectRestorePending.value = false;
+      projectRestorePendingRoots.value = [];
     }
   })();
 }

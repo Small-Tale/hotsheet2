@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyRememberedTabOrder, insertTabByRank, reorderTabs, replaceTabInPlace } from './tab-order';
+import {
+  applyRememberedTabOrder,
+  insertTabByRank,
+  interleaveByRank,
+  reorderTabs,
+  replaceTabInPlace,
+} from './tab-order';
 
 const items = ['one', 'two', 'three'].map((id) => ({ id })),
   identity = (item: { id: string }) => item.id;
@@ -50,5 +56,32 @@ describe('insertTabByRank (HS2-X74D4B)', () => {
     expect(updated[1]).toEqual({ id: 'beta', name: 'renamed' });
     // Empty, then refill.
     expect(insertTabByRank([], identity, { id: 'solo' }, 5, rankOf).map(identity)).toEqual(['solo']);
+  });
+});
+
+describe('interleaveByRank (HS2-2BEJXD)', () => {
+  const ranks = new Map([
+    ['beta', 1],
+    ['delta', 3],
+  ]);
+  const rankOf = (id: string) => ranks.get(id);
+  it('places pending entries at their remembered positions around ranked and unranked items', () => {
+    expect(
+      interleaveByRank(['beta', 'delta', 'opened-later'], rankOf, [
+        { rank: 2, item: 'gamma' },
+        { rank: 0, item: 'alpha' },
+      ]),
+    ).toEqual(['alpha', 'beta', 'gamma', 'delta', 'opened-later']);
+    // Pending entries ranked after every item trail them; nothing pending leaves the list unchanged.
+    expect(interleaveByRank(['beta'], rankOf, [{ rank: 9, item: 'omega' }])).toEqual(['beta', 'omega']);
+    expect(interleaveByRank(['beta', 'delta'], rankOf, [])).toEqual(['beta', 'delta']);
+    // Only pending (nothing registered yet), then empty.
+    expect(
+      interleaveByRank([], rankOf, [
+        { rank: 1, item: 'b' },
+        { rank: 0, item: 'a' },
+      ]),
+    ).toEqual(['a', 'b']);
+    expect(interleaveByRank([], rankOf, [])).toEqual([]);
   });
 });

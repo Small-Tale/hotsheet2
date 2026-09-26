@@ -188,6 +188,30 @@ describe('application shell components', () => {
     expect(restoreFailure).toContain('draggable="false"');
     expect(restoreFailure).toContain('data-lucide="circle-alert"');
     expect(restoreFailure).not.toContain('data-action="close-project-tab"');
+    // A still-opening remembered project is a dormant Kerf placeholder with an opening spinner that
+    // names it; it cannot be selected, closed, or dragged (HS2-2BEJXD).
+    const pendingTab = String(
+      ProjectTab({ id: 'pending:/work/alpha', name: 'alpha', location: 'local', pending: true }),
+    );
+    expect(pendingTab).toContain('data-pending="true"');
+    expect(pendingTab).toContain('data-placeholder="true"');
+    expect(pendingTab).toContain('aria-busy="true"');
+    expect(pendingTab).toContain('draggable="false"');
+    expect(pendingTab).toMatch(/role="tab"[^>]*disabled/);
+    expect(pendingTab).toContain('aria-label="Opening alpha"');
+    expect(pendingTab).not.toContain('data-action="close-project-tab"');
+    // Pending tabs are left out of the mobile project Select until they register.
+    const mobileBar = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: [
+          { id: 'beta', name: 'beta', location: 'local', selected: true },
+          { id: 'pending:/work/alpha', name: 'alpha', location: 'local', pending: true },
+        ],
+      }),
+    );
+    expect(mobileBar).toContain('value="beta"');
+    expect(mobileBar).not.toContain('pending:/work/alpha');
     const notificationMarkup = String(ProjectTab({ id: 'one', name: 'One', location: 'local', notificationCount: 2 }));
     expect(notificationMarkup).not.toContain('data-lucide="folder-git-2"');
     expect(notificationMarkup).toContain('aria-label="2 pending notifications"');

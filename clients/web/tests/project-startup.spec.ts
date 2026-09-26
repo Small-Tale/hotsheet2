@@ -268,7 +268,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('alpha preserved draft');
 });
 
-test('shows the active project while another remembered project is still opening, then fills tabs in remembered order (HS2-X74D4B)', async ({
+test('shows the active project while other remembered projects are still opening, as in-place placeholder tabs (HS2-X74D4B, HS2-2BEJXD)', async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -283,13 +283,27 @@ test('shows the active project while another remembered project is still opening
   fixture.pending.get('beta')!.release();
   await expect(restoring).toHaveCount(0);
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
-  await expect(tabs).toHaveText(['beta1']);
+  // Still-opening projects hold their remembered positions as dormant placeholder tabs (HS2-2BEJXD).
+  const tabHosts = page.locator('.project-tab-bar [data-tab-kind="project"]');
+  await expect(tabHosts).toHaveCount(3);
+  await expect
+    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-pending'))))
+    .toEqual(['true', 'false', 'true']);
+  await expect(page.getByRole('img', { name: 'Opening alpha' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Opening gamma' })).toBeVisible();
+  await expect(tabHosts.nth(0).getByRole('tab')).toBeDisabled();
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   await page.screenshot({ path: testInfo.outputPath('active-first-while-others-restore.png') });
-  // The rest register behind it in remembered order, without moving the selection.
+  // Each placeholder is replaced in place as its project registers, without moving the selection.
   fixture.pending.get('gamma')!.release();
+  await expect
+    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-pending'))))
+    .toEqual(['true', 'false', 'false']);
+  await expect(tabs.nth(2)).toHaveText('gamma');
+  await page.locator('.project-tab-bar').screenshot({ path: testInfo.outputPath('pending-tab-replaced-in-place.png') });
   fixture.pending.get('alpha')!.release();
   await expect(tabs).toHaveText(['alpha', 'beta1', 'gamma']);
+  await expect(page.locator('.project-tab-bar [data-pending="true"]')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   await page.getByRole('tab', { name: /^alpha/ }).click();

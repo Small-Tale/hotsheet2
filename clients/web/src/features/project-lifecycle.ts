@@ -734,6 +734,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     projectRestoreFailures,
     selectedProjectRestoreRoot,
     projectsPendingActivation,
+    /** A restored project's remembered startup position, when it was registered by startup restore. */
+    projectRestoreRank: (id: string) => restoreRanks.get(id),
     hs1SourceIdentity,
     retainProjectRestoreFailure,
     wireOpenedProject,

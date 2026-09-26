@@ -40,6 +40,8 @@ interface RestoreProjectsOptions {
   selectFailure: (root: string) => void;
   /** Called once the active project (or its failure) is presented; the rest may still be restoring. */
   activeReady?: () => void;
+  /** Called once per root when it is registered or has failed its bounded retry (HS2-2BEJXD). */
+  settled?: (root: string) => void;
   waitForRetry?: () => Promise<void>;
 }
 
@@ -74,6 +76,7 @@ export async function restoreRememberedProjects(options: RestoreProjectsOptions)
     await options.wire(root, result, roots.indexOf(root));
     registered.set(result.project.id, result.project);
     openedByRoot.set(root, registered.get(result.project.id)!);
+    options.settled?.(root);
   };
 
   let activated: Project | undefined;
@@ -88,10 +91,27 @@ export async function restoreRememberedProjects(options: RestoreProjectsOptions)
       announce();
     }
   }
-  const firstPass = await Promise.all(roots.map((root) => pending.get(root)!));
-  roots.forEach((root, index) => {
-    if (!results.has(root)) record(root, firstPass[index]);
-  });
+  if (activated) {
+    // The active project is already presented: register each other project as soon as its open
+    // succeeds (its tab replaces its placeholder in place), serialized so wiring never interleaves,
+    // instead of letting the slowest open hold every other tab back (HS2-2BEJXD).
+    let wiring = Promise.resolve();
+    await Promise.all(
+      roots
+        .filter((root) => !results.has(root))
+        .map(async (root) => {
+          const result = await pending.get(root)!;
+          record(root, result);
+          if (result.ok) wiring = wiring.then(() => wire(root));
+        }),
+    );
+    await wiring;
+  } else {
+    const firstPass = await Promise.all(roots.map((root) => pending.get(root)!));
+    roots.forEach((root, index) => {
+      if (!results.has(root)) record(root, firstPass[index]);
+    });
+  }
   const failed = roots.filter((root) => results.get(root)?.ok === false);
   if (failed.length) {
     await (options.waitForRetry ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 500))))();
@@ -100,7 +120,10 @@ export async function restoreRememberedProjects(options: RestoreProjectsOptions)
       record(root, retried[index]);
     });
   }
-  for (const root of roots) await wire(root);
+  for (const root of roots) {
+    if (results.get(root)?.ok) await wire(root);
+    else options.settled?.(root);
+  }
   if (activated) return;
   const requestedActive = options.activeRoot ? openedByRoot.get(options.activeRoot) : undefined;
   const active = requestedActive

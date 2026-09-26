@@ -566,8 +566,14 @@ and identity-less legacy entries remain conservatively blocking.
   Retrying a failed project open clears the prior failure immediately. During startup,
   remembered roots are deduplicated and their project-open/metadata requests run concurrently.
   When the remembered active root opens on its first attempt, it is registered and activated
-  immediately and the shell is revealed without waiting for the other projects; they register
-  behind it, each inserted at its remembered tab position (HS2-X74D4B). Otherwise failed opens
+  immediately and the shell is revealed without waiting for the other projects. Each other
+  remembered project shows a dormant placeholder tab at its remembered position until its open
+  succeeds (it then registers at once, replacing the placeholder in place, without waiting for
+  slower projects) or fails its bounded retry (it then becomes the usual error tab). Placeholders
+  use Kerf's `AppTab` skeleton; the spinner's accessible label names the project, pending a Kerf
+  variant that keeps the visible name (KF-8913PN, HS2-XGSSK1). The mobile project select lists a
+  project once it registers, because Kerf's Select has no disabled choices. Still-opening roots
+  stay in the remembered set if it is saved mid-restore (HS2-X74D4B, HS2-2BEJXD). Otherwise failed opens
   receive one bounded parallel retry and successful projects are registered serially in remembered
   order before one project is activated. Only the remembered active project loads its ticket list,
   commands, views, and workspace session before the shell is revealed. Other project tabs

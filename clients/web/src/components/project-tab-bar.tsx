@@ -68,17 +68,20 @@ export function ProjectTabBar({
     </div>
   );
   if (mobile) {
-    const active = tabs.find((tab) => tab.selected) ?? tabs[0];
+    // Kerf's Select has no disabled choices, so still-opening projects join the list once they
+    // register rather than appearing as choices that cannot be selected (HS2-2BEJXD).
+    const choosable = tabs.filter((tab) => !tab.pending),
+      active = choosable.find((tab) => tab.selected) ?? choosable[0];
     return (
       <div class="project-tab-bar project-tab-bar--mobile" data-component="project-tab-bar" data-mode={mode}>
         {modes}
-        {tabs.length ? (
+        {choosable.length ? (
           <Select
             className="project-tab-bar__select"
             name="mobile-project"
             value={active.id}
             ariaLabel="Project"
-            choices={tabs.map((tab) => ({ value: tab.id, label: tab.name }))}
+            choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
             renderSelected={(choice) => (
               <span class="project-tab-bar__selected-project">
                 {choice.label}
