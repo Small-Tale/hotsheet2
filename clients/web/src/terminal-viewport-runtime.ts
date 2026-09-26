@@ -669,6 +669,10 @@ function initializeTerminalViewport(
   if (autoFocus) {
     const focusIfCurrent = (force = false) => {
       if (disposed || !terminal.element) return;
+      // Once the requested focus landed, later retries must not reclaim it: a control that took focus
+      // and then unmounted (the phone focus-mode Exit pill) leaves <body> active, and refocusing
+      // here would re-enter the mode the user just left (HS2-Y9VK3C).
+      if (!force && !focusRequested) return;
       const active = document.activeElement,
         activeTile =
           active instanceof Element ? active.closest<HTMLElement>('[data-component="terminal-tile"]') : undefined,

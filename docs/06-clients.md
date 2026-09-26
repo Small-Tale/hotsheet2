@@ -1824,7 +1824,9 @@ follow `VisualViewport` offset and size changes rather than the layout viewport,
 virtual keyboard shrinks and repositions the terminal instead of covering its bottom rows. The whole
 viewport behind the focused terminal is blacked out with the terminal background, so the app never
 shows in the gap around it — e.g. below the terminal and above the iOS keyboard (HS2-JQPRXV). Exit
-restores focus to the selected drawer tab; a later terminal focus may re-enter. Drawer hiding,
+restores focus to the selected drawer tab; a later terminal focus may re-enter. A new terminal's
+initial auto-focus retries stop once that focus has landed, so tapping Exit right after opening a
+terminal cannot be undone by a pending retry reclaiming focus (HS2-Y9VK3C). Drawer hiding,
 tab/project replacement, and crossing to desktop invalidate stale focus-mode ownership
 (HS2-GMTQZM).
 The browser regression follows the complete user path with a newly created terminal: enter

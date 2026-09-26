@@ -6,6 +6,7 @@ import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from
 
 const allocated = vi.hoisted(() => ({
   proposed: { cols: 80, rows: 24 },
+  openElement: false,
   terminals: [] as Array<{
     dispose: ReturnType<typeof vi.fn>;
     render: ReturnType<typeof vi.fn>;
@@ -16,6 +17,7 @@ const allocated = vi.hoisted(() => ({
     scrollToLine: ReturnType<typeof vi.fn>;
     write: ReturnType<typeof vi.fn>;
     buffer: { active: { baseY: number; cursorY: number; viewportY: number } };
+    focus: ReturnType<typeof vi.fn>;
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -34,10 +36,14 @@ vi.mock('@xterm/xterm', () => ({
     scrollToLine = vi.fn();
     write = vi.fn();
     buffer = { active: { baseY: 20, cursorY: 3, viewportY: 20 } };
+    focus = vi.fn();
+    element?: { style: Record<string, string> };
     constructor() {
       allocated.terminals.push(this);
     }
-    open() {}
+    open() {
+      if (allocated.openElement) this.element = { style: {} };
+    }
     loadAddon() {}
     onRender() {
       return { dispose: this.render };
@@ -85,6 +91,7 @@ let throwSocket = false,
 beforeEach(() => {
   allocated.terminals.length = 0;
   allocated.proposed = { cols: 80, rows: 24 };
+  allocated.openElement = false;
   resize.length = 0;
   intersections.length = 0;
   sockets.length = 0;
@@ -142,7 +149,11 @@ function element() {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
   };
-  return { viewport: mock as unknown as HTMLElement, removed: mock.removeEventListener };
+  return {
+    viewport: mock as unknown as HTMLElement,
+    removed: mock.removeEventListener,
+    listeners: mock.addEventListener,
+  };
 }
 
 describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
@@ -255,5 +266,61 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     size(120, 35);
     expect(terminal.resize).toHaveBeenCalledWith(120, 35);
     expect(terminal.registerMarker).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
+  function mountAutoFocused() {
+    allocated.openElement = true;
+    const frames: Array<() => void> = [],
+      body = {},
+      doc = { activeElement: body as unknown, body };
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal(
+      'Element',
+      class {
+        readonly fake = true;
+      },
+    );
+    const { viewport, listeners } = element(),
+      dispose = mountTerminalViewportRuntime(viewport, {
+        url: 'ws://lan/terminal',
+        viewerId: 'viewer',
+        autoFocus: true,
+      }),
+      terminal = allocated.terminals[0],
+      runRetries = () => {
+        for (const frame of frames.splice(0)) frame();
+        for (const timeout of scheduledTimeouts.splice(0)) timeout();
+      },
+      focusLanded = () => {
+        for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
+          if (type === 'focusin') handler();
+      };
+    return { terminal, doc, body, runRetries, focusLanded, dispose };
+  }
+
+  it('stops retrying once the requested focus landed, so an unmounted Exit control cannot pull focus back', () => {
+    const { terminal, doc, body, runRetries, focusLanded, dispose } = mountAutoFocused();
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    focusLanded();
+    // The user taps Exit; the pill unmounts and focus falls back to <body> before the settle retry.
+    doc.activeElement = body;
+    runRetries();
+    runRetries();
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('keeps retrying while the requested focus has not landed yet', () => {
+    const { terminal, runRetries, dispose } = mountAutoFocused();
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    runRetries();
+    expect(terminal.focus.mock.calls.length).toBeGreaterThan(1);
+    dispose();
   });
 });
