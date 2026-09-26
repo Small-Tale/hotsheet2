@@ -4975,6 +4975,13 @@ export async function startHotSheetWebClient() {
         selectFailure: (root) => {
           selectedProjectRestoreRoot.value = root;
         },
+        // Show the active project as soon as it is ready; the others keep restoring behind it
+        // (HS2-X74D4B). Both reconciles are idempotent and run again once every project is registered.
+        activeReady: () => {
+          initialProjectRestorePending.value = false;
+          startPermissionUpdates();
+          syncProjectChangeStreams();
+        },
       });
       startPermissionUpdates();
       syncProjectChangeStreams();

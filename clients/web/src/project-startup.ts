@@ -33,40 +33,75 @@ interface RestoreProjectsOptions {
   roots: readonly string[];
   activeRoot?: string;
   fetch: (root: string) => Promise<ProjectOpenResult>;
-  wire: (root: string, opened: Extract<ProjectOpenResult, { ok: true }>) => Promise<void>;
+  /** Register one opened project; `index` is its root's position in `roots` (for stable tab order). */
+  wire: (root: string, opened: Extract<ProjectOpenResult, { ok: true }>, index: number) => Promise<void>;
   retainFailure: (root: string, failure: Extract<ProjectOpenResult, { ok: false }>) => void;
   activate: (project: Project) => Promise<void>;
   selectFailure: (root: string) => void;
+  /** Called once the active project (or its failure) is presented; the rest may still be restoring. */
+  activeReady?: () => void;
   waitForRetry?: () => Promise<void>;
 }
 
-/** Fetch each pass together, then serialize registration and restore exactly one active project. */
+/**
+ * Fetch every remembered project together. When the remembered active root opens on its first
+ * attempt, register and activate it immediately so the app is usable without waiting for every other
+ * project and its retries; the rest are then registered in remembered order (HS2-X74D4B). Otherwise
+ * (no remembered active root, a checkout alias, or a failed first attempt) wait for the full pass and
+ * its one bounded retry, then restore exactly one active project as before.
+ */
 export async function restoreRememberedProjects(options: RestoreProjectsOptions): Promise<void> {
   const roots = [...new Set(options.roots)];
   const results = new Map<string, ProjectOpenResult>();
-  const fetchPass = async (requested: readonly string[]) => {
-    const opened = await Promise.all(requested.map((root) => options.fetch(root)));
-    requested.forEach((root, index) => {
-      const result = opened[index];
-      results.set(root, result);
-      if (!result.ok) options.retainFailure(root, result);
-    });
+  const pending = new Map(roots.map((root) => [root, options.fetch(root)]));
+  const record = (root: string, result: ProjectOpenResult) => {
+    results.set(root, result);
+    if (!result.ok) options.retainFailure(root, result);
   };
-  await fetchPass(roots);
+  let announced = false;
+  const announce = () => {
+    if (announced) return;
+    announced = true;
+    options.activeReady?.();
+  };
+  const registered = new Map<string, Project>();
+  const openedByRoot = new Map<string, Project>();
+  const wired = new Set<string>();
+  const wire = async (root: string) => {
+    const result = results.get(root);
+    if (!result?.ok || wired.has(root)) return;
+    wired.add(root);
+    await options.wire(root, result, roots.indexOf(root));
+    registered.set(result.project.id, result.project);
+    openedByRoot.set(root, registered.get(result.project.id)!);
+  };
+
+  let activated: Project | undefined;
+  const early = options.activeRoot && pending.has(options.activeRoot) ? options.activeRoot : undefined;
+  if (early) {
+    const result = await pending.get(early)!;
+    record(early, result);
+    if (result.ok) {
+      await wire(early);
+      activated = registered.get(result.project.id);
+      await options.activate(activated!);
+      announce();
+    }
+  }
+  const firstPass = await Promise.all(roots.map((root) => pending.get(root)!));
+  roots.forEach((root, index) => {
+    if (!results.has(root)) record(root, firstPass[index]);
+  });
   const failed = roots.filter((root) => results.get(root)?.ok === false);
   if (failed.length) {
     await (options.waitForRetry ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 500))))();
-    await fetchPass(failed);
+    const retried = await Promise.all(failed.map((root) => options.fetch(root)));
+    failed.forEach((root, index) => {
+      record(root, retried[index]);
+    });
   }
-  const registered = new Map<string, Project>();
-  const openedByRoot = new Map<string, Project>();
-  for (const root of roots) {
-    const result = results.get(root);
-    if (!result?.ok) continue;
-    await options.wire(root, result);
-    registered.set(result.project.id, result.project);
-    openedByRoot.set(root, registered.get(result.project.id)!);
-  }
+  for (const root of roots) await wire(root);
+  if (activated) return;
   const requestedActive = options.activeRoot ? openedByRoot.get(options.activeRoot) : undefined;
   const active = requestedActive
     ? registered.get(requestedActive.id)
@@ -80,4 +115,5 @@ export async function restoreRememberedProjects(options: RestoreProjectsOptions)
     if (fallback) await options.activate(fallback);
     else if (roots.length) options.selectFailure(roots[0]);
   }
+  announce();
 }

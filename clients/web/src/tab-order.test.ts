@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyRememberedTabOrder, reorderTabs, replaceTabInPlace } from './tab-order';
+import { applyRememberedTabOrder, insertTabByRank, reorderTabs, replaceTabInPlace } from './tab-order';
 
 const items = ['one', 'two', 'three'].map((id) => ({ id })),
   identity = (item: { id: string }) => item.id;
@@ -24,5 +24,31 @@ describe('tab order', () => {
       'three',
     ]);
     expect(replaceTabInPlace(items, identity, { id: 'four' }).map(identity)).toEqual(['one', 'two', 'three', 'four']);
+  });
+});
+
+describe('insertTabByRank (HS2-X74D4B)', () => {
+  const identity = (item: { id: string }) => item.id;
+  it('lands out-of-order registrations in remembered positions, replaces in place, and keeps unranked tabs last', () => {
+    const ranks = new Map<string, number>(),
+      rankOf = (item: { id: string }) => ranks.get(item.id),
+      add = (items: { id: string }[], id: string, rank?: number) => {
+        if (rank !== undefined) ranks.set(id, rank);
+        return rank === undefined
+          ? replaceTabInPlace(items, identity, { id })
+          : insertTabByRank(items, identity, { id }, rank, rankOf);
+      };
+    // The active middle project registers first, then a user-opened (unranked) project, then the rest.
+    let items = add([], 'beta', 1);
+    items = add(items, 'opened-later');
+    items = add(items, 'gamma', 2);
+    items = add(items, 'alpha', 0);
+    expect(items.map(identity)).toEqual(['alpha', 'beta', 'gamma', 'opened-later']);
+    // Re-registering an existing tab replaces it without moving it.
+    const updated = insertTabByRank(items, identity, { id: 'beta', name: 'renamed' } as { id: string }, 1, rankOf);
+    expect(updated.map(identity)).toEqual(['alpha', 'beta', 'gamma', 'opened-later']);
+    expect(updated[1]).toEqual({ id: 'beta', name: 'renamed' });
+    // Empty, then refill.
+    expect(insertTabByRank([], identity, { id: 'solo' }, 5, rankOf).map(identity)).toEqual(['solo']);
   });
 });

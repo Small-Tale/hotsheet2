@@ -9,7 +9,7 @@ import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '..
 import { type MigrationJob } from '../migration-progress';
 import type { PermissionAutomation } from '../permission-notifications';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
-import { replaceTabInPlace } from '../tab-order';
+import { insertTabByRank, replaceTabInPlace } from '../tab-order';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
 import { dismissHs1CleanupPrompt, hs1MigrationPromptDismissed, saveActiveProjectRoot } from '../workspace-session';
 
@@ -96,6 +96,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     projectRestoreFailures = signal<ProjectRestoreFailure[]>([]),
     selectedProjectRestoreRoot = signal('');
   const projectsPendingActivation = new Set<string>();
+  /** Remembered startup position of each restored project, for out-of-order registration. */
+  const restoreRanks = new Map<string, number>();
 
   const migrationJobs: MigrationJobClient = new MigrationJobs(
     (job) => {
@@ -154,11 +156,26 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     projectRestoreFailures.value = [...projectRestoreFailures.value.filter((item) => item.root !== root), failure];
   }
 
-  async function wireOpenedProject(root: string, opened: Extract<ProjectOpenResult, { ok: true }>) {
+  async function wireOpenedProject(
+    root: string,
+    opened: Extract<ProjectOpenResult, { ok: true }>,
+    restoreIndex?: number,
+  ) {
     const { project: value, providers: descriptors } = opened;
     projectRestoreFailures.value = projectRestoreFailures.value.filter((item) => item.root !== root);
     if (selectedProjectRestoreRoot.value === root) selectedProjectRestoreRoot.value = '';
-    projects.value = replaceTabInPlace(projects.value, (item) => item.id, value);
+    if (restoreIndex === undefined) projects.value = replaceTabInPlace(projects.value, (item) => item.id, value);
+    else {
+      // Startup registers the active project first; keep every tab in its remembered position.
+      if (!restoreRanks.has(value.id)) restoreRanks.set(value.id, restoreIndex);
+      projects.value = insertTabByRank(
+        projects.value,
+        (item) => item.id,
+        value,
+        restoreRanks.get(value.id)!,
+        (item) => restoreRanks.get(item.id),
+      );
+    }
     hideVerifiedByProject.value = {
       ...hideVerifiedByProject.value,
       [value.id]: localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`) === 'true',

@@ -560,8 +560,11 @@ and identity-less legacy entries remain conservatively blocking.
   hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
   remembered roots are deduplicated and their project-open/metadata requests run concurrently.
-  Failed opens receive one bounded parallel retry; successful projects are then registered
-  serially in remembered order. Only the remembered active project loads its ticket list,
+  When the remembered active root opens on its first attempt, it is registered and activated
+  immediately and the shell is revealed without waiting for the other projects; they register
+  behind it, each inserted at its remembered tab position (HS2-X74D4B). Otherwise failed opens
+  receive one bounded parallel retry and successful projects are registered serially in remembered
+  order before one project is activated. Only the remembered active project loads its ticket list,
   commands, views, and workspace session before the shell is revealed. Other project tabs
   load those resources when selected (including selection after closing the active tab).
   If the remembered active root remains unavailable, its error tab stays selected; if no
@@ -1855,11 +1858,13 @@ viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the proj
 bottom drawer over that same viewport boundary.
 
 When a launch restores remembered projects, the client holds a single project-restoration
-surface until parallel project registration, the active project's tickets and workspace session,
-visible terminal resources, and each failed project's bounded retry have settled. It then reveals the complete healthy and error-tab
-set in one render boundary and restores the remembered active healthy or failed tab. A refresh
-therefore never exposes a partially restored board beside terminal content from a different
-stage of startup.
+surface until the remembered active project is registered and its tickets, workspace session, and
+visible terminal resources have settled, then reveals it in one render boundary. The active board
+never appears partially restored. Other remembered projects keep opening behind it and their tabs
+appear in remembered positions as they register, so one slow or unreachable project no longer
+delays the launch (HS2-X74D4B, which replaced the earlier reveal-every-tab-at-once rule). When the
+remembered active root fails its first open, or there is none, the client waits for every project
+and the one bounded retry, then restores the remembered active healthy or failed tab as before.
 
 The terminal service is host-wide, while drawers are project-specific. The client assigns
 each terminal to the most-specific open project root containing its reported working

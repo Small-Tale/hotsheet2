@@ -23,7 +23,7 @@ function deferred<T>() {
 function callbacks() {
   return {
     wire: vi
-      .fn<(root: string, result: Extract<ProjectOpenResult, { ok: true }>) => Promise<void>>()
+      .fn<(root: string, result: Extract<ProjectOpenResult, { ok: true }>, index: number) => Promise<void>>()
       .mockResolvedValue(undefined),
     activate: vi.fn<(project: Project) => Promise<void>>().mockResolvedValue(undefined),
     retainFailure: vi.fn(),
@@ -81,34 +81,77 @@ describe('project open preparation', () => {
 });
 
 describe('remembered project startup', () => {
-  it('starts every unique fetch together, tolerates reverse completion, and serializes wiring before one active restoration', async () => {
+  it('starts every unique fetch together, then presents the active project before the others finish (HS2-X74D4B)', async () => {
     const pending = new Map(['alpha', 'beta', 'gamma'].map((root) => [root, deferred<ProjectOpenResult>()]));
     const fetch = vi.fn((root: string) => pending.get(root)!.promise);
     const state = callbacks(),
-      firstWire = deferred<undefined>();
-    state.wire.mockImplementationOnce(() => firstWire.promise);
+      activeReady = vi.fn();
     const restored = restoreRememberedProjects({
       ...state,
       roots: ['alpha', 'beta', 'alpha', 'gamma'],
       activeRoot: 'beta',
       fetch,
+      activeReady,
     });
     expect(fetch.mock.calls.map(([root]) => root)).toEqual(['alpha', 'beta', 'gamma']);
+    // gamma finishing first changes nothing; the active beta registers and activates alone.
     pending.get('gamma')!.resolve(success('gamma'));
-    pending.get('beta')!.resolve(success('beta'));
     await Promise.resolve();
     expect(state.wire).not.toHaveBeenCalled();
-    pending.get('alpha')!.resolve(success('alpha'));
+    pending.get('beta')!.resolve(success('beta'));
     await vi.waitFor(() => {
-      expect(state.wire).toHaveBeenCalledTimes(1);
+      expect(activeReady).toHaveBeenCalledTimes(1);
     });
-    expect(state.wire.mock.calls[0][0]).toBe('alpha');
-    expect(state.activate).not.toHaveBeenCalled();
-    firstWire.resolve(undefined);
-    await restored;
-    expect(state.wire.mock.calls.map(([root]) => root)).toEqual(['alpha', 'beta', 'gamma']);
+    expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([['beta', 1]]);
     expect(state.activate).toHaveBeenCalledExactlyOnceWith(project('beta'));
+    // The slow alpha still blocks the background registration, which then follows remembered order.
+    pending.get('alpha')!.resolve(success('alpha'));
+    await restored;
+    expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([
+      ['beta', 1],
+      ['alpha', 0],
+      ['gamma', 2],
+    ]);
+    expect(state.activate).toHaveBeenCalledTimes(1);
+    expect(activeReady).toHaveBeenCalledTimes(1);
     expect(state.waitForRetry).not.toHaveBeenCalled();
+  });
+  it('falls back to the full pass when the active first attempt fails, announcing readiness once at the end', async () => {
+    const state = callbacks(),
+      activeReady = vi.fn(),
+      attempts = new Map<string, number>();
+    await restoreRememberedProjects({
+      ...state,
+      roots: ['alpha', 'beta'],
+      activeRoot: 'beta',
+      activeReady,
+      fetch: async (root) => {
+        attempts.set(root, (attempts.get(root) ?? 0) + 1);
+        return root === 'beta' && attempts.get(root) === 1 ? failure(root) : success(root);
+      },
+    });
+    expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([
+      ['alpha', 0],
+      ['beta', 1],
+    ]);
+    expect(state.activate).toHaveBeenCalledExactlyOnceWith(project('beta'));
+    expect(activeReady).toHaveBeenCalledTimes(1);
+    expect(state.activate.mock.invocationCallOrder[0]).toBeLessThan(activeReady.mock.invocationCallOrder[0]);
+  });
+  it('announces readiness after selecting a failure and after an empty restore', async () => {
+    const state = callbacks(),
+      activeReady = vi.fn();
+    await restoreRememberedProjects({
+      ...state,
+      roots: ['alpha'],
+      activeRoot: 'alpha',
+      activeReady,
+      fetch: async () => failure(),
+    });
+    expect(state.selectFailure).toHaveBeenCalledExactlyOnceWith('alpha');
+    expect(activeReady).toHaveBeenCalledTimes(1);
+    await restoreRememberedProjects({ ...state, roots: [], activeReady, fetch: async () => failure() });
+    expect(activeReady).toHaveBeenCalledTimes(2);
   });
   it('retries only failed roots together, preserving original order and active choice after recovery', async () => {
     const state = callbacks(),
@@ -196,7 +239,7 @@ describe('remembered project startup', () => {
     fetch.mockImplementation(async (root) => success(root));
     await restoreRememberedProjects({ ...state, roots: ['beta', 'beta'], activeRoot: 'beta', fetch });
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(state.wire).toHaveBeenCalledExactlyOnceWith('beta', success('beta'));
+    expect(state.wire).toHaveBeenCalledExactlyOnceWith('beta', success('beta'), 0);
     expect(state.activate).toHaveBeenCalledExactlyOnceWith(project('beta'));
   });
   it('matches a canonical active root when the remembered open request used a checkout alias', async () => {

@@ -268,6 +268,34 @@ test('opens remembered projects concurrently, wires original order, and restores
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('alpha preserved draft');
 });
 
+test('shows the active project while another remembered project is still opening, then fills tabs in remembered order (HS2-X74D4B)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'beta');
+  for (const name of ['alpha', 'beta', 'gamma']) fixture.pending.set(name, gate());
+  await page.goto('/?dev-review=false');
+  await expect.poll(() => fixture.attempts.size).toBe(3);
+  const restoring = page.locator('[data-component="project-restore-state"]'),
+    tabs = page.locator('.project-tab-bar [role="tab"]');
+  await expect(restoring).toBeVisible();
+  // Only the active project opens; the slow alpha stays pending.
+  fixture.pending.get('beta')!.release();
+  await expect(restoring).toHaveCount(0);
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await expect(tabs).toHaveText(['beta1']);
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  await page.screenshot({ path: testInfo.outputPath('active-first-while-others-restore.png') });
+  // The rest register behind it in remembered order, without moving the selection.
+  fixture.pending.get('gamma')!.release();
+  fixture.pending.get('alpha')!.release();
+  await expect(tabs).toHaveText(['alpha', 'beta1', 'gamma']);
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
+  await page.getByRole('tab', { name: /^alpha/ }).click();
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+});
+
 test('retries failed roots in parallel and retains the original order when the active root recovers', async ({
   page,
 }) => {
