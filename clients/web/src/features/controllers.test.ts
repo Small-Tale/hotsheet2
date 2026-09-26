@@ -348,6 +348,49 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(state.ai.aiConfigurationProjectId).toBe('b');
   });
 
+  it('requests AI tools and settings in parallel and applies them together (HS2-QV8B7R)', async () => {
+    const state = chatOwners(),
+      tools = deferred<Response>(),
+      settings = deferred<Response>();
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      if (url.startsWith('/api/a/ai-tools')) return tools.promise;
+      if (url === '/api/a/ai-settings') return settings.promise;
+      throw new Error(`Unexpected ${url}`);
+    });
+    const loading = state.ai.refreshAiConfiguration(undefined, true);
+    await vi.advanceTimersByTimeAsync(0);
+    // Both requests are in flight before either answers.
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/ai-tools?refresh=true', '/api/a/ai-settings']);
+    expect(state.ai.aiSettingsLoading.value).toBe(true);
+    // Settings answering first applies nothing until the tools arrive too.
+    settings.resolve(json({ tool: 'a-tool' }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.ai.aiSettingsLoading.value).toBe(true);
+    expect(state.ai.aiConfigurationProjectId).not.toBe('a');
+    tools.resolve(json([{ id: 'a-tool', display_name: 'A tool', models: [] }]));
+    await loading;
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(state.ai.aiToolOptions()).toEqual([{ id: 'a-tool', label: 'A tool' }]);
+    expect(state.ai.aiConfigurationProjectId).toBe('a');
+    expect(state.ai.aiSettingsMessage.value).toBe('');
+
+    // A failing settings read fails the whole refresh without applying the tools.
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      if (url.startsWith('/api/a/ai-tools')) return json([{ id: 'other', display_name: 'Other', models: [] }]);
+      return new Response(JSON.stringify({ error: 'settings unavailable' }), { status: 500 });
+    });
+    await state.ai.refreshAiConfiguration();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(state.ai.aiSettingsMessage.value).toContain('settings unavailable');
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
+    expect(state.ai.aiConfigurationProjectId).toBe('');
+    expect(state.ai.aiToolOptions()).toEqual([{ id: 'a-tool', label: 'A tool' }]);
+  });
+
   it('restores cached per-project AI configuration on A→B→A without refetching (HS2-AZZ9TF)', async () => {
     const state = chatOwners();
     fetchMock.mockImplementation(async (url) => {

@@ -492,6 +492,117 @@ async fn prewarming_the_catalog_coexists_with_a_concurrent_first_client() {
     );
 }
 
+/// Write the `ci-fixture` drivable plugin (detected through `rustc`) into `dir`.
+fn write_memo_fixture_plugin(dir: &std::path::Path) {
+    let fixture = dir.join("ci-fixture");
+    std::fs::create_dir_all(&fixture).unwrap();
+    std::fs::write(
+        fixture.join("instructions.md"),
+        "CI fixture instructions.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        r#"
+id = "ci-fixture"
+display_name = "CI Fixture"
+product_name = "CI Fixture"
+tier = "cli-agent"
+[detection]
+binaries = ["rustc"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "spawn"
+program = "rustc"
+content = "arg"
+models = [
+  { id = "fixture-model", label = "Fixture Model", effort_levels = ["low", "high"] },
+]
+default_model = "fixture-model"
+default_effort = "low"
+session_options = ["model", "effort"]
+"#,
+    )
+    .unwrap();
+}
+
+async fn lists_ci_fixture(router: &axum::Router, uri: &str) -> bool {
+    let response = router
+        .clone()
+        .oneshot(authed("GET", uri, None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    body_json(response)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool["id"] == "ci-fixture")
+}
+
+/// HS2-QV8B7R: AI-tool discovery is memoized briefly, so `/ai-tools` and `/ai-settings`
+/// share one scan. The fixture plugin's manifest is read on every real scan, which makes
+/// the memo observable: removing the plugin is invisible until `refresh=true` rescans,
+/// and re-adding it is invisible until setting a tool up invalidates the memo.
+#[tokio::test]
+async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
+    let plugins = tempfile::tempdir().unwrap();
+    write_memo_fixture_plugin(plugins.path());
+    let (_dir, state) = state();
+    let router = app(state.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+
+    assert!(lists_ci_fixture(&router, "/ai-tools").await);
+    // /ai-settings reuses the memoized discovery and still resolves a default tool.
+    let settings = router
+        .clone()
+        .oneshot(authed("GET", "/ai-settings", None))
+        .await
+        .unwrap();
+    assert_eq!(settings.status(), StatusCode::OK);
+
+    // Hit: the plugin is gone from disk but the memo still answers.
+    std::fs::remove_dir_all(plugins.path().join("ci-fixture")).unwrap();
+    assert!(lists_ci_fixture(&router, "/ai-tools").await);
+
+    // Refresh bypasses the memo and repopulates it with the new state.
+    assert!(!lists_ci_fixture(&router, "/ai-tools?refresh=true").await);
+    write_memo_fixture_plugin(plugins.path());
+    assert!(
+        !lists_ci_fixture(&router, "/ai-tools").await,
+        "the refreshed memo answers until it is invalidated"
+    );
+
+    // Setting a tool up changes plugin state and invalidates the memo.
+    let setup = router
+        .clone()
+        .oneshot(authed("POST", "/setup/ci-fixture", None))
+        .await
+        .unwrap();
+    assert_eq!(setup.status(), StatusCode::OK);
+    assert!(lists_ci_fixture(&router, "/ai-tools").await);
+
+    // /ai-settings validation sees the same (memoized) discovery.
+    let saved = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/ai-settings",
+            Some(r#"{"tool":"ci-fixture","model":"fixture-model","effort":"high"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+}
+
 #[tokio::test]
 async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
     let (dir, state) = state();
@@ -2270,6 +2381,121 @@ fn adding_a_blocked_checkout_source_does_not_stall_other_requests() {
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        },
+    );
+}
+
+/// HS2-QV8B7R: `GET /checkouts/{reference}/corrupt-tickets` runs its resilient listing
+/// (a parse of every ticket file) on the blocking pool. While a planted pipe blocks that
+/// parse, `/health` and the checkout's ticket rows keep answering; once released the pipe
+/// is reported as a corrupt ticket with the unchanged wire shape.
+#[cfg(unix)]
+#[test]
+fn listing_corrupt_tickets_does_not_stall_other_requests() {
+    use std::time::Duration;
+
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let fifo = plant_ticket_fifo(&store);
+    let fifo_path = fifo.display().to_string();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let unblock = release.clone();
+
+    run_flow_with_deadline(
+        release,
+        "a request blocked on the planted ticket pipe: GET corrupt-tickets parsed tickets on \
+         the request thread",
+        move || async move {
+            let app = app(st.with_checkout_registry(registry_path));
+            let opened = body_json(
+                app.clone()
+                    .oneshot(authed(
+                        "POST",
+                        "/projects/open",
+                        Some(
+                            &serde_json::json!({ "root": checkout, "sources": [source] })
+                                .to_string(),
+                        ),
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+            let corrupt_uri = format!("/checkouts/{checkout_id}/corrupt-tickets");
+            let listing = tokio::spawn(app.clone().oneshot(authed("GET", &corrupt_uri, None)));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(
+                !listing.is_finished(),
+                "the listing should wait on the pipe"
+            );
+
+            assert_health_answers(&app).await;
+            let rows = app
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    None,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(rows.status(), StatusCode::OK);
+            assert!(!listing.is_finished());
+
+            unblock_fifo_until(fifo, unblock);
+            let resp = tokio::time::timeout(Duration::from_secs(10), listing)
+                .await
+                .expect("the listing finishes once the pipe is released")
+                .unwrap()
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let corrupt = body_json(resp).await;
+            let corrupt = corrupt.as_array().unwrap();
+            assert_eq!(corrupt.len(), 1, "{corrupt:?}");
+            let entry = corrupt[0].as_object().unwrap();
+            let mut keys = entry.keys().map(String::as_str).collect::<Vec<_>>();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                [
+                    "error",
+                    "error_code",
+                    "id",
+                    "path",
+                    // `slug` is omitted when the unparseable file has none.
+                    "store",
+                    "store_path"
+                ]
+            );
+            assert!(
+                entry["path"].as_str().unwrap().ends_with(
+                    std::path::Path::new(&fifo_path)
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                ),
+                "{entry:?}"
+            );
+
+            // An unknown checkout still fails from inside the blocking task.
+            let missing = app
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    "/checkouts/no-such-checkout/corrupt-tickets",
+                    None,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(missing.status(), StatusCode::NOT_FOUND);
         },
     );
 }

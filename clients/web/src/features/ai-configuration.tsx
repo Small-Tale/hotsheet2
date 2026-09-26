@@ -320,9 +320,10 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     aiSettingsLoading.value = true;
     const epoch = aiConfigurationEpochs.get(current.id) ?? 0;
     try {
-      const client = new Api(current.apiPath),
-        tools = await client.aiTools(refresh),
-        defaults = await client.aiSettings();
+      const client = new Api(current.apiPath);
+      // Independent reads: issue both at once so project activation waits for the slower one,
+      // not their sum. The server shares one AI-tool discovery between them (HS2-QV8B7R).
+      const [tools, defaults] = await Promise.all([client.aiTools(refresh), client.aiSettings()]);
       // A late answer for a project the user already left is still that project's configuration:
       // keep it warm for the next switch back, but never apply it to the active project.
       if ((aiConfigurationEpochs.get(current.id) ?? 0) === epoch)

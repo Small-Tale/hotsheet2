@@ -147,6 +147,10 @@ Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalid
 reported path, routes the generated work item to the affected store, and returns the
 existing open repair item on repeated requests. The API schedules recoverable work for an
 AI worker; it does not synchronously rewrite or delete an unreadable source file.
+`GET /checkouts/{reference}/corrupt-tickets` parses every ticket file of every linked git
+source, so it runs on the blocking pool and never stalls other requests (HS2-QV8B7R). It
+does not reuse the `/health` scan, which covers only the primary store and may answer from
+a stale listing.
 
 `POST /projects/open` is the client onboarding transaction: it validates a code checkout,
 accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` store,
@@ -575,7 +579,11 @@ it does, the core queries the installed provider, merges live ids and effort lev
 manifest labels/default fallbacks, and degrades to the manifest when the runtime is
 offline. The server caches results by plugin id plus runtime version; authenticated
 `GET /ai-tools?refresh=true` bypasses the same-version cache so clients can refresh after
-provider changes. `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
+provider changes. The server also memoizes a complete discovery for 10 s inside the same
+catalog lock, so `/ai-tools`, `/ai-settings`, and terminal-launch validation share one scan
+and concurrent callers coalesce onto it; `refresh=true` bypasses and repopulates the memo,
+and `POST /setup/{tool}` (or replacing the plugin roots) invalidates it. Tools installed
+outside the server appear once the memo expires or on the next refresh (HS2-QV8B7R). `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
 [--model <id>] [--effort <level>]` provide headless parity for the machine-local defaults
 exposed by `/ai-tools` and `/ai-settings`.
 

@@ -5,6 +5,7 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+mod ai_tool_discovery;
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;
@@ -26,7 +27,7 @@ pub mod turn_stream;
 
 use std::collections::HashSet;
 use std::path::Path as FsPath;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use multistore::{StoreEntry, StoreHost, StoreInfo};
@@ -140,9 +141,13 @@ pub struct AppState {
     terminal_broker: Option<terminal_broker::TerminalBroker>,
     /// Search roots for third-party plugins; embedded first-party plugins are always present.
     plugin_dirs: Arc<Vec<std::path::PathBuf>>,
-    /// Runtime AI model catalogs keyed by plugin id and installed runtime version. The
-    /// manifest remains the fallback for unsupported or unavailable capabilities.
-    model_catalogs: Arc<Mutex<hotsheet_aitools::ModelCatalogCache>>,
+    /// Runtime AI model catalogs keyed by plugin id and installed runtime version, plus a
+    /// short-lived memo of the last full discovery (HS2-QV8B7R). The manifest remains the
+    /// fallback for unsupported or unavailable capabilities.
+    model_catalogs: Arc<Mutex<ai_tool_discovery::AiToolDiscoveryCache>>,
+    /// Bumped by anything that changes tool installation or plugin state; a discovery memo
+    /// scanned under an older generation is never served (HS2-QV8B7R).
+    ai_tool_generation: Arc<AtomicU64>,
     /// Checkout ids with a background setup refresh in flight; repeated opens coalesce.
     setup_refreshes: Arc<Mutex<std::collections::HashSet<String>>>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
@@ -287,7 +292,8 @@ impl AppState {
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
-            model_catalogs: Arc::new(Mutex::new(hotsheet_aitools::ModelCatalogCache::default())),
+            model_catalogs: Arc::default(),
+            ai_tool_generation: Arc::default(),
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
@@ -614,7 +620,7 @@ impl AppState {
     /// Override plugin search roots (for hermetic hosts and integration tests).
     pub fn with_plugin_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
         self.plugin_dirs = Arc::new(dirs);
-        self.model_catalogs = Arc::new(Mutex::new(hotsheet_aitools::ModelCatalogCache::default()));
+        self.model_catalogs = Arc::default();
         self
     }
 
@@ -4055,25 +4061,38 @@ struct CheckoutCorruptTicket {
     error_code: &'static str,
 }
 
+/// `GET /checkouts/{reference}/corrupt-tickets` — every unparseable ticket file across the
+/// checkout's hosted git sources.
+///
+/// The resilient listing parses every ticket file of every linked store, so the whole walk
+/// runs on the blocking pool and a large store never occupies an async request thread
+/// (HS2-QV8B7R). It is not shared with the `/health` single-flight scan: that scan covers
+/// only the primary store and may answer from a stale listing, whereas the ticket list
+/// filters rows by this response and needs the current state of every linked source.
 async fn list_checkout_corrupt_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
 ) -> Result<Json<Vec<CheckoutCorruptTicket>>, ApiError> {
-    let mut result = Vec::new();
-    for (store_id, entry) in checkout_entries(&state, &reference)? {
-        let store_path = entry.store.root().display().to_string();
-        for corrupt in entry.store.list_tickets_resilient()?.corrupt {
-            result.push(CheckoutCorruptTicket {
-                store: store_id.clone(),
-                store_path: store_path.clone(),
-                path: corrupt.path.display().to_string(),
-                id: corrupt.id.map(|id| id.to_string()),
-                slug: corrupt.slug,
-                error: corrupt.error,
-                error_code: corrupt.error_code,
-            });
+    let result = tokio::task::spawn_blocking(move || {
+        let mut result = Vec::new();
+        for (store_id, entry) in checkout_entries(&state, &reference)? {
+            let store_path = entry.store.root().display().to_string();
+            for corrupt in entry.store.list_tickets_resilient()?.corrupt {
+                result.push(CheckoutCorruptTicket {
+                    store: store_id.clone(),
+                    store_path: store_path.clone(),
+                    path: corrupt.path.display().to_string(),
+                    id: corrupt.id.map(|id| id.to_string()),
+                    slug: corrupt.slug,
+                    error: corrupt.error,
+                    error_code: corrupt.error_code,
+                });
+            }
         }
-    }
+        Ok::<_, ApiError>(result)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     Ok(Json(result))
 }
 
@@ -6414,13 +6433,44 @@ struct CreateDriveConnectionReq {
 }
 
 fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    let mut cache = state.model_catalogs.lock().unwrap();
-    hotsheet_aitools::discover_ai_tool_descriptors(
+    discover_ai_tools_memoized(
+        &state.model_catalogs,
+        &state.ai_tool_generation,
         &state.plugin_dirs,
         state.store.root(),
-        &mut cache,
         refresh,
     )
+}
+
+/// Blocking AI-tool discovery through the short-lived memo (HS2-QV8B7R). The generation is
+/// read under the catalog lock, so callers that queued behind a scan reuse its result
+/// unless an invalidation landed after it started.
+fn discover_ai_tools_memoized(
+    catalogs: &Mutex<ai_tool_discovery::AiToolDiscoveryCache>,
+    generation: &AtomicU64,
+    plugin_dirs: &[std::path::PathBuf],
+    root: &FsPath,
+    refresh: bool,
+) -> Vec<hotsheet_plugins::AiToolDescriptor> {
+    let mut cache = catalogs.lock().unwrap();
+    let generation = generation.load(Ordering::Acquire);
+    cache.discover(
+        std::time::Instant::now(),
+        generation,
+        ai_tool_discovery::AI_TOOL_DISCOVERY_TTL,
+        refresh,
+        |catalogs, refresh| {
+            hotsheet_aitools::discover_ai_tool_descriptors(plugin_dirs, root, catalogs, refresh)
+        },
+    )
+}
+
+impl AppState {
+    /// Drop the memoized AI-tool discovery after tool installation or plugin state changed,
+    /// without waiting for a discovery in progress (HS2-QV8B7R).
+    fn invalidate_ai_tool_discovery(&self) {
+        self.ai_tool_generation.fetch_add(1, Ordering::AcqRel);
+    }
 }
 
 /// Discover AI tools **off the async runtime**.
@@ -6432,16 +6482,21 @@ fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins:
 /// unrelated concurrent requests behind it — the mechanism behind a second web client
 /// loading far slower than the first (HS2-10R4VV). Move the whole scan (and its lock) to
 /// the blocking pool so the async workers stay free. See HS2-S66BZZ.
+///
+/// The result is memoized for [`ai_tool_discovery::AI_TOOL_DISCOVERY_TTL`] under the same
+/// lock, so project activation's `/ai-tools` and `/ai-settings` share one scan and
+/// concurrent callers coalesce onto it; `refresh` bypasses and repopulates the memo
+/// (HS2-QV8B7R).
 async fn discovered_ai_tools_off_runtime(
     state: &AppState,
     refresh: bool,
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
     let catalogs = state.model_catalogs.clone();
+    let generation = state.ai_tool_generation.clone();
     let plugin_dirs = state.plugin_dirs.clone();
     let root = state.store.root().to_path_buf();
     tokio::task::spawn_blocking(move || {
-        let mut cache = catalogs.lock().unwrap();
-        hotsheet_aitools::discover_ai_tool_descriptors(&plugin_dirs, &root, &mut cache, refresh)
+        discover_ai_tools_memoized(&catalogs, &generation, &plugin_dirs, &root, refresh)
     })
     .await
     .unwrap_or_default()
@@ -8277,6 +8332,8 @@ async fn setup_tool(
         &state.plugin_dirs,
     )
     .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    // Setting a tool up changes its plugin state; the next discovery must rescan.
+    state.invalidate_ai_tool_discovery();
     Ok(Json(reports))
 }
 
