@@ -11,10 +11,12 @@ import {
   chooseLocalFolder,
   connectGitTicketStoreRemote,
   createLocalGitTicketStore,
+  createServerHealthProbe,
   describeGitRemoteFailure,
   developmentRepositoryRoot,
   developmentSetupAssetsFingerprint,
   folderChooserCommand,
+  forgetVerifiedServer,
   hs1ChannelSlug,
   hs1MigrationArgs,
   linkedTicketStore,
@@ -753,6 +755,84 @@ describe('requireCompatibleServer', () => {
   });
 });
 
+describe('dev bridge server health probe (HS2-TANE0V)', () => {
+  const instance = { pid: 42, url: 'http://127.0.0.1:8787', secret: 'private', started_at: '2026-09-10T01:00:00Z' };
+  const setup = (answers: Array<'ok' | 'down' | 'bad'>) => {
+    let clock = 1_000;
+    const timeouts: number[] = [],
+      timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+        timeouts.push(ms);
+        return new AbortController().signal;
+      }),
+      request = vi.fn(() => {
+        const answer = answers.shift() ?? 'ok';
+        if (answer === 'down') return Promise.reject(new Error('connection refused'));
+        return Promise.resolve(Response.json({ status: answer === 'ok' ? 'ok' : 'starting' }));
+      }),
+      verified = new Map<string, { instance: typeof instance; at: number }>(),
+      probe = createServerHealthProbe('/store', {
+        request: request as unknown as typeof fetch,
+        now: () => clock,
+        verified,
+      });
+    return {
+      probe,
+      request,
+      verified,
+      timeouts,
+      restore: () => {
+        timeoutSpy.mockRestore();
+      },
+      advance: (ms: number) => {
+        clock += ms;
+      },
+    };
+  };
+
+  it('is patient on the first probe of a call and short on retries', async () => {
+    const { probe, timeouts, restore } = setup(['down', 'down']);
+    await expect(probe(instance, 0)).resolves.toBe(false);
+    await expect(probe(instance, 1)).resolves.toBe(false);
+    expect(timeouts).toEqual([3_000, 750]);
+    restore();
+  });
+
+  it('reuses a fresh verification of the same instance, then re-probes after expiry, replacement, or forget', async () => {
+    const { probe, request, verified, advance, restore } = setup(['ok', 'ok', 'ok', 'down', 'ok']);
+    await expect(probe(instance, 0)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    // A burst of project opens within the window does not re-request /health.
+    advance(9_000);
+    await expect(probe(instance, 0)).resolves.toBe(true);
+    await expect(probe(instance, 0)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    // Expired: probe again and refresh the verification.
+    advance(1_500);
+    await expect(probe(instance, 0)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    // A replacement process (new pid/started_at) is never trusted from the old verification.
+    const replacement = { ...instance, pid: 43, started_at: '2026-09-10T02:00:00Z' };
+    await expect(probe(replacement, 0)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(3);
+    // A failed forward forgets the verification, so a dead instance is re-probed and reported.
+    forgetVerifiedServer('/store', verified);
+    await expect(probe(replacement, 0)).resolves.toBe(false);
+    expect(verified.has('/store')).toBe(false);
+    await expect(probe(replacement, 0)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(5);
+    restore();
+  });
+
+  it('never caches an unhealthy answer', async () => {
+    const { probe, request, verified, restore } = setup(['bad', 'ok']);
+    await expect(probe(instance, 0)).resolves.toBe(false);
+    expect(verified.size).toBe(0);
+    await expect(probe(instance, 1)).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    restore();
+  });
+});
+
 describe('machine server supervision', () => {
   const running = { pid: 42, url: 'http://127.0.0.1:8787', secret: 'private', started_at: '2026-09-10T01:00:00Z' };
   const replacement = { ...running, pid: 43, started_at: '2026-09-10T02:00:00Z' };
@@ -763,8 +843,16 @@ describe('machine server supervision', () => {
     await expect(
       superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch, wait: vi.fn() }, 1),
     ).resolves.toEqual(running);
-    expect(probe).toHaveBeenCalledWith(running);
+    expect(probe).toHaveBeenCalledWith(running, 0);
     expect(launch).not.toHaveBeenCalled();
+  });
+
+  it('numbers probe attempts so only the first check of a supervision call is patient (HS2-TANE0V)', async () => {
+    const probe = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    await expect(
+      superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch: vi.fn(), wait: vi.fn() }, 3),
+    ).resolves.toEqual(running);
+    expect(probe.mock.calls.map((call) => call[1])).toEqual([0, 1, 2]);
   });
 
   it('restarts after a crash but refuses to duplicate a live unhealthy process', async () => {

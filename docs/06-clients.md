@@ -594,7 +594,12 @@ and identity-less legacy entries remain conservatively blocking.
   The Vite-only bridge discovers or detached-starts one bootstrap machine server and
   attaches every discovered or explicit project store through the server's multi-store
   open path; it never starts one server per project. Discovery is health checked and the
-  bridge re-supervises after transport failures and terminal-WebSocket reconnects. Safe
+  bridge re-supervises after transport failures and terminal-WebSocket reconnects. The first
+  `/health` check of each supervision waits up to 3 s, so a busy but healthy server is not
+  mistaken for a dead one, while retries keep a 750 ms limit so a hung registered process is
+  still reported promptly. An instance (same pid, URL, and start time) verified healthy in the
+  last 10 s is reused without another request, so a burst of project opens or reconnects does
+  not re-probe; a failed forward forgets that verification before re-supervising (HS2-TANE0V). Safe
   GET/HEAD requests retry after recovery, while ambiguous writes return an explicit 503
   instead of risking duplicate mutation. Compatible old servers may be upgraded through
   their authenticated quiescence/restart capabilities; the bridge waits for the old

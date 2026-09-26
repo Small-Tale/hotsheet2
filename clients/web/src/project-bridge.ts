@@ -704,7 +704,8 @@ async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
 
 export interface ServerSupervisorPlatform {
   discover(): Promise<InstanceInfo | undefined>;
-  probe(instance: InstanceInfo): Promise<boolean>;
+  /** `attempt` is 0 for the first health check of a supervision call and increases per retry. */
+  probe(instance: InstanceInfo, attempt: number): Promise<boolean>;
   launch(): Promise<void>;
   wait(): Promise<void>;
 }
@@ -731,7 +732,8 @@ function sameInstance(left: InstanceInfo | undefined, right: InstanceInfo | unde
  * join-don't-collide boundary. Calls are event-driven by project open/API/WS reconnects. */
 export async function superviseServer(platform: ServerSupervisorPlatform, maxAttempts = 80): Promise<InstanceInfo> {
   const first = await platform.discover();
-  if (first && (await platform.probe(first))) return first;
+  let probes = 0;
+  if (first && (await platform.probe(first, probes++))) return first;
   let launched = false;
   if (!first) {
     await platform.launch();
@@ -740,7 +742,7 @@ export async function superviseServer(platform: ServerSupervisorPlatform, maxAtt
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await platform.wait();
     const current = await platform.discover();
-    if (current && (await platform.probe(current))) return current;
+    if (current && (await platform.probe(current, probes++))) return current;
     if (!current && !launched) {
       await platform.launch();
       launched = true;
@@ -750,20 +752,68 @@ export async function superviseServer(platform: ServerSupervisorPlatform, maxAtt
   throw new Error('Timed out waiting for a healthy Hot Sheet server.');
 }
 
+export interface ServerHealthProbeOptions {
+  request?: typeof fetch;
+  now?: () => number;
+  /** Instances verified healthy per store: `sameInstance` identity plus when it was verified. */
+  verified?: Map<string, { instance: InstanceInfo; at: number }>;
+  /** The first check of a supervision call waits this long, so a busy but healthy server passes. */
+  patientTimeoutMs?: number;
+  /** Retries stay short, so a hung registered server is still reported in roughly the same time. */
+  retryTimeoutMs?: number;
+  /** A just-verified instance is trusted without another request for this long. */
+  freshMs?: number;
+}
+
+const verifiedServerInstances = new Map<string, { instance: InstanceInfo; at: number }>();
+
+/** Drop a store's recent health verification so the next supervision probes the server again. */
+export function forgetVerifiedServer(
+  store: string,
+  verified: Map<string, { instance: InstanceInfo; at: number }> = verifiedServerInstances,
+): void {
+  verified.delete(store);
+}
+
+/** Health probe for the dev bridge's server supervisor (HS2-TANE0V). Project opens each supervise the
+ * server, so a burst of opens re-probed `/health` back to back, and a 750 ms limit made a busy server
+ * look unhealthy and restarted the retry loop. Opens now reuse a verification of the same instance
+ * from the last few seconds (no request, no timer), and the first probe of a call is patient. */
+export function createServerHealthProbe(
+  store: string,
+  {
+    request = fetch,
+    now = Date.now,
+    verified = verifiedServerInstances,
+    patientTimeoutMs = 3_000,
+    retryTimeoutMs = 750,
+    freshMs = 10_000,
+  }: ServerHealthProbeOptions = {},
+): ServerSupervisorPlatform['probe'] {
+  return async (instance, attempt) => {
+    const previous = verified.get(store);
+    if (previous && sameInstance(previous.instance, instance) && now() - previous.at < freshMs) return true;
+    verified.delete(store);
+    try {
+      const response = await request(`${instance.url}/health`, {
+        signal: AbortSignal.timeout(attempt === 0 ? patientTimeoutMs : retryTimeoutMs),
+      });
+      if (!response.ok) return false;
+      const healthy = ((await response.json()) as { status?: string }).status === 'ok';
+      if (healthy) verified.set(store, { instance, at: now() });
+      return healthy;
+    } catch {
+      return false;
+    }
+  };
+}
+
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
   return {
     discover: () => instanceFor(store),
-    probe: async (instance) => {
-      try {
-        const response = await fetch(`${instance.url}/health`, { signal: AbortSignal.timeout(750) });
-        if (!response.ok) return false;
-        return ((await response.json()) as { status?: string }).status === 'ok';
-      } catch {
-        return false;
-      }
-    },
+    probe: createServerHealthProbe(store),
     launch: async () => {
       if (!(await exists(binary)))
         throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
@@ -1002,6 +1052,8 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
     return await forward();
   } catch (error) {
     if (!target.serverStore) throw error;
+    // A failed forward means the verified instance may be gone: re-probe instead of trusting it.
+    forgetVerifiedServer(target.serverStore);
     await refreshSupervisedTarget(target);
     if (request.method !== 'GET' && request.method !== 'HEAD')
       return Response.json(
