@@ -2010,6 +2010,270 @@ fn registering_a_blocked_store_does_not_stall_other_requests() {
     }
 }
 
+/// Run `flow` on its own current-thread runtime with an outer deadline. A request that
+/// blocks the runtime (a synchronous ticket parse on the request path) then fails cleanly
+/// with `regression` instead of hanging the test. `release` is set once the flow ends so
+/// any pipe-unblocking helper threads stop.
+#[cfg(unix)]
+fn run_flow_with_deadline<F, Fut>(
+    release: Arc<std::sync::atomic::AtomicBool>,
+    regression: &str,
+    flow: F,
+) where
+    F: FnOnce() -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()>,
+{
+    use std::sync::atomic::Ordering;
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let flow_release = release.clone();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(flow());
+        flow_release.store(true, Ordering::Release);
+        runtime.shutdown_background();
+        let _ = tx.send(());
+    });
+    let outcome = rx.recv_timeout(std::time::Duration::from_secs(30));
+    release.store(true, Ordering::Release);
+    match outcome {
+        Ok(()) => {}
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!("{regression}"),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("the request flow panicked (see the assertion output above)")
+        }
+    }
+}
+
+/// Repeatedly open `fifo` for writing until `release` is set, so every blocked reader of
+/// the planted pipe sees EOF and moves on.
+#[cfg(unix)]
+fn unblock_fifo_until(fifo: std::path::PathBuf, release: Arc<std::sync::atomic::AtomicBool>) {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::thread::spawn(move || {
+        while !release.load(std::sync::atomic::Ordering::Acquire) {
+            let _ = std::fs::OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&fifo);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    });
+}
+
+/// `/health` answers `ok` while other work is pending on the runtime.
+#[cfg(unix)]
+async fn assert_health_answers(app: &axum::Router) {
+    let health = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(health.status(), StatusCode::OK);
+    assert_eq!(body_json(health).await["status"], "ok");
+}
+
+/// HS2-2VBN8Y: `POST /projects/open` discovers and hosts the checkout's ticket store on
+/// the blocking pool. A named pipe planted in the sibling `app.hs2` store blocks its index
+/// build; `/health` keeps answering, and the open completes with the discovered source
+/// once the pipe is released.
+#[cfg(unix)]
+#[test]
+fn opening_a_project_with_a_blocked_store_does_not_stall_other_requests() {
+    use std::time::Duration;
+
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let ticket_store =
+        FsStore::init(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
+    let fifo = plant_ticket_fifo(&ticket_store);
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let open_body = serde_json::json!({ "root": checkout }).to_string();
+    let missing_store = workspace.path().join("missing.hs2");
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let unblock = release.clone();
+
+    run_flow_with_deadline(
+        release,
+        "a request blocked on the planted ticket pipe: POST /projects/open built the index \
+         on the request thread",
+        move || async move {
+            let app = app(st.with_checkout_registry(registry_path));
+            let open = tokio::spawn(app.clone().oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&open_body),
+            )));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(!open.is_finished(), "the open should wait on the pipe");
+            assert_health_answers(&app).await;
+            let providers = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(providers.as_array().unwrap().len(), 1, "{providers}");
+            assert!(!open.is_finished());
+
+            unblock_fifo_until(fifo, unblock);
+            let resp = tokio::time::timeout(Duration::from_secs(10), open)
+                .await
+                .expect("the open finishes once the pipe is released")
+                .unwrap()
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CREATED);
+            let opened = body_json(resp).await;
+            assert_eq!(opened["discovered"], true);
+            let sources = opened["checkout"]["sources"].as_array().unwrap();
+            assert_eq!(sources.len(), 1, "{opened}");
+            assert_eq!(sources[0]["provider"], "git");
+            let providers = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert!(
+                providers.as_array().unwrap().iter().any(|p| p["locator"]
+                    .as_str()
+                    .is_some_and(|l| l.ends_with("app.hs2"))),
+                "the discovered store is hosted: {providers}"
+            );
+
+            // Errors raised inside the blocking task keep their status codes.
+            let missing = serde_json::json!({
+                "root": checkout,
+                "stores": [missing_store]
+            })
+            .to_string();
+            let resp = app
+                .clone()
+                .oneshot(authed("POST", "/projects/open", Some(&missing)))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        },
+    );
+}
+
+/// HS2-2VBN8Y: `PUT /checkouts/{reference}/sources/{connection_id}` hosts a git source on
+/// the blocking pool before linking it. While the source's index build is blocked on a
+/// planted pipe, `/health` keeps answering; afterwards the source is linked and hosted.
+#[cfg(unix)]
+#[test]
+fn adding_a_blocked_checkout_source_does_not_stall_other_requests() {
+    use std::time::Duration;
+
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let linked =
+        FsStore::init(workspace.path().join("linked"), &StoreMetadata::new("LNK")).unwrap();
+    let linked_root = linked.root().to_path_buf();
+    let fifo = plant_ticket_fifo(&linked);
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(&linked_root);
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let missing_locator = workspace.path().join("missing");
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let unblock = release.clone();
+
+    run_flow_with_deadline(
+        release,
+        "a request blocked on the planted ticket pipe: PUT checkout source built the index \
+         on the request thread",
+        move || async move {
+            let app = app(st.with_checkout_registry(registry_path));
+            let opened = body_json(
+                app.clone()
+                    .oneshot(authed(
+                        "POST",
+                        "/projects/open",
+                        Some(&serde_json::json!({ "root": checkout, "sources": [] }).to_string()),
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+            let uri = format!("/checkouts/{checkout_id}/sources/{}", source.connection_id);
+            let body = serde_json::json!({
+                "provider": "git",
+                "locator": linked_root,
+                "make_default": true
+            })
+            .to_string();
+            let add = tokio::spawn(app.clone().oneshot(authed("PUT", &uri, Some(&body))));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(!add.is_finished(), "the source add should wait on the pipe");
+            assert_health_answers(&app).await;
+            let pending = body_json(
+                app.clone()
+                    .oneshot(authed("GET", &format!("/checkouts/{checkout_id}"), None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert!(pending["sources"].as_array().unwrap().is_empty());
+            assert!(!add.is_finished());
+
+            unblock_fifo_until(fifo, unblock);
+            let resp = tokio::time::timeout(Duration::from_secs(10), add)
+                .await
+                .expect("the source add finishes once the pipe is released")
+                .unwrap()
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let linked_checkout = body_json(resp).await;
+            assert_eq!(
+                linked_checkout["sources"][0]["connection_id"],
+                source.connection_id.as_str()
+            );
+            assert_eq!(
+                linked_checkout["default_source"],
+                source.connection_id.as_str()
+            );
+
+            // A mismatched connection id and a missing locator still fail as bad requests.
+            let wrong = app
+                .clone()
+                .oneshot(authed(
+                    "PUT",
+                    &format!("/checkouts/{checkout_id}/sources/not-the-id"),
+                    Some(&body),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(wrong.status(), StatusCode::BAD_REQUEST);
+            let missing = serde_json::json!({
+                "provider": "git",
+                "locator": missing_locator,
+            })
+            .to_string();
+            let resp = app
+                .clone()
+                .oneshot(authed("PUT", &uri, Some(&missing)))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        },
+    );
+}
+
 /// HS2-9PPDR1: `GET /health` never waits on a full primary-store ticket parse. The
 /// resilient listing runs single-flight on the blocking pool under a short budget; past it
 /// the probe answers from the index (before any scan completed) or the last completed

@@ -122,7 +122,10 @@ never opens a ticket file, so its cost does not grow with ticket count. The tick
 in `GET /stores` (and the single-store count returned by `POST /stores`) parse ticket files
 on the blocking pool, so a large store cannot stall `/health` or other requests. `POST
 /stores` also opens and indexes a newly hosted store on the blocking pool, so registering a
-large store never occupies an async request thread (HS2-GM4FR2). Background
+large store never occupies an async request thread (HS2-GM4FR2). `POST /projects/open`
+(store discovery plus hosting each linked store) and `PUT
+/checkouts/{reference}/sources/{connection_id}` (hosting a newly linked store) do the same
+work on the blocking pool with unchanged status codes and responses (HS2-2VBN8Y). Background
 sync, Trash-purge, and distributed-work loops enumerate hosted roots without parsing
 tickets (HS2-4XXRJP).
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.

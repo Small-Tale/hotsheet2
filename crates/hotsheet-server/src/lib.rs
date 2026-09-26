@@ -3139,32 +3139,46 @@ fn schedule_worklist_regeneration(
 /// them in this machine server, and persist the checkout-to-store links atomically from
 /// the client's point of view. An empty result is valid and lets a settings UI ask the
 /// user to choose one or more providers explicitly.
+///
+/// Store discovery (a directory walk) and hosting each git source (which opens and
+/// reconciles or rebuilds its index, parsing every ticket file) run on the blocking pool,
+/// so opening a project with a large store never occupies an async request thread
+/// (HS2-2VBN8Y).
 async fn open_project(
     State(state): State<AppState>,
     Json(body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
-    let root = FsPath::new(&body.root);
     let discovered = body.stores.is_none() && body.sources.is_none();
-    let stores = match body.stores {
-        Some(paths) => paths.into_iter().map(std::path::PathBuf::from).collect(),
-        None if body.sources.is_none() => {
-            hotsheet_ticketing::checkouts::discover_ticket_stores(root)
-                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?
+    let hosting_state = state.clone();
+    let discovery_root = body.root.clone();
+    let explicit_stores = body.stores;
+    let explicit_sources = body.sources;
+    let sources = tokio::task::spawn_blocking(move || {
+        let stores = match explicit_stores {
+            Some(paths) => paths.into_iter().map(std::path::PathBuf::from).collect(),
+            None if explicit_sources.is_none() => {
+                hotsheet_ticketing::checkouts::discover_ticket_stores(FsPath::new(&discovery_root))
+                    .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?
+            }
+            None => Vec::new(),
+        };
+        let mut sources = explicit_sources.unwrap_or_default();
+        sources.extend(
+            stores
+                .iter()
+                .cloned()
+                .map(hotsheet_ticketing::checkouts::TicketSource::git),
+        );
+        for source in sources.iter().filter(|source| source.provider == "git") {
+            let store = FsStore::open(&source.locator)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+            hosting_state.host_store(store)?;
         }
-        None => Vec::new(),
-    };
-    let mut sources = body.sources.unwrap_or_default();
-    sources.extend(
-        stores
-            .iter()
-            .cloned()
-            .map(hotsheet_ticketing::checkouts::TicketSource::git),
-    );
-    for source in sources.iter().filter(|source| source.provider == "git") {
-        let store = FsStore::open(&source.locator)
-            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-        state.host_store(store)?;
-    }
+        Ok::<_, ApiError>(sources)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    let root = FsPath::new(&body.root);
     let default_source = body
         .default_source
         .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
@@ -3261,9 +3275,18 @@ async fn add_checkout_source(
     Json(body): Json<CheckoutSourceBody>,
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
     let source = if body.provider == "git" {
-        let store = FsStore::open(&body.locator)
-            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-        state.host_store(store.clone())?;
+        // Hosting a new store builds its index (a full ticket parse): keep it off the
+        // async request threads (HS2-2VBN8Y).
+        let hosting_state = state.clone();
+        let locator = body.locator;
+        let store = tokio::task::spawn_blocking(move || {
+            let store = FsStore::open(&locator)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            hosting_state.host_store(store.clone())?;
+            Ok::<_, ApiError>(store)
+        })
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
         let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
         if source.connection_id != connection_id {
             return Err(ApiError::new(
