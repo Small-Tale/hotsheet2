@@ -1821,7 +1821,9 @@ recent output, and stale ANSI modes from the disconnected stream leaking into re
 On a mobile layout, keyboard focus in the active dedicated drawer terminal promotes that
 terminal to a fixed, chrome-free focus surface with only an accessible Exit action. Its bounds
 follow `VisualViewport` offset and size changes rather than the layout viewport, so Mobile Safari's
-virtual keyboard shrinks and repositions the terminal instead of covering its bottom rows. Exit
+virtual keyboard shrinks and repositions the terminal instead of covering its bottom rows. The whole
+viewport behind the focused terminal is blacked out with the terminal background, so the app never
+shows in the gap around it — e.g. below the terminal and above the iOS keyboard (HS2-JQPRXV). Exit
 restores focus to the selected drawer tab; a later terminal focus may re-enter. Drawer hiding,
 tab/project replacement, and crossing to desktop invalidate stale focus-mode ownership
 (HS2-GMTQZM).

@@ -869,3 +869,51 @@ for (const initialWidth of [390, 1280]) {
     }
   });
 }
+
+test('blacks out the app behind a focused drawer terminal so nothing shows around it (HS2-JQPRXV)', async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    const viewport = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    Object.defineProperty(window, '__setTerminalTestViewport', {
+      configurable: true,
+      value: (next: { left: number; top: number; width: number; height: number }) => {
+        viewport.offsetLeft = next.left;
+        viewport.offsetTop = next.top;
+        viewport.width = next.width;
+        viewport.height = next.height;
+        viewport.dispatchEvent(new Event('resize'));
+      },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page, true);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  // Shrink the focused terminal to a sub-viewport box (as the iOS keyboard does), leaving a gap below.
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __setTerminalTestViewport: (next: { left: number; top: number; width: number; height: number }) => void;
+      }
+    ).__setTerminalTestViewport({ left: 4, top: 18, width: 382, height: 492 });
+  });
+  await expect
+    .poll(async () => {
+      const box = await drawer.boundingBox();
+      return box && { y: Math.round(box.y), bottom: Math.round(box.y + box.height) };
+    })
+    .toEqual({ y: 18, bottom: 510 });
+  // A point in the gap below the terminal box must be covered by the terminal backdrop, not the app.
+  const coversGap = await page.evaluate(() => {
+    const focus = document.querySelector('[data-component="terminal-drawer"][data-focus-mode="true"]');
+    const hit = document.elementFromPoint(195, 700);
+    return Boolean(focus && hit && (hit === focus || focus.contains(hit)));
+  });
+  expect(coversGap).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('focus-blackout.png') });
+});

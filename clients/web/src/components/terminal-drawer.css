@@ -17,6 +17,16 @@
   height: var(--terminal-focus-height);
   background: var(--hs-terminal-background);
 }
+/* Black out the whole viewport behind the focused terminal so the app never shows around it —
+   e.g. below the terminal above the iOS keyboard (HS2-JQPRXV). The backdrop lives in the drawer's
+   own z-index:200 stacking context, so it covers all app content yet stays behind the terminal. */
+.terminal-drawer[data-focus-mode='true']::before {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background: var(--hs-terminal-background);
+}
 .terminal-drawer[data-focus-mode='true'] .terminal-session .terminal-viewport {
   padding: 0;
 }
