@@ -7727,6 +7727,91 @@ async fn setup_endpoint_needs_the_secret() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// HS2-9TV33W: `POST /setup/{tool}` runs on the blocking pool. A named pipe planted as the
+/// project's `AGENTS.md` blocks setup's read of the instruction target (the pipe is held
+/// open read-write, so the read waits for data instead of EOF). While it is blocked,
+/// `/health` and other requests keep answering; once a regular file replaces the pipe and
+/// the holder closes, setup completes with the unchanged `200` report shape.
+#[cfg(unix)]
+#[test]
+fn setting_up_a_tool_does_not_stall_other_requests() {
+    use std::os::unix::ffi::OsStrExt;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = AppState::new(store, SECRET.into()).unwrap();
+    let agents = dir.path().join("AGENTS.md");
+    let c_path = std::ffi::CString::new(agents.as_os_str().as_bytes()).unwrap();
+    // SAFETY: `c_path` is a valid NUL-terminated path that outlives the call.
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+    // Holding the pipe open read-write lets setup's open succeed but keeps its read waiting.
+    let holder = Arc::new(Mutex::new(Some(
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&agents)
+            .unwrap(),
+    )));
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // On a deadline failure, closing the holder unblocks the stuck read.
+    let watcher_release = release.clone();
+    let watcher_holder = holder.clone();
+    std::thread::spawn(move || {
+        while !watcher_release.load(Ordering::Acquire) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        watcher_holder.lock().unwrap().take();
+    });
+    let root = dir.path().to_path_buf();
+
+    run_flow_with_deadline(
+        release,
+        "a request blocked on the planted AGENTS.md pipe: POST /setup ran on the request thread",
+        move || async move {
+            let app = app(st);
+            let setup = tokio::spawn(app.clone().oneshot(authed("POST", "/setup/codex", None)));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert!(!setup.is_finished(), "setup should wait on the pipe");
+            assert_health_answers(&app).await;
+            let providers = app
+                .clone()
+                .oneshot(authed("GET", "/providers", None))
+                .await
+                .unwrap();
+            assert_eq!(providers.status(), StatusCode::OK);
+            assert!(!setup.is_finished());
+
+            // Replace the pipe with an empty regular file, then close the holder so the
+            // blocked read sees EOF; setup's later reads and writes hit the regular file.
+            let replacement = root.join("AGENTS.md.tmp");
+            std::fs::write(&replacement, "").unwrap();
+            std::fs::rename(&replacement, root.join("AGENTS.md")).unwrap();
+            holder.lock().unwrap().take();
+
+            let resp = tokio::time::timeout(Duration::from_secs(10), setup)
+                .await
+                .expect("setup finishes once the pipe is released")
+                .unwrap()
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let reports = body_json(resp).await;
+            assert_eq!(reports[0]["tool"], "Codex CLI");
+            let written = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+            assert!(written.contains("<!-- BEGIN hotsheet:codex -->"));
+
+            // Errors raised inside the blocking task keep their status code.
+            let unknown = app
+                .clone()
+                .oneshot(authed("POST", "/setup/nope", None))
+                .await
+                .unwrap();
+            assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+        },
+    );
+}
+
 /// The `close_reason` / `closed` list filters are served through the **index**
 /// (the server lists via `index.query`, not `ops::query`), so this pins that the
 /// structured close tag actually round-trips to SQLite and back (HS2-61 / HS2-20).

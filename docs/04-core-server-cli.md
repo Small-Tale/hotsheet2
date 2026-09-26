@@ -125,7 +125,10 @@ on the blocking pool, so a large store cannot stall `/health` or other requests.
 large store never occupies an async request thread (HS2-GM4FR2). `POST /projects/open`
 (store discovery plus hosting each linked store) and `PUT
 /checkouts/{reference}/sources/{connection_id}` (hosting a newly linked store) do the same
-work on the blocking pool with unchanged status codes and responses (HS2-2VBN8Y). Background
+work on the blocking pool with unchanged status codes and responses (HS2-2VBN8Y). `POST
+/setup/{tool}` (instruction, MCP, and permission file writes plus any tool probe) also runs
+on the blocking pool with unchanged status codes and report shape, then invalidates the
+AI-tool discovery memo (HS2-9TV33W). Background
 sync, Trash-purge, and distributed-work loops enumerate hosted roots without parsing
 tickets (HS2-4XXRJP).
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.

@@ -8322,16 +8322,16 @@ async fn setup_tool(
     State(state): State<AppState>,
     Path(tool): Path<String>,
 ) -> Result<Json<Vec<hotsheet_plugins::SetupReport>>, ApiError> {
+    // Setup writes instruction/MCP/permission files and may probe the tool, so it runs on
+    // the blocking pool instead of occupying an async request thread (HS2-9TV33W).
     let store = state.store.root().to_path_buf();
-    let reports = hotsheet_plugins::run_setup_in(
-        &store,
-        &store,
-        Some(&tool),
-        false,
-        None,
-        &state.plugin_dirs,
-    )
-    .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let plugin_dirs = state.plugin_dirs.clone();
+    let reports = tokio::task::spawn_blocking(move || {
+        hotsheet_plugins::run_setup_in(&store, &store, Some(&tool), false, None, &plugin_dirs)
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     // Setting a tool up changes its plugin state; the next discovery must rescan.
     state.invalidate_ai_tool_discovery();
     Ok(Json(reports))
