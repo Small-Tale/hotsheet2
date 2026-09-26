@@ -806,6 +806,22 @@ function demoContent(item: DemoDefinition) {
           <h2>Magnified interactive</h2>
           <FixedAspectTerminalCard session={session} mode="magnified" />
         </div>
+        <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
+          <h2>Magnified phone toolbar</h2>
+          <FixedAspectTerminalCard
+            session={session}
+            mode="magnified"
+            mobile={{ viewport: { left: 0, top: 0, width: 390, height: 844 }, keyboardVisible: false, columns: 60 }}
+          />
+        </div>
+        <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
+          <h2>Magnified phone, keyboard presented</h2>
+          <FixedAspectTerminalCard
+            session={session}
+            mode="magnified"
+            mobile={{ viewport: { left: 0, top: 0, width: 390, height: 500 }, keyboardVisible: true, columns: 60 }}
+          />
+        </div>
       </section>
     );
   }

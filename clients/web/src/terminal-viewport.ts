@@ -155,11 +155,13 @@ export interface TerminalViewportOptions {
   viewerId?: string;
   autoFocus?: boolean;
   onTicketReference?: (reference: string) => void;
+  /** Column count for a phone-width interactive terminal (80xM policy); defaults to 80. */
+  mobileColumns?: () => number;
 }
 
 export function mountTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference }: TerminalViewportOptions,
+  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns }: TerminalViewportOptions,
 ): () => void {
   return mountTerminalRuntime(element, async () => {
     const { mountTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
@@ -169,6 +171,7 @@ export function mountTerminalViewport(
         viewerId: viewerId ?? browserRandomId(),
         autoFocus,
         onTicketReference,
+        mobileColumns,
       });
   });
 }

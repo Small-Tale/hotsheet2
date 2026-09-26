@@ -72,6 +72,8 @@ terminals	delegate	document.body	'dblclick'	'.terminal-dashboard__magnified .ter
 terminals	delegate	document.body	'contextmenu'	'[data-component="terminal-tile"]'
 terminals	delegate	document.body	'click'	'[data-action="open-terminal-context-menu"]'
 terminals	delegate	document.body	'click'	'[data-action="dismiss-magnified-terminal"]'
+terminals	delegate	document.body	'click'	'[data-action="close-magnified-terminal"]'
+terminals	delegate	document.body	'click'	'[data-action="cycle-mobile-terminal-columns"]'
 terminals	delegate	document.body	'click'	'[data-action="hide-dashboard-terminal"]'
 terminals	delegate	document.body	'click'	'[data-action="open-terminal-visibility"]'
 terminals	delegate	document.body	'wa-hide'	'[data-terminal-visibility-dialog]'

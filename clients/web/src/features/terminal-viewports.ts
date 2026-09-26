@@ -19,6 +19,8 @@ export interface TerminalViewportsDependencies {
     projectId: string | undefined,
     preferredProject: string,
   ) => void;
+  /** Current phone-width terminal column preference (HS2-WMN626). */
+  mobileTerminalColumns?: () => number;
 }
 
 function terminalViewportIdentity(element: HTMLElement): string | undefined {
@@ -63,6 +65,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
       mountTerminalViewport(element, {
         url: terminalBrowserWebSocketUrl(current.apiPath, terminalId),
         autoFocus,
+        mobileColumns: dependencies.mobileTerminalColumns,
         onTicketReference: interactive
           ? (reference) => {
               const parsed = parseTicketLinkReference(reference);

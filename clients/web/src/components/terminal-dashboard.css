@@ -405,23 +405,86 @@
   aspect-ratio: auto;
   pointer-events: auto;
 }
-/* On a phone the fitted magnified terminal uses the full screen. */
-.app-shell[data-mobile='true'] .terminal-dashboard__magnified {
-  padding: remify(8px);
+/* On a phone the magnified terminal fills the visual viewport, which the virtual keyboard shrinks,
+   with no inset ring; the toolbar moves to the top and hides while the keyboard is up (HS2-WMN626). */
+.terminal-dashboard__magnified[data-mobile='true'] {
+  inset: auto;
+  top: var(--terminal-magnified-top);
+  left: var(--terminal-magnified-left);
+  width: var(--terminal-magnified-width);
+  height: var(--terminal-magnified-height);
+  padding: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-right) var(--hotsheet-safe-area-bottom)
+    var(--hotsheet-safe-area-left);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: var(--hs-terminal-background);
+  backdrop-filter: none;
   place-items: stretch;
 }
-.app-shell[data-mobile='true'] .terminal-dashboard__magnified .terminal-tile {
+.terminal-dashboard__magnified[data-mobile='true'][data-keyboard-visible='true'] {
+  padding-bottom: 0;
+}
+.terminal-tile[data-mobile-chrome='true'] {
   width: 100%;
   height: 100%;
   max-height: none;
+  border-radius: 0;
+  background: var(--hs-terminal-background);
+  box-shadow: none;
 }
-.app-shell[data-mobile='true'] .terminal-dashboard__magnified .terminal-tile__preview {
-  flex: 1;
-  min-height: 0;
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer {
+  order: -1;
+  border-bottom: 1px solid color-mix(in srgb, var(--hs-terminal-foreground) 16%, transparent);
+  color: var(--hs-terminal-foreground);
 }
-.app-shell[data-mobile='true'] .terminal-dashboard__magnified .terminal-tile__viewport-frame {
-  aspect-ratio: auto;
-  height: 100%;
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__identity strong {
+  color: var(--hs-terminal-foreground);
+}
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button {
+  color: var(--hs-terminal-foreground);
+}
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button:hover,
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button:active {
+  background: color-mix(in srgb, var(--hs-terminal-foreground) 16%, transparent);
+}
+.terminal-tile[data-mobile-chrome='true'][data-keyboard-visible='true'] .terminal-tile__footer {
+  display: none;
+}
+/* The mobile grid scales xterm's root and gives it the inverse layout size, so the viewport must clip
+   rather than scroll: otherwise the oversized layout box pans the terminal off screen. */
+.terminal-tile[data-mobile-chrome='true'] .terminal-viewport,
+.app-shell[data-mobile='true'] .terminal-viewport--dedicated {
+  overflow: clip;
+}
+.terminal-tile__close,
+.terminal-tile__text-size {
+  display: inline-flex;
+  min-width: remify(40px);
+  height: remify(40px);
+  padding: 0 remify(8px);
+  border-radius: var(--wa-border-radius-m);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: remify(4px);
+}
+.terminal-tile__text-size span {
+  font-size: var(--wa-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.terminal-tile__close:hover,
+.terminal-tile__text-size:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.terminal-tile__close svg,
+.terminal-tile__text-size svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__menu,
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__open {
+  width: remify(40px);
+  height: remify(40px);
 }
 .terminal-dashboard__context-menu {
   position: fixed;

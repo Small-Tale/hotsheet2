@@ -34,6 +34,13 @@ When automation lands, remove the manual-only step and record it below.
    fills the screen (no 5:3 letterbox), shows a full 80 columns scaled to the phone width, and
    uses M rows to fill the height (many more than 24), and that a full-width TUI (e.g. `nano`,
    `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
+   HS2-WMN626 — on a real iPhone (Safari and the installed PWA), magnify a terminal and tap into
+   it. Confirm the terminal shrinks to sit above the virtual keyboard (nothing hidden behind it),
+   the top toolbar hides while the keyboard is up and returns when it is dismissed, the status
+   bar/home-indicator safe areas are respected, and dragging or typing never pans the terminal
+   sideways. Cycle the text-size button through 80/70/60/50/40 columns and confirm each fits the
+   width, then close with the toolbar's X. Automated coverage simulates the keyboard through a
+   stubbed `VisualViewport`; only a device proves iOS's real keyboard and focus-scroll behavior.
 6. HS2-3ZBQDG — on current **physical-device Mobile Safari**, use the server's ordinary
    LAN HTTP address (not localhost or an HTTPS tunnel), then repeat on HTTPS. Confirm visible
    scrollback glyphs in the Workspace grid, magnified terminal, and dedicated drawer. Type a

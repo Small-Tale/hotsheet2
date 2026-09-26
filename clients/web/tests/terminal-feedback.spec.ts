@@ -968,3 +968,143 @@ test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F7
   expect(geometry.frameFillsHeight).toBe(true);
   await page.screenshot({ path: '/private/tmp/hs2-z84f78-mobile-magnified.png', fullPage: true });
 });
+
+// HS2-WMN626: the phone magnified terminal follows the visual viewport (so the virtual keyboard
+// shrinks it), clips instead of panning sideways, has no inset ring, and carries a top toolbar with
+// Close and a text-size control (80 → 40 columns) that hides while the keyboard is presented.
+test('adapts the phone magnified terminal to the keyboard with close and text-size controls (HS2-WMN626)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const fake = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => fake });
+    (window as unknown as { __setVisualViewport: (height: number) => void }).__setVisualViewport = (height) => {
+      fake.height = height;
+      fake.dispatchEvent(new Event('resize'));
+    };
+  });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+  await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
+  await tile.click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    viewport = magnified.locator('[data-display-mode="interactive"]'),
+    footer = magnified.locator('.terminal-tile__footer'),
+    close = magnified.getByRole('button', { name: 'Close nano' }),
+    textSize = magnified.getByRole('button', { name: /^Text size: \d+ columns/ });
+  await expect(magnified).toHaveAttribute('data-mobile', 'true');
+  await expect(magnified).toHaveAttribute('data-keyboard-visible', 'false');
+  await expect(viewport).toHaveAttribute('data-grid-size', /^80x\d+$/);
+  const rowsOf = async () => Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1]);
+  await expect.poll(rowsOf).toBeGreaterThan(30);
+  const fullRows = await rowsOf();
+
+  // Full-bleed on the terminal background, toolbar above the terminal.
+  const chrome = await magnified.evaluate((overlay) => {
+    const box = overlay.getBoundingClientRect(),
+      tileElement = overlay.querySelector<HTMLElement>('.terminal-tile')!,
+      footerBox = overlay.querySelector<HTMLElement>('.terminal-tile__footer')!.getBoundingClientRect(),
+      previewBox = overlay.querySelector<HTMLElement>('.terminal-tile__preview')!.getBoundingClientRect(),
+      terminalBackground = getComputedStyle(
+        overlay.querySelector<HTMLElement>('.terminal-tile__preview')!,
+      ).backgroundColor;
+    return {
+      box: [box.left, box.top, box.width, box.height],
+      overlayBackground: getComputedStyle(overlay).backgroundColor,
+      tileBackground: getComputedStyle(tileElement).backgroundColor,
+      terminalBackground,
+      radius: getComputedStyle(tileElement).borderTopLeftRadius,
+      toolbarAbove: footerBox.bottom <= previewBox.top + 1,
+    };
+  });
+  expect(chrome.box).toEqual([0, 0, 390, 844]);
+  expect(chrome.overlayBackground).toBe(chrome.terminalBackground);
+  expect(chrome.tileBackground).toBe(chrome.terminalBackground);
+  expect(chrome.radius).toBe('0px');
+  expect(chrome.toolbarAbove).toBe(true);
+  await expect(close).toBeVisible();
+  await expect(textSize).toHaveAttribute('data-columns', '80');
+  await expect(textSize).toHaveCSS('cursor', 'pointer');
+  await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-toolbar.png') });
+
+  // The scaled xterm root is wider than its box in layout terms; the viewport must not pan sideways.
+  const panned = await viewport.evaluate((element) => {
+    element.scrollLeft = 400;
+    element.scrollTop = 400;
+    return [element.scrollLeft, element.scrollTop, getComputedStyle(element).overflowX];
+  });
+  expect(panned).toEqual([0, 0, 'clip']);
+
+  // Text size cycles 80 → 70 → 60 → 50 → 40 → 80, refitting the PTY each time, and persists.
+  for (const columns of [70, 60, 50, 40, 80]) {
+    await textSize.click();
+    await expect(textSize).toHaveAttribute('data-columns', String(columns));
+    await expect(textSize).toHaveAccessibleName(`Text size: ${columns} columns. Change text size`);
+    await expect(viewport).toHaveAttribute('data-grid-size', new RegExp(`^${columns}x\\d+$`));
+    await expect(viewport).toHaveAttribute('data-pty-size', new RegExp(`^${columns}x\\d+$`));
+    expect(await page.evaluate(() => localStorage.getItem('hotsheet.terminals.mobile-columns'))).toBe(String(columns));
+    if (columns === 40) {
+      const screen = await viewport.evaluate((element) => {
+        const box = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
+          frame = element.getBoundingClientRect();
+        return { left: box.left - frame.left, right: frame.right - box.right, scale: element.dataset.physicalScale };
+      });
+      expect(Math.abs(screen.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(screen.right)).toBeLessThanOrEqual(1);
+      expect(Number(screen.scale)).toBeGreaterThan(1);
+      // Hover/press feedback stays legible on the terminal-colored toolbar.
+      const hover = await textSize.evaluate((button) => [
+        getComputedStyle(button).backgroundColor,
+        getComputedStyle(button).color,
+      ]);
+      expect(hover[0]).not.toBe(hover[1]);
+      expect(hover[0]).toMatch(/color-mix|rgba?\(|oklab|color\(/);
+      await textSize.hover();
+      await footer.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-toolbar-hover.png') });
+      await page.mouse.move(0, 400);
+      await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-40-columns.png') });
+    }
+  }
+  await textSize.click();
+  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+
+  // Presenting the keyboard shrinks the overlay to the visual viewport and hides the toolbar.
+  await page.evaluate(() => {
+    (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(500);
+  });
+  await expect(magnified).toHaveAttribute('data-keyboard-visible', 'true');
+  await expect(footer).toBeHidden();
+  await expect.poll(async () => (await magnified.boundingBox())?.height).toBe(500);
+  await expect.poll(rowsOf).toBeLessThan(fullRows);
+  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+  await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-keyboard.png') });
+
+  // Dismissing the keyboard restores the full-height overlay and its toolbar.
+  await page.evaluate(() => {
+    (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(844);
+  });
+  await expect(magnified).toHaveAttribute('data-keyboard-visible', 'false');
+  await expect(footer).toBeVisible();
+  await expect.poll(async () => (await magnified.boundingBox())?.height).toBe(844);
+  await expect.poll(rowsOf).toBeGreaterThan(30);
+
+  // Close dismisses the magnified terminal; reopening keeps the chosen text size.
+  await close.click();
+  await expect(magnified).toBeHidden();
+  await tile.click();
+  await expect(magnified).toBeVisible();
+  await expect(textSize).toHaveAttribute('data-columns', '70');
+  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+
+  // Widening past the phone breakpoint drops the phone-only chrome.
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await expect(magnified).toHaveAttribute('data-mobile', 'false');
+  await expect(close).toHaveCount(0);
+  await expect(textSize).toHaveCount(0);
+});

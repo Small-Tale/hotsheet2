@@ -1072,12 +1072,13 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   await rail.screenshot({ path: '/private/tmp/hs2-tnsd4k-rail-search-demo-narrow.png', animations: 'disabled' });
 });
 
-test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship', async ({ page }) => {
+test('catalogs every FixedAspectTerminalCard variant and its dashboard relationship', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
   const stage = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
     preview = stage.locator('[data-fixed-aspect-terminal-card="preview"]'),
-    magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]'),
+    magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]:not([data-mobile-chrome])'),
+    phone = stage.locator('[data-mobile-chrome="true"]'),
     previewViewport = preview.locator('[data-display-mode="scaled-preview"]'),
     magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
   await expect(preview).toBeVisible();
@@ -1104,7 +1105,7 @@ test('catalogs both FixedAspectTerminalCard variants and their dashboard relatio
         .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!
         .getBoundingClientRect(),
       magnified = element
-        .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]')!
+        .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]:not([data-mobile-chrome])')!
         .getBoundingClientRect(),
       row = element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"] .xterm-rows > div')!;
     return { previewWidth: preview.width, magnifiedWidth: magnified.width, font: getComputedStyle(row).fontFamily };
@@ -1112,6 +1113,26 @@ test('catalogs both FixedAspectTerminalCard variants and their dashboard relatio
   expect(sizing.previewWidth).toBeLessThanOrEqual(352);
   expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);
   expect(sizing.font).toContain('ui-monospace');
+  // HS2-WMN626 phone variant: toolbar with Close and text size on top; hidden while the keyboard is up.
+  await expect(phone).toHaveCount(2);
+  const phoneToolbar = phone.first().locator('.terminal-tile__footer');
+  await expect(phoneToolbar.getByRole('button', { name: 'Close Development' })).toBeVisible();
+  await expect(phoneToolbar.getByRole('button', { name: 'Text size: 60 columns. Change text size' })).toBeVisible();
+  await expect(phoneToolbar.locator('svg[data-lucide="a-large-small"]')).toBeVisible();
+  await expect(phoneToolbar.locator('svg[data-lucide="x"]')).toBeVisible();
+  expect(
+    await phone
+      .first()
+      .evaluate(
+        (card) =>
+          card.querySelector('.terminal-tile__footer')!.getBoundingClientRect().bottom <=
+          card.querySelector('.terminal-tile__preview')!.getBoundingClientRect().top + 1,
+      ),
+  ).toBe(true);
+  await expect(phone.first()).toHaveCSS('border-top-left-radius', '0px');
+  await expect(phone.nth(1)).toHaveAttribute('data-keyboard-visible', 'true');
+  await expect(phone.nth(1).locator('.terminal-tile__footer')).toBeHidden();
+  await stage.screenshot({ path: test.info().outputPath('hs2-wmn626-demo-variants.png') });
   const relationships = page.locator('.kui-catalog__related-menu');
   await relationships.getByRole('button', { name: /Component/ }).click();
   await expect(relationships.getByText('Used by', { exact: true })).toBeVisible();

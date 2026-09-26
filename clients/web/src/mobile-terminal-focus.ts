@@ -50,3 +50,17 @@ export function transitionMobileTerminalFocus(
   if (event.type === 'viewport-change') return state.active ? { ...state, viewport: event.viewport } : state;
   return state.active ? INACTIVE_MOBILE_TERMINAL_FOCUS : state;
 }
+
+/** The on-screen keyboard covers at least this much of the layout viewport when it is presented. */
+export const MOBILE_VIRTUAL_KEYBOARD_MIN_INSET = 120;
+
+/** Whether a virtual keyboard is covering part of the layout viewport. Pinch zoom also shrinks the
+ * visual viewport, so compare its unscaled height rather than its CSS-pixel height. */
+export function mobileVirtualKeyboardVisible(
+  visualViewport: Pick<VisualViewport, 'height' | 'scale'> | null | undefined,
+  layoutHeight: number,
+): boolean {
+  if (!visualViewport) return false;
+  const scale = Number.isFinite(visualViewport.scale) && visualViewport.scale > 0 ? visualViewport.scale : 1;
+  return layoutHeight - visualViewport.height * scale > MOBILE_VIRTUAL_KEYBOARD_MIN_INSET;
+}

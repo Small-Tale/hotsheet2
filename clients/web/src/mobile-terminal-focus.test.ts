@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   INACTIVE_MOBILE_TERMINAL_FOCUS,
   mobileTerminalViewport,
+  mobileVirtualKeyboardVisible,
   transitionMobileTerminalFocus,
 } from './mobile-terminal-focus';
 
@@ -72,5 +73,21 @@ describe('mobile terminal focus mode', () => {
     expect(second).toEqual({ active: true, terminalId: 'two', viewport: viewport(500) });
     expect(transitionMobileTerminalFocus(invalid, { type: 'context-invalid' })).toBe(invalid);
     expect(transitionMobileTerminalFocus(invalid, { type: 'exit' })).toBe(invalid);
+  });
+});
+
+describe('mobile virtual keyboard detection (HS2-WMN626)', () => {
+  it('detects a keyboard covering the layout viewport, ignoring small chrome changes', () => {
+    expect(mobileVirtualKeyboardVisible(undefined, 844)).toBe(false);
+    expect(mobileVirtualKeyboardVisible({ height: 844, scale: 1 }, 844)).toBe(false);
+    expect(mobileVirtualKeyboardVisible({ height: 780, scale: 1 }, 844)).toBe(false);
+    expect(mobileVirtualKeyboardVisible({ height: 500, scale: 1 }, 844)).toBe(true);
+    expect(mobileVirtualKeyboardVisible({ height: 844, scale: 1 }, 844)).toBe(false);
+  });
+
+  it('does not mistake pinch zoom for a keyboard', () => {
+    expect(mobileVirtualKeyboardVisible({ height: 422, scale: 2 }, 844)).toBe(false);
+    expect(mobileVirtualKeyboardVisible({ height: 250, scale: 2 }, 844)).toBe(true);
+    expect(mobileVirtualKeyboardVisible({ height: 500, scale: 0 }, 844)).toBe(true);
   });
 });

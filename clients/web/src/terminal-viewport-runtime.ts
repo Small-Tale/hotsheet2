@@ -5,6 +5,11 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 
 import { isMobileViewport } from './mobile-layout';
+import {
+  DEFAULT_MOBILE_TERMINAL_COLUMNS,
+  MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
+  normalizeMobileTerminalColumns,
+} from './mobile-terminal-columns';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import {
   isTerminalReplacementReplay,
@@ -204,6 +209,7 @@ type TerminalRuntimeOptions = {
   viewerId: string;
   autoFocus?: boolean;
   onTicketReference?: (reference: string) => void;
+  mobileColumns?: () => number;
 };
 
 export function mountTerminalViewportRuntime(element: HTMLElement, options: TerminalRuntimeOptions): () => void {
@@ -214,7 +220,7 @@ export function mountTerminalViewportRuntime(element: HTMLElement, options: Term
 
 function initializeTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference }: TerminalRuntimeOptions,
+  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns }: TerminalRuntimeOptions,
   own: OwnTerminalResource,
 ): void {
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
@@ -310,13 +316,15 @@ function initializeTerminalViewport(
     socket?.close();
   });
   const claimsSizing = () => terminalViewportClaimsSizing(scaledPreview, fixedDashboardGrid);
-  // On a phone-width viewport a dedicated drawer terminal keeps the canonical 80 columns but fills
-  // the available height with M rows, scaled to fit width (HS2-S708S3).
+  // On a phone-width viewport a dedicated drawer terminal keeps a fixed column count (80 by default,
+  // down to 40 for larger text — HS2-WMN626) but fills the available height with M rows, scaled to
+  // fit width (HS2-S708S3).
+  const mobileCols = () => normalizeMobileTerminalColumns(mobileColumns?.() ?? DEFAULT_MOBILE_TERMINAL_COLUMNS);
   let mobileGridRows = TERMINAL_DASHBOARD_ROWS,
     lastMobileClaimGrid = '',
     lastSettledGeometry: { cols: number; rows: number } | undefined;
   const proposed = () => {
-    if (mobile80xM()) return { cols: TERMINAL_DASHBOARD_COLS, rows: mobileGridRows };
+    if (mobile80xM()) return { cols: mobileCols(), rows: mobileGridRows };
     if (fixedDashboardGrid) return { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
     return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
@@ -386,11 +394,12 @@ function initializeTerminalViewport(
       targetWidth = Math.max(1, element.clientWidth - horizontalPadding - 1),
       targetHeight = Math.max(1, element.clientHeight - verticalPadding - 1);
     if (mobile80xM()) {
-      // 80 columns fixed and scaled to fit the phone width; M rows chosen to fill the available
+      // The mobile column count is fixed and scaled to fit the phone width; M rows chosen to fill the available
       // height at that scale (HS2-Z84F78). Resizing reflows the measured screen, so a cols/rows
       // change returns early and the next render re-measures before applying the transform.
-      if (terminal.cols !== TERMINAL_DASHBOARD_COLS) {
-        terminal.resize(TERMINAL_DASHBOARD_COLS, terminal.rows);
+      const cols = mobileCols();
+      if (terminal.cols !== cols) {
+        terminal.resize(cols, terminal.rows);
         return;
       }
       const scale = targetWidth / screen.offsetWidth;
@@ -399,8 +408,8 @@ function initializeTerminalViewport(
         rows = Math.max(1, Math.floor(targetHeight / (scale * rowHeight)));
       if (rows !== terminal.rows) {
         mobileGridRows = rows;
-        terminal.resize(TERMINAL_DASHBOARD_COLS, rows);
-        element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+        terminal.resize(cols, rows);
+        element.dataset.gridSize = `${cols}x${rows}`;
         return;
       }
       mobileGridRows = rows;
@@ -412,10 +421,10 @@ function initializeTerminalViewport(
       terminal.element.style.height = terminalInverseScalePercent(scale);
       element.dataset.scale = String(scale);
       element.dataset.physicalScale = String(scale);
-      element.dataset.gridSize = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+      element.dataset.gridSize = `${cols}x${rows}`;
       element.dataset.geometryReady = 'true';
       if (autoFocus && focusRequested) terminal.focus();
-      const grid = `${TERMINAL_DASHBOARD_COLS}x${rows}`;
+      const grid = `${cols}x${rows}`;
       if (lastMobileClaimGrid !== grid) {
         lastMobileClaimGrid = grid;
         claim();
@@ -481,7 +490,7 @@ function initializeTerminalViewport(
           webgl = undefined;
           element.dataset.renderer = 'dom';
         }
-        terminal.resize(TERMINAL_DASHBOARD_COLS, mobileGridRows);
+        terminal.resize(mobileCols(), mobileGridRows);
         scheduleDashboardFill();
       } else if (fixedDashboardGrid) {
         terminal.resize(TERMINAL_DASHBOARD_COLS, TERMINAL_DASHBOARD_ROWS);
@@ -527,6 +536,13 @@ function initializeTerminalViewport(
   window.addEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
   own(() => {
     window.removeEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);
+  });
+  const refitMobileColumns = () => {
+    if (mobile80xM()) applySettledGeometry();
+  };
+  window.addEventListener(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT, refitMobileColumns);
+  own(() => {
+    window.removeEventListener(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT, refitMobileColumns);
   });
   const connect = () => {
     if (disposed) return;

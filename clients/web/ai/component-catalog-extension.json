@@ -1302,9 +1302,9 @@
       "id": "fixed-aspect-terminal-card",
       "name": "FixedAspectTerminalCard",
       "kind": "component",
-      "purpose": "Shared 5:3 terminal viewport card in preview and magnified variants.",
+      "purpose": "Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.",
       "useWhen": [
-        "Hot Sheet needs shared 5:3 terminal viewport card in preview and magnified variants."
+        "Hot Sheet needs shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific FixedAspectTerminalCard behavior."

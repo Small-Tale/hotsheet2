@@ -2192,10 +2192,12 @@ recency claim and lets the server move the shared PTY to those fitted dimensions
 rendering and physical scaling belong only to workspace and drawer grid tiles.
 
 **Mobile 80×M (HS2-Z84F78, HS2-S708S3).** On a phone-width viewport (`isMobileViewport`, the same
-1024px breakpoint as the single-column layout) a magnified or dedicated interactive terminal keeps the canonical
-**80 columns** — so line wrapping matches every other device — and chooses **M rows to fill
-the available height**, scaling the whole grid to fit the phone width. The text ends up
-small (80 columns on a ~390px screen), which is the deliberate trade for consistent width.
+1024px breakpoint as the single-column layout) a magnified or dedicated interactive terminal keeps a
+fixed column count — the canonical **80 columns** by default, so line wrapping matches every other
+device — and chooses **M rows to fill the available height**, scaling the whole grid to fit the
+phone width. The text ends up small (80 columns on a ~390px screen), which is the deliberate
+default trade for consistent width; the phone text-size control below trades columns for larger
+text.
 The magnified/full-screen terminal drops its 5:3 aspect and fills the screen. The dedicated
 drawer terminal applies the same fixed-80-column DOM render path within the drawer's available
 height. Both resize the PTY to 80×M, width-fit the physical grid, and reclaim sizing with the
@@ -2204,6 +2206,22 @@ the inverse of that physical scale, keeping its vertical scrollbar on the visibl
 of stranding it inside the terminal (HS2-QBMVFQ). Read-only grid preview tiles
 deliberately remain uniform 80×24, 5:3 cards: they are glanceable non-input surfaces, not the
 phone's interactive terminal.
+
+**Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
+positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
+shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the
+terminal behind it. It is full-bleed on the terminal background color (no inset ring or dimmed
+scrim), pads for the device safe areas (dropping the bottom inset while the keyboard covers it),
+and clips rather than scrolls its scaled xterm root so a focus scroll or touch cannot pan the
+terminal sideways off screen. The card footer becomes a **top toolbar** carrying **Close**
+(Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small` plus the
+current column count), the actions menu, and open-in-drawer. The toolbar is shown only while the
+keyboard is hidden; keyboard visibility is inferred when the unscaled visual viewport is more than
+120px shorter than the layout viewport (pinch zoom is not mistaken for a keyboard). Text size
+cycles **80 → 70 → 60 → 50 → 40 → 80** columns; the choice is persisted per browser
+(`hotsheet.terminals.mobile-columns`), applies to every phone-width 80×M terminal (magnified and
+dedicated drawer), and immediately refits the grid and PTY claim to the new *columns*×M. Wider
+viewports never render this chrome.
 
 ### 6.7.5 Escape hatch: a per-viewer _separate_ terminal
 

@@ -6,8 +6,9 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus } from 'lucide';
+import { ALargeSmall, Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus, X } from 'lucide';
 
+import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -49,6 +50,15 @@ export interface WorkspaceGridChat {
   summary?: string;
 }
 
+/** Phone-only presentation of the magnified terminal (HS2-WMN626): the overlay tracks the visual
+ * viewport so the virtual keyboard shrinks it, and a top toolbar (close + text size) is shown only
+ * while the keyboard is hidden. */
+export interface MobileMagnifiedTerminal {
+  viewport: MobileTerminalViewport;
+  keyboardVisible: boolean;
+  columns: number;
+}
+
 export interface TerminalDashboardProps {
   groups: TerminalDashboardGroup[];
   width: number;
@@ -61,6 +71,7 @@ export interface TerminalDashboardProps {
   activeVisibilityGroupId?: string;
   visibilityScope?: string;
   magnifiedKey?: string;
+  mobileMagnified?: MobileMagnifiedTerminal;
   hiddenKeys?: readonly string[];
   loading?: boolean;
   message?: string;
@@ -142,10 +153,12 @@ function TerminalCard({
   session,
   mode = 'preview',
   previewPaused = false,
+  mobile,
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
   previewPaused?: boolean;
+  mobile?: MobileMagnifiedTerminal;
 }) {
   const key = keyFor(session);
   const dashboardPreview = mode === 'preview',
@@ -187,6 +200,8 @@ function TerminalCard({
       data-busy={String(session.busy)}
       data-alive={String(session.alive)}
       data-magnified={String(magnified)}
+      data-mobile-chrome={magnified && mobile ? 'true' : undefined}
+      data-keyboard-visible={magnified && mobile ? String(mobile.keyboardVisible) : undefined}
       data-preview-only={String(dashboardPreview)}
       data-preview-paused={String(dashboardPreview && previewPaused)}
       data-action={dashboardPreview ? 'preview-terminal' : undefined}
@@ -198,6 +213,17 @@ function TerminalCard({
         <div class="terminal-tile__viewport-frame">{viewport}</div>
       </div>
       <footer class="terminal-tile__footer">
+        {magnified && mobile && (
+          <button
+            type="button"
+            class="terminal-tile__close"
+            data-action="close-magnified-terminal"
+            aria-label={`Close ${session.title ?? session.id}`}
+            title="Close"
+          >
+            <LucideIcon icon={X} name="x" />
+          </button>
+        )}
         <span
           class="terminal-tile__state"
           aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
@@ -217,6 +243,19 @@ function TerminalCard({
           </strong>
         </button>
         {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
+        {magnified && mobile && (
+          <button
+            type="button"
+            class="terminal-tile__text-size"
+            data-action="cycle-mobile-terminal-columns"
+            data-columns={String(mobile.columns)}
+            aria-label={`Text size: ${mobile.columns} columns. Change text size`}
+            title="Change text size"
+          >
+            <LucideIcon icon={ALargeSmall} name="a-large-small" />
+            <span aria-hidden="true">{mobile.columns}</span>
+          </button>
+        )}
         <button
           type="button"
           class="terminal-tile__menu"
@@ -247,11 +286,13 @@ function TerminalCard({
 export function FixedAspectTerminalCard({
   session,
   mode = 'preview',
+  mobile,
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
+  mobile?: MobileMagnifiedTerminal;
 }) {
-  return <TerminalCard session={session} mode={mode} />;
+  return <TerminalCard session={session} mode={mode} mobile={mobile} />;
 }
 
 export function TerminalSession({ session, active = true }: { session: TerminalDashboardSession; active?: boolean }) {
@@ -393,6 +434,7 @@ export function TerminalDashboard({
   grouping = 'flow',
   layoutMode = 'responsive',
   magnifiedKey,
+  mobileMagnified,
   hiddenKeys = [],
   loading = false,
   message = '',
@@ -497,8 +539,15 @@ export function TerminalDashboard({
           aria-modal="true"
           aria-label={`Magnified ${magnified.title ?? magnified.id}`}
           data-action="dismiss-magnified-terminal"
+          data-mobile={String(Boolean(mobileMagnified))}
+          data-keyboard-visible={mobileMagnified ? String(mobileMagnified.keyboardVisible) : undefined}
+          style={
+            mobileMagnified
+              ? `--terminal-magnified-left:${mobileMagnified.viewport.left}px;--terminal-magnified-top:${mobileMagnified.viewport.top}px;--terminal-magnified-width:${mobileMagnified.viewport.width}px;--terminal-magnified-height:${mobileMagnified.viewport.height}px`
+              : undefined
+          }
         >
-          <FixedAspectTerminalCard session={magnified} mode="magnified" />
+          <FixedAspectTerminalCard session={magnified} mode="magnified" mobile={mobileMagnified} />
         </div>
       )}
       {contextMenu && (

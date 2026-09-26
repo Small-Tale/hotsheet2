@@ -19,7 +19,12 @@ import {
 import { orderedDrawerTabIds } from '../drawer-tab-order';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { terminalGridContentSize } from '../terminal-grid-layout';
-import { TerminalDashboard, type TerminalDashboardSession, TerminalSession } from './terminal-dashboard';
+import {
+  type MobileMagnifiedTerminal,
+  TerminalDashboard,
+  type TerminalDashboardSession,
+  TerminalSession,
+} from './terminal-dashboard';
 
 export interface TerminalDrawerChatTab {
   id: string;
@@ -41,6 +46,7 @@ export interface TerminalDrawerProps {
   fitHigh: number;
   selectedId: string;
   magnifiedKey?: string;
+  mobileMagnified?: MobileMagnifiedTerminal;
   loading?: boolean;
   message?: string;
   maximized?: boolean;
@@ -62,6 +68,7 @@ export function TerminalDrawer({
   fitHigh,
   selectedId,
   magnifiedKey,
+  mobileMagnified,
   loading = false,
   message = '',
   maximized = false,
@@ -246,6 +253,7 @@ export function TerminalDrawer({
             grouping="flow"
             layoutMode="drawer"
             magnifiedKey={magnifiedKey}
+            mobileMagnified={mobileMagnified}
             loading={loading}
             message={message}
           />

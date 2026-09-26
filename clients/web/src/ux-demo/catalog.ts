@@ -545,7 +545,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'fixed-aspect-terminal-card',
         'FixedAspectTerminalCard',
-        'Shared 5:3 terminal viewport card in preview and magnified variants.',
+        'Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.',
         'feature-floor',
         true,
       ),

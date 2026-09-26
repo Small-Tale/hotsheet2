@@ -1412,7 +1412,9 @@ Selecting an error tab uses the shared `EmptyState` primitive for exact failure 
 guidance, and retry without pretending the unavailable checkout has live sidebar or inspector data.
 
 `FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
-both supported public variants with the real xterm frontend, a deterministic ANSI fixture whose
+every supported public variant with the real xterm frontend — grid preview, magnified, and the
+phone magnified variant (`mobile` prop, `data-mobile-chrome`) with its top toolbar and with the
+keyboard presented (toolbar hidden; HS2-WMN626) — a deterministic ANSI fixture whose
 reverse-video Nano bars explicitly paint all 80 terminal cells,
 and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.

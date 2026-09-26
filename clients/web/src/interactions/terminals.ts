@@ -56,6 +56,7 @@ export interface TerminalInteractionsDependencies {
   readonly terminalDrawerCreateMenuOpen: Signal<boolean>;
   readonly enterMobileTerminalFocus: (terminalId: string) => void;
   readonly exitMobileTerminalFocus: () => void;
+  readonly cycleMobileTerminalColumns: () => void;
   readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
   readonly aiLaunchConfiguration: (kind: 'ai-shell' | 'ai-chat', customize: boolean) => AiToolDefaults | undefined;
@@ -124,6 +125,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalDrawerCreateMenuOpen,
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
+    cycleMobileTerminalColumns,
     focusDrawerTab,
     createProjectTerminal,
     aiLaunchConfiguration,
@@ -237,6 +239,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   });
   delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
     if (event.target === target) magnifiedTerminalKey.value = undefined;
+  });
+  delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {
+    magnifiedTerminalKey.value = undefined;
+  });
+  delegate(document.body, 'click', '[data-action="cycle-mobile-terminal-columns"]', () => {
+    cycleMobileTerminalColumns();
   });
   delegate(document.body, 'click', '[data-action="hide-dashboard-terminal"]', (_event, target) => {
     const key = data(target).terminalKey ?? data(target).itemId,

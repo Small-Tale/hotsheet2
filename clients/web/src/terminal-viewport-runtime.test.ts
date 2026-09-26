@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns';
+import { TERMINAL_DRAWER_RESIZE_END_EVENT } from './terminal-viewport';
 import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from './terminal-viewport-runtime';
 
 const allocated = vi.hoisted(() => ({
@@ -155,7 +157,11 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(allocated.terminals[0].input).toHaveBeenCalledTimes(1);
     expect(resize[0].disconnect).toHaveBeenCalledTimes(1);
     expect(intersections[0].disconnect).toHaveBeenCalledTimes(1);
-    expect(windowMock.removeEventListener).toHaveBeenCalledTimes(1);
+    // Drawer resize-end plus the HS2-WMN626 mobile column-change listener.
+    expect(windowMock.removeEventListener.mock.calls.map(([name]) => name as string)).toEqual([
+      MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
+      TERMINAL_DRAWER_RESIZE_END_EVENT,
+    ]);
     expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
     expect(removed).toHaveBeenCalledTimes(5);
     throwSocket = false;

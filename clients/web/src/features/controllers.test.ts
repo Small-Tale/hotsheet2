@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConversationState } from '../ai-conversation';
 import { Api, type CommandDefinition, type FullTicket, type RepositoryFile, type ToolConnection } from '../api';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
-import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { MobileMagnifiedTerminal, TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
@@ -468,6 +468,8 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   const groups = signal<TerminalDashboardGroup[]>([{ projectId: 'a', projectName: 'A', sessions: [] }]);
   const dimensions = signal({ width: 1000, height: 500 });
   const permissions = createPermissionsController({ projects, selectedProjectId: state.selectedProjectId });
+  const magnified = signal<string | undefined>(undefined),
+    mobileMagnified = signal<MobileMagnifiedTerminal | undefined>(undefined);
   const presentation = createTerminalPresentation({
     projects,
     project: state.project,
@@ -482,7 +484,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDashboardSize: dimensions,
       terminalFitAcross: signal(2),
       terminalFitHigh: signal(1),
-      magnifiedTerminalKey: signal<string | undefined>(undefined),
+      magnifiedTerminalKey: magnified,
       terminalHiddenKeys: () => ['hidden'],
       terminalDashboardLoading: signal(false),
       terminalDashboardMessage: signal(''),
@@ -494,6 +496,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDrawerMaximized: signal(false),
       terminalDrawerCreateMenuOpen: signal(false),
       mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
+      mobileMagnifiedTerminal: () => mobileMagnified.value,
     },
     conversations: {
       conversationStates: state.conversationStates,
@@ -530,8 +533,19 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   shellMode.value = 'terminals';
   expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({
     kind: 'terminals',
-    dashboard: { width: 390, height: 300, hiddenKeys: ['hidden'] },
+    dashboard: { width: 390, height: 300, hiddenKeys: ['hidden'], mobileMagnified: undefined },
   });
+  // HS2-WMN626: phone chrome is projected only while a terminal is magnified on a phone viewport.
+  const phone = { viewport: { left: 0, top: 0, width: 390, height: 500 }, keyboardVisible: true, columns: 60 };
+  mobileMagnified.value = phone;
+  expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({ dashboard: { mobileMagnified: undefined } });
+  magnified.value = 'a:t1';
+  expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({
+    dashboard: { magnifiedKey: 'a:t1', mobileMagnified: phone },
+  });
+  expect(presentation.projectTerminalDrawerProps()).toMatchObject({ magnifiedKey: 'a:t1', mobileMagnified: phone });
+  mobileMagnified.value = undefined;
+  expect(presentation.projectTerminalDrawerProps()?.mobileMagnified).toBeUndefined();
   expect(presentation.workspaceTerminalGroups()[0].chats?.[0].summary).toBe('Replacement');
 });
 

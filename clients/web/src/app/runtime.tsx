@@ -193,8 +193,15 @@ import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { isMobileViewport, MOBILE_OVERLAYS_CLOSED, type MobileOverlayState } from '../mobile-layout';
 import {
+  loadMobileTerminalColumns,
+  MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
+  nextMobileTerminalColumns,
+  saveMobileTerminalColumns,
+} from '../mobile-terminal-columns';
+import {
   INACTIVE_MOBILE_TERMINAL_FOCUS,
   mobileTerminalViewport,
+  mobileVirtualKeyboardVisible,
   transitionMobileTerminalFocus,
 } from '../mobile-terminal-focus';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
@@ -416,7 +423,9 @@ export async function startHotSheetWebClient() {
     terminalDrawerFitAcross = signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-across')) || 2),
     terminalDrawerFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-high')) || 2),
     terminalDrawerSelected = signal('grid'),
-    mobileTerminalFocus = signal(INACTIVE_MOBILE_TERMINAL_FOCUS);
+    mobileTerminalFocus = signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
+    mobileTerminalColumns = signal(loadMobileTerminalColumns(localStorage)),
+    mobileViewportGeometry = signal(currentMobileViewportGeometry());
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
     terminalDrawerOrderByProject = signal<Record<string, string[]>>({}),
     terminalDrawerCreateMenuOpen = signal(false);
@@ -437,6 +446,7 @@ export async function startHotSheetWebClient() {
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
   const { syncTerminalViewportMounts } = createTerminalViewportsController({
     projects,
+    mobileTerminalColumns: () => mobileTerminalColumns.peek(),
     get pendingTerminalFocus() {
       return pendingTerminalFocus;
     },
@@ -1663,6 +1673,35 @@ export async function startHotSheetWebClient() {
   function exitMobileTerminalFocus() {
     mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, { type: 'exit' });
   }
+  function currentMobileViewportGeometry() {
+    return {
+      viewport: mobileTerminalViewport(window.visualViewport, window),
+      keyboardVisible: mobileVirtualKeyboardVisible(window.visualViewport, window.innerHeight),
+    };
+  }
+  function syncMobileViewportGeometry() {
+    const next = currentMobileViewportGeometry(),
+      current = mobileViewportGeometry.peek();
+    if (
+      next.keyboardVisible !== current.keyboardVisible ||
+      (Object.keys(next.viewport) as (keyof typeof next.viewport)[]).some(
+        (key) => next.viewport[key] !== current.viewport[key],
+      )
+    )
+      mobileViewportGeometry.value = next;
+  }
+  function cycleMobileTerminalColumns() {
+    mobileTerminalColumns.value = saveMobileTerminalColumns(
+      localStorage,
+      nextMobileTerminalColumns(mobileTerminalColumns.peek()),
+    );
+    window.dispatchEvent(new CustomEvent(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT));
+  }
+  function mobileMagnifiedTerminal() {
+    if (!viewportMobile.value) return undefined;
+    const geometry = mobileViewportGeometry.value;
+    return { ...geometry, columns: mobileTerminalColumns.value };
+  }
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];
   }
@@ -1947,10 +1986,15 @@ export async function startHotSheetWebClient() {
         exitMobileTerminalFocus();
       }
     }
-    if (mobile) syncMobileTerminalViewport();
+    if (mobile) {
+      syncMobileTerminalViewport();
+      syncMobileViewportGeometry();
+    }
   });
   window.visualViewport?.addEventListener('resize', syncMobileTerminalViewport);
   window.visualViewport?.addEventListener('scroll', syncMobileTerminalViewport);
+  window.visualViewport?.addEventListener('resize', syncMobileViewportGeometry);
+  window.visualViewport?.addEventListener('scroll', syncMobileViewportGeometry);
   const ticketSnapshot = (slug: string) =>
     tickets.value.find((item) => item.slug === slug) as TicketSnapshot | undefined;
   const ticketSearchKey = (ticket: WireTicketRow) => `${ticket.connection_id}:${ticket.native_id}`;
@@ -3982,6 +4026,7 @@ export async function startHotSheetWebClient() {
         terminalDrawerMaximized,
         terminalDrawerCreateMenuOpen,
         mobileTerminalFocus,
+        mobileMagnifiedTerminal,
       },
       conversations: {
         conversationStates,
@@ -4699,7 +4744,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailDirection, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, mobileOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

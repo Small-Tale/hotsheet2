@@ -10,7 +10,7 @@ import { type ToolConnection } from '../api';
 import { AIConversation } from '../components/ai-conversation';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { AIConversationSurface } from '../components/reader-overlay-surfaces';
-import { type TerminalDashboardGroup } from '../components/terminal-dashboard';
+import { type MobileMagnifiedTerminal, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalDrawerChatTab, type TerminalDrawerProps } from '../components/terminal-drawer';
 import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-composition-surfaces';
 import type { Project } from '../interactions/types';
@@ -44,6 +44,8 @@ export interface TerminalPresentationDependencies {
     terminalDrawerMaximized: Signal<boolean>;
     terminalDrawerCreateMenuOpen: Signal<boolean>;
     mobileTerminalFocus: Signal<MobileTerminalFocusState>;
+    /** Phone-only magnified-terminal chrome inputs; undefined on wider viewports (HS2-WMN626). */
+    mobileMagnifiedTerminal: () => MobileMagnifiedTerminal | undefined;
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -84,6 +86,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDrawerMaximized,
     terminalDrawerCreateMenuOpen,
     mobileTerminalFocus,
+    mobileMagnifiedTerminal,
   } = dependencies.terminals;
   const {
     conversationStates,
@@ -131,6 +134,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           fitHigh: terminalFitHigh.value,
           grouping: 'flow',
           magnifiedKey: magnifiedTerminalKey.value,
+          mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,
           hiddenKeys: terminalHiddenKeys(TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
           loading: terminalDashboardLoading.value,
           message: terminalDashboardMessage.value,
@@ -211,6 +215,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       fitHigh: terminalDrawerFitHigh.value,
       selectedId: terminalDrawerSelected.value,
       magnifiedKey: magnifiedTerminalKey.value,
+      mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,
       loading: terminalDashboardLoading.value,
       message: terminalDashboardMessage.value,
       maximized: terminalDrawerMaximized.value,

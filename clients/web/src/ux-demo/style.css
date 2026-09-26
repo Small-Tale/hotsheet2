@@ -714,3 +714,6 @@ body[data-resizing-project-sidebar='true'] {
 .ai-conversation-demo > output:empty {
   display: none;
 }
+.fixed-aspect-terminal-card-demo__phone {
+  max-width: remify(392px);
+}
