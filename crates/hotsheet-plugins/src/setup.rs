@@ -21,6 +21,54 @@ pub struct SetupReport {
     pub wrote: Vec<String>,
 }
 
+/// What a refresh changed (HS2-CAM9J5): the tools it set up or repaired, and the managed
+/// artifacts it removed from tools the project disabled.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct RefreshReport {
+    /// Every enabled tool the refresh set up (detected or previously managed).
+    pub set_up: Vec<SetupReport>,
+    /// Disabled tools whose managed artifacts the refresh removed; only tools with at
+    /// least one change are listed.
+    pub removed: Vec<RemovalReport>,
+}
+
+impl RefreshReport {
+    /// Whether the refresh set nothing up and removed nothing.
+    pub fn is_empty(&self) -> bool {
+        self.set_up.is_empty() && self.removed.is_empty()
+    }
+}
+
+/// The project-relative paths one disabled tool's refresh changed (HS2-CAM9J5).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct RemovalReport {
+    pub tool: String,
+    /// Files deleted outright (a Hot Sheet-owned skill, or a config left holding nothing).
+    pub removed: Vec<String>,
+    /// Files kept but edited to drop Hot Sheet's section, MCP entry, or hooks.
+    pub edited: Vec<String>,
+}
+
+impl RemovalReport {
+    fn record(&mut self, rel: &str, change: Option<Change>) {
+        let list = match change {
+            Some(Change::Removed) => &mut self.removed,
+            Some(Change::Edited) => &mut self.edited,
+            None => return,
+        };
+        if !list.iter().any(|path| path == rel) {
+            list.push(rel.to_string());
+        }
+    }
+}
+
+/// How a removal step changed one file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Change {
+    Removed,
+    Edited,
+}
+
 /// A setup failure.
 #[derive(Debug, thiserror::Error)]
 pub enum SetupError {
@@ -134,12 +182,15 @@ pub fn run_setup_in(
 /// Refresh also reconciles **shared** instruction sections (HS2-329EED): a shared section's
 /// served-tool list is rebuilt from the tools in this refresh, and a shared section whose
 /// every listed tool is now disabled (or no longer installed as a plugin) is removed.
+///
+/// The returned [`RefreshReport`] lists the tools set up and, per disabled tool, the
+/// project-relative files deleted or edited to drop Hot Sheet's entries (HS2-CAM9J5).
 pub fn refresh_setup_in(
     store_path: &Path,
     project_dir: &Path,
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[std::path::PathBuf],
-) -> Result<Vec<SetupReport>, SetupError> {
+) -> Result<RefreshReport, SetupError> {
     let all = all_plugins(plugin_dirs);
     let mut reconcile_targets: Vec<String> = Vec::new();
     for plugin in &all {
@@ -164,7 +215,20 @@ pub fn refresh_setup_in(
         .into_iter()
         .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
         .collect::<Vec<_>>();
-    let reports = if plugins.is_empty() {
+    // Shared-section membership before this run, so a disabled sharer dropped from (or
+    // taken out with) a shared section is reported as an edit of that file (HS2-CAM9J5).
+    let shared_members = |target: &str| {
+        std::fs::read_to_string(project_dir.join(target))
+            .ok()
+            .and_then(|contents| parse_shared_section(&contents, &shared_section_key(target)))
+            .map(|shared| shared.tools)
+            .unwrap_or_default()
+    };
+    let members_before: Vec<(String, Vec<String>)> = reconcile_targets
+        .iter()
+        .map(|target| (target.clone(), shared_members(target)))
+        .collect();
+    let set_up = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
         let run_ids = HashSet::new();
         for target in &reconcile_targets {
@@ -174,10 +238,25 @@ pub fn refresh_setup_in(
     } else {
         setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))?
     };
+    let mut removed = Vec::new();
     for plugin in &excluded {
-        remove_disabled_tool_artifacts(project_dir, plugin, &claimed)?;
+        let mut report = remove_disabled_tool_artifacts(project_dir, plugin, &claimed)?;
+        let target = &plugin.manifest.instructions.target;
+        let was_member = members_before
+            .iter()
+            .any(|(t, tools)| t == target && tools.iter().any(|tool| tool == plugin.id()));
+        if was_member
+            && !shared_members(target)
+                .iter()
+                .any(|tool| tool == plugin.id())
+        {
+            report.record(target, Some(Change::Edited));
+        }
+        if !report.removed.is_empty() || !report.edited.is_empty() {
+            removed.push(report);
+        }
     }
-    Ok(reports)
+    Ok(RefreshReport { set_up, removed })
 }
 
 /// Remove the wholly Hot Sheet-owned setup artifacts of a tool the project disabled
@@ -196,7 +275,11 @@ fn remove_disabled_tool_artifacts(
     project: &Path,
     plugin: &Plugin,
     claimed: &HashSet<String>,
-) -> Result<(), SetupError> {
+) -> Result<RemovalReport, SetupError> {
+    let mut report = RemovalReport {
+        tool: plugin.manifest.product_name.clone(),
+        ..RemovalReport::default()
+    };
     let rel = &plugin.manifest.instructions.target;
     let instructions = crate::is_safe_rel_path(rel)
         .then(|| std::fs::read_to_string(project.join(rel)).ok())
@@ -205,23 +288,23 @@ fn remove_disabled_tool_artifacts(
         per_tool_section_requires_preservation(plugin, instructions.as_deref())
             || skill_requires_preservation(project, plugin);
     if !workflow_preserved {
-        remove_disabled_tool_section(project, plugin)?;
+        report.record(rel, remove_disabled_tool_section(project, plugin)?);
         if let Some((rel, _)) = plugin.skill() {
             if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
-                remove_managed_file(project, rel, false)?;
+                report.record(rel, remove_managed_file(project, rel, false)?);
             }
         }
     }
     let mcp = &plugin.manifest.mcp.target;
     if crate::is_safe_rel_path(mcp) && !claimed.contains(mcp) {
-        remove_mcp_entry(project, plugin)?;
+        report.record(mcp, remove_mcp_entry(project, plugin)?);
     }
     if let Some(spec) = &plugin.manifest.hooks {
         if crate::is_safe_rel_path(&spec.target) && !claimed.contains(&spec.target) {
-            remove_hotsheet_hooks(project, &spec.target)?;
+            report.record(&spec.target, remove_hotsheet_hooks(project, &spec.target)?);
         }
     }
-    Ok(())
+    Ok(report)
 }
 
 /// Remove the per-tool `hotsheet:<id>` instruction section of a disabled tool, so
@@ -229,14 +312,17 @@ fn remove_disabled_tool_artifacts(
 /// written by a newer Hot Sheet, or an equal-version section the project customized, is
 /// preserved. The file is never created, and content outside the managed markers is
 /// untouched.
-fn remove_disabled_tool_section(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
+fn remove_disabled_tool_section(
+    project: &Path,
+    plugin: &Plugin,
+) -> Result<Option<Change>, SetupError> {
     let rel = &plugin.manifest.instructions.target;
     if !crate::is_safe_rel_path(rel) {
-        return Ok(());
+        return Ok(None);
     }
     let path = project.join(rel);
     let Ok(existing) = std::fs::read_to_string(&path) else {
-        return Ok(());
+        return Ok(None);
     };
     let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
     let bundled_block = format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
@@ -254,19 +340,24 @@ fn remove_disabled_tool_section(project: &Path, plugin: &Plugin) -> Result<(), S
         }
         out = remove_range(&out, (start, finish));
     }
-    if out != existing {
-        write_file(&path, &out)?;
+    if out == existing {
+        return Ok(None);
     }
-    Ok(())
+    write_file(&path, &out)?;
+    Ok(Some(Change::Edited))
 }
 
 /// Delete a Hot Sheet-owned file, then prune the directories it leaves empty (never the
 /// project itself). `excluded` also drops the file's local git exclude, which setup added
 /// only for a wholly Hot Sheet-owned config.
-fn remove_managed_file(project: &Path, rel: &str, excluded: bool) -> Result<(), SetupError> {
+fn remove_managed_file(
+    project: &Path,
+    rel: &str,
+    excluded: bool,
+) -> Result<Option<Change>, SetupError> {
     let path = project.join(rel);
     if !path.is_file() {
-        return Ok(());
+        return Ok(None);
     }
     std::fs::remove_file(&path).map_err(|source| SetupError::Io {
         path: path.display().to_string(),
@@ -285,7 +376,7 @@ fn remove_managed_file(project: &Path, rel: &str, excluded: bool) -> Result<(), 
     if excluded {
         remove_local_git_exclude(project, rel)?;
     }
-    Ok(())
+    Ok(Some(Change::Removed))
 }
 
 /// Whether an installed MCP `command` launches Hot Sheet's MCP binary (`bundled` is the
@@ -302,11 +393,11 @@ fn is_hotsheet_mcp_command(installed: &str, bundled: &str) -> bool {
 /// Remove a disabled tool's Hot Sheet MCP server entry (HS2-ZTGX6P): the entry named by
 /// the manifest whose command is Hot Sheet's MCP binary. Unrelated servers and settings in
 /// a shared config are kept; a config that held only Hot Sheet's entry is deleted.
-fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
+fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<Option<Change>, SetupError> {
     let spec = &plugin.manifest.mcp;
     let target = project.join(&spec.target);
     let Ok(contents) = std::fs::read_to_string(&target) else {
-        return Ok(());
+        return Ok(None);
     };
     let name = spec.server_name.as_str();
     let owned = |command: Option<&str>| {
@@ -320,16 +411,16 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
                 "mcp"
             };
             let Ok(mut root) = serde_json::from_str::<serde_json::Value>(&contents) else {
-                return Ok(());
+                return Ok(None);
             };
             let Some(object) = root.as_object_mut() else {
-                return Ok(());
+                return Ok(None);
             };
             let Some(servers) = object
                 .get_mut(key)
                 .and_then(serde_json::Value::as_object_mut)
             else {
-                return Ok(());
+                return Ok(None);
             };
             let command = servers.get(name).and_then(|entry| {
                 let command = entry.get("command")?;
@@ -338,7 +429,7 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
                     .or_else(|| command.as_array()?.first()?.as_str())
             });
             if !owned(command) {
-                return Ok(());
+                return Ok(None);
             }
             servers.remove(name);
             if servers.is_empty() {
@@ -355,19 +446,19 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
         }
         "codex-toml" => {
             let Ok(mut root) = toml::from_str::<toml::Table>(&contents) else {
-                return Ok(());
+                return Ok(None);
             };
             let Some(servers) = root
                 .get_mut("mcp_servers")
                 .and_then(toml::Value::as_table_mut)
             else {
-                return Ok(());
+                return Ok(None);
             };
             let command = servers
                 .get(name)
                 .and_then(|entry| entry.get("command")?.as_str());
             if !owned(command) {
-                return Ok(());
+                return Ok(None);
             }
             servers.remove(name);
             if servers.is_empty() {
@@ -379,10 +470,10 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
                 Some(toml::to_string_pretty(&root).unwrap())
             }
         }
-        _ => return Ok(()),
+        _ => return Ok(None),
     };
     match rendered {
-        Some(rendered) => write_file(&target, &rendered),
+        Some(rendered) => write_file(&target, &rendered).map(|()| Some(Change::Edited)),
         None => remove_managed_file(project, &spec.target, true),
     }
 }
@@ -390,22 +481,22 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
 /// Remove every Hot Sheet permission hook from a disabled tool's hook config
 /// (HS2-ZTGX6P). The user's own hooks and other settings stay; an event list emptied by
 /// the removal is dropped, and a config left empty is deleted with its local git exclude.
-fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<(), SetupError> {
+fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<Option<Change>, SetupError> {
     let target = project.join(rel);
     let Some(mut root) = std::fs::read_to_string(&target)
         .ok()
         .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
     else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(object) = root.as_object_mut() else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(hooks) = object
         .get_mut("hooks")
         .and_then(serde_json::Value::as_object_mut)
     else {
-        return Ok(());
+        return Ok(None);
     };
     let mut changed = false;
     hooks.retain(|_, entries| {
@@ -421,7 +512,7 @@ fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<(), SetupError> {
         !entries.is_empty()
     });
     if !changed {
-        return Ok(());
+        return Ok(None);
     }
     if hooks.is_empty() {
         object.remove("hooks");
@@ -433,6 +524,7 @@ fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<(), SetupError> {
             &target,
             &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
         )
+        .map(|()| Some(Change::Edited))
     }
 }
 
@@ -1389,7 +1481,7 @@ args = ["--path", "{{store}}"]
             fixture
         }
 
-        fn refresh(&self, enabled: &[&str]) -> Vec<SetupReport> {
+        fn refresh(&self, enabled: &[&str]) -> RefreshReport {
             let enabled: HashSet<String> = enabled.iter().map(|id| id.to_string()).collect();
             refresh_setup_in(
                 self.store.path(),
@@ -1537,7 +1629,12 @@ args = ["--path", "{{store}}"]
             fixture.agents(),
             format!("User text.\n\n{}\n", shared("alpha, beta, gamma"))
         );
-        assert!(reports.iter().all(|report| report.wrote[0] == "AGENTS.md"));
+        assert!(
+            reports
+                .set_up
+                .iter()
+                .all(|report| report.wrote[0] == "AGENTS.md")
+        );
         for id in ["alpha", "beta", "gamma"] {
             assert!(
                 fixture
@@ -1567,18 +1664,34 @@ args = ["--path", "{{store}}"]
         ));
         let expect = |tools: &str| format!("User text.\n\n{}\n\nFooter.\n", shared(tools));
 
-        fixture.refresh(&["alpha", "beta", "gamma"]);
+        assert!(
+            fixture
+                .refresh(&["alpha", "beta", "gamma"])
+                .removed
+                .is_empty()
+        );
         assert_eq!(fixture.agents(), expect("alpha, beta, gamma"));
-        // Disable one sharer: the section stays for the others.
-        fixture.refresh(&["alpha", "beta"]);
+        // Disable one sharer: the section stays for the others. The refresh reports the
+        // disabled sharer leaving the shared file and its deleted artifacts (HS2-CAM9J5).
+        let removed = |id: &str| RemovalReport {
+            tool: format!("{id} tool"),
+            removed: vec![format!(".{id}/SKILL.md"), format!(".{id}/mcp.json")],
+            edited: vec!["AGENTS.md".into()],
+        };
+        assert_eq!(
+            fixture.refresh(&["alpha", "beta"]).removed,
+            [removed("gamma")]
+        );
         assert_eq!(fixture.agents(), expect("alpha, beta"));
         // Down to one sharer: still one shared section, not a per-tool re-split.
-        fixture.refresh(&["alpha"]);
+        assert_eq!(fixture.refresh(&["alpha"]).removed, [removed("beta")]);
         assert_eq!(fixture.agents(), expect("alpha"));
-        fixture.refresh(&["alpha"]);
+        assert!(fixture.refresh(&["alpha"]).removed.is_empty());
         assert_eq!(fixture.agents(), expect("alpha"));
         // No sharer remains: the section is removed and user content keeps its shape.
-        assert!(fixture.refresh(&["unrelated"]).is_empty());
+        let last = fixture.refresh(&["unrelated"]);
+        assert!(last.set_up.is_empty());
+        assert_eq!(last.removed, [removed("alpha")]);
         assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
         assert!(fixture.refresh(&["unrelated"]).is_empty());
         assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
@@ -1824,8 +1937,19 @@ command = "hotsheet-cli permission-hook"
         assert!(fixture.exclude().contains("/.echo/settings.local.json\n"));
         let excludes = fixture.exclude();
 
-        for _ in 0..2 {
-            fixture.refresh(&["alpha"]);
+        for pass in 0..2 {
+            let report = fixture.refresh(&["alpha"]);
+            let expected = RemovalReport {
+                tool: "echo tool".into(),
+                removed: artifacts[1..].iter().map(|rel| rel.to_string()).collect(),
+                edited: vec!["AGENTS.md".into()],
+            };
+            // HS2-CAM9J5: the first pass reports every removal; the next reports nothing.
+            if pass == 0 {
+                assert_eq!(report.removed, [expected]);
+            } else {
+                assert!(report.removed.is_empty(), "{report:?}");
+            }
             assert_eq!(fixture.agents(), "User text.\n");
             for rel in &artifacts[1..] {
                 assert!(!fixture.path(rel).exists(), "{rel} was left behind");
@@ -1924,7 +2048,7 @@ args = ["--path", "{store}"]
 
         // Explicit empty list: nothing is enabled, so every managed artifact leaves.
         for _ in 0..2 {
-            assert!(refresh(Some(&none)).is_empty(), "no tool is set up");
+            assert!(refresh(Some(&none)).set_up.is_empty(), "no tool is set up");
             assert_eq!(fixture.agents(), "User text.\n");
             for rel in echo_artifacts.iter().chain(&[
                 ".alpha/SKILL.md",
@@ -1969,7 +2093,7 @@ args = ["--path", "{store}"]
         let restored = HashSet::from(["echo".to_string()]);
         for _ in 0..2 {
             let reports = refresh(Some(&restored));
-            assert_eq!(reports.len(), 1, "{reports:?}");
+            assert_eq!(reports.set_up.len(), 1, "{reports:?}");
             assert_eq!(echo_artifacts.map(|rel| fixture.read(rel)), unset_echo);
             assert!(fixture.agents().contains("hotsheet:echo"));
         }
@@ -2069,8 +2193,32 @@ args = ["--path", "{{store}}"]
                 .contains("hotsheet-mcp")
         );
 
-        for _ in 0..2 {
-            fixture.refresh(&["alpha"]);
+        for pass in 0..2 {
+            let report = fixture.refresh(&["alpha"]);
+            // HS2-CAM9J5: the first pass reports each shared config as edited, never removed.
+            // Each fixture's AGENTS.md section leaves too (and the built-in OpenCode also
+            // targets opencode.json), so compare the set of edited configs.
+            let edited: std::collections::BTreeSet<_> = report
+                .removed
+                .iter()
+                .flat_map(|tool| {
+                    assert!(tool.removed.is_empty(), "{tool:?}");
+                    tool.edited
+                        .iter()
+                        .filter(|rel| *rel != "AGENTS.md")
+                        .cloned()
+                })
+                .collect();
+            if pass == 0 {
+                assert_eq!(
+                    edited,
+                    ["shared.json", "opencode.json", ".toby/config.toml"]
+                        .map(String::from)
+                        .into()
+                );
+            } else {
+                assert!(report.removed.is_empty(), "{report:?}");
+            }
             let json: serde_json::Value =
                 serde_json::from_str(&fixture.read("shared.json").unwrap()).unwrap();
             assert_eq!(
@@ -2096,7 +2244,7 @@ args = ["--path", "{{store}}"]
         // A user's own `hotsheet` server (not Hot Sheet's MCP binary) is not ours to remove.
         let own = "{\n  \"mcpServers\": {\n    \"hotsheet\": {\n      \"command\": \"/opt/custom/bridge\"\n    }\n  }\n}\n";
         fixture.write("shared.json", own);
-        fixture.refresh(&["alpha"]);
+        assert!(fixture.refresh(&["alpha"]).removed.is_empty());
         assert_eq!(fixture.read("shared.json").as_deref(), Some(own));
 
         // Configs that held only Hot Sheet's entry are deleted outright.
@@ -2110,7 +2258,18 @@ args = ["--path", "{{store}}"]
             fixture.exclude(),
             "/shared.json\n/opencode.json\n/.toby/config.toml\n"
         );
-        fixture.refresh(&["alpha"]);
+        let report = fixture.refresh(&["alpha"]);
+        let deleted: std::collections::BTreeSet<_> = report
+            .removed
+            .iter()
+            .flat_map(|tool| tool.removed.clone())
+            .collect();
+        assert_eq!(
+            deleted,
+            ["shared.json", "opencode.json", ".toby/config.toml"]
+                .map(String::from)
+                .into()
+        );
         for rel in ["shared.json", "opencode.json", ".toby"] {
             assert!(!fixture.path(rel).exists(), "{rel}");
         }
@@ -2154,8 +2313,20 @@ command = "hotsheet-cli permission-hook"
         let installed = fixture.read(".hank/settings.json").unwrap();
         assert!(installed.contains("permission-hook"), "{installed}");
         assert!(installed.contains("PermissionRequest"), "{installed}");
-        for _ in 0..2 {
-            fixture.refresh(&["alpha"]);
+        for pass in 0..2 {
+            let report = fixture.refresh(&["alpha"]);
+            if pass == 0 {
+                assert_eq!(
+                    report.removed,
+                    [RemovalReport {
+                        tool: "hank tool".into(),
+                        removed: vec![".hank/mcp.json".into()],
+                        edited: vec!["AGENTS.md".into(), ".hank/settings.json".into()],
+                    }]
+                );
+            } else {
+                assert!(report.is_empty(), "{report:?}");
+            }
             let settings: serde_json::Value =
                 serde_json::from_str(&fixture.read(".hank/settings.json").unwrap()).unwrap();
             assert_eq!(settings, user, "only Hot Sheet's hooks leave");
@@ -2246,7 +2417,7 @@ args = []
 
         let reports = fixture.refresh(&["alpha", "beta", "gamma"]);
         assert_eq!(fixture.agents(), with_stale);
-        for report in &reports {
+        for report in &reports.set_up {
             assert_eq!(report.wrote.len(), 1, "only MCP maintenance: {report:?}");
         }
         for id in ["alpha", "beta", "gamma"] {
@@ -2489,7 +2660,7 @@ args = []
                 instructions
             );
             assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
-            assert_eq!(report[0].wrote, [".fixture/mcp.json"]);
+            assert_eq!(report.set_up[0].wrote, [".fixture/mcp.json"]);
         }
     }
 

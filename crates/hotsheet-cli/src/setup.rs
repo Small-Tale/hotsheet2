@@ -10,7 +10,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-pub use hotsheet_plugins::SetupReport;
+pub use hotsheet_plugins::{RefreshReport, RemovalReport, SetupReport};
 
 /// Set up one named `tool`, or every detected (and enabled) tool when `detect` is set.
 pub fn run_setup(
@@ -30,8 +30,9 @@ pub fn run_setup(
 }
 
 /// Migrate existing settings and refresh every detected or previously managed tool using
-/// the same core writers as explicit setup and bootstrap.
-pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<Vec<SetupReport>> {
+/// the same core writers as explicit setup and bootstrap. The report also lists what was
+/// removed from tools the project disabled (HS2-CAM9J5).
+pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<RefreshReport> {
     let settings = hotsheet_ticketing::Settings::with_legacy_stores(project_dir, [store_path]);
     settings.migrate_existing()?;
     let enabled = enabled_plugin_ids(project_dir);

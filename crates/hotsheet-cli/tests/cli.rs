@@ -507,8 +507,24 @@ fn setup_refresh_removes_a_disabled_tools_owned_artifacts() {
     // Disable Codex by enabling only Claude (whose targets never overlap Codex's; it may or
     // may not be detected here). An empty list would disable every tool (HS2-8B3VJP).
     enable(r#""claude""#);
-    for _ in 0..2 {
-        run(&["setup", "--refresh"]);
+    for pass in 0..2 {
+        let output = hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["setup", "--refresh", "--project"])
+            .arg(&project)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        // HS2-CAM9J5: a shared config keeping the user's settings is reported as edited.
+        let edited_config = stdout.lines().any(|l| l == "  edited .codex/config.toml");
+        let removed_hooks = stdout.lines().any(|l| l == "  removed .codex/hooks.json");
+        assert_eq!(edited_config && removed_hooks, pass == 0, "{stdout}");
+        assert!(
+            !stdout.contains("Removed disabled Codex CLI") || pass == 0,
+            "{stdout}"
+        );
         assert_eq!(
             std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
             "User text.\n"
@@ -619,8 +635,30 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
 
     // An explicit empty list disables every tool.
     set_enabled(Some("[]"));
-    for _ in 0..2 {
-        run(&["setup", "--refresh"]).success();
+    for pass in 0..2 {
+        let output = run(&["setup", "--refresh"]).success().get_output().clone();
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        // HS2-CAM9J5: the refresh that deletes files says so; only a no-op is "current".
+        if pass == 0 {
+            assert!(
+                stdout.contains("Removed disabled Codex CLI setup in "),
+                "{stdout}"
+            );
+            for line in [
+                "  edited AGENTS.md",
+                "  removed .agents/skills/hotsheet/SKILL.md",
+                "  removed .codex/config.toml",
+                "  removed .codex/hooks.json",
+            ] {
+                assert!(stdout.lines().any(|l| l == line), "{line}: {stdout}");
+            }
+            assert!(!stdout.contains("Setup is current"), "{stdout}");
+        } else {
+            assert_eq!(
+                stdout,
+                "Setup is current; no applicable AI-tool integrations found.\n"
+            );
+        }
         assert_eq!(
             std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
             "User text.\n"

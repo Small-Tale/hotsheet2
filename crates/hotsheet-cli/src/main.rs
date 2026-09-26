@@ -3849,18 +3849,36 @@ fn cmd_setup(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     )
     .register(&project_dir, None, repository, vec![store.to_path_buf()])?;
-    let reports = if refresh {
-        hotsheet_cli::setup::refresh_setup(store, &project_dir)?
+    let (reports, removed) = if refresh {
+        let report = hotsheet_cli::setup::refresh_setup(store, &project_dir)?;
+        if report.is_empty() {
+            println!("Setup is current; no applicable AI-tool integrations found.");
+        }
+        (report.set_up, report.removed)
     } else {
-        hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?
+        (
+            hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?,
+            Vec::new(),
+        )
     };
-    if refresh && reports.is_empty() {
-        println!("Setup is current; no applicable AI-tool integrations found.");
-    }
     for r in &reports {
         println!("Set up {} in {}:", r.tool, project_dir.display());
         for w in &r.wrote {
             println!("  wrote {w}");
+        }
+    }
+    // Disabled tools whose managed artifacts refresh removed (HS2-CAM9J5).
+    for r in &removed {
+        println!(
+            "Removed disabled {} setup in {}:",
+            r.tool,
+            project_dir.display()
+        );
+        for path in &r.removed {
+            println!("  removed {path}");
+        }
+        for path in &r.edited {
+            println!("  edited {path}");
         }
     }
     Ok(())

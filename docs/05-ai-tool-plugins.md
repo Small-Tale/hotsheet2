@@ -144,6 +144,15 @@ instead of one copy per tool:
   enabled tool also declares is never removed. Re-enabling a detected tool makes the next
   refresh write the complete layout again; an undetected tool needs an explicit
   `hotsheet setup <tool>`, because nothing marks it as previously managed any more.
+- **Refresh reports what it removed (HS2-CAM9J5).** The core refresh returns a
+  `RefreshReport`: the tools it set up, plus one `RemovalReport` per disabled tool that had
+  something to remove, listing project-relative paths it `removed` (deleted outright) and
+  `edited` (kept, with Hot Sheet's section, MCP entry, hooks, or shared-section membership
+  dropped). `hotsheet setup --refresh` prints them under
+  `Removed disabled <tool> setup in <project>:` as `removed <path>` / `edited <path>` lines,
+  and prints `Setup is current; …` only when nothing was set up or removed. A repeated
+  refresh reports nothing further. The server's project-open refresh computes the same
+  report but does not surface it yet (HS2-W3EZNE).
 - Version preservation applies to the shared section's **body**. For every tool targeting
   the file, a newer shared body, or an equal-version body whose bytes differ, freezes that
   tool's instruction/skill bundle — even when it also has a stale per-tool copy — exactly
