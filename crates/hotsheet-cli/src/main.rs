@@ -1599,10 +1599,25 @@ fn cmd_bootstrap(
                 if error
                     .downcast_ref::<hotsheet_plugins::SetupError>()
                     .is_some_and(|error| {
-                        matches!(error, hotsheet_plugins::SetupError::NoneDetected)
+                        matches!(
+                            error,
+                            hotsheet_plugins::SetupError::NoneDetected
+                                | hotsheet_plugins::SetupError::NoneEnabled
+                        )
                     }) =>
             {
-                println!("No supported AI tools were detected; project/store setup is complete.");
+                if matches!(
+                    error.downcast_ref::<hotsheet_plugins::SetupError>(),
+                    Some(hotsheet_plugins::SetupError::NoneEnabled)
+                ) {
+                    println!(
+                        "No detected AI tool is enabled by this project's `enabled_plugins` setting; project/store setup is complete."
+                    );
+                } else {
+                    println!(
+                        "No supported AI tools were detected; project/store setup is complete."
+                    );
+                }
                 println!(
                     "Run `hotsheet-cli bootstrap --project {} --store {} --tool <tool>` after installing Claude, Codex, OpenCode, or another registered tool.",
                     shell_quote_path(&project),

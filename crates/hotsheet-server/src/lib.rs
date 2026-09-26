@@ -2982,18 +2982,14 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
     tokio::task::spawn_blocking(move || {
         let _ = settings.migrate_existing();
-        let enabled = settings
-            .get("enabled_plugins", hotsheet_ticketing::Scope::Shared)
-            .ok()
-            .flatten()
-            .and_then(|value| value.as_array().cloned())
-            .map(|values| {
-                values
-                    .into_iter()
-                    .filter_map(|value| value.as_str().map(str::to_owned))
-                    .collect::<std::collections::HashSet<_>>()
-            })
-            .filter(|values| !values.is_empty());
+        // Same resolution as the CLI: an explicit empty list disables every tool (HS2-8B3VJP).
+        let enabled = hotsheet_plugins::enabled_plugins_from_setting(
+            settings
+                .get("enabled_plugins", hotsheet_ticketing::Scope::Shared)
+                .ok()
+                .flatten()
+                .as_ref(),
+        );
         let _ =
             hotsheet_plugins::refresh_setup_in(&store, &project, enabled.as_ref(), &plugin_dirs);
         if let Ok(mut active) = active.lock() {

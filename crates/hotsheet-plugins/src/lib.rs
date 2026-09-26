@@ -23,7 +23,10 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 pub mod setup;
-pub use setup::{SetupError, SetupReport, mcp_command, refresh_setup_in, run_setup, run_setup_in};
+pub use setup::{
+    SetupError, SetupReport, enabled_plugins_from_setting, mcp_command, refresh_setup_in,
+    run_setup, run_setup_in,
+};
 
 /// The bundled first-party plugins, embedded from the repo's `plugins/` tree at build
 /// time. Adding a first-party tool = adding a directory here.

@@ -109,9 +109,23 @@ instead of one copy per tool:
   section stays for the others. When no listed tool remains enabled, refresh removes the
   section. A disabled tool's _per-tool_ section leaves the same way (HS2-FKC8VN): when
   `enabled_plugins` is set and excludes a tool, refresh removes that tool's
-  `hotsheet:<tool>` section while preserving everything outside the markers. With no (or
-  an empty) `enabled_plugins` setting nothing counts as disabled, so refresh never removes
-  anything.
+  `hotsheet:<tool>` section while preserving everything outside the markers. With no
+  `enabled_plugins` setting nothing counts as disabled, so refresh never removes anything.
+- **An explicit empty list disables every tool (HS2-8B3VJP).** `enabled_plugins` is read
+  the same way by `hotsheet setup` and the server's project-open refresh
+  (`hotsheet_plugins::enabled_plugins_from_setting`):
+
+  | Setting value | Meaning |
+  | --- | --- |
+  | absent or `null` | no restriction — refresh only adds or repairs |
+  | `[]` | no tool enabled — refresh removes every tool's managed artifacts |
+  | `["codex", …]` | only the listed ids are enabled (non-string entries are ignored) |
+  | any other value (malformed) | treated as absent, so a corrupt setting never deletes setup |
+
+  With `[]`, `setup --detect` fails with a "no detected AI tool is enabled" error instead
+  of "none detected", and `bootstrap` reports that nothing is enabled and still completes
+  project/store setup. No Hot Sheet client or server writes `[]` as a default; the key is
+  omitted until a project opts into a list. Explicit `setup <tool>` ignores the list.
 - **Disabled tools leave no managed artifacts (HS2-ZTGX6P).** Refresh also removes a
   disabled tool's other wholly Hot Sheet-owned artifacts, so it stops counting as
   previously managed and cannot be half re-enabled later:

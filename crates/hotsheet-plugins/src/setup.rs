@@ -30,6 +30,10 @@ pub enum SetupError {
     NoToolGiven,
     #[error("no supported AI tools detected on this machine")]
     NoneDetected,
+    #[error(
+        "no detected AI tool is enabled for this project (its `enabled_plugins` setting excludes them all)"
+    )]
+    NoneEnabled,
     #[error("store path does not exist: {0} (run `init` first)")]
     NoStore(String),
     #[error("plugin '{id}' declares unsafe target path(s): {targets} (must be project-relative)")]
@@ -43,6 +47,25 @@ pub enum SetupError {
         path: String,
         source: std::io::Error,
     },
+}
+
+/// Resolve the project's `enabled_plugins` shared setting (HS2-94) into the `enabled` set
+/// every setup entry point takes, so the CLI and the server interpret it identically
+/// (HS2-8B3VJP):
+///
+/// * unset (`None`) or JSON `null` → `None`: no restriction, refresh never removes anything;
+/// * an array → `Some` of its string entries. An **explicit empty list means no tool is
+///   enabled**, so refresh removes every tool's managed artifacts; non-string entries are
+///   ignored;
+/// * any other (malformed) value → `None`, so a corrupt setting never deletes setup.
+pub fn enabled_plugins_from_setting(value: Option<&serde_json::Value>) -> Option<HashSet<String>> {
+    let values = value?.as_array()?;
+    Some(
+        values
+            .iter()
+            .filter_map(|value| value.as_str().map(String::from))
+            .collect(),
+    )
 }
 
 /// Set up one named `tool`, or every **detected** tool when `detect` is set, writing into
@@ -81,16 +104,25 @@ pub fn run_setup_in(
             crate::find_in(id, plugin_dirs)
                 .ok_or_else(|| SetupError::UnknownTool(id.to_string()))?,
         ],
-        (None, true) => all_plugins(plugin_dirs)
-            .into_iter()
-            .filter(is_detected)
-            .filter(|p| enabled.is_none_or(|set| set.contains(p.id())))
-            .collect(),
+        (None, true) => {
+            let detected: Vec<Plugin> = all_plugins(plugin_dirs)
+                .into_iter()
+                .filter(is_detected)
+                .collect();
+            if detected.is_empty() {
+                return Err(SetupError::NoneDetected);
+            }
+            let enabled: Vec<Plugin> = detected
+                .into_iter()
+                .filter(|p| enabled.is_none_or(|set| set.contains(p.id())))
+                .collect();
+            if enabled.is_empty() {
+                return Err(SetupError::NoneEnabled);
+            }
+            enabled
+        }
         (None, false) => return Err(SetupError::NoToolGiven),
     };
-    if plugins.is_empty() {
-        return Err(SetupError::NoneDetected);
-    }
 
     setup_plugins(store_path, project_dir, plugins, None)
 }
@@ -117,7 +149,8 @@ pub fn refresh_setup_in(
         }
     }
     // Tools the project explicitly left out of `enabled_plugins` (HS2-FKC8VN). Without an
-    // enabled list nothing is excluded: refresh then only ever adds or repairs.
+    // enabled list nothing is excluded: refresh then only ever adds or repairs. An explicit
+    // empty list excludes every tool (HS2-8B3VJP).
     let (plugins, excluded): (Vec<_>, Vec<_>) = all
         .into_iter()
         .partition(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())));
@@ -1825,6 +1858,120 @@ command = "hotsheet-cli permission-hook"
                 "re-enabling restores the layout"
             );
             assert_eq!(fixture.exclude(), excludes);
+        }
+    }
+
+    /// HS2-8B3VJP: the setting resolver keeps "unset" and "explicitly empty" apart.
+    #[test]
+    fn enabled_plugins_setting_distinguishes_unset_empty_and_malformed() {
+        use serde_json::json;
+        assert_eq!(enabled_plugins_from_setting(None), None);
+        assert_eq!(enabled_plugins_from_setting(Some(&json!(null))), None);
+        assert_eq!(
+            enabled_plugins_from_setting(Some(&json!([]))),
+            Some(HashSet::new())
+        );
+        assert_eq!(
+            enabled_plugins_from_setting(Some(&json!(["claude", 7, "codex"]))),
+            Some(HashSet::from(["claude".to_string(), "codex".to_string()]))
+        );
+        for malformed in [json!("claude"), json!({"claude": true}), json!(true)] {
+            assert_eq!(enabled_plugins_from_setting(Some(&malformed)), None);
+        }
+    }
+
+    /// HS2-8B3VJP: an explicit empty `enabled_plugins` list disables every tool. Walk
+    /// unset → empty (every managed artifact leaves, twice, byte-stable) → unset (detected
+    /// tools return) → empty → a restored list (only the listed detected tool returns).
+    #[test]
+    fn an_empty_enabled_list_disables_every_tool_and_a_restored_list_re_enables() {
+        let fixture = Sharing::new();
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        custom_tool(
+            fixture.plugins.path(),
+            "echo",
+            true,
+            r#"[skills]
+target = ".echo/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".echo/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+        );
+        fixture.write_agents("User text.\n");
+        let dirs = [fixture.plugins.path().to_path_buf()];
+        let refresh = |enabled: Option<&HashSet<String>>| {
+            refresh_setup_in(fixture.store.path(), fixture.project.path(), enabled, &dirs).unwrap()
+        };
+        let none = HashSet::new();
+        let echo_artifacts = [".echo/skills/hotsheet/SKILL.md", ".echo/mcp.json"];
+
+        // Unset: the detected tool is set up; explicitly set-up sharers are managed too.
+        fixture.setup("alpha");
+        fixture.setup("beta");
+        refresh(None);
+        for rel in echo_artifacts
+            .iter()
+            .chain(&[".alpha/SKILL.md", ".beta/mcp.json"])
+        {
+            assert!(fixture.path(rel).is_file(), "{rel} missing while unset");
+        }
+        assert!(fixture.agents().contains("hotsheet:echo"));
+
+        // Explicit empty list: nothing is enabled, so every managed artifact leaves.
+        for _ in 0..2 {
+            assert!(refresh(Some(&none)).is_empty(), "no tool is set up");
+            assert_eq!(fixture.agents(), "User text.\n");
+            for rel in echo_artifacts.iter().chain(&[
+                ".alpha/SKILL.md",
+                ".alpha/mcp.json",
+                ".beta/SKILL.md",
+            ]) {
+                assert!(!fixture.path(rel).exists(), "{rel} was left behind");
+            }
+            assert!(
+                !fixture.exclude().contains("/.echo/"),
+                "{}",
+                fixture.exclude()
+            );
+            for id in ["echo", "alpha", "beta"] {
+                assert!(!has_managed_setup(
+                    fixture.project.path(),
+                    &fixture.plugin(id)
+                ));
+            }
+        }
+        // Detect-setup honors the empty list with its own error, not "none detected".
+        let err = run_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            None,
+            true,
+            Some(&none),
+            &dirs,
+        )
+        .unwrap_err();
+        assert!(matches!(err, SetupError::NoneEnabled), "{err}");
+
+        // Back to unset: detected tools return; the undetected sharers stay gone.
+        refresh(None);
+        assert!(echo_artifacts.iter().all(|rel| fixture.path(rel).is_file()));
+        assert!(!fixture.path(".alpha/SKILL.md").exists());
+        let unset_echo = echo_artifacts.map(|rel| fixture.read(rel));
+
+        // Empty again, then restore a list naming the detected tool.
+        refresh(Some(&none));
+        assert!(echo_artifacts.iter().all(|rel| !fixture.path(rel).exists()));
+        let restored = HashSet::from(["echo".to_string()]);
+        for _ in 0..2 {
+            let reports = refresh(Some(&restored));
+            assert_eq!(reports.len(), 1, "{reports:?}");
+            assert_eq!(echo_artifacts.map(|rel| fixture.read(rel)), unset_echo);
+            assert!(fixture.agents().contains("hotsheet:echo"));
         }
     }
 

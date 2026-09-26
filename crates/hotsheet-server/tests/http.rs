@@ -2473,6 +2473,131 @@ args = ["--path", "{{store}}"]
     );
 }
 
+/// HS2-8B3VJP: the project-open refresh resolves `enabled_plugins` like the CLI. Unset sets
+/// up a detected tool; an explicit empty list removes every managed artifact (and stays
+/// removed on the next open); restoring a list naming the tool re-enables it.
+#[tokio::test]
+async fn opening_project_with_an_empty_enabled_list_disables_every_tool() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    std::fs::write(checkout.join("AGENTS.md"), "User instructions.\n").unwrap();
+    std::fs::write(
+        ticket_store.join("hotsheet-settings.json"),
+        r#"{"user_key":7}"#,
+    )
+    .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(fixture.join("instructions.md"), "Fixture instructions.\n").unwrap();
+    std::fs::write(fixture.join("SKILL.md"), "Fixture skill.\n").unwrap();
+    // Detected through a shell every test machine has on PATH.
+    let binary = if cfg!(windows) { "cmd" } else { "sh" };
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        format!(
+            r#"
+id = "fixture"
+display_name = "Fixture"
+product_name = "Fixture Tool"
+tier = "cli-agent"
+[detection]
+binaries = ["{binary}"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[skills]
+target = ".fixture/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+"#
+        ),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let artifacts = [".fixture/skills/hotsheet/SKILL.md", ".fixture/mcp.json"];
+    let managed = || {
+        std::fs::read_to_string(checkout.join("AGENTS.md"))
+            .is_ok_and(|text| text.contains("<!-- BEGIN hotsheet:fixture -->"))
+            && artifacts.iter().all(|rel| checkout.join(rel).is_file())
+    };
+    let removed = || {
+        std::fs::read_to_string(checkout.join("AGENTS.md"))
+            .is_ok_and(|text| text == "User instructions.\n")
+            && !checkout.join(".fixture").exists()
+    };
+    let open = || async {
+        let opened = application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert!(opened.status().is_success(), "{}", opened.status());
+    };
+    async fn settle(ready: impl Fn() -> bool) {
+        for _ in 0..100 {
+            if ready() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("refresh did not settle");
+    }
+    let set_enabled = |tools: Option<serde_json::Value>| {
+        let path = checkout.join(".hotsheet2/settings.json");
+        let mut settings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let object = settings.as_object_mut().unwrap();
+        match tools {
+            Some(tools) => object.insert("enabled_plugins".into(), tools),
+            None => object.remove("enabled_plugins"),
+        };
+        std::fs::write(&path, settings.to_string()).unwrap();
+    };
+
+    // Unset: the detected fixture is set up (and the settings migrate into the project).
+    open().await;
+    settle(managed).await;
+    let unset: Vec<_> = artifacts
+        .iter()
+        .map(|rel| std::fs::read(checkout.join(rel)).unwrap())
+        .collect();
+
+    // An explicit empty list disables every tool, and a later open keeps it disabled.
+    set_enabled(Some(serde_json::json!([])));
+    open().await;
+    settle(removed).await;
+    open().await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(removed(), "a second open never re-adds a disabled tool");
+
+    // Restoring a list naming the tool re-enables it with the same artifacts.
+    set_enabled(Some(serde_json::json!(["fixture"])));
+    open().await;
+    settle(managed).await;
+    let restored: Vec<_> = artifacts
+        .iter()
+        .map(|rel| std::fs::read(checkout.join(rel)).unwrap())
+        .collect();
+    assert_eq!(restored, unset);
+}
+
 #[tokio::test]
 async fn opening_project_regenerates_its_worklist_after_responding() {
     use hotsheet_model::{Timestamp, Ulid};

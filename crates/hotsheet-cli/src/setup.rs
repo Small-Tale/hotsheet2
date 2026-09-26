@@ -43,20 +43,17 @@ pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<Vec<SetupR
     )?)
 }
 
-/// The project's `enabled_plugins` shared setting as a set of ids, or `None` if unset (no
-/// restriction). A non-array or empty value is treated as "no restriction". (HS2-94 settings
-/// driving HS2-92/HS2-98 setup.)
+/// The project's `enabled_plugins` shared setting as a set of ids: `None` when unset (no
+/// restriction), `Some(empty)` for an explicit empty list (no tool enabled). Resolution is
+/// shared with the server's project-open refresh through
+/// [`hotsheet_plugins::enabled_plugins_from_setting`] (HS2-94, HS2-8B3VJP).
 fn enabled_plugin_ids(project: &Path) -> Option<HashSet<String>> {
     use hotsheet_ticketing::{Scope, Settings};
     let value = Settings::for_project(project)
         .get("enabled_plugins", Scope::Shared)
-        .ok()??;
-    let set: HashSet<String> = value
-        .as_array()?
-        .iter()
-        .filter_map(|v| v.as_str().map(String::from))
-        .collect();
-    (!set.is_empty()).then_some(set)
+        .ok()
+        .flatten();
+    hotsheet_plugins::enabled_plugins_from_setting(value.as_ref())
 }
 
 #[cfg(test)]
@@ -339,8 +336,18 @@ mod tests {
             .unwrap();
         let set = enabled_plugin_ids(d.path()).unwrap();
         assert!(set.contains("claude") && !set.contains("codex"));
+        // An explicit empty list is authoritative: no tool is enabled (HS2-8B3VJP).
         Settings::for_project(d.path())
             .set("enabled_plugins", serde_json::json!([]), Scope::Shared)
+            .unwrap();
+        assert_eq!(enabled_plugin_ids(d.path()), Some(HashSet::new()));
+        // A malformed value never restricts (and so never removes) anything.
+        Settings::for_project(d.path())
+            .set(
+                "enabled_plugins",
+                serde_json::json!("claude"),
+                Scope::Shared,
+            )
             .unwrap();
         assert!(enabled_plugin_ids(d.path()).is_none());
     }

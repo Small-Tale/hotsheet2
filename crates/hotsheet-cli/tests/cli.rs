@@ -504,8 +504,8 @@ fn setup_refresh_removes_a_disabled_tools_owned_artifacts() {
     assert!(enabled.iter().all(Option::is_some), "{enabled:?}");
     assert!(enabled[2].as_deref().unwrap().contains("hotsheet-mcp"));
 
-    // An empty list means "no restriction", so disable Codex by enabling only Claude
-    // (whose targets never overlap Codex's; it may or may not be detected here).
+    // Disable Codex by enabling only Claude (whose targets never overlap Codex's; it may or
+    // may not be detected here). An empty list would disable every tool (HS2-8B3VJP).
     enable(r#""claude""#);
     for _ in 0..2 {
         run(&["setup", "--refresh"]);
@@ -531,6 +531,133 @@ fn setup_refresh_removes_a_disabled_tools_owned_artifacts() {
         run(&["setup", "--refresh"]);
         assert_eq!(snapshot(), enabled);
     }
+}
+
+/// HS2-8B3VJP: an explicit empty `enabled_plugins` list disables every AI tool, unlike an
+/// unset setting. Walk unset (a detected tool is set up) → `[]` (every managed artifact
+/// leaves; a second refresh is a no-op; detect-setup reports nothing enabled) → a restored
+/// list (the detected tool returns with the identical layout).
+#[test]
+fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    let bin = root.path().join("bin");
+    for dir in [&store, &project, &home, &bin] {
+        std::fs::create_dir(dir).unwrap();
+    }
+    // A stand-in `codex` on PATH makes Codex detected on every machine.
+    let codex = bin.join(if cfg!(windows) { "codex.exe" } else { "codex" });
+    std::fs::write(&codex, "#!/bin/sh\n").unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    // `None` removes the key (unset); `Some(json)` sets it, in the store and, once
+    // migrated, in the project settings.
+    let set_enabled = |tools: Option<&str>| {
+        let mut store_settings = serde_json::json!({});
+        if let Some(tools) = tools {
+            store_settings["enabled_plugins"] = serde_json::from_str(tools).unwrap();
+        }
+        std::fs::write(
+            store.join("hotsheet-settings.json"),
+            store_settings.to_string(),
+        )
+        .unwrap();
+        let project_settings = project.join(".hotsheet2/settings.json");
+        if project_settings.is_file() {
+            let mut settings: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&project_settings).unwrap()).unwrap();
+            let object = settings.as_object_mut().unwrap();
+            match tools {
+                Some(tools) => {
+                    object.insert(
+                        "enabled_plugins".into(),
+                        serde_json::from_str(tools).unwrap(),
+                    );
+                }
+                None => {
+                    object.remove("enabled_plugins");
+                }
+            }
+            std::fs::write(&project_settings, settings.to_string()).unwrap();
+        }
+    };
+    let run = |args: &[&str]| {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .env("PATH", &path)
+            .args(args)
+            .arg("--project")
+            .arg(&project)
+            .assert()
+    };
+    std::fs::write(project.join("AGENTS.md"), "User text.\n").unwrap();
+    let artifacts = [
+        "AGENTS.md",
+        ".agents/skills/hotsheet/SKILL.md",
+        ".codex/config.toml",
+        ".codex/hooks.json",
+    ];
+    let snapshot = || artifacts.map(|rel| std::fs::read_to_string(project.join(rel)).ok());
+
+    // Unset: the detected tool is set up by refresh alone.
+    set_enabled(None);
+    run(&["setup", "--refresh"]).success();
+    let unset = snapshot();
+    assert!(unset.iter().all(Option::is_some), "{unset:?}");
+    assert!(unset[0].as_deref().unwrap().contains("hotsheet:"));
+
+    // An explicit empty list disables every tool.
+    set_enabled(Some("[]"));
+    for _ in 0..2 {
+        run(&["setup", "--refresh"]).success();
+        assert_eq!(
+            std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+            "User text.\n"
+        );
+        for rel in &artifacts[1..] {
+            assert!(!project.join(rel).exists(), "{rel} was left behind");
+        }
+        // Claude may be detected on this machine; its owned artifacts leave too.
+        for rel in [".claude", ".mcp.json", ".agents", ".codex"] {
+            assert!(!project.join(rel).exists(), "{rel} was left behind");
+        }
+        let claude_md = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap_or_default();
+        assert!(!claude_md.contains("hotsheet:"), "{claude_md}");
+    }
+    run(&["setup", "--detect"])
+        .failure()
+        .stderr(predicates::str::contains("enabled_plugins"));
+
+    // Restoring a list re-enables the detected tool. Other tools this machine detects
+    // stay out, so only Codex's own artifacts must match the unset layout.
+    set_enabled(Some(r#"["codex"]"#));
+    run(&["setup", "--refresh"]).success();
+    let restored = snapshot();
+    assert_eq!(restored[1..], unset[1..]);
+    assert!(
+        restored[0]
+            .as_deref()
+            .unwrap()
+            .contains("hotsheet-instructions-version")
+    );
+    run(&["setup", "--refresh"]).success();
+    assert_eq!(snapshot(), restored, "a second refresh is a no-op");
+
+    // Unsetting again restores exactly the original unset layout.
+    set_enabled(None);
+    run(&["setup", "--refresh"]).success();
+    assert_eq!(snapshot(), unset);
 }
 
 #[test]
