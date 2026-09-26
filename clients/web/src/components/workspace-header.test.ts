@@ -372,13 +372,16 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-view-mode="notifications"');
     expect(markup).toContain('Show Notifications (7 pending)');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
-    expect(headerCss).toContainSource('.workspace-header__sort { width: remify(44px); }');
+    // Kerf's icon-only Select owns the trigger width (HS2-06GDW3); the group only centers it
+    // (KF-Y3YZBE workaround) instead of forcing a fixed 44px width (HS2-7DJPSG).
+    expect(headerCss).not.toContain('.workspace-header__sort {');
+    expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*justify-content: center/);
     // The single sort group owns the pill; the Select combobox stays transparent so it does not
     // draw a second, shorter pill that pokes out of the group's rounding (HS2-W3VD53).
     expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*background: transparent/);
     // The focus ring is a single pill on the group (following its radius), not a mismatched ring on
     // the smaller inner combobox (HS2-M1DF1D).
-    expect(headerCss).toContainSource('.workspace-header__sort-group { border-radius: var(--wa-border-radius-pill); }');
+    expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*border-radius: var\(--wa-border-radius-pill\)/);
     expect(headerCss).toContainSource(
       '.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has(.workspace-header__sort[open]) { outline: var(--wa-focus-ring)',
     );
