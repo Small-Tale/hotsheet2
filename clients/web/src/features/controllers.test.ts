@@ -358,10 +358,10 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
       if (url === '/api/a/ai-settings') return settings.promise;
       throw new Error(`Unexpected ${url}`);
     });
-    const loading = state.ai.refreshAiConfiguration(undefined, true);
+    const loading = state.ai.refreshAiConfiguration();
     await vi.advanceTimersByTimeAsync(0);
     // Both requests are in flight before either answers.
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/ai-tools?refresh=true', '/api/a/ai-settings']);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/ai-tools', '/api/a/ai-settings']);
     expect(state.ai.aiSettingsLoading.value).toBe(true);
     // Settings answering first applies nothing until the tools arrive too.
     settings.resolve(json({ tool: 'a-tool' }));
@@ -389,6 +389,26 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(state.ai.aiSettingsLoading.value).toBe(false);
     expect(state.ai.aiConfigurationProjectId).toBe('');
     expect(state.ai.aiToolOptions()).toEqual([{ id: 'a-tool', label: 'A tool' }]);
+  });
+
+  it('keeps an explicit AI-tool refresh ordered before the settings read (HS2-QV8B7R)', async () => {
+    const state = chatOwners(),
+      tools = deferred<Response>();
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      if (url === '/api/a/ai-tools?refresh=true') return tools.promise;
+      if (url === '/api/a/ai-settings') return json({ tool: 'a-tool' });
+      throw new Error(`Unexpected ${url}`);
+    });
+    const loading = state.ai.refreshAiConfiguration(undefined, true);
+    await vi.advanceTimersByTimeAsync(0);
+    // The settings must be validated against the rescanned tools, so they wait for the refresh.
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/ai-tools?refresh=true']);
+    tools.resolve(json([{ id: 'a-tool', display_name: 'A tool', models: [] }]));
+    await loading;
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/ai-tools?refresh=true', '/api/a/ai-settings']);
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
   });
 
   it('restores cached per-project AI configuration on A→B→A without refetching (HS2-AZZ9TF)', async () => {

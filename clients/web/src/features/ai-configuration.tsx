@@ -321,9 +321,13 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     const epoch = aiConfigurationEpochs.get(current.id) ?? 0;
     try {
       const client = new Api(current.apiPath);
-      // Independent reads: issue both at once so project activation waits for the slower one,
-      // not their sum. The server shares one AI-tool discovery between them (HS2-QV8B7R).
-      const [tools, defaults] = await Promise.all([client.aiTools(refresh), client.aiSettings()]);
+      // Ordinary reads are independent: issue both at once so project activation waits for the
+      // slower one, not their sum; the server shares one AI-tool discovery between them. An explicit
+      // refresh stays ordered so the settings are validated against the freshly rescanned tools
+      // rather than the server's pre-refresh memo (HS2-QV8B7R).
+      const [tools, defaults] = refresh
+        ? [await client.aiTools(true), await client.aiSettings()]
+        : await Promise.all([client.aiTools(false), client.aiSettings()]);
       // A late answer for a project the user already left is still that project's configuration:
       // keep it warm for the next switch back, but never apply it to the active project.
       if ((aiConfigurationEpochs.get(current.id) ?? 0) === epoch)
