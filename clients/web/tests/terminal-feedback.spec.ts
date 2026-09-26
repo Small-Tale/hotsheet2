@@ -420,6 +420,18 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });
+  // The drawer grid tile's More actions menu renders (it used to set state nothing drew) with Open
+  // only, since terminal visibility is dashboard-scoped; Open switches the drawer to that terminal
+  // (HS2-V2CCN6).
+  await drawer.getByRole('button', { name: 'More actions for nano' }).click();
+  const drawerMenu = drawer.getByRole('menu');
+  await expect(drawerMenu).toBeVisible();
+  await expect(drawerMenu.locator('wa-dropdown-item')).toHaveCount(1);
+  await expect(drawerMenu.getByText('Hide Terminal')).toHaveCount(0);
+  await expect(page.locator('[data-component="terminal-context-menu"]')).toHaveCount(1);
+  await drawerMenu.getByText('Open').click();
+  await expect(page.locator('[data-component="terminal-context-menu"]')).toHaveCount(0);
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
 });
 
 test('releases magnified terminal resources and bounds duplicated scrollback', async ({ page }) => {

@@ -187,6 +187,31 @@ describe('TerminalDashboard', () => {
     expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(markup).toContain('data-action="hide-dashboard-terminal"');
+    const openOnly = String(
+      TerminalDashboard({
+        groups,
+        width: 900,
+        height: 600,
+        fitAcross: 7,
+        fitHigh: 3,
+        contextMenu: { key: 'one:term-1', x: 20, y: 30 },
+        contextMenuActions: ['open'],
+      }),
+    );
+    expect(openOnly.match(/<wa-dropdown-item/g)).toHaveLength(1);
+    expect(openOnly).not.toContain('data-action="hide-dashboard-terminal"');
+    expect(
+      String(
+        TerminalDashboard({
+          groups,
+          width: 900,
+          height: 600,
+          fitAcross: 7,
+          fitHigh: 3,
+          contextMenu: { key: 'other:term-9', x: 20, y: 30 },
+        }),
+      ),
+    ).not.toContain('data-component="terminal-context-menu"');
   });
   it('uses a compact label select with a content-sized popup for visibility groups and omits global layout grouping', () => {
     const visibilityGroups = [

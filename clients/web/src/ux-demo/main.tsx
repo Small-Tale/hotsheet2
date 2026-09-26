@@ -724,6 +724,7 @@ function demoContent(item: DemoDefinition) {
           fitAcross={2}
           fitHigh={2}
           selectedId="shell"
+          contextMenu={terminalDashboardContextMenu.value}
         />
       </section>
     );

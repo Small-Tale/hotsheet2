@@ -76,7 +76,14 @@ export interface TerminalDashboardProps {
   loading?: boolean;
   message?: string;
   contextMenu?: { key: string; x: number; y: number };
+  /**
+   * Actions offered by the tile More actions menu. The project drawer grid omits `hide`, because
+   * terminal visibility is scoped to the workspace dashboard and the drawer never applies it.
+   */
+  contextMenuActions?: readonly TerminalContextMenuAction[];
 }
+export type TerminalContextMenuAction = 'open' | 'hide';
+const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'hide'];
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
@@ -438,6 +445,7 @@ export function TerminalDashboard({
   loading = false,
   message = '',
   contextMenu,
+  contextMenuActions = ALL_CONTEXT_MENU_ACTIONS,
 }: TerminalDashboardProps) {
   const hidden = new Set(hiddenKeys);
   const visibleGroups = groups
@@ -454,6 +462,11 @@ export function TerminalDashboard({
       ? terminalDrawerGridLayout(width, height, fitHigh)
       : terminalGridLayout(width, height, fitAcross, fitHigh);
   const magnified = groups.flatMap((group) => group.sessions).find((session) => keyFor(session) === magnifiedKey);
+  // One menu signal serves every grid; only the grid that shows the targeted tile renders it.
+  const menuTargetsThisGrid =
+    contextMenu !== undefined &&
+    (sessions.some((session) => keyFor(session) === contextMenu.key) ||
+      chats.some((chat) => chatKeyFor(chat) === contextMenu.key));
   return (
     <section
       class="terminal-dashboard"
@@ -549,7 +562,7 @@ export function TerminalDashboard({
           <FixedAspectTerminalCard session={magnified} mode="magnified" mobile={mobileMagnified} />
         </div>
       )}
-      {contextMenu && (
+      {contextMenu && menuTargetsThisGrid && (
         <div
           class="terminal-dashboard__context-menu"
           data-component="terminal-context-menu"
@@ -557,18 +570,22 @@ export function TerminalDashboard({
           style={`left:${contextMenu.x}px;top:${contextMenu.y}px`}
           data-terminal-key={contextMenu.key}
         >
-          <wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}>
-            <span slot="icon">
-              <LucideIcon icon={ExternalLink} name="external-link" />
-            </span>
-            Open
-          </wa-dropdown-item>
-          <wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}>
-            <span slot="icon">
-              <LucideIcon icon={EyeOff} name="eye-off" />
-            </span>
-            Hide Terminal
-          </wa-dropdown-item>
+          {contextMenuActions.includes('open') && (
+            <wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}>
+              <span slot="icon">
+                <LucideIcon icon={ExternalLink} name="external-link" />
+              </span>
+              Open
+            </wa-dropdown-item>
+          )}
+          {contextMenuActions.includes('hide') && (
+            <wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}>
+              <span slot="icon">
+                <LucideIcon icon={EyeOff} name="eye-off" />
+              </span>
+              Hide Terminal
+            </wa-dropdown-item>
+          )}
         </div>
       )}
     </section>

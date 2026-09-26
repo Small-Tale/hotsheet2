@@ -226,6 +226,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       // The phone focus-mode text-size control uses the same mobile geometry + columns as the
       // magnified terminal; undefined off phones so the control never renders there (HS2-ZSFAHF).
       focusTextSize: focusMode ? mobileMagnifiedTerminal() : undefined,
+      // The drawer grid's tiles carry the same More actions button as the dashboard (HS2-V2CCN6).
+      contextMenu: terminalContextMenu.value,
     };
   }
 

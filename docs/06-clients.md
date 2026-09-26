@@ -1803,7 +1803,10 @@ centered over a full-browser dimming layer; click-away restores the grid. Its fo
 an external-open action, and both that action and a footer double-click open the terminal in
 its project's maximized drawer. A grid-tile double-click does the same, while right-click
 exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer
-opens that exact same menu from the keyboard or pointer. The dedicated drawer consumer re-fits after both
+opens that exact same menu from the keyboard or pointer. The project drawer's grid (including its
+magnified tile) renders the same menu with **Open** only, because terminal visibility is scoped to
+the workspace dashboard and the drawer never applies it; only the grid that shows the targeted tile
+renders the menu (HS2-V2CCN6). The dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 While that magnified viewport is open, its containing workspace is promoted above adjacent
 shell regions, both side-region separators are suppressed, and the workspace suppresses its own

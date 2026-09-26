@@ -22,6 +22,7 @@ import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import {
   type MobileMagnifiedTerminal,
+  type TerminalContextMenuAction,
   TerminalDashboard,
   type TerminalDashboardSession,
   TerminalSession,
@@ -56,8 +57,12 @@ export interface TerminalDrawerProps {
   focusViewport?: MobileTerminalViewport;
   /** Phone focus-mode text-size control state (columns + keyboard visibility); undefined off phones (HS2-ZSFAHF). */
   focusTextSize?: MobileMagnifiedTerminal;
+  /** The open tile More actions menu, rendered by the drawer grid when it targets one of its tiles (HS2-V2CCN6). */
+  contextMenu?: { key: string; x: number; y: number };
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
+// Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
+const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open'];
 
 export function TerminalDrawer({
   projectId,
@@ -79,6 +84,7 @@ export function TerminalDrawer({
   focusMode = false,
   focusViewport,
   focusTextSize,
+  contextMenu,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -260,6 +266,8 @@ export function TerminalDrawer({
             mobileMagnified={mobileMagnified}
             loading={loading}
             message={message}
+            contextMenu={contextMenu}
+            contextMenuActions={DRAWER_CONTEXT_MENU_ACTIONS}
           />
         )}
       </div>

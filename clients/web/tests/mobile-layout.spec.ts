@@ -917,3 +917,54 @@ test('blacks out the app behind a focused drawer terminal so nothing shows aroun
   expect(coversGap).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('focus-blackout.png') });
 });
+
+test('opens the drawer grid tile More actions menu from a phone tap, in front of the terminal (HS2-V2CCN6)', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }),
+    page = await context.newPage();
+  await openDemoProject(page, true);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+  await expect(drawer).toHaveAttribute('data-mode', 'grid');
+  const more = drawer.getByRole('button', { name: 'More actions for Codex Main' });
+  await more.tap();
+  const menu = page.locator('[data-component="terminal-context-menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('wa-dropdown-item')).toHaveCount(1);
+  await expect(menu.getByText('Hide Terminal')).toHaveCount(0);
+  // The menu must be painted in front of the terminal grid, not merely present in the DOM.
+  const inFront = await menu.evaluate((node) => {
+    const box = node.getBoundingClientRect(),
+      hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && node.contains(hit));
+  });
+  expect(inFront).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('drawer-grid-tile-menu-phone.png') });
+  await menu.getByText('Open').tap();
+  await expect(menu).toHaveCount(0);
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  // The same menu opens from a magnified ("zoomed") drawer tile, in front of the magnified terminal.
+  // Open focuses the terminal, which enters phone focus mode; leave it to reach the tab rail.
+  const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
+  if (await exitFocus.isVisible()) await exitFocus.tap();
+  await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+  await drawer
+    .locator('[data-component="terminal-tile"][data-action="preview-terminal"] .terminal-tile__preview')
+    .first()
+    .tap();
+  const magnified = drawer.getByRole('dialog', { name: /Magnified/ });
+  await expect(magnified).toBeVisible();
+  await magnified.getByRole('button', { name: 'More actions for Codex Main' }).tap();
+  await expect(menu).toBeVisible();
+  expect(
+    await menu.evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return Boolean(hit && node.contains(hit));
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('drawer-magnified-tile-menu-phone.png') });
+  await context.close();
+});

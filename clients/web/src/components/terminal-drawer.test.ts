@@ -142,6 +142,46 @@ describe('TerminalDrawer', () => {
     expect(chat).not.toContain('data-lucide="chevron-right"');
     expect(chat.match(/<wa-dropdown-item/g)).toHaveLength(4);
   });
+  it('renders the grid tile More actions menu with Open only, and only for its own tiles (HS2-V2CCN6)', () => {
+    const withMenu = (key: string) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'grid',
+          contextMenu: { key, x: 20, y: 30 },
+        }),
+      );
+    const own = withMenu('project:one');
+    expect(own).toContain('data-action="open-terminal-context-menu"');
+    expect(own).toContain('data-component="terminal-context-menu"');
+    expect(own.match(/<wa-dropdown-item/g)).toHaveLength(1);
+    expect(own).toContain('data-action="open-terminal-project" data-item-id="project:one"');
+    expect(own).not.toContain('data-action="hide-dashboard-terminal"');
+    // A menu opened for a tile in another grid (e.g. the workspace dashboard) is not duplicated here.
+    expect(withMenu('elsewhere:one')).not.toContain('data-component="terminal-context-menu"');
+    // The dedicated (non-grid) view has no tiles, so it never renders the menu.
+    expect(
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'one',
+          contextMenu: { key: 'project:one', x: 20, y: 30 },
+        }),
+      ),
+    ).not.toContain('data-component="terminal-context-menu"');
+  });
   it('renders a remembered mixed-kind order in both tabs and the project grid', () => {
     const content = AIConversation({
         open: true,
