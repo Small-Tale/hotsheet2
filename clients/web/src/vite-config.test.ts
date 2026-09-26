@@ -8,13 +8,22 @@ import {
 } from '../vite.config';
 
 describe('Vite dependency isolation', () => {
-  it('disables runtime discovery and uses the stable session cache', () => {
+  it('disables runtime discovery, pre-bundles the scanned browser dependencies, and uses the stable session cache', () => {
     expect(
-      viteDependencyIsolation({ HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_VITE_CACHE_DIR: '/tmp/stable-cache' }),
+      viteDependencyIsolation({ HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_VITE_CACHE_DIR: '/tmp/stable-cache' }, () => [
+        'kerfjs',
+        'lucide',
+      ]),
     ).toEqual({
       cacheDir: '/tmp/stable-cache',
-      optimizeDeps: { noDiscovery: true, include: [] },
+      optimizeDeps: { noDiscovery: true, include: ['kerfjs', 'lucide'] },
     });
+  });
+
+  it('scans the real browser graph for stable dev by default (HS2-N9RD7X)', () => {
+    const include = viteDependencyIsolation({ HOTSHEET_WEB_STABLE_DEV: '1' }).optimizeDeps?.include ?? [];
+    expect(include).toContain('kerfjs');
+    expect(include).toContain('@xterm/xterm');
   });
 
   it('isolates a hot test server cache without disabling hot dependency discovery', () => {

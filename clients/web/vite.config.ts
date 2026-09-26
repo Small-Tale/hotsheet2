@@ -1,17 +1,29 @@
+import { fileURLToPath } from 'node:url';
+
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
 import { defineConfig, type Plugin, type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
+import { scanBrowserDependencies } from './src/browser-dependency-scan';
 import { devServerRouteExclude } from './src/dev-server-routes';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
 
+/**
+ * The frozen stable-dev snapshot never discovers dependencies at runtime (a mid-session re-optimize
+ * reloads open pages, HS2-ATE664), but it pre-bundles every dependency the browser import graph
+ * reaches once at startup, so a new tab loads a few bundles instead of ~2,400 raw `node_modules`
+ * files (HS2-N9RD7X).
+ */
 export function viteDependencyIsolation(
   environment: NodeJS.ProcessEnv = process.env,
+  browserDependencies: () => string[] = () => scanBrowserDependencies(fileURLToPath(new URL('.', import.meta.url))),
 ): Pick<UserConfig, 'cacheDir' | 'optimizeDeps'> {
   const cacheDir = environment.HOTSHEET_VITE_CACHE_DIR;
   return {
     ...(cacheDir ? { cacheDir } : {}),
-    ...(environment.HOTSHEET_WEB_STABLE_DEV === '1' ? { optimizeDeps: { noDiscovery: true, include: [] } } : {}),
+    ...(environment.HOTSHEET_WEB_STABLE_DEV === '1'
+      ? { optimizeDeps: { noDiscovery: true, include: browserDependencies() } }
+      : {}),
   };
 }
 

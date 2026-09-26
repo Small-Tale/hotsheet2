@@ -253,7 +253,12 @@ and identity-less legacy entries remain conservatively blocking.
   like `dist`, test results, and dependency output. Each stable process also owns a private Vite dependency cache inside its
   snapshot and disables runtime dependency discovery. A later route may therefore load a
   previously unseen ESM dependency without Vite optimizing it and forcing a document
-  reload. Playwright and Vitest use separate disposable Vite caches, so a test run cannot
+  reload. Instead, at startup it walks the browser import graph from `src/main.tsx` and
+  `src/ux-demo/main.tsx` (static, re-exported, and lazy imports; not types, stylesheets, or
+  Node modules) and passes every bare package it reaches to `optimizeDeps.include`, so the
+  dependencies are pre-bundled once. A new tab then loads a few dependency bundles instead of
+  roughly 2,000 raw `node_modules` files, which is about 420 requests instead of 2,400 and matters
+  most over a LAN (HS2-N9RD7X). Playwright and Vitest use separate disposable Vite caches, so a test run cannot
   mutate the cache of a maintainer's running stable client. Because a dev server can still
   full-reload for other reasons (a watched file with no HMR boundary changing, a
   self-invalidating module, or a server restart) and a reload wipes the console, a dev-only

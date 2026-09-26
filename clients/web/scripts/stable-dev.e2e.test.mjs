@@ -191,12 +191,29 @@ it('does not reload when a later route first imports another dependency', async 
       const key = 'hotsheet-stable-document-loads';
       sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
     });
+    const requests = [],
+      pageErrors = [];
+    page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+    page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.goto(`http://127.0.0.1:${port}/`);
-    await page.waitForTimeout(250);
+    await page.waitForLoadState('networkidle');
     expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+    // Dependencies are pre-bundled at startup (HS2-N9RD7X): no raw package JavaScript is fetched
+    // module-by-module (only package stylesheets, which Vite serves directly).
+    const rawPackageScripts = requests.filter(
+      (path) =>
+        path.includes('/node_modules/') && !path.includes('/.vite') && !path.includes('/deps/') && !/\.css$/.test(path),
+    );
+    console.log(`stable-dev first load: ${requests.length} requests, ${rawPackageScripts.length} raw package scripts`);
+    expect(rawPackageScripts).toEqual([]);
     await page.goto(`http://127.0.0.1:${port}/ux-demo`);
     await page.waitForTimeout(1_000);
     expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('2');
+    // Pre-bundled packages still run as one module graph: the catalog renders and registers its
+    // Web Awesome elements with no page errors.
+    await page.waitForLoadState('networkidle');
+    expect(await page.evaluate(() => Boolean(customElements.get('wa-button')))).toBe(true);
+    expect(pageErrors).toEqual([]);
     expect(output()).not.toContain('new dependencies optimized');
     expect(output()).not.toContain('optimized dependencies changed. reloading');
   } finally {
