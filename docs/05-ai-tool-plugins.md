@@ -107,14 +107,29 @@ instead of one copy per tool:
   refreshed tools. A tool listed in a shared section counts as previously managed, so
   disabling one sharer (removing it from `enabled_plugins`) drops it from the list while the
   section stays for the others. When no listed tool remains enabled, refresh removes the
-  section. Re-enabling a tool that still has managed artifacts (its skill) recreates it.
-  A disabled tool's _per-tool_ section leaves the same way (HS2-FKC8VN): when
+  section. A disabled tool's _per-tool_ section leaves the same way (HS2-FKC8VN): when
   `enabled_plugins` is set and excludes a tool, refresh removes that tool's
-  `hotsheet:<tool>` section while preserving everything outside the markers, and re-enabling
-  it writes the section back. The usual ownership rule applies: a section written by a
-  newer Hot Sheet, or an equal-version section the project customized, is kept. With no
-  `enabled_plugins` setting nothing counts as disabled, so refresh never removes a
-  per-tool section. Disabled tools' skill files and MCP entries are left in place.
+  `hotsheet:<tool>` section while preserving everything outside the markers. With no (or
+  an empty) `enabled_plugins` setting nothing counts as disabled, so refresh never removes
+  anything.
+- **Disabled tools leave no managed artifacts (HS2-ZTGX6P).** Refresh also removes a
+  disabled tool's other wholly Hot Sheet-owned artifacts, so it stops counting as
+  previously managed and cannot be half re-enabled later:
+  - its worklist skill file (pruning directories the removal leaves empty);
+  - its `hotsheet` MCP server entry — only when that entry's command is Hot Sheet's MCP
+    binary. Unrelated servers and settings in a shared config stay; a config left holding
+    nothing Hot Sheet did not write is deleted, along with the `.git/info/exclude` line
+    setup added for it;
+  - its Hot Sheet permission hooks. The user's own hooks and settings stay; an event list
+    the removal empties is dropped, and a config left empty is deleted with its exclude line.
+
+  Ownership follows setup's rules. The instruction section and skill are one workflow
+  bundle: if either installed half is newer than the bundled one, or an equal-version
+  customization, both are kept (the tool then still counts as previously managed), while
+  MCP and hook removal proceeds. Older and unversioned halves are removed. A path an
+  enabled tool also declares is never removed. Re-enabling a detected tool makes the next
+  refresh write the complete layout again; an undetected tool needs an explicit
+  `hotsheet setup <tool>`, because nothing marks it as previously managed any more.
 - Version preservation applies to the shared section's **body**. For every tool targeting
   the file, a newer shared body, or an equal-version body whose bytes differ, freezes that
   tool's instruction/skill bundle — even when it also has a stale per-tool copy — exactly

@@ -446,6 +446,93 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     );
 }
 
+/// HS2-ZTGX6P: disabling a tool through `enabled_plugins` removes its wholly Hot Sheet-owned
+/// skill, MCP entry, and permission hook on the headless refresh, keeping the user's own
+/// config; re-enabling and setting it up again restores the same layout.
+#[test]
+fn setup_refresh_removes_a_disabled_tools_owned_artifacts() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let enable = |tools: &str| {
+        std::fs::write(
+            store.join("hotsheet-settings.json"),
+            format!(r#"{{"enabled_plugins":[{tools}]}}"#),
+        )
+        .unwrap();
+        let project_settings = project.join(".hotsheet2/settings.json");
+        if project_settings.is_file() {
+            let mut settings: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&project_settings).unwrap()).unwrap();
+            settings["enabled_plugins"] = serde_json::from_str(&format!("[{tools}]")).unwrap();
+            std::fs::write(&project_settings, settings.to_string()).unwrap();
+        }
+    };
+    let run = |args: &[&str]| {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(args)
+            .arg("--project")
+            .arg(&project)
+            .assert()
+            .success();
+    };
+    enable(r#""codex""#);
+    std::fs::write(project.join("AGENTS.md"), "User text.\n").unwrap();
+    std::fs::create_dir_all(project.join(".codex")).unwrap();
+    std::fs::write(project.join(".codex/config.toml"), "model = \"o3\"\n").unwrap();
+    let artifacts = [
+        "AGENTS.md",
+        ".agents/skills/hotsheet/SKILL.md",
+        ".codex/config.toml",
+        ".codex/hooks.json",
+    ];
+    let snapshot = || artifacts.map(|rel| std::fs::read_to_string(project.join(rel)).ok());
+
+    run(&["setup", "codex"]);
+    run(&["setup", "--refresh"]);
+    let enabled = snapshot();
+    assert!(enabled.iter().all(Option::is_some), "{enabled:?}");
+    assert!(enabled[2].as_deref().unwrap().contains("hotsheet-mcp"));
+
+    // An empty list means "no restriction", so disable Codex by enabling only Claude
+    // (whose targets never overlap Codex's; it may or may not be detected here).
+    enable(r#""claude""#);
+    for _ in 0..2 {
+        run(&["setup", "--refresh"]);
+        assert_eq!(
+            std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+            "User text.\n"
+        );
+        assert!(
+            !project.join(".agents").exists(),
+            "the skill tree is pruned"
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join(".codex/config.toml")).unwrap(),
+            "model = \"o3\"\n",
+            "the user's own config stays"
+        );
+        assert!(!project.join(".codex/hooks.json").exists());
+    }
+
+    enable(r#""codex""#);
+    run(&["setup", "codex"]);
+    for _ in 0..2 {
+        run(&["setup", "--refresh"]);
+        assert_eq!(snapshot(), enabled);
+    }
+}
+
 #[test]
 fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
     let root = tempfile::tempdir().unwrap();

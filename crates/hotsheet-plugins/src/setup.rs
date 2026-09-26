@@ -121,6 +121,12 @@ pub fn refresh_setup_in(
     let (plugins, excluded): (Vec<_>, Vec<_>) = all
         .into_iter()
         .partition(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())));
+    // Every enabled tool keeps each target it declares, even when this run skips it, so a
+    // disabled tool never removes an artifact an enabled tool shares (HS2-ZTGX6P).
+    let claimed: HashSet<String> = plugins
+        .iter()
+        .flat_map(|plugin| plugin.target_paths().into_iter().map(String::from))
+        .collect();
     let plugins = plugins
         .into_iter()
         .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
@@ -135,46 +141,266 @@ pub fn refresh_setup_in(
     } else {
         setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))?
     };
-    remove_disabled_tool_sections(project_dir, &excluded)?;
+    for plugin in &excluded {
+        remove_disabled_tool_artifacts(project_dir, plugin, &claimed)?;
+    }
     Ok(reports)
 }
 
-/// Remove the per-tool `hotsheet:<id>` instruction section of every tool the project
-/// disabled, so disabled-tool guidance leaves per-tool and shared layouts alike
-/// (HS2-FKC8VN). The same ownership rule as refresh applies: a section written by a newer
-/// Hot Sheet, or an equal-version section the project customized, is preserved. The file
-/// is never created, and content outside the managed markers is untouched.
-fn remove_disabled_tool_sections(project: &Path, disabled: &[Plugin]) -> Result<(), SetupError> {
-    for plugin in disabled {
-        let rel = &plugin.manifest.instructions.target;
-        if !crate::is_safe_rel_path(rel) {
-            continue;
-        }
-        let path = project.join(rel);
-        let Ok(existing) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
-        let bundled_block = format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
-        let bundled_version =
-            marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
-        let mut out = existing.clone();
-        while let Some((start, finish)) = find_block(&out, &begin, &end) {
-            if marked_artifact_requires_preservation(
-                &out[start..finish],
-                &bundled_block,
-                bundled_version,
-                INSTRUCTIONS_VERSION_PREFIX,
-            ) {
-                break;
+/// Remove the wholly Hot Sheet-owned setup artifacts of a tool the project disabled
+/// (`enabled_plugins` excludes it), so a disabled tool leaves no guidance, skill, MCP
+/// server, or permission hook behind and no longer counts as previously managed
+/// (HS2-FKC8VN, HS2-ZTGX6P). Ownership follows setup's rules:
+///
+/// * The instruction section and the worklist skill form one workflow bundle. When either
+///   installed half was written by a newer Hot Sheet or is an equal-version customization,
+///   both are preserved, exactly as setup would preserve them.
+/// * Only the `hotsheet` MCP server entry whose command is Hot Sheet's MCP binary, and only
+///   Hot Sheet permission hooks, are removed; every other entry in a shared config stays.
+///   A config left holding nothing is deleted with its local git exclude.
+/// * A path an enabled tool also declares is never touched.
+fn remove_disabled_tool_artifacts(
+    project: &Path,
+    plugin: &Plugin,
+    claimed: &HashSet<String>,
+) -> Result<(), SetupError> {
+    let rel = &plugin.manifest.instructions.target;
+    let instructions = crate::is_safe_rel_path(rel)
+        .then(|| std::fs::read_to_string(project.join(rel)).ok())
+        .flatten();
+    let workflow_preserved =
+        per_tool_section_requires_preservation(plugin, instructions.as_deref())
+            || skill_requires_preservation(project, plugin);
+    if !workflow_preserved {
+        remove_disabled_tool_section(project, plugin)?;
+        if let Some((rel, _)) = plugin.skill() {
+            if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
+                remove_managed_file(project, rel, false)?;
             }
-            out = remove_range(&out, (start, finish));
         }
-        if out != existing {
-            write_file(&path, &out)?;
+    }
+    let mcp = &plugin.manifest.mcp.target;
+    if crate::is_safe_rel_path(mcp) && !claimed.contains(mcp) {
+        remove_mcp_entry(project, plugin)?;
+    }
+    if let Some(spec) = &plugin.manifest.hooks {
+        if crate::is_safe_rel_path(&spec.target) && !claimed.contains(&spec.target) {
+            remove_hotsheet_hooks(project, &spec.target)?;
         }
     }
     Ok(())
+}
+
+/// Remove the per-tool `hotsheet:<id>` instruction section of a disabled tool, so
+/// disabled-tool guidance leaves per-tool and shared layouts alike (HS2-FKC8VN). A section
+/// written by a newer Hot Sheet, or an equal-version section the project customized, is
+/// preserved. The file is never created, and content outside the managed markers is
+/// untouched.
+fn remove_disabled_tool_section(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
+    let rel = &plugin.manifest.instructions.target;
+    if !crate::is_safe_rel_path(rel) {
+        return Ok(());
+    }
+    let path = project.join(rel);
+    let Ok(existing) = std::fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+    let bundled_block = format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
+    let bundled_version =
+        marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+    let mut out = existing.clone();
+    while let Some((start, finish)) = find_block(&out, &begin, &end) {
+        if marked_artifact_requires_preservation(
+            &out[start..finish],
+            &bundled_block,
+            bundled_version,
+            INSTRUCTIONS_VERSION_PREFIX,
+        ) {
+            break;
+        }
+        out = remove_range(&out, (start, finish));
+    }
+    if out != existing {
+        write_file(&path, &out)?;
+    }
+    Ok(())
+}
+
+/// Delete a Hot Sheet-owned file, then prune the directories it leaves empty (never the
+/// project itself). `excluded` also drops the file's local git exclude, which setup added
+/// only for a wholly Hot Sheet-owned config.
+fn remove_managed_file(project: &Path, rel: &str, excluded: bool) -> Result<(), SetupError> {
+    let path = project.join(rel);
+    if !path.is_file() {
+        return Ok(());
+    }
+    std::fs::remove_file(&path).map_err(|source| SetupError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let mut dir = path.parent();
+    while let Some(current) = dir {
+        if current == project || !current.starts_with(project) {
+            break;
+        }
+        if std::fs::remove_dir(current).is_err() {
+            break; // not empty (or not ours to remove): stop pruning
+        }
+        dir = current.parent();
+    }
+    if excluded {
+        remove_local_git_exclude(project, rel)?;
+    }
+    Ok(())
+}
+
+/// Whether an installed MCP `command` launches Hot Sheet's MCP binary (`bundled` is the
+/// manifest command; the installed one may be an absolute sibling path or a `.exe`).
+fn is_hotsheet_mcp_command(installed: &str, bundled: &str) -> bool {
+    let stem = |command: &str| {
+        Path::new(command)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+    };
+    stem(installed).is_some_and(|installed| Some(installed) == stem(bundled))
+}
+
+/// Remove a disabled tool's Hot Sheet MCP server entry (HS2-ZTGX6P): the entry named by
+/// the manifest whose command is Hot Sheet's MCP binary. Unrelated servers and settings in
+/// a shared config are kept; a config that held only Hot Sheet's entry is deleted.
+fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
+    let spec = &plugin.manifest.mcp;
+    let target = project.join(&spec.target);
+    let Ok(contents) = std::fs::read_to_string(&target) else {
+        return Ok(());
+    };
+    let name = spec.server_name.as_str();
+    let owned = |command: Option<&str>| {
+        command.is_some_and(|command| is_hotsheet_mcp_command(command, &spec.command))
+    };
+    let rendered = match spec.format.as_str() {
+        format @ ("claude-json" | "opencode-json") => {
+            let key = if format == "claude-json" {
+                "mcpServers"
+            } else {
+                "mcp"
+            };
+            let Ok(mut root) = serde_json::from_str::<serde_json::Value>(&contents) else {
+                return Ok(());
+            };
+            let Some(object) = root.as_object_mut() else {
+                return Ok(());
+            };
+            let Some(servers) = object
+                .get_mut(key)
+                .and_then(serde_json::Value::as_object_mut)
+            else {
+                return Ok(());
+            };
+            let command = servers.get(name).and_then(|entry| {
+                let command = entry.get("command")?;
+                command
+                    .as_str()
+                    .or_else(|| command.as_array()?.first()?.as_str())
+            });
+            if !owned(command) {
+                return Ok(());
+            }
+            servers.remove(name);
+            if servers.is_empty() {
+                object.remove(key);
+            }
+            let hotsheet_only = object
+                .keys()
+                .all(|key| format == "opencode-json" && key == "$schema");
+            if hotsheet_only {
+                None
+            } else {
+                Some(serde_json::to_string_pretty(&root).unwrap() + "\n")
+            }
+        }
+        "codex-toml" => {
+            let Ok(mut root) = toml::from_str::<toml::Table>(&contents) else {
+                return Ok(());
+            };
+            let Some(servers) = root
+                .get_mut("mcp_servers")
+                .and_then(toml::Value::as_table_mut)
+            else {
+                return Ok(());
+            };
+            let command = servers
+                .get(name)
+                .and_then(|entry| entry.get("command")?.as_str());
+            if !owned(command) {
+                return Ok(());
+            }
+            servers.remove(name);
+            if servers.is_empty() {
+                root.remove("mcp_servers");
+            }
+            if root.is_empty() {
+                None
+            } else {
+                Some(toml::to_string_pretty(&root).unwrap())
+            }
+        }
+        _ => return Ok(()),
+    };
+    match rendered {
+        Some(rendered) => write_file(&target, &rendered),
+        None => remove_managed_file(project, &spec.target, true),
+    }
+}
+
+/// Remove every Hot Sheet permission hook from a disabled tool's hook config
+/// (HS2-ZTGX6P). The user's own hooks and other settings stay; an event list emptied by
+/// the removal is dropped, and a config left empty is deleted with its local git exclude.
+fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<(), SetupError> {
+    let target = project.join(rel);
+    let Some(mut root) = std::fs::read_to_string(&target)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+    else {
+        return Ok(());
+    };
+    let Some(object) = root.as_object_mut() else {
+        return Ok(());
+    };
+    let Some(hooks) = object
+        .get_mut("hooks")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return Ok(());
+    };
+    let mut changed = false;
+    hooks.retain(|_, entries| {
+        let Some(entries) = entries.as_array_mut() else {
+            return true;
+        };
+        let before = entries.len();
+        entries.retain(|entry| !is_hotsheet_hook(entry));
+        if entries.len() == before {
+            return true;
+        }
+        changed = true;
+        !entries.is_empty()
+    });
+    if !changed {
+        return Ok(());
+    }
+    if hooks.is_empty() {
+        object.remove("hooks");
+    }
+    if object.is_empty() {
+        remove_managed_file(project, rel, true)
+    } else {
+        write_file(
+            &target,
+            &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
+        )
+    }
 }
 
 fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
@@ -278,28 +504,53 @@ fn marked_version(contents: &str, prefix: &str) -> Option<u64> {
     })
 }
 
+/// Whether the installed per-tool `hotsheet:<id>` section (the first one in `instructions`)
+/// is newer than, or an equal-version variant of, the bundled section.
+fn per_tool_section_requires_preservation(plugin: &Plugin, instructions: Option<&str>) -> bool {
+    let bundled_instruction_version =
+        marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+    let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+    let bundled_instruction_block =
+        format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
+    instructions
+        .and_then(|contents| {
+            let (start, finish) = find_block(contents, &begin, &end)?;
+            Some(&contents[start..finish])
+        })
+        .is_some_and(|installed| {
+            marked_artifact_requires_preservation(
+                installed,
+                &bundled_instruction_block,
+                bundled_instruction_version,
+                INSTRUCTIONS_VERSION_PREFIX,
+            )
+        })
+}
+
+/// Whether the installed worklist skill is newer than, or an equal-version variant of,
+/// the bundled skill.
+fn skill_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
+    plugin.skill().is_some_and(|(target, bundled)| {
+        let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
+        std::fs::read_to_string(project.join(target))
+            .ok()
+            .is_some_and(|installed| {
+                marked_artifact_requires_preservation(
+                    &installed,
+                    bundled,
+                    bundled_version,
+                    SKILL_VERSION_PREFIX,
+                )
+            })
+    })
+}
+
 fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
     let bundled_instruction_version =
         marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
     let instructions =
         std::fs::read_to_string(project.join(&plugin.manifest.instructions.target)).ok();
-    let begin = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
-    let end = format!("<!-- END hotsheet:{} -->", plugin.id());
-    let bundled_instruction_block =
-        format!("{begin}\n{}\n{end}", plugin.instructions_body().trim_end());
-    let installed_instruction_block = instructions.as_deref().and_then(|contents| {
-        let start = contents.find(&begin)?;
-        let finish = contents[start..].find(&end)? + start + end.len();
-        Some(&contents[start..finish])
-    });
-    if installed_instruction_block.is_some_and(|installed| {
-        marked_artifact_requires_preservation(
-            installed,
-            &bundled_instruction_block,
-            bundled_instruction_version,
-            INSTRUCTIONS_VERSION_PREFIX,
-        )
-    }) {
+    if per_tool_section_requires_preservation(plugin, instructions.as_deref()) {
         return true;
     }
     // A shared section in the same file is this tool's installed instructions too (it
@@ -320,19 +571,7 @@ fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> 
     {
         return true;
     }
-    plugin.skill().is_some_and(|(target, bundled)| {
-        let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
-        std::fs::read_to_string(project.join(target))
-            .ok()
-            .is_some_and(|installed| {
-                marked_artifact_requires_preservation(
-                    &installed,
-                    bundled,
-                    bundled_version,
-                    SKILL_VERSION_PREFIX,
-                )
-            })
-    })
+    skill_requires_preservation(project, plugin)
 }
 
 /// A strictly newer marker belongs to a newer writer. An equal marker with different
@@ -737,6 +976,28 @@ fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
     write_file(&target, &format!("{existing}{separator}{entry}\n"))
 }
 
+/// Drop the `/<rel>` line setup added to this checkout's `.git/info/exclude` for a wholly
+/// Hot Sheet-owned config that has now been deleted.
+fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
+    let Some(git_dir) = project_git_dir(project) else {
+        return Ok(());
+    };
+    let target = git_dir.join("info/exclude");
+    let Ok(existing) = std::fs::read_to_string(&target) else {
+        return Ok(());
+    };
+    let entry = format!("/{}", rel.replace('\\', "/"));
+    if !existing.lines().any(|line| line == entry) {
+        return Ok(());
+    }
+    let kept: String = existing
+        .lines()
+        .filter(|line| *line != entry)
+        .map(|line| format!("{line}\n"))
+        .collect();
+    write_file(&target, &kept)
+}
+
 /// Register the tool's permission hook (`docs/05` §5.7) in its config, if it declares one.
 /// Claude and Codex both currently document this lifecycle JSON shape:
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
@@ -1015,6 +1276,26 @@ args = ["--path", "{store}"]
 
     /// A fixture tool `id` targeting `AGENTS.md` with the given versioned instruction body.
     fn sharing_tool(root: &Path, id: &str, instructions: &str, version: u64) {
+        sharing_tool_detected_by(
+            root,
+            id,
+            instructions,
+            version,
+            &format!("definitely-not-installed-hotsheet-{id}"),
+        );
+    }
+
+    /// A shell every test machine has on `PATH`, so a fixture detected by it is always
+    /// detected (refresh then sets it up whenever it is enabled).
+    const PRESENT_BINARY: &str = if cfg!(windows) { "cmd" } else { "sh" };
+
+    fn sharing_tool_detected_by(
+        root: &Path,
+        id: &str,
+        instructions: &str,
+        version: u64,
+        binary: &str,
+    ) {
         let plugin = root.join(id);
         std::fs::create_dir_all(&plugin).unwrap();
         std::fs::write(
@@ -1036,7 +1317,7 @@ display_name = "{id}"
 product_name = "{id} tool"
 tier = "cli-agent"
 [detection]
-binaries = ["definitely-not-installed-hotsheet-{id}"]
+binaries = ["{binary}"]
 [instructions]
 target = "AGENTS.md"
 section = "instructions.md"
@@ -1268,12 +1549,19 @@ args = ["--path", "{{store}}"]
         assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
         assert!(fixture.refresh(&["unrelated"]).is_empty());
         assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
-        // Re-enable two (their skills mark them as previously managed): recreated once.
+        // Disabling also removed their skills (HS2-ZTGX6P), so these undetected tools are no
+        // longer previously managed: re-enabling alone restores nothing, never a partial
+        // layout, and explicit setup brings them back.
+        fixture.refresh(&["gamma", "beta"]);
+        assert_eq!(fixture.agents(), "User text.\n\nFooter.\n");
+        fixture.setup("gamma");
+        fixture.setup("beta");
         fixture.refresh(&["gamma", "beta"]);
         assert_eq!(
             fixture.agents(),
             format!("User text.\n\nFooter.\n\n{}\n", shared("beta, gamma"))
         );
+        fixture.setup("alpha");
         fixture.refresh(&["alpha", "beta", "gamma"]);
         let settled = format!(
             "User text.\n\nFooter.\n\n{}\n",
@@ -1328,9 +1616,15 @@ args = ["--path", "{{store}}"]
         fixture.refresh(&[]);
         assert_eq!(fixture.agents(), "User text.\n");
 
-        // Re-enabling (their skills mark them as previously managed) restores guidance.
+        // Their skills left too (HS2-ZTGX6P), so re-enabling these undetected tools needs
+        // an explicit setup; the next refresh keeps what it restored.
+        fixture.refresh(&["delta"]);
+        assert_eq!(fixture.agents(), "User text.\n");
+        fixture.setup("delta");
         fixture.refresh(&["delta"]);
         assert_eq!(fixture.agents(), format!("User text.\n\n{delta}\n"));
+        fixture.setup("alpha");
+        fixture.setup("beta");
         fixture.refresh(&["alpha", "beta", "delta"]);
         let restored = fixture.agents();
         assert!(restored.contains(&delta), "{restored}");
@@ -1387,6 +1681,370 @@ args = ["--path", "{{store}}"]
             refreshed.contains(&per_tool("alpha", SHARED_BODY)),
             "{refreshed}"
         );
+    }
+
+    /// A fixture tool with an explicit manifest tail (`[skills]`, `[mcp]`, `[hooks]`), its
+    /// instruction section in `AGENTS.md` and a versioned skill source.
+    fn custom_tool(root: &Path, id: &str, detected: bool, tail: &str) {
+        let plugin = root.join(id);
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(
+            plugin.join("instructions.md"),
+            format!("<!-- hotsheet-instructions-version: 8 -->\n{id} instructions\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            plugin.join("SKILL.md"),
+            format!("<!-- hotsheet-skill-version: 8 -->\n{id} skill\n"),
+        )
+        .unwrap();
+        let binary = if detected {
+            PRESENT_BINARY.to_string()
+        } else {
+            format!("definitely-not-installed-hotsheet-{id}")
+        };
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!(
+                r#"
+id = "{id}"
+display_name = "{id}"
+product_name = "{id} tool"
+tier = "cli-agent"
+[detection]
+binaries = ["{binary}"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+{tail}
+"#
+            ),
+        )
+        .unwrap();
+    }
+
+    impl Sharing {
+        fn path(&self, rel: &str) -> std::path::PathBuf {
+            self.project.path().join(rel)
+        }
+
+        fn read(&self, rel: &str) -> Option<String> {
+            std::fs::read_to_string(self.path(rel)).ok()
+        }
+
+        fn write(&self, rel: &str, contents: &str) {
+            let path = self.path(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, contents).unwrap();
+        }
+
+        fn exclude(&self) -> String {
+            self.read(".git/info/exclude").unwrap_or_default()
+        }
+
+        fn plugin(&self, id: &str) -> Plugin {
+            crate::find_in(id, &[self.plugins.path().to_path_buf()]).unwrap()
+        }
+    }
+
+    /// HS2-ZTGX6P: the full disable → refresh → refresh → re-enable → refresh walk for a
+    /// detected tool. Every wholly Hot Sheet-owned artifact leaves, the tool stops counting
+    /// as previously managed, and re-enabling restores the identical layout.
+    #[test]
+    fn disabling_a_tool_removes_its_owned_artifacts_and_re_enabling_restores_them() {
+        let fixture = Sharing::new();
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        custom_tool(
+            fixture.plugins.path(),
+            "echo",
+            true,
+            r#"[skills]
+target = ".echo/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".echo/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[hooks]
+target = ".echo/settings.local.json"
+machine_local = true
+event = "PreToolUse"
+command = "hotsheet-cli permission-hook"
+"#,
+        );
+        fixture.write_agents("User text.\n");
+        fixture.write(".echo/notes.md", "user file beside the tool's config\n");
+        let artifacts = [
+            "AGENTS.md",
+            ".echo/skills/hotsheet/SKILL.md",
+            ".echo/mcp.json",
+            ".echo/settings.local.json",
+        ];
+        let snapshot = |fixture: &Sharing| artifacts.map(|rel| fixture.read(rel));
+
+        fixture.refresh(&["echo"]);
+        let enabled = snapshot(&fixture);
+        assert!(enabled.iter().all(Option::is_some), "{enabled:?}");
+        assert!(fixture.exclude().contains("/.echo/mcp.json\n"));
+        assert!(fixture.exclude().contains("/.echo/settings.local.json\n"));
+        let excludes = fixture.exclude();
+
+        for _ in 0..2 {
+            fixture.refresh(&["alpha"]);
+            assert_eq!(fixture.agents(), "User text.\n");
+            for rel in &artifacts[1..] {
+                assert!(!fixture.path(rel).exists(), "{rel} was left behind");
+            }
+            assert!(
+                !fixture.path(".echo/skills").exists(),
+                "emptied dirs are pruned"
+            );
+            assert_eq!(
+                fixture.read(".echo/notes.md").as_deref(),
+                Some("user file beside the tool's config\n"),
+                "a directory holding user files stays"
+            );
+            assert!(
+                !fixture.exclude().contains("/.echo/"),
+                "{}",
+                fixture.exclude()
+            );
+            assert!(
+                !has_managed_setup(fixture.project.path(), &fixture.plugin("echo")),
+                "a disabled tool is no longer previously managed"
+            );
+        }
+
+        for _ in 0..2 {
+            fixture.refresh(&["echo"]);
+            assert_eq!(
+                snapshot(&fixture),
+                enabled,
+                "re-enabling restores the layout"
+            );
+            assert_eq!(fixture.exclude(), excludes);
+        }
+    }
+
+    #[test]
+    fn a_disabled_tools_customized_or_newer_workflow_is_preserved_as_a_bundle() {
+        let fixture = Sharing::new();
+        sharing_tool(fixture.plugins.path(), "delta", "delta instructions\n", 8);
+        let section = per_tool(
+            "delta",
+            "<!-- hotsheet-instructions-version: 8 -->\ndelta instructions",
+        );
+        for installed in [
+            "<!-- hotsheet-skill-version: 9 -->\nnewer skill\n",
+            "<!-- hotsheet-skill-version: 8 -->\nproject-customized skill\n",
+        ] {
+            fixture.setup("delta");
+            fixture.write(".delta/SKILL.md", installed);
+            for _ in 0..2 {
+                fixture.refresh(&["alpha"]);
+                assert_eq!(fixture.read(".delta/SKILL.md").as_deref(), Some(installed));
+                assert!(fixture.agents().contains(&section), "{}", fixture.agents());
+                assert!(
+                    !fixture.path(".delta/mcp.json").exists(),
+                    "MCP maintenance continues for a preserved workflow"
+                );
+                assert!(has_managed_setup(
+                    fixture.project.path(),
+                    &fixture.plugin("delta")
+                ));
+            }
+        }
+
+        // An older or unversioned skill is Hot Sheet's to remove, section and all.
+        for installed in [
+            "<!-- hotsheet-skill-version: 3 -->\nolder\n",
+            "unversioned\n",
+        ] {
+            fixture.setup("delta");
+            fixture.write(".delta/SKILL.md", installed);
+            fixture.refresh(&["alpha"]);
+            assert!(!fixture.path(".delta").exists());
+            assert!(!fixture.agents().contains("hotsheet:delta"));
+        }
+    }
+
+    #[test]
+    fn disabling_a_tool_keeps_unrelated_entries_in_shared_mcp_configs() {
+        let fixture = Sharing::new();
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        for (id, format, target) in [
+            ("jay", "claude-json", "shared.json"),
+            ("oscar", "opencode-json", "opencode.json"),
+            ("toby", "codex-toml", ".toby/config.toml"),
+        ] {
+            custom_tool(
+                fixture.plugins.path(),
+                id,
+                false,
+                &format!(
+                    r#"[mcp]
+target = "{target}"
+format = "{format}"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+"#
+                ),
+            );
+        }
+        let json_user = "{\n  \"mcpServers\": {\n    \"other\": {\n      \"command\": \"other-mcp\"\n    }\n  },\n  \"theme\": \"dark\"\n}\n";
+        let opencode_user = "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"mcp\": {\n    \"other\": {\n      \"command\": [\n        \"other-mcp\"\n      ],\n      \"type\": \"local\"\n    }\n  }\n}\n";
+        let toml_user = "model = \"o3\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\n";
+        fixture.write("shared.json", json_user);
+        fixture.write("opencode.json", opencode_user);
+        fixture.write(".toby/config.toml", toml_user);
+        for id in ["jay", "oscar", "toby"] {
+            fixture.setup(id);
+        }
+        assert!(
+            fixture
+                .read("shared.json")
+                .unwrap()
+                .contains("hotsheet-mcp")
+        );
+        assert!(
+            fixture
+                .read("opencode.json")
+                .unwrap()
+                .contains("hotsheet-mcp")
+        );
+        assert!(
+            fixture
+                .read(".toby/config.toml")
+                .unwrap()
+                .contains("hotsheet-mcp")
+        );
+
+        for _ in 0..2 {
+            fixture.refresh(&["alpha"]);
+            let json: serde_json::Value =
+                serde_json::from_str(&fixture.read("shared.json").unwrap()).unwrap();
+            assert_eq!(
+                json,
+                serde_json::from_str::<serde_json::Value>(json_user).unwrap()
+            );
+            let opencode: serde_json::Value =
+                serde_json::from_str(&fixture.read("opencode.json").unwrap()).unwrap();
+            assert_eq!(
+                opencode,
+                serde_json::from_str::<serde_json::Value>(opencode_user).unwrap()
+            );
+            let toml: toml::Table =
+                toml::from_str(&fixture.read(".toby/config.toml").unwrap()).unwrap();
+            assert_eq!(toml, toml::from_str::<toml::Table>(toml_user).unwrap());
+            assert_eq!(
+                fixture.exclude(),
+                "",
+                "user-owned configs were never excluded"
+            );
+        }
+
+        // A user's own `hotsheet` server (not Hot Sheet's MCP binary) is not ours to remove.
+        let own = "{\n  \"mcpServers\": {\n    \"hotsheet\": {\n      \"command\": \"/opt/custom/bridge\"\n    }\n  }\n}\n";
+        fixture.write("shared.json", own);
+        fixture.refresh(&["alpha"]);
+        assert_eq!(fixture.read("shared.json").as_deref(), Some(own));
+
+        // Configs that held only Hot Sheet's entry are deleted outright.
+        std::fs::remove_file(fixture.path("shared.json")).unwrap();
+        std::fs::remove_file(fixture.path("opencode.json")).unwrap();
+        std::fs::remove_dir_all(fixture.path(".toby")).unwrap();
+        for id in ["jay", "oscar", "toby"] {
+            fixture.setup(id);
+        }
+        assert_eq!(
+            fixture.exclude(),
+            "/shared.json\n/opencode.json\n/.toby/config.toml\n"
+        );
+        fixture.refresh(&["alpha"]);
+        for rel in ["shared.json", "opencode.json", ".toby"] {
+            assert!(!fixture.path(rel).exists(), "{rel}");
+        }
+        assert_eq!(fixture.exclude(), "");
+    }
+
+    #[test]
+    fn disabling_a_tool_removes_only_hot_sheet_hooks() {
+        let fixture = Sharing::new();
+        custom_tool(
+            fixture.plugins.path(),
+            "hank",
+            false,
+            r#"[mcp]
+target = ".hank/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+[hooks]
+target = ".hank/settings.json"
+event = "PreToolUse"
+additional_events = ["PermissionRequest"]
+command = "hotsheet-cli permission-hook"
+"#,
+        );
+        let user = serde_json::json!({
+            "permissions": { "allow": ["Bash(ls)"] },
+            "hooks": {
+                "PreToolUse": [
+                    { "matcher": "Bash", "hooks": [{ "type": "command", "command": "audit" }] }
+                ],
+                "Stop": []
+            }
+        });
+        fixture.write(
+            ".hank/settings.json",
+            &serde_json::to_string_pretty(&user).unwrap(),
+        );
+        fixture.setup("hank");
+        let installed = fixture.read(".hank/settings.json").unwrap();
+        assert!(installed.contains("permission-hook"), "{installed}");
+        assert!(installed.contains("PermissionRequest"), "{installed}");
+        for _ in 0..2 {
+            fixture.refresh(&["alpha"]);
+            let settings: serde_json::Value =
+                serde_json::from_str(&fixture.read(".hank/settings.json").unwrap()).unwrap();
+            assert_eq!(settings, user, "only Hot Sheet's hooks leave");
+        }
+    }
+
+    #[test]
+    fn a_disabled_tool_never_removes_a_target_an_enabled_tool_declares() {
+        let fixture = Sharing::new();
+        for id in ["one", "two"] {
+            custom_tool(
+                fixture.plugins.path(),
+                id,
+                false,
+                r#"[skills]
+target = ".shared/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".shared/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+"#,
+            );
+        }
+        fixture.setup("one");
+        let skill = fixture.read(".shared/SKILL.md");
+        let mcp = fixture.read(".shared/mcp.json");
+        assert!(skill.is_some() && mcp.is_some());
+        // `two` stays enabled (and previously managed through the shared skill), so `one`
+        // being disabled leaves the shared skill and MCP entry in place.
+        fixture.refresh(&["two"]);
+        assert!(fixture.read(".shared/SKILL.md").is_some());
+        assert_eq!(fixture.read(".shared/mcp.json"), mcp);
+        assert!(!fixture.agents().contains("hotsheet:one"));
     }
 
     #[test]
