@@ -2500,6 +2500,167 @@ fn listing_corrupt_tickets_does_not_stall_other_requests() {
     );
 }
 
+/// Open a checkout over `sources` and return its corrupt-tickets URI.
+async fn corrupt_listing_uri(
+    app: &axum::Router,
+    checkout: &std::path::Path,
+    sources: serde_json::Value,
+) -> String {
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({ "root": checkout, "sources": sources }).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    format!("/checkouts/{checkout_id}/corrupt-tickets")
+}
+
+/// The `path` of every entry of a corrupt-tickets response.
+async fn corrupt_paths(app: &axum::Router, uri: &str) -> Vec<String> {
+    let resp = app.clone().oneshot(authed("GET", uri, None)).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    body_json(resp)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["path"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// HS2-KYSBT2: the checkout corrupt listing is served from a stat-validated per-store
+/// cache, and it tracks every on-disk transition of a ticket file across requests:
+/// healthy → corrupt → repaired → deleted → corrupt again, plus a server-side write.
+#[tokio::test]
+async fn checkout_corrupt_listing_tracks_corrupt_repair_delete_and_corrupt_again() {
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let uri = corrupt_listing_uri(&app, &checkout, serde_json::json!([source])).await;
+
+    let created = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Target"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id: hotsheet_model::Ulid = created["id"].as_str().unwrap().parse().unwrap();
+    let path = store.ticket_path(&id);
+    let path_text = path.display().to_string();
+    let healthy = std::fs::read_to_string(&path).unwrap();
+    assert!(corrupt_paths(&app, &uri).await.is_empty());
+    // Repeated reads of an unchanged store stay empty.
+    assert!(corrupt_paths(&app, &uri).await.is_empty());
+
+    // Healthy → corrupt (an external edit breaks the frontmatter fence).
+    std::fs::write(&path, healthy.replacen("---", "+++", 1)).unwrap();
+    assert_eq!(
+        corrupt_paths(&app, &uri).await,
+        std::slice::from_ref(&path_text)
+    );
+    assert_eq!(
+        corrupt_paths(&app, &uri).await,
+        std::slice::from_ref(&path_text)
+    );
+
+    // Corrupt → repaired by restoring the original bytes.
+    std::fs::write(&path, &healthy).unwrap();
+    assert!(corrupt_paths(&app, &uri).await.is_empty());
+
+    // Corrupt again, then deleted, then corrupt again at the same path.
+    std::fs::write(&path, "not a ticket").unwrap();
+    assert_eq!(
+        corrupt_paths(&app, &uri).await,
+        std::slice::from_ref(&path_text)
+    );
+    std::fs::remove_file(&path).unwrap();
+    assert!(corrupt_paths(&app, &uri).await.is_empty());
+    std::fs::write(&path, "still not a ticket").unwrap();
+    assert_eq!(
+        corrupt_paths(&app, &uri).await,
+        std::slice::from_ref(&path_text)
+    );
+
+    // A server-side create of another ticket leaves the corrupt one reported.
+    let other = app
+        .clone()
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Other"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::CREATED);
+    assert_eq!(corrupt_paths(&app, &uri).await, [path_text]);
+    std::fs::write(&path, &healthy).unwrap();
+    assert!(corrupt_paths(&app, &uri).await.is_empty());
+}
+
+/// HS2-KYSBT2: once a ticket file's outcome is cached, a later corrupt listing does not
+/// open it again. A named pipe (with an old modification time, so it is outside the racy
+/// window) is read once while a helper unblocks it; after the helper stops, a second
+/// listing still answers promptly with the same report. The previous full parse would
+/// block on the pipe.
+#[cfg(unix)]
+#[test]
+fn a_repeated_corrupt_listing_does_not_reopen_unchanged_files() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, SystemTime};
+
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let fifo = plant_ticket_fifo(&store);
+    // Opening read-write never blocks on a pipe; it lets the test age the pipe's mtime.
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&fifo)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(3600))
+        .unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let release = Arc::new(AtomicBool::new(false));
+    let first_read_done = Arc::new(AtomicBool::new(false));
+    let unblock = first_read_done.clone();
+
+    run_flow_with_deadline(
+        release,
+        "a request blocked on the planted ticket pipe: GET corrupt-tickets parsed tickets on \
+         the request thread",
+        move || async move {
+            let app = app(st.with_checkout_registry(registry_path));
+            let uri = corrupt_listing_uri(&app, &checkout, serde_json::json!([source])).await;
+            unblock_fifo_until(fifo.clone(), unblock);
+            let first = tokio::time::timeout(Duration::from_secs(10), corrupt_paths(&app, &uri))
+                .await
+                .expect("the first listing reads the released pipe");
+            assert_eq!(first, [fifo.display().to_string()]);
+
+            // Stop unblocking the pipe: any further open of it would now block.
+            first_read_done.store(true, Ordering::Release);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let second = tokio::time::timeout(Duration::from_secs(5), corrupt_paths(&app, &uri))
+                .await
+                .expect("the second listing answers from the cache without reopening the pipe");
+            assert_eq!(second, first);
+        },
+    );
+}
+
 /// HS2-9PPDR1: `GET /health` never waits on a full primary-store ticket parse. The
 /// resilient listing runs single-flight on the blocking pool under a short budget; past it
 /// the probe answers from the index (before any scan completed) or the last completed

@@ -22,6 +22,8 @@ use serde::Serialize;
 pub struct StoreEntry {
     pub store: FsStore,
     pub index: Arc<Mutex<Index>>,
+    /// Stat-validated memo of the store's corrupt ticket files (HS2-KYSBT2).
+    pub corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
 }
 
 /// The stable, URL-safe id for a store: the first 16 hex of the canonical-root hash — the
@@ -303,6 +305,7 @@ mod tests {
         StoreEntry {
             store,
             index: Arc::new(Mutex::new(index)),
+            corrupt: Arc::default(),
         }
     }
 

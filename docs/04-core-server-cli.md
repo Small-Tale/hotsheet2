@@ -150,10 +150,17 @@ Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalid
 reported path, routes the generated work item to the affected store, and returns the
 existing open repair item on repeated requests. The API schedules recoverable work for an
 AI worker; it does not synchronously rewrite or delete an unreadable source file.
-`GET /checkouts/{reference}/corrupt-tickets` parses every ticket file of every linked git
-source, so it runs on the blocking pool and never stalls other requests (HS2-QV8B7R). It
-does not reuse the `/health` scan, which covers only the primary store and may answer from
-a stale listing.
+`GET /checkouts/{reference}/corrupt-tickets` runs on the blocking pool and never stalls
+other requests (HS2-QV8B7R). Each hosted store keeps a stat-validated corrupt-ticket cache
+(`hotsheet_ticketing::CorruptTicketCache`, HS2-KYSBT2), prewarmed in the background when
+the store is hosted. A request lists and `stat`s the ticket tree and re-reads only files
+whose fingerprint changed: size, modification time, inode, change time, and the ticket's
+attachment directory. A file modified within 2 s of being observed is re-read on the next
+request, and read failures other than a parse error are never cached. The answer therefore
+always matches the disk, including edits made outside the server, with the same wire
+shape, so the web client keeps awaiting it before painting filtered rows. It does not
+reuse the `/health` scan, which covers only the primary store and may answer from a stale
+listing.
 
 `POST /projects/open` is the client onboarding transaction: it validates a code checkout,
 accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` store,

@@ -171,6 +171,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/checkout_order.rs  #   shared multi-source checkout merge order, ranks, global limit (HS2-M0YTB6), and the value-keyset `MergeKey`/`AfterKey` (HS2-74H84S)
       src/checkout_page.rs   #   shared batched k-way checkout page merge, v2 cursor codec, filter fingerprint, counts envelope (server + serverless MCP, HS2-JVF20F)
+      src/corrupt_cache.rs   #   stat-validated per-store memo of corrupt ticket files; re-parses only changed files (checkout corrupt-tickets, HS2-KYSBT2)
       src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)

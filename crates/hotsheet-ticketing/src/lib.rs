@@ -14,6 +14,7 @@ pub mod analytics;
 pub mod annotation_activity;
 pub mod checkout_order;
 pub mod checkout_page;
+pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;
 pub mod identity;
@@ -42,6 +43,7 @@ pub use activity_distillation::{
     LocalActivitySummarizer, SafeActivityEvent, write_distilled_note,
 };
 pub use auto_context::{AutoContextEntry, AutoContextSource, TicketAutoContext};
+pub use corrupt_cache::CorruptTicketCache;
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
 pub use identity::{ME, current_user_email, current_user_name, resolve_me};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};

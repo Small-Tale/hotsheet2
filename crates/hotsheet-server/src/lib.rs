@@ -79,6 +79,9 @@ pub struct AppState {
     secret: String,
     events: broadcast::Sender<ChangeEvent>,
     index: Arc<Mutex<Index>>,
+    /// The primary store's stat-validated corrupt-ticket cache (HS2-KYSBT2), shared with
+    /// its hosted entry so the unprefixed and checkout routes see one cache.
+    corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
     /// A bounded, sequenced log of recent [`ChangeEvent`]s backing the **long-poll**
     /// fallback (`GET /ws/poll`) for clients that can't hold a WebSocket (HS2-P3P3CC). The
     /// live push over `/ws/sync` is the primary transport; this replays "everything since
@@ -213,13 +216,17 @@ impl AppState {
         let store = store.with_deferred_push();
         let (events, _) = broadcast::channel(256);
         let index = Arc::new(Mutex::new(index));
+        let corrupt = Arc::default();
         let host = StoreHost::new();
         // The primary store is the default hosted entry (shares the same index Arc, so
         // the unprefixed routes and /stores/{default}/… see one index).
-        host.register(StoreEntry {
+        let primary = StoreEntry {
             store: store.clone(),
             index: index.clone(),
-        });
+            corrupt: Arc::clone(&corrupt),
+        };
+        host.register(primary.clone());
+        prewarm_corrupt_tickets(primary);
         let event_log = Arc::new(Mutex::new(EventLog::default()));
         // A permission request enqueued by a driven tool pushes a `permission_asked` nudge
         // over the event bus (WS + long-poll ring), so clients fetch + answer it.
@@ -270,6 +277,7 @@ impl AppState {
             secret,
             events,
             index,
+            corrupt,
             event_log,
             host,
             injected_providers: ProviderRegistry::default(),
@@ -674,8 +682,10 @@ impl AppState {
         let entry = StoreEntry {
             store: store.clone(),
             index: Arc::new(Mutex::new(index)),
+            corrupt: Arc::default(),
         };
         self.host.register(entry.clone());
+        prewarm_corrupt_tickets(entry.clone());
         let project = store.root().display().to_string();
         if let Ok(mut paths) = self.permission_rule_paths.lock()
             && !paths.is_empty()
@@ -861,6 +871,7 @@ impl AppState {
         StoreEntry {
             store: self.store.clone(),
             index: self.index.clone(),
+            corrupt: self.corrupt.clone(),
         }
     }
 
@@ -4064,11 +4075,15 @@ struct CheckoutCorruptTicket {
 /// `GET /checkouts/{reference}/corrupt-tickets` — every unparseable ticket file across the
 /// checkout's hosted git sources.
 ///
-/// The resilient listing parses every ticket file of every linked store, so the whole walk
-/// runs on the blocking pool and a large store never occupies an async request thread
-/// (HS2-QV8B7R). It is not shared with the `/health` single-flight scan: that scan covers
-/// only the primary store and may answer from a stale listing, whereas the ticket list
-/// filters rows by this response and needs the current state of every linked source.
+/// Each hosted store keeps a stat-validated [`hotsheet_ticketing::CorruptTicketCache`]
+/// (HS2-KYSBT2): a request lists and `stat`s the ticket tree and re-parses only files
+/// whose fingerprint changed, so the answer always matches the disk without a full parse
+/// on every project activation. The cache is prewarmed when a store is hosted. The walk
+/// still runs on the blocking pool so a cold cache or a slow disk never occupies an async
+/// request thread (HS2-QV8B7R). It is not shared with the `/health` single-flight scan:
+/// that scan covers only the primary store and may answer from a stale listing, whereas
+/// the ticket list filters rows by this response and needs the current state of every
+/// linked source.
 async fn list_checkout_corrupt_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
@@ -4077,7 +4092,14 @@ async fn list_checkout_corrupt_tickets(
         let mut result = Vec::new();
         for (store_id, entry) in checkout_entries(&state, &reference)? {
             let store_path = entry.store.root().display().to_string();
-            for corrupt in entry.store.list_tickets_resilient()?.corrupt {
+            let listed = entry
+                .corrupt
+                .lock()
+                .map_err(|_| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "corrupt cache poisoned")
+                })?
+                .corrupt_tickets(&entry.store)?;
+            for corrupt in listed {
                 result.push(CheckoutCorruptTicket {
                     store: store_id.clone(),
                     store_path: store_path.clone(),
@@ -4094,6 +4116,19 @@ async fn list_checkout_corrupt_tickets(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     Ok(Json(result))
+}
+
+/// Fill a newly hosted store's corrupt-ticket cache in the background, so the first
+/// project activation's `corrupt-tickets` request finds it warm (or coalesces onto the
+/// scan in progress under the cache lock) instead of starting a full parse (HS2-KYSBT2).
+fn prewarm_corrupt_tickets(entry: StoreEntry) {
+    let _ = std::thread::Builder::new()
+        .name("hs-corrupt-prewarm".into())
+        .spawn(move || {
+            if let Ok(mut cache) = entry.corrupt.lock() {
+                let _ = cache.corrupt_tickets(&entry.store);
+            }
+        });
 }
 
 #[derive(Deserialize)]

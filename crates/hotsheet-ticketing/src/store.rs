@@ -1121,7 +1121,7 @@ impl FsStore {
     /// Every `tickets/<shard>/<ULID>.md` file path in the store, unsorted. A
     /// directory-level I/O error (e.g. an unreadable shard) is fatal; per-file
     /// parse errors are the concern of the caller, not this walk.
-    fn ticket_file_paths(&self) -> Result<Vec<PathBuf>, StoreError> {
+    pub(crate) fn ticket_file_paths(&self) -> Result<Vec<PathBuf>, StoreError> {
         let mut paths = Vec::new();
         let tickets_dir = self.root.join("tickets");
         if !tickets_dir.is_dir() {
@@ -1197,20 +1197,7 @@ impl FsStore {
         for path in self.ticket_file_paths()? {
             match self.read_ticket_at(&path) {
                 Ok(ticket) => tickets.push(ticket),
-                Err(error) => {
-                    let (id, slug) = recover_ticket_identity(&path);
-                    let (error_code, message) = match &error {
-                        StoreError::Parse { source, .. } => (source.code(), source.user_message()),
-                        _ => ("invalid_ticket", error.to_string()),
-                    };
-                    corrupt.push(CorruptTicket {
-                        path,
-                        id,
-                        slug,
-                        error: message,
-                        error_code,
-                    });
-                }
+                Err(error) => corrupt.push(CorruptTicket::from_error(path, &error)),
             }
         }
         tickets.sort_by_key(|t| t.id);
@@ -1312,6 +1299,25 @@ impl FsStore {
 }
 
 // ---- resilient-enumeration helpers -------------------------------------------------
+
+impl CorruptTicket {
+    /// The report for a ticket file whose read or parse failed with `error`: the
+    /// recoverable identity plus a stable error class and user-facing message.
+    pub(crate) fn from_error(path: PathBuf, error: &StoreError) -> Self {
+        let (id, slug) = recover_ticket_identity(&path);
+        let (error_code, message) = match error {
+            StoreError::Parse { source, .. } => (source.code(), source.user_message()),
+            _ => ("invalid_ticket", error.to_string()),
+        };
+        Self {
+            path,
+            id,
+            slug,
+            error: message,
+            error_code,
+        }
+    }
+}
 
 /// Best-effort recovery of a failed file's identity for a [`CorruptTicket`]. The id
 /// comes from the filename stem (the canonical ULID); if the stem isn't a ULID we fall
