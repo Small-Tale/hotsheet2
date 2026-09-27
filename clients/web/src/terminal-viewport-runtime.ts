@@ -11,6 +11,7 @@ import {
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
+import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import {
   isTerminalReplacementReplay,
   parseTerminalSizeMessage,
@@ -643,6 +644,62 @@ function initializeTerminalViewport(
       terminal.focus();
     };
   if (!scaledPreview) {
+    // A finger drag scrolls the terminal like a desktop wheel: scrollback, or arrow keys in an
+    // alternate-screen app (HS2-KFBRSB).
+    const scrollRows = createTerminalLineScroller({
+        rowHeight: () => {
+          const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
+          return screen && terminal.rows ? screen.getBoundingClientRect().height / terminal.rows : 0;
+        },
+        alternateScreen: () => terminal.buffer.active.type === 'alternate',
+        applicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
+        scrollLines: (lines) => {
+          terminal.scrollLines(lines);
+        },
+        sendInput: (data) => {
+          terminal.input(data, true);
+        },
+      }),
+      touchScroll = createTouchScrollController({
+        wheel: scrollRows,
+        frame: (callback) => {
+          const handle = window.requestAnimationFrame(callback);
+          return () => {
+            window.cancelAnimationFrame(handle);
+          };
+        },
+      }),
+      touchStart = (event: TouchEvent) => {
+        if (event.touches.length !== 1) {
+          touchScroll.cancel();
+          return;
+        }
+        const touch = event.touches[0];
+        touchScroll.start({ y: touch.clientY, time: event.timeStamp });
+      },
+      touchMove = (event: TouchEvent) => {
+        if (event.touches.length !== 1) return;
+        const touch = event.touches[0];
+        if (touchScroll.move({ y: touch.clientY, time: event.timeStamp })) event.preventDefault();
+      },
+      touchEnd = (event: TouchEvent) => {
+        const touch = event.changedTouches[0] as Touch | undefined;
+        touchScroll.end(touch ? { y: touch.clientY, time: event.timeStamp } : undefined);
+      },
+      touchCancel = () => {
+        touchScroll.cancel();
+      };
+    element.addEventListener('touchstart', touchStart, { passive: true });
+    element.addEventListener('touchmove', touchMove, { passive: false });
+    element.addEventListener('touchend', touchEnd);
+    element.addEventListener('touchcancel', touchCancel);
+    own(() => {
+      touchScroll.cancel();
+      element.removeEventListener('touchstart', touchStart);
+      element.removeEventListener('touchmove', touchMove);
+      element.removeEventListener('touchend', touchEnd);
+      element.removeEventListener('touchcancel', touchCancel);
+    });
     element.addEventListener('click', focusTerminal);
     element.addEventListener('focusin', focus);
     element.addEventListener('focusout', focus);

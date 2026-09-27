@@ -60,6 +60,12 @@ When automation lands, remove the manual-only step and record it below.
    device and repeat. Tap Exit and confirm the ordinary drawer chrome returns with focus on the
    selected terminal tab. Automated Chromium coverage exercises the same VisualViewport state
    transitions, but cannot reproduce iOS keyboard composition and safe-area behavior exactly.
+9. HS2-KFBRSB — on a **physical phone** (iOS Safari and Android Chrome), fill a dedicated drawer
+   terminal and a magnified terminal with scrollback (for example `seq 500`). Drag down and up
+   with one finger and confirm the terminal scrolls smoothly, a flick glides and stops on the next
+   touch, a tap still opens the keyboard without scrolling, and the page itself never rubber-bands.
+   Run `less` or `nano` and confirm a drag moves through the file. Automated Chromium coverage
+   drives synthetic DevTools touch drags; only a device proves the gesture feel.
 
 ### Browser identities on ordinary LAN HTTP
 

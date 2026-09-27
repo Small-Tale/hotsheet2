@@ -1138,3 +1138,90 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   await expect(close).toHaveCount(0);
   await expect(textSize).toHaveCount(0);
 });
+
+// HS2-KFBRSB: a finger drag scrolls phone terminals like a wheel, while a tap still only focuses.
+test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KFBRSB)', async ({ browser }) => {
+  const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: 2,
+    }),
+    page = await context.newPage(),
+    cdp = await context.newCDPSession(page);
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  await expect.poll(() => dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
+  await dedicated.evaluate(() => {
+    const output = Array.from({ length: 200 }, (_, index) => `scrollback line ${index}\r\n`).join('');
+    for (const socket of (
+      window as unknown as { __terminalFeedbackSockets: Array<EventTarget & { url: string }> }
+    ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/terminal-new/attach')))
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+  });
+  const sliderTop = (viewport: import('@playwright/test').Locator) =>
+    viewport.evaluate((node) =>
+      Number.parseFloat(node.querySelector<HTMLElement>('.scrollbar.vertical .slider')?.style.top ?? 'NaN'),
+    );
+  const swipe = async (viewport: import('@playwright/test').Locator, from: number, to: number) => {
+    const box = (await viewport.boundingBox())!,
+      x = box.x + box.width / 2;
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y: box.y + box.height * from }],
+    });
+    for (let step = 1; step <= 10; step += 1)
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: box.y + box.height * (from + ((to - from) * step) / 10) }],
+      });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+  await expect.poll(() => sliderTop(dedicated)).toBeGreaterThan(0);
+  const bottom = await sliderTop(dedicated);
+  // A tap does not scroll.
+  await swipe(dedicated, 0.5, 0.5);
+  await page.waitForTimeout(300);
+  expect(await sliderTop(dedicated)).toBe(bottom);
+  // Dragging down reveals older scrollback; dragging back up returns toward the newest output.
+  await swipe(dedicated, 0.3, 0.8);
+  await expect.poll(() => sliderTop(dedicated)).toBeLessThan(bottom - 50);
+  await expect(dedicated.locator('.xterm-rows')).toContainText('scrollback line');
+  const scrolledUp = await sliderTop(dedicated);
+  await page.waitForTimeout(600);
+  await swipe(dedicated, 0.8, 0.3);
+  await expect.poll(() => sliderTop(dedicated)).toBeGreaterThan(scrolledUp + 50);
+  await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-dedicated-scrolled.png') });
+
+  // The phone magnified terminal scrolls the same way.
+  await page.getByRole('button', { name: 'Exit terminal focus' }).click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]');
+  await expect(tile).toBeVisible();
+  await tile.locator('.terminal-tile__preview').click();
+  const magnified = dashboard.getByRole('dialog', { name: /Magnified/ }),
+    magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+  await magnifiedViewport.evaluate(() => {
+    const output = Array.from({ length: 200 }, (_, index) => `magnified line ${index}\r\n`).join('');
+    for (const socket of (
+      window as unknown as { __terminalFeedbackSockets: Array<EventTarget & { url: string }> }
+    ).__terminalFeedbackSockets.filter((item) => item.url.includes('/terminals/terminal-new/attach')))
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+  });
+  await expect.poll(() => sliderTop(magnifiedViewport)).toBeGreaterThan(0);
+  const magnifiedBottom = await sliderTop(magnifiedViewport);
+  await swipe(magnifiedViewport, 0.3, 0.8);
+  await expect.poll(() => sliderTop(magnifiedViewport)).toBeLessThan(magnifiedBottom - 20);
+  await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-magnified-scrolled.png') });
+  await context.close();
+});

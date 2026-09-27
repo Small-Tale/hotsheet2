@@ -2241,6 +2241,14 @@ of stranding it inside the terminal (HS2-QBMVFQ). Read-only grid preview tiles
 deliberately remain uniform 80×24, 5:3 cards: they are glanceable non-input surfaces, not the
 phone's interactive terminal.
 
+**Touch scrolling (HS2-KFBRSB).** Every interactive terminal (dedicated drawer, focus mode, and
+magnified) scrolls with a one-finger vertical drag, followed by a short momentum glide; a new touch
+stops the glide. Pixel movement is converted to whole rows at the rendered (fitted) row height:
+normal-buffer scrollback moves the viewport, while an alternate-screen app (nano, less, vim)
+receives up/down arrow keys (honoring application cursor mode), the same as xterm's desktop wheel. A
+touch that moves less than 8px is a tap, which still focuses the terminal and opens the keyboard.
+Scaled grid previews never scroll.
+
 **Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
 shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the

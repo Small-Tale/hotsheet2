@@ -174,7 +174,20 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
       TERMINAL_DRAWER_RESIZE_END_EVENT,
     ]);
     expect(windowMock.cancelAnimationFrame).toHaveBeenCalledWith(1);
-    expect(removed).toHaveBeenCalledTimes(5);
+    // Interaction listeners plus the HS2-KFBRSB touch-scroll listeners are all removed on teardown.
+    expect(removed.mock.calls.map(([name]) => name as string).sort()).toEqual(
+      [
+        'click',
+        'focusin',
+        'focusin',
+        'focusout',
+        'pointerdown',
+        'touchcancel',
+        'touchend',
+        'touchmove',
+        'touchstart',
+      ].sort(),
+    );
     throwSocket = false;
     const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'two' });
     dispose();
