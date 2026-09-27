@@ -16,3 +16,4 @@
 **/.claude
 **/tests/fixtures
 /clients/web/ai/component-catalog-extension.json
+**/dist-host/

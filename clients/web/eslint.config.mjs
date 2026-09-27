@@ -10,6 +10,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-host/**',
       'node_modules/**',
       'test-results/**',
       'playwright-report/**',

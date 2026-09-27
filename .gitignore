@@ -39,6 +39,7 @@ pnpm-debug.log*
 # --- Common build/test/coverage output ---
 /dist/
 **/dist/
+**/dist-host/
 /coverage/
 coverage/
 /test-results/

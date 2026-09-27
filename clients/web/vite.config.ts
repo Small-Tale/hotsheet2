@@ -80,7 +80,7 @@ export function stableDevClientStripPlugin(environment: NodeJS.ProcessEnv = proc
   };
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, isSsrBuild }) => ({
   ...viteDependencyIsolation(),
   plugins:
     command === 'serve'
@@ -98,4 +98,6 @@ export default defineConfig(({ command }) => ({
   css: { postcss: { plugins: [remifyCss()] } },
   server: { host: '127.0.0.1', port: 4175, strictPort: true, hmr: stableDevHmr() },
   build: { sourcemap: true },
+  // The local production host bundle (`npm run build:host`) serves `dist/`; it needs no public assets.
+  publicDir: isSsrBuild ? false : 'public',
 }));

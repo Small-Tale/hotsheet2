@@ -74,6 +74,13 @@ When automation lands, remove the manual-only step and record it below.
     underline, and confirm leaving the terminal clears it. Automated coverage asserts the exact bytes
     and focus retention in Chromium; only a device proves keyboard retention and IME interplay.
 
+### Local production host over the LAN
+
+HS2-587N4D — run `npm run prod:rebuild-lan` in `clients/web`, then open
+`http://<machine-LAN-address>:4180/` on a phone. Confirm the app loads quickly, a project opens, a
+terminal attaches and streams, and live ticket changes arrive. Stop the host with Ctrl-C and
+confirm the machine server keeps running. Automated coverage runs the real host on loopback only.
+
 ### Browser identities on ordinary LAN HTTP
 
 HS2-76ZR5P — on physical Mobile Safari at the server's LAN HTTP address, create a ticket
