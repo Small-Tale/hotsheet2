@@ -1225,3 +1225,129 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-magnified-scrolled.png') });
   await context.close();
 });
+
+// HS2-CKS78M: the phone key bar sends special keys and sticky modifiers without dismissing the keyboard.
+test('sends special keys and sticky modifiers from the phone terminal key bar (HS2-CKS78M)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const fake = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => fake });
+    (window as unknown as { __setVisualViewport: (height: number) => void }).__setVisualViewport = (height) => {
+      fake.height = height;
+      fake.dispatchEvent(new Event('resize'));
+    };
+  });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]'),
+    textarea = dedicated.locator('.xterm-helper-textarea');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  const keyBar = page.locator('[data-component="terminal-key-bar"]');
+  // Hidden until the soft keyboard is presented.
+  await expect(keyBar).toHaveCount(0);
+  const setKeyboard = (height: number) =>
+    page.evaluate((value) => {
+      (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(value);
+    }, height);
+  await setKeyboard(420);
+  await expect(keyBar).toBeVisible();
+  const sent = () =>
+    page.evaluate(() =>
+      (
+        window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+      ).__terminalFeedbackSockets
+        .filter((socket) => socket.url.includes('/terminals/terminal-new/attach'))
+        .flatMap((socket) => socket.sent)
+        .filter((value): value is string => typeof value === 'string' && !value.startsWith('{')),
+    );
+  const sentSince = async (count: number) => (await sent()).slice(count);
+  await textarea.focus();
+  let before = (await sent()).length;
+  await keyBar.getByRole('button', { name: 'Escape' }).click();
+  await expect.poll(() => sentSince(before)).toEqual(['\u001b']);
+  await expect(textarea).toBeFocused();
+  // Ctrl once applies to the next typed character, then clears.
+  const ctrl = keyBar.getByRole('button', { name: /^Ctrl/ });
+  await ctrl.click();
+  await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
+  before = (await sent()).length;
+  await page.keyboard.type('c');
+  await expect.poll(() => sentSince(before)).toEqual(['\u0003']);
+  await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
+  await expect(textarea).toBeFocused();
+  // Alt double-tapped locks and applies to arrows until released.
+  const alt = keyBar.getByRole('button', { name: /^Alt/ });
+  await alt.click();
+  await alt.click();
+  await expect(alt).toHaveAccessibleName('Alt (locked)');
+  before = (await sent()).length;
+  await keyBar.getByRole('button', { name: 'Up arrow' }).click();
+  await keyBar.getByRole('button', { name: 'Left arrow' }).click();
+  await expect.poll(() => sentSince(before)).toEqual(['\u001b[1;3A', '\u001b[1;3D']);
+  await expect(alt).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: test.info().outputPath('hs2-cks78m-drawer-key-bar.png') });
+  // The Fn row carries function and navigation keys.
+  await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
+  await expect(keyBar.getByRole('button', { name: 'Up arrow' })).toHaveCount(0);
+  before = (await sent()).length;
+  await keyBar.getByRole('button', { name: 'F5', exact: true }).click();
+  await keyBar.getByRole('button', { name: 'Page down' }).click();
+  await expect.poll(() => sentSince(before)).toEqual(['\u001b[15;3~', '\u001b[6;3~']);
+  // Scrolled to the far keys, Fn stays pinned at the leading edge.
+  const fn = keyBar.getByRole('button', { name: 'Function and navigation keys' });
+  expect(await keyBar.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  const [fnBox, barBox] = await Promise.all([fn.boundingBox(), keyBar.boundingBox()]);
+  expect(fnBox!.x - barBox!.x).toBeLessThanOrEqual(12);
+  await page.screenshot({ path: test.info().outputPath('hs2-cks78m-drawer-function-row.png') });
+  await alt.click();
+  await expect(alt).toHaveAttribute('aria-pressed', 'false');
+  await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
+  await expect(textarea).toBeFocused();
+  // Hiding the keyboard hides the bar again.
+  await setKeyboard(844);
+  await expect(keyBar).toHaveCount(0);
+  // A modifier left locked is cleared when the phone terminal is left.
+  await setKeyboard(420);
+  await alt.click();
+  await alt.click();
+  await expect(alt).toHaveAccessibleName('Alt (locked)');
+  await setKeyboard(844);
+  await assertMagnifiedKeyBar(page, setKeyboard, sent);
+});
+
+async function assertMagnifiedKeyBar(
+  page: import('@playwright/test').Page,
+  setKeyboard: (height: number) => Promise<void>,
+  sent: () => Promise<string[]>,
+) {
+  // The phone magnified terminal carries the same bar while its keyboard is up.
+  await page.getByRole('button', { name: 'Exit terminal focus' }).click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]');
+  await tile.locator('.terminal-tile__preview').click();
+  const magnified = dashboard.getByRole('dialog', { name: /Magnified/ });
+  await expect(magnified).toBeVisible();
+  await setKeyboard(420);
+  const keyBar = magnified.locator('[data-component="terminal-key-bar"]');
+  await expect(keyBar).toBeVisible();
+  await expect(keyBar.getByRole('button', { name: /^Alt/ })).toHaveAttribute('aria-pressed', 'false');
+  const before = (await sent()).length;
+  await keyBar.getByRole('button', { name: 'Tab', exact: true }).click();
+  await expect.poll(async () => (await sent()).slice(before)).toEqual(['\t']);
+  // Settle the magnified overlay's entrance before capturing it.
+  await magnified.evaluate(async (node) => {
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: test.info().outputPath('hs2-cks78m-magnified-key-bar.png') });
+}

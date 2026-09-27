@@ -2249,6 +2249,18 @@ receives up/down arrow keys (honoring application cursor mode), the same as xter
 touch that moves less than 8px is a tap, which still focuses the terminal and opens the keyboard.
 Scaled grid previews never scroll.
 
+**Phone terminal key bar (HS2-CKS78M).** While a phone terminal (drawer focus mode or the magnified
+terminal) has the soft keyboard up, a key bar sits directly above the keyboard. Its main row fits a
+390px phone without scrolling: **Fn**, Esc, Tab, sticky **Ctrl** and **Alt**, and the four arrows
+(Lucide `arrow-*`). **Fn** swaps in a scrolling row with Shift, Home, End, PgUp, PgDn, and F1–F12, and
+the row resets to its leading edge when toggled. A modifier tap cycles _once_ (applies to the next key,
+including a character typed on the soft keyboard, then clears) → _locked_ (marked with an underline;
+stays on) → off; leaving focus mode or closing the magnified terminal clears modifiers and the Fn row.
+Keys use xterm sequences: application-cursor-aware arrows and Home/End, `CSI 1;m` modifier forms, SS3
+F1–F4, `CSI n~` for F5–F12/PgUp/PgDn, Shift+Tab as `CSI Z`, Ctrl+letter control codes, and an ESC
+prefix for Alt. The bar's buttons are never focusable and a capture-phase `pointerdown` guard keeps
+focus in the terminal, so tapping a key never dismisses the keyboard.
+
 **Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
 shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the

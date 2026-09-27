@@ -10,6 +10,14 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { type DrawerAIChat } from '../project-drive';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
+import {
+  NO_TERMINAL_MODIFIERS,
+  TERMINAL_KEY_EVENT,
+  type TerminalModifier,
+  type TerminalModifiers,
+  type TerminalSpecialKey,
+  toggleTerminalModifier,
+} from '../terminal-keys';
 import { type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -57,6 +65,9 @@ export interface TerminalInteractionsDependencies {
   readonly enterMobileTerminalFocus: (terminalId: string) => void;
   readonly exitMobileTerminalFocus: () => void;
   readonly cycleMobileTerminalColumns: () => void;
+  /** Phone key-bar sticky modifiers and Fn-row state (HS2-CKS78M). */
+  readonly terminalModifiers: Signal<TerminalModifiers>;
+  readonly terminalFunctionRow: Signal<boolean>;
   readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
   readonly aiLaunchConfiguration: (kind: 'ai-shell' | 'ai-chat', customize: boolean) => AiToolDefaults | undefined;
@@ -126,6 +137,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
     cycleMobileTerminalColumns,
+    terminalModifiers,
+    terminalFunctionRow,
     focusDrawerTab,
     createProjectTerminal,
     aiLaunchConfiguration,
@@ -154,6 +167,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     enterMobileTerminalFocus(viewport.dataset.terminalId!);
   });
   delegate(document.body, 'click', '[data-action="exit-terminal-focus-mode"]', () => {
+    terminalModifiers.value = NO_TERMINAL_MODIFIERS;
+    terminalFunctionRow.value = false;
     const current = project(),
       drawer = document.querySelector<HTMLElement>('[data-component="terminal-drawer"]'),
       terminalId = drawer?.querySelector<HTMLElement>('.terminal-session:not([hidden]) [data-terminal-id]')?.dataset
@@ -244,8 +259,47 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     if (data(target).mobile === 'true') return;
     if (event.target === target) magnifiedTerminalKey.value = undefined;
   });
+  // Leaving a phone terminal clears its key-bar state, so a locked modifier never carries over.
+  const resetKeyBar = () => {
+    terminalModifiers.value = NO_TERMINAL_MODIFIERS;
+    terminalFunctionRow.value = false;
+  };
   delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {
     magnifiedTerminalKey.value = undefined;
+    resetKeyBar();
+  });
+  // Phone key bar (HS2-CKS78M). Its buttons never take focus: cancelling the mousedown default (also
+  // dispatched for touch taps) keeps the terminal's textarea focused so the soft keyboard stays up, and
+  // each action restores that focus if something else took it.
+  delegate(document.body, 'mousedown', '[data-component="terminal-key-bar"]', (event) => {
+    event.preventDefault();
+  });
+  const keyBarViewport = (target: Element) =>
+    target
+      .closest('[data-component="terminal-drawer"], [data-component="terminal-tile"]')
+      ?.querySelector<HTMLElement>(
+        '.terminal-session:not([hidden]) [data-display-mode="interactive"], .terminal-tile__viewport-frame [data-display-mode="interactive"]',
+      );
+  const keepTerminalFocus = (viewport: HTMLElement | null | undefined) => {
+    const input = viewport?.querySelector<HTMLElement>('.xterm-helper-textarea');
+    if (input && document.activeElement !== input) input.focus({ preventScroll: true });
+  };
+  delegate(document.body, 'click', '[data-action="toggle-terminal-modifier"]', (_event, target) => {
+    const modifier = data(target).modifier as TerminalModifier | undefined;
+    if (modifier) terminalModifiers.value = toggleTerminalModifier(terminalModifiers.value, modifier);
+    keepTerminalFocus(keyBarViewport(target));
+  });
+  delegate(document.body, 'click', '[data-action="toggle-terminal-function-row"]', (_event, target) => {
+    terminalFunctionRow.value = !terminalFunctionRow.value;
+    // Each row starts at its leading edge, so a swapped row never opens mid-scroll.
+    target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
+    keepTerminalFocus(keyBarViewport(target));
+  });
+  delegate(document.body, 'click', '[data-action="send-terminal-key"]', (_event, target) => {
+    const key = data(target).key as TerminalSpecialKey | undefined,
+      viewport = keyBarViewport(target);
+    if (key && viewport) viewport.dispatchEvent(new CustomEvent(TERMINAL_KEY_EVENT, { detail: { key } }));
+    keepTerminalFocus(viewport);
   });
   delegate(document.body, 'click', '[data-action="cycle-mobile-terminal-columns"]', () => {
     cycleMobileTerminalColumns();

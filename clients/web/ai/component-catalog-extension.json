@@ -1321,6 +1321,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "terminal-key-bar",
+      "name": "TerminalKeyBar",
+      "kind": "component",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."
+      ],
+      "publicClasses": [
+        "terminal-key-bar"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "terminal-visibility-dialog",
       "name": "TerminalVisibilityDialog",
       "kind": "component",

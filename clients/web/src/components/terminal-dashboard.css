@@ -66,7 +66,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.terminal-dashboard button {
+/* The terminal key bar composes Kerf control groups that own their button colors (HS2-CKS78M). */
+.terminal-dashboard button:not(:where(.terminal-key-bar button)) {
   border: 0;
   color: var(--wa-color-neutral-on-quiet);
   background: transparent;

@@ -38,6 +38,7 @@ import { SavedViewDialog } from '../components/saved-view-dialog';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
+import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog } from '../components/terminal-rename-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
@@ -54,6 +55,15 @@ import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
+import {
+  consumeTerminalModifiers,
+  encodeTerminalKey,
+  NO_TERMINAL_MODIFIERS,
+  type TerminalModifier,
+  type TerminalModifiers,
+  type TerminalSpecialKey,
+  toggleTerminalModifier,
+} from '../terminal-keys';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import {
   AIConversationDemo,
@@ -323,6 +333,9 @@ function updateDemoModifiedWhenPopupsClose(value: Record<string, string>): void 
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
 const drawerFocusDemoColumns = signal(60);
+const keyBarDemoModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
+  keyBarDemoFunctionRow = signal(false),
+  keyBarDemoOutput = signal('');
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
@@ -817,6 +830,22 @@ function demoContent(item: DemoDefinition) {
     );
   if (item.id === 'terminal-operations-sidebar') return <TerminalOperationsSidebarDemo />;
   if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo />;
+  if (item.id === 'terminal-key-bar')
+    return (
+      <section class="terminal-key-bar-demo" aria-label="Terminal key bar variants">
+        <div>
+          <h2>Keys</h2>
+          <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
+        </div>
+        <div>
+          <h2>Function row</h2>
+          <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
+        </div>
+        <p class="component-stage__event" data-key-bar-demo-output>
+          {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
+        </p>
+      </section>
+    );
   if (item.id === 'fixed-aspect-terminal-card') {
     const session = {
       id: 'shell',
@@ -1280,6 +1309,22 @@ delegate(root, 'contextmenu', '[data-component="terminal-tile"]', (event, target
   event.preventDefault();
   const pointer = event as MouseEvent;
   showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
+});
+// The TerminalKeyBar demo exercises the same modifier and Fn transitions as production and shows the
+// exact bytes each key would send (HS2-CKS78M).
+delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-modifier"]', (_event, target) => {
+  const modifier = (target as HTMLElement).dataset.modifier as TerminalModifier | undefined;
+  if (modifier) keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
+});
+delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-function-row"]', (_event, target) => {
+  keyBarDemoFunctionRow.value = !keyBarDemoFunctionRow.value;
+  target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
+});
+delegate(root, 'click', '.terminal-key-bar-demo [data-action="send-terminal-key"]', (_event, target) => {
+  const key = (target as HTMLElement).dataset.key as TerminalSpecialKey,
+    bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
+  keyBarDemoModifiers.value = consumeTerminalModifiers(keyBarDemoModifiers.value);
+  keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
 });
 // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
 delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {

@@ -237,6 +237,7 @@ import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
+import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import { defaultTerminalName, parseTerminalNames, terminalNameKey } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
@@ -431,6 +432,9 @@ export async function startHotSheetWebClient() {
     terminalDrawerSelected = signal('grid'),
     mobileTerminalFocus = signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
     mobileTerminalColumns = signal(loadMobileTerminalColumns(localStorage)),
+    // Phone key-bar state (HS2-CKS78M): sticky modifiers and whether the Fn row is showing.
+    terminalModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
+    terminalFunctionRow = signal(false),
     mobileViewportGeometry = signal(currentMobileViewportGeometry());
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
     terminalDrawerOrderByProject = signal<Record<string, string[]>>({}),
@@ -453,6 +457,12 @@ export async function startHotSheetWebClient() {
   const { syncTerminalViewportMounts } = createTerminalViewportsController({
     projects,
     mobileTerminalColumns: () => mobileTerminalColumns.peek(),
+    terminalModifiers: {
+      current: () => terminalModifiers.peek(),
+      consume: () => {
+        terminalModifiers.value = consumeTerminalModifiers(terminalModifiers.peek());
+      },
+    },
     get pendingTerminalFocus() {
       return pendingTerminalFocus;
     },
@@ -1717,7 +1727,11 @@ export async function startHotSheetWebClient() {
   function mobileMagnifiedTerminal() {
     if (!viewportMobile.value) return undefined;
     const geometry = mobileViewportGeometry.value;
-    return { ...geometry, columns: mobileTerminalColumns.value };
+    return {
+      ...geometry,
+      columns: mobileTerminalColumns.value,
+      keyBar: { modifiers: terminalModifiers.value, functionRow: terminalFunctionRow.value },
+    };
   }
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];
@@ -4776,7 +4790,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailDirection, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, mobileOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

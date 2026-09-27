@@ -95,6 +95,7 @@ describe('UX demo catalog', () => {
       'terminal-operations-sidebar',
       'terminal-ticket-rail',
       'fixed-aspect-terminal-card',
+      'terminal-key-bar',
       'terminal-visibility-dialog',
       'terminal-rename-dialog',
       'app-empty-state',
@@ -142,6 +143,7 @@ describe('UX demo catalog', () => {
       'workspace-header',
       'ticket-inspector',
       'terminal-dashboard',
+      'terminal-key-bar',
       'toolbar',
       'floating-toolbar',
       'dialog-header',
@@ -149,7 +151,17 @@ describe('UX demo catalog', () => {
     expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);
     expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);
-    expect(findDemo('terminal-drawer')?.uses).toEqual(['app-tab', 'list-item', 'list-header', 'ai-conversation']);
+    expect(findDemo('terminal-drawer')?.uses).toEqual([
+      'app-tab',
+      'list-item',
+      'list-header',
+      'ai-conversation',
+      'terminal-key-bar',
+    ]);
+    expect(demosUsing('terminal-key-bar').map((entry) => entry.id)).toEqual([
+      'terminal-drawer',
+      'fixed-aspect-terminal-card',
+    ]);
     expect(findDemo('terminal-dashboard')?.uses).toEqual([
       'fixed-aspect-terminal-card',
       'floating-toolbar',

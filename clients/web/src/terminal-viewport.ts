@@ -1,4 +1,5 @@
 import { browserRandomId } from './browser-id';
+import type { TerminalModifiers } from './terminal-keys';
 
 export interface TerminalSizeMessage {
   pty_size: { cols: number; rows: number };
@@ -157,11 +158,13 @@ export interface TerminalViewportOptions {
   onTicketReference?: (reference: string) => void;
   /** Column count for a phone-width interactive terminal (80xM policy); defaults to 80. */
   mobileColumns?: () => number;
+  /** Sticky key-bar modifiers applied to special keys and the next typed character (HS2-CKS78M). */
+  modifiers?: { current: () => TerminalModifiers; consume: () => void };
 }
 
 export function mountTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns }: TerminalViewportOptions,
+  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns, modifiers }: TerminalViewportOptions,
 ): () => void {
   return mountTerminalRuntime(element, async () => {
     const { mountTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
@@ -172,6 +175,7 @@ export function mountTerminalViewport(
         autoFocus,
         onTicketReference,
         mobileColumns,
+        modifiers,
       });
   });
 }

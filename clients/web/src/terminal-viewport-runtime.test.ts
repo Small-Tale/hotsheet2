@@ -181,6 +181,7 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'focusin',
         'focusin',
         'focusout',
+        'hotsheet-terminal-key',
         'pointerdown',
         'touchcancel',
         'touchend',

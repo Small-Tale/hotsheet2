@@ -509,7 +509,7 @@ export const demoCatalog: DemoCategory[] = [
         'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.',
         'feature-floor',
         true,
-        ['app-tab', 'list-item', 'list-header', 'ai-conversation'],
+        ['app-tab', 'list-item', 'list-header', 'ai-conversation', 'terminal-key-bar'],
       ),
       demo(
         'terminal-dashboard',
@@ -548,6 +548,15 @@ export const demoCatalog: DemoCategory[] = [
         'Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.',
         'feature-floor',
         true,
+        ['terminal-key-bar'],
+      ),
+      demo(
+        'terminal-key-bar',
+        'TerminalKeyBar',
+        'Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn.',
+        'feature-floor',
+        true,
+        ['toolbar-control-group'],
       ),
       demo(
         'terminal-visibility-dialog',

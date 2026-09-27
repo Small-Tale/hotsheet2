@@ -66,6 +66,13 @@ When automation lands, remove the manual-only step and record it below.
    touch, a tap still opens the keyboard without scrolling, and the page itself never rubber-bands.
    Run `less` or `nano` and confirm a drag moves through the file. Automated Chromium coverage
    drives synthetic DevTools touch drags; only a device proves the gesture feel.
+10. HS2-CKS78M — on a **physical phone** (iOS Safari and Android Chrome), open a phone terminal with
+    the soft keyboard up and confirm the key bar sits directly above it and tapping any key never
+    dismisses the keyboard. In a shell: Ctrl then `c` interrupts `sleep 100`; Tab completes; ↑ recalls
+    history; Alt then `b`/`f` moves by word. In `vim`: Esc leaves insert mode; arrows move; Fn → F1
+    opens help. In `htop` or `mc`: F-keys and PgUp/PgDn work. Double-tap Alt to lock it, confirm the
+    underline, and confirm leaving the terminal clears it. Automated coverage asserts the exact bytes
+    and focus retention in Chromium; only a device proves keyboard retention and IME interplay.
 
 ### Browser identities on ordinary LAN HTTP
 

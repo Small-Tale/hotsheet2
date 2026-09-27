@@ -747,3 +747,19 @@ body[data-resizing-project-sidebar='true'] {
 .fixed-aspect-terminal-card-demo__phone {
   max-width: remify(392px);
 }
+
+.terminal-key-bar-demo {
+  display: grid;
+  width: min(remify(390px), 100%);
+  gap: var(--wa-space-l);
+}
+.terminal-key-bar-demo > div {
+  min-width: 0;
+}
+.terminal-key-bar-demo h2 {
+  margin: 0 0 var(--wa-space-s);
+  font-size: var(--wa-font-size-s);
+}
+.terminal-key-bar-demo .terminal-key-bar {
+  border-radius: remify(12.8px);
+}

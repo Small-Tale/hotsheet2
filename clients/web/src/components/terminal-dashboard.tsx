@@ -18,6 +18,7 @@ import {
 } from '../terminal-grid-layout';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
+import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
 
 export interface TerminalDashboardSession {
   id: string;
@@ -57,6 +58,8 @@ export interface MobileMagnifiedTerminal {
   viewport: MobileTerminalViewport;
   keyboardVisible: boolean;
   columns: number;
+  /** Special-key accessory bar state, shown above the soft keyboard (HS2-CKS78M). */
+  keyBar?: TerminalKeyBarProps;
 }
 
 export interface TerminalDashboardProps {
@@ -219,6 +222,7 @@ function TerminalCard({
         <pre>{preview}</pre>
         <div class="terminal-tile__viewport-frame">{viewport}</div>
       </div>
+      {magnified && mobile?.keyboardVisible && mobile.keyBar && <TerminalKeyBar {...mobile.keyBar} />}
       <footer class="terminal-tile__footer">
         {magnified && mobile && (
           <button

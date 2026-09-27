@@ -1,6 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import type { Project } from '../interactions/types';
+import type { TerminalModifiers } from '../terminal-keys';
 import { ProgressiveTerminalWorkQueue } from '../terminal-progressive-work';
 import {
   mountTerminalViewport,
@@ -21,6 +22,8 @@ export interface TerminalViewportsDependencies {
   ) => void;
   /** Current phone-width terminal column preference (HS2-WMN626). */
   mobileTerminalColumns?: () => number;
+  /** Sticky key-bar modifiers shared by every interactive terminal (HS2-CKS78M). */
+  terminalModifiers?: { current: () => TerminalModifiers; consume: () => void };
 }
 
 function terminalViewportIdentity(element: HTMLElement): string | undefined {
@@ -66,6 +69,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
         url: terminalBrowserWebSocketUrl(current.apiPath, terminalId),
         autoFocus,
         mobileColumns: dependencies.mobileTerminalColumns,
+        modifiers: dependencies.terminalModifiers,
         onTicketReference: interactive
           ? (reference) => {
               const parsed = parseTicketLinkReference(reference);

@@ -10,6 +10,15 @@ import {
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
+import {
+  applyTerminalModifiersToText,
+  encodeTerminalKey,
+  NO_TERMINAL_MODIFIERS,
+  TERMINAL_KEY_EVENT,
+  type TerminalModifiers,
+  terminalModifiersActive,
+  type TerminalSpecialKey,
+} from './terminal-keys';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import {
@@ -211,6 +220,8 @@ type TerminalRuntimeOptions = {
   autoFocus?: boolean;
   onTicketReference?: (reference: string) => void;
   mobileColumns?: () => number;
+  /** Sticky key-bar modifiers (HS2-CKS78M): read on each key, consumed after a one-shot applies. */
+  modifiers?: { current: () => TerminalModifiers; consume: () => void };
 };
 
 export function mountTerminalViewportRuntime(element: HTMLElement, options: TerminalRuntimeOptions): () => void {
@@ -221,7 +232,7 @@ export function mountTerminalViewportRuntime(element: HTMLElement, options: Term
 
 function initializeTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns }: TerminalRuntimeOptions,
+  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns, modifiers }: TerminalRuntimeOptions,
   own: OwnTerminalResource,
 ): void {
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
@@ -713,15 +724,43 @@ function initializeTerminalViewport(
       element.removeEventListener('focusin', signalInteraction);
     });
   }
-  const input = terminal.onData((value) => {
+  const sendInput = (value: string) => {
     if (!scaledPreview && socket?.readyState === WebSocket.OPEN) {
       socket.send(value);
       signalInteractionThrottled();
     }
+  };
+  const input = terminal.onData((value) => {
+    // A sticky key-bar modifier applies to the next typed character (HS2-CKS78M).
+    const active = modifiers?.current();
+    if (active && terminalModifiersActive(active)) {
+      const modified = applyTerminalModifiersToText(value, active);
+      if (modified !== value) modifiers?.consume();
+      sendInput(modified);
+      return;
+    }
+    sendInput(value);
   });
   own(() => {
     input.dispose();
   });
+  if (!scaledPreview) {
+    const sendSpecialKey = (event: Event) => {
+      const key = (event as CustomEvent<{ key: TerminalSpecialKey }>).detail.key,
+        sequence = encodeTerminalKey(key, modifiers?.current() ?? NO_TERMINAL_MODIFIERS, {
+          applicationCursor: terminal.modes.applicationCursorKeysMode,
+        });
+      if (!sequence) return;
+      modifiers?.consume();
+      // Typing into the terminal returns the viewport to the newest output, as a physical key does.
+      terminal.scrollToBottom();
+      sendInput(sequence);
+    };
+    element.addEventListener(TERMINAL_KEY_EVENT, sendSpecialKey);
+    own(() => {
+      element.removeEventListener(TERMINAL_KEY_EVENT, sendSpecialKey);
+    });
+  }
   connect();
   if (autoFocus) {
     const focusIfCurrent = (force = false) => {

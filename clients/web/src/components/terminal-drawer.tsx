@@ -27,6 +27,7 @@ import {
   type TerminalDashboardSession,
   TerminalSession,
 } from './terminal-dashboard';
+import { TerminalKeyBar } from './terminal-key-bar';
 
 export interface TerminalDrawerChatTab {
   id: string;
@@ -271,6 +272,9 @@ export function TerminalDrawer({
           />
         )}
       </div>
+      {focusMode && focusTextSize?.keyboardVisible && focusTextSize.keyBar && (
+        <TerminalKeyBar {...focusTextSize.keyBar} />
+      )}
       {focusMode && focusTextSize && (
         <button
           type="button"

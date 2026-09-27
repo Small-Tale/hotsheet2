@@ -1,0 +1,45 @@
+/* Phone terminal accessory bar (HS2-CKS78M): one horizontally scrolling row of Kerf dark control
+   groups on the terminal background, directly above the soft keyboard. */
+.terminal-key-bar {
+  display: flex;
+  flex: none;
+  min-width: 0;
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  padding-inline: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-left, 0px))
+    calc(var(--kui-space-xs) + var(--hotsheet-safe-area-right, 0px));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-top: 1px solid color-mix(in srgb, var(--hs-terminal-foreground) 16%, transparent);
+  /* The bar sits on the terminal surface in every host (drawer focus mode, magnified tile), so it
+     owns its foreground instead of inheriting a host's quiet text color. */
+  color: var(--hs-terminal-foreground);
+  background: var(--hs-terminal-background);
+  gap: var(--kui-space-xs);
+  touch-action: pan-x;
+}
+.terminal-key-bar::-webkit-scrollbar {
+  display: none;
+}
+.terminal-key-bar > .kui-toolbar-control-group {
+  flex: none;
+}
+/* Fn stays pinned at the leading edge while a row scrolls, so the other row is always one tap away;
+   the keys scroll beneath it on the terminal-colored backing. */
+.terminal-key-bar > .kui-toolbar-control-group:first-child {
+  position: sticky;
+  z-index: 1;
+  left: 0;
+  box-shadow: calc(-1 * var(--kui-space-xs)) 0 0 var(--kui-space-xs) var(--hs-terminal-background);
+}
+.terminal-key-bar button {
+  min-width: remify(40px);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+/* A locked modifier is marked beyond the pressed chrome, so once and locked read differently. */
+.terminal-key-bar button[data-state='locked'] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
