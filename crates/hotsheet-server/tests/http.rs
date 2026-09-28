@@ -3795,6 +3795,90 @@ async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
+/// Opening a project monitors its checkout by filesystem events: a working-tree change is
+/// announced over the long-poll stream, while ignored build output is not (HS2-4S9ENS).
+#[tokio::test]
+async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&checkout)
+            .args(["init", "--quiet"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::write(checkout.join(".gitignore"), "target/\n").unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"]
+        .as_str()
+        .or_else(|| opened["id"].as_str())
+        .unwrap_or_else(|| panic!("no checkout id in {opened}"))
+        .to_string();
+    let poll = |cursor: u64| {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+            )
+            .await
+        }
+    };
+    let announced = |polled: &serde_json::Value| {
+        polled["events"].as_array().unwrap().iter().any(|event| {
+            event["kind"] == "repository_changed" && event["id"] == checkout_id.as_str()
+        })
+    };
+    // Let the monitor take its baseline, then start from the current cursor.
+    tokio::time::sleep(std::time::Duration::from_millis(1_000)).await;
+    let mut cursor = poll(0).await["cursor"].as_u64().unwrap();
+
+    std::fs::create_dir_all(checkout.join("target/debug")).unwrap();
+    std::fs::write(checkout.join("target/debug/artifact"), "build output").unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(2_000)).await;
+    let polled = poll(cursor).await;
+    assert!(
+        !announced(&polled),
+        "ignored output was announced: {polled}"
+    );
+    cursor = polled["cursor"].as_u64().unwrap();
+
+    std::fs::write(checkout.join("visible.txt"), "working tree").unwrap();
+    let mut seen = false;
+    for _ in 0..100 {
+        let polled = poll(cursor).await;
+        if announced(&polled) {
+            seen = true;
+            break;
+        }
+        cursor = polled["cursor"].as_u64().unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(seen, "the working-tree change was not announced within 10s");
+}
+
 #[tokio::test]
 async fn checkout_search_matches_slug_details_and_notes() {
     let (_primary, st) = state();

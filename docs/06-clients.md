@@ -1160,12 +1160,18 @@ and identity-less legacy entries remain conservatively blocking.
   complete ahead, behind, staged, unstaged, untracked, and conflicted counts. Repository
   failures remain local to this surface instead of hiding the project, and its explicit
   Refresh action performs one request. The server monitors each open checkout off the
-  project-open request path. Linux and Windows use their native recursive filesystem
-  watcher and coalesce event bursts. macOS fingerprints Git's porcelain-v2 status between
-  750 ms and a two-second idle backoff instead of using notify's recursive polling watcher;
-  Git excludes ignored build output and dependencies, and unchanged fingerprints emit
-  nothing. Both paths send checkout-scoped `repository_changed` invalidations over the
-  existing WebSocket/long-poll stream. The active client then fetches one authoritative
+  project-open request path, driven by the platform's native recursive filesystem watcher
+  on every platform, including FSEvents on macOS (HS2-4S9ENS). Events coalesce until they
+  pause (175 ms), or for at most one second during a continuous stream. The monitor then
+  re-reads Git's porcelain-v2 status fingerprint, at most once every 750 ms, and announces
+  only a changed fingerprint. Events under paths Git ignores, and under `.git/objects` or
+  `.git/logs`, are dropped before that read. The ignored set is re-learned whenever events
+  arrive without a status change, and a linked worktree's external Git directories are
+  watched too. An idle checkout spawns no `git` process. Starting a native stream can take
+  seconds on a busy Mac, so until it is live the monitor polls the fingerprint every 750 ms
+  as a bridge. If the native watcher cannot start at all, it falls back to that poll with a
+  two-second idle backoff. Changes are announced as checkout-scoped `repository_changed`
+  invalidations over the existing WebSocket/long-poll stream. The active client then fetches one authoritative
   snapshot; the status surface never introduces simple polling.
 
   The real inspector's attachment surface materializes ordinary-sized browsed and
