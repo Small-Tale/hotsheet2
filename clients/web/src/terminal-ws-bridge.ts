@@ -8,7 +8,7 @@ import { projectChangeWebSocketUrl, projectTerminalWebSocketUrl } from './projec
 const browserAttach = /^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
 const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
 type TargetResolver = (projectId: string, terminalId: string) => string | undefined | Promise<string | undefined>;
-type SyncTargetResolver = (projectId: string) => string | undefined | Promise<string | undefined>;
+type SyncTargetResolver = (projectId: string, client?: string) => string | undefined | Promise<string | undefined>;
 
 export async function browserTerminalAttachTarget(
   requestUrl: string | undefined,
@@ -30,11 +30,11 @@ export async function browserProjectWebSocketTarget(
   resolveSync: SyncTargetResolver = projectChangeWebSocketUrl,
 ): Promise<string | undefined> {
   if (!requestUrl) return undefined;
-  const pathname = new URL(requestUrl, 'http://localhost').pathname,
-    sync = pathname.match(browserSync);
+  const url = new URL(requestUrl, 'http://localhost'),
+    sync = url.pathname.match(browserSync);
   if (sync) {
     try {
-      return await resolveSync(decodeURIComponent(sync[1]));
+      return await resolveSync(decodeURIComponent(sync[1]), url.searchParams.get('client') ?? undefined);
     } catch {
       return undefined;
     }

@@ -1,6 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -52,11 +51,7 @@ async function processesUsing(home) {
  * HOTSHEET_HOME to find that server's discovery record, and match the build the host launched.
  */
 async function stopMachineServer(home) {
-  const release = resolve(repoRoot, 'target/release');
-  const cli = existsSync(resolve(release, 'hotsheet-server'))
-    ? resolve(release, 'hotsheet-cli')
-    : resolve(repoRoot, 'target/debug/hotsheet-cli');
-  await run(cli, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
+  await run(workingTreeBinaries.HOTSHEET_CLI_BIN, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
     env: { ...process.env, HOTSHEET_HOME: home },
   }).catch(() => undefined);
   const deadline = Date.now() + 10_000;
@@ -68,6 +63,13 @@ async function stopMachineServer(home) {
 const productionEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST') && name !== 'NODE_ENV' && name !== 'TEST'),
 );
+
+// Exercise the working tree's server, not a possibly stale release build the host would prefer.
+const workingTreeBinaries = {
+  HOTSHEET_SERVER_BIN: resolve(repoRoot, 'target/debug/hotsheet-server'),
+  HOTSHEET_CLI_BIN: resolve(repoRoot, 'target/debug/hotsheet-cli'),
+  HOTSHEET_MIGRATE_BIN: resolve(repoRoot, 'target/debug/hotsheet-migrate'),
+};
 
 beforeAll(async () => {
   await run('npm', ['run', 'build'], { cwd: webRoot, env: productionEnvironment });
@@ -86,7 +88,7 @@ it('serves the production client and the local bridge without Vite', async () =>
   try {
     child = spawn(process.execPath, ['dist-host/local-host.js', '--port', String(port)], {
       cwd: webRoot,
-      env: { ...productionEnvironment, HOTSHEET_HOME: home },
+      env: { ...productionEnvironment, ...workingTreeBinaries, HOTSHEET_HOME: home },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', (chunk) => (log += chunk));
@@ -117,6 +119,35 @@ it('serves the production client and the local bridge without Vite', async () =>
     const checkouts = await fetch(`${origin}/__hotsheet/checkouts`);
     expect(checkouts.status).toBe(200);
     expect(Array.isArray(await checkouts.json())).toBe(true);
+
+    // HS2-ARJ9J1: a project's store is hosted while a tab has it open, unhosted when the last
+    // tab closes it, and hosted again by the next request through that project.
+    const project = resolve(home, 'app'),
+      ticketStore = resolve(home, 'app.hs2');
+    await mkdir(project);
+    await run(workingTreeBinaries.HOTSHEET_CLI_BIN, ['-C', ticketStore, 'init', '--prefix', 'LH'], {
+      env: { ...process.env, HOTSHEET_HOME: home },
+    });
+    const opened = await fetch(`${origin}/__hotsheet/projects/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: project, ticketStore }),
+    });
+    expect(opened.status).toBe(201);
+    const { id, apiPath } = await opened.json(),
+      api = `${origin}${apiPath}`,
+      hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
+    expect((await fetch(`${api}/ws/poll?timeout_ms=0&since=0&client=e2e-tab`)).status).toBe(200);
+    expect(await hostsProject()).toBe(true);
+    expect((await fetch(`${api}/close?client=e2e-tab`, { method: 'POST' })).status).toBe(204);
+    let unhosted = false;
+    for (let attempt = 0; attempt < 50 && !unhosted; attempt += 1) {
+      unhosted = !(await hostsProject());
+      if (!unhosted) await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    }
+    expect(unhosted).toBe(true);
+    expect((await fetch(`${api}/checkouts/${encodeURIComponent(id)}/tickets`)).status).toBe(200);
+    expect(await hostsProject()).toBe(true);
   } finally {
     await browser?.close();
     if (child) {

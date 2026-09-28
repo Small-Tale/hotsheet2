@@ -79,7 +79,7 @@ async function installProjects(page: Page) {
   let holdBetaRefresh = false;
   let heldBetaTickets: Route | undefined;
 
-  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', (socket) => {
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
     const projectId = decodeURIComponent(new URL(socket.url()).pathname.match(/project-api\/([^/]+)/)?.[1] ?? '');
     sockets.set(projectId, [...(sockets.get(projectId) ?? []), socket]);
     socket.onClose(() => {

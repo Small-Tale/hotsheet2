@@ -178,6 +178,27 @@ short-lived write hashes suppress their watcher echoes. Unmarked external filesy
 are parsed into the index from their exact changed paths before regenerating the same bounded
 projection.
 
+**Hosting follows open projects (HS2-ARJ9J1).** Stores hosted because a project opened them
+stay hosted only while they are in use. The primary store, stores listed in `stores.json`,
+and stores added with `POST /stores` stay hosted for the life of the server. A client tags
+each change stream, `GET /ws/poll` or `/ws/sync`, with `checkout=<id>` and `client=<tab id>`.
+The web bridge adds `checkout`, since the browser only knows its project.
+
+- **Leases:** a lease stays live while a socket is open or a poll is in flight, and for 60 s
+  after, which covers the gap between long-polls.
+- **Explicit close:** a client closing a project calls `POST /checkouts/{reference}/close?client=<id>`.
+  That drops its lease immediately and triggers an unhost sweep; an unknown checkout returns 404.
+- **What the sweep keeps:** it unhosts a project store only when no live lease names a checkout
+  that references it, and nothing else needs it. Live needs are a drive on the store, a live
+  terminal whose working directory lies inside such a checkout, or an unexpired claim in the
+  store.
+- **Grace period:** without an explicit close, the sweep runs 10 minutes after the leases lapse.
+- **Unhosting** drops the store's index, watcher, discovery file and writer lock, and stops the
+  repository monitor of any checkout nobody has open.
+- **Pinning:** a change stream that names no checkout, from an older client, pins every store.
+- **Re-hosting:** a lease on a checkout, a checkout-scoped request, or a new `POST /projects/open`
+  hosts the store again, so a tab that slept past the grace period keeps working.
+
 ### Headless platform APIs
 
 The authenticated server exposes checkout-scoped repository snapshots at

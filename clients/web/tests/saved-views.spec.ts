@@ -104,7 +104,7 @@ async function mockSavedViews(page: Page) {
       });
     return route.continue();
   });
-  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', () => undefined);
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
   return () => views;
 }
 

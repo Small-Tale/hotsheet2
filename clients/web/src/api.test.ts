@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Api, encodeAttachmentFilename, turnStreamEvents, TurnStreamReplayGuard } from './api';
+import { Api, CHANGE_STREAM_CLIENT_ID, encodeAttachmentFilename, turnStreamEvents, TurnStreamReplayGuard } from './api';
 import { serverInFlightCount } from './server-busy';
 
 describe('server-busy tracking option (HS2-AZZ9TF)', () => {
@@ -188,7 +188,7 @@ describe('repository setup transport', () => {
 describe('change polling transport', () => {
   it('builds a credential-free same-origin WebSocket URL', () => {
     expect(new Api('/__hotsheet/project-api/project%20one').changeWebSocketUrl()).toBe(
-      'ws://localhost/__hotsheet/project-api/project%20one/ws/sync',
+      `ws://localhost/__hotsheet/project-api/project%20one/ws/sync?client=${CHANGE_STREAM_CLIENT_ID}`,
     );
   });
   it('requests the secret-hiding project proxy with a cursor and abort signal', async () => {
@@ -198,7 +198,7 @@ describe('change polling transport', () => {
     const controller = new AbortController();
     await expect(new Api('/api').pollEvents(7, controller.signal, 1234)).resolves.toMatchObject({ cursor: 8 });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/ws/poll?timeout_ms=1234&since=7',
+      `/api/ws/poll?timeout_ms=1234&since=7&client=${CHANGE_STREAM_CLIENT_ID}`,
       expect.objectContaining({ signal: controller.signal }),
     );
     fetchMock.mockRestore();
@@ -810,4 +810,17 @@ it('allocates distinct transfer operation IDs on LAN HTTP, including failure the
     fetchMock.mockRestore();
     vi.unstubAllGlobals();
   }
+});
+
+describe('project session close (HS2-ARJ9J1)', () => {
+  it('tells the server this tab closed the project', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await new Api('/api', 'secret').closeProjectSession();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/close?client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    vi.unstubAllGlobals();
+  });
 });

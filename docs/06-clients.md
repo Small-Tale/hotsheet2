@@ -1660,6 +1660,10 @@ view layer is new work.
 Closing a project tab always requires confirmation, including when no live resources are
 running; the empty-resource form is compact, names the destructive action directly, and
 does not present the absence of running resources as a warning.
+Once the project closes, the client tells the server with `POST …/close?client=<tab id>`, the
+same per-tab id that tags its change stream. The server can then stop hosting stores that no
+open project needs ([04-core-server-cli.md](04-core-server-cli.md), HS2-ARJ9J1). The call is
+best-effort; if it fails, the unhost happens after the lease lapses and the grace period.
 The close flow first inventories live terminals and AI chats. When any are running, the
 confirmation dialog uses the shared menu navigation to select an item and
 shows either its live, read-only terminal renderer or the exact shared `AIConversation`

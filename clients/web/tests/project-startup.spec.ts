@@ -87,7 +87,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       ),
     },
   );
-  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', () => undefined);
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
   await page.route('**/__hotsheet/**', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),

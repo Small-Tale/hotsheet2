@@ -3879,6 +3879,196 @@ async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output(
     assert!(seen, "the working-tree change was not announced within 10s");
 }
 
+/// A project's store is hosted while some client has it open and unhosted once the last one
+/// closes it, unless live work still needs it; a later request hosts it again (HS2-ARJ9J1).
+#[tokio::test]
+async fn closing_the_last_open_project_unhosts_its_store_until_it_is_needed_again() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let store_path = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    let store = FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout, "stores": [store_path]}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let hosted = |app: axum::Router| async move {
+        body_json(app.oneshot(authed("GET", "/stores", None)).await.unwrap())
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["prefix"] == "AP")
+    };
+    let request = |app: axum::Router, method: &'static str, uri: String| async move {
+        app.oneshot(authed(method, &uri, None))
+            .await
+            .unwrap()
+            .status()
+    };
+    let eventually = |app: axum::Router, want: bool| async move {
+        for _ in 0..50 {
+            if hosted(app.clone()).await == want {
+                return true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        false
+    };
+    let poll =
+        |client: &str| format!("/ws/poll?since=0&timeout_ms=0&checkout={id}&client={client}");
+    let close = |client: &str| format!("/checkouts/{id}/close?client={client}");
+    assert!(hosted(app.clone()).await);
+
+    // Two tabs have the project open; closing one keeps the store hosted.
+    assert_eq!(
+        request(app.clone(), "GET", poll("tab-1")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request(app.clone(), "GET", poll("tab-2")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request(app.clone(), "POST", close("tab-1")).await,
+        StatusCode::NO_CONTENT
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        hosted(app.clone()).await,
+        "another tab still has the project open"
+    );
+
+    // A live claim keeps it hosted even after the last close.
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "AP",
+        Timestamp::new("2026-09-28T00:00:00Z"),
+        NewTicket {
+            title: "claimed".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::claim(
+        &store,
+        &ticket.id,
+        &Timestamp::new("2026-09-28T00:00:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        "worker",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        request(app.clone(), "POST", close("tab-2")).await,
+        StatusCode::NO_CONTENT
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        hosted(app.clone()).await,
+        "a live claim still needs the store"
+    );
+
+    // Once nothing needs it, the next close unhosts it.
+    ops::release(
+        &store,
+        &ticket.id,
+        Timestamp::new("2026-09-28T00:01:00Z"),
+        "worker",
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        request(app.clone(), "POST", close("tab-2")).await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(
+        eventually(app.clone(), false).await,
+        "the closed project's store stayed hosted"
+    );
+
+    // A request through the checkout hosts it again transparently.
+    assert_eq!(
+        request(app.clone(), "GET", format!("/checkouts/{id}/tickets")).await,
+        StatusCode::OK
+    );
+    assert!(hosted(app.clone()).await);
+    // Closing an unknown checkout is a 404, not a silent success.
+    assert_eq!(
+        request(app.clone(), "POST", "/checkouts/nope/close?client=x".into()).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+/// A subscription that names no checkout (an older client) pins every project store.
+#[tokio::test]
+async fn an_untagged_change_stream_keeps_every_project_store_hosted() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let store_path = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout, "stores": [store_path]}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let status = app
+        .clone()
+        .oneshot(authed("GET", "/ws/poll?since=0&timeout_ms=0", None))
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::OK);
+    let status = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{id}/close?client=tab"),
+            None,
+        ))
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let stores = body_json(app.oneshot(authed("GET", "/stores", None)).await.unwrap()).await;
+    assert!(
+        stores
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["prefix"] == "AP"),
+        "{stores}"
+    );
+}
+
 #[tokio::test]
 async fn checkout_search_matches_slug_details_and_notes() {
     let (_primary, st) = state();

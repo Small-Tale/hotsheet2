@@ -74,7 +74,7 @@ describe('projectSessionRegistry', () => {
       'ws://127.0.0.1:1/terminals/terminal/attach?secret=private',
     );
     await expect(ssrGraph.projectChangeWebSocketUrl('module-graph-checkout')).resolves.toBe(
-      'ws://127.0.0.1:1/ws/sync?secret=private',
+      'ws://127.0.0.1:1/ws/sync?secret=private&checkout=module-graph-checkout',
     );
   });
 });
@@ -178,6 +178,14 @@ describe('projectScopedServerPath', () => {
       '/checkouts/project%20one/terminal-settings',
     );
     expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/ai-settings');
+    // A project's explicit close and its change stream carry the checkout (HS2-ARJ9J1).
+    expect(projectScopedServerPath('project one', '/close?client=tab-1')).toBe(
+      '/checkouts/project%20one/close?client=tab-1',
+    );
+    expect(projectScopedServerPath('project one', '/ws/poll?timeout_ms=0&client=tab-1')).toBe(
+      '/ws/poll?timeout_ms=0&client=tab-1&checkout=project%20one',
+    );
+    expect(projectScopedServerPath('project one', '/ws/poll')).toBe('/ws/poll?checkout=project%20one');
     expect(projectScopedServerPath('project one', '/checkouts/project%20one/tickets')).toBe(
       '/checkouts/project%20one/tickets',
     );

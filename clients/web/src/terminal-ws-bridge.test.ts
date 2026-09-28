@@ -63,6 +63,11 @@ describe('terminal WebSocket bridge', () => {
       browserProjectWebSocketTarget('/__hotsheet/project-api/project%20one/terminals/main/attach', terminal, sync),
     ).resolves.toBe('terminal:project one:main');
     expect(sync).toHaveBeenCalledOnce();
+    // The browser tab's client id passes through so the server can track which projects are open.
+    await expect(
+      browserProjectWebSocketTarget('/__hotsheet/project-api/project%20one/ws/sync?client=tab-1', terminal, sync),
+    ).resolves.toBe('sync:project one');
+    expect(sync).toHaveBeenLastCalledWith('project one', 'tab-1');
   });
 
   it('forwards text and binary frames across an actual WebSocket upgrade', async () => {

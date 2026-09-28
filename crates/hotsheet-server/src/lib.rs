@@ -17,6 +17,7 @@ pub mod lifecycle;
 pub mod media;
 pub mod multistore;
 pub mod notifications;
+mod presence;
 pub mod repository_browser;
 pub mod source_revision;
 pub mod sync_loop;
@@ -91,9 +92,16 @@ pub struct AppState {
     /// here as the default entry; additional stores are added via `POST /stores`.
     host: StoreHost,
     injected_providers: ProviderRegistry,
-    /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
-    /// store's watcher is held by the server binary). Never read — just not dropped.
-    watchers: Arc<Mutex<Vec<WatchHandle>>>,
+    /// Keeps the fs-watchers of `POST /stores`-registered stores alive, by store id (the
+    /// default store's watcher is held by the server binary). Removing one stops it.
+    watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
+    /// Which checkouts some client has open, from live change-stream leases (HS2-ARJ9J1).
+    presence: presence::Presence,
+    /// Stores hosted because a project opened them: the only ones unhosted again once no open
+    /// checkout references them. The default and startup-configured stores stay hosted.
+    project_hosted: Arc<Mutex<std::collections::HashSet<String>>>,
+    /// When the next unhost sweep is due, and the wake-up for an earlier request.
+    unhost_sweep: Arc<UnhostSweep>,
     /// One bounded monitor per open code checkout. It emits only invalidation events;
     /// clients obtain the authoritative status through the existing endpoint.
     repository_watchers: Arc<Mutex<std::collections::HashMap<String, RepositoryWatchHandle>>>,
@@ -110,13 +118,14 @@ pub struct AppState {
     /// here, so `lifecycle::find_instance(storeX)` resolves to this one machine server for
     /// each project it hosts. `None` in tests (they never write under the machine home).
     instance: Arc<Mutex<Option<InstanceMeta>>>,
-    /// Keeps the per-store instance-file guards alive; they remove their files on shutdown.
-    instance_guards: Arc<Mutex<Vec<lifecycle::InstanceGuard>>>,
+    /// Keeps the per-store instance-file guards alive, by store root; they remove their files
+    /// on shutdown or when the store is unhosted.
+    instance_guards: Arc<Mutex<std::collections::HashMap<String, lifecycle::InstanceGuard>>>,
     /// Per-hosted-store index-writer locks (HS2-AYCA1W). The primary `store`'s lock is held
     /// by the server binary (main.rs); this holds one for every *additional* hosted store, so
     /// no second machine server double-writes a registered store's index. Real-run only (a
     /// held lock touches the machine home) — acquired in `register_store_instance`.
-    writer_locks: Arc<Mutex<Vec<lifecycle::WriterLock>>>,
+    writer_locks: Arc<Mutex<std::collections::HashMap<String, lifecycle::WriterLock>>>,
     /// A "kick" to the background sync loop (HS2-731C2X): a server write signals it so local
     /// changes push promptly rather than waiting for the next interval. `None` until the
     /// loop is spawned (tests don't run it).
@@ -281,13 +290,16 @@ impl AppState {
             event_log,
             host,
             injected_providers: ProviderRegistry::default(),
-            watchers: Arc::new(Mutex::new(Vec::new())),
+            watchers: Arc::default(),
+            presence: presence::Presence::default(),
+            project_hosted: Arc::default(),
+            unhost_sweep: Arc::default(),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
             github_auth_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
-            instance_guards: Arc::new(Mutex::new(Vec::new())),
-            writer_locks: Arc::new(Mutex::new(Vec::new())),
+            instance_guards: Arc::default(),
+            writer_locks: Arc::default(),
             sync_kick: Arc::new(Mutex::new(None)),
             local_write_hashes: Default::default(),
             permissions,
@@ -703,6 +715,7 @@ impl AppState {
             paths.insert(project, path);
         }
         let store_root = store.root().to_path_buf();
+        let watched_id = id.clone();
         match spawn_watcher_for(
             WatchTarget {
                 entry,
@@ -717,7 +730,7 @@ impl AppState {
         ) {
             Ok(handle) => {
                 if let Ok(mut w) = self.watchers.lock() {
-                    w.push(handle);
+                    w.insert(watched_id, handle);
                 }
             }
             Err(e) => eprintln!("watcher for {} failed to start: {e}", store_root.display()),
@@ -751,6 +764,97 @@ impl AppState {
                 "repository watcher for {} failed to start: {error}",
                 root.display()
             ),
+        }
+    }
+
+    /// The hosted entry for a checkout's git source, hosting it again when an earlier sweep
+    /// unhosted it (HS2-ARJ9J1): a client that kept a project open across a long sleep keeps
+    /// working without reopening it.
+    fn hosted_source(
+        &self,
+        source: &hotsheet_ticketing::checkouts::TicketSource,
+    ) -> Option<StoreEntry> {
+        if let Some(entry) = self.host.get(&source.connection_id) {
+            return Some(entry);
+        }
+        if source.provider != "git" {
+            return None;
+        }
+        let store = FsStore::open(&source.locator).ok()?;
+        self.host_project_store(store).ok()?;
+        self.host.get(&source.connection_id)
+    }
+
+    /// Host a store for an open project, making it eligible to be unhosted once no open
+    /// checkout references it (HS2-ARJ9J1).
+    fn host_project_store(&self, store: FsStore) -> Result<bool, ApiError> {
+        let id = multistore::store_url_id(&store);
+        let pinned = self.host.contains(&id) && !self.is_project_hosted(&id);
+        let added = self.host_store(store)?;
+        if !pinned && let Ok(mut hosted) = self.project_hosted.lock() {
+            hosted.insert(id);
+        }
+        self.request_unhost_sweep(presence::POLL_RECONNECT_GAP + presence::UNHOST_GRACE);
+        Ok(added)
+    }
+
+    fn is_project_hosted(&self, id: &str) -> bool {
+        self.project_hosted
+            .lock()
+            .is_ok_and(|hosted| hosted.contains(id))
+    }
+
+    /// Stop hosting a project store: its index, watcher, discovery file and writer lock go,
+    /// and the next open or checkout request hosts it again (HS2-ARJ9J1).
+    fn unhost_store(&self, id: &str) {
+        if let Ok(mut hosted) = self.project_hosted.lock()
+            && !hosted.remove(id)
+        {
+            return;
+        }
+        let Some(entry) = self.host.unregister(id) else {
+            return;
+        };
+        let root = entry.store.root().display().to_string();
+        let watcher = self.watchers.lock().ok().and_then(|mut w| w.remove(id));
+        let guard = self
+            .instance_guards
+            .lock()
+            .ok()
+            .and_then(|mut g| g.remove(&root));
+        let lock = self
+            .writer_locks
+            .lock()
+            .ok()
+            .and_then(|mut w| w.remove(&root));
+        // Stop the watcher and release the files outside every lock.
+        drop((watcher, guard, lock));
+        eprintln!("unhosted store {root}: no open project references it");
+    }
+
+    /// Ask for an unhost sweep `delay` from now; an earlier pending request wins.
+    fn request_unhost_sweep(&self, delay: Duration) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let at = tokio::time::Instant::now() + delay;
+        {
+            let Ok(mut due) = self.unhost_sweep.due.lock() else {
+                return;
+            };
+            if due.is_some_and(|current| current <= at) {
+                return;
+            }
+            *due = Some(at);
+        }
+        self.unhost_sweep.wake.notify_one();
+        if !self
+            .unhost_sweep
+            .started
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            let state = self.clone();
+            runtime.spawn(async move { run_unhost_sweeper(state).await });
         }
     }
 
@@ -805,7 +909,7 @@ impl AppState {
             match lifecycle::acquire_writer_lock(store_path) {
                 Ok(lock) => {
                     if let Ok(mut w) = self.writer_locks.lock() {
-                        w.push(lock);
+                        w.insert(store_path.display().to_string(), lock);
                     }
                 }
                 Err(lifecycle::LockError::Held(pid)) => eprintln!(
@@ -819,7 +923,7 @@ impl AppState {
         match lifecycle::register_instance(&info, store_path) {
             Ok(guard) => {
                 if let Ok(mut g) = self.instance_guards.lock() {
-                    g.push(guard);
+                    g.insert(store_path.display().to_string(), guard);
                 }
             }
             Err(e) => eprintln!(
@@ -1326,6 +1430,7 @@ pub fn app(state: AppState) -> Router {
         .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
         .route("/projects/open", post(open_project))
+        .route("/checkouts/{reference}/close", post(close_checkout_session))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
             "/checkouts/{reference}/commands",
@@ -3189,7 +3294,7 @@ async fn open_project(
         for source in sources.iter().filter(|source| source.provider == "git") {
             let store = FsStore::open(&source.locator)
                 .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-            hosting_state.host_store(store)?;
+            hosting_state.host_project_store(store)?;
         }
         Ok::<_, ApiError>(sources)
     })
@@ -3658,11 +3763,19 @@ fn checkout_entries(
         let canonical = FsPath::new(&store_path)
             .canonicalize()
             .unwrap_or_else(|_| store_path.clone().into());
-        let Some((store_id, _)) =
-            state.host.locations().into_iter().find(|(_, root)| {
-                root.canonicalize().unwrap_or_else(|_| root.clone()) == canonical
-            })
-        else {
+        let find =
+            || {
+                state.host.locations().into_iter().find(|(_, root)| {
+                    root.canonicalize().unwrap_or_else(|_| root.clone()) == canonical
+                })
+            };
+        // A sweep may have unhosted it while the project stayed open (HS2-ARJ9J1).
+        let found = find().or_else(|| {
+            let store = FsStore::open(&store_path).ok()?;
+            state.host_project_store(store).ok()?;
+            find()
+        });
+        let Some((store_id, _)) = found else {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 format!("checkout {reference} links an unhosted store: {store_path}"),
@@ -4335,7 +4448,7 @@ fn resolve_project_ticket_ref(
         .resolve_source(&reference.project_id, &reference.connection_id)
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     let native_id = if source.provider == "git" {
-        let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+        let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
                 StatusCode::CONFLICT,
                 format!("checkout links an unhosted git source: {}", source.locator),
@@ -4371,7 +4484,7 @@ async fn create_checkout_ticket(
         q.source.as_deref().or(q.store.as_deref()),
     )?;
     let ticket = if source.provider == "git" {
-        let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+        let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
                 StatusCode::CONFLICT,
                 format!("checkout links an unhosted git source: {}", source.locator),
@@ -4441,7 +4554,7 @@ fn read_checkout_ticket_source(
     required: bool,
 ) -> Result<Option<ResolvedTicket>, ApiError> {
     if source.provider == "git" {
-        let Some(entry) = state.host.get(&source.connection_id) else {
+        let Some(entry) = state.hosted_source(source) else {
             return if required {
                 Err(ApiError::new(
                     StatusCode::CONFLICT,
@@ -4693,7 +4806,7 @@ async fn update_checkout_ticket(
             )?,
         }));
     }
-    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+    let entry = state.hosted_source(&source).ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
             "checkout links an unhosted git source",
@@ -4821,7 +4934,7 @@ async fn close_checkout_ticket(
             ticket: contextualize_api_ticket(ticket, &settings)?,
         }));
     }
-    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+    let entry = state.hosted_source(&source).ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
             "checkout links an unhosted git source",
@@ -8448,7 +8561,213 @@ async fn ws_sync(
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
     let rx = state.events.subscribe();
-    ws.on_upgrade(move |socket| ws_loop(socket, rx))
+    let lease = begin_presence(
+        &state,
+        params.checkout.as_deref(),
+        params.client.as_deref(),
+        presence::Channel::Socket,
+    );
+    ws.on_upgrade(move |socket| async move {
+        ws_loop(socket, rx).await;
+        drop(lease);
+    })
+}
+
+/// Start a change-stream lease. A lease on a checkout also brings its stores and repository
+/// monitor back if an earlier sweep stopped them, off the request path.
+fn begin_presence(
+    state: &AppState,
+    checkout: Option<&str>,
+    client: Option<&str>,
+    channel: presence::Channel,
+) -> presence::PresenceGuard {
+    let lease = state.presence.begin(checkout, client, channel);
+    state.request_unhost_sweep(presence::POLL_RECONNECT_GAP + presence::UNHOST_GRACE);
+    if let Some(reference) = checkout.filter(|reference| !reference.is_empty()) {
+        let state = state.clone();
+        let reference = reference.to_string();
+        tokio::task::spawn_blocking(move || {
+            let Ok(checkout) = state.checkout_registry.resolve(&reference) else {
+                return;
+            };
+            for source in checkout.sources.iter().filter(|s| s.provider == "git") {
+                state.hosted_source(source);
+            }
+            state.watch_checkout_repository(&checkout);
+        });
+    }
+    lease
+}
+
+/// `POST /checkouts/{reference}/close?client=<id>` — a client closed this project, so its
+/// lease ends now and the project's stores are unhosted unless something still needs them
+/// (HS2-ARJ9J1).
+async fn close_checkout_session(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(params): Query<CloseSessionParams>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    state.presence.close(&checkout.id, params.client.as_deref());
+    state.request_unhost_sweep(Duration::ZERO);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+struct CloseSessionParams {
+    client: Option<String>,
+}
+
+/// When the next unhost sweep runs; a request for an earlier time wakes the sweeper.
+#[derive(Default)]
+struct UnhostSweep {
+    due: Mutex<Option<tokio::time::Instant>>,
+    wake: tokio::sync::Notify,
+    started: std::sync::atomic::AtomicBool,
+}
+
+/// Run unhost sweeps as they come due (HS2-ARJ9J1). A local timer only: it issues no network
+/// requests, and stays idle when no project store is hosted.
+async fn run_unhost_sweeper(state: AppState) {
+    loop {
+        let due = state.unhost_sweep.due.lock().ok().and_then(|due| *due);
+        let Some(at) = due else {
+            state.unhost_sweep.wake.notified().await;
+            continue;
+        };
+        tokio::select! {
+            () = tokio::time::sleep_until(at) => {
+                if let Ok(mut due) = state.unhost_sweep.due.lock()
+                    && due.is_some_and(|due| due <= tokio::time::Instant::now())
+                {
+                    *due = None;
+                }
+                sweep_unhosted(&state).await;
+            }
+            () = state.unhost_sweep.wake.notified() => {}
+        }
+    }
+}
+
+/// Unhost every project store that no open checkout references and no live work needs: a
+/// drive on the store, a terminal inside a checkout that uses it, or a live claim in it.
+/// Repository monitors of checkouts nobody has open stop too. While project stores remain
+/// hosted, another sweep is scheduled for when their leases could have lapsed.
+async fn sweep_unhosted(state: &AppState) {
+    let live = state.presence.live();
+    let terminal_dirs = live_terminal_dirs(state).await;
+    let drive_sources: std::collections::HashSet<String> = state
+        .client_drives
+        .list()
+        .into_iter()
+        .map(|drive| drive.source)
+        .collect();
+    let sweeping = state.clone();
+    let remaining = tokio::task::spawn_blocking(move || {
+        let state = sweeping;
+        let checkouts = state.checkout_registry.list().unwrap_or_default();
+        let in_terminal = |checkout: &hotsheet_ticketing::checkouts::Checkout| {
+            terminal_dirs
+                .iter()
+                .any(|dir| dir.starts_with(&checkout.root))
+        };
+        let hosted: Vec<String> = state
+            .project_hosted
+            .lock()
+            .map(|hosted| hosted.iter().cloned().collect())
+            .unwrap_or_default();
+        let mut eligible = Vec::new();
+        let mut busy = std::collections::HashSet::new();
+        for id in hosted {
+            let referencing: Vec<&hotsheet_ticketing::checkouts::Checkout> = checkouts
+                .iter()
+                .filter(|checkout| {
+                    checkout
+                        .sources
+                        .iter()
+                        .any(|source| source.provider == "git" && source.connection_id == id)
+                })
+                .collect();
+            let referenced_live = live.untagged
+                || referencing
+                    .iter()
+                    .any(|checkout| live.checkouts.contains(&checkout.id));
+            if !referenced_live
+                && (drive_sources.contains(&id)
+                    || referencing.iter().any(|checkout| in_terminal(checkout))
+                    || store_has_live_claim(&state, &id))
+            {
+                busy.insert(id.clone());
+            }
+            eligible.push((id, referencing.iter().map(|c| c.id.clone()).collect()));
+        }
+        let candidates = presence::unhost_candidates(&eligible, &live, &busy);
+        for id in &candidates {
+            state.unhost_store(id);
+        }
+        if !live.untagged {
+            let stopped: Vec<RepositoryWatchHandle> = state
+                .repository_watchers
+                .lock()
+                .map(|mut watchers| {
+                    checkouts
+                        .iter()
+                        .filter(|checkout| {
+                            !live.checkouts.contains(&checkout.id) && !in_terminal(checkout)
+                        })
+                        .filter_map(|checkout| watchers.remove(&checkout.id))
+                        .collect()
+                })
+                .unwrap_or_default();
+            drop(stopped);
+        }
+        eligible.len() - candidates.len()
+    })
+    .await
+    .unwrap_or(0);
+    if remaining > 0 {
+        state.request_unhost_sweep(presence::POLL_RECONNECT_GAP + presence::UNHOST_GRACE);
+    }
+}
+
+/// The working directories of live terminals, which keep their checkout's stores hosted.
+async fn live_terminal_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
+    let infos: Vec<TerminalInfo> = if let Some(broker) = &state.terminal_broker {
+        match broker.call(hotsheet_terminals::BrokerRequest::List).await {
+            Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => {
+                terminals.into_iter().map(broker_info).collect()
+            }
+            _ => Vec::new(),
+        }
+    } else {
+        state
+            .terminals
+            .list()
+            .into_iter()
+            .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
+            .collect()
+    };
+    infos
+        .into_iter()
+        .filter(|info| info.alive)
+        .filter_map(|info| info.cwd.map(std::path::PathBuf::from))
+        .collect()
+}
+
+/// Whether any ticket in a hosted store is claimed under a lease that has not expired.
+fn store_has_live_claim(state: &AppState, id: &str) -> bool {
+    let Some(entry) = state.host.get(id) else {
+        return false;
+    };
+    let now = now();
+    entry.store.list_tickets().is_ok_and(|tickets| {
+        tickets
+            .iter()
+            .any(|ticket| ticket.claimed_by.is_some() && !ops::claim_available(ticket, &now))
+    })
 }
 
 async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<ChangeEvent>) {
@@ -8475,6 +8794,9 @@ struct PollParams {
     since: Option<u64>,
     /// How long to block for the next event when none are newer than `since` (ms, capped).
     timeout_ms: Option<u64>,
+    /// The checkout this subscription serves and the client holding it (HS2-ARJ9J1).
+    checkout: Option<String>,
+    client: Option<String>,
 }
 
 /// One long-poll response: the new cursor, any events since the requested one, and whether
@@ -8504,6 +8826,12 @@ async fn poll_events(
     {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
+    let _lease = begin_presence(
+        &state,
+        params.checkout.as_deref(),
+        params.client.as_deref(),
+        presence::Channel::Poll,
+    );
     // No `since` → hand back the current cursor with no backlog (initial handshake).
     let Some(since) = params.since else {
         return Json(PollResponse {
@@ -8866,6 +9194,10 @@ struct RenewReq {
 #[derive(Debug, Deserialize)]
 struct WsParams {
     secret: Option<String>,
+    /// The checkout this subscription serves and the client (browser tab) holding it, so the
+    /// server knows which projects are open (HS2-ARJ9J1).
+    checkout: Option<String>,
+    client: Option<String>,
 }
 
 // The full-ticket + note wire DTOs (`ApiTicket`/`ApiNote`) and their `From<&Ticket>`

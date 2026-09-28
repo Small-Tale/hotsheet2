@@ -513,6 +513,13 @@ export interface ApiOptions {
    */
   trackBusy?: boolean;
 }
+/** Identifies this browser tab's change-stream subscriptions to the server, so it knows which
+ * projects some client has open and which it may stop hosting (HS2-ARJ9J1). */
+export const CHANGE_STREAM_CLIENT_ID =
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
 export class Api {
   private readonly trackBusy: boolean;
   constructor(
@@ -885,14 +892,18 @@ export class Api {
   changeWebSocketUrl = () => {
     const url = new URL(`${this.origin}/ws/sync`, typeof location === 'undefined' ? 'http://localhost' : location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('client', CHANGE_STREAM_CLIENT_ID);
     return url.toString();
   };
   pollEvents = (since?: number, signal?: AbortSignal, timeoutMs = 25_000) =>
     this.request<PollResponse>(
-      `/ws/poll?timeout_ms=${timeoutMs}${since === undefined ? '' : `&since=${since}`}`,
+      `/ws/poll?timeout_ms=${timeoutMs}${since === undefined ? '' : `&since=${since}`}&client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`,
       { signal },
       false,
     );
+  /** Tell the server this tab closed the project, so it can stop hosting what nothing else needs. */
+  closeProjectSession = () =>
+    this.request<void>(`/close?client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`, { method: 'POST' });
   resolvePermission = (id: number, decision: 'allow' | 'deny', scope: 'once' | 'always') =>
     this.request<{ connection: string; decision: 'allow' | 'deny'; persisted: boolean }>(`/permissions/${id}`, {
       method: 'POST',

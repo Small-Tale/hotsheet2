@@ -1072,13 +1072,18 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
 export function projectScopedServerPath(projectId: string, path: string): string {
   const [pathname, ...query] = path.split('?'),
     scoped =
+      pathname === '/close' ||
       pathname === '/commands' ||
       pathname === '/command-runs' ||
       pathname === '/views' ||
       pathname === '/terminal-settings' ||
       /^\/commands\/[^/]+\/run$/.test(pathname) ||
       /^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
-  return `${scoped ? `/checkouts/${encodeURIComponent(projectId)}` : ''}${pathname}${query.length ? `?${query.join('?')}` : ''}`;
+  // The server learns which projects are open from which checkout each change stream serves
+  // (HS2-ARJ9J1); the browser only knows its project, so the bridge names the checkout.
+  let search = query.join('?');
+  if (pathname === '/ws/poll') search = `${search}${search ? '&' : ''}checkout=${encodeURIComponent(projectId)}`;
+  return `${scoped ? `/checkouts/${encodeURIComponent(projectId)}` : ''}${pathname}${search ? `?${search}` : ''}`;
 }
 
 async function refreshSupervisedTarget(target: SessionTarget): Promise<void> {
@@ -1129,13 +1134,16 @@ export async function projectTerminalWebSocketUrl(projectId: string, terminalId:
 
 /** Resolve a browser-facing project session to its authenticated change-stream URL.
  * The browser connects only to the credential-free Vite bridge path. */
-export async function projectChangeWebSocketUrl(projectId: string): Promise<string | undefined> {
+export async function projectChangeWebSocketUrl(projectId: string, client?: string): Promise<string | undefined> {
   const target = sessions.get(projectId);
   if (!target) return undefined;
   await refreshSupervisedTarget(target);
   const url = new URL('/ws/sync', target.url);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.searchParams.set('secret', target.secret);
+  // Which checkout and tab this stream serves, so the server knows the project is open (HS2-ARJ9J1).
+  url.searchParams.set('checkout', projectId);
+  if (client) url.searchParams.set('client', client);
   return url.toString();
 }
 

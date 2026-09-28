@@ -178,6 +178,11 @@ impl StoreHost {
         id
     }
 
+    /// Stop serving a store, returning its entry (HS2-ARJ9J1).
+    pub fn unregister(&self, id: &str) -> Option<StoreEntry> {
+        self.stores.lock().ok()?.remove(id)
+    }
+
     /// The entry for a URL id, if hosted.
     pub fn get(&self, id: &str) -> Option<StoreEntry> {
         self.stores.lock().ok()?.get(id).cloned()

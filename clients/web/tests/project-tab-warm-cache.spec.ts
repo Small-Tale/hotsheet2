@@ -127,7 +127,7 @@ async function installWorkspace(page: Page) {
     { roots: projects.map((item) => item.root) },
   );
 
-  await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', (socket) => {
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
     const id = decodeURIComponent(new URL(socket.url()).pathname.match(/project-api\/([^/]+)/)?.[1] ?? '');
     sockets.set(id, [...(sockets.get(id) ?? []), socket]);
     socket.onClose(() => {

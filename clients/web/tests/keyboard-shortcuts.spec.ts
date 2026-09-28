@@ -235,7 +235,7 @@ for (const apple of [true, false]) {
     }, apple);
     await installFixture(page);
     // Keep the real sync client connected without a zero-delay polling fallback in this HTTP fixture.
-    await page.routeWebSocket('**/__hotsheet/project-api/*/ws/sync', () => undefined);
+    await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {

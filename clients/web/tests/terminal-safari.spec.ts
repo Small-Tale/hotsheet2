@@ -115,7 +115,7 @@ for (const width of [390, 1280]) {
           route.send(message);
         });
       });
-      await page.routeWebSocket('**/ws/sync', (route) => {
+      await page.routeWebSocket(/\/ws\/sync(?:\?.*)?$/, (route) => {
         route.connectToServer();
       });
       page.on('pageerror', (error) => errors.push(error.message));
