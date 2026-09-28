@@ -108,7 +108,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalog.locator('[data-component="list-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="list-item"]')).not.toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-ecdq5k-kerf-catalog-wide.png', fullPage: true });
-  const firstCatalogList = catalog.locator('.kui-catalog__items').first();
+  const firstCatalogList = catalog.locator('[data-component="list"] > [data-component="list"]').first();
   const firstCatalogItem = firstCatalogList.locator('[data-component="list-item"]').first();
   const [listBox, itemBox] = await Promise.all([firstCatalogList.boundingBox(), firstCatalogItem.boundingBox()]);
   expect(itemBox!.x - listBox!.x).toBeCloseTo(8, 0);
@@ -139,10 +139,10 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await relationships.getByText('TagChip', { exact: true }).click();
   await expect(page).toHaveURL('/ux-demo?component=tag-chip');
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
-  const collapse = page.getByRole('button', { name: 'Collapse UX components catalog' });
+  const collapse = page.getByRole('button', { name: 'Hide UX components catalog' });
   await collapse.click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
-  await page.getByRole('button', { name: 'Expand UX components catalog' }).click();
+  await page.getByRole('button', { name: 'Show UX components catalog' }).click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
@@ -178,7 +178,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(page.locator('html')).toHaveClass(/wa-dark/);
   await expect(page.getByRole('button', { name: 'Use light theme' })).toBeVisible();
   await page.setViewportSize({ width: 760, height: 800 });
-  await page.getByRole('button', { name: 'Collapse UX components catalog' }).click();
+  await page.getByRole('button', { name: 'Hide UX components catalog' }).click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-narrow.png', fullPage: true });
 });
@@ -234,7 +234,8 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(listHeaderDemo).toBeVisible();
-  await page.getByRole('button', { name: 'Collapse UX components catalog' }).click();
+  // Kerf 5.0.0-beta.56 collapses the catalog sidebar into a transient overlay on a small screen.
+  await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-header-narrow.png', fullPage: true });
   await page.goto('/ux-demo?component=list-item&dev-review=false');
   await expect(page.getByRole('region', { name: 'ListItem demo' })).toBeVisible();
@@ -585,6 +586,9 @@ test('represents the shared repository-status composition in the UX catalog', as
   await expect(dialog.getByRole('button', { name: 'Open comparison in Glassbox' })).toBeEnabled();
   await dialog.screenshot({ path: '/private/tmp/hs2-qe4j38-repository-comparison.png' });
   await page.setViewportSize({ width: 760, height: 640 });
+  // Kerf 5.0.0-beta.56 keeps the catalog sidebar inline at 760px; hide it so the composition gets the
+  // constrained stage width this check is about rather than the width left beside the sidebar.
+  await page.getByRole('button', { name: 'Hide UX components catalog' }).click();
   await expect(dialog.locator('aside')).toHaveCSS('padding', '16px');
   await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '16px');
   await expect(dialog.locator('[aria-label="Repository identity"] dd').first()).toHaveCSS('white-space', 'normal');
@@ -638,7 +642,7 @@ test('contains the embedded repository status dialog and header actions (HS2-MCH
   await dialog.screenshot({ path: '/private/tmp/hs2-mchtaw-repository-status-wide.png' });
   await page.addStyleTag({
     content:
-      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+      'body{min-width:0}.demo-shell{display:block}.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer,.settings-toggle{display:none}.kui-workbench__main{min-height:0;padding:12px}',
   });
   await page.setViewportSize({ width: 760, height: 640 });
   assertContained(await measureContainment());
@@ -1228,12 +1232,12 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');
-  const captureTarget = page.locator('.kui-catalog__sidebar [data-item-id="ticket-row"]');
+  const captureTarget = page.locator('.kui-workbench__rail--left [data-item-id="ticket-row"]');
   await captureTarget.scrollIntoViewIfNeeded();
   await captureTarget.evaluate((node) => {
     (node as HTMLElement).style.color = 'oklab(55% 0.1 0.1)';
   });
-  await page.locator('.kui-catalog__header').evaluate((node) => {
+  await page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header').evaluate((node) => {
     (node as HTMLElement).style.boxShadow = '0 0 2px oklab(55% 0.1 0.1)';
   });
   expect(await captureTarget.evaluate((node) => getComputedStyle(node).color)).toMatch(/^(?:oklab|rgb)/);
@@ -1259,8 +1263,8 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(selection).toHaveCount(1);
   await expect(selection.locator('.hs-dev-review__handle')).toHaveCount(8);
   const beforeScroll = await selection.boundingBox();
-  // Kerf 5.0.0-beta.51's catalog sidebar is a Pane whose content region owns scrolling (HS2-KMDJRH).
-  const scroller = page.locator('.kui-catalog__sidebar .kui-pane__content');
+  // Kerf 5.0.0-beta.55's catalog sidebar is a Workbench rail Pane whose content region owns scrolling.
+  const scroller = page.locator('.kui-workbench__rail--left .kui-pane__content');
   const initialScroll = await scroller.evaluate((node) => node.scrollTop);
   await scroller.evaluate((node) => {
     node.scrollBy(0, -80);
@@ -1395,7 +1399,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
         height: canvas.height,
       };
     });
-  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([214, 236, 255]);
+  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([214, 233, 249]);
   await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
   await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
   const attachmentInput = dialog.getByLabel('Add attachments');
@@ -1482,18 +1486,19 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = 'playwright-css-live-edit';
-    style.textContent = '.kui-catalog__detail { outline: 6px solid rgb(12, 200, 34); }';
+    style.textContent = '.kui-workbench__main { outline: 6px solid rgb(12, 200, 34); }';
     document.head.append(style);
-    document.querySelector<HTMLElement>('.kui-catalog__header')!.style.paddingTop = '31px';
+    document.querySelector<HTMLElement>('.kui-workbench__main > .kui-pane > .kui-pane__header')!.style.paddingTop =
+      '31px';
   });
-  await expect(page.locator('.kui-catalog__detail')).toHaveCSS('outline-width', '6px');
+  await expect(page.locator('.kui-workbench__main')).toHaveCSS('outline-width', '6px');
   await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
   // Reassert the DevTools-authored inline declaration after screenshot/layout work so the
   // captured "after" CSSOM cannot race a responsive catalog rerender under full-suite load.
-  await page.locator('.kui-catalog__header').evaluate((node) => {
+  await page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header').evaluate((node) => {
     (node as HTMLElement).style.paddingTop = '31px';
   });
-  await expect(page.locator('.kui-catalog__header')).toHaveCSS('padding-top', '31px');
+  await expect(page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header')).toHaveCSS('padding-top', '31px');
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   await expect.poll(() => submitted).toBeTruthy();
   expect(submitted).toMatchObject({
@@ -1512,7 +1517,7 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
     after = decode(attachments[1].dataUrl);
   expect(before).not.toContain('playwright-css-live-edit');
   expect(after).toContain('stylesheet');
-  expect(after).toContain('.kui-catalog__detail { outline: rgb(12, 200, 34) solid 6px; }');
+  expect(after).toContain('.kui-workbench__main { outline: rgb(12, 200, 34) solid 6px; }');
   expect(after).toContain('padding-top: 31px');
   expect(after).not.toBe(before);
   await expect(tool.getByText('HS2-CSS created.')).toBeVisible();
@@ -1661,7 +1666,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
   await expect(row.locator('[data-component="status-badge"]')).toHaveCSS(
     'background-color',
-    'color(srgb 0.84 0.925333 1)',
+    'color(srgb 0.84 0.913412 0.977412)',
   );
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
@@ -1684,7 +1689,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
-  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(255, 56, 60)');
+  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(235, 0, 5)');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/needs-review/);
   await row.click();
   await expect(selected).toHaveJSProperty('checked', false);
@@ -2061,7 +2066,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listStar).not.toHaveClass(/active/);
   await expect(page.getByText('HS2-R76MMW removed from Up Next')).toBeVisible();
 
-  await page.locator('.kui-catalog__sidebar [data-item-id="ticket-board"]').click();
+  await page.locator('.kui-workbench__rail--left [data-item-id="ticket-board"]').click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
@@ -2784,7 +2789,7 @@ test('shows repository comparison as a shared pressed toolbar control', async ({
     .screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-header.png' });
   await page.addStyleTag({
     content:
-      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+      'body{min-width:0}.demo-shell{display:block}.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer,.settings-toggle{display:none}.kui-workbench__main{min-height:0;padding:12px}',
   });
   await page.setViewportSize({ width: 760, height: 640 });
   await page.mouse.move(740, 620);
@@ -2812,7 +2817,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(category.locator('.kui-select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
   const selectedOption = category.locator('wa-option[value="task"]');
-  await expect(selectedOption).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
+  await expect(selectedOption).toHaveCSS('background-color', 'color(srgb 0.84 0.913412 0.977412)');
   // Brand-on-quiet label uses kerf's AA-compliant #1a5dcf on the quiet fill (kerf 5.0.0-beta.15, HS2-228M1N).
   await expect(selectedOption).toHaveCSS('color', 'rgb(26, 93, 207)');
   await expect(selectedOption.locator('.kui-select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
@@ -2913,7 +2918,7 @@ test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecyc
   expect(await dialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
 
   await page.evaluate(() => {
-    const target = document.querySelector<HTMLElement>('.kui-catalog__sidebar')!;
+    const target = document.querySelector<HTMLElement>('.kui-workbench__rail--left')!;
     target.tabIndex = -1;
     target.focus();
   });
@@ -2948,7 +2953,7 @@ test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecyc
 
   await page.addStyleTag({
     content:
-      'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+      'body{min-width:0}.demo-shell{display:block}.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer,.settings-toggle{display:none}.kui-workbench__main{min-height:0;padding:12px}',
   });
   await launcher.click();
   await expect
@@ -3369,7 +3374,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   const annotatedCard = page.getByRole('button', { name: 'Open wide-layout.svg in media gallery, 2 annotations' });
   await expect(annotatedCard.locator('.ticket-attachments__annotation-marker [data-lucide="pencil"]')).toBeVisible();
   await page
-    .locator('.kui-catalog__detail')
+    .locator('.kui-workbench__main')
     .screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-wide.png' });
   await page.evaluate(
     () =>
@@ -3423,6 +3428,8 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     .locator('[data-component="ticket-attachments"]')
     .screenshot({ path: '/private/tmp/hs2-j978e9-annotation-grid-marker.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  // Kerf 5.0.0-beta.56 collapses the catalog sidebar into a transient overlay on a small screen.
+  await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');
   const batchHeader = page.locator('.ticket-attachments__batch > header').first(),
     batchTitle = batchHeader.locator('.ticket-attachments__batch-title'),
     batchPurpose = batchHeader.locator('select');
@@ -3768,7 +3775,7 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   const inspector = page.getByRole('complementary', { name: 'TagChip settings' });
   await expect(inspector).toBeVisible();
   const [detailBox, inspectorBox] = await Promise.all([
-    page.locator('.kui-catalog__detail').boundingBox(),
+    page.locator('.kui-workbench__main').boundingBox(),
     inspector.boundingBox(),
   ]);
   expect(detailBox).not.toBeNull();
@@ -4073,15 +4080,19 @@ test('keeps workspace spacing and the new-ticket action in the project tab bar',
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(header.getByRole('button', { name: /New ticket/ })).toHaveCount(1);
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.locator('.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer').evaluateAll((nodes) => {
-    nodes.forEach((node) => {
-      (node as HTMLElement).style.display = 'none';
+  await page
+    .locator(
+      '.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer',
+    )
+    .evaluateAll((nodes) => {
+      nodes.forEach((node) => {
+        (node as HTMLElement).style.display = 'none';
+      });
     });
-  });
   await page.locator('.demo-shell').evaluate((node) => {
     (node as HTMLElement).style.gridTemplateColumns = '1fr';
   });
-  await page.locator('.kui-catalog__detail,.component-stage').evaluateAll((nodes) => {
+  await page.locator('.kui-workbench__main,.component-stage').evaluateAll((nodes) => {
     nodes.forEach((node) => {
       (node as HTMLElement).style.padding = '0';
       (node as HTMLElement).style.border = '0';
@@ -4194,7 +4205,7 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   const tabStates = page.locator('[data-tab-kind="project"]');
   await expect(tabStates).toHaveCount(16);
   // A still-opening remembered project is a dormant placeholder with a named opening spinner (HS2-2BEJXD).
-  const pendingTab = page.locator('[data-tab-kind="project"][data-pending="true"]');
+  const pendingTab = page.locator('[data-tab-kind="project"][data-project-pending="true"]');
   await expect(pendingTab).toHaveCount(1);
   await expect(pendingTab).toHaveAttribute('aria-busy', 'true');
   await expect(pendingTab.getByRole('tab')).toBeDisabled();

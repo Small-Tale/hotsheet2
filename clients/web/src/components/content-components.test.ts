@@ -314,7 +314,9 @@ describe('content components', () => {
       }),
     );
     expect(covered).toContain('data-reader-active="false"');
-    expect(covered).not.toContain('aria-modal=');
+    // A covered reader does not claim modality; the value is explicit because Kerf 5.0.0-beta.56 leaves a
+    // custom element's aria-* alone when a template omits it.
+    expect(covered).toContain('aria-modal="false"');
   });
 
   it('keeps the feedback catchall at half the ordinary note-editor minimum height', () => {

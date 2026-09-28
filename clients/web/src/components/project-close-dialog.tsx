@@ -137,7 +137,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
       data-project-id={state.projectId}
       data-has-resources={String(hasResources)}
       label={`Close ${state.projectName}?`}
-      aria-describedby={hasResources ? 'project-close-dialog-summary' : undefined}
+      aria-describedby={hasResources ? 'project-close-dialog-summary' : ''}
       open
     >
       {hasResources && (

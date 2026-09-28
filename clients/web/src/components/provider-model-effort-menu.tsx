@@ -48,7 +48,7 @@ export function providerModelEffortChoice(
   return (
     <wa-dropdown-item
       slot="submenu"
-      aria-current={selected ? 'true' : undefined}
+      aria-current={selected ? 'true' : 'false'}
       data-action={action}
       data-value={value}
       value={value}

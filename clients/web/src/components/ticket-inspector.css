@@ -19,6 +19,11 @@
 }
 .ticket-inspector__slug {
   appearance: none;
+  /* Kerf toolbar zones top-align against one control band (beta.55); the slug button fills that
+     band (the toolbar group size) and centers its text, as a direct ToolbarText would. */
+  display: flex;
+  min-height: var(--kui-toolbar-group-size, calc(2px + remify(42px)));
+  align-items: center;
   border: 0;
   padding: 0;
   color: inherit;

@@ -227,7 +227,7 @@ export function createDevApp(
     <title>Hot Sheet UX components</title>
   </head>
   <body>
-    <div id="ux-demo"></div>
+    <div id="ux-demo" class="kui-app-root"></div>
     <script type="module" src="/src/ux-demo/main.tsx"></script>
   </body>
 </html>`);

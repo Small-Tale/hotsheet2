@@ -97,9 +97,11 @@ export function QuickTicketComposer({
       data-key="quick-ticket-composer"
       label="Create ticket"
       role="dialog"
-      aria-modal={expanded ? 'true' : undefined}
+      aria-modal={expanded ? 'true' : 'false'}
       aria-label="Create ticket"
-      aria-hidden={expanded ? undefined : 'true'}
+      // Kerf 5.0.0-beta.56 leaves a custom element's role/aria-* alone when the template omits it, so
+      // every state renders an explicit value rather than relying on the morph to remove it.
+      aria-hidden={expanded ? 'false' : 'true'}
       inert={expanded ? undefined : true}
       open={expanded || undefined}
       data-controlled-open={String(expanded)}

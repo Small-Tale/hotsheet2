@@ -248,8 +248,10 @@ describe('TerminalDashboard', () => {
     expect(css).toMatchSource(/\.workspace-chat-tile\[data-preview-only="true"\] \{ cursor: pointer;/);
   });
   it('keeps the Kerf floating zoom toolbar above the mobile safe area', () => {
+    // Kerf reads --kui-floating-toolbar-inset as an optional override, so the calc() spells out the
+    // default; without it the inset is invalid and the toolbar jumps to the top (HS2-QCSPDH).
     expect(css).toMatchSource(
-      /\.terminal-dashboard__zoom\.kui-floating-toolbar\[data-position="bottom-end"\] \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-right\)\)[^}]*inset-block-end: calc\(var\(--kui-floating-toolbar-inset\) \+ var\(--hotsheet-safe-area-bottom\)\)/,
+      /\.terminal-dashboard__zoom\.kui-floating-toolbar\[data-position="bottom-end"\] \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset, var\(--kui-space-m, 1rem\)\) \+ var\(--hotsheet-safe-area-right\)\)[^}]*inset-block-end: calc\(var\(--kui-floating-toolbar-inset, var\(--kui-space-m, 1rem\)\) \+ var\(--hotsheet-safe-area-bottom\)\)/,
     );
   });
 });

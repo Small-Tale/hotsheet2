@@ -193,7 +193,7 @@ describe('application shell components', () => {
     const pendingTab = String(
       ProjectTab({ id: 'pending:/work/alpha', name: 'alpha', location: 'local', pending: true }),
     );
-    expect(pendingTab).toContain('data-pending="true"');
+    expect(pendingTab).toContain('data-project-pending="true"');
     expect(pendingTab).toContain('data-placeholder="true"');
     expect(pendingTab).toContain('aria-busy="true"');
     expect(pendingTab).toContain('draggable="false"');

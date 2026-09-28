@@ -3,6 +3,17 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+// Kerf's Catalog composes a Workbench of Panes, Toolbars, and Lists and owns only its stage CSS, so
+// the demo loads each composed primitive's stylesheet (Kerf 5.0.0-beta.55).
+import '@kerfjs/ui/workbench.css';
+import '@kerfjs/ui/pane.css';
+import '@kerfjs/ui/toolbar.css';
+import '@kerfjs/ui/text.css';
+import '@kerfjs/ui/row.css';
+import '@kerfjs/ui/list.css';
+import '@kerfjs/ui/list-item.css';
+import '@kerfjs/ui/list-header.css';
+import '@kerfjs/ui/list-inset-text.css';
 import '@kerfjs/ui/catalog.css';
 import '@kerfjs/ui/floating-toolbar.css';
 import '@kerfjs/ui/select/register';
@@ -967,7 +978,7 @@ function DemoApp() {
           </span>
         }
         headerActions={
-          <ToolbarControlGroup label="Demo tools">
+          <ToolbarControlGroup label="Demo tools" content="mixed">
             {import.meta.env.DEV ? (
               <button
                 type="button"
@@ -1057,6 +1068,10 @@ wireTokenSearchFields(root, {
   },
 });
 wireCatalog(root, {
+  // Kerf 5.0.0-beta.56: with the app-owned flag the sidebar is a transient overlay on a small screen
+  // (collapsed at the breakpoint, closed on Escape, an outside press, or a selection) instead of
+  // covering the preview.
+  collapsed: catalogCollapsed,
   onSelect: (id) => {
     selectDemo(id, false);
   },

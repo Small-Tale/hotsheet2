@@ -312,13 +312,16 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   await page.setViewportSize({ width: 720, height: 760 });
   await expect(third).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-t5vnj8-layered-readers-narrow.png', fullPage: true });
+  // In the mobile layout the workspace inspector is a closed overlay whose content Kerf makes inert, so
+  // unwind at the wide layout where the opening link is reachable.
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.keyboard.press('Escape');
   await expect(third).toHaveCount(0);
   await expect(first.getByRole('link', { name: '@third-project/HS2-LINK01' })).toBeFocused();
   await first.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(first).toHaveCount(0);
   await expect(inspectorLink).toBeFocused();
-  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', projects.source.id);
+  await expect(page.getByRole('tab', { name: projects.source.name })).toHaveAttribute('aria-selected', 'true');
   await expect(workspaceInspector).toHaveAttribute('data-ticket-slug', 'KF-ROOT01');
 });
 

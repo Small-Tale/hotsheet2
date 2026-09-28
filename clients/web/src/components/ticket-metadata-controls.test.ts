@@ -91,7 +91,8 @@ describe('ticket metadata controls and inspector panels', () => {
       /<span[^>]*slot="start" class="kui-select__custom-selected"><span class="status-badge status-badge--completed/,
     );
     expect(status).toMatch(/<wa-option value="verified"><span[^>]*slot="start" class="kui-select__icon"/);
-    expect(status).toContain('<wa-divider></wa-divider><wa-option value="backlog"');
+    // Kerf 5.0.0-beta.56 renders Web Awesome's reflected divider defaults (separator role).
+    expect(status).toMatch(/<wa-divider[^>]*role="separator"[^>]*><\/wa-divider><wa-option value="backlog"/);
     expect(status).toContain('<wa-option value="archive"');
     expect(status).toContain('data-lucide="badge-check"');
     expect(status.match(/data-lucide=/g)).toHaveLength(7);

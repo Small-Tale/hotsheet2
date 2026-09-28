@@ -1629,6 +1629,36 @@ demos and production flows.
 The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
 examples using the package component unchanged, including explicit edge dividers.
 
+### Kerf beta.56 adoption
+
+Beta.52–56 (HS2-QCSPDH) changed several things Hot Sheet depends on:
+
+- **Custom elements own their `role` and `aria-*` (KF-KQWZ8M).** A re-render no longer removes a
+  custom element's host `role` or `aria-*` just because the template omits it. A conditional
+  attribute on a Web Awesome host (`wa-dialog`, `wa-dropdown-item`) therefore always renders an
+  explicit value — `aria-hidden="false"`, `aria-modal="false"`, `aria-current="false"`, or an empty
+  `aria-describedby` — rather than relying on the morph to remove it; otherwise a dialog opened after
+  being hidden kept `aria-hidden="true"` and dropped out of the accessibility tree.
+- **Catalog on Workbench.** The UX catalog is a Workbench of Panes, Toolbars, and Lists: the demo
+  imports those primitives' CSS, gives its root a definite height (`.kui-app-root`), and passes its
+  collapsed signal to `wireCatalog`, so the sidebar becomes a transient overlay on a small screen.
+- **Toolbar control band (KF-KM1E5V).** Toolbar zones top-align against one control band; an
+  app-owned control in a zone (the inspector's slug button) sizes itself to
+  `--kui-toolbar-group-size` to stay centered in it.
+- **Icon tile (KF-XZD841).** A direct icon in a `ToolbarControlGroup` is a 16px glyph centered in the
+  control slot; heading glyphs use it instead of an app-owned 22px size.
+- **Floating toolbar inset.** Kerf reads `--kui-floating-toolbar-inset` as an optional override, so
+  app `calc()`s spell out its default; a ResizableRegion restore corner owns the inset for a restore
+  toolbar composed there.
+- **`AppTab` owns `data-pending`.** Project tabs publish their opening state as the app-owned
+  `data-project-pending`.
+- **Visual tokens.** Light-mode brand and danger fills darkened for WCAG AA contrast, and
+  Web Awesome reflected defaults (for example a divider's `role="separator"`) render in Select
+  options.
+
+Beta.55 also shipped a restore-corner `:has()` rule that made style recalculation about 7× slower;
+Hot Sheet stayed on beta.51 until beta.56 fixed it (KF-MEV7Q1).
+
 ### Kerf beta.51 adoption
 
 Beta.51 (HS2-KMDJRH) changed four things Hot Sheet depends on:

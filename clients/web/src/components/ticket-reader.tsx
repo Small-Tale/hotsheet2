@@ -60,12 +60,14 @@ export function TicketReader({
       data-reader-count={stackSize}
       label={label}
       role="dialog"
-      aria-modal={active ? 'true' : undefined}
+      aria-modal={active ? 'true' : 'false'}
       aria-label={label}
       without-header
       open={open || undefined}
       data-controlled-open={String(open)}
-      aria-hidden={open ? undefined : 'true'}
+      // Kerf 5.0.0-beta.56 leaves a custom element's role/aria-* alone when the template omits it, so
+      // every state renders an explicit value rather than relying on the morph to remove it.
+      aria-hidden={open ? 'false' : 'true'}
       inert={open ? undefined : true}
       style={style}
     >

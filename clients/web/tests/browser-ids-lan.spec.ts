@@ -181,7 +181,14 @@ for (const width of [390, 1280]) {
         if (index === 1) await composer.screenshot({ path: testInfo.outputPath(`LAN-attachment-draft-${width}.png`) });
         await composer.getByRole('button', { name: 'Create ticket' }).click();
         await expect(composer).toBeHidden();
-        await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
+        // The created ticket is presented. On a phone the inspector stays a closed overlay whose content
+        // Kerf keeps inert, so assert the selected row there and the open details editor on desktop.
+        if (width === 390)
+          await expect(page.getByRole('option', { name: new RegExp(`LAN attachment ${index + 1}`) })).toHaveAttribute(
+            'aria-selected',
+            'true',
+          );
+        else await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
         if (index === 1) {
           await expect.poll(() => uploads.length).toBe(3);
           releaseThirdUpload();

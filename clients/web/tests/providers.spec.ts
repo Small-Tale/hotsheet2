@@ -4729,10 +4729,13 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
   await expect(restoreGroup).toHaveAttribute('data-tone', 'default');
   await expect(restoreGroup).toHaveCSS('color-scheme', 'dark');
   await expect(restoreGroup).toHaveCSS('background-color', 'rgb(58, 58, 60)');
+  // Kerf 5.0.0-beta.55 anchors the toolbar in its ResizableRegion restore corner, which owns the
+  // canonical inset; measure the rendered gap to the shell's main area rather than the toolbar's own offsets.
   const insets = () =>
     restoreToolbar.evaluate((node) => {
-      const style = getComputedStyle(node);
-      return { right: style.right, bottom: style.bottom };
+      const box = node.getBoundingClientRect(),
+        main = node.closest('.app-shell__main')!.getBoundingClientRect();
+      return { right: `${Math.round(main.right - box.right)}px`, bottom: `${Math.round(main.bottom - box.bottom)}px` };
     });
   expect(await insets()).toEqual({ right: '16px', bottom: '16px' });
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-app-shell-drawer-restore-wide.png', fullPage: true });
@@ -10568,6 +10571,9 @@ test('keeps decoded video seeks responsive across repeated real playback session
       await gallery.screenshot({ path: '/private/tmp/hs2-video-reliability-gallery-wide.png' });
       await page.setViewportSize({ width: 760, height: 640 });
       await gallery.screenshot({ path: '/private/tmp/hs2-video-reliability-gallery-narrow.png' });
+      // At 760px the inspector is a closed mobile overlay whose content Kerf keeps inert; return to the
+      // desktop layout so the preview it owns stays reachable for the release assertion.
+      await page.setViewportSize({ width: 1280, height: 900 });
     }
     const retained = await video.elementHandle();
     await gallery.getByRole('button', { name: 'Close video gallery' }).click();
@@ -13086,7 +13092,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await expect(inspector).toBeVisible();
   await first.hover();
-  await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.729333 1)');
+  await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   await first.screenshot({ path: '/private/tmp/hs2-77bn46-hover-border.png' });
   await first.click();
   await second.click({ modifiers: ['Meta'] });
@@ -13094,7 +13100,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.screenshot({ path: '/private/tmp/hotsheet-multi-selection-placeholder.png' });
   await expect(first).toHaveAttribute('data-selected', 'true');
   await expect(second).toHaveAttribute('data-selected', 'true');
-  await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.729333 1)');
+  await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   const selectedBoxes = await Promise.all([first, second].map((locator) => locator.boundingBox()));
   expect(Math.abs(selectedBoxes[0]!.y + selectedBoxes[0]!.height - selectedBoxes[1]!.y)).toBe(1);
   await page.getByLabel('Columns view').click();
@@ -13113,7 +13119,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await crossColumn.click({ modifiers: ['Shift'] });
   await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(1);
   await expect(crossColumn).toHaveAttribute('data-selected', 'true');
-  await expect(crossColumn).toHaveCSS('border-color', 'color(srgb 0.42 0.729333 1)');
+  await expect(crossColumn).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   await expect(closedReader).toBeHidden();
   expect(await closedReader.boundingBox()).toBeNull();
   await page.screenshot({ path: '/private/tmp/hs2-6thrgf-selected-board-wide.png' });
@@ -14296,7 +14302,7 @@ test('previews rows with a border-only outline and keeps column cards borderless
   const card = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]');
   await expect(card).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
   await card.click();
-  await expect(card).toHaveCSS('border-color', 'color(srgb 0.42 0.729333 1)');
+  await expect(card).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   await page.screenshot({ path: '/private/tmp/hs2-2n2tcr-column-border-after.png', fullPage: true });
   const workArea = page.locator('.app-shell__work-area');
   const focusColor = await resolvedColor(workArea, 'var(--wa-color-focus)');

@@ -19,7 +19,7 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
     if (width < 600)
       await page.addStyleTag({
         content:
-          'body{min-width:0}.demo-shell{display:block}.kui-catalog__sidebar,.kui-catalog__header,.kui-catalog__footer,.settings-toggle{display:none}.kui-catalog__detail{min-height:0;padding:12px}',
+          'body{min-width:0}.demo-shell{display:block}.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer,.settings-toggle{display:none}.kui-workbench__main{min-height:0;padding:12px}',
       });
     const dialog = page.getByRole('dialog', { name: 'Server build details' });
     await expect(dialog).toBeVisible();
@@ -29,8 +29,9 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
     await expect(toolbar.locator('[data-component="toolbar-text"]')).toHaveAttribute('id', 'connection-details-title');
     await expect(dialog.getByRole('heading', { name: 'Server build details' })).toHaveCount(0);
     await expect(dialog.locator('#connection-details-summary')).not.toHaveText('');
-    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('width', '22px');
-    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('height', '22px');
+    // Kerf's icon tile: a 16px glyph centered in the group's control slot, like an icon button.
+    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('width', '16px');
+    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('height', '16px');
     expect(
       await toolbar.evaluate((node) => {
         const title = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();

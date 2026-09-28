@@ -287,7 +287,7 @@ test('shows the active project while other remembered projects are still opening
   const tabHosts = page.locator('.project-tab-bar [data-tab-kind="project"]');
   await expect(tabHosts).toHaveCount(3);
   await expect
-    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-pending'))))
+    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-project-pending'))))
     .toEqual(['true', 'false', 'true']);
   await expect(page.getByRole('img', { name: 'Opening alpha' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Opening gamma' })).toBeVisible();
@@ -297,13 +297,13 @@ test('shows the active project while other remembered projects are still opening
   // Each placeholder is replaced in place as its project registers, without moving the selection.
   fixture.pending.get('gamma')!.release();
   await expect
-    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-pending'))))
+    .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-project-pending'))))
     .toEqual(['true', 'false', 'false']);
   await expect(tabs.nth(2)).toHaveText('gamma');
   await page.locator('.project-tab-bar').screenshot({ path: testInfo.outputPath('pending-tab-replaced-in-place.png') });
   fixture.pending.get('alpha')!.release();
   await expect(tabs).toHaveText(['alpha', 'beta1', 'gamma']);
-  await expect(page.locator('.project-tab-bar [data-pending="true"]')).toHaveCount(0);
+  await expect(page.locator('.project-tab-bar [data-project-pending="true"]')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   await page.getByRole('tab', { name: /^alpha/ }).click();

@@ -369,9 +369,11 @@
   width: remify(16px);
   height: remify(16px);
 }
+/* Kerf reads --kui-floating-toolbar-inset as an optional override (default --kui-space-m) rather than
+   defining it, so the fallback must be spelled out or the calc() is invalid and the inset drops to auto. */
 .terminal-dashboard__zoom.kui-floating-toolbar[data-position='bottom-end'] {
-  inset-inline-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-right));
-  inset-block-end: calc(var(--kui-floating-toolbar-inset) + var(--hotsheet-safe-area-bottom));
+  inset-inline-end: calc(var(--kui-floating-toolbar-inset, var(--kui-space-m, 1rem)) + var(--hotsheet-safe-area-right));
+  inset-block-end: calc(var(--kui-floating-toolbar-inset, var(--kui-space-m, 1rem)) + var(--hotsheet-safe-area-bottom));
 }
 .terminal-dashboard__magnified {
   position: fixed;

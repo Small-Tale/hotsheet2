@@ -178,7 +178,8 @@ export function ProjectTab({
         'data-disconnected': String(disconnected),
         'data-attention': String(attention),
         'data-restore-failure': String(restoreFailure),
-        'data-pending': String(pending),
+        // Kerf's AppTab owns `data-pending` (its named-pending state); the project's opening state is app-owned.
+        'data-project-pending': String(pending),
       }}
     />
   );

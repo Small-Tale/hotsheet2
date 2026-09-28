@@ -1015,6 +1015,9 @@ and identity-less legacy entries remain conservatively blocking.
   custom-element `open` that a re-render omits (so unrelated renders no longer close a user-opened
   popup), which means a controlled dialog would otherwise open but never close. Uncontrolled popups
   carry no marker and keep that protection (HS2-KMDJRH).
+  Since Kerf 5.0.0-beta.56 (KF-KQWZ8M) the morph likewise leaves a custom element's host `role` and
+  `aria-*` alone when a template omits them, so conditional ARIA on a Web Awesome host always renders
+  an explicit value (for example `aria-hidden={open ? 'false' : 'true'}`) (HS2-QCSPDH).
   Saved-view opening uses the controlled dialog open state and native name autofocus. No delayed
   application callback may reclaim focus after the user selects the query or reopen a cancelled
   dialog. Create and Edit transitions synchronously project their initial name into the live
