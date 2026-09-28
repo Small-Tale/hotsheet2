@@ -15,6 +15,15 @@ export function isMobileViewport(width: number): boolean {
   return width < MOBILE_BREAKPOINT;
 }
 
+/**
+ * Whether the app may focus a terminal or drawer input on its own (open, connect, refit, drawer resize).
+ * In the mobile layout focusing raises the on-screen keyboard and puts a terminal in focus mode, so only
+ * the user's own tap focuses there (HS2-YD7RZ7).
+ */
+export function automaticInputFocusAllowed(width: number): boolean {
+  return !isMobileViewport(width);
+}
+
 /** Which overlay panels are currently open in the mobile layout. At most one is ever `true`. */
 export interface MobileOverlayState {
   sidebar: boolean;

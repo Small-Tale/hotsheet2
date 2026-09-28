@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  automaticInputFocusAllowed,
   closeMobileOverlay,
   isMobileViewport,
   MOBILE_BREAKPOINT,
@@ -60,5 +61,14 @@ describe('mobile layout', () => {
     expect(state).toEqual({ sidebar: false, inspector: true });
     state = closeMobileOverlay(state, 'inspector'); // scrim dismiss
     expect(state).toEqual(MOBILE_OVERLAYS_CLOSED);
+  });
+});
+
+describe('automaticInputFocusAllowed (HS2-YD7RZ7)', () => {
+  it('lets only larger layouts focus inputs automatically', () => {
+    expect(automaticInputFocusAllowed(390)).toBe(false);
+    expect(automaticInputFocusAllowed(MOBILE_BREAKPOINT - 1)).toBe(false);
+    expect(automaticInputFocusAllowed(MOBILE_BREAKPOINT)).toBe(true);
+    expect(automaticInputFocusAllowed(1440)).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 
-import { isMobileViewport } from './mobile-layout';
+import { automaticInputFocusAllowed, isMobileViewport } from './mobile-layout';
 import {
   DEFAULT_MOBILE_TERMINAL_COLUMNS,
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
@@ -232,9 +232,17 @@ export function mountTerminalViewportRuntime(element: HTMLElement, options: Term
 
 function initializeTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns, modifiers }: TerminalRuntimeOptions,
+  {
+    url,
+    viewerId,
+    autoFocus: requestedAutoFocus = false,
+    onTicketReference,
+    mobileColumns,
+    modifiers,
+  }: TerminalRuntimeOptions,
   own: OwnTerminalResource,
 ): void {
+  const autoFocus = requestedAutoFocus && automaticInputFocusAllowed(window.innerWidth);
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
@@ -542,7 +550,7 @@ function initializeTerminalViewport(
   };
   const finishDrawerResize = () => {
     if (!insideDrawer) return;
-    if (settledResize) terminal.focus();
+    if (settledResize && automaticInputFocusAllowed(window.innerWidth)) terminal.focus();
     applySettledGeometry();
   };
   window.addEventListener(TERMINAL_DRAWER_RESIZE_END_EVENT, finishDrawerResize);

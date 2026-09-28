@@ -995,3 +995,46 @@ test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({
     await context.close();
   }
 });
+
+test('resizing the phone drawer never focuses its terminal, only a tap does (HS2-YD7RZ7)', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }),
+    page = await context.newPage();
+  await openDemoProject(page, true);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    drawer = page.locator('[data-component="terminal-drawer"]'),
+    terminalInput = drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea');
+  // Opening a terminal tab on a phone does not auto-focus it either.
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').tap();
+  await expect(drawer.locator('.terminal-session:not([hidden]) [data-geometry-ready="true"]')).toHaveCount(1);
+  await expect(terminalInput).not.toBeFocused();
+  await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
+
+  const handle = page.locator('[data-region-id="app-terminal-drawer"] [data-kui-resize-handle]').first(),
+    before = (await drawer.boundingBox())!.height;
+  for (const delta of [-120, 80]) {
+    const box = (await handle.boundingBox())!,
+      x = box.x + box.width / 2,
+      y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + delta / 2);
+    await page.mouse.move(x, y + delta);
+    await page.mouse.up();
+    // Let the settled refit and the drawer-resize-end focus path run.
+    await page.waitForTimeout(400);
+    await expect(terminalInput).not.toBeFocused();
+    await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
+    await expect(drawer.locator('.terminal-drawer__rail')).toBeVisible();
+  }
+  expect((await drawer.boundingBox())!.height).not.toBe(before);
+  await page.screenshot({ path: testInfo.outputPath('phone-drawer-after-resize.png') });
+
+  // A direct tap on the terminal still focuses it and enters phone focus mode.
+  await drawer.locator('.terminal-session:not([hidden]) .terminal-viewport').first().tap();
+  await expect(terminalInput).toBeFocused();
+  await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'true');
+  await context.close();
+});

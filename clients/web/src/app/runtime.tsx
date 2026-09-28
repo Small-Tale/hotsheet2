@@ -200,7 +200,12 @@ import type {
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
-import { isMobileViewport, MOBILE_OVERLAYS_CLOSED, type MobileOverlayState } from '../mobile-layout';
+import {
+  automaticInputFocusAllowed,
+  isMobileViewport,
+  MOBILE_OVERLAYS_CLOSED,
+  type MobileOverlayState,
+} from '../mobile-layout';
 import {
   loadMobileTerminalColumns,
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
@@ -1208,6 +1213,7 @@ export async function startHotSheetWebClient() {
     );
   }
   function focusDrawerInput(projectId: string) {
+    if (!automaticInputFocusAllowed(window.innerWidth)) return;
     const scheduled = document.activeElement;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {

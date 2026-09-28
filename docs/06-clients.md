@@ -2305,6 +2305,12 @@ the same text-size control (`a-large-small`) at the top-left, mirroring the top-
 hidden while the keyboard is presented, so the size is adjustable there too, not only from a
 magnified terminal (HS2-ZSFAHF).
 
+**Tap-only focus in the mobile layout (HS2-YD7RZ7).** Below the desktop breakpoint, focusing a
+terminal raises the on-screen keyboard and enters focus mode, so only the user's own tap on a
+terminal (or tap in a drawer AI-chat composer) focuses it. Opening the drawer, selecting a drawer
+tab, opening a terminal from a menu, connecting, refitting, and finishing a drawer resize never
+move focus there. Wider layouts keep the default-focus behavior described for the drawer.
+
 ### 6.7.5 Escape hatch: a per-viewer _separate_ terminal
 
 When someone genuinely needs a natively-sized terminal on each device

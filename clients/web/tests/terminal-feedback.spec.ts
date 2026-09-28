@@ -888,10 +888,9 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
-  const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
-  await expect(exitFocus).toBeVisible();
-  await exitFocus.click();
-  await expect(exitFocus).toBeHidden();
+  // On a phone only a tap focuses a terminal, so creating one does not enter focus mode (HS2-YD7RZ7).
+  await expect(page.getByRole('button', { name: 'Exit terminal focus' })).toHaveCount(0);
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
   await expect(dedicated).toHaveAttribute('data-renderer', 'dom');
   await expect(dedicated.locator('canvas')).toHaveCount(0);
   await expect.poll(() => dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
@@ -1159,6 +1158,9 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  // A tap is what focuses a phone terminal and enters focus mode (HS2-YD7RZ7).
+  await dedicated.tap();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   await expect.poll(() => dedicated.locator('.xterm-rows').textContent()).toContain('GNU nano 8.4');
   await dedicated.evaluate(() => {
     const output = Array.from({ length: 200 }, (_, index) => `scrollback line ${index}\r\n`).join('');
@@ -1248,6 +1250,8 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]'),
     textarea = dedicated.locator('.xterm-helper-textarea');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  // A tap is what focuses a phone terminal and enters focus mode (HS2-YD7RZ7).
+  await dedicated.click();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   const keyBar = page.locator('[data-component="terminal-key-bar"]');
   // Hidden until the soft keyboard is presented.
