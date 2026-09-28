@@ -670,8 +670,13 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
         for rel in [".claude", ".mcp.json", ".agents", ".codex"] {
             assert!(!project.join(rel).exists(), "{rel} was left behind");
         }
-        let claude_md = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap_or_default();
-        assert!(!claude_md.contains("hotsheet:"), "{claude_md}");
+        // Setup created CLAUDE.md (when Claude is detected) for its section alone, so the
+        // file leaves with the section instead of lingering empty (HS2-G9CD1W).
+        assert!(
+            !project.join("CLAUDE.md").exists(),
+            "{:?}",
+            std::fs::read_to_string(project.join("CLAUDE.md"))
+        );
     }
     run(&["setup", "--detect"])
         .failure()
@@ -696,6 +701,23 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
     set_enabled(None);
     run(&["setup", "--refresh"]).success();
     assert_eq!(snapshot(), unset);
+
+    // HS2-G9CD1W: an instruction file holding only Hot Sheet's section is deleted, and
+    // reported as removed, when disabling leaves it with no user content.
+    let agents = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
+    std::fs::write(
+        project.join("AGENTS.md"),
+        agents.replacen("User text.\n", "", 1),
+    )
+    .unwrap();
+    set_enabled(Some("[]"));
+    let output = run(&["setup", "--refresh"]).success().get_output().clone();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.lines().any(|line| line == "  removed AGENTS.md"),
+        "{stdout}"
+    );
+    assert!(!project.join("AGENTS.md").exists());
 }
 
 #[test]

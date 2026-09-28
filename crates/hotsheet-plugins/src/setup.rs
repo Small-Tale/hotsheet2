@@ -250,7 +250,12 @@ pub fn refresh_setup_in(
                 .iter()
                 .any(|tool| tool == plugin.id())
         {
-            report.record(target, Some(Change::Edited));
+            let change = if project_dir.join(target).exists() {
+                Change::Edited
+            } else {
+                Change::Removed
+            };
+            report.record(target, Some(change));
         }
         if !report.removed.is_empty() || !report.edited.is_empty() {
             removed.push(report);
@@ -311,7 +316,8 @@ fn remove_disabled_tool_artifacts(
 /// disabled-tool guidance leaves per-tool and shared layouts alike (HS2-FKC8VN). A section
 /// written by a newer Hot Sheet, or an equal-version section the project customized, is
 /// preserved. The file is never created, and content outside the managed markers is
-/// untouched.
+/// untouched. A file left holding nothing but whitespace (setup created it for that section)
+/// is deleted, like a config that held only Hot Sheet's entry (HS2-G9CD1W).
 fn remove_disabled_tool_section(
     project: &Path,
     plugin: &Plugin,
@@ -342,6 +348,9 @@ fn remove_disabled_tool_section(
     }
     if out == existing {
         return Ok(None);
+    }
+    if out.trim().is_empty() {
+        return remove_managed_file(project, rel, false);
     }
     write_file(&path, &out)?;
     Ok(Some(Change::Edited))
@@ -800,6 +809,11 @@ fn write_instruction_target(
     let rendered = render_instruction_target(&existing, rel, &tools, refresh_members);
     if rendered == existing {
         return Ok(());
+    }
+    // Retiring the last managed section of a file setup created leaves nothing of the
+    // user's, so the file goes rather than lingering empty (HS2-G9CD1W).
+    if rendered.trim().is_empty() {
+        return remove_managed_file(project, rel, false).map(|_| ());
     }
     write_file(&target, &rendered)
 }
@@ -1787,6 +1801,72 @@ args = ["--path", "{{store}}"]
     }
 
     #[test]
+    fn disabling_the_only_writer_deletes_an_instruction_file_left_empty() {
+        // HS2-G9CD1W: setup created AGENTS.md for a single tool's per-tool section; disabling
+        // that tool deletes the file instead of leaving it empty, and reports the deletion.
+        let fixture = Sharing::new();
+        sharing_tool(fixture.plugins.path(), "delta", "delta instructions\n", 8);
+        fixture.setup("delta");
+        assert!(fixture.agents().contains("hotsheet:delta"));
+        let report = fixture.refresh(&["alpha"]);
+        let agents = fixture.project.path().join("AGENTS.md");
+        assert!(!agents.exists(), "{:?}", std::fs::read_to_string(&agents));
+        let delta = report
+            .removed
+            .iter()
+            .find(|item| item.tool == "delta tool")
+            .unwrap();
+        assert!(
+            delta.removed.iter().any(|rel| rel == "AGENTS.md"),
+            "{delta:?}"
+        );
+        assert!(
+            !delta.edited.iter().any(|rel| rel == "AGENTS.md"),
+            "{delta:?}"
+        );
+        // A repeated refresh has nothing left to remove and never recreates the file.
+        fixture.refresh(&["alpha"]);
+        assert!(!agents.exists());
+
+        // A whitespace-only remainder counts as empty too.
+        fixture.write_agents(&format!(
+            "\n  \n{}\n\n\t\n",
+            per_tool(
+                "delta",
+                "<!-- hotsheet-instructions-version: 8 -->\ndelta instructions"
+            )
+        ));
+        fixture.refresh(&["alpha"]);
+        assert!(!agents.exists());
+    }
+
+    #[test]
+    fn retiring_a_shared_section_deletes_only_a_file_it_alone_filled() {
+        let fixture = Sharing::new();
+        fixture.setup("alpha");
+        fixture.setup("beta");
+        fixture.refresh(&["alpha", "beta"]);
+        assert_eq!(fixture.agents(), format!("{}\n", shared("alpha, beta")));
+        let report = fixture.refresh(&[]);
+        assert!(!fixture.project.path().join("AGENTS.md").exists());
+        assert!(
+            report
+                .removed
+                .iter()
+                .any(|item| item.removed.iter().any(|rel| rel == "AGENTS.md")),
+            "{report:?}"
+        );
+
+        // Any user content keeps the file, with only the managed section removed.
+        fixture.write_agents(&format!("{}\n\nUser footer.\n", shared("alpha, beta")));
+        fixture.refresh(&[]);
+        assert_eq!(fixture.agents(), "User footer.\n");
+        fixture.write_agents(&format!("# Notes\n\n{}\n", per_tool("alpha", SHARED_BODY)));
+        fixture.refresh(&[]);
+        assert_eq!(fixture.agents(), "# Notes\n");
+    }
+
+    #[test]
     fn disabled_tool_sections_written_by_a_newer_writer_or_customized_are_preserved() {
         let fixture = Sharing::new();
         sharing_tool(fixture.plugins.path(), "delta", "delta instructions\n", 8);
@@ -2196,13 +2276,17 @@ args = ["--path", "{{store}}"]
         for pass in 0..2 {
             let report = fixture.refresh(&["alpha"]);
             // HS2-CAM9J5: the first pass reports each shared config as edited, never removed.
-            // Each fixture's AGENTS.md section leaves too (and the built-in OpenCode also
-            // targets opencode.json), so compare the set of edited configs.
+            // Each fixture's AGENTS.md section leaves too, deleting the file setup created for
+            // it (HS2-G9CD1W), and the built-in OpenCode also targets opencode.json, so
+            // compare the set of edited configs.
             let edited: std::collections::BTreeSet<_> = report
                 .removed
                 .iter()
                 .flat_map(|tool| {
-                    assert!(tool.removed.is_empty(), "{tool:?}");
+                    assert!(
+                        tool.removed.iter().all(|rel| rel == "AGENTS.md"),
+                        "{tool:?}"
+                    );
                     tool.edited
                         .iter()
                         .filter(|rel| *rel != "AGENTS.md")
@@ -2264,13 +2348,19 @@ args = ["--path", "{{store}}"]
             .iter()
             .flat_map(|tool| tool.removed.clone())
             .collect();
+        // AGENTS.md held only the disabled tools' sections, so it goes too (HS2-G9CD1W).
         assert_eq!(
             deleted,
-            ["shared.json", "opencode.json", ".toby/config.toml"]
-                .map(String::from)
-                .into()
+            [
+                "AGENTS.md",
+                "shared.json",
+                "opencode.json",
+                ".toby/config.toml"
+            ]
+            .map(String::from)
+            .into()
         );
-        for rel in ["shared.json", "opencode.json", ".toby"] {
+        for rel in ["AGENTS.md", "shared.json", "opencode.json", ".toby"] {
             assert!(!fixture.path(rel).exists(), "{rel}");
         }
         assert_eq!(fixture.exclude(), "");
@@ -2320,8 +2410,10 @@ command = "hotsheet-cli permission-hook"
                     report.removed,
                     [RemovalReport {
                         tool: "hank tool".into(),
-                        removed: vec![".hank/mcp.json".into()],
-                        edited: vec!["AGENTS.md".into(), ".hank/settings.json".into()],
+                        // Setup created AGENTS.md for this section alone, so it leaves
+                        // with it (HS2-G9CD1W).
+                        removed: vec!["AGENTS.md".into(), ".hank/mcp.json".into()],
+                        edited: vec![".hank/settings.json".into()],
                     }]
                 );
             } else {

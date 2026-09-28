@@ -111,6 +111,10 @@ instead of one copy per tool:
   `enabled_plugins` is set and excludes a tool, refresh removes that tool's
   `hotsheet:<tool>` section while preserving everything outside the markers. With no
   `enabled_plugins` setting nothing counts as disabled, so refresh never removes anything.
+  When removing a per-tool or shared section leaves the instruction file empty or
+  whitespace-only (setup created the file for that section, as with `CLAUDE.md` in a clean
+  project), the file itself is deleted and reported as removed, pruning parent directories
+  the deletion leaves empty. Any remaining user content keeps the file (HS2-G9CD1W).
 - **An explicit empty list disables every tool (HS2-8B3VJP).** `enabled_plugins` is read
   the same way by `hotsheet setup` and the server's project-open refresh
   (`hotsheet_plugins::enabled_plugins_from_setting`):
