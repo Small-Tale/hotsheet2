@@ -515,7 +515,8 @@ represent server/project connections rather than embedded stores. The strip uses
 Kerf's 4px tight-cluster rhythm around and between controls, with an 8px outer
 inline inset, while retaining its fixed 60px geometry. The component must tolerate
 two tabs that expose the same store through different checkouts or
-servers. The tab strip scrolls horizontally without truncating identities; the overflow
+servers. The tab strip scrolls horizontally without truncating identities (every TabBar strip —
+project tabs, terminal drawer, and inspector — clamps vertical scrolling, HS2-QG4K9W); the overflow
 strip provides direct access to tabs outside the current viewport and reserves enough inset
 for the complete selected shadow and keyboard focus ring at both ends. Project tabs support
 same-strip pointer drag reordering. Terminal and AI-chat tabs share one project-scoped

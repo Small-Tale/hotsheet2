@@ -105,6 +105,12 @@
   padding: var(--kui-space-xs) var(--kui-space-m);
 }
 .terminal-drawer__views .kui-tab-bar__tabs {
+  /* overflow-x: auto alone computes overflow-y to auto, so the few pixels the focus-ring inset adds let the
+     strip scroll vertically on touch; tab strips only scroll horizontally (HS2-QG4K9W). */
+  overflow-y: hidden;
+  /* Grow with the tabs (for example under larger platform text) instead of clipping them. */
+  height: auto;
+  min-height: var(--kui-toolbar-group-size);
   margin: calc(var(--kui-space-2xs) * -1);
   padding: var(--kui-space-2xs);
   flex: 0 1 auto;

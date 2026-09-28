@@ -177,3 +177,8 @@
     white-space: nowrap;
   }
 }
+
+/* Tab strips only scroll horizontally; Kerf's overflow-x: auto alone computes overflow-y to auto (HS2-QG4K9W). */
+.ticket-inspector__tabs .kui-tab-bar__tabs {
+  overflow-y: hidden;
+}

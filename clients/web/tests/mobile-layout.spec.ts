@@ -968,3 +968,30 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await page.screenshot({ path: testInfo.outputPath('drawer-magnified-tile-menu-phone.png') });
   await context.close();
 });
+
+test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({ browser }) => {
+  for (const width of [390, 1440]) {
+    const phone = width < 500,
+      context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: phone, isMobile: phone }),
+      page = await context.newPage();
+    await openDemoProject(page, true);
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawerTabs = page.locator('.terminal-drawer__views .kui-tab-bar__tabs');
+    await expect(drawerTabs).toBeVisible();
+    // The drawer strip grows with its tabs rather than clipping them into a vertical scroll range.
+    expect(await drawerTabs.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(0);
+    await page.locator('[data-ticket-slug]').first().click();
+    await expect(page.locator('.ticket-inspector__tabs .kui-tab-bar__tabs').first()).toBeVisible();
+    const strips = page.locator('.kui-tab-bar__tabs');
+    expect(await strips.count()).toBeGreaterThanOrEqual(phone ? 2 : 3);
+    for (const strip of await strips.all()) {
+      if (!(await strip.isVisible())) continue;
+      expect(await strip.evaluate((element) => getComputedStyle(element).overflowY)).toBe('hidden');
+      const box = (await strip.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel(0, 40);
+      await expect.poll(() => strip.evaluate((element) => element.scrollTop)).toBe(0);
+    }
+    await context.close();
+  }
+});
