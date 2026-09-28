@@ -18,6 +18,11 @@ export interface SavedViewDialogProps {
   queryTokens?: readonly InlineSearchToken[];
   busy?: boolean;
   error?: string;
+  /**
+   * Increments on every open. The token editor keeps its own text while morphing, so a new session replaces it
+   * with the freshly seeded query even when the tokens match the previous session's.
+   */
+  session?: number;
 }
 
 export function SavedViewDialog({
@@ -28,6 +33,7 @@ export function SavedViewDialog({
   queryTokens = [],
   busy = false,
   error = '',
+  session = 0,
 }: SavedViewDialogProps) {
   const rename = mode === 'rename',
     title = rename ? 'Edit View' : 'Create View',
@@ -57,7 +63,7 @@ export function SavedViewDialog({
             autofocus
             disabled={busy || undefined}
           ></wa-input>
-          <label class="saved-view-dialog__query">
+          <label class="saved-view-dialog__query" data-key={`saved-view-query-session-${session}`}>
             <span>
               Search query <sup aria-hidden="true">*</sup>
             </span>

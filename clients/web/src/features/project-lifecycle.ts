@@ -47,7 +47,7 @@ export interface ProjectLifecycleDependencies {
   refreshTerminalDashboard: () => Promise<unknown>;
   restoreProjectSession: (project: Project) => Promise<unknown>;
   customViewFor: (view: TicketView, projectId: string) => CustomView | undefined;
-  applyCustomViewQuery: (view: CustomView) => void;
+  restoreCustomView: (view: CustomView) => void;
   observeTerminalDrawer: () => void;
   requestProjectRefresh: (project: Project) => Promise<unknown>;
   showToast: (message: string) => void;
@@ -250,7 +250,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     ]);
     await dependencies.restoreProjectSession(value);
     const restored = dependencies.customViewFor(selectedView.value, value.id);
-    if (restored) dependencies.applyCustomViewQuery(restored);
+    if (restored) dependencies.restoreCustomView(restored);
     else if (customTicketViewKey(selectedView.value)) selectedView.value = 'all';
     if (terminalDrawerVisible.value) dependencies.observeTerminalDrawer();
   }

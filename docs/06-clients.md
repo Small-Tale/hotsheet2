@@ -979,7 +979,11 @@ and identity-less legacy entries remain conservatively blocking.
   create dialog for a readable name and any ordinary search expression. The query editor fills
   the dialog content width on desktop and mobile, independently of the collapsed toolbar search. Saved views live in
   the code project's shared settings, appear in both the project sidebar and terminal ticket
-  rail, and apply their query through the same inline text/token search pipeline. Their
+  rail, and apply their query through the same inline text/token search pipeline. A view's query
+  is an implicit scope, not search-bar content (HS2-50R1YQ): selecting the view shows its tickets
+  like any other view and leaves the search bar untouched, and a search-bar query narrows the view
+  as `(view query) AND (search-bar query)`. Switching views keeps the search bar's own query, and
+  sidebar search counts report that query per view. Their
   `custom:<id>` selection restores per project, follows replayable `views_updated` events,
   and falls back to Queue if a selected shared view is removed. Creating a view rejects empty,
   overlong, or case-insensitively duplicate names and empty or overlong queries before saving.

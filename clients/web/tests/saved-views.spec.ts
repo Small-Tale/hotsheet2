@@ -242,6 +242,60 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   expect(views()).toEqual([]);
 });
 
+test('scopes the search bar to a selected shared view without populating it (HS2-50R1YQ)', async ({ page }) => {
+  const views = await mockSavedViews(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add view' }).click();
+  const dialog = page.locator('[data-component="saved-view-dialog"]');
+  await dialog.getByRole('textbox', { name: 'View name' }).fill('Needs docs');
+  await dialog.getByRole('searchbox', { name: 'Search query' }).fill('tag:docs ');
+  await dialog.getByRole('button', { name: 'Create View' }).click();
+  expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
+
+  // Selecting the view shows its tickets like any other view; the search bar stays closed and empty.
+  await expect(page.getByRole('button', { name: 'Needs docs', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
+  await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await expect(search).toHaveText('');
+  await expect(
+    page.locator('[data-token-search-id="workspace-search"] [data-component="token-search-token"]'),
+  ).toHaveCount(0);
+
+  // A search-bar query narrows the view: (tag:docs) AND (bar query).
+  await search.pressSequentially('parser');
+  await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
+  await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toHaveCount(0);
+  await search.press('ControlOrMeta+a');
+  await search.pressSequentially('saved');
+  await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
+  // A new view starts from what is visible: the selected view scoped by the search-bar query.
+  await page.getByRole('button', { name: 'Add view', exact: true }).click();
+  const seeded = dialog.getByRole('searchbox', { name: 'Search query' });
+  await expect(seeded).toContainText(') AND (saved)');
+  await expect(seeded.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await search.click();
+
+  // Leaving the view keeps the bar's own query and drops the view scope.
+  await search.press('ControlOrMeta+a');
+  await search.press('Backspace');
+  await page.getByRole('button', { name: /Queue/ }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Needs docs', exact: true }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
+  await expect(search).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Search tickets' })).toBeVisible();
+});
+
 test('keeps immediate saved-view query replacement focused when opening frames resume (HS2-N7XTP4)', async ({
   page,
 }) => {

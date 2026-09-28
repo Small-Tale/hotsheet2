@@ -6,7 +6,7 @@ import { consumeSearchTokens, type InlineSearchToken, orderedSearchText } from '
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { data } from '../interactions/dom';
 import type { Control, Project } from '../interactions/types';
-import { customViewNameAvailable, uniqueCustomViewId } from '../saved-views';
+import { customViewNameAvailable, customViewQueryText, uniqueCustomViewId } from '../saved-views';
 import { customTicketViewId, customTicketViewKey, type TicketView } from '../ticket-views';
 
 export interface SavedViewsControllerDependencies {
@@ -35,6 +35,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
       showToast,
     } = dependencies,
     savedViewDialogOpen = signal(false),
+    savedViewDialogSession = signal(0),
     savedViewDialogMode = signal<'create' | 'rename'>('create'),
     savedViewTargetId = signal<string | undefined>(undefined),
     savedViewName = signal(''),
@@ -48,6 +49,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewDeleteError = signal('');
 
   function showSavedViewDialog() {
+    savedViewDialogSession.value += 1;
     savedViewDialogOpen.value = true;
     const name = document.querySelector<Control>('[name="saved-view-name"]');
     if (name && name.value !== savedViewName.value) name.value = savedViewName.value;
@@ -59,7 +61,10 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
   }
   function openSavedViewDialog() {
     const selected = customViewFor(selectedView.value),
-      query = selected?.query ?? orderedSearchText(searchQuery.value, searchTokens.value, () => true);
+      // A new view starts from what is visible: the selected view scoped by any search-bar query (HS2-50R1YQ).
+      query = selected
+        ? customViewQueryText(selected, searchQuery.value, searchTokens.value)
+        : orderedSearchText(searchQuery.value, searchTokens.value, () => true);
     savedViewDialogMode.value = 'create';
     savedViewTargetId.value = undefined;
     savedViewName.value = '';
@@ -230,6 +235,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
 
   return {
     savedViewDialogOpen,
+    savedViewDialogSession,
     savedViewDialogMode,
     savedViewTargetId,
     savedViewName,

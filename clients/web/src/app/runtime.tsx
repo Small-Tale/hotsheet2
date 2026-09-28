@@ -241,6 +241,7 @@ import {
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
+import { customViewSearch } from '../saved-views';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
@@ -891,7 +892,7 @@ export async function startHotSheetWebClient() {
     refreshTerminalDashboard,
     restoreProjectSession,
     customViewFor,
-    applyCustomViewQuery,
+    restoreCustomView,
     observeTerminalDrawer,
     requestProjectRefresh: (target) => projectTabRefresh.request(target),
     showToast,
@@ -1008,6 +1009,7 @@ export async function startHotSheetWebClient() {
   }
   const {
     savedViewDialogOpen,
+    savedViewDialogSession,
     savedViewDialogMode,
     savedViewName,
     savedViewQuery,
@@ -1040,17 +1042,21 @@ export async function startHotSheetWebClient() {
     selectTicketView,
     showToast,
   });
-  function applyCustomViewQuery(view: CustomView) {
-    const parsed = consumeSearchTokens(view.query, true);
-    batch(() => {
-      searchOpen.value = true;
-      searchQuery.value = parsed.text;
-      searchTokens.value = parsed.tokens;
-      searchHelpOpen.value = false;
-      searchMatchKeys.value = undefined;
-    });
+  // A shared view's query is an implicit scope (HS2-50R1YQ): it never populates the search bar, and any
+  // search-bar query narrows it as `(view query) AND (search-bar query)`.
+  function activateCustomView() {
+    searchMatchKeys.value = undefined;
     resetProgressiveTicketRendering();
     scheduleTicketSearch();
+  }
+  /** Restore a selected shared view; sessions saved before HS2-50R1YQ copied its query into the bar, so drop it. */
+  function restoreCustomView(view: CustomView) {
+    if (orderedSearchText(searchQuery.value, searchTokens.value, () => true).trim() === view.query.trim())
+      batch(() => {
+        searchQuery.value = '';
+        searchTokens.value = [];
+      });
+    activateCustomView();
   }
   function selectTicketView(next: TicketView, { refresh = true }: { refresh?: boolean } = {}) {
     ticketCollectionRefreshTask.cancel();
@@ -1071,14 +1077,8 @@ export async function startHotSheetWebClient() {
       resetProgressiveTicketRendering();
       resetBoardColumnPages();
       selectedView.value = next;
-      if (definition) applyCustomViewQuery(definition);
-      else if (customTicketViewKey(previous)) {
-        searchOpen.value = false;
-        searchQuery.value = '';
-        searchTokens.value = [];
-        searchHelpOpen.value = false;
-        searchMatchKeys.value = undefined;
-      }
+      if (definition) activateCustomView();
+      else if (customTicketViewKey(previous)) searchMatchKeys.value = undefined;
       ticketCollectionState.value =
         refresh && !definition && next !== 'errors' && !workspaceSearchActive()
           ? { projectId: selectedProjectId.value, view: next, status: 'loading' }
@@ -1892,7 +1892,7 @@ export async function startHotSheetWebClient() {
     if (generation !== projectActivationGeneration || project()?.id !== current.id) return;
     await restoreProjectSession(current, generation);
     const restored = customViewFor(selectedView.value, current.id);
-    if (restored) applyCustomViewQuery(restored);
+    if (restored) restoreCustomView(restored);
     else if (customTicketViewKey(selectedView.value)) selectedView.value = 'all';
     if (includeTerminals) observeTerminalDrawer();
   }
@@ -2117,10 +2117,10 @@ export async function startHotSheetWebClient() {
 
   function visibleTickets() {
     let result: WireTicketRow[];
-    if (searchQuery.value.trim() || searchTokens.value.length) {
+    if (workspaceSearchActive()) {
       const matches = searchMatchKeys.value,
         matched = matches ? tickets.value.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [],
-        effective = effectiveSearch(searchQuery.value, searchTokens.value),
+        effective = selectedViewSearch(),
         advanced = usesAdvancedSearchExpression(effective.text),
         tags = advanced
           ? []
@@ -2134,8 +2134,19 @@ export async function startHotSheetWebClient() {
     const active = activeWorkspaceSort();
     return result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
   }
-  function workspaceSearchActive() {
+  /** Whether the search bar itself holds a query. */
+  function searchBarActive() {
     return Boolean(searchQuery.value.trim() || searchTokens.value.length);
+  }
+  /** Whether the visible rows come from a search: a search-bar query or a selected shared view's query. */
+  function workspaceSearchActive() {
+    return searchBarActive() || customViewFor(selectedView.value) !== undefined;
+  }
+  /** The search that selects the visible rows: the bar query, scoped by the selected shared view's query. */
+  function selectedViewSearch(view = selectedView.value) {
+    const bar = effectiveSearch(searchQuery.value, searchTokens.value),
+      definition = customViewFor(view);
+    return definition ? combinedCustomViewSearch(definition, bar) : bar;
   }
 
   let searchTimer: number | undefined,
@@ -2204,10 +2215,7 @@ export async function startHotSheetWebClient() {
     updateSidebarSearchCount(state, view, count);
   }
   function combinedCustomViewSearch(view: CustomView, effective: EffectiveTicketSearch) {
-    const active = orderedSearchText(effective.text, effective.tokens, () => true).trim(),
-      combined = active ? `(${view.query}) AND (${active})` : view.query,
-      parsed = consumeSearchTokens(combined, true);
-    return effectiveSearch(parsed.text, parsed.tokens);
+    return customViewSearch(view, effective.text, effective.tokens);
   }
   async function refreshSidebarSearchCounts(
     current: Project,
@@ -2217,9 +2225,11 @@ export async function startHotSheetWebClient() {
     first: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery },
     refreshEveryView: boolean,
   ) {
-    const client = new Api(current.apiPath);
+    const client = new Api(current.apiPath),
+      selectedDefinition = customViewFor(selected, current.id),
+      selectedSearch = selectedDefinition ? combinedCustomViewSearch(selectedDefinition, effective) : effective;
     try {
-      await countSearchView(client, current, selected, effective, state, first);
+      await countSearchView(client, current, selected, selectedSearch, state, first);
     } catch {
       updateSidebarSearchCount(state, selected, 0);
     }
@@ -2243,7 +2253,9 @@ export async function startHotSheetWebClient() {
     resetBoardColumnPages();
     const current = project(),
       view = selectedView.value,
-      effective = effectiveSearch(searchQuery.value, searchTokens.value),
+      effective = selectedViewSearch(view),
+      barEffective = effectiveSearch(searchQuery.value, searchTokens.value),
+      countSidebar = Boolean(barEffective.text || barEffective.tokens.length),
       signature = searchSignature(),
       generation = ++searchGeneration;
     if (searchTimer !== undefined) {
@@ -2271,7 +2283,7 @@ export async function startHotSheetWebClient() {
         values: countsComplete ? { ...previous.values } : {},
         pending: countsComplete ? [view] : countViews,
       };
-    sidebarSearchCounts.value = countState;
+    sidebarSearchCounts.value = countSidebar ? countState : undefined;
     try {
       const query = searchRequest(effective, view),
         client = new Api(current.apiPath),
@@ -2299,14 +2311,16 @@ export async function startHotSheetWebClient() {
       tickets.value = mergeTicketLinkRows(tickets.value, rows);
       ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: tickets.value };
       searchMatchKeys.value = new Set(matched.map(ticketSearchKey));
-      void refreshSidebarSearchCounts(
-        current,
-        view,
-        effective,
-        countState,
-        { rows, cursor: boolean ? undefined : page.next_cursor, query },
-        !countsComplete,
-      );
+      // Sidebar counts report the search-bar query per view, so a shared view alone shows ordinary counts.
+      if (countSidebar)
+        void refreshSidebarSearchCounts(
+          current,
+          view,
+          barEffective,
+          countState,
+          { rows, cursor: boolean ? undefined : page.next_cursor, query },
+          !countsComplete,
+        );
     } catch (reason) {
       if (generation === searchGeneration) {
         searchMatchKeys.value = new Set();
@@ -2386,7 +2400,7 @@ export async function startHotSheetWebClient() {
     searchGeneration += 1;
     sidebarSearchCounts.value = undefined;
     if (searchTimer !== undefined) window.clearTimeout(searchTimer);
-    if (!searchQuery.value.trim() && !searchTokens.value.length) {
+    if (!workspaceSearchActive()) {
       searchTimer = undefined;
       searchMatchKeys.value = undefined;
       return;
@@ -3069,7 +3083,7 @@ export async function startHotSheetWebClient() {
       const key = customTicketViewKey(selectedView.value);
       if (!key) return;
       const selected = views.find((view) => view.id === key);
-      if (selected) applyCustomViewQuery(selected);
+      if (selected) activateCustomView();
       else selectTicketView('all');
     } catch {
       /* older or temporarily unavailable servers simply keep their last known shared view list */
@@ -3467,9 +3481,7 @@ export async function startHotSheetWebClient() {
     const counts = projectTicketCounts(current.id),
       searchCounts = sidebarSearchCounts.value,
       searchActive =
-        workspaceSearchActive() &&
-        searchCounts?.projectId === current.id &&
-        searchCounts.signature === searchSignature(),
+        searchBarActive() && searchCounts?.projectId === current.id && searchCounts.signature === searchSignature(),
       searchView = (id: TicketView, fallback?: number) => ({
         count: searchActive ? searchCounts.values[id] : fallback,
         countLoading: searchActive && searchCounts.pending.includes(id),
@@ -4588,6 +4600,7 @@ export async function startHotSheetWebClient() {
           queryTokens={savedViewQueryTokens.value}
           busy={savedViewBusy.value}
           error={savedViewError.value}
+          session={savedViewDialogSession.value}
         />
         <SavedViewDeleteDialog
           open={Boolean(deleteView)}
