@@ -5069,7 +5069,7 @@ test('browses repository files and commits with host-native actions', async ({ p
         },
       });
     }
-    actions.push({ path: url.pathname, ...request.postDataJSON() });
+    actions.push({ endpoint: url.pathname, ...request.postDataJSON() });
     return route.fulfill({ status: 204 });
   });
   await page.goto('/');
