@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createLocalHostApp } from './local-host';
+import { createLocalHostApp, releaseBinaryEnvironment } from './local-host';
 
 describe('local production host (HS2-587N4D)', () => {
   let dist: string;
@@ -50,5 +50,35 @@ describe('local production host (HS2-587N4D)', () => {
     expect((await host.request('/__hotsheet/demo-modified')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+});
+
+describe('release binaries for the production host (HS2-D2JQ9A)', () => {
+  const root = '/repo',
+    release = (name: string) => `/repo/target/release/${name}`,
+    built =
+      (...names: string[]) =>
+      (path: string) =>
+        names.some((name) => path === release(name));
+
+  it('switches every binary to its release build together once a release server exists', () => {
+    expect(releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'))).toEqual({
+      HOTSHEET_SERVER_BIN: release('hotsheet-server'),
+      HOTSHEET_CLI_BIN: release('hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+    });
+  });
+
+  it('never pairs a stale release CLI with the debug server', () => {
+    expect(releaseBinaryEnvironment(root, {}, built('hotsheet-cli', 'hotsheet-migrate'))).toEqual({});
+  });
+
+  it('keeps explicit overrides and skips release binaries that are not built', () => {
+    expect(releaseBinaryEnvironment(root, { HOTSHEET_SERVER_BIN: '/custom/server' }, built('hotsheet-server'))).toEqual(
+      {},
+    );
+    expect(
+      releaseBinaryEnvironment(root, { HOTSHEET_CLI_BIN: '/custom/cli' }, built('hotsheet-server', 'hotsheet-cli')),
+    ).toEqual({ HOTSHEET_SERVER_BIN: release('hotsheet-server') });
   });
 });

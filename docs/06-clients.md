@@ -308,8 +308,12 @@ and identity-less legacy entries remain conservatively blocking.
   `/ux-demo`, and its modification feed) return 404. Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
-  open starts the new binary; `dev:rebuild-lan` and `prod:rebuild-lan` run it and then serve the
-  dev or production client on `0.0.0.0` for other devices on the LAN.
+  open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
+  for other devices on the LAN. The production host prefers **release** binaries (HS2-D2JQ9A): when
+  `target/release/hotsheet-server` exists and `HOTSHEET_SERVER_BIN` is unset, it launches the release
+  server, CLI, and migrator together (never a release CLI beside a debug server) and logs which build
+  it uses. `server:rebuild:release` builds those and stops the running machine server, and
+  `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
 
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation
   counters to browser tests. Polling responses that do not change observable state

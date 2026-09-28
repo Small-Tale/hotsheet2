@@ -7,7 +7,9 @@
  * `npm run dev`. The development-only surfaces, Dev Review, the `/ux-demo` catalog, and its
  * modification feed, are not served; the production bundle already omits their client code.
  */
+import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getRequestListener } from '@hono/node-server';
@@ -15,9 +17,37 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type MiddlewareHandler } from 'hono';
 
 import { createDevApp } from './dev-server';
+import { developmentRepositoryRoot } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
+
+/** The Rust binaries the bridge launches, by the environment variable that overrides each. */
+const HOST_BINARIES = {
+  HOTSHEET_SERVER_BIN: 'hotsheet-server',
+  HOTSHEET_CLI_BIN: 'hotsheet-cli',
+  HOTSHEET_MIGRATE_BIN: 'hotsheet-migrate',
+} as const;
+
+/**
+ * Release builds of the bridge's binaries for a production host (HS2-D2JQ9A). The bridge defaults to
+ * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
+ * server is built, every binary not already set in `environment` switches to its release build
+ * together, so a stale release CLI is never paired with a debug server.
+ */
+export function releaseBinaryEnvironment(
+  repositoryRoot: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  exists: (path: string) => boolean = existsSync,
+): Record<string, string> {
+  const release = (name: string) => resolve(repositoryRoot, 'target/release', name);
+  if (environment.HOTSHEET_SERVER_BIN || !exists(release(HOST_BINARIES.HOTSHEET_SERVER_BIN))) return {};
+  const chosen: Record<string, string> = {};
+  for (const [variable, name] of Object.entries(HOST_BINARIES)) {
+    if (!environment[variable] && exists(release(name))) chosen[variable] = release(name);
+  }
+  return chosen;
+}
 
 /** Set `Cache-Control` on a successful response produced by the handlers after this middleware. */
 function cacheControl(value: string): MiddlewareHandler {
@@ -76,6 +106,13 @@ function argument(name: string): string | undefined {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const host = argument('host') ?? '127.0.0.1',
     port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
+  const release = releaseBinaryEnvironment(developmentRepositoryRoot());
+  Object.assign(process.env, release);
+  console.log(
+    release.HOTSHEET_SERVER_BIN
+      ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`
+      : 'Using debug Hot Sheet binaries; run `npm run server:rebuild:release` for a faster server.',
+  );
   const server = await startLocalHost({ host, port });
   const address = server.address(),
     listening = typeof address === 'object' && address ? address.port : port;

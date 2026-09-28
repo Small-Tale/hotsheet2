@@ -63,6 +63,8 @@ it('serves the production client and the local bridge without Vite', async () =>
   try {
     await waitForHost(`${origin}/`, child, () => log);
     expect(log).toContain(`Hot Sheet production client on ${origin}/`);
+    // HS2-D2JQ9A: the host says which server build it launches (release when one is built).
+    expect(log).toMatch(/Using (release|debug) Hot Sheet binaries/);
     const page = await browser.newPage(),
       requests = [],
       pageErrors = [];
