@@ -89,6 +89,7 @@ let throwSocket = false,
   throwObservation = false;
 
 beforeEach(() => {
+  windowMock.innerWidth = 390;
   allocated.terminals.length = 0;
   allocated.proposed = { cols: 80, rows: 24 };
   allocated.openElement = false;
@@ -284,7 +285,9 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
 });
 
 describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
-  function mountAutoFocused() {
+  function mountAutoFocused(innerWidth = 1440) {
+    // Automatic focus is a larger-device behavior; phones focus only on the user's tap (HS2-YD7RZ7).
+    windowMock.innerWidth = innerWidth;
     allocated.openElement = true;
     const frames: Array<() => void> = [],
       body = {},
@@ -317,6 +320,13 @@ describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
       };
     return { terminal, doc, body, runRetries, focusLanded, dispose };
   }
+
+  it('ignores an automatic focus request in the mobile layout (HS2-YD7RZ7)', () => {
+    const { terminal, runRetries, dispose } = mountAutoFocused(390);
+    runRetries();
+    expect(terminal.focus).not.toHaveBeenCalled();
+    dispose();
+  });
 
   it('stops retrying once the requested focus landed, so an unmounted Exit control cannot pull focus back', () => {
     const { terminal, doc, body, runRetries, focusLanded, dispose } = mountAutoFocused();
