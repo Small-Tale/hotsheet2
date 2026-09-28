@@ -8138,6 +8138,44 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   await expect(editor).toHaveValue('Intro, rewritten by me\nMiddle\nEnd\nAppended by the AI\nMore from me');
 });
 
+test('merges concurrent edits to different words of the same title (HS2-R8TYCG)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockProject(page);
+  let liveFull = { ...full, title: 'Fix the parser bug', concurrency_token: 'base' };
+  const patches: Record<string, unknown>[] = [];
+  await page.route('**/tickets/01', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const patch = request.postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    if (patch.expected_token !== liveFull.concurrency_token)
+      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+    liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+  const title = inspector.getByRole('textbox', { name: 'Ticket title' });
+  await expect(title).toHaveValue('Fix the parser bug');
+  // Another writer renames a different word of the same one-line title.
+  liveFull = { ...liveFull, title: 'Fix the lexer bug', concurrency_token: 'remote-title' };
+  await title.fill('Fix the parser crash');
+  await expect.poll(() => liveFull.title).toBe('Fix the lexer crash');
+  await expect(title).toHaveValue('Fix the lexer crash');
+  await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('hs2-r8tycg-merged-title-wide.png') });
+  // The same word changed on both sides still asks.
+  liveFull = { ...liveFull, title: 'Fix the tokenizer crash', concurrency_token: 'remote-overlap' };
+  await title.fill('Fix the scanner crash');
+  await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toBeVisible();
+  await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toContainText('Fix the tokenizer crash');
+});
+
 test('does not report this clients own in-flight autosave as a merge conflict', async ({ page }) => {
   await mockProject(page);
   let liveFull = { ...full },

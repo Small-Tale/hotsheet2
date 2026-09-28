@@ -120,6 +120,71 @@ describe('mergeText adversarial sequences', () => {
   });
 });
 
+describe('mergeText within a line (HS2-R8TYCG)', () => {
+  it('merges edits to different words of one line, such as a title', () => {
+    expect(mergeText('Fix the parser bug', 'Fix the parser crash', 'Fix the lexer bug')).toEqual({
+      clean: true,
+      merged: 'Fix the lexer crash',
+    });
+    expect(mergeText('Ship it', 'Ship it now', 'Please ship it')).toEqual({
+      clean: true,
+      merged: 'Please ship it now',
+    });
+  });
+
+  it('merges word edits inside a multi-line region both sides touched', () => {
+    const base = text('Intro', 'alpha beta gamma', 'delta epsilon', 'End'),
+      mine = text('Intro', 'alpha BETA gamma', 'delta epsilon', 'End'),
+      theirs = text('Intro', 'alpha beta gamma', 'delta EPSILON!', 'End');
+    // Line-level, both sides changed adjacent lines of one region; word-level they are disjoint.
+    expect(mergeText(base, mine, theirs)).toEqual({
+      clean: true,
+      merged: text('Intro', 'alpha BETA gamma', 'delta EPSILON!', 'End'),
+    });
+  });
+
+  it('keeps punctuation and whitespace exact and still conflicts on the same word', () => {
+    expect(mergeText('a, b; c.', 'a, B; c.', 'a, b; c!')).toEqual({ clean: true, merged: 'a, B; c!' });
+    expect(mergeText('Fix the parser bug', 'Fix the lexer bug', 'Fix the tokenizer bug')).toEqual({
+      clean: false,
+    });
+    // Both sides inserting different words at the same point is ambiguous.
+    expect(mergeText('one two', 'one new two', 'one other two')).toEqual({ clean: false });
+    // A word inserted right next to a word the other side replaced has no unambiguous reading.
+    expect(mergeText('My local wording', 'My revised local wording', 'Their newer wording')).toEqual({
+      clean: false,
+    });
+    expect(mergeText('Fix the bug', 'Fix the bug quickly', 'Fix the defect')).toEqual({ clean: false });
+    // Lines stay looser: editing a line while the other side appends lines after it merges.
+    expect(mergeText('# Notes\nDraft', '# Notes\nDraft, expanded', '# Notes\nDraft\n\nAppended')).toEqual({
+      clean: true,
+      merged: '# Notes\nDraft, expanded\n\nAppended',
+    });
+  });
+
+  it('merges any two edits to different words of a line, symmetrically (seeded)', () => {
+    for (let seed = 1; seed <= 200; seed += 1) {
+      let state = seed;
+      const next = (limit: number) => {
+          state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+          return state % limit;
+        },
+        size = 3 + next(8),
+        base = Array.from({ length: size }, (_, index) => `w${index}`),
+        first = next(size - 1),
+        second = first + 1 + next(size - first - 1),
+        mine = base.map((word, index) => (index === first ? `${word}-mine` : word)),
+        theirs = base.map((word, index) => (index === second ? `${word}-theirs` : word)),
+        merged = mergeText(base.join(' '), mine.join(' '), theirs.join(' '));
+      const expected = base.map((word, index) =>
+        index === first ? `${word}-mine` : index === second ? `${word}-theirs` : word,
+      );
+      expect(merged, `seed ${seed}`).toEqual({ clean: true, merged: expected.join(' ') });
+      expect(mergeText(base.join(' '), theirs.join(' '), mine.join(' ')), `seed ${seed}`).toEqual(merged);
+    }
+  });
+});
+
 describe('mergeSet (HS2-A4XCXE)', () => {
   it('applies my additions and removals on top of theirs', () => {
     expect(mergeSet(['a', 'b'], ['a', 'c'], ['a', 'b', 'd'])).toEqual(['a', 'd', 'c']);

@@ -398,11 +398,14 @@ and identity-less legacy entries remain conservatively blocking.
   editing immediately. An active text draft adopts a remote-only update when still
   untouched, preserves a local-only edit, and stays quiet when both sides converge.
   When both sides changed the same text field (details, title, blocked reason, or a note),
-  the client three-way merges them line by line: edits to different lines, or one side's
-  append, combine automatically, and the merged text flows into the open editor (even while
-  it has focus, as long as the user has not typed past the saved text) and is saved. Tag
-  edits merge as additions and removals. Only an overlapping change to the same lines, or
-  two different values for a scalar field, opens a reconciliation surface with the remote
+  the client three-way merges them by line, then word by word inside any line region both
+  sides changed (HS2-R8TYCG): edits to different lines or to different words of one line
+  (a title, say), or one side's append, combine automatically, and the merged text flows
+  into the open editor (even while it has focus, as long as the user has not typed past the
+  saved text) and is saved. Tag edits merge as additions and removals. Only an overlapping
+  change to the same words, two different insertions at the same point, a word inserted
+  right next to a word the other side replaced, or two different
+  values for a scalar field, opens a reconciliation surface with the remote
   and local versions plus an editable merged value (HS2-A4XCXE). A draft typed on top of an
   older value is rebased onto the ticket's current value before it is sent, so a save never
   silently overwrites a concurrent edit to the same field. Whole-ticket concurrency
