@@ -74,6 +74,33 @@ export function reconcileTicketReaderFrame(frame: TicketReaderFrame, ticket: Ful
   };
 }
 
+/**
+ * After a save committed `committed`, drafts that still hold exactly what was `sent` adopt the committed
+ * text, which differs when the save merged a concurrent edit (HS2-A4XCXE). Later typing then builds on the
+ * merged text instead of overwriting the other edit.
+ */
+export function adoptCommittedReaderDrafts(
+  frame: TicketReaderFrame,
+  sent: Record<string, unknown>,
+  committed: FullTicket,
+): TicketReaderFrame {
+  const edit = { ...frame.edit },
+    text = (value: unknown) => (typeof value === 'string' ? value : '');
+  if (typeof sent.details === 'string' && edit.detailsMode === 'write' && edit.detailsDraft === sent.details)
+    edit.detailsDraft = edit.detailsBase = committed.details;
+  if (
+    Object.hasOwn(sent, 'blocked_reason') &&
+    edit.blockedReasonEditing &&
+    edit.blockedReasonDraft.trim() === text(sent.blocked_reason).trim()
+  )
+    edit.blockedReasonDraft = edit.blockedReasonBase = committed.blocked_reason ?? '';
+  if (typeof sent.note === 'string' && sent.note_id === edit.editingNoteId && edit.noteDraft === sent.note) {
+    const note = committed.notes.find((item) => item.id === edit.editingNoteId);
+    if (note) edit.noteDraft = edit.noteBase = note.text;
+  }
+  return { ...frame, edit };
+}
+
 export function pushTicketReaderFrame(
   stack: readonly TicketReaderFrame[],
   frame: TicketReaderFrame,

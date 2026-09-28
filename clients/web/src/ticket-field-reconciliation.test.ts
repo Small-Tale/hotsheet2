@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FullTicket } from './api';
-import { isTicketConcurrencyConflict, reconcileActiveDraft, reconcileTicketPatch } from './ticket-field-reconciliation';
+import {
+  isTicketConcurrencyConflict,
+  rebaseDraftValue,
+  reconcileActiveDraft,
+  reconcileTicketPatch,
+  ticketFieldText,
+} from './ticket-field-reconciliation';
 
 const ticket = (changes: Partial<FullTicket> = {}): FullTicket => ({
   connection_id: 'git-local',
@@ -99,6 +105,62 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileActiveDraft('base', 'same', 'same')).toEqual({ kind: 'converged', base: 'same', draft: 'same' });
     expect(reconcileActiveDraft('base', 'mine', 'theirs')).toEqual({ kind: 'conflict', base: 'theirs', draft: 'mine' });
     expect(reconcileActiveDraft('', '', '')).toEqual({ kind: 'unchanged', base: '', draft: '' });
+  });
+
+  it('merges disjoint concurrent edits of the same text field instead of conflicting (HS2-A4XCXE)', () => {
+    const base = ticket({ details: 'Intro\nMiddle\nEnd' }),
+      remote = ticket({ details: 'Intro\nMiddle\nEnd\nAI appended', concurrency_token: 'remote' });
+    expect(reconcileTicketPatch(base, remote, { details: 'Intro edited\nMiddle\nEnd' })).toEqual({
+      retry: { details: 'Intro edited\nMiddle\nEnd\nAI appended' },
+      conflicts: [],
+    });
+    const note = { ...base.notes[0], text: 'Line one\nLine two' },
+      noteRemote = ticket({ notes: [{ ...note, text: 'Line one\nLine two, theirs' }] });
+    expect(
+      reconcileTicketPatch(ticket({ notes: [note] }), noteRemote, { note_id: 'N1', note: 'Line one, mine\nLine two' }),
+    ).toEqual({ retry: { note: 'Line one, mine\nLine two, theirs', note_id: 'N1' }, conflicts: [] });
+  });
+
+  it('still reports overlapping edits of the same lines as a conflict', () => {
+    const result = reconcileTicketPatch(ticket({ details: 'Shared line' }), ticket({ details: 'Their line' }), {
+      details: 'My line',
+    });
+    expect(result.retry).toEqual({});
+    expect(result.conflicts).toMatchObject([{ key: 'details', mine: 'My line', theirs: 'Their line' }]);
+  });
+
+  it('merges concurrent tag additions and removals and keeps an empty blocked reason null', () => {
+    expect(
+      reconcileTicketPatch(ticket({ tags: ['one', 'two'] }), ticket({ tags: ['one', 'two', 'remote'] }), {
+        tags: ['two', 'mine'],
+      }),
+    ).toEqual({ retry: { tags: ['two', 'remote', 'mine'] }, conflicts: [] });
+    expect(
+      reconcileTicketPatch(
+        ticket({ blocked_reason: 'Waiting\non review' }),
+        ticket({ blocked_reason: 'Waiting\non review\nand CI' }),
+        { blocked_reason: 'Waiting' },
+      ).conflicts,
+    ).toEqual([]);
+  });
+
+  it('merges an idle draft with a disjoint remote edit and asks only on overlap', () => {
+    expect(reconcileActiveDraft('a\nb\nc', 'A\nb\nc', 'a\nb\nc\nd')).toEqual({
+      kind: 'merged',
+      base: 'a\nb\nc\nd',
+      draft: 'A\nb\nc\nd',
+      mine: 'A\nb\nc',
+    });
+    expect(reconcileActiveDraft('a\nb', 'a\nmine', 'a\ntheirs').kind).toBe('conflict');
+  });
+
+  it('rebases a draft typed on an older value onto the current ticket value', () => {
+    expect(rebaseDraftValue('same', 'mine', 'same')).toEqual({ kind: 'unchanged' });
+    expect(rebaseDraftValue('old', 'mine', 'mine')).toEqual({ kind: 'unchanged' });
+    expect(rebaseDraftValue('a\nb', 'A\nb', 'a\nb\nc')).toEqual({ kind: 'merged', value: 'A\nb\nc' });
+    expect(rebaseDraftValue('a', 'mine', 'theirs')).toEqual({ kind: 'conflict' });
+    expect(ticketFieldText(ticket(), 'note', 'N1')).toBe('Base note');
+    expect(ticketFieldText(ticket({ blocked_reason: null as unknown as string }), 'blocked_reason')).toBe('');
   });
 
   it('recognizes only the typed concurrency failure', () => {

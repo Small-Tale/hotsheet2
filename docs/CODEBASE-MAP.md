@@ -98,6 +98,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
     src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics
+    src/text-merge.ts        #   Line-based three-way text merge and tag set merge for concurrent ticket edits (HS2-A4XCXE)
+    src/focused-draft-sync.ts #  Writes a merged draft into the focused text control without moving the caret (HS2-A4XCXE)
     src/ticket-scroll-state.ts # In-session project/mode/view scroll snapshots, deferred restoration, and content-bound clamping
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
     src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)

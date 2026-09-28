@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Capabilities, FullTicket } from './api';
 import {
   activeTicketReaderProject,
+  adoptCommittedReaderDrafts,
   disposeTicketReaderFrames,
   popTicketReaderFrame,
   pushTicketReaderFrame,
@@ -99,6 +100,47 @@ describe('layered ticket reader stack', () => {
       noteDraft: 'local note',
       noteBase: 'remote note',
     });
+  });
+
+  it('adopts committed merged text only into drafts still holding what was sent (HS2-A4XCXE)', () => {
+    const current = frame('one', 'alpha', 'HS2-SAME01');
+    current.edit = {
+      ...current.edit,
+      detailsMode: 'write',
+      detailsDraft: 'mine',
+      blockedReasonEditing: true,
+      blockedReasonDraft: 'typed further',
+      editingNoteId: 'note-1',
+      noteDraft: 'my note',
+    };
+    const committed = {
+      ...current.ticket,
+      details: 'mine\nmerged remote line',
+      blocked_reason: 'merged reason',
+      notes: [
+        {
+          id: 'note-1',
+          kind: 'regular' as const,
+          created_at: '2026-09-11T00:00:00Z',
+          edited_at: '2026-09-11T00:00:00Z',
+          text: 'my note\nmerged',
+        },
+      ],
+    };
+    const adopted = adoptCommittedReaderDrafts(
+      current,
+      { details: 'mine', blocked_reason: 'sent reason', note_id: 'note-1', note: 'my note' },
+      committed,
+    );
+    expect(adopted.edit).toMatchObject({
+      detailsDraft: 'mine\nmerged remote line',
+      detailsBase: 'mine\nmerged remote line',
+      // The user kept typing after this save was sent, so that draft is left for its own save to rebase.
+      blockedReasonDraft: 'typed further',
+      noteDraft: 'my note\nmerged',
+      noteBase: 'my note\nmerged',
+    });
+    expect(current.edit.detailsDraft).toBe('mine');
   });
 
   it('does not mutate the caller-owned stack while pushing or popping', () => {

@@ -397,10 +397,19 @@ and identity-less legacy entries remain conservatively blocking.
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not
   editing immediately. An active text draft adopts a remote-only update when still
   untouched, preserves a local-only edit, and stays quiet when both sides converge.
-  Only divergent changes to that same active field open a reconciliation surface with
-  the remote and local versions plus an editable merged value. Whole-ticket concurrency
-  token failures use the same comparison: unrelated field drift retries once against
-  the fresh token instead of presenting a false conflict. Single-ticket edits are
+  When both sides changed the same text field (details, title, blocked reason, or a note),
+  the client three-way merges them line by line: edits to different lines, or one side's
+  append, combine automatically, and the merged text flows into the open editor (even while
+  it has focus, as long as the user has not typed past the saved text) and is saved. Tag
+  edits merge as additions and removals. Only an overlapping change to the same lines, or
+  two different values for a scalar field, opens a reconciliation surface with the remote
+  and local versions plus an editable merged value (HS2-A4XCXE). A draft typed on top of an
+  older value is rebased onto the ticket's current value before it is sent, so a save never
+  silently overwrites a concurrent edit to the same field. Whole-ticket concurrency
+  token failures use the same comparison: unrelated field drift is rebased and retried
+  against the fresh token, up to four times, so token churn from an actively working AI
+  (lease renewals, notes) cannot roll an edit back. Linked (stacked) ticket readers use the
+  same merge-and-retry path. Single-ticket edits are
   serialized per ticket: each edit bases off the previous edit's committed concurrency
   token, so a user's own rapid sequential edits (e.g. setting a priority then the
   description right after creating a ticket) are last-write-wins and never self-conflict,

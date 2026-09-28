@@ -414,3 +414,56 @@ test('opens media from a stacked linked reader in the gallery for that reader ti
   await expect(linked).toBeVisible();
   await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
 });
+
+test('merges a concurrent remote edit into a linked reader draft instead of discarding it (HS2-A4XCXE)', async ({
+  page,
+}) => {
+  await mockLayeredProjects(page);
+  let details = 'First line\nSecond line',
+    token = 'token-target';
+  const patches: Array<Record<string, unknown>> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    details,
+    blocked_reason: null,
+    concurrency_token: token,
+    notes: [],
+    attachments: [],
+  });
+  await page.route('**/project-api/target-project/**/tickets/target', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: ticketJson() });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const patch = request.postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    if (patch.expected_token !== token)
+      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+    if (typeof patch.details === 'string') details = patch.details;
+    token = `committed-${patches.length}`;
+    return route.fulfill({ json: ticketJson() });
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page
+    .locator('[data-component="ticket-inspector"][data-presentation="sidebar"]')
+    .getByRole('link', { name: '@target-project/HS2-LINK01' })
+    .click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await reader.locator('[data-action="edit-markdown"]').dblclick();
+  const editor = reader.getByRole('textbox', { name: 'Ticket details' });
+  await expect(editor).toHaveValue('First line\nSecond line');
+  // Another writer appends a line the reader has not seen.
+  details = 'First line\nSecond line\nAppended elsewhere';
+  token = 'remote-append';
+  await editor.fill('First line, edited in the reader\nSecond line');
+  await expect.poll(() => details).toBe('First line, edited in the reader\nSecond line\nAppended elsewhere');
+  await expect(editor).toHaveValue('First line, edited in the reader\nSecond line\nAppended elsewhere');
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  // A genuine overlap keeps the draft and says so instead of silently replacing it.
+  details = 'First line, rewritten elsewhere\nSecond line\nAppended elsewhere';
+  token = 'remote-overlap';
+  await editor.fill('First line, rewritten here\nSecond line\nAppended elsewhere');
+  await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
+  await expect(editor).toHaveValue('First line, rewritten here\nSecond line\nAppended elsewhere');
+});

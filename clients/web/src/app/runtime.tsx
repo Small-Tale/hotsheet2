@@ -173,6 +173,7 @@ import { createTerminalViewportsController } from '../features/terminal-viewport
 import { createTicketWorkflows } from '../features/ticket-workflows';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
+import { syncFocusedDraftControl } from '../focused-draft-sync';
 import {
   activeDatePrefix,
   activeTagPrefix,
@@ -2648,9 +2649,14 @@ export async function startHotSheetWebClient() {
     if (detailsMode.value === 'write' && !detailsAutosave.pending()) {
       const next = reconcileActiveDraft(detailsDraftBase, detailsDraft.value, refreshed.details);
       detailsDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         detailsDraft.value = next.draft;
         settledConflictKey = 'details';
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        detailsAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict') {
         detailsAutosave.cancel();
@@ -2667,9 +2673,14 @@ export async function startHotSheetWebClient() {
     if (readerDetailsMode.value === 'write' && !readerDetailsAutosave.pending()) {
       const next = reconcileActiveDraft(readerDetailsDraftBase, readerDetailsDraft.value, refreshed.details);
       readerDetailsDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         readerDetailsDraft.value = next.draft;
         settledConflictKey = 'details';
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        readerDetailsAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
         readerDetailsAutosave.cancel();
@@ -2686,9 +2697,14 @@ export async function startHotSheetWebClient() {
     if (titleEditing.value && !titleAutosave.pending()) {
       const next = reconcileActiveDraft(titleDraftBase, titleDraft.value, refreshed.title);
       titleDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         titleDraft.value = next.draft;
         settledConflictKey = 'title';
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        titleAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
         titleAutosave.cancel();
@@ -2706,9 +2722,14 @@ export async function startHotSheetWebClient() {
       const remote = refreshed.blocked_reason ?? '',
         next = reconcileActiveDraft(blockedReasonDraftBase, blockedReasonDraft.value, remote);
       blockedReasonDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         blockedReasonDraft.value = next.draft;
         settledConflictKey = 'blocked_reason';
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        blockedReasonAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
         blockedReasonAutosave.cancel();
@@ -2726,9 +2747,14 @@ export async function startHotSheetWebClient() {
       const remote = refreshed.blocked_reason ?? '',
         next = reconcileActiveDraft(readerBlockedReasonDraftBase, readerBlockedReasonDraft.value, remote);
       readerBlockedReasonDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         readerBlockedReasonDraft.value = next.draft;
         settledConflictKey = 'blocked_reason';
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        readerBlockedReasonAutosave.schedule(next.draft);
       }
       if (next.kind === 'conflict' && !conflict) {
         readerBlockedReasonAutosave.cancel();
@@ -2748,9 +2774,14 @@ export async function startHotSheetWebClient() {
         previousNote = previous.notes.find((note) => note.id === noteId)?.text ?? '',
         next = reconcileActiveDraft(noteDraftBase, noteDraft.value, remote);
       noteDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         noteDraft.value = next.draft;
         settledConflictKey = `note:${noteId}`;
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        noteAutosave.schedule({ id: noteId, value: next.draft });
       }
       if (next.kind === 'conflict' && !conflict) {
         noteAutosave.cancel();
@@ -2770,9 +2801,14 @@ export async function startHotSheetWebClient() {
         previousNote = previous.notes.find((note) => note.id === readerNoteId)?.text ?? '',
         next = reconcileActiveDraft(readerNoteDraftBase, readerNoteDraft.value, remote);
       readerNoteDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged') {
+      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
         readerNoteDraft.value = next.draft;
         settledConflictKey = `note:${readerNoteId}`;
+      }
+      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+      if (next.kind === 'merged') {
+        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+        readerNoteAutosave.schedule({ id: readerNoteId, value: next.draft });
       }
       if (next.kind === 'conflict' && !conflict) {
         readerNoteAutosave.cancel();
@@ -3360,7 +3396,7 @@ export async function startHotSheetWebClient() {
       }
   }
   // prettier-ignore
-  const { updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, activeTicketSurface, draftScope, ago, });
+  const { updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, activeTicketSurface, draftScope, ago, });
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {

@@ -8075,6 +8075,69 @@ test('merges unrelated external ticket fields and offers an editable merge for t
     .toBe(true);
 });
 
+test('merges a concurrent remote edit and rides out token churn without losing the local edit (HS2-A4XCXE)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockProject(page);
+  let liveFull = { ...full, details: 'Intro\nMiddle\nEnd', concurrency_token: 'base' },
+    churn = 0;
+  const patches: Record<string, unknown>[] = [];
+  await page.route('**/tickets/01', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const patch = request.postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    // An AI renewing its lease or adding notes keeps moving the token between the client's refetch and retry.
+    if (churn > 0) {
+      churn -= 1;
+      liveFull = { ...liveFull, concurrency_token: `churn-${churn}` };
+      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+    }
+    if (patch.expected_token !== liveFull.concurrency_token)
+      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+    liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  await expect(editor).toHaveValue('Intro\nMiddle\nEnd');
+  // The AI appends a line the client has not seen yet, and keeps renewing its lease while the user saves.
+  liveFull = { ...liveFull, details: 'Intro\nMiddle\nEnd\nAppended by the AI', concurrency_token: 'remote-append' };
+  churn = 2;
+  await editor.fill('Intro, edited locally\nMiddle\nEnd');
+  await expect.poll(() => liveFull.details).toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
+  await expect(editor).toHaveValue('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
+  await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('hs2-a4xcxe-merged-editor-wide.png') });
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  // Two churned rejections, then the merged commit: the edit survives repeated stale-token rejections.
+  expect(patches.filter((patch) => typeof patch.details === 'string')).toHaveLength(3);
+  // Typing on after the merge builds on the merged text rather than overwriting the AI's line.
+  await editor.fill('Intro, edited locally\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  await expect
+    .poll(() => liveFull.details)
+    .toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  // Only a true overlap asks: the AI rewrites the line the user is rewriting too.
+  liveFull = {
+    ...liveFull,
+    details: 'Intro, rewritten by the AI\nMiddle\nEnd\nAppended by the AI\nMore from me',
+    concurrency_token: 'remote-overlap',
+  };
+  await editor.fill('Intro, rewritten by me\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  const conflict = inspector.locator('[data-component="ticket-field-conflict"]');
+  await expect(conflict).toBeVisible();
+  await expect(conflict).toContainText('Intro, rewritten by the AI');
+  await page.screenshot({ path: test.info().outputPath('hs2-a4xcxe-overlap-conflict-wide.png') });
+  await expect(editor).toHaveValue('Intro, rewritten by me\nMiddle\nEnd\nAppended by the AI\nMore from me');
+});
+
 test('does not report this clients own in-flight autosave as a merge conflict', async ({ page }) => {
   await mockProject(page);
   let liveFull = { ...full },
