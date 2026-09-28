@@ -6224,6 +6224,129 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
 }
 
 #[tokio::test]
+async fn multi_file_diffs_launch_the_difftool_once() {
+    // HS2-J7HQ5E: several selected files open together as one directory diff.
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let log = checkout.path().join(".git").join("difftool.log");
+    let run = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(checkout.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.name", "Test"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "diff.tool", "hs2-test"]);
+    let record = format!(
+        "ls \"$REMOTE\" >> '{}'; echo --- >> '{}'",
+        log.display(),
+        log.display()
+    );
+    run(&["config", "difftool.hs2-test.cmd", &record]);
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        std::fs::write(checkout.path().join(name), "base\n").unwrap();
+    }
+    run(&["add", "."]);
+    run(&["commit", "-qm", "initial"]);
+
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"multi","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let wait_for_runs = |runs: usize| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let text = std::fs::read_to_string(&log).unwrap_or_default();
+            if text.matches("---").count() >= runs || std::time::Instant::now() > deadline {
+                // Give a would-be second per-file invocation time to appear.
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                return std::fs::read_to_string(&log).unwrap_or_default();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    };
+
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        std::fs::write(checkout.path().join(name), "changed\n").unwrap();
+    }
+    let unstaged = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/multi/repository/review",
+            Some(r#"{"mode":"worktree_file","paths":["a.txt","b.txt"],"area":"unstaged"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unstaged.status(), StatusCode::NO_CONTENT);
+    let text = wait_for_runs(1);
+    assert_eq!(text.matches("---").count(), 1, "one launch: {text}");
+    assert!(text.contains("a.txt") && text.contains("b.txt") && !text.contains("c.txt"));
+
+    // A path outside the changed set rejects the whole request.
+    let unknown = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/multi/repository/review",
+            Some(r#"{"mode":"worktree_file","paths":["a.txt","missing.txt"],"area":"unstaged"}"#),
+        ))
+        .await
+        .unwrap();
+    let status = unknown.status();
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "{}",
+        body_json(unknown).await
+    );
+
+    // Ticket-scoped files open once across the ticket's commit range.
+    std::fs::remove_file(&log).unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/multi/tickets",
+                Some(r#"{"title":"Review several files"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let slug = created["slug"].as_str().unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-qm", &format!("{slug}: change three files")]);
+    let ticket = app
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/multi/tickets/{id}/code-review"),
+            Some(r#"{"mode":"ticket_file","paths":["b.txt","c.txt"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ticket.status(), StatusCode::NO_CONTENT);
+    let text = wait_for_runs(1);
+    assert_eq!(text.matches("---").count(), 1, "one launch: {text}");
+    assert!(text.contains("b.txt") && text.contains("c.txt") && !text.contains("a.txt"));
+}
+
+#[tokio::test]
 async fn analytics_endpoints_return_ticket_flow_and_usage_contracts() {
     let (_d, st) = state();
     let app = app(st);

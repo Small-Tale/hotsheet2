@@ -336,8 +336,9 @@ export type CodeReviewTarget =
   | { mode: 'commit'; commit: string }
   | { mode: 'range'; from: string; to: string }
   | { mode: 'compare'; from: string; to: string }
-  | { mode: 'ticket_file'; path: string }
-  | { mode: 'worktree_file'; path: string; area: 'staged' | 'unstaged' };
+  /** One or more ticket-changed files; several open together as one directory diff (HS2-J7HQ5E). */
+  | { mode: 'ticket_file'; paths: string[] }
+  | { mode: 'worktree_file'; paths: string[]; area: 'staged' | 'unstaged' };
 export interface PermissionRequest {
   id: number;
   project?: string;

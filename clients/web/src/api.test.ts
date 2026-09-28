@@ -711,7 +711,7 @@ describe('ticket code review transport', () => {
       api.openCodeReview('folder with spaces', 'ticket/1', { mode: 'commit', commit: 'abc' }),
     ).resolves.toBeUndefined();
     await expect(
-      api.openCodeReview('folder with spaces', 'ticket/1', { mode: 'ticket_file', path: 'src/a b.ts' }),
+      api.openCodeReview('folder with spaces', 'ticket/1', { mode: 'ticket_file', paths: ['src/a b.ts'] }),
     ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -726,7 +726,7 @@ describe('ticket code review transport', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       '/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',
-      expect.objectContaining({ method: 'POST', body: '{"mode":"ticket_file","path":"src/a b.ts"}' }),
+      expect.objectContaining({ method: 'POST', body: '{"mode":"ticket_file","paths":["src/a b.ts"]}' }),
     );
     fetchMock.mockRestore();
   });
@@ -738,7 +738,11 @@ describe('repository browser transport', () => {
     const api = new Api('/api');
     await api.repositoryFileAction('folder with spaces', 'src/a b.ts', 'reveal');
     await api.openRepositoryReview('folder with spaces', { mode: 'range', from: 'aaa', to: 'bbb' });
-    await api.openRepositoryReview('folder with spaces', { mode: 'worktree_file', path: 'src/a b.ts', area: 'staged' });
+    await api.openRepositoryReview('folder with spaces', {
+      mode: 'worktree_file',
+      paths: ['src/a b.ts', 'README.md'],
+      area: 'staged',
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/checkouts/folder%20with%20spaces/repository/files/action',
@@ -752,7 +756,10 @@ describe('repository browser transport', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       '/api/checkouts/folder%20with%20spaces/repository/review',
-      expect.objectContaining({ method: 'POST', body: '{"mode":"worktree_file","path":"src/a b.ts","area":"staged"}' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: '{"mode":"worktree_file","paths":["src/a b.ts","README.md"],"area":"staged"}',
+      }),
     );
     fetchMock.mockRestore();
   });

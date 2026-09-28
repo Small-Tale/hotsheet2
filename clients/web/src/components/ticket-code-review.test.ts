@@ -210,11 +210,11 @@ describe('TicketCodeReview', () => {
     expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'abc' })).toBeUndefined();
     expect(codeReviewTarget({ reviewMode: 'ticket_file', reviewPath: 'src/main.ts' })).toEqual({
       mode: 'ticket_file',
-      path: 'src/main.ts',
+      paths: ['src/main.ts'],
     });
     expect(codeReviewTarget({ reviewMode: 'worktree_file', reviewPath: 'src/main.ts', reviewArea: 'staged' })).toEqual({
       mode: 'worktree_file',
-      path: 'src/main.ts',
+      paths: ['src/main.ts'],
       area: 'staged',
     });
     expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc' })).toBeUndefined();

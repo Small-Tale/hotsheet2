@@ -180,13 +180,10 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     const current = project();
     if (!current) return;
     try {
-      await Promise.all(
-        paths.map((path) =>
-          new Api(current.apiPath).openRepositoryReview(current.id, { mode: 'worktree_file', path, area }),
-        ),
-      );
+      // One request, so the configured tool opens once with every selected file (HS2-J7HQ5E).
+      await new Api(current.apiPath).openRepositoryReview(current.id, { mode: 'worktree_file', paths, area });
       showToast(
-        `Opened ${paths.length === 1 ? `${area} file diff` : `${paths.length} ${area} file diffs`} in ${repository.value?.difftool ?? 'the configured diff tool'}.`,
+        `Opened ${paths.length === 1 ? `${area} file diff` : `${paths.length} ${area} files in one diff`} in ${repository.value?.difftool ?? 'the configured diff tool'}.`,
       );
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
@@ -321,17 +318,14 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     const current = project(),
       ticket = selectedTicket.value;
     if (!current || !ticket) return;
-    codeReviewMessage.value = `Opening ${paths.length === 1 ? 'file diff' : `${paths.length} file diffs`}…`;
-    void Promise.all(
-      paths.map((path) =>
-        new Api(current.apiPath).openCodeReview(current.id, ticket.id, { mode: 'ticket_file', path }),
-      ),
-    )
+    codeReviewMessage.value = `Opening ${paths.length === 1 ? 'file diff' : `${paths.length} files in one diff`}…`;
+    void new Api(current.apiPath)
+      .openCodeReview(current.id, ticket.id, { mode: 'ticket_file', paths })
       .then(() => {
         if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
           codeReviewMessage.value = '';
           showToast(
-            `Opened ${paths.length === 1 ? 'file diff' : `${paths.length} file diffs`} in ${codeReview.value?.difftool ?? 'the configured diff tool'}.`,
+            `Opened ${paths.length === 1 ? 'file diff' : `${paths.length} files in one diff`} in ${codeReview.value?.difftool ?? 'the configured diff tool'}.`,
           );
         }
       })

@@ -5114,10 +5114,15 @@ test('browses repository files and commits with host-native actions', async ({ p
   await staged.click({ button: 'right' });
   await expect(popover.getByRole('menuitem', { name: 'Open' })).toBeDisabled();
   await popover.getByRole('menuitem', { name: 'Show Diff' }).click();
+  // HS2-J7HQ5E: both selected files go in one request, so the tool opens once.
   await expect
     .poll(() => actions.filter((action) => action.mode === 'worktree_file' && action.area === 'staged').length)
-    .toBe(2);
-  await expect(page.locator('.app-toast')).toContainText('Opened 2 staged file diffs in Glassbox.');
+    .toBe(1);
+  const stagedDiff = actions.find((action) => action.mode === 'worktree_file' && action.area === 'staged');
+  expect(stagedDiff?.paths).toHaveLength(2);
+  expect(stagedDiff?.paths).toContain('src/staged.ts');
+  expect(stagedDiff).not.toHaveProperty('path');
+  await expect(page.locator('.app-toast')).toContainText('Opened 2 staged files in one diff in Glassbox.');
   await page.screenshot({ path: '/private/tmp/hs2-jgfm53-multi-file-menu-wide.png' });
   await staged.dblclick();
   await expect
@@ -5433,7 +5438,7 @@ test('lists associated commits and opens a validated commit or range in the conf
         (action) =>
           action.operation === 'code-review' &&
           action.mode === 'ticket_file' &&
-          action.path === 'clients/web/src/change-evidence.test.ts',
+          JSON.stringify(action.paths) === JSON.stringify(['clients/web/src/change-evidence.test.ts']),
       ),
     )
     .toBe(true);
@@ -5508,6 +5513,56 @@ test('renders the exact shared Code Review component in the inspector and reader
   await page.screenshot({ path: '/private/tmp/hs2-g7p7s7-code-review-reader-after.png', fullPage: true });
 });
 
+test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', async ({ page }) => {
+  const actions = await mockProject(page);
+  await page.route('**/tickets/01/code-review', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: {
+            difftool: 'Glassbox',
+            truncated: false,
+            summary: { files: { total: 2, docs: 2, tests: 0, source: 0, other: 0 }, tests_added: 0, tests_modified: 0 },
+            files: [
+              { path: 'docs/06-clients.md', change: 'modified', category: 'docs' },
+              { path: 'docs/README.md', change: 'modified', category: 'docs' },
+            ],
+            ranges: [],
+            commits: [
+              {
+                sha: 'aaa1111',
+                short_sha: 'aaa1111',
+                subject: 'HS2-DEMO01: update the client docs',
+                committed_at: '2026-09-02T07:00:00Z',
+              },
+            ],
+          },
+        })
+      : route.fallback(),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
+  await inspector.getByRole('button', { name: 'Open change evidence' }).click();
+  const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
+  await expect(evidenceDialog).toHaveAttribute('data-view', 'docs');
+  const files = evidenceDialog.locator('[data-action="select-repository-file"]');
+  await expect(files).toHaveCount(2);
+  await files.nth(0).click();
+  await files.nth(1).click({ modifiers: ['Meta'] });
+  await expect(files.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await files.nth(1).click({ button: 'right' });
+  await evidenceDialog.getByRole('menuitem', { name: 'Show Diff' }).click();
+  await expect
+    .poll(() => actions.filter((action) => action.operation === 'code-review' && action.mode === 'ticket_file').length)
+    .toBe(1);
+  const diff = actions.find((action) => action.operation === 'code-review' && action.mode === 'ticket_file');
+  expect(diff?.paths).toEqual(['docs/06-clients.md', 'docs/README.md']);
+  await expect(page.locator('.app-toast')).toContainText('Opened 2 files in one diff in Glassbox.');
+});
+
 test('keeps change evidence interactive when launched from the modal ticket reader (HS2-6EV2ES)', async ({ page }) => {
   const actions = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -5538,7 +5593,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
         (action: Record<string, unknown>) =>
           action.operation === 'code-review' &&
           action.mode === 'ticket_file' &&
-          action.path === 'clients/web/src/change-evidence.test.ts',
+          JSON.stringify(action.paths) === JSON.stringify(['clients/web/src/change-evidence.test.ts']),
       ),
     )
     .toBe(true);

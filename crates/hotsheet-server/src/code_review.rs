@@ -200,11 +200,54 @@ pub struct CodeReviewPage {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ReviewTarget {
-    Commit { commit: String },
-    Range { from: String, to: String },
-    Compare { from: String, to: String },
-    TicketFile { path: String },
-    WorktreeFile { path: String, area: WorktreeArea },
+    Commit {
+        commit: String,
+    },
+    Range {
+        from: String,
+        to: String,
+    },
+    Compare {
+        from: String,
+        to: String,
+    },
+    /// One or more ticket-changed files. `paths` also accepts a single `path` string.
+    TicketFile {
+        #[serde(alias = "path", deserialize_with = "one_or_many_paths")]
+        paths: Vec<String>,
+    },
+    /// One or more changed working-tree files in one area. `paths` also accepts `path`.
+    WorktreeFile {
+        #[serde(alias = "path", deserialize_with = "one_or_many_paths")]
+        paths: Vec<String>,
+        area: WorktreeArea,
+    },
+}
+
+/// Accept a single path string or a list; reject an empty list and drop repeated paths.
+fn one_or_many_paths<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    let paths = match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(path) => vec![path],
+        OneOrMany::Many(paths) => paths,
+    };
+    let mut seen = HashSet::new();
+    let paths: Vec<String> = paths
+        .into_iter()
+        .filter(|path| seen.insert(path.clone()))
+        .collect();
+    if paths.is_empty() {
+        return Err(serde::de::Error::custom("at least one path is required"));
+    }
+    Ok(paths)
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -530,7 +573,7 @@ pub fn launch(
     }
     let (old, new) = launch_revisions(root, review, target)?;
     match target {
-        ReviewTarget::TicketFile { path } => spawn_difftool_file(root, (&old, &new), path),
+        ReviewTarget::TicketFile { paths } => spawn_difftool_files(root, (&old, &new), paths),
         _ => spawn_difftool(root, (old, new)),
     }
 }
@@ -567,38 +610,49 @@ pub fn launch_repository(
             validate_reachable_commit(root, to)?;
             (from.clone(), to.clone())
         }
-        ReviewTarget::WorktreeFile { path, area } => {
-            return launch_worktree_file(root, path, *area);
+        ReviewTarget::WorktreeFile { paths, area } => {
+            return launch_worktree_files(root, paths, *area);
         }
         ReviewTarget::TicketFile { .. } => return Err(CodeReviewError::InvalidTarget),
     };
     spawn_difftool(root, revisions)
 }
 
-fn launch_worktree_file(
+fn launch_worktree_files(
     root: &Path,
-    path: &str,
+    paths: &[String],
     area: WorktreeArea,
 ) -> Result<(), CodeReviewError> {
     let args = match area {
         WorktreeArea::Staged => ["diff", "--name-only", "-z", "--cached"].as_slice(),
         WorktreeArea::Unstaged => ["diff", "--name-only", "-z"].as_slice(),
     };
-    let changed = git_output(root, args)?;
-    if !changed.split('\0').any(|candidate| candidate == path) {
+    let output = git_output(root, args)?;
+    let changed: HashSet<&str> = output.split('\0').collect();
+    if paths.is_empty() || !paths.iter().all(|path| changed.contains(path.as_str())) {
         return Err(CodeReviewError::InvalidTarget);
     }
     let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(root)
-        .args(["difftool", "--no-prompt"]);
+    command.arg("-C").arg(root).args(difftool_args(paths, &[]));
     if area == WorktreeArea::Staged {
         command.arg("--cached");
     }
+    spawn_detached(command.arg("--").args(paths))
+}
+
+/// `git difftool` arguments before the pathspec. Several files open together as one
+/// directory diff; plain `git difftool` would launch the tool once per file.
+fn difftool_args<'a>(paths: &[String], revisions: &[&'a str]) -> Vec<&'a str> {
+    let mut args = vec!["difftool", "--no-prompt"];
+    if paths.len() > 1 {
+        args.push("--dir-diff");
+    }
+    args.extend_from_slice(revisions);
+    args
+}
+
+fn spawn_detached(command: &mut Command) -> Result<(), CodeReviewError> {
     command
-        .arg("--")
-        .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -639,21 +693,19 @@ fn spawn_difftool(root: &Path, (old, new): (String, String)) -> Result<(), CodeR
         .map_err(|error| CodeReviewError::Launch(error.to_string()))
 }
 
-fn spawn_difftool_file(
+fn spawn_difftool_files(
     root: &Path,
     (old, new): (&str, &str),
-    path: &str,
+    paths: &[String],
 ) -> Result<(), CodeReviewError> {
-    Command::new("git")
+    let mut command = Command::new("git");
+    command
         .arg("-C")
         .arg(root)
-        .args(["difftool", "--no-prompt", old, new, "--", path])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+        .args(difftool_args(paths, &[old, new]))
+        .arg("--")
+        .args(paths);
+    spawn_detached(&mut command)
 }
 
 fn launch_revisions(
@@ -713,8 +765,12 @@ fn launch_revisions(
                 .ok_or(CodeReviewError::InvalidTarget)?;
             Ok((from.sha.clone(), to.sha.clone()))
         }
-        ReviewTarget::TicketFile { path } => {
-            if !review.files.iter().any(|file| file.path == *path) {
+        ReviewTarget::TicketFile { paths } => {
+            if paths.is_empty()
+                || !paths
+                    .iter()
+                    .all(|path| review.files.iter().any(|file| file.path == *path))
+            {
                 return Err(CodeReviewError::InvalidTarget);
             }
             let (Some(newest), Some(oldest)) = (review.commits.first(), review.commits.last())
@@ -1163,7 +1219,7 @@ mod tests {
                 Path::new("."),
                 &review,
                 &ReviewTarget::TicketFile {
-                    path: "src/known.rs".into()
+                    paths: vec!["src/known.rs".into()]
                 },
             )
             .unwrap(),
@@ -1174,10 +1230,53 @@ mod tests {
                 Path::new("."),
                 &review,
                 &ReviewTarget::TicketFile {
-                    path: "--no-index".into()
+                    paths: vec!["--no-index".into()]
                 },
             ),
             Err(CodeReviewError::InvalidTarget)
         ));
+        // Every path in a multi-file target must be ticket evidence.
+        assert!(matches!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::TicketFile {
+                    paths: vec!["src/known.rs".into(), "--no-index".into()]
+                },
+            ),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+    }
+
+    #[test]
+    fn file_targets_accept_one_path_or_a_deduplicated_list() {
+        let parse = |json: &str| serde_json::from_str::<ReviewTarget>(json);
+        assert_eq!(
+            parse(r#"{"mode":"ticket_file","path":"a.rs"}"#).unwrap(),
+            ReviewTarget::TicketFile {
+                paths: vec!["a.rs".into()]
+            }
+        );
+        assert_eq!(
+            parse(r#"{"mode":"worktree_file","paths":["a.rs","b.rs","a.rs"],"area":"staged"}"#)
+                .unwrap(),
+            ReviewTarget::WorktreeFile {
+                paths: vec!["a.rs".into(), "b.rs".into()],
+                area: WorktreeArea::Staged,
+            }
+        );
+        assert!(parse(r#"{"mode":"ticket_file","paths":[]}"#).is_err());
+        assert!(parse(r#"{"mode":"ticket_file"}"#).is_err());
+    }
+
+    #[test]
+    fn several_files_open_as_one_directory_diff() {
+        let one = vec!["a.rs".to_owned()];
+        let two = vec!["a.rs".to_owned(), "b.rs".to_owned()];
+        assert_eq!(difftool_args(&one, &[]), ["difftool", "--no-prompt"]);
+        assert_eq!(
+            difftool_args(&two, &["old", "new"]),
+            ["difftool", "--no-prompt", "--dir-diff", "old", "new"]
+        );
     }
 }

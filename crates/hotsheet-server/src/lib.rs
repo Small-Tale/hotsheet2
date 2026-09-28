@@ -3528,7 +3528,10 @@ fn repository_browser_api_error(error: repository_browser::RepositoryBrowserErro
     let status = match error {
         RepositoryBrowserError::UnknownFile
         | RepositoryBrowserError::UnsafePath
-        | RepositoryBrowserError::MissingFile => StatusCode::BAD_REQUEST,
+        | RepositoryBrowserError::MissingFile
+        | RepositoryBrowserError::Review(code_review::CodeReviewError::InvalidTarget) => {
+            StatusCode::BAD_REQUEST
+        }
         RepositoryBrowserError::Review(code_review::CodeReviewError::DifftoolNotConfigured) => {
             StatusCode::CONFLICT
         }

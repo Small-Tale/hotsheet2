@@ -1346,8 +1346,11 @@ and identity-less legacy entries remain conservatively blocking.
   action menu. Platform-additive and range selection permit batch Show Diff and path-copy
   operations, while single-file-only Open and host-native reveal actions are disabled for
   a multi-selection. Show Diff opens the selected file or files in the configured difftool across the complete span from the parent of the
-  oldest associated commit through the newest associated commit. The server derives
-  and revalidates the exact path and range; arbitrary browser-supplied files are rejected.
+  oldest associated commit through the newest associated commit. A multi-selection is one
+  request and one difftool launch: several files open together as a `git difftool --dir-diff`
+  rather than one tool window per file (HS2-J7HQ5E). The server derives
+  and revalidates every exact path and the range; a request containing any arbitrary
+  browser-supplied file is rejected as a whole.
   Classification runs against that committed range (not the browser's working tree) and is configurable through the effective project setting
   `code_review_file_classes`, whose JSON object contains `docs`, `tests`, and `source`
   glob arrays. The defaults recognize `docs/**`, Markdown, conventional test/spec paths,
@@ -2567,7 +2570,8 @@ platform-additive and Shift range gestures build a multi-selection without openi
 Only the ellipsis and right-click open the shared action menu. Its Show Diff action opens exact staged,
 unstaged, or conflicted working-tree file diff in the configured difftool after fresh
 server-side status validation (and is disabled where no meaningful diff exists). A batch
-selection opens each selected diff and copies relative or absolute paths as newline-delimited
+selection opens every selected file in one difftool launch (a `git difftool --dir-diff`
+over exactly those paths, validated together; HS2-J7HQ5E) and copies relative or absolute paths as newline-delimited
 text; Open and reveal are disabled because they are single-file operations. Double-click
 remains a direct shortcut asking the host to open a currently reported file. The menu also
 copies relative or absolute paths, opens the file, or reveals it with host-specific

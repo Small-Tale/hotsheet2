@@ -261,13 +261,13 @@ export function codeReviewTarget(data: DOMStringMap): CodeReviewTarget | undefin
     return { mode: 'range', from: data.reviewFrom, to: data.reviewTo };
   if (data.reviewMode === 'compare' && data.reviewFrom && data.reviewTo && data.reviewFrom !== data.reviewTo)
     return { mode: 'compare', from: data.reviewFrom, to: data.reviewTo };
-  if (data.reviewMode === 'ticket_file' && data.reviewPath) return { mode: 'ticket_file', path: data.reviewPath };
+  if (data.reviewMode === 'ticket_file' && data.reviewPath) return { mode: 'ticket_file', paths: [data.reviewPath] };
   if (
     data.reviewMode === 'worktree_file' &&
     data.reviewPath &&
     (data.reviewArea === 'staged' || data.reviewArea === 'unstaged')
   )
-    return { mode: 'worktree_file', path: data.reviewPath, area: data.reviewArea };
+    return { mode: 'worktree_file', paths: [data.reviewPath], area: data.reviewArea };
   return undefined;
 }
 
