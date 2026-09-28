@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Run as a self-claim worker — continuously claim, work, and release Up Next tickets
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 32 -->
+<!-- hotsheet-skill-version: 33 -->
 
 You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
 store. Pick one stable worker id for the session and use it for every claim, renewal,
@@ -19,6 +19,9 @@ and release.
 2. Implement only that ticket. Renew before lengthy work with `hotsheet_renew` using
    `id`, `worker`, and `lease_minutes`, or `hotsheet-cli renew <id> --worker <id>`.
    If renewal fails, stop; another worker may now own the lease.
+   If you decide to stop working this ticket for any reason before completing it (a
+   blocker, `FEEDBACK NEEDED`, deferring it, switching tickets, or ending your turn), add a
+   note saying where you stopped and release the claim right away; leave its status alone.
 3. Run proportionate checks and commit only this ticket's changes. Never push without
    explicit maintainer permission.
 4. Before completion, finish and verify scope; update required tests, coverage, and docs;
@@ -33,6 +36,11 @@ and release.
    simple updates brief and omit empty sections.
 5. Release with `hotsheet_release` using `id` and `worker`, or
    `hotsheet-cli release <id> --worker <id>`, then return to step 1.
+
+**Never leave a claim behind.** A live claim tells everyone you are actively on that ticket
+and blocks other workers until its lease expires. Release on every exit path, not only after
+completion, and before your final response run `hotsheet-cli ls --claimed` to confirm you
+hold no claim you are no longer working.
 
 ## Coordination
 

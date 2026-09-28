@@ -118,6 +118,43 @@ fn every_worklist_skill_leaves_pushing_to_the_repository() {
 }
 
 #[test]
+fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
+    // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
+    // so the instructions and the worklist skill both make release the rule on every exit path.
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    for plugin in all_plugins(&[]) {
+        let body = flatten(plugin.instructions_body());
+        for phrase in [
+            "Release your claim the moment you stop working a ticket",
+            "switching to a different ticket",
+            "about to end your turn or session",
+            "Releasing never changes the ticket's status",
+            "hotsheet-cli ls --claimed",
+        ] {
+            assert!(
+                body.contains(phrase),
+                "{} instructions are missing: {phrase}",
+                plugin.id()
+            );
+        }
+        if let Some((_, skill)) = plugin.skill() {
+            let skill = flatten(skill);
+            for phrase in [
+                "the moment you stop working the ticket for any reason",
+                "release every claim you hold",
+                "hotsheet-cli ls --claimed",
+            ] {
+                assert!(
+                    skill.contains(phrase),
+                    "{} skill is missing: {phrase}",
+                    plugin.id()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn codex_declares_its_project_local_skill() {
     let p = find_in("codex", &[]).expect("codex plugin present");
     assert_eq!(p.manifest.product_name, "Codex CLI");
@@ -125,7 +162,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 50 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 51 -->"));
     assert_eq!(p.manifest.instructions.target, "AGENTS.md");
     assert_eq!(p.manifest.mcp.format, "codex-toml");
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");

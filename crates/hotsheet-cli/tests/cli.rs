@@ -632,6 +632,19 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
     let unset = snapshot();
     assert!(unset.iter().all(Option::is_some), "{unset:?}");
     assert!(unset[0].as_deref().unwrap().contains("hotsheet:"));
+    // HS2-M3F0MS: the section setup writes tells AIs to release claims whenever they stop.
+    assert!(
+        unset[0]
+            .as_deref()
+            .unwrap()
+            .contains("Release your claim the moment you stop working a ticket")
+    );
+    assert!(
+        unset[1]
+            .as_deref()
+            .unwrap()
+            .contains("hotsheet-cli ls --claimed")
+    );
 
     // An explicit empty list disables every tool.
     set_enabled(Some("[]"));
@@ -739,11 +752,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 50 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 51 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 50 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 51 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -782,11 +795,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 49 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 50 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 50 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 51 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)

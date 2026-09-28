@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 50 -->
+<!-- hotsheet-skill-version: 51 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -29,8 +29,11 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    which acquires the claim and changes Not Started to Started in one durable write.
    Do not issue separate claim and status commands. Renew
    before the lease expires and before lengthy work with `hotsheet_renew` or
-   `hotsheet-cli renew`; release with `hotsheet_release` or `hotsheet-cli release` when
-   work stops for completion, handoff, error, or feedback. If another worker holds the
+   `hotsheet-cli renew`. Release with `hotsheet_release` or `hotsheet-cli release` the
+   moment you stop working the ticket for any reason: completion, handoff, error, feedback,
+   switching to another ticket, deciding to defer it, or ending your turn. A claim left
+   behind falsely signals live work and blocks others until it expires; releasing never
+   changes status, so a part-done ticket stays `started` with a note on where you stopped. If another worker holds the
    live lease, do not work concurrently; replan around other tickets. Then implement and
    verify scope, run the completion checklist, and mark completed with a result and
    verification note. Delegated workers claim their own exact assigned ticket and use a
@@ -107,6 +110,10 @@ ticket blocker, leave the ticket started and add a `FEEDBACK NEEDED:` note namin
 specific decision or state required. FEEDBACK NEEDED is not deferred-work tracking:
 create follow-ups first for independently describable gaps, exhaust safe alternatives,
 and continue other independent Up Next work before stopping.
+
+Whenever you stop, for any of these reasons or any other, release every claim you hold
+first: run `hotsheet-cli ls --claimed` and release each ticket you are no longer actively
+working (use `--force` only for a delegated worker's claim you are taking back).
 
 Notes:
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work

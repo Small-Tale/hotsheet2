@@ -207,6 +207,14 @@ and per-ticket commit hygiene — while explicitly **leaving the push/PR decisio
 repository** rather than mandating it. The four first-party blocks share one body; the
 `every_builtin_carries_the_full_default_guidance` test pins that content.
 
+The blocks and the worklist skill also make **releasing a claim the rule on every exit path**
+(HS2-M3F0MS): an AI releases its claim the moment it stops working a ticket for any reason
+(completion, a blocker or `FEEDBACK NEEDED`, handoff, switching tickets, deferring, running
+out of time or budget, or ending its turn), leaves the status alone with a note on where it
+stopped, and checks `hotsheet-cli ls --claimed` before its final response so no stale claim
+falsely signals live work. `every_builtin_tells_ais_to_release_claims_whenever_they_stop`
+pins that guidance.
+
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
 capability seen from two sides: the loader decides _what_ tools exist, the setup
