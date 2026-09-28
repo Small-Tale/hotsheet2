@@ -168,6 +168,36 @@ describe('ticket motion', () => {
     expect(incoming.animate).not.toHaveBeenCalled();
   });
 
+  it('renders a bulk arrival into an empty collection without cloning or animating any row (HS2-8Y2XST)', () => {
+    const document = mockDocument(),
+      arrive = (count: number) =>
+        Array.from({ length: count }, (_, index) => {
+          const slug = `HS2-FILL${count}-${index}`,
+            item = row(slug, 'not-started', rect(10, 20 + index * 72, 190, 63), undefined, document),
+            overlay = ghost(slug, document);
+          (item.container as unknown as { cloneNode: () => HTMLElement }).cloneNode = () => overlay;
+          return { item, overlay };
+        });
+    const bulk = arrive(13);
+    animateTicketMotion(
+      { scope: 'edge-to-edge:ticket-board', rows: new Map() },
+      root(bulk.map(({ item }) => item)),
+      false,
+    );
+    for (const { item, overlay } of bulk) {
+      expect(overlay.animate).not.toHaveBeenCalled();
+      expect(item.container.style.visibility).not.toBe('hidden');
+    }
+    // A handful of arrivals is ordinary ticket work and still fades in.
+    const few = arrive(3);
+    animateTicketMotion(
+      { scope: 'edge-to-edge:ticket-board', rows: new Map() },
+      root(few.map(({ item }) => item)),
+      false,
+    );
+    for (const { overlay } of few) expect(overlay.animate).toHaveBeenCalled();
+  });
+
   it('does not clone or animate rows when the ticket collection view changes', () => {
     const previous = row('HS2-A', 'ticket-list', rect(10, 20)),
       incoming = row('HS2-B', 'ticket-list', rect(10, 20));

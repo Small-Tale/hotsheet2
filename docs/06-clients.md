@@ -391,7 +391,10 @@ and identity-less legacy entries remain conservatively blocking.
   replacing a whole collection never creates per-row transition ghosts; within-view
   ticket arrivals, departures, and moves retain their normal motion. Collections above
   100 rendered tickets also bypass geometry capture and transition ghosts, keeping
-  search responsive when it replaces a fully rendered large queue (HS2-E76C4K).
+  search responsive when it replaces a fully rendered large queue (HS2-E76C4K). Likewise a bulk
+  arrival — more than a dozen rows filling a collection at once, as when a project or view loads into
+  an empty list — renders directly instead of ghost-fading each row, whose per-row clone and forced
+  layout read blocked the main thread for seconds (HS2-8Y2XST).
   Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not

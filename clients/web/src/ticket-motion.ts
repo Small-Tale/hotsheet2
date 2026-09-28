@@ -13,6 +13,10 @@ export interface TicketMotionSnapshot {
 const LAYOUT_DURATION = 240,
   FADE_DURATION = 160,
   MAX_CAPTURED_ROWS = 100,
+  // A collection filling in (a project or view loading into an empty list) brings many rows at once.
+  // Ghost-fading each one clones it and forces a layout read per row, which locked the main thread
+  // for seconds (HS2-8Y2XST); a bulk arrival renders directly and motion stays for ordinary ticket work.
+  MAX_INCOMING_ANIMATIONS = 12,
   MOTION_EASING = 'cubic-bezier(.2,.8,.2,1)';
 export const TICKET_MOTION_LAYER = '90';
 const activeLayoutAnimations = new WeakMap<HTMLElement, Animation>();
@@ -102,6 +106,7 @@ export function animateTicketMotion(
   const removed = [...before.rows].filter(([slug]) => !after.has(slug)),
     incoming = [...after].filter(([slug]) => !before.rows.has(slug)),
     removedParents = new Set(removed.map(([, row]) => row.parent));
+  if (incoming.length > MAX_INCOMING_ANIMATIONS) return;
   const layoutMotion = new Map<
     string,
     { current: TicketMotionRow; previous: TicketMotionRow; x: number; y: number; movedColumn: boolean }
