@@ -149,7 +149,9 @@ so opening a project never waits for the OS to start the stream (HS2-P3SSGR). A 
 drops changes made while it is still starting, and starting it can take seconds on a busy macOS
 machine, so a short-lived 250ms poller bridges that window: the store is re-checked when the bridge
 starts, the bridge is dropped about 1.5s after the native stream is live, and the store is re-checked
-once more. Each re-check processes only ticket files whose bytes differ from the index. That start-up
+once more. Each re-check processes only ticket files whose bytes differ from the index. The bridge compares file
+contents, not just mtimes, because notify's poller records mtimes in whole seconds and would otherwise
+miss an edit made in the same second as its previous scan until the native stream was up (HS2-XAHR91). That start-up
 gap, not a second stream, is what made the old macOS registered-store test fail (HS2-SG1BKJ); the
 permanent 250ms polling fallback it replaces re-walked each registered store four times a second and
 kept an idle server busy. Steady-state detection takes tens of milliseconds plus the 150ms debounce.

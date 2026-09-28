@@ -9055,6 +9055,16 @@ const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
 /// When the startup resync runs; a native stream is live well within this (HS2-P3SSGR).
 const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
 
+/// The startup bridge's polling config. notify's poller compares mtimes in whole seconds, so an
+/// edit landing in the same second as the previous scan looks unchanged; comparing contents
+/// catches it at the next scan instead of waiting for the native stream, whose start can take
+/// several seconds on a busy Mac (HS2-XAHR91). The bridge lives only until that stream is up.
+fn startup_bridge_config() -> notify::Config {
+    notify::Config::default()
+        .with_poll_interval(Duration::from_millis(250))
+        .with_compare_contents(true)
+}
+
 /// A second FSEvents watcher is unreliable in the server process, while notify's polling
 /// watcher recursively walks every checkout (including ignored build output) on both
 /// startup and every interval. On macOS, fingerprint Git's own bounded view instead.
@@ -9104,7 +9114,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                     move |res| {
                         let _ = bridge_tx.send(res);
                     },
-                    notify::Config::default().with_poll_interval(Duration::from_millis(250)),
+                    startup_bridge_config(),
                 )
                 .and_then(|mut bridge| {
                     bridge.watch(&tickets_dir, RecursiveMode::Recursive)?;
@@ -9926,6 +9936,54 @@ mod terminal_permission_route_tests {
         assert_eq!(
             value(&env, "HOTSHEET_SERVER").as_deref(),
             Some("http://127.0.0.1:4175")
+        );
+    }
+}
+
+#[cfg(test)]
+mod startup_bridge_tests {
+    use super::startup_bridge_config;
+    use notify::{RecursiveMode, Watcher};
+    use std::time::{Duration, SystemTime};
+
+    /// The bridge must report an edit whose mtime lands in the same second as the previous
+    /// scan (HS2-XAHR91); an mtime-only poller reports nothing until the next second's write.
+    #[test]
+    fn the_startup_bridge_sees_an_edit_within_the_same_mtime_second() {
+        let dir = tempfile::tempdir().unwrap();
+        let ticket = dir.path().join("ticket.md");
+        let stamp = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        let write = |text: &str| {
+            std::fs::write(&ticket, text).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&ticket)
+                .unwrap()
+                .set_modified(stamp)
+                .unwrap();
+        };
+        write("first");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut bridge = notify::PollWatcher::new(
+            move |res: notify::Result<notify::Event>| {
+                let _ = tx.send(res);
+            },
+            startup_bridge_config(),
+        )
+        .unwrap();
+        bridge.watch(dir.path(), RecursiveMode::Recursive).unwrap();
+        // Let the initial scan record the file, then drain anything it reported.
+        std::thread::sleep(Duration::from_millis(400));
+        while rx.try_recv().is_ok() {}
+
+        write("second, same mtime second");
+        let seen = rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the bridge should report a same-second edit")
+            .unwrap();
+        assert!(
+            seen.paths.iter().any(|path| path.ends_with("ticket.md")),
+            "{seen:?}"
         );
     }
 }
