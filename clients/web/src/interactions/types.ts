@@ -1,4 +1,4 @@
-import { type CodeReview, type RepositoryFile } from '../api';
+import { type CodeReview, type FullTicket, type RepositoryFile } from '../api';
 import { type CompatibilityAssessment } from '../compatibility';
 import { type AttachmentContextMenuKind } from '../components/attachment-context-menu';
 import { type RepositoryStatusView } from '../components/repository-status-popover';
@@ -67,4 +67,17 @@ export interface DetailsFinishTask {
   ticketId?: string;
   generation: number;
   saved: Promise<boolean>;
+}
+
+/**
+ * The ticket a gallery was opened for (HS2-97E0QR). Media opened from a stacked reader belongs to
+ * that reader's ticket and project, not the workspace selection; `update` receives the ticket after
+ * an annotation save so the owning reader stays current.
+ */
+export interface GallerySource {
+  ticket: FullTicket;
+  project: Project;
+  /** View-only source (a linked reader cannot edit attachments), so markup is unavailable. */
+  readOnly?: boolean;
+  update?: (ticket: FullTicket) => void;
 }

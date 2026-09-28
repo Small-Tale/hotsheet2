@@ -75,10 +75,17 @@ const projectByRoot = new Map<string, (typeof projects)[keyof typeof projects]>(
   Object.values(projects).map((project) => [project.root, project]),
 );
 
+// A 1×1 PNG served for fixture attachment media.
+const GALLERY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 async function mockLayeredProjects(
   page: Page,
   mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [],
   rejectMutations = false,
+  attachmentsFor: Record<string, Array<{ id: string; filename: string; created_at: string }>> = {},
 ) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async (route) => {
@@ -177,6 +184,8 @@ async function mockLayeredProjects(
         },
       });
     }
+    if (/\/attachments\/[^/]+$/.test(path) && request.method() === 'GET')
+      return route.fulfill({ contentType: 'image/png', body: GALLERY_PNG });
     if (ticketId && request.method() === 'GET') {
       const ticket = tickets.find((item) =>
         [item.id, item.native_id, item.qualified_id].some((identity) => identity === ticketId),
@@ -189,7 +198,7 @@ async function mockLayeredProjects(
               blocked_reason: null,
               concurrency_token: `token-${ticket.id}`,
               notes: [],
-              attachments: [],
+              attachments: attachmentsFor[ticket.id] ?? [],
             },
           })
         : route.fulfill({ status: 404, json: { error: `No ${ticketId}` } });
@@ -363,4 +372,45 @@ test('edits same-slug linked readers through their owning project and flushes be
     'data-ticket-slug',
     'KF-ROOT01',
   );
+});
+
+test('opens media from a stacked linked reader in the gallery for that reader ticket (HS2-97E0QR)', async ({
+  page,
+}) => {
+  await mockLayeredProjects(page, [], false, {
+    target: [{ id: 'LINKED-IMG', filename: 'linked-proof.png', created_at: '2026-09-11T00:02:00Z' }],
+  });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const baseReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
+  await baseReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
+  await linked.getByRole('tab', { name: /Attachments/ }).click();
+  const opener = linked.locator('[data-action="open-attachment-gallery"]').first();
+  await expect(opener).toBeVisible();
+  await opener.click();
+  // The gallery shows the linked reader's own media (from its project), above both readers.
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await expect(gallery).toBeVisible();
+  await expect(gallery).toContainText('linked-proof.png');
+  await expect(gallery.locator('img').first()).toHaveAttribute(
+    'src',
+    // Same checkout-scoped URL the linked reader itself uses: its owning checkout and ticket.
+    /\/checkouts\/target-project\/tickets\/target\/attachments\/LINKED-IMG$/,
+  );
+  const galleryOnTop = await gallery.evaluate((node) => {
+    const box = node.getBoundingClientRect(),
+      hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && node.contains(hit));
+  });
+  expect(galleryOnTop).toBe(true);
+  // The linked reader is view-only for attachments, so its gallery offers no markup either.
+  await expect(gallery.getByRole('button', { name: 'Annotate media' })).toBeDisabled();
+  await page.screenshot({ path: test.info().outputPath('hs2-97e0qr-linked-reader-gallery.png') });
+  // Closing the gallery returns to the linked reader, still stacked above the base reader.
+  await page.keyboard.press('Escape');
+  await expect(gallery).toHaveCount(0);
+  await expect(linked).toBeVisible();
+  await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
 });

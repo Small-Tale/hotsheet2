@@ -1233,7 +1233,10 @@ and identity-less legacy entries remain conservatively blocking.
   valid single-range `206` response instead of loading the whole attachment into memory,
   so Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
-  A preview or inline image opens the same full-screen native modal media gallery. It occupies a
+  A preview or inline image opens the same full-screen native modal media gallery. Media opened from
+  a stacked (linked) ticket reader belongs to that reader's ticket and project, not the workspace
+  selection: the gallery lists, navigates, and addresses that ticket's media, and because linked
+  readers cannot edit attachments its markup is unavailable (HS2-97E0QR). It occupies a
   newer top-layer position when launched from a ticket reader, and Escape consumes only the gallery
   before returning interaction to the still-open reader. Videos remain paused initially and
   use native `preload="auto"` so the browser presents the decoded first frame rather than

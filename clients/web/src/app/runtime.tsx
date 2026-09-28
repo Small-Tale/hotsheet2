@@ -189,7 +189,14 @@ import {
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { beginInteractionTiming } from '../interaction-performance';
 import { data } from '../interactions/dom';
-import type { Control, DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
+import type {
+  Control,
+  DetailsFinishTask,
+  GallerySource,
+  NotWorkingTarget,
+  PendingEvidence,
+  Project,
+} from '../interactions/types';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
@@ -3746,6 +3753,24 @@ export async function startHotSheetWebClient() {
       />
     );
   }
+  // Media opened from a stacked (linked) reader belongs to that reader's ticket and project (HS2-97E0QR).
+  function gallerySourceFor(target: Element): GallerySource | undefined {
+    const frameId = target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId,
+      frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined,
+      owner = frame ? projects.value.find((item) => item.id === frame.projectId) : undefined;
+    if (!frame || !owner) return undefined;
+    return {
+      ticket: frame.ticket,
+      project: owner,
+      // Linked readers never manage attachments (only the workspace reader is editable).
+      readOnly: true,
+      update: (ticket) => {
+        linkedReaderStack.value = linkedReaderStack.value.map((item) =>
+          item.id === frame.id ? { ...item, ticket } : item,
+        );
+      },
+    };
+  }
   function readerLayersSurfaceProps(): Parameters<typeof ReaderLayersSurface>[0] {
     const current = project(),
       base =
@@ -4815,7 +4840,7 @@ export async function startHotSheetWebClient() {
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,
     composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, addNewTicketFiles, composerAttachments,
     composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, refreshProject,
-    galleryImages, resetAttachmentGallery, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
+    galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
     updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,
     canUseAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,

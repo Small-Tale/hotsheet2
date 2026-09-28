@@ -227,6 +227,95 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
   });
 });
 
+describe('gallery source for stacked readers (HS2-97E0QR)', () => {
+  it('opens, shifts, saves, and closes against the owning reader ticket, then returns to the workspace selection', async () => {
+    const attachment = (id: string, text?: string) => ({
+      id,
+      filename: `${id}.png`,
+      created_at: '',
+      ...(text ? { annotations: [{ id: `${id}-a`, x: 0, y: 0, width: 1, height: 1, text }] } : {}),
+    });
+    const ticketFor = (id: string, slug: string, attachments: FullTicket['attachments']): FullTicket => ({
+      id,
+      slug,
+      title: slug,
+      native_id: id,
+      qualified_id: `git:${id}`,
+      connection_id: 'git',
+      status: 'started',
+      up_next: false,
+      feedback_needed: false,
+      tags: [],
+      blocked_by: [],
+      claim_count: 0,
+      details: '',
+      notes: [],
+      attachments,
+    });
+    const workspace = ticketFor('selected', 'HS2-SEL', [attachment('sel')]),
+      linkedTicket = ticketFor('linked', 'HS2-LNK', [attachment('l1', 'linked note'), attachment('l2')]),
+      selectedTicket = signal<FullTicket | null>(workspace),
+      updates: FullTicket[] = [],
+      saved: Array<[string, string, string]> = [],
+      api = new Api('/api/a');
+    vi.spyOn(api, 'updateCheckoutAttachmentAnnotations').mockImplementation(async (checkout, id, attachmentId) => {
+      saved.push([checkout, id, attachmentId]);
+      return { store: 'git', ticket: { ...linkedTicket, title: 'saved', store: 'git' } };
+    });
+    const owner = createGalleryController({
+      selectedTicket,
+      project: () => project('a'),
+      api: () => api,
+      attachmentContext: (ticket, owning) => ({
+        checkout: owning?.id ?? 'a',
+        ticket: ticket.slug,
+        baseUrl: '/api/a',
+      }),
+      showToast: vi.fn(),
+      error: signal(''),
+    });
+    const source = {
+      ticket: linkedTicket,
+      project: project('b'),
+      update: (ticket: FullTicket) => updates.push(ticket),
+    };
+    const linkedImages = owner.galleryImages(source.ticket, source.project);
+    expect(linkedImages.map((image) => image.name)).toEqual(['l1.png', 'l2.png']);
+    expect(linkedImages[0].url).toContain('/checkouts/b/tickets/linked/attachments/l1');
+    // Opened for the linked reader: the gallery's own view and annotations follow that ticket.
+    owner.resetAttachmentGallery(linkedImages[0].url, source);
+    expect(owner.galleryImages().map((image) => image.name)).toEqual(['l1.png', 'l2.png']);
+    expect(owner.attachmentGalleryAnnotations.value[0].text).toBe('linked note');
+    // Shifting keeps the source.
+    owner.shiftGallery(1);
+    expect(owner.attachmentGalleryUrl.value).toBe(linkedImages[1].url);
+    owner.shiftGallery(-1);
+    // An annotation edit saves to the owning project and ticket and refreshes that reader, not the selection.
+    owner.beginGalleryAnnotationSession();
+    owner.attachmentGalleryAnnotations.value = [{ id: 'new', x: 0, y: 0, width: 1, height: 1, text: 'edited' }];
+    owner.finishGalleryAnnotationSession();
+    await vi.waitFor(() => {
+      expect(saved).toEqual([['b', 'linked', 'l1']]);
+    });
+    await vi.waitFor(() => {
+      expect(updates.map((ticket) => ticket.title)).toEqual(['saved']);
+    });
+    expect(selectedTicket.value).toBe(workspace);
+    // A read-only source (a linked reader) never starts an annotation session.
+    owner.resetAttachmentGallery(linkedImages[0].url, { ...source, readOnly: true });
+    owner.beginGalleryAnnotationSession();
+    owner.attachmentGalleryAnnotations.value = [{ id: 'blocked', x: 0, y: 0, width: 1, height: 1, text: 'no' }];
+    owner.finishGalleryAnnotationSession();
+    for (let flush = 0; flush < 5; flush += 1) await Promise.resolve();
+    expect(saved).toHaveLength(1);
+    // Closing clears the source; the next open without one belongs to the workspace selection again.
+    owner.resetAttachmentGallery();
+    expect(owner.galleryImages().map((image) => image.name)).toEqual(['sel.png']);
+    owner.resetAttachmentGallery(owner.galleryImages()[0].url);
+    expect(owner.galleryImages().map((image) => image.name)).toEqual(['sel.png']);
+  });
+});
+
 function chatOwners() {
   const active = signal<Project | undefined>(project('a'));
   const selectedProjectId = signal('a');

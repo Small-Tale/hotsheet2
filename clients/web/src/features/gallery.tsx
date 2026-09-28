@@ -19,20 +19,24 @@ import {
 } from '../components/attachment-gallery';
 import type { AttachmentContextMenuSurface } from '../components/reader-overlay-surfaces';
 import { GallerySurface } from '../components/reader-overlay-surfaces';
-import type { AttachmentMenu, Project } from '../interactions/types';
+import type { AttachmentMenu, GallerySource, Project } from '../interactions/types';
 
 export interface GalleryDependencies {
   project: () => Project | undefined;
   selectedTicket: Signal<FullTicket | null>;
   api: () => Api;
-  attachmentContext: (ticket: FullTicket) => AttachmentReferenceContext | undefined;
+  attachmentContext: (ticket: FullTicket, project?: Project) => AttachmentReferenceContext | undefined;
   showToast: (message: string) => void;
   error: Signal<string>;
 }
 
 export function createGalleryController(dependencies: GalleryDependencies) {
   const { project, selectedTicket, api, attachmentContext, showToast, error } = dependencies;
-  const attachmentGalleryUrl = signal<string | undefined>(undefined);
+  const attachmentGalleryUrl = signal<string | undefined>(undefined),
+    gallerySource = signal<GallerySource | undefined>(undefined);
+  // Without an explicit source the gallery belongs to the workspace selection.
+  const sourceTicket = () => gallerySource.value?.ticket ?? selectedTicket.value,
+    sourceProject = () => gallerySource.value?.project ?? project();
   const attachmentGalleryGeometry = signal<AttachmentGalleryGeometry>({
       naturalWidth: 0,
       naturalHeight: 0,
@@ -75,10 +79,9 @@ export function createGalleryController(dependencies: GalleryDependencies) {
 
   const attachmentMenu = signal<AttachmentMenu | undefined>(undefined);
 
-  function galleryImages(ticket = selectedTicket.value): AttachmentGalleryImage[] {
-    const current = project();
+  function galleryImages(ticket = sourceTicket(), current = sourceProject()): AttachmentGalleryImage[] {
     if (!ticket || !current) return [];
-    const context = attachmentContext(ticket)!,
+    const context = attachmentContext(ticket, current)!,
       images: AttachmentGalleryImage[] = ticket.attachments
         .filter((item) => isGalleryMediaAttachment(item.filename))
         .map((item) => ({
@@ -135,7 +138,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 volume: attachmentGalleryVolume.value,
                 muted: attachmentGalleryMuted.value,
                 volumeOpen: attachmentGalleryVolumeOpen.value,
-                annotationEnabled: Boolean(image?.attachmentId),
+                annotationEnabled: Boolean(image?.attachmentId) && !gallerySource.value?.readOnly,
               }
             : undefined
         }
@@ -214,14 +217,17 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     if (video) releaseAttachmentGalleryVideo(video);
   }
 
-  function resetAttachmentGallery(url?: string) {
+  /** Show `url` (or close without one). A `source` opens it for that ticket; shifting keeps the current one. */
+  function resetAttachmentGallery(url?: string, source?: GallerySource) {
     finishGalleryAnnotationSession();
+    if (!url) gallerySource.value = undefined;
+    else if (source) gallerySource.value = source;
     stopGallerySvgClock();
     disposeAttachmentGalleryVideo();
     attachmentGalleryObserver?.disconnect();
     attachmentGalleryObserver = undefined;
     const image = url ? galleryImages().find((item) => item.url === url || item.aliases?.includes(url)) : undefined,
-      attachment = selectedTicket.value?.attachments.find((item) => item.id === image?.attachmentId);
+      attachment = sourceTicket()?.attachments.find((item) => item.id === image?.attachmentId);
     batch(() => {
       attachmentGalleryUrl.value = url;
       attachmentGalleryScale.value = undefined;
@@ -310,12 +316,13 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       image = active
         ? galleryImages().find((item) => item.url === active || item.aliases?.includes(active))
         : undefined;
-    return selectedTicket.value?.attachments.find((item) => item.id === image?.attachmentId);
+    return sourceTicket()?.attachments.find((item) => item.id === image?.attachmentId);
   }
 
   function beginGalleryAnnotationSession() {
-    const current = project(),
-      ticket = selectedTicket.value,
+    if (gallerySource.value?.readOnly) return;
+    const current = sourceProject(),
+      ticket = sourceTicket(),
       attachment = activeGalleryAttachment();
     if (!current || !ticket || !attachment) return;
     attachmentAnnotationSession = {
@@ -340,7 +347,13 @@ export function createGalleryController(dependencies: GalleryDependencies) {
           session.attachmentId,
           annotations,
         );
-        if (selectedTicket.value?.id === session.ticketId) selectedTicket.value = result.ticket;
+        const source = gallerySource.value;
+        if (source?.ticket.id === session.ticketId && source.project.id === session.projectId) {
+          gallerySource.value = { ...source, ticket: result.ticket };
+          source.update?.(result.ticket);
+        }
+        if (selectedTicket.value?.id === session.ticketId && project()?.id === session.projectId)
+          selectedTicket.value = result.ticket;
         showToast('Annotations saved.');
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);

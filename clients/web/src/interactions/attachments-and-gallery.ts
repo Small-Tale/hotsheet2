@@ -23,7 +23,7 @@ import {
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { data } from './dom';
-import { type AttachmentMenu, type Project } from './types';
+import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
 export interface AttachmentAndGalleryInteractionsDependencies {
@@ -35,8 +35,10 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly showToast: (message: string) => void;
   readonly refreshProject: ({ showLoading }?: { showLoading?: boolean }) => Promise<void>;
   draggedGroupedAttachmentId: string | undefined;
-  readonly galleryImages: (ticket?: FullTicket | null) => AttachmentGalleryImage[];
-  readonly resetAttachmentGallery: (url?: string) => void;
+  readonly galleryImages: (ticket?: FullTicket | null, project?: Project) => AttachmentGalleryImage[];
+  readonly resetAttachmentGallery: (url?: string, source?: GallerySource) => void;
+  /** The stacked reader's ticket and project owning a gallery opener, if it is not the workspace reader (HS2-97E0QR). */
+  readonly gallerySourceFor: (target: Element) => GallerySource | undefined;
   readonly shiftGallery: (delta: number) => void;
   readonly attachmentGalleryGeometry: Signal<AttachmentGalleryGeometry>;
   readonly attachmentGalleryScale: Signal<number | undefined>;
@@ -93,6 +95,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     refreshProject,
     galleryImages,
     resetAttachmentGallery,
+    gallerySourceFor,
     shiftGallery,
     attachmentGalleryGeometry,
     attachmentGalleryScale,
@@ -303,14 +306,16 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     void openSelectedAttachment(data(target).attachmentActionId!);
   });
   delegate(document.body, 'click', '[data-action="open-attachment-gallery"]', (_event, target) => {
-    const selection = data(target),
-      url = attachmentGallerySelectionUrl(galleryImages(), {
+    // Media in a stacked reader belongs to that reader's ticket, not the workspace selection.
+    const source = gallerySourceFor(target),
+      selection = data(target),
+      url = attachmentGallerySelectionUrl(galleryImages(source?.ticket, source?.project), {
         url: selection.attachmentUrl,
         ticket: selection.attachmentTicket,
         name: selection.attachmentName,
         attachmentId: selection.galleryAttachmentId,
       });
-    if (url) resetAttachmentGallery(url);
+    if (url) resetAttachmentGallery(url, source);
   });
   delegate(document.body, 'click', '[data-action="close-attachment-gallery"]', () => {
     resetAttachmentGallery();
