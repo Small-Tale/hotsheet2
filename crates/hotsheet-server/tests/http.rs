@@ -9065,6 +9065,107 @@ args = ["-c", "printf 'auto-launched:%s' \"$HOTSHEET_SECRET\""]
     assert!(output.contains("auto-launched:test-secret"), "{output}");
 }
 
+/// A Connect-launched AI session claims with the worker id its terminal was given, and whatever
+/// it still holds when the terminal exits is released (HS2-1VAW1C).
+#[tokio::test]
+async fn a_connect_terminal_releases_its_sessions_claims_when_it_exits() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (store_dir, st) = state();
+    let store = FsStore::open(store_dir.path()).unwrap();
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-09-28T00:00:00Z"),
+        NewTicket {
+            title: "claimed by the session".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    let fake = plugins.path().join("fake-session");
+    std::fs::create_dir(&fake).unwrap();
+    std::fs::write(fake.join("instructions.md"), "Fake setup marker\n").unwrap();
+    std::fs::write(
+        fake.join("manifest.toml"),
+        r#"
+id = "fake-session"
+display_name = "Fake"
+product_name = "Fake Session"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[launch]
+program = "/bin/sh"
+args = ["-c", "printf 'worker:%s:end' \"$HOTSHEET_WORKER_ID\"; sleep 2"]
+"#,
+    )
+    .unwrap();
+    let app = app(st.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"connect":"fake-session","id":"session-1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let worker = "fake-session-session-1";
+    let mut output = String::new();
+    for _ in 0..50 {
+        let terminal = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/terminals/session-1", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        output = terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if output.contains("worker:") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(output.contains(&format!("worker:{worker}:end")), "{output}");
+
+    // The session claims a ticket (as the AI would, with its worker id) and never releases it.
+    ops::claim(
+        &store,
+        &ticket.id,
+        &Timestamp::new("2026-09-28T00:01:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        worker,
+        None,
+    )
+    .unwrap();
+    let mut released = false;
+    for _ in 0..80 {
+        if store.read_ticket(&ticket.id).unwrap().claimed_by.is_none() {
+            released = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(released, "the session's claim outlived its terminal");
+}
+
 /// A Claude or Codex started by hand in a shell or command terminal must route its permission
 /// prompts to the app like a Connect launch, so every terminal carries the route-back env
 /// (HS2-HE4AVD).

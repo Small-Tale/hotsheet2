@@ -528,13 +528,18 @@ enum Cmd {
         #[arg(long)]
         start: bool,
     },
-    /// Release a claim (only the holding worker, unless --force).
+    /// Release a claim (only the holding worker, unless --force), or with `--all` every claim
+    /// the worker holds.
     Release {
-        id: String,
+        #[arg(required_unless_present = "all")]
+        id: Option<String>,
         #[arg(long, default_value = "worker")]
         worker: String,
         #[arg(long)]
         force: bool,
+        /// Release every claim held by `--worker` (a launcher's end-of-session safety net).
+        #[arg(long, conflicts_with_all = ["id", "force"])]
+        all: bool,
     },
     /// Renew a claim's lease (must be the holding worker).
     Renew {
@@ -1244,7 +1249,15 @@ fn main() -> Result<()> {
             lease_minutes,
             start,
         } => cmd_claim(&cli.path, &id, &worker, label, lease_minutes, start),
-        Cmd::Release { id, worker, force } => cmd_release(&cli.path, &id, &worker, force),
+        Cmd::Release {
+            id,
+            worker,
+            force,
+            all,
+        } => match id {
+            Some(id) if !all => cmd_release(&cli.path, &id, &worker, force),
+            _ => cmd_release_worker(&cli.path, &worker),
+        },
         Cmd::Renew {
             id,
             worker,
@@ -2686,28 +2699,46 @@ fn cmd_launch(
     let permission_project = FsStore::open(&selected)
         .map(|store| store.root().display().to_string())
         .unwrap_or_else(|_| selected.display().to_string());
+    // The session's worker id: the instructions tell the AI to claim with it, and its claims
+    // are released when the tool exits (HS2-1VAW1C).
+    let worker = hotsheet_cli::launch_worker_id(tool, &Ulid::new());
     let mut command = std::process::Command::new(&program);
     command
         .args(&launch.args)
         .current_dir(&launch_dir)
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
-        .env("HOTSHEET_PROJECT", permission_project);
-
+        .env("HOTSHEET_PROJECT", permission_project)
+        .env("HOTSHEET_WORKER_ID", &worker);
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("launching {}", program.display()))?;
+    // The tool owns the terminal: its interrupt, quit and hang-up signals are for it. Survive
+    // them here (after the spawn, so the tool keeps default dispositions) to release its claims
+    // once it exits, including when the terminal window closes.
     #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        Err(command.exec().into())
+    // SAFETY: setting a signal disposition to SIG_IGN has no handler to race with.
+    unsafe {
+        libc::signal(libc::SIGINT, libc::SIG_IGN);
+        libc::signal(libc::SIGQUIT, libc::SIG_IGN);
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
     }
-    #[cfg(not(unix))]
-    {
-        let status = command.status()?;
-        if status.success() {
-            Ok(())
-        } else {
-            bail!("{} exited with {status}", program.display())
+    let status = child.wait()?;
+    if let Ok(store) = FsStore::open(&selected) {
+        match ops::release_worker(&store, now_ts(), &worker) {
+            Ok(released) if !released.is_empty() => eprintln!(
+                "Released claims left by {tool}: {}",
+                released
+                    .iter()
+                    .map(|ticket| ticket.slug.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Ok(_) => {}
+            Err(error) => eprintln!("could not release {worker}'s claims: {error}"),
         }
     }
+    std::process::exit(hotsheet_cli::exit_code_of(status))
 }
 
 fn choose_launch_source(project: &Path, candidates: &[PathBuf]) -> Result<PathBuf> {
@@ -3351,6 +3382,18 @@ fn cmd_release(path: &PathBuf, id: &str, worker: &str, force: bool) -> Result<()
     let ticket = resolve(&store, id)?;
     let released = ops::release(&store, &ticket.id, now_ts(), worker, force)?;
     println!("Released {}", released.slug);
+    Ok(())
+}
+
+fn cmd_release_worker(path: &PathBuf, worker: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let released = ops::release_worker(&store, now_ts(), worker)?;
+    if released.is_empty() {
+        println!("{worker} holds no claims");
+    }
+    for ticket in released {
+        println!("Released {}", ticket.slug);
+    }
     Ok(())
 }
 

@@ -55,6 +55,29 @@ pub fn select_launch_candidate(candidates: &[PathBuf], one_based: usize) -> Opti
         .cloned()
 }
 
+/// The worker id `hotsheet-cli launch` gives a session: the tool plus a short random suffix
+/// drawn from `nonce`, unique enough to tell concurrent sessions apart (HS2-1VAW1C).
+pub fn launch_worker_id(tool: &str, nonce: &ulid::Ulid) -> String {
+    let text = nonce.to_string().to_ascii_lowercase();
+    hotsheet_aitools::session_worker_id(tool, &text[text.len() - 8..])
+}
+
+/// The exit code a wrapper should report for its child: the child's own code, or `128 + signal`
+/// when a signal ended it, as a shell would.
+pub fn exit_code_of(status: std::process::ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+    1
+}
+
 /// Root that owns project-scoped AI-tool setup when an interactive launch begins in a
 /// subdirectory. Prefer the nearest checkout/store marker; a standalone directory remains
 /// its own root. This keeps `.codex/hooks.json` discoverable from nested working directories.
@@ -613,5 +636,30 @@ mod store_link_tests {
                 .selected,
             Some(other.canonicalize().unwrap())
         );
+    }
+}
+
+#[cfg(test)]
+mod launch_session_tests {
+    use super::{exit_code_of, launch_worker_id};
+
+    #[test]
+    fn a_launch_worker_id_is_the_tool_and_a_short_lowercase_suffix() {
+        let nonce = ulid::Ulid::from_string("01M3MJ5K6YNV7HKC509KSKWTVG").unwrap();
+        assert_eq!(launch_worker_id("claude", &nonce), "claude-9kskwtvg");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_wrapper_reports_its_childs_exit_code_or_signal() {
+        let status = |script: &str| {
+            std::process::Command::new("/bin/sh")
+                .args(["-c", script])
+                .status()
+                .unwrap()
+        };
+        assert_eq!(exit_code_of(status("exit 0")), 0);
+        assert_eq!(exit_code_of(status("exit 7")), 7);
+        assert_eq!(exit_code_of(status("kill -TERM $$")), 128 + 15);
     }
 }

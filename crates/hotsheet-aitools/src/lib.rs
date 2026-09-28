@@ -66,3 +66,21 @@ pub use system::SystemSpawner;
 
 #[cfg(test)]
 mod tests;
+
+/// The environment variable carrying a launched AI session's worker id (HS2-1VAW1C).
+pub const WORKER_ID_ENV: &str = "HOTSHEET_WORKER_ID";
+
+/// The worker id a launcher assigns an AI session: `<tool>-<session>`. The bundled
+/// instructions tell the AI to claim with it, and the launcher releases every claim it holds
+/// when the session ends.
+pub fn session_worker_id(tool: &str, session: &str) -> String {
+    format!("{tool}-{session}")
+}
+
+#[cfg(test)]
+mod worker_id_tests {
+    #[test]
+    fn a_session_worker_id_names_the_tool_and_session() {
+        assert_eq!(super::session_worker_id("claude", "01ABC"), "claude-01ABC");
+    }
+}

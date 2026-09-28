@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 50 -->
+<!-- hotsheet-instructions-version: 51 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -37,6 +37,9 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
   actively on it. Always claim before you touch code. Prefer it over `hotsheet-cli edit <slug>
   --status started`, which only flips the status and does **not** claim or signal live work.
   (Self-serve the top of the queue with `hotsheet-cli claim-next --worker <your-id>`.)
+- **Your worker id:** if `HOTSHEET_WORKER_ID` is set in your environment, use its value as
+  `<your-id>`. Hot Sheet gave it to this session and releases whatever it still holds when the
+  session ends. Otherwise choose one stable id for the session.
 - `hotsheet-cli renew <slug> --worker <your-id>` during long work; `hotsheet-cli release <slug>
   --worker <your-id>` whenever you stop working it (see below).
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.

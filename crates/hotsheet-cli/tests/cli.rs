@@ -752,11 +752,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 51 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 52 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 51 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 53 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -795,11 +795,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 50 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 51 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 51 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 52 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -1608,6 +1608,156 @@ command = "hotsheet-cli permission-hook"
         .success()
         .stdout("http://127.0.0.1:4567|route-back|created\n");
     assert!(created_store.join("hotsheet-store.json").is_file());
+}
+
+/// A launched session gets its own worker id, and whatever it leaves claimed is released when it
+/// exits, with the tool's exit code passed through (HS2-1VAW1C). `release --all` is the same
+/// safety net by hand.
+#[cfg(unix)]
+#[test]
+fn launch_releases_the_claims_its_session_left_behind() {
+    use hotsheet_model::{Timestamp, Ulid};
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store_path = root.path().join("tickets");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&project).unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
+    let ticket = |title: &str| {
+        hotsheet_ticketing::ops::create(
+            &store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-09-28T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: title.into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let left = ticket("left claimed by the session");
+    let other = ticket("claimed by someone else");
+    let cli = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let store_arg = store_path.display().to_string();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .args([
+            "-C",
+            &store_arg,
+            "claim",
+            &other.slug,
+            "--worker",
+            "someone",
+        ])
+        .assert()
+        .success();
+
+    // The fake tool claims with the worker id it was given, reports it, then exits non-zero
+    // without releasing.
+    let agent = root.path().join("fake-agent");
+    std::fs::write(
+        &agent,
+        format!(
+            "#!/bin/sh\n'{}' -C '{}' claim {} --worker \"$HOTSHEET_WORKER_ID\" >/dev/null || exit 9\nprintf '%s\\n' \"$HOTSHEET_WORKER_ID\"\nexit 3\n",
+            cli.display(),
+            store_arg,
+            left.slug
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let plugin = home.join("plugins/fake");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "## Fake agent\n").unwrap();
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            r#"id = "fake"
+display_name = "Fake"
+product_name = "Fake Agent"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[launch]
+program = "{}"
+[hooks]
+target = ".fake/settings.json"
+event = "PreToolUse"
+command = "hotsheet-cli permission-hook"
+"#,
+            agent.display()
+        ),
+    )
+    .unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store_path);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(), "url": "http://127.0.0.1:4567",
+            "secret": "route-back", "store_path": store_path.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .env("HOTSHEET_HOME", &home)
+        .args(["launch", "fake", "--ticket-store", &store_arg])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "the tool's exit code passes through"
+    );
+    let worker = String::from_utf8(output.stdout).unwrap().trim().to_string();
+    assert!(worker.starts_with("fake-"), "worker id {worker:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains(&format!("Released claims left by fake: {}", left.slug)),
+        "{stderr}"
+    );
+    let reread = |slug: &hotsheet_model::Ticket| store.read_ticket(&slug.id).unwrap();
+    assert_eq!(reread(&left).claimed_by, None);
+    assert_eq!(
+        reread(&left)
+            .claim_history
+            .first()
+            .map(|event| event.worker.clone()),
+        Some(worker)
+    );
+    assert_eq!(reread(&other).claimed_by.as_deref(), Some("someone"));
+
+    // `release --all` releases one worker's claims and nobody else's.
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .args(["-C", &store_arg, "release", "--all", "--worker", "someone"])
+        .assert()
+        .success()
+        .stdout(format!("Released {}\n", other.slug));
+    assert_eq!(reread(&other).claimed_by, None);
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .args(["-C", &store_arg, "release", "--all", "--worker", "someone"])
+        .assert()
+        .success()
+        .stdout("someone holds no claims\n");
 }
 
 #[test]

@@ -155,6 +155,28 @@ fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
 }
 
 #[test]
+fn every_builtin_tells_ais_to_use_the_launcher_worker_id() {
+    // HS2-1VAW1C: a launcher's worker id lets it release the session's claims when it ends.
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    for plugin in all_plugins(&[]) {
+        let body = flatten(plugin.instructions_body());
+        assert!(
+            body.contains("if `HOTSHEET_WORKER_ID` is set in your environment, use its value"),
+            "{} instructions do not name the launcher worker id",
+            plugin.id()
+        );
+        if let Some((_, skill)) = plugin.skill() {
+            assert!(
+                flatten(skill)
+                    .contains("the value of `HOTSHEET_WORKER_ID` when your environment sets it"),
+                "{} skill does not name the launcher worker id",
+                plugin.id()
+            );
+        }
+    }
+}
+
+#[test]
 fn codex_declares_its_project_local_skill() {
     let p = find_in("codex", &[]).expect("codex plugin present");
     assert_eq!(p.manifest.product_name, "Codex CLI");
@@ -162,7 +184,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 51 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 52 -->"));
     assert_eq!(p.manifest.instructions.target, "AGENTS.md");
     assert_eq!(p.manifest.mcp.format, "codex-toml");
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");

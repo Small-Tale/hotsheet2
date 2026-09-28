@@ -289,9 +289,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   (incl. `--blocked-by`/`--clear-blocked-by`), `attach`, `close`, `restore`, `purge-trash`, `providers`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list,
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
-  `import`, `doctor`, `claim`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
-  `launch <tool>` replaces itself with a hook-capable interactive tool in the caller's
-  terminal, discovering the store from `.hotsheet2/store` (legacy `.hotsheet/store` fallback) and the permission route-back
+  `import`, `doctor`, `claim`, `claim-next`, `release` (`--all --worker <id>`), `renew`, `trigger` (the headless "play":
+  `launch <tool>` runs a hook-capable interactive tool in the caller's terminal, waits, and
+  releases the claims left by its `HOTSHEET_WORKER_ID` session (HS2-1VAW1C), discovering the store from `.hotsheet2/store` (legacy `.hotsheet/store` fallback) and the permission route-back
   from `${HOTSHEET_HOME}/instances` (Claude today — HS2-C46G58). `trigger` can
   drive a real AI tool for the project and stream one turn — HS2-109; HS2-103 launch
   safety baked in — HS2-117), `work` (the headless loop: `trigger` one turn at a time

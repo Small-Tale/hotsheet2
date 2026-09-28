@@ -215,6 +215,25 @@ stopped, and checks `hotsheet-cli ls --claimed` before its final response so no 
 falsely signals live work. `every_builtin_tells_ais_to_release_claims_whenever_they_stop`
 pins that guidance.
 
+**Launcher-owned worker ids** are the mechanical safety net behind that guidance
+(HS2-1VAW1C). A launcher that starts an AI session gives it a worker id,
+`<tool>-<session>`, in `HOTSHEET_WORKER_ID`. The blocks and skills tell the AI to claim with
+that id whenever it is set. When the session ends, the launcher releases every claim the id
+still holds, leaving other workers' claims and every ticket's status alone:
+
+- **Connect terminals:** a server `connect` terminal uses its terminal id as the session. When
+  the terminal exits or is deleted, the server releases the id's claims in every hosted
+  store. This works both in-process and with the detached terminal broker.
+- **External launches:** `hotsheet-cli launch <tool>` now spawns the tool and waits, instead
+  of replacing itself. It ignores the terminal's interrupt, quit and hang-up signals, which
+  belong to the tool, so it can release the session's claims even when the terminal window
+  closes. It then exits with the tool's exit code, or `128 + signal`.
+- **By hand:** `hotsheet-cli release --all --worker <id>` is the same release, headless.
+
+Lease expiry remains the backstop for anything a launcher cannot observe. That includes a
+broker terminal that survives a server restart, a shell terminal where a user starts a tool
+by hand, and a session that picked its own id.
+
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
 capability seen from two sides: the loader decides _what_ tools exist, the setup

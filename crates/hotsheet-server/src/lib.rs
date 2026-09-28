@@ -7265,7 +7265,12 @@ fn terminal_launch(
     }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let env = terminal_permission_route_env(state);
+    let mut env = terminal_permission_route_env(state);
+    // The session's worker id: its claims are released when the terminal exits (HS2-1VAW1C).
+    env.push((
+        hotsheet_aitools::WORKER_ID_ENV.to_string(),
+        hotsheet_aitools::session_worker_id(tool, terminal_id),
+    ));
     let args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())
         .unwrap_or_default();
@@ -7585,15 +7590,20 @@ fn register_terminal_connection(
         });
     }
     let conn_id = id.to_string();
+    let host = state.host.clone();
+    let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let alive = term.is_alive();
-            if let Ok(mut r) = registry.lock() {
-                if !alive {
+            if !alive {
+                if let Ok(mut r) = registry.lock() {
                     r.unregister(&conn_id);
-                    break;
                 }
+                release_session_claims(host, worker).await;
+                break;
+            }
+            if let Ok(mut r) = registry.lock() {
                 match term.activity() {
                     hotsheet_terminals::Activity::Busy => r.note_activity(&conn_id, now_ms()),
                     hotsheet_terminals::Activity::Idle => r.set_idle(&conn_id),
@@ -7629,6 +7639,8 @@ fn register_broker_terminal_connection(
         });
     }
     let conn_id = id.to_string();
+    let host = state.host.clone();
+    let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -7654,11 +7666,37 @@ fn register_broker_terminal_connection(
                     if let Ok(mut r) = registry.lock() {
                         r.unregister(&conn_id);
                     }
+                    release_session_claims(host, worker).await;
                     break;
                 }
             }
         }
     });
+}
+
+/// Release every claim an ended AI session's worker still holds in any hosted store: the
+/// safety net for a session that stopped without releasing (HS2-1VAW1C). The store watcher
+/// reindexes and announces the released tickets like any other write.
+async fn release_session_claims(host: multistore::StoreHost, worker: String) {
+    let result = tokio::task::spawn_blocking(move || {
+        let mut released = Vec::new();
+        for (id, _) in host.locations() {
+            let Some(entry) = host.get(&id) else {
+                continue;
+            };
+            match ops::release_worker(&entry.store, now(), &worker) {
+                Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
+                Err(error) => eprintln!("releasing {worker}'s claims in {id} failed: {error}"),
+            }
+        }
+        (worker, released)
+    })
+    .await;
+    if let Ok((worker, released)) = result
+        && !released.is_empty()
+    {
+        eprintln!("released claims left by {worker}: {}", released.join(", "));
+    }
 }
 
 /// `GET /terminals` — the live terminals (id, alive, busy).

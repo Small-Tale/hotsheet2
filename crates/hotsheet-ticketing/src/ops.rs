@@ -1754,6 +1754,25 @@ pub fn release(
     Ok(t)
 }
 
+/// Release every claim `worker` holds in `store`, returning the released tickets. This is the
+/// safety net for a session that ends without releasing its claims (HS2-1VAW1C): a launcher
+/// gives the session a worker id and releases that id's claims when the session exits.
+pub fn release_worker(
+    store: &FsStore,
+    now: Timestamp,
+    worker: &str,
+) -> Result<Vec<Ticket>, OpError> {
+    let held: Vec<Ulid> = store
+        .list_tickets()?
+        .into_iter()
+        .filter(|ticket| ticket.claimed_by.as_deref() == Some(worker))
+        .map(|ticket| ticket.id)
+        .collect();
+    held.iter()
+        .map(|id| release(store, id, now.clone(), worker, false))
+        .collect()
+}
+
 /// Renew a claim's lease. Must be the holding `worker`.
 pub fn renew(
     store: &FsStore,
@@ -3704,6 +3723,62 @@ mod tests {
         assert!(released.claimed_by.is_none());
         assert_eq!(released.claim_history[2].kind, ClaimEventKind::Release);
         assert!(released.claim_history[2].lease_expires_at.is_none());
+    }
+
+    /// A launcher releases its session's claims when the session exits (HS2-1VAW1C): only
+    /// that worker's live claims, idempotently, leaving other workers' claims alone.
+    #[test]
+    fn release_worker_releases_only_that_workers_claims() {
+        let (_d, store) = store();
+        let ids: Vec<Ulid> = [
+            "01ARZ3NDEKTSV4RRFFQ69G5FC0",
+            "01ARZ3NDEKTSV4RRFFQ69G5FC1",
+            "01ARZ3NDEKTSV4RRFFQ69G5FC2",
+        ]
+        .iter()
+        .map(|id| Ulid::from_string(id).unwrap())
+        .collect();
+        for (index, id) in ids.iter().enumerate() {
+            create(
+                &store,
+                *id,
+                "HS",
+                ts("2026-08-19T00:00:00Z"),
+                NewTicket {
+                    title: format!("t{index}"),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let now = ts("2026-08-19T00:10:00Z");
+        let lease = ts("2026-08-19T00:40:00Z");
+        claim(&store, &ids[0], &now, lease.clone(), "claude-t1", None).unwrap();
+        claim(&store, &ids[1], &now, lease.clone(), "claude-t1", None).unwrap();
+        claim(&store, &ids[2], &now, lease, "codex-t2", None).unwrap();
+
+        let mut released: Vec<String> = release_worker(&store, now.clone(), "claude-t1")
+            .unwrap()
+            .into_iter()
+            .map(|ticket| ticket.title)
+            .collect();
+        released.sort();
+        assert_eq!(released, ["t0", "t1"]);
+        assert!(store.read_ticket(&ids[0]).unwrap().claimed_by.is_none());
+        assert!(store.read_ticket(&ids[1]).unwrap().claimed_by.is_none());
+        assert_eq!(
+            store.read_ticket(&ids[2]).unwrap().claimed_by.as_deref(),
+            Some("codex-t2")
+        );
+        // Releasing again (a second exit signal) finds nothing and changes nothing.
+        assert!(
+            release_worker(&store, now.clone(), "claude-t1")
+                .unwrap()
+                .is_empty()
+        );
+        // An unknown worker releases nothing.
+        assert!(release_worker(&store, now, "nobody").unwrap().is_empty());
     }
 
     #[test]

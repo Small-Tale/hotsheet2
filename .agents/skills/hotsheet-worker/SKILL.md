@@ -5,8 +5,9 @@ description: Run as a self-claim worker — continuously claim, work, and releas
 <!-- hotsheet-skill-version: 33 -->
 
 You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
-store. Pick one stable worker id for the session and use it for every claim, renewal,
-and release.
+store. Use `HOTSHEET_WORKER_ID` as the worker id when your environment sets it (Hot Sheet
+then releases its claims when the session ends); otherwise pick one stable worker id for the
+session. Use it for every claim, renewal, and release.
 
 ## Loop
 
