@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -37,6 +38,32 @@ async function waitForHost(url, child, output) {
   throw new Error(`Timed out waiting for ${url}.\n${output()}`);
 }
 
+/** Live processes whose command line mentions `home` (the test's isolated HOTSHEET_HOME). */
+async function processesUsing(home) {
+  const { stdout } = await run('ps', ['-Ao', 'pid=,command=']);
+  return stdout
+    .split('\n')
+    .filter((line) => line.includes(home))
+    .map((line) => line.trim());
+}
+
+/**
+ * Stop the machine server the host supervised under `home` (HS2-WQ65KT). The CLI must see the same
+ * HOTSHEET_HOME to find that server's discovery record, and match the build the host launched.
+ */
+async function stopMachineServer(home) {
+  const release = resolve(repoRoot, 'target/release');
+  const cli = existsSync(resolve(release, 'hotsheet-server'))
+    ? resolve(release, 'hotsheet-cli')
+    : resolve(repoRoot, 'target/debug/hotsheet-cli');
+  await run(cli, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
+    env: { ...process.env, HOTSHEET_HOME: home },
+  }).catch(() => undefined);
+  const deadline = Date.now() + 10_000;
+  while ((await processesUsing(home)).length > 0 && Date.now() < deadline)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+}
+
 // Build as `npm run prod` does: without the test runner's environment, which would change Vite's mode.
 const productionEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST') && name !== 'NODE_ENV' && name !== 'TEST'),
@@ -50,17 +77,21 @@ beforeAll(async () => {
 it('serves the production client and the local bridge without Vite', async () => {
   const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-home-')),
     port = await availablePort(),
+    origin = `http://127.0.0.1:${port}`;
+  let log = '',
+    child,
+    browser;
+  // Everything that can fail runs inside the try, so the host and its machine server are always
+  // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
+  try {
     child = spawn(process.execPath, ['dist-host/local-host.js', '--port', String(port)], {
       cwd: webRoot,
       env: { ...productionEnvironment, HOTSHEET_HOME: home },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-  let log = '';
-  child.stdout.on('data', (chunk) => (log += chunk));
-  child.stderr.on('data', (chunk) => (log += chunk));
-  const origin = `http://127.0.0.1:${port}`,
+    child.stdout.on('data', (chunk) => (log += chunk));
+    child.stderr.on('data', (chunk) => (log += chunk));
     browser = await chromium.launch();
-  try {
     await waitForHost(`${origin}/`, child, () => log);
     expect(log).toContain(`Hot Sheet production client on ${origin}/`);
     // HS2-D2JQ9A: the host says which server build it launches (release when one is built).
@@ -87,15 +118,17 @@ it('serves the production client and the local bridge without Vite', async () =>
     expect(checkouts.status).toBe(200);
     expect(Array.isArray(await checkouts.json())).toBe(true);
   } finally {
-    await browser.close();
-    child.kill('SIGTERM');
-    await new Promise((resolveExit) => (child.exitCode === null ? child.once('exit', resolveExit) : resolveExit()));
-    await run(resolve(repoRoot, 'target/debug/hotsheet-cli'), [
-      'serve',
-      '-C',
-      resolve(home, 'server-bootstrap.hs2'),
-      '--stop',
-    ]).catch(() => undefined);
+    await browser?.close();
+    if (child) {
+      child.kill('SIGTERM');
+      await new Promise((resolveExit) =>
+        child.exitCode === null && child.signalCode === null ? child.once('exit', resolveExit) : resolveExit(),
+      );
+    }
+    await stopMachineServer(home);
+    const survivors = await processesUsing(home);
     await rm(home, { recursive: true, force: true });
+    // Nothing the test started may outlive it: not the host, not its supervised machine server.
+    expect(survivors).toEqual([]);
   }
 }, 120_000);
