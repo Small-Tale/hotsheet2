@@ -300,7 +300,8 @@ and identity-less legacy entries remain conservatively blocking.
   or connect to Vite; Tauri startup itself remains to be measured once that host exists.
 - **Local production host (HS2-587N4D).** `npm run prod` builds the client and a Node host
   (`src/local-host.ts`, bundled by `npm run build:host` into `dist-host/`) and serves `dist/` on
-  `127.0.0.1:4180` (`-- --host`/`--port` override) with the same local bridge as the dev server:
+  `127.0.0.1:4175`, the same port as the dev server (`-- --host`/`--port` override), with the
+  same local bridge as the dev server:
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
   revalidates, and client routes fall back to `index.html`. Development-only surfaces (Dev Review,

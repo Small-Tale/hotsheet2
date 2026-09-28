@@ -17,7 +17,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { createDevApp } from './dev-server';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
-export const LOCAL_HOST_DEFAULT_PORT = 4180;
+export const LOCAL_HOST_DEFAULT_PORT = 4175;
 
 /** Set `Cache-Control` on a successful response produced by the handlers after this middleware. */
 function cacheControl(value: string): MiddlewareHandler {

@@ -77,7 +77,7 @@ When automation lands, remove the manual-only step and record it below.
 ### Local production host over the LAN
 
 HS2-587N4D — run `npm run prod:rebuild-lan` in `clients/web`, then open
-`http://<machine-LAN-address>:4180/` on a phone. Confirm the app loads quickly, a project opens, a
+`http://<machine-LAN-address>:4175/` on a phone. Confirm the app loads quickly, a project opens, a
 terminal attaches and streams, and live ticket changes arrive. Stop the host with Ctrl-C and
 confirm the machine server keeps running. Automated coverage runs the real host on loopback only.
 
