@@ -159,6 +159,13 @@ Codex turn to request Bash approval, verifies the documented `PermissionRequest`
 returns a native deny, and confirms the command did not run. Production launches retain
 Codex's `/hooks` hash-review gate; only this isolated drift test bypasses persisted trust.
 
+### AI shell permission prompt in app
+
+In the app, open a project's shell terminal, run `claude` (and separately `codex`), and ask for
+a command that needs approval. The permission prompt must appear in the Hot Sheet app, not in
+the shell, and the app's answer must be honored (HS2-HE4AVD). Real interactive tools can't run
+in CI; the automated tests prove the route-back environment reaches the shell.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

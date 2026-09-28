@@ -559,6 +559,14 @@ that declared hook remains rejected rather than receiving misleading, unused rou
 environment. Codex permissions also remain supported through Hot Sheet's app-server drive
 (`trigger`/`work`).
 
+**Hot Sheet's own shell terminals.** Every shell and command terminal that the server
+hosts carries the same route-back as a Connect launch: `HOTSHEET_SECRET`,
+`HOTSHEET_PROJECT` and, once the listener URL is known, `HOTSHEET_SERVER` (HS2-HE4AVD).
+Running `claude` or `codex` by hand in an app shell therefore raises its permission
+prompts in the app, as long as the project's setup has installed the tool's
+`PermissionRequest` hook. Without the hook, the variables go unused and the tool's
+native prompt stays in charge.
+
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)
 §2.7). Two regimes:

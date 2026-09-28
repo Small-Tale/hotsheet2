@@ -7265,18 +7265,7 @@ fn terminal_launch(
     }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let mut env = vec![
-        ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
-        (
-            "HOTSHEET_PROJECT".to_string(),
-            state.store.root().display().to_string(),
-        ),
-    ];
-    if let Ok(url) = state.terminal_server_url.lock()
-        && let Some(url) = url.as_ref()
-    {
-        env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
-    }
+    let env = terminal_permission_route_env(state);
     let args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())
         .unwrap_or_default();
@@ -7419,7 +7408,44 @@ fn shell_history_environment(
     }
 }
 
+/// The permission route-back every Hot Sheet terminal carries, so a hook-capable tool
+/// (Claude, Codex) started by hand in a shell raises its permission prompts in the app just
+/// like a Connect-launched one (HS2-HE4AVD). Without a known server URL, only the project is
+/// set and the tool's native prompt stays in charge.
+fn terminal_permission_route_env(state: &AppState) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
+        (
+            "HOTSHEET_PROJECT".to_string(),
+            state.store.root().display().to_string(),
+        ),
+    ];
+    if let Ok(url) = state.terminal_server_url.lock()
+        && let Some(url) = url.as_ref()
+    {
+        env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
+    }
+    env
+}
+
+/// Shell and command terminals: per-terminal shell history plus the permission route-back.
 fn terminal_shell_history_env(
+    state: &AppState,
+    req: &OpenTerminalReq,
+    terminal_id: &str,
+    command: &str,
+) -> Result<Vec<(String, String)>, ApiError> {
+    let mut env = terminal_permission_route_env(state);
+    env.extend(terminal_shell_history_only_env(
+        state,
+        req,
+        terminal_id,
+        command,
+    )?);
+    Ok(env)
+}
+
+fn terminal_shell_history_only_env(
     state: &AppState,
     req: &OpenTerminalReq,
     terminal_id: &str,
@@ -9867,5 +9893,39 @@ mod activity_distillation_tests {
         let broadcast = std::iter::from_fn(|| live.try_recv().ok()).collect::<Vec<_>>();
         assert_eq!(broadcast.len(), recorded.len());
         assert_eq!(broadcast[128].activity.as_ref(), Some(&recorded[128]));
+    }
+}
+
+#[cfg(test)]
+mod terminal_permission_route_tests {
+    use super::{AppState, terminal_permission_route_env};
+    use hotsheet_ticketing::{FsStore, StoreMetadata};
+
+    #[test]
+    fn every_terminal_route_carries_the_secret_project_and_server_once_known() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let value = |env: &[(String, String)], key: &str| {
+            env.iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.clone())
+        };
+
+        // Before the listener URL is known the tool can't reach the server, so no route.
+        let env = terminal_permission_route_env(&state);
+        assert_eq!(value(&env, "HOTSHEET_SECRET").as_deref(), Some("secret"));
+        assert_eq!(
+            value(&env, "HOTSHEET_PROJECT"),
+            Some(store.root().display().to_string())
+        );
+        assert_eq!(value(&env, "HOTSHEET_SERVER"), None);
+
+        state.set_terminal_server_url("http://127.0.0.1:4175".into());
+        let env = terminal_permission_route_env(&state);
+        assert_eq!(
+            value(&env, "HOTSHEET_SERVER").as_deref(),
+            Some("http://127.0.0.1:4175")
+        );
     }
 }

@@ -8981,6 +8981,55 @@ args = ["-c", "printf 'auto-launched:%s' \"$HOTSHEET_SECRET\""]
     assert!(output.contains("auto-launched:test-secret"), "{output}");
 }
 
+/// A Claude or Codex started by hand in a shell or command terminal must route its permission
+/// prompts to the app like a Connect launch, so every terminal carries the route-back env
+/// (HS2-HE4AVD).
+#[tokio::test]
+async fn shell_and_command_terminals_carry_the_permission_route_back() {
+    let (store_dir, st) = state();
+    let app = app(st);
+    let project = store_dir.path().display().to_string();
+    let print = r#"printf 'route:%s:%s:end' "$HOTSHEET_SECRET" "$HOTSHEET_PROJECT""#;
+    let requests = [
+        (
+            "cmd",
+            serde_json::json!({"id":"cmd","command":"/bin/sh","args":["-c", print]}),
+        ),
+        (
+            "shell",
+            serde_json::json!({"id":"shell","shell_command": print}),
+        ),
+    ];
+    for (id, request) in requests {
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(&request.to_string())))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{id}");
+        let expected = format!("route:test-secret:{project}:end");
+        let mut output = String::new();
+        for _ in 0..100 {
+            let terminal = body_json(
+                app.clone()
+                    .oneshot(authed("GET", &format!("/terminals/{id}"), None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            output = terminal["scrollback"]
+                .as_str()
+                .unwrap_or_default()
+                .replace(['\r', '\n'], "");
+            if output.contains(&expected) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(output.contains(&expected), "{id}: {output}");
+    }
+}
+
 /// The `connect` busy feed must also work when the terminal lives in the **detached broker**
 /// (HS2-ERT00F item 5): the server can't read an in-process `Terminal`, so it polls the broker
 /// over the socket for busy/idle and mirrors it into the connection registry.
