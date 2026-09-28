@@ -38,6 +38,14 @@ export function openMobileOverlay(which: keyof MobileOverlayState): MobileOverla
   return { sidebar: which === 'sidebar', inspector: which === 'inspector' };
 }
 
+/**
+ * Show the inspector for a ticket the user just created. On mobile it is a closed overlay, so it opens
+ * (closing the sidebar); larger layouts keep the inspector the user chose (HS2-QFW2A7).
+ */
+export function revealInspectorForCreatedTicket(mobile: boolean, state: MobileOverlayState): MobileOverlayState {
+  return mobile ? openMobileOverlay('inspector') : state;
+}
+
 /** Toggle the sidebar overlay: open it (closing the inspector) if closed, otherwise close it. */
 export function toggleMobileSidebar(state: MobileOverlayState): MobileOverlayState {
   return state.sidebar ? MOBILE_OVERLAYS_CLOSED : openMobileOverlay('sidebar');

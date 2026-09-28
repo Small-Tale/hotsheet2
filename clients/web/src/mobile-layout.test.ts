@@ -7,6 +7,7 @@ import {
   MOBILE_BREAKPOINT,
   MOBILE_OVERLAYS_CLOSED,
   openMobileOverlay,
+  revealInspectorForCreatedTicket,
   shouldAutoOpenInspectorOnTap,
   toggleMobileInspector,
   toggleMobileSidebar,
@@ -51,6 +52,16 @@ describe('mobile layout', () => {
     expect(shouldAutoOpenInspectorOnTap({ ...base, shiftKey: true })).toBe(false); // range multi-select
     expect(shouldAutoOpenInspectorOnTap({ ...base, metaKey: true })).toBe(false); // toggle multi-select
     expect(shouldAutoOpenInspectorOnTap({ ...base, ctrlKey: true })).toBe(false);
+  });
+
+  it('opens the inspector for a created ticket only on mobile (HS2-QFW2A7)', () => {
+    const sidebarOpen = openMobileOverlay('sidebar');
+    expect(revealInspectorForCreatedTicket(true, MOBILE_OVERLAYS_CLOSED)).toEqual({ sidebar: false, inspector: true });
+    expect(revealInspectorForCreatedTicket(true, sidebarOpen)).toEqual({ sidebar: false, inspector: true });
+    const inspectorOpen = openMobileOverlay('inspector');
+    expect(revealInspectorForCreatedTicket(true, inspectorOpen)).toEqual(inspectorOpen);
+    expect(revealInspectorForCreatedTicket(false, sidebarOpen)).toBe(sidebarOpen);
+    expect(revealInspectorForCreatedTicket(false, MOBILE_OVERLAYS_CLOSED)).toBe(MOBILE_OVERLAYS_CLOSED);
   });
 
   it('walks a realistic open → switch → dismiss sequence', () => {

@@ -198,7 +198,9 @@ and identity-less legacy entries remain conservatively blocking.
   is restored when the viewport grows back to desktop (HS2-1XCHZT). Because there is no persistent
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
-  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP). The
+  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
+  Creating a ticket likewise opens the overlay on the new ticket with its details editor focused,
+  as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The
   left/right sidebar keyboard shortcuts use the same mutually exclusive mobile overlays without
   changing the persisted desktop sidebar preferences (HS2-KN79XP). Crossing from desktop into mobile closes the desktop panels;
   reopening the inspector positions it fully within the viewport, including at 940px.

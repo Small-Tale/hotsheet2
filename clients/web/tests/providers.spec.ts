@@ -6590,6 +6590,51 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.screenshot({ path: '/private/tmp/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
 });
 
+test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7)', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create ticket' });
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Created title');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+
+  // The overlay opens on the new ticket with its details editor ready, not inert offscreen.
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.locator('.app-shell__scrim')).toBeVisible();
+  const ticketInspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(ticketInspector).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'HS2-NEW001 inspector' })).toBeVisible();
+  await expect(ticketInspector.getByRole('heading', { name: 'Created title', level: 1 })).toBeVisible();
+  await expect(ticketInspector.locator('[name="markdown-source"]')).toBeFocused();
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: testInfo.outputPath('hs2-qfw2a7-created-ticket-phone.png') });
+
+  // Tap-away returns to the list with the new ticket still selected.
+  await page.locator('.app-shell__scrim').click({ position: { x: 10, y: 400 } });
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')).toBeVisible();
+});
+
+test('creating a ticket on a desktop leaves the inspector as the user set it (HS2-QFW2A7)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create ticket' });
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Created title');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
+  await expect(page.locator('[data-component="ticket-inspector"] [name="markdown-source"]')).toBeFocused();
+});
+
 test('does not resurrect a dismissed ticket composer after another modal closes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

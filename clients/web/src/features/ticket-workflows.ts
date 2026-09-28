@@ -202,6 +202,8 @@ export interface TicketWorkflowDependencies {
     afterOpen?: () => void,
   ) => void;
   beginDetailsEdit: (reader?: boolean, frame?: TicketReaderFrame) => void;
+  /** Bring the inspector into view where it is not always visible (the phone overlay). */
+  revealTicketInspector: () => void;
   activeTicketSurface: () => ParentNode;
   draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   ago: (value?: string) => string;
@@ -306,6 +308,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     openTicketLinkMatch,
     presentTicketReaderDialog,
     beginDetailsEdit,
+    revealTicketInspector,
     activeTicketSurface,
     draftScope,
     ago,
@@ -1681,6 +1684,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           selectedTicket.value = null;
           selectedTicketSlugs.value = [created.slug];
           state.ticketSelectionAnchor = created.slug;
+          // On a phone the inspector is a closed overlay; open it so the new ticket's details
+          // editor is reachable rather than inert offscreen (HS2-QFW2A7).
+          revealTicketInspector();
           presentTicket(created);
           beginDetailsEdit();
           window.setTimeout(() => {
