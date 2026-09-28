@@ -8926,9 +8926,36 @@ impl Drop for RepositoryWatchHandle {
     }
 }
 
+/// Held only for its `Drop`.
 enum HeldWatcher {
-    Recommended(notify::RecommendedWatcher),
-    Poll(notify::PollWatcher),
+    Native { _hold: NativeWatcherHold },
+    Poll { _watcher: notify::PollWatcher },
+}
+
+/// A native watcher started on its own thread; `stopped` tells a still-starting thread to
+/// discard the watcher it is creating.
+#[derive(Default)]
+struct NativeWatcherState {
+    watcher: Option<notify::RecommendedWatcher>,
+    /// Bridges the native stream's start-up: polls until the stream has been live a moment.
+    bridge: Option<notify::PollWatcher>,
+    stopped: bool,
+}
+
+type NativeWatcherSlot = Arc<Mutex<NativeWatcherState>>;
+
+/// Owns a started (or starting) native watcher; dropping it stops the watcher.
+struct NativeWatcherHold(NativeWatcherSlot);
+
+impl Drop for NativeWatcherHold {
+    fn drop(&mut self) {
+        let watchers = self.0.lock().ok().map(|mut state| {
+            state.stopped = true;
+            (state.watcher.take(), state.bridge.take())
+        });
+        // Stop the stream outside the lock: it waits for the stream's run-loop thread.
+        drop(watchers);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -8987,16 +9014,20 @@ pub fn spawn_polling_watcher_for_test(state: AppState) -> anyhow::Result<WatchHa
     spawn_watcher_for(default_watch_target(&state), WatcherBackend::Poll)
 }
 
-/// FSEvents can stop delivering changes when a process creates a second watcher for a
-/// sibling temporary/store directory. Dynamically registered stores therefore use the
-/// deterministic polling backend on macOS; other platforms retain their native backend.
+/// Dynamically registered stores use the native watcher on every platform (HS2-P3SSGR).
+/// A native stream drops events from roughly its first 250ms, which is what made the
+/// macOS registered-store test fail (HS2-SG1BKJ); the startup resync in
+/// [`spawn_watcher_for`] covers that window. The 250ms polling fallback it replaces
+/// re-walked every registered store four times a second and kept an idle server busy.
 fn registered_watcher_backend() -> WatcherBackend {
-    if cfg!(target_os = "macos") {
-        WatcherBackend::Poll
-    } else {
-        WatcherBackend::Recommended
-    }
+    WatcherBackend::Recommended
 }
+
+/// Marks the synthetic event that asks a store's watch loop to re-check its tickets once
+/// the native stream is live, covering writes made while the stream was starting.
+const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
+/// When the startup resync runs; a native stream is live well within this (HS2-P3SSGR).
+const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
 
 /// A second FSEvents watcher is unreliable in the server process, while notify's polling
 /// watcher recursively walks every checkout (including ignored build output) on both
@@ -9024,27 +9055,95 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
     std::fs::create_dir_all(&tickets_dir)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = match backend {
-        WatcherBackend::Recommended => {
-            HeldWatcher::Recommended(notify::recommended_watcher(move |res| {
-                let _ = tx.send(res);
-            })?)
-        }
-        WatcherBackend::Poll => HeldWatcher::Poll(notify::PollWatcher::new(
-            move |res| {
-                let _ = tx.send(res);
-            },
-            notify::Config::default().with_poll_interval(Duration::from_millis(250)),
-        )?),
-    };
-    match &mut watcher {
-        HeldWatcher::Recommended(watcher) => {
-            watcher.watch(&tickets_dir, RecursiveMode::Recursive)?
-        }
-        HeldWatcher::Poll(watcher) => watcher.watch(&tickets_dir, RecursiveMode::Recursive)?,
-    }
-
     std::thread::spawn(move || watch_loop(rx, target));
+    let watcher = match backend {
+        WatcherBackend::Recommended => {
+            // Starting a native stream (FSEventStreamStart on macOS) can take seconds under
+            // load, and this runs on the project-open path, so the stream starts on its own
+            // thread (HS2-P3SSGR). Until it has been live a moment, a short-lived poller bridges
+            // the gap so a change made right after the store opens is still seen promptly; the
+            // store is re-checked when the bridge starts and again when it is dropped, covering
+            // writes made before either watcher took its first look.
+            let slot: NativeWatcherSlot = Arc::default();
+            let started = slot.clone();
+            std::thread::spawn(move || {
+                let resync = tx.clone();
+                let request_resync = |dir: &FsPath| {
+                    let _ = resync.send(Ok(notify::Event::new(notify::EventKind::Other)
+                        .add_path(dir.to_path_buf())
+                        .set_info(STARTUP_RESYNC)));
+                };
+                let bridge_tx = tx.clone();
+                let bridge = notify::PollWatcher::new(
+                    move |res| {
+                        let _ = bridge_tx.send(res);
+                    },
+                    notify::Config::default().with_poll_interval(Duration::from_millis(250)),
+                )
+                .and_then(|mut bridge| {
+                    bridge.watch(&tickets_dir, RecursiveMode::Recursive)?;
+                    Ok(bridge)
+                });
+                {
+                    let Ok(mut slot) = started.lock() else {
+                        return;
+                    };
+                    if slot.stopped {
+                        return;
+                    }
+                    slot.bridge = bridge.ok();
+                }
+                request_resync(&tickets_dir);
+                let mut watcher = match notify::recommended_watcher(move |res| {
+                    let _ = tx.send(res);
+                }) {
+                    Ok(watcher) => watcher,
+                    Err(error) => {
+                        eprintln!(
+                            "watcher for {} failed to start: {error}",
+                            tickets_dir.display()
+                        );
+                        return;
+                    }
+                };
+                if let Err(error) = watcher.watch(&tickets_dir, RecursiveMode::Recursive) {
+                    eprintln!(
+                        "watcher for {} failed to start: {error}",
+                        tickets_dir.display()
+                    );
+                    return;
+                }
+                {
+                    let Ok(mut slot) = started.lock() else {
+                        return;
+                    };
+                    // The handle was dropped while the stream started: stop it again.
+                    if slot.stopped {
+                        return;
+                    }
+                    slot.watcher = Some(watcher);
+                }
+                std::thread::sleep(STARTUP_RESYNC_DELAY);
+                // The native stream is live: retire the bridge and re-check once more.
+                let bridge = started.lock().ok().and_then(|mut slot| slot.bridge.take());
+                drop(bridge);
+                request_resync(&tickets_dir);
+            });
+            HeldWatcher::Native {
+                _hold: NativeWatcherHold(slot),
+            }
+        }
+        WatcherBackend::Poll => {
+            let mut watcher = notify::PollWatcher::new(
+                move |res| {
+                    let _ = tx.send(res);
+                },
+                notify::Config::default().with_poll_interval(Duration::from_millis(250)),
+            )?;
+            watcher.watch(&tickets_dir, RecursiveMode::Recursive)?;
+            HeldWatcher::Poll { _watcher: watcher }
+        }
+    };
     Ok(WatchHandle { _watcher: watcher })
 }
 
@@ -9204,10 +9303,10 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
     use std::time::Duration;
 
     while let Ok(first) = rx.recv() {
-        let mut paths = event_paths(first);
+        let mut paths = watch_event_paths(&target, first);
         // Debounce a burst (editor save, git checkout touching many files).
         while let Ok(next) = rx.recv_timeout(Duration::from_millis(150)) {
-            paths.extend(event_paths(next));
+            paths.extend(watch_event_paths(&target, next));
         }
         paths.sort();
         paths.dedup();
@@ -9237,6 +9336,65 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
             }
         }
     }
+}
+
+/// The ticket files one watcher event concerns; a startup resync yields the store's ticket
+/// files whose bytes differ from the index.
+fn watch_event_paths(
+    target: &WatchTarget,
+    res: notify::Result<notify::Event>,
+) -> Vec<std::path::PathBuf> {
+    if let Ok(event) = &res
+        && event.info() == Some(STARTUP_RESYNC)
+    {
+        return event
+            .paths
+            .iter()
+            .flat_map(|dir| stale_ticket_files(target, dir))
+            .collect();
+    }
+    event_paths(res)
+}
+
+/// Ticket files under `tickets_dir` (`<shard>/<ULID>.md`) whose content hash differs from
+/// the store's index: the writes a starting native stream may have missed. Unchanged
+/// tickets are skipped so a resync does not re-announce the whole store.
+fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::path::PathBuf> {
+    let is_md = |path: &FsPath| path.extension().and_then(|e| e.to_str()) == Some("md");
+    let mut files = Vec::new();
+    let mut dirs = vec![tickets_dir.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                dirs.push(path);
+            } else if is_md(&path) {
+                files.push(path);
+            }
+        }
+    }
+    let Ok(index) = target.entry.index.lock() else {
+        return files;
+    };
+    files
+        .into_iter()
+        .filter(|path| {
+            let Some(id) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .and_then(|stem| Ulid::from_string(stem).ok())
+            else {
+                return false;
+            };
+            let Ok(bytes) = std::fs::read(path) else {
+                return false;
+            };
+            index.content_hash(&id).ok().flatten().as_deref() != Some(hash_bytes(&bytes).as_str())
+        })
+        .collect()
 }
 
 fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
@@ -9365,13 +9523,50 @@ mod watcher_tests {
     use std::time::Duration;
 
     #[test]
-    fn registered_store_watcher_avoids_a_second_fsevents_stream() {
-        let expected = if cfg!(target_os = "macos") {
-            WatcherBackend::Poll
-        } else {
-            WatcherBackend::Recommended
+    fn startup_resync_finds_only_ticket_files_the_index_has_not_seen() {
+        use hotsheet_model::{Timestamp, Ulid};
+        use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let create = |title: &str| {
+            ops::create(
+                &store,
+                Ulid::new(),
+                "HS",
+                Timestamp::new("2026-09-28T00:00:00Z"),
+                NewTicket {
+                    title: title.into(),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
         };
-        assert_eq!(registered_watcher_backend(), expected);
+        let indexed = create("indexed before the watcher started");
+        let state = super::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let tickets = dir.path().join("tickets");
+        // Everything on disk is indexed: a resync touches nothing.
+        assert!(super::stale_ticket_files(&target, &tickets).is_empty());
+        // A write the starting stream missed (new ticket) and an external edit are found.
+        let missed = create("written while the stream was starting");
+        let mut edited = store.read_ticket(&indexed.id).unwrap();
+        edited.title = "edited while the stream was starting".into();
+        store.write_ticket(&edited).unwrap();
+        let mut stale: Vec<_> = super::stale_ticket_files(&target, &tickets)
+            .into_iter()
+            .map(|path| path.file_stem().unwrap().to_string_lossy().into_owned())
+            .collect();
+        stale.sort();
+        let mut expected = vec![indexed.id.to_string(), missed.id.to_string()];
+        expected.sort();
+        assert_eq!(stale, expected);
+    }
+
+    #[test]
+    fn registered_stores_use_the_native_watcher_instead_of_polling() {
+        // Polling re-walked every registered store four times a second (HS2-P3SSGR).
+        assert_eq!(registered_watcher_backend(), WatcherBackend::Recommended);
     }
 
     #[test]

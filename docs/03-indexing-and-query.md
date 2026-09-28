@@ -143,10 +143,17 @@ indexes to add this lookup (HS2-Y7W3Z4).
 ## 3.4 Incremental reindex
 
 The server owns a **filesystem watcher** (`notify` in Rust / `fsnotify` in Go)
-over every store path. The primary store uses the platform-native watcher. Additional
-stores registered at runtime use the native watcher too, except on macOS where they use
-a short-interval polling watcher to avoid missed events from a second FSEvents stream in
-the same process. On change:
+over every store path. Every hosted store — the primary store and stores registered at
+runtime — uses its own platform-native watcher (FSEvents on macOS), started on a background thread
+so opening a project never waits for the OS to start the stream (HS2-P3SSGR). A native stream
+drops changes made while it is still starting, and starting it can take seconds on a busy macOS
+machine, so a short-lived 250ms poller bridges that window: the store is re-checked when the bridge
+starts, the bridge is dropped about 1.5s after the native stream is live, and the store is re-checked
+once more. Each re-check processes only ticket files whose bytes differ from the index. That start-up
+gap, not a second stream, is what made the old macOS registered-store test fail (HS2-SG1BKJ); the
+permanent 250ms polling fallback it replaces re-walked each registered store four times a second and
+kept an idle server busy. Steady-state detection takes tens of milliseconds plus the 150ms debounce.
+On change:
 
 1. **Debounce** rapid bursts (an editor save, a git checkout touching many files).
 2. **Detect what actually changed.** For each candidate file, compare its current
