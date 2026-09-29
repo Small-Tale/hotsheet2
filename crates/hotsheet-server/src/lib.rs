@@ -2585,11 +2585,19 @@ fn connection_token(connection: &ProviderConnection) -> Result<String, ApiError>
 
 async fn create_provider_connection(
     State(state): State<AppState>,
-    Json(connection): Json<ProviderConnection>,
+    Json(mut connection): Json<ProviderConnection>,
 ) -> Result<(StatusCode, Json<ProviderConnection>), ApiError> {
     let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .load()
         .map_err(provider_transfer_error)?;
+    // Clients no longer ask users for an id; an empty one is generated (HS2-48GA17).
+    if connection.id.trim().is_empty() {
+        connection.id = hotsheet_ticketing::generate_connection_id(
+            &connections,
+            &connection.provider,
+            &connection.locator,
+        );
+    }
     save_provider_connections(&state, connections, connection.clone(), None)?;
     Ok((StatusCode::CREATED, Json(connection)))
 }

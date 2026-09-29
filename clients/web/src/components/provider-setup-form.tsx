@@ -92,19 +92,10 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
         </section>
       )}
       <Grid className="provider-setup-form__grid" columns={2} gap="m">
-        <label>
-          Connection ID
-          <input
-            name="connection-id"
-            required
-            placeholder={`${kind}-main`}
-            value={connection?.id ?? ''}
-            disabled={editing}
-          />
-        </label>
-        <label>
+        <label class="provider-setup-form__wide">
           Display name
           <input name="connection-name" placeholder={labels[0]} value={connection?.name ?? ''} />
+          <small>Leave blank to use “{labels[0]}”.</small>
         </label>
         <label class="provider-setup-form__wide">
           {kind === 'jira' ? 'Project key' : 'Repository'}
@@ -119,7 +110,8 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
             <input name="connection-locator" required placeholder={labels[1]} value={connection?.locator ?? ''} />
           )}
         </label>
-        {(kind !== 'github' || editing) && (
+        {/* GitHub uses the credential saved by Sign in with GitHub; there is no manual reference (HS2-48GA17). */}
+        {kind !== 'github' && (
           <label class="provider-setup-form__wide">
             Credential reference
             <input
@@ -133,16 +125,6 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
               browser.
             </small>
           </label>
-        )}
-        {kind === 'github' && !editing && (
-          <details class="provider-setup-form__wide">
-            <summary>Use a credential reference instead</summary>
-            <label>
-              Credential reference
-              <input name="credential-reference" placeholder={labels[2]} />
-              <small>Advanced fallback for an existing OS-keychain credential.</small>
-            </label>
-          </details>
         )}
         {kind === 'jira' && (
           <>

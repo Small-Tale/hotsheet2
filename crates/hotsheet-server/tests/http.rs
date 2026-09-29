@@ -11137,6 +11137,47 @@ async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract()
 }
 
 #[tokio::test]
+async fn creating_a_connection_without_an_id_generates_a_unique_readable_one() {
+    // HS2-48GA17: the setup dialog no longer asks users to invent a connection id.
+    let (_dir, st) = state();
+    let app = app(st);
+    let body = serde_json::json!({
+        "provider":"github","locator":"Small-Tale/hotsheet2","name":"GitHub Issues",
+        "default":false,"settings":{"credential":{"secret":"github-app-x"}}
+    })
+    .to_string();
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(authed("POST", "/provider-connections", Some(&body)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        ids.push(
+            body_json(response).await["id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    assert_eq!(
+        ids,
+        [
+            "github-small-tale-hotsheet2",
+            "github-small-tale-hotsheet2-2"
+        ]
+    );
+    let listed = body_json(
+        app.oneshot(authed("GET", "/provider-connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed.as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn provider_connections_crud_keeps_only_references_and_one_default() {
     // Hermetic: removal walks the checkout registry and key metadata (nextest isolates each
     // test process, so the env var cannot leak).

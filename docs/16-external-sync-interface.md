@@ -263,7 +263,12 @@ boundary. The server owns protocol pacing (`authorization_pending` and `slow_dow
 access/refresh bundles in the OS credential store, refreshes expiring access tokens, and
 reports expiry, denial, cancellation, revoked credentials, and SAML reauthorization
 requirements. GitHub Enterprise derives its web origin from the configured `/api/v3` API
-base. Manual credential references remain an advanced fallback. The first-party public
+base. The web dialog has no manual credential-reference field for GitHub: sign-in supplies
+the credential, and editing keeps the existing one (HS2-48GA17). A pre-registered key
+(`hotsheet key set`) can still be named in `providers.json` as a headless/advanced path. New
+connections need no user-chosen id: a create request with an empty `id` gets a readable
+unique one (`github-small-tale-hotsheet2`, then `-2`, …), and a blank display name defaults to
+the provider name ("GitHub Issues"). The first-party public
 GitHub.com Client ID (`Iv23lialgSTESydkTreA`) is bundled into development and release server
 builds; it is an identifier, not a secret. `HOTSHEET_GITHUB_APP_CLIENT_ID` may override it
 for development builds. The server build fails clearly if neither the override nor the

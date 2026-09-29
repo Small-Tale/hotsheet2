@@ -89,6 +89,8 @@ pub struct ProviderDescriptor {
 /// Durable, non-secret project configuration for one provider connection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderConnection {
+    /// Empty on a create request asks the host to generate one ([`generate_connection_id`]).
+    #[serde(default)]
     pub id: String,
     pub provider: String,
     pub locator: String,
@@ -183,6 +185,39 @@ impl ProviderConfigRegistry {
             .iter()
             .any(|connection| connection.id == connection_id && connection.disabled))
     }
+}
+
+/// A readable, unique connection id for a new `provider` connection to `locator`
+/// (`github-small-tale-hotsheet2`, then `-2`, `-3`, … on collision). Users never have to
+/// invent one (HS2-48GA17).
+pub fn generate_connection_id(
+    existing: &[ProviderConnection],
+    provider: &str,
+    locator: &str,
+) -> String {
+    let mut base = String::new();
+    for c in format!("{provider}-{locator}").chars() {
+        if c.is_ascii_alphanumeric() {
+            base.push(c.to_ascii_lowercase());
+        } else if !base.ends_with('-') {
+            base.push('-');
+        }
+    }
+    let mut base = base.trim_matches('-').chars().take(48).collect::<String>();
+    while base.ends_with('-') {
+        base.pop();
+    }
+    if base.is_empty() {
+        base = "connection".into();
+    }
+    let taken = |id: &str| existing.iter().any(|connection| connection.id == id);
+    if !taken(&base) {
+        return base;
+    }
+    (2..)
+        .map(|n| format!("{base}-{n}"))
+        .find(|candidate| !taken(candidate))
+        .expect("an unbounded suffix search always finds a free id")
 }
 
 fn validate_connections(connections: &[ProviderConnection]) -> Result<(), ProviderError> {
@@ -2229,6 +2264,39 @@ mod tests {
                 .iter()
                 .any(|r| r.descriptor.connection_id == "down" && r.result.is_err())
         );
+    }
+
+    #[test]
+    fn generated_connection_ids_are_readable_valid_and_unique() {
+        let connection = |id: &str| ProviderConnection {
+            id: id.into(),
+            provider: "github".into(),
+            locator: "x/y".into(),
+            name: None,
+            default: false,
+            settings: serde_json::Value::Null,
+            disabled: false,
+        };
+        assert_eq!(
+            generate_connection_id(&[], "github", "Small-Tale/hotsheet2"),
+            "github-small-tale-hotsheet2"
+        );
+        let existing = [
+            connection("github-small-tale-hotsheet2"),
+            connection("github-small-tale-hotsheet2-2"),
+        ];
+        assert_eq!(
+            generate_connection_id(&existing, "github", "small-tale/hotsheet2"),
+            "github-small-tale-hotsheet2-3"
+        );
+        assert_eq!(generate_connection_id(&[], "jira", "OPS"), "jira-ops");
+        assert_eq!(generate_connection_id(&[], "", "///"), "connection");
+        let long = generate_connection_id(&[], "gitlab", &"group/".repeat(30));
+        assert!(long.len() <= 48 && !long.ends_with('-'));
+        // Every generated id passes the registry's own validation.
+        for id in [long, generate_connection_id(&existing, "github", "a b/c.d")] {
+            validate_connections(&[connection(&id)]).unwrap();
+        }
     }
 
     #[test]

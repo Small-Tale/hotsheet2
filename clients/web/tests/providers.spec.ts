@@ -429,6 +429,16 @@ async function mockProject(
       return route.fulfill({ json: providerConnectionRecords });
     if (path.endsWith('/provider-connections') && request.method() === 'POST') {
       const created = request.postDataJSON();
+      // Like the server, generate a readable unique id when the client sends none (HS2-48GA17).
+      if (!created.id) {
+        const base = `${created.provider}-${created.locator}`
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+        let id = base;
+        for (let n = 2; providerConnectionRecords.some((item) => item.id === id); n += 1) id = `${base}-${n}`;
+        created.id = id;
+      }
       providerConnectionRecords = [...providerConnectionRecords, created];
       return route.fulfill({ status: 201, json: created });
     }
@@ -1881,13 +1891,19 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
   await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
-  await providerForm.getByLabel('Connection ID').fill('GitHub Main');
+  // No connection id to invent, no credential reference, and a blank name defaults to the provider (HS2-48GA17).
+  await expect(providerForm.getByLabel('Connection ID')).toHaveCount(0);
+  await expect(providerForm.getByText('Use a credential reference instead')).toHaveCount(0);
+  await expect(providerForm.getByLabel(/Credential reference/)).toHaveCount(0);
+  const creates: Array<{ id: string; name: string }> = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
+      creates.push(request.postDataJSON());
+  });
   await providerForm.getByLabel('Repository').selectOption('small-tale/hotsheet2');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
-  await expect(setup.getByRole('alert')).toContainText('lowercase letters');
-  await providerForm.getByLabel('Connection ID').fill('github-main');
-  await providerForm.getByLabel('Display name').fill('GitHub Issues');
-  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect.poll(() => creates.length).toBe(1);
+  expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues' });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
@@ -1904,7 +1920,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
   await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
-  await providerForm.getByLabel('Connection ID').fill('github-secondary');
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
   await providerForm.getByLabel('Repository').selectOption('small-tale/secondary');
   await providerForm.getByLabel('Use as the default ticket source').uncheck();
@@ -1913,7 +1928,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
   await page.getByRole('button', { name: 'Edit GitHub Issues' }).click();
-  await expect(providerForm.getByLabel('Connection ID')).toBeDisabled();
   await expect(providerForm.getByLabel('Repository')).toHaveValue('small-tale/hotsheet2');
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await setup.getByRole('button', { name: 'Save changes' }).click();
@@ -1953,7 +1967,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.setViewportSize({ width: 1100, height: 760 });
   await footer.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(setup).toHaveJSProperty('open', false);
-  expect(deletes).toEqual(['github-secondary']);
+  expect(deletes).toEqual(['github-small-tale-secondary']);
   await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed.');
   await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();

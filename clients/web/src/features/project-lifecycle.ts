@@ -3,7 +3,7 @@ import { type Signal, signal } from 'kerfjs';
 import { Api, type Capabilities, type Checkout, type CustomView, type ProviderConnection } from '../api';
 import { isRemoteClient } from '../client-origin';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
-import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
+import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
@@ -498,25 +498,25 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         const value = values.get(field);
         return typeof value === 'string' ? value.trim() : '';
       },
-      id = editingId ?? read('connection-id'),
-      name = read('connection-name'),
+      existing = editingId ? providerConnections.value.find((item) => item.id === editingId) : undefined,
+      // New connections get a server-generated id; an empty display name uses the provider's name (HS2-48GA17).
+      id = editingId ?? '',
+      name = read('connection-name') || providerName(kind),
       locator = read('connection-locator'),
+      existingCredential = (existing?.settings.credential as { secret?: unknown } | undefined)?.secret,
       credential =
         kind === 'github'
-          ? (githubAuth.value?.credential ?? read('credential-reference'))
+          ? (githubAuth.value?.credential ?? (typeof existingCredential === 'string' ? existingCredential : ''))
           : read('credential-reference'),
       makeDefault = values.get('make-default') === 'on';
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-      providerSettingsError.value = 'Connection ID must use lowercase letters, numbers, and hyphens.';
-      return;
-    }
     if (!locator || (kind !== 'jira' && !locator.includes('/'))) {
       providerSettingsError.value =
         kind === 'jira' ? 'Enter the Jira project key.' : 'Enter a namespace/repository path.';
       return;
     }
     if (!credential) {
-      providerSettingsError.value = 'Enter an existing OS-keychain credential reference.';
+      providerSettingsError.value =
+        kind === 'github' ? 'Sign in with GitHub first.' : 'Enter an existing OS-keychain credential reference.';
       return;
     }
     const settings: Record<string, unknown> = { credential: { secret: credential } },
@@ -534,7 +534,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       id,
       provider: kind,
       locator,
-      name: name || null,
+      name,
       default: makeDefault,
       settings,
     };
