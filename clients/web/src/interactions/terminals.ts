@@ -451,22 +451,23 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     event.stopPropagation();
     terminalDrawerCreateMenuOpen.value = !terminalDrawerCreateMenuOpen.value;
   });
-  window.addEventListener('resize', () => {
-    if (!terminalDrawerCreateMenuOpen.value) return;
-    requestAnimationFrame(() => {
+  if (typeof window !== 'undefined')
+    window.addEventListener('resize', () => {
       if (!terminalDrawerCreateMenuOpen.value) return;
-      const button = document.querySelector<HTMLElement>('[data-action="toggle-terminal-create-menu"]'),
-        menu = document.querySelector<HTMLElement>('.terminal-drawer__create-menu');
-      if (!button || !menu) return;
-      const position = drawerCreateMenuPosition(button.getBoundingClientRect(), {
-        width: window.innerWidth,
-        height: window.innerHeight,
+      requestAnimationFrame(() => {
+        if (!terminalDrawerCreateMenuOpen.value) return;
+        const button = document.querySelector<HTMLElement>('[data-action="toggle-terminal-create-menu"]'),
+          menu = document.querySelector<HTMLElement>('.terminal-drawer__create-menu');
+        if (!button || !menu) return;
+        const position = drawerCreateMenuPosition(button.getBoundingClientRect(), {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+        menu.dataset.side = position.side;
+        menu.style.left = `${position.left}px`;
+        menu.style.maxHeight = `${position.maxHeight}px`;
       });
-      menu.dataset.side = position.side;
-      menu.style.left = `${position.left}px`;
-      menu.style.maxHeight = `${position.maxHeight}px`;
     });
-  });
   delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
     const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
     terminalDrawerCreateMenuOpen.value = false;

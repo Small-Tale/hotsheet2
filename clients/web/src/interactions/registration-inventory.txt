@@ -100,6 +100,7 @@ terminals	delegate	document.body	'dblclick'	'[data-action="toggle-terminal-drawe
 terminals	delegate	document.body	'dblclick'	'[data-tab-kind="terminal"], [data-action="select-drawer-item"]'
 terminals	delegate	document.body	'click'	'[data-action="select-drawer-item"]'
 terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-create-menu"]'
+terminals	window.addEventListener	'resize'
 terminals	delegate	document.body	'click'	'[data-action="create-terminal-drawer-item"]'
 terminals	delegate	document.body	'click'	'[data-action="open-saved-conversation"]'
 terminals	document.addEventListener	'pointerdown'
