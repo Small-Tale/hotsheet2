@@ -2026,9 +2026,6 @@ export async function startHotSheetWebClient() {
     const mobile = isMobileViewport(window.innerWidth);
     if (mobile !== viewportMobile.value) {
       viewportMobile.value = mobile;
-      // Board columns load per status on desktop but the mobile layout lists one global page, so crossing
-      // the breakpoint on the board reloads the matching row shape (HS2-HNZZHC).
-      if (viewMode.value === 'board') void refreshProject({ showLoading: false, quiet: true });
       if (!mobile) {
         mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
         exitMobileTerminalFocus();
@@ -2980,7 +2977,7 @@ export async function startHotSheetWebClient() {
     projectId = selectedProjectId.value,
     loaded?: { rows: readonly WireTicketRow[]; pages: Record<string, BoardColumnPage> },
   ): BoardRefreshSpec | undefined {
-    if (viewMode.value !== 'board' || viewportMobile.value) return undefined;
+    if (viewMode.value !== 'board') return undefined;
     if (!isPerColumnBoardView(view, projectId === selectedProjectId.value && workspaceSearchActive())) return undefined;
     const hideVerified = hideVerifiedByProject.value[projectId] ?? false,
       columns = ['not-started', 'started', 'completed', ...(hideVerified ? [] : ['verified'])].map((id) => ({
@@ -3970,7 +3967,7 @@ export async function startHotSheetWebClient() {
         },
       };
     continueProgressiveTicketRendering(shown.length);
-    if (viewMode.value === 'board' && !viewportMobile.value) {
+    if (viewMode.value === 'board') {
       const counts =
           workspaceSearchActive() || collectionLoading
             ? undefined
@@ -4005,7 +4002,9 @@ export async function startHotSheetWebClient() {
           continuation,
         };
       });
-      return { kind: 'board', board: { columns, label: 'Project board', emptyState } };
+      // Phones page through one snapped column at a time instead of shrinking the grid (HS2-ZYJMDP).
+      const layout = viewportMobile.value ? 'paged' : 'grid';
+      return { kind: 'board', board: { columns, label: 'Project board', emptyState, layout } };
     }
     return {
       kind: 'list',
@@ -4434,8 +4433,7 @@ export async function startHotSheetWebClient() {
         }
         headerActions={
           <WorkspaceControls
-            mode={viewportMobile.value && viewMode.value === 'board' ? 'list' : viewMode.value}
-            listOnly={viewportMobile.value}
+            mode={viewMode.value}
             searchOpen={searchOpen.value}
             searchQuery={searchQuery.value}
             searchTokens={searchTokens.value}
@@ -4485,11 +4483,7 @@ export async function startHotSheetWebClient() {
         }
         pageHeader={pageHeader}
         workspace={<WorkspaceSurface {...workspaceSurfaceProps()} />}
-        workspacePresentation={
-          viewMode.value === 'board' && !viewportMobile.value && selectedView.value !== 'errors'
-            ? 'edge-to-edge'
-            : 'inset'
-        }
+        workspacePresentation={viewMode.value === 'board' && selectedView.value !== 'errors' ? 'edge-to-edge' : 'inset'}
         terminalDrawer={
           drawerViewAllowed ? (
             terminalDrawerMounted.value ? (
@@ -4549,7 +4543,7 @@ export async function startHotSheetWebClient() {
   const ticketScrollRoot = () => appRoot.querySelector<HTMLElement>('.app-shell__workspace') ?? appRoot;
   const ticketScrollScope = () => ({
     project: selectedProjectId.value,
-    mode: `${shellMode.value}:${viewMode.value === 'board' && viewportMobile.value ? 'list' : viewMode.value}`,
+    mode: `${shellMode.value}:${viewMode.value}`,
     view:
       viewMode.value === 'notifications'
         ? notificationView.value

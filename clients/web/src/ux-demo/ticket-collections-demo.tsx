@@ -333,6 +333,11 @@ export function TicketBoardDemo() {
   return (
     <section class="collection-demo collection-demo--board" aria-label="TicketBoard demo">
       <TicketBoard columns={columns} label="Example status board" />
+      <article class="collection-demo__paged-board">
+        <h3>Paged layout</h3>
+        <p>Phone widths show one column at a time and snap to the nearest column when a swipe is released.</p>
+        <TicketBoard columns={columns} layout="paged" label="Paged status board" />
+      </article>
       <article class="collection-demo__empty-board">
         <h3>Empty search</h3>
         <TicketBoard

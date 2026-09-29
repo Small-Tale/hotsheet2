@@ -672,6 +672,13 @@ always retain native clipboard behavior.
   appropriate. If the whole board is empty, it retains the column headings and places
   one shared `TicketEmptyState` across the board body; individual empty columns remain
   blank when other columns contain tickets.
+  Its `layout` variant is `grid` (default, described above) or `paged` (HS2-ZYJMDP): each column
+  is the board's visible width minus 24px so the next column peeks in, and mandatory horizontal
+  scroll snapping settles a released scroll or swipe on the nearest column start with a smooth
+  animated scroll (instant under `prefers-reduced-motion`). Trailing room lets the last column rest
+  at the same 8px inset. The production app uses `paged` below the mobile breakpoint; the demo
+  shows both variants. Changing `layout` remounts the board, so a paged scroll offset never leaves
+  the grid mid-column.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
   affordance, and a full-width heading control that selects every ticket in that column.

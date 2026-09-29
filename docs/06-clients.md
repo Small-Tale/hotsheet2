@@ -192,10 +192,13 @@ and identity-less legacy entries remain conservatively blocking.
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or
   retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the
-  ticket workspace is also list-only: the column/board
-  view does not fit a single narrow column, so the Columns view toggle (and its overflow entry)
-  is hidden and a persisted board preference renders as a list without being overwritten, so it
-  is restored when the viewport grows back to desktop (HS2-1XCHZT). Because there is no persistent
+  Columns view remains available (HS2-ZYJMDP, replacing the earlier list-only rule from
+  HS2-1XCHZT): the edge-to-edge board uses TicketBoard's `paged` layout, showing one
+  near-full-width column at a time with the next column peeking in. The board scrolls
+  horizontally and, when a swipe, drag, or wheel scroll is released, snaps with an animated
+  scroll to the nearest column start (native CSS mandatory scroll snapping; instant under
+  reduced motion). Crossing the breakpoint keeps the view-mode preference and switches between
+  the paged and side-by-side grid layouts, restarting at the leading column. Because there is no persistent
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
   the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
@@ -752,7 +755,7 @@ and identity-less legacy entries remain conservatively blocking.
   and each Load more reads that column's next 100. A refresh (live change, tab reactivation, list↔board
   switch) reloads each column back to its loaded length in one commit, in pages of at most 500, so an
   external change does not reset a column's pagination. Warm project tabs keep their column cursors with
-  their rows. Crossing the mobile breakpoint on the board reloads, because mobile lists one global page.
+  their rows. Mobile uses the same per-column loading in its paged board layout (HS2-ZYJMDP).
   Single-collection Backlog/Archive/Trash boards and search keep the global cursor.
   A column pages an _ordered list_ of statuses, not just one: when the **Hide Verified column** setting
   merges Verified into Completed, that column exhausts its `completed` stream and then continues into

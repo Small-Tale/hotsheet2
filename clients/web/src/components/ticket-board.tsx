@@ -5,19 +5,29 @@ import { TicketEmptyState, type TicketEmptyStateProps } from './ticket-empty-sta
 
 export type TicketColumnProps = TicketBoardColumnProps;
 
+/**
+ * `grid` fits every column side by side (scrolling horizontally only below the per-column minimum);
+ * `paged` shows one near-full-width column at a time with the next one peeking, and snaps to the
+ * nearest column with an animated scroll when a horizontal scroll or swipe is released (HS2-ZYJMDP).
+ */
+export type TicketBoardLayout = 'grid' | 'paged';
+
 export interface TicketBoardProps {
   columns: TicketColumnProps[];
   label?: string;
   emptyState?: TicketEmptyStateProps;
+  layout?: TicketBoardLayout;
 }
 
-export function TicketBoard({ columns, label = 'Ticket board', emptyState }: TicketBoardProps) {
+export function TicketBoard({ columns, label = 'Ticket board', emptyState, layout = 'grid' }: TicketBoardProps) {
+  // A layout switch remounts the board so a paged scroll offset never strands the grid mid-column.
   const empty = columns.every((column) => (column.totalCount ?? column.tickets.length) === 0);
   return (
     <section
       class="ticket-board"
-      data-key="ticket-board"
+      data-key={layout === 'grid' ? 'ticket-board' : `ticket-board:${layout}`}
       data-component="ticket-board"
+      data-layout={layout}
       data-ticket-selection-root="true"
       role="listbox"
       aria-multiselectable="true"

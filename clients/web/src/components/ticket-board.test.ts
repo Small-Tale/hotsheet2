@@ -44,6 +44,25 @@ describe('TicketBoard', () => {
     expect(markup).not.toContain('ticket-card');
   });
 
+  it('exposes grid and paged layouts, snapping paged columns on release (HS2-ZYJMDP)', () => {
+    const columns = [
+      { id: 'active', title: 'Active', tickets: [ticket] },
+      { id: 'done', title: 'Done', tickets: [] },
+    ];
+    expect(String(TicketBoard({ columns }))).toContain('data-layout="grid"');
+    expect(String(TicketBoard({ columns, layout: 'paged' }))).toContain('data-layout="paged"');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
+    const paged = css.match(/\.ticket-board\[data-layout='paged'\] \{([^}]*)\}/)?.[1] ?? '';
+    expect(paged).toMatch(/scroll-snap-type: x mandatory/);
+    expect(paged).toMatch(/scroll-behavior: smooth/);
+    expect(paged).toMatch(/container-type: inline-size/);
+    expect(css).toMatch(
+      /\[data-layout='paged'\] \.ticket-board__columns \{[^}]*grid-auto-columns: calc\(100cqi - remify\(24px\)\)/,
+    );
+    expect(css).toMatch(/\[data-layout='paged'\] \.ticket-board-column \{[^}]*scroll-snap-align: start/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)[^}]*\{[^}]*scroll-behavior: auto/);
+  });
+
   it('leaves columns visually unframed beneath their title and count', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
     const rule = css.match(/\.ticket-board-column \{([^}]*)\}/)?.[1] ?? '';

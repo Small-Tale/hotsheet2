@@ -230,21 +230,11 @@ describe('WorkspaceHeader', () => {
     );
   });
 
-  it('hides the columns/board view toggle and its overflow entry when listOnly (mobile) (HS2-1XCHZT)', () => {
-    const desktop = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
-    // Desktop keeps the columns toggle button and its overflow entry.
-    expect(desktop).toContain('data-segment-value="board" data-selected="false" aria-label="Columns view"');
-    expect(desktop).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
-    expect(desktop.match(/data-action="set-view-mode"/g)).toHaveLength(4);
-
-    const mobile = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', listOnly: true }));
-    // Mobile drops the board toggle and its overflow entry, keeping list/notifications/settings.
-    expect(mobile).not.toContain('data-view-mode="board"');
-    expect(mobile).not.toContain('Show Columns View');
-    expect(mobile.match(/data-action="set-view-mode"/g)).toHaveLength(3);
-    expect(mobile).toContain(
-      'data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"',
-    );
+  it('offers the columns/board view toggle and its overflow entry (HS2-ZYJMDP)', () => {
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }));
+    expect(markup).toContain('data-segment-value="board" data-selected="true" aria-label="Columns view"');
+    expect(markup).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
   });
 
   it('delegates the collapsed find state to the canonical TokenSearchField trigger', () => {

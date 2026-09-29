@@ -103,6 +103,16 @@ manual check.
 Exercise platform accessibility, background/resume, notification presentation, and
 credential storage once the native clients exist.
 
+### Mobile paged board touch swiping (HS2-ZYJMDP)
+
+On a **physical phone** (iOS Safari, the installed PWA, and Android Chrome), open a project in
+the Columns view. Swipe partway toward the next column and lift: the board should animate onto
+the nearest column's leading edge (the next column when past halfway, otherwise back). Flick
+quickly: momentum should settle on a column start, never between columns. Confirm that vertical
+scrolling inside a column is not hijacked by the horizontal snap, that tapping a ticket still
+opens the inspector overlay, and that rotating the device re-snaps to a column. Playwright
+covers wheel/trackpad snapping in Chromium; real touch momentum is manual.
+
 ### Web visual quality gate
 
 For every change affecting rendered web-client visuals, inspect the real affected

@@ -408,32 +408,78 @@ test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays witho
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
 });
 
-test('mobile forces list view and hides the columns toggle, restoring board view on desktop (HS2-1XCHZT)', async ({
+test('mobile pages the columns view one snapped column at a time and keeps the board on desktop (HS2-ZYJMDP)', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
-  // Desktop: the columns/board toggle is available and switches to a board.
+  const board = page.locator('[data-component="ticket-board"]');
+  const columns = board.locator('[data-component="ticket-board-column"]');
+
+  // The Columns toggle is offered on mobile and presents the paged board edge to edge.
   await page.getByRole('button', { name: 'Columns view' }).click();
-  await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
+  await expect(board).toHaveAttribute('data-layout', 'paged');
   await expect(page.locator('[data-component="ticket-list"]')).toHaveCount(0);
-
-  // Shrinking below the floor forces the list view and removes the columns toggle entirely.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('button', { name: 'Columns view' })).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
-  await expect(page.locator('[data-component="ticket-board"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
-
-  // Growing back restores the desktop board preference (it was never overwritten).
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Columns view' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.app-shell__workspace')).toHaveAttribute('data-presentation', 'edge-to-edge');
+  await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
+  const geometry = await board.evaluate((element) => {
+    const bounds = element.getBoundingClientRect(),
+      cells = [...element.querySelectorAll('[data-component="ticket-board-column"]')].map((cell) =>
+        cell.getBoundingClientRect(),
+      );
+    return { board: bounds, first: cells[0], second: cells[1], overflow: element.scrollWidth - element.clientWidth };
+  });
+  // One column nearly fills the board while the next one peeks in at the trailing edge.
+  expect(geometry.first.width).toBeGreaterThan(geometry.board.width * 0.85);
+  expect(geometry.first.width).toBeLessThan(geometry.board.width);
+  expect(geometry.second.left).toBeLessThan(geometry.board.right);
+  expect(geometry.overflow).toBeGreaterThan(geometry.first.width);
+
+  // A partial horizontal scroll settles on the nearest column start once it is released: that column's
+  // leading edge rests at the board's 8px scroll padding.
+  const columnInset = (index: number) =>
+    board.evaluate(
+      (element, target) =>
+        Math.round(
+          element.querySelectorAll('[data-component="ticket-board-column"]')[target].getBoundingClientRect().left -
+            element.getBoundingClientRect().left,
+        ),
+      index,
+    );
+  const scrollLeft = () => board.evaluate((element) => Math.round(element.scrollLeft));
+  await board.hover();
+  await page.mouse.wheel(Math.round(geometry.first.width * 0.7), 0);
+  await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
+  const second = await scrollLeft();
+  expect(second).toBeGreaterThan(0);
+  await page.mouse.wheel(-Math.round(geometry.first.width * 0.3), 0);
+  await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
+  await page.mouse.wheel(-Math.round(geometry.first.width * 0.8), 0);
+  await expect.poll(scrollLeft, { timeout: 5000 }).toBe(0);
+  await expect.poll(() => columnInset(0), { timeout: 5000 }).toBe(8);
+  await expect(columns.first()).toBeInViewport({ ratio: 0.95 });
+
+  // Tapping a ticket inside the paged board still opens the mobile inspector overlay.
+  await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').scrollIntoViewIfNeeded();
+  await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
+  await expect(page.locator('.kui-resizable-region[data-region-id="app-inspector"]')).toHaveAttribute(
+    'data-collapsed',
+    'false',
+  );
+  await page.locator('.app-shell__scrim').click({ position: { x: 8, y: 400 } });
+
+  // Growing to desktop keeps the board preference in the side-by-side grid layout, and back again.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(board).toHaveAttribute('data-layout', 'grid');
+  await expect(board).toHaveCSS('scroll-snap-type', 'none');
+  await expect(page.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(board).toHaveAttribute('data-layout', 'paged');
   await page.getByRole('button', { name: 'List view' }).click();
   await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(board).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
 });
 

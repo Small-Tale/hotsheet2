@@ -213,6 +213,24 @@ body[data-resizing-project-sidebar='true'] {
 .collection-demo--board .ticket-board {
   height: remify(544px);
 }
+.collection-demo__paged-board {
+  display: grid;
+  width: min(100%, remify(392px));
+  padding: var(--wa-space-s) 0 0;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-l);
+  background: var(--wa-color-surface-lowered);
+  gap: var(--wa-space-xs);
+}
+.collection-demo__paged-board > h3,
+.collection-demo__paged-board > p {
+  margin: 0;
+  padding-inline: var(--wa-space-s);
+}
+.collection-demo__paged-board > p {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+}
 .collection-demo--column {
   width: min(100%, remify(384px));
   min-width: 250px;
@@ -240,7 +258,8 @@ body[data-resizing-project-sidebar='true'] {
   gap: var(--wa-space-xs);
 }
 .collection-demo__empty-states h3,
-.collection-demo__empty-board h3 {
+.collection-demo__empty-board h3,
+.collection-demo__paged-board h3 {
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);

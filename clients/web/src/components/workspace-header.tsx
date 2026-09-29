@@ -70,9 +70,6 @@ export interface WorkspaceHeaderProps {
   selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
   selectedTicketsMutable?: boolean;
-  /** Mobile: board/column view does not fit a single column, so hide the Columns toggle and its
-   * overflow entry and leave only the list ticket view (HS2-1XCHZT). */
-  listOnly?: boolean;
 }
 
 export function WorkspaceIdentity({
@@ -93,7 +90,6 @@ export function WorkspaceIdentity({
 
 function workspaceModeChoices(
   count: number,
-  listOnly: boolean,
   presentation: WorkspaceControlsPresentation,
 ): ReadonlyArray<SegmentedControlChoice<WorkspaceViewMode>> {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
@@ -103,9 +99,7 @@ function workspaceModeChoices(
     { value: 'settings', label: 'Settings', icon: Settings, iconName: 'settings' },
   ];
   return modes
-    .filter(({ value }) =>
-      presentation === 'rail' ? value === 'list' || value === 'notifications' : !listOnly || value !== 'board',
-    )
+    .filter(({ value }) => presentation !== 'rail' || value === 'list' || value === 'notifications')
     .map(({ value, label, icon, iconName }) => {
       const badge = value === 'notifications' ? count : 0;
       return {
@@ -217,7 +211,6 @@ function WorkspaceOverflowControls({
   notificationCount,
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
-  listOnly = false,
   presentation,
 }: {
   mode: WorkspaceViewMode;
@@ -230,12 +223,11 @@ function WorkspaceOverflowControls({
   notificationCount: number;
   selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
-  listOnly?: boolean;
   presentation: WorkspaceControlsPresentation;
 }) {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
-    ...(listOnly || presentation === 'rail'
+    ...(presentation === 'rail'
       ? []
       : [{ value: 'board' as const, label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' }]),
     {
@@ -346,7 +338,6 @@ export function WorkspaceControls({
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
-  listOnly = false,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
   const ticketActionsDisabled = projectActionsDisabled || selectedTicketCount === 0 || !selectedTicketsMutable;
@@ -367,7 +358,7 @@ export function WorkspaceControls({
           id="workspace-view-mode"
           label="View mode"
           value={mode}
-          choices={workspaceModeChoices(notificationCount, listOnly, presentation)}
+          choices={workspaceModeChoices(notificationCount, presentation)}
           action="set-view-mode"
           appearance="toolbar"
           shape={presentation === 'rail' ? 'rounded' : 'pill'}
@@ -569,7 +560,6 @@ export function WorkspaceControls({
         notificationCount={notificationCount}
         selectedTicketsUpNext={selectedTicketsUpNext}
         selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
-        listOnly={listOnly}
         presentation={presentation}
       />
     </div>
@@ -594,7 +584,6 @@ export function WorkspaceHeader({
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
-  listOnly = false,
 }: WorkspaceHeaderProps) {
   return (
     <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
@@ -616,7 +605,6 @@ export function WorkspaceHeader({
           selectedTicketsUpNext={selectedTicketsUpNext}
           selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
           selectedTicketsMutable={selectedTicketsMutable}
-          listOnly={listOnly}
         />
       )}
     </header>
