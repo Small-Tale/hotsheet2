@@ -212,7 +212,7 @@ for (const width of [390, 1280]) {
         create = drawer.getByRole('button', { name: 'New drawer item' });
       for (let index = 0; index < 2; index++) {
         await create.click();
-        await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat', { exact: true }).click();
+        await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
         const chat = drawer.locator('[data-component="ai-conversation"]');
         await chat.getByLabel('Message Codex').fill(`LAN turn ${index + 1}`);
         await chat.getByRole('button', { name: 'Send message to Codex' }).click();
@@ -223,7 +223,7 @@ for (const width of [390, 1280]) {
       expect(turns).toEqual(['LAN turn 1', 'LAN turn 2']);
       for (let index = 0; index < 2; index++) {
         await create.click();
-        await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Saved conversation…').click();
+        await drawer.getByRole('menuitem', { name: 'Saved conversation…' }).click();
         await expect(drawer.locator('[data-component="ai-conversation"]')).toContainText('Saved LAN result');
       }
       await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveCount(2);

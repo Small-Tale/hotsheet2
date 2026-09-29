@@ -148,7 +148,7 @@ export async function installTerminalFixture(
       });
     }
     if (ticketLinks && path.match(/\/tickets\/[^/]+$/)) {
-      const id = decodeURIComponent(path.split('/').at(-1)!),
+      const id = decodeURIComponent(path.split('/').at(-1)!).split(':').at(-1),
         ticket = linkTickets.find((item) => item.id === id);
       if (ticket)
         return route.fulfill({

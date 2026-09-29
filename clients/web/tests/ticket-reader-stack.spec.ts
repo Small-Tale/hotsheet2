@@ -368,8 +368,8 @@ test('edits same-slug linked readers through their owning project and flushes be
   await expect
     .poll(() => mutations.map((item) => [item.projectId, item.ticketId, item.patch.details]))
     .toEqual([
-      ['third-project', 'deep', 'Deep project draft stays with git-deep.'],
-      ['target-project', 'target', 'Target project draft stays with git-target.'],
+      ['third-project', 'git-deep:deep', 'Deep project draft stays with git-deep.'],
+      ['target-project', 'git-target:target', 'Target project draft stays with git-target.'],
     ]);
   await expect(page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]')).toHaveAttribute(
     'data-ticket-slug',
@@ -400,7 +400,7 @@ test('opens media from a stacked linked reader in the gallery for that reader ti
   await expect(gallery.locator('img').first()).toHaveAttribute(
     'src',
     // Same checkout-scoped URL the linked reader itself uses: its owning checkout and ticket.
-    /\/checkouts\/target-project\/tickets\/target\/attachments\/LINKED-IMG$/,
+    /\/checkouts\/target-project\/tickets\/git-target%3Atarget\/attachments\/LINKED-IMG$/,
   );
   const galleryOnTop = await gallery.evaluate((node) => {
     const box = node.getBoundingClientRect(),
@@ -434,7 +434,7 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
     notes: [],
     attachments: [],
   });
-  await page.route('**/project-api/target-project/**/tickets/target', async (route) => {
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget', async (route) => {
     const request = route.request();
     if (request.method() === 'GET') return route.fulfill({ json: ticketJson() });
     if (request.method() !== 'PATCH') return route.fallback();

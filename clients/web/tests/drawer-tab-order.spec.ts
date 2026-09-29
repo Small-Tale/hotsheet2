@@ -193,7 +193,7 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   await expect(drawer).toBeVisible();
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', 'shell-two']);
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
   const chat = drawer.locator('[data-tab-kind="ai-chat"]');
   await expect(chat).toBeVisible();
   const chatId = await chat.getAttribute('data-tab-id');
@@ -250,7 +250,7 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   const drawer = page.locator('[data-component="terminal-drawer"]');
   for (let index = 0; index < 2; index += 1) {
     await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+    await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
   }
   const chats = drawer.locator('[data-tab-kind="ai-chat"]'),
     chatOneId = (await chats.nth(0).getAttribute('data-tab-id'))!,

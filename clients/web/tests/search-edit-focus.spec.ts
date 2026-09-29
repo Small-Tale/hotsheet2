@@ -101,7 +101,7 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
         ? route.fulfill({ json: { items: [match], counts } })
         : route.fulfill({ json: { items: base, counts: { ...counts, total: 2, queued: 2, open: 2, started: 2 } } });
     }
-    if (/\/tickets\/HS2-MATCH$/.test(path))
+    if (path.endsWith('/checkouts/demo/tickets/git-local%3AHS2-MATCH'))
       return route.fulfill({
         json: {
           store: 'git-local',

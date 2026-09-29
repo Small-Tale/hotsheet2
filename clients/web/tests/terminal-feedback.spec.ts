@@ -617,7 +617,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.getByRole('menuitem', { name: 'Default shell' }).click();
   let dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
   await dedicated.click();
@@ -831,7 +831,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.getByRole('menuitem', { name: 'Default shell' }).click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
   const claims = () =>
@@ -891,7 +891,7 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.getByRole('menuitem', { name: 'Default shell' }).click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
   // On a phone only a tap focuses a terminal, so creating one does not enter focus mode (HS2-YD7RZ7).
@@ -1161,7 +1161,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.getByRole('menuitem', { name: 'Default shell' }).click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');
   // A tap is what focuses a phone terminal and enters focus mode (HS2-YD7RZ7).
@@ -1252,7 +1252,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.getByRole('menuitem', { name: 'Default shell' }).click();
   const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]'),
     textarea = dedicated.locator('.xterm-helper-textarea');
   await expect(dedicated).toHaveAttribute('data-connection', 'connected');

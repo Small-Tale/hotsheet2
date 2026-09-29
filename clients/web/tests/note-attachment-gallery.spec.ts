@@ -67,7 +67,8 @@ test('each image in one note opens its own gallery attachment', async ({ page })
           ? { items: [row], counts: { all: 1, queue: 1, backlog: 0, archive: 0 } }
           : [row],
       });
-    if (path.endsWith('/tickets/1') && request.method() === 'GET') return route.fulfill({ json: ticket });
+    if (path.endsWith('/checkouts/demo/tickets/git%3A1') && request.method() === 'GET')
+      return route.fulfill({ json: ticket });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [
@@ -115,7 +116,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
     details = visibleInspector.locator('.ticket-inspector__details-surface');
   await expect(details.getByRole('button', { name: 'Open first.svg in image gallery' })).toHaveAttribute(
     'data-attachment-url',
-    /\/tickets\/HS2-IMAGES\/attachments\/A-FIRST$/,
+    /\/checkouts\/demo\/tickets\/HS2-IMAGES\/attachments\/A-FIRST$/,
   );
   await expect(details.getByRole('link', { name: 'report.pdf' })).toHaveAttribute(
     'href',

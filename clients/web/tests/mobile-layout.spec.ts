@@ -70,7 +70,7 @@ async function openDemoProject(page: import('@playwright/test').Page, withTermin
         ],
       });
     // Flattened ticket + store, matching GET /checkouts/{ref}/tickets/{id} (the client wraps it itself).
-    if (/\/tickets\/HS2-M1$/.test(path))
+    if (path.endsWith('/checkouts/demo-checkout/tickets/git-local%3AHS2-M1'))
       return route.fulfill({
         json: {
           store: 'git-local',

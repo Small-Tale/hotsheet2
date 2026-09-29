@@ -2489,7 +2489,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
   await demo.screenshot({ path: '/private/tmp/hs2-y70mjy-notifications-narrow.png', animations: 'disabled' });
   await command.getByRole('button', { name: 'Always Allow', exact: true }).click();
   await expect(command).toHaveAttribute('data-state', 'allow');
-  await expect(command.getByText('allowed this kind of request', { exact: true })).toBeVisible();
+  await expect(command.getByText(/allowed this kind of request$/)).toBeVisible();
   await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
   await read.getByRole('button', { name: 'Deny', exact: true }).click();
   await expect(pending).toHaveCount(0);
@@ -2501,8 +2501,8 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
   await command.getByRole('button', { name: 'Allow Once', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(command).toHaveAttribute('data-state', 'allow');
-  await expect(command.getByText('allowed permission', { exact: true })).toBeVisible();
-  await expect(command.getByText('allowed this kind of request', { exact: true })).toHaveCount(0);
+  await expect(command.getByText(/allowed permission$/)).toBeVisible();
+  await expect(command.getByText(/allowed this kind of request$/)).toHaveCount(0);
   await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
 });
 
