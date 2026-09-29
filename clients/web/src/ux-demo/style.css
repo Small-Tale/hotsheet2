@@ -332,6 +332,10 @@ body[data-resizing-project-sidebar='true'] {
   gap: remify(32px);
   padding: clamp(remify(24px), 4vw, remify(48px));
 }
+.toolbar-control-group-demo > div {
+  width: max-content;
+  min-width: remify(160px);
+}
 .toolbar-text-demo {
   display: flex;
   flex-wrap: wrap;

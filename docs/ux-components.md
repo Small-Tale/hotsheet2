@@ -1766,12 +1766,12 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
-error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH, and
-HS2-GX51F7 is:
+error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
+HS2-GX51F7, and HS2-NBMT1Q is:
 
 | Severity | Exact diagnostic budgets                                                 |
 | -------- | ------------------------------------------------------------------------ |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 107; `KUI-L022` 67; `KUI-L201` 22 |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 107; `KUI-L022` 67; `KUI-L201` 14 |
 | review   | `KUI-L004` 82; `KUI-L006` 15; `KUI-L008` 26                              |
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
@@ -1787,3 +1787,7 @@ HS2-GX51F7 uses TabBar's adjacent trailing and far-edge end zones for terminal d
 creation and hide actions, and gives the AppTab catalog example a TabBar parent. It also
 removes a consumer rule targeting TabBar's trailing internals; all `KUI-L202` and
 `KUI-L203` findings are now cleared.
+
+HS2-NBMT1Q renders every ToolbarControlGroup catalog variant through a Toolbar leading
+zone. The eight group variants and their interactions remain available; the doctor no
+longer reports their parent composition.

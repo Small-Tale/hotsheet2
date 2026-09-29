@@ -2644,6 +2644,27 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.kui-toolbar-control-group');
   await expect(groups).toHaveCount(8);
+  expect(await groups.evaluateAll((nodes) => nodes.every((node) => node.closest('[data-component="toolbar"]')))).toBe(
+    true,
+  );
+  const clippedGroups = await groups.evaluateAll((nodes) =>
+    nodes.flatMap((node, index) => {
+      const group = node.getBoundingClientRect();
+      const toolbar = node.closest('[data-component="toolbar"]')!.getBoundingClientRect();
+      return group.left >= toolbar.left - 1 && group.right <= toolbar.right + 1
+        ? []
+        : [
+            {
+              index,
+              groupWidth: group.width,
+              toolbarWidth: toolbar.width,
+              groupRight: group.right,
+              toolbarRight: toolbar.right,
+            },
+          ];
+    }),
+  );
+  expect(clippedGroups).toEqual([]);
   const segments = demo.getByRole('group', { name: 'View mode', exact: true });
   await expect(segments).toHaveAttribute('data-component', 'segmented-control');
   const list = segments.getByRole('button', { name: 'List view' });
