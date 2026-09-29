@@ -10010,6 +10010,42 @@ async fn cancelled_driven_approval_clears_the_server_queue_and_notifies_clients(
 }
 
 #[tokio::test]
+async fn timed_out_driven_approval_notifies_clients_when_the_queue_clears() {
+    let (_d, st) = state();
+    let mut live = st.subscribe();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let waiter = std::thread::spawn(move || {
+        bridge.request_blocking_timeout_for_project(
+            "project",
+            "codex-session",
+            "execCommandApproval",
+            "cargo test",
+            std::time::Duration::from_millis(30),
+            hotsheet_aitools::PermissionDecision::Deny,
+        )
+    });
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    let (asked, removed) = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        (live.recv().await.unwrap(), live.recv().await.unwrap())
+    })
+    .await
+    .unwrap();
+    assert_eq!(asked.kind, "permission_asked");
+    assert_eq!(removed.kind, "permission_resolved");
+    assert_eq!(removed.id, asked.id);
+    assert_eq!(removed.message, None);
+    let response = app
+        .oneshot(authed("GET", "/permissions", None))
+        .await
+        .unwrap();
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn permissions_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)

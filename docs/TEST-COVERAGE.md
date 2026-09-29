@@ -298,6 +298,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | codex-rpc-approval-close | docs/05-ai-tool-plugins.md | Closing a driven Codex RPC connection cancels only its pending approval, wakes the waiter, and notifies clients (HS2-V5Y8WW). | `crates/hotsheet-aitools/src/codex.rs # close while approval blocked`; `crates/hotsheet-aitools/src/permission.rs # interleaved cancellation and human resolution` | `crates/hotsheet-server/tests/http.rs # cancelled approval leaves GET /permissions empty and emits removal` | — | double-covered |
 
+| driven-approval-timeout-removal | docs/05-ai-tool-plugins.md | A driven approval timeout removes the request and immediately notifies clients once (HS2-J30B1J). | `crates/hotsheet-aitools/src/permission.rs # timeout and human-answer race` | `crates/hotsheet-server/tests/http.rs # timeout removal event and empty GET /permissions` | — | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

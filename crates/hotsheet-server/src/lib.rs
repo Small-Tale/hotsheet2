@@ -261,7 +261,7 @@ impl AppState {
         {
             let events = events.clone();
             let log = event_log.clone();
-            permissions.set_on_cancelled(move |req| {
+            permissions.set_on_removed(move |req| {
                 emit_change(
                     &log,
                     &events,
@@ -6624,7 +6624,6 @@ async fn ask_permission(
     let guard = PermissionAskGuard {
         state: cancellation.clone(),
     };
-    let expiry = cancellation.clone();
     // request_blocking_timeout blocks (Condvar); run it off the async runtime.
     let decision = tokio::task::spawn_blocking(move || {
         bridge.request_blocking_timeout_with_pending(
@@ -6638,7 +6637,7 @@ async fn ask_permission(
             hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
             hotsheet_aitools::PermissionDecision::Deny,
             |id| cancellation.mark_pending(id),
-            |id| expiry.emit_removed(id),
+            |_| {},
         )
     })
     .await

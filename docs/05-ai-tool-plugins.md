@@ -588,6 +588,8 @@ notified immediately; an abandoned request does not remain as a false popup.
 The same removal applies to a driven Codex app-server approval when its RPC connection
 closes: the bridge wakes that waiter with a one-time denial, publishes a removal event,
 and leaves unrelated approvals and remembered rules untouched (HS2-V5Y8WW).
+An unanswered approval also emits the same removal event when its timeout expires;
+a human answer that wins the race does not emit a second removal (HS2-J30B1J).
 The server retains an eventual safe-deny guard of 24 hours. This is intentionally much
 longer than client-side automation windows: an ignored or otherwise hidden popup does
 not advance a client's visible-presentation countdown and must not disappear after the

@@ -269,7 +269,7 @@ pub struct SharedPermissionBridge {
     #[allow(clippy::type_complexity)]
     on_pending: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
     #[allow(clippy::type_complexity)]
-    on_cancelled: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
+    on_removed: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
 }
 
 impl SharedPermissionBridge {
@@ -279,7 +279,7 @@ impl SharedPermissionBridge {
             results: Mutex::new(HashMap::new()),
             cvar: Condvar::new(),
             on_pending: Mutex::new(None),
-            on_cancelled: Mutex::new(None),
+            on_removed: Mutex::new(None),
         }
     }
 
@@ -288,9 +288,9 @@ impl SharedPermissionBridge {
         *self.on_pending.lock().unwrap() = Some(Box::new(f));
     }
 
-    /// Notify clients when a transport closes while its approval is pending.
-    pub fn set_on_cancelled(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
-        *self.on_cancelled.lock().unwrap() = Some(Box::new(f));
+    /// Notify clients when cancellation or timeout removes an unanswered approval.
+    pub fn set_on_removed(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
+        *self.on_removed.lock().unwrap() = Some(Box::new(f));
     }
 
     /// Replace the bridge's allow-rules (e.g. seeding durable `Always` rules loaded from
@@ -425,15 +425,16 @@ impl SharedPermissionBridge {
             Outcome::Auto(d) => return d,
             Outcome::Pending(id) => id,
         };
+        let request = Request {
+            id,
+            project,
+            connection,
+            tool,
+            action,
+            agent,
+        };
         if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
-            f(&Request {
-                id,
-                project,
-                connection,
-                tool,
-                action,
-                agent,
-            });
+            f(&request);
         }
         on_pending(id);
         let deadline = Instant::now() + timeout;
@@ -454,6 +455,7 @@ impl SharedPermissionBridge {
                     .is_some();
                 if expired {
                     on_expired(id);
+                    self.notify_removed(&request);
                     return on_timeout;
                 }
                 return self
@@ -495,10 +497,14 @@ impl SharedPermissionBridge {
         };
         self.results.lock().unwrap().insert(id, Decision::Deny);
         self.cvar.notify_all();
-        if let Some(callback) = self.on_cancelled.lock().unwrap().as_ref() {
-            callback(&request);
-        }
+        self.notify_removed(&request);
         true
+    }
+
+    fn notify_removed(&self, request: &Request) {
+        if let Some(callback) = self.on_removed.lock().unwrap().as_ref() {
+            callback(request);
+        }
     }
 }
 
@@ -620,7 +626,7 @@ mod tests {
         let bridge = Arc::new(SharedPermissionBridge::default());
         let cancelled = Arc::new(Mutex::new(Vec::new()));
         let observed = cancelled.clone();
-        bridge.set_on_cancelled(move |request| observed.lock().unwrap().push(request.id));
+        bridge.set_on_removed(move |request| observed.lock().unwrap().push(request.id));
         let first_bridge = bridge.clone();
         let first =
             std::thread::spawn(move || first_bridge.request_blocking("first", "Bash", "rm x"));
@@ -688,6 +694,9 @@ mod tests {
         use std::sync::{Arc, Mutex};
         let bridge = Arc::new(SharedPermissionBridge::default());
         let expired = Arc::new(Mutex::new(Vec::new()));
+        let removed = Arc::new(Mutex::new(Vec::new()));
+        let observed = removed.clone();
+        bridge.set_on_removed(move |request| observed.lock().unwrap().push(request.id));
         let timeout_ids = expired.clone();
         let decision = bridge.request_blocking_timeout_with_pending(
             PermissionAsk {
@@ -704,6 +713,7 @@ mod tests {
         );
         assert_eq!(decision, Decision::Deny);
         assert_eq!(expired.lock().unwrap().len(), 1);
+        assert_eq!(*removed.lock().unwrap(), *expired.lock().unwrap());
         assert!(bridge.pending().is_empty());
 
         let waiter_bridge = bridge.clone();
@@ -732,6 +742,7 @@ mod tests {
         bridge.resolve(id, Decision::Allow, Scope::Once).unwrap();
         assert_eq!(waiter.join().unwrap(), Decision::Allow);
         assert_eq!(expired.lock().unwrap().len(), 1);
+        assert_eq!(removed.lock().unwrap().len(), 1);
     }
 
     #[test]
