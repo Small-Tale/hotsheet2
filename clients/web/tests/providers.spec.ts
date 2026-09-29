@@ -3312,7 +3312,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await expect(codexTile).toHaveCount(1);
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('Default shell').click();
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   const dedicated = drawer.locator('[data-component="terminal-session"]:not([hidden])');
@@ -3579,7 +3579,7 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -3632,14 +3632,19 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   expect(createStyle.borderRadius).toBe('999px');
   expect(createStyle.height).toBe('32px');
   await create.click();
-  await expect(region).toHaveAttribute('data-content-overflow', 'visible');
-  const menu = drawer.getByRole('menu', { name: 'New drawer item' });
+  await expect(region.locator(':scope > .kui-resizable-region__content')).toHaveCSS('overflow', 'visible');
+  const menu = drawer.locator('[data-terminal-drawer-create]');
   await expect(menu.getByText('Default shell')).toBeVisible();
   await expect(menu.getByText('AI shell')).toBeVisible();
   await expect(menu.locator('[data-component="list-header"]')).toHaveCount(0);
   await expect(menu.locator('[data-lucide="chevron-right"]')).toHaveCount(0);
+  const popupBounds = () =>
+    menu.evaluate((node) => {
+      const bounds = node.shadowRoot?.querySelector('[part="menu"]')?.getBoundingClientRect();
+      return bounds ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+    });
   const captureMenu = async (path: string) => {
-    const [menuBox, createBox] = await Promise.all([menu.boundingBox(), create.boundingBox()]);
+    const [menuBox, createBox] = await Promise.all([popupBounds(), create.boundingBox()]);
     expect(menuBox).not.toBeNull();
     expect(createBox).not.toBeNull();
     const left = Math.max(0, Math.min(menuBox!.x, createBox!.x) - 16),
@@ -3656,11 +3661,13 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   };
   await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-wide.png');
   await page.setViewportSize({ width: 760, height: 640 });
-  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute('open', '');
+  await expect.poll(async () => (await popupBounds())?.x ?? -Infinity).toBeGreaterThanOrEqual(8);
+  await page.screenshot({ path: '/private/tmp/hs2-r8smk2-popup-narrow-full.png', fullPage: true });
   await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await menu.getByText('AI chat').click({ modifiers: ['Alt'] });
-  await expect(region).toHaveAttribute('data-content-overflow', 'clip');
+  await expect(region.locator(':scope > .kui-resizable-region__content')).toHaveCSS('overflow', 'hidden');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Claude chat' })).toHaveAttribute('aria-selected', 'true');
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
@@ -3753,7 +3760,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
     composer = conversation.getByLabel('Message Codex'),
     messages = conversation.locator('[data-message-id]');
@@ -3812,7 +3819,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
     composer = conversation.getByLabel('Message Codex'),
     messages = conversation.locator('[data-action="pick-conversation-message"]'),
@@ -3985,7 +3992,7 @@ test('selects and copies chat messages before saving that range without choosing
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]');
   const composer = conversation.getByLabel('Message Codex');
   await composer.fill('Export the referenced proof.');
@@ -4091,7 +4098,7 @@ test('selects and copies chat messages before saving that range without choosing
   ]);
   const openSaved = async () => {
     await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Saved conversation…').click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('Saved conversation…').click();
   };
   await openSaved();
   const savedTab = drawer.getByRole('tab', { name: 'Codex saved chat' });
@@ -4156,7 +4163,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   const projectChat = drawer.locator('[data-component="workspace-chat-tile"]');
@@ -4221,7 +4228,7 @@ test('previews running project resources with shared menus and explicit keep-run
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -4275,7 +4282,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const liveConversation = drawer.locator('[data-component="ai-conversation"]'),
     composer = liveConversation.getByLabel('Message Codex'),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
@@ -4388,7 +4395,7 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -4441,7 +4448,7 @@ test('restores an AI transcript and resumes its durable session after client and
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -4492,7 +4499,7 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -4629,7 +4636,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Show terminal drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat', { exact: true }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
     await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
     await page.getByRole('button', { name: 'Workspace grid' }).click();
     const dashboard = page.getByRole('region', { name: 'Workspace grid' });
@@ -4816,7 +4823,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('Default shell').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('Default shell').click();
   const viewport = drawer.locator(
     '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
   );
@@ -4904,7 +4911,7 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await page.screenshot({ path: '/private/tmp/hs2-4fzgm7-drawer-max.png', fullPage: true });
 });
 
-test('keeps the drawer create menu on screen when the drawer reaches the page header', async ({ page }) => {
+test('keeps the Kerf drawer create menu on screen and keyboard operable at the page header', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
@@ -4916,10 +4923,15 @@ test('keeps the drawer create menu on screen when the drawer reaches the page he
   await handle.focus();
   for (let step = 0; step < 32; step += 1) await page.keyboard.press('ArrowUp');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  const menu = drawer.getByRole('menu', { name: 'New drawer item' });
-  await expect(menu).toHaveAttribute('data-side', 'below');
+  const menu = drawer.locator('[data-terminal-drawer-create]');
+  await expect(menu).toHaveAttribute('open', '');
   await expect(menu.getByText('Saved conversation…')).toBeVisible();
-  const bounds = await menu.boundingBox();
+  const menuBounds = () =>
+    menu.evaluate((node) => {
+      const bounds = node.shadowRoot?.querySelector('[part="menu"]')?.getBoundingClientRect();
+      return bounds ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+    });
+  const bounds = await menuBounds();
   expect(bounds).not.toBeNull();
   expect(bounds!.y).toBeGreaterThanOrEqual(8);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900 - 8);
@@ -4927,15 +4939,28 @@ test('keeps the drawer create menu on screen when the drawer reaches the page he
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440 - 8);
   await page.screenshot({ path: '/private/tmp/hs2-zkkrzs-tall-drawer-menu.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 300 });
-  await expect(menu).toHaveAttribute('data-side', 'below');
   await expect
     .poll(async () => {
-      const shortBounds = await menu.boundingBox();
+      const shortBounds = await menuBounds();
       return shortBounds ? shortBounds.y + shortBounds.height : Infinity;
     })
     .toBeLessThanOrEqual(300 - 8);
   await menu.getByText('Saved conversation…').scrollIntoViewIfNeeded();
   await expect(menu.getByText('Saved conversation…')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).not.toHaveAttribute('open', '');
+  await expect
+    .poll(() => menu.evaluate((node) => (node as HTMLElement & { popup?: { active?: boolean } }).popup?.active))
+    .toBe(false);
+  await drawer.getByRole('button', { name: 'New drawer item' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toHaveAttribute('open', '');
+  const firstCommand = menu.locator('wa-dropdown-item').first();
+  await firstCommand.focus();
+  await expect(firstCommand).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('double-clicks the drawer rail or any terminal tab to toggle maximization', async ({ page }) => {
@@ -7035,7 +7060,7 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]'),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
   await conversation.getByLabel('Message Codex').fill('Export the referenced proof.');
@@ -10198,7 +10223,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menu', { name: 'New drawer item' }).getByText('AI chat').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');

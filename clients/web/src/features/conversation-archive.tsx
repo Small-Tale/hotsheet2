@@ -33,7 +33,6 @@ export interface ConversationArchiveDependencies {
   aiToolLabel: (tool: string) => string;
   showToast: (message: string) => void;
   error: Signal<string>;
-  terminalDrawerCreateMenuOpen: Signal<boolean>;
   terminalVisibility: Signal<TerminalVisibilityState>;
   persistTerminalVisibility: (next: TerminalVisibilityState) => void;
   replaceConversationStates: (states: Record<string, ConversationState>) => void;
@@ -52,7 +51,6 @@ export function createConversationArchiveController(dependencies: ConversationAr
     aiToolLabel,
     showToast,
     error,
-    terminalDrawerCreateMenuOpen,
     terminalVisibility,
     persistTerminalVisibility,
     replaceConversationStates,
@@ -165,7 +163,6 @@ export function createConversationArchiveController(dependencies: ConversationAr
   async function openSavedConversation() {
     const current = project();
     if (!current) return;
-    terminalDrawerCreateMenuOpen.value = false;
     try {
       const response = await fetch('/__hotsheet/conversation-exports/open', { method: 'POST' }),
         result = (await response.json()) as { conversation?: ConversationExportOpenResult; error?: string };

@@ -101,7 +101,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(421);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(420);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))
@@ -122,7 +122,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(13);
+    expect(main.split('\n')).toHaveLength(14);
     expect(main).toContain('await startHotSheetWebClient();');
     expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
     expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);

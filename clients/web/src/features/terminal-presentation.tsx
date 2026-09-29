@@ -16,7 +16,6 @@ import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-compos
 import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
-import { drawerCreateMenuPosition } from '../terminal-drawer-menu-position';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
@@ -43,7 +42,6 @@ export interface TerminalPresentationDependencies {
     terminalDrawerFitHigh: Signal<number>;
     terminalDrawerSelected: Signal<string>;
     terminalDrawerMaximized: Signal<boolean>;
-    terminalDrawerCreateMenuOpen: Signal<boolean>;
     mobileTerminalFocus: Signal<MobileTerminalFocusState>;
     /** Phone-only magnified-terminal chrome inputs; undefined on wider viewports (HS2-WMN626). */
     mobileMagnifiedTerminal: () => MobileMagnifiedTerminal | undefined;
@@ -85,7 +83,6 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDrawerFitHigh,
     terminalDrawerSelected,
     terminalDrawerMaximized,
-    terminalDrawerCreateMenuOpen,
     mobileTerminalFocus,
     mobileMagnifiedTerminal,
   } = dependencies.terminals;
@@ -221,18 +218,6 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       loading: terminalDashboardLoading.value,
       message: terminalDashboardMessage.value,
       maximized: terminalDrawerMaximized.value,
-      createMenuOpen: terminalDrawerCreateMenuOpen.value,
-      createMenuPosition: terminalDrawerCreateMenuOpen.value
-        ? (() => {
-            const button = document.querySelector<HTMLElement>('[data-action="toggle-terminal-create-menu"]');
-            return button
-              ? drawerCreateMenuPosition(button.getBoundingClientRect(), {
-                  width: window.innerWidth,
-                  height: window.innerHeight,
-                })
-              : undefined;
-          })()
-        : undefined,
       focusMode,
       focusViewport: focused.viewport,
       // The phone focus-mode text-size control uses the same mobile geometry + columns as the

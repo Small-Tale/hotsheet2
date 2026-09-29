@@ -452,8 +452,7 @@ export async function startHotSheetWebClient() {
     terminalFunctionRow = signal(false),
     mobileViewportGeometry = signal(currentMobileViewportGeometry());
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
-    terminalDrawerOrderByProject = signal<Record<string, string[]>>({}),
-    terminalDrawerCreateMenuOpen = signal(false);
+    terminalDrawerOrderByProject = signal<Record<string, string[]>>({});
   const magnifiedTerminalKey = signal<string | undefined>(undefined),
     terminalVisibility = signal(parseTerminalVisibilityState(localStorage.getItem(TERMINAL_VISIBILITY_STORAGE_KEY))),
     terminalVisibilityDialogScope = signal<string | undefined>(undefined),
@@ -833,7 +832,6 @@ export async function startHotSheetWebClient() {
     aiToolLabel,
     showToast,
     error,
-    terminalDrawerCreateMenuOpen,
     terminalVisibility,
     persistTerminalVisibility,
     replaceConversationStates,
@@ -4152,7 +4150,6 @@ export async function startHotSheetWebClient() {
         terminalDrawerFitHigh,
         terminalDrawerSelected,
         terminalDrawerMaximized,
-        terminalDrawerCreateMenuOpen,
         mobileTerminalFocus,
         mobileMagnifiedTerminal,
       },
@@ -4523,7 +4520,6 @@ export async function startHotSheetWebClient() {
           drawerViewAllowed
         }
         sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
-        terminalDrawerContentOverflow={terminalDrawerCreateMenuOpen.value ? 'visible' : 'clip'}
         inspector={
           viewMode.value === 'notifications' ? (
             <NotificationInspector />
@@ -4887,7 +4883,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailDirection, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, terminalDrawerCreateMenuOpen, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, mobileOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

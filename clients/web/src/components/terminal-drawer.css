@@ -127,7 +127,6 @@
   background: var(--wa-color-surface-default);
 }
 .terminal-drawer__rail > button,
-.terminal-drawer__create,
 .terminal-drawer__actions > button {
   display: inline-flex;
   min-width: remify(32px);
@@ -151,12 +150,10 @@
   flex: none;
 }
 .terminal-drawer__rail > button:hover,
-.terminal-drawer__create:hover,
 .terminal-drawer__actions > button:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
 .terminal-drawer__rail > button:focus-visible,
-.terminal-drawer__create:focus-visible,
 .terminal-drawer__actions > button:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
@@ -170,31 +167,22 @@
   position: relative;
   flex: none;
 }
-.terminal-drawer__create {
-  flex: none;
+/* Keep Web Awesome's anchored popup outside the drawer clipping boundary without
+   rerendering the dropdown during its open lifecycle (HS2-R8SMK2). */
+[data-region-id='app-terminal-drawer']:has([data-terminal-drawer-create][open]) {
+  z-index: var(--kui-resizable-region-popup-z, 5);
+  overflow: visible;
 }
-.terminal-drawer__create-menu {
-  position: absolute;
-  z-index: 30;
-  bottom: calc(100% + var(--kui-space-xs));
-  left: 0;
-  display: grid;
-  box-sizing: border-box;
-  width: min(remify(224px), calc(100vw - remify(16px)));
-  overflow-y: auto;
-  padding: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-raised);
-  box-shadow: var(--wa-shadow-l);
-  gap: var(--kui-space-none);
+[data-region-id='app-terminal-drawer']:has([data-terminal-drawer-create][open]) > .kui-resizable-region__content {
+  overflow: visible;
 }
-.terminal-drawer__create-menu[data-side='below'] {
-  top: calc(100% + var(--kui-space-xs));
-  bottom: auto;
-}
-.terminal-drawer__create-menu wa-dropdown-item {
-  width: 100%;
+.terminal-drawer__create-wrap .kui-popup-menu > wa-button::part(base) {
+  min-width: remify(32px);
+  height: remify(32px);
+  min-height: remify(32px);
+  padding-inline: var(--kui-space-xs);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
 }
 .terminal-drawer__actions {
   display: flex;

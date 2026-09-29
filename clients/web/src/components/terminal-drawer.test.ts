@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { sourceTokens } from '../source-format-matchers';
 import { AIConversation } from './ai-conversation';
 import { TerminalDrawer } from './terminal-drawer';
 
@@ -46,23 +45,18 @@ describe('TerminalDrawer', () => {
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
     expect(css).toMatch(/\.terminal-drawer__grid-tab \{[^}]*position: sticky/);
   });
-  it('keeps the wrapped create action on the shared transparent pill button surface', () => {
+  it('keeps the PopupMenu trigger on the compact pill button surface', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8'),
       base =
-        sourceTokens(css).match(
-          /\.terminal-drawer__rail>button,\.terminal-drawer__create,\.terminal-drawer__actions>button\{([^}]+)\}/,
-        )?.[1] ?? '';
+        css.match(/\.terminal-drawer__create-wrap \.kui-popup-menu > wa-button::part\(base\) \{([^}]+)\}/)?.[1] ?? '';
     expect(base).toContainSource('height: remify(32px)');
     expect(base).toContainSource('border-radius: var(--wa-border-radius-pill)');
-    expect(base).toContainSource('background: transparent');
-    expect(css).toContain('.terminal-drawer__create:hover');
-    expect(css).toContain('.terminal-drawer__create:focus-visible');
+    expect(render()).toContain('appearance="plain"');
   });
-  it('uses the Kerf spacing scale for the rail, connected menu rows, content, and terminal inset', () => {
+  it('uses the Kerf spacing scale for the rail, content, and terminal inset', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toContain('padding: var(--kui-space-xs) var(--kui-space-m)');
-    expect(css).toContain('gap: var(--kui-space-none)');
     expect(css).toContain('padding-top: var(--kui-space-xs)');
     expect(css).toMatch(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
   });
@@ -99,15 +93,10 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('class="kui-app-tab');
     expect(markup).toContain('data-action="close-terminal-tab"');
     expect(markup.indexOf('Terminal 1')).toBeLessThan(markup.indexOf('aria-label="Busy"'));
-    for (const action of [
-      'select-drawer-item',
-      'toggle-terminal-create-menu',
-      'toggle-terminal-drawer',
-      'toggle-terminal-drawer-maximize',
-    ])
+    for (const action of ['select-drawer-item', 'toggle-terminal-drawer', 'toggle-terminal-drawer-maximize'])
       expect(markup).toContain(`data-action="${action}"`);
   });
-  it('opens a direct action menu without a redundant heading or false submenu disclosures', () => {
+  it('composes the drawer actions with Kerf PopupMenu and an accessible trigger', () => {
     const content = AIConversation({
         open: true,
         presentation: 'embedded',
@@ -128,8 +117,6 @@ describe('TerminalDrawer', () => {
           fitAcross: 2,
           fitHigh: 2,
           selectedId: 'chat:one',
-          createMenuOpen: true,
-          createMenuPosition: { side: 'below', left: -20, maxHeight: 100 },
         }),
       );
     expect(chat).toContain('data-mode="ai-chat"');
@@ -138,9 +125,12 @@ describe('TerminalDrawer', () => {
     expect(chat).toContain('data-presentation="embedded"');
     for (const item of ['Default shell', 'AI shell', 'AI chat', 'Saved conversation…']) expect(chat).toContain(item);
     expect(chat).toContain('data-action="open-saved-conversation"');
-    expect(chat).toContain('role="menu"');
-    expect(chat).toContain('data-side="below"');
-    expect(chat).toContain('left:-20px;max-height:100px');
+    expect(chat).toContain('data-component="popup-menu"');
+    expect(chat).toContain('data-terminal-drawer-create="true"');
+    expect(chat).toContain('placement="top-start"');
+    expect(chat).toContain('New drawer item');
+    expect(chat).toContain('data-action="create-terminal-drawer-item"');
+    expect(chat).not.toContain('terminal-drawer__create-menu');
     expect(chat).not.toContain('data-component="list-header"');
     expect(chat).not.toContain('data-lucide="chevron-right"');
     expect(chat.match(/<wa-dropdown-item/g)).toHaveLength(4);
@@ -163,7 +153,7 @@ describe('TerminalDrawer', () => {
     const own = withMenu('project:one');
     expect(own).toContain('data-action="open-terminal-context-menu"');
     expect(own).toContain('data-component="terminal-context-menu"');
-    expect(own.match(/<wa-dropdown-item/g)).toHaveLength(1);
+    expect(own.match(/data-component="terminal-context-menu"/g)).toHaveLength(1);
     expect(own).toContain('data-action="open-terminal-project" data-item-id="project:one"');
     expect(own).not.toContain('data-action="hide-dashboard-terminal"');
     // A menu opened for a tile in another grid (e.g. the workspace dashboard) is not duplicated here.

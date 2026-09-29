@@ -381,7 +381,6 @@ function chatOwners() {
     ...common,
     aiToolLabel: ai.aiToolLabel,
     conversationAiSelection: ai.conversationAiSelection,
-    terminalDrawerCreateMenuOpen: signal(false),
     terminalVisibility: signal(initialTerminalVisibilityState()),
     persistTerminalVisibility: vi.fn(),
     replaceConversationStates: (next) => {
@@ -646,7 +645,6 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDrawerFitHigh: signal(1),
       terminalDrawerSelected: signal('ai-chat:chat-a'),
       terminalDrawerMaximized: signal(false),
-      terminalDrawerCreateMenuOpen: signal(false),
       mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
       mobileMagnifiedTerminal: () => mobileMagnified.value,
     },

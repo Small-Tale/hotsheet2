@@ -2,6 +2,7 @@ import './terminal-drawer.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
@@ -19,7 +20,6 @@ import {
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import type { DrawerCreateMenuPosition } from '../terminal-drawer-menu-position';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import {
   type MobileMagnifiedTerminal,
@@ -54,8 +54,6 @@ export interface TerminalDrawerProps {
   loading?: boolean;
   message?: string;
   maximized?: boolean;
-  createMenuOpen?: boolean;
-  createMenuPosition?: DrawerCreateMenuPosition;
   focusMode?: boolean;
   focusViewport?: MobileTerminalViewport;
   /** Phone focus-mode text-size control state (columns + keyboard visibility); undefined off phones (HS2-ZSFAHF). */
@@ -83,8 +81,6 @@ export function TerminalDrawer({
   loading = false,
   message = '',
   maximized = false,
-  createMenuOpen = false,
-  createMenuPosition,
   focusMode = false,
   focusViewport,
   focusTextSize,
@@ -196,54 +192,38 @@ export function TerminalDrawer({
             trailing={
               <>
                 <div class="terminal-drawer__create-wrap">
-                  <button
-                    type="button"
-                    class="terminal-drawer__create"
-                    data-action="toggle-terminal-create-menu"
-                    aria-label="New drawer item"
-                    aria-expanded={String(createMenuOpen)}
-                    title="New shell or AI chat"
-                  >
-                    <LucideIcon icon={Plus} name="plus" />
-                  </button>
-                  {createMenuOpen && (
-                    <div
-                      class="terminal-drawer__create-menu"
-                      data-side={createMenuPosition?.side ?? 'above'}
-                      role="menu"
-                      aria-label="New drawer item"
-                      style={
-                        createMenuPosition
-                          ? `left:${createMenuPosition.left}px;max-height:${createMenuPosition.maxHeight}px`
-                          : undefined
-                      }
-                    >
-                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="default-shell">
-                        <span slot="icon">
-                          <LucideIcon icon={SquareTerminal} name="square-terminal" />
-                        </span>
-                        Default shell
-                      </wa-dropdown-item>
-                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-shell">
-                        <span slot="icon">
-                          <LucideIcon icon={Bot} name="bot" />
-                        </span>
-                        AI shell
-                      </wa-dropdown-item>
-                      <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="ai-chat">
-                        <span slot="icon">
-                          <LucideIcon icon={MessageSquare} name="message-square" />
-                        </span>
-                        AI chat
-                      </wa-dropdown-item>
-                      <wa-dropdown-item data-action="open-saved-conversation">
-                        <span slot="icon">
-                          <LucideIcon icon={FolderOpen} name="folder-open" />
-                        </span>
-                        Saved conversation…
-                      </wa-dropdown-item>
-                    </div>
-                  )}
+                  <PopupMenu
+                    label="New drawer item"
+                    icon={<LucideIcon icon={Plus} name="plus" />}
+                    caret={false}
+                    placement="top-start"
+                    rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
+                    items={[
+                      {
+                        label: 'Default shell',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
+                        attributes: { 'data-item-id': 'default-shell' },
+                      },
+                      {
+                        label: 'AI shell',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={Bot} name="bot" />,
+                        attributes: { 'data-item-id': 'ai-shell' },
+                      },
+                      {
+                        label: 'AI chat',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={MessageSquare} name="message-square" />,
+                        attributes: { 'data-item-id': 'ai-chat' },
+                      },
+                      {
+                        label: 'Saved conversation…',
+                        action: 'open-saved-conversation',
+                        icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+                      },
+                    ]}
+                  />
                 </div>
                 <div class="terminal-drawer__actions">
                   <button

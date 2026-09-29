@@ -1980,14 +1980,13 @@ its tabs until the rail is exhausted, then scrolls horizontally; its growing tra
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
 at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
 one-shot input focus; plus
-opens a direct shared-menu choice of Default shell, AI shell, or AI chat. The menu has no
-redundant heading, and leaf actions do not display submenu chevrons. The menu stays within the
-viewport: it opens on the side of the rail with more space, shifts
-inward at the horizontal edge, updates while the viewport changes, and scrolls when neither
-side can show its full height (HS2-ZKKRZS).
+opens Kerf PopupMenu choices for Default shell, AI shell, AI chat, and saved conversations.
+The menu has no redundant heading or submenu chevrons. Its popup keeps the commands within the
+viewport as the drawer and window resize, and supplies native menu keyboard navigation
+(HS2-ZKKRZS, HS2-R8SMK2).
 The rail and terminal inset
-use Kerf's canonical 8 px within-group rhythm, the tab-strip focus gutter and icon-label clusters
-use 4 px, and connected create-menu rows use no extra gap (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
+use Kerf's canonical 8 px within-group rhythm, and the tab-strip focus gutter and icon-label clusters
+use 4 px (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
 plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed
 `connect` launch path rather than treating the provider id as a shell command. A dedicated
 xterm viewport receives focus as soon as it

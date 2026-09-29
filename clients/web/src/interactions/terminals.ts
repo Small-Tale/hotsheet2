@@ -9,7 +9,6 @@ import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibi
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { type DrawerAIChat } from '../project-drive';
-import { drawerCreateMenuPosition } from '../terminal-drawer-menu-position';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
 import {
   NO_TERMINAL_MODIFIERS,
@@ -62,7 +61,6 @@ export interface TerminalInteractionsDependencies {
   readonly terminalDrawerVisible: Signal<boolean>;
   readonly toggleTerminalDrawerMaximized: () => void;
   readonly selectDrawerItem: (id: string) => void;
-  readonly terminalDrawerCreateMenuOpen: Signal<boolean>;
   readonly enterMobileTerminalFocus: (terminalId: string) => void;
   readonly exitMobileTerminalFocus: () => void;
   readonly cycleMobileTerminalColumns: () => void;
@@ -134,7 +132,6 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalDrawerVisible,
     toggleTerminalDrawerMaximized,
     selectDrawerItem,
-    terminalDrawerCreateMenuOpen,
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
     cycleMobileTerminalColumns,
@@ -447,30 +444,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     const tab = target.closest<HTMLElement>('[data-tab-kind]');
     selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
   });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-create-menu"]', (event) => {
-    event.stopPropagation();
-    terminalDrawerCreateMenuOpen.value = !terminalDrawerCreateMenuOpen.value;
-  });
-  if (typeof window !== 'undefined')
-    window.addEventListener('resize', () => {
-      if (!terminalDrawerCreateMenuOpen.value) return;
-      requestAnimationFrame(() => {
-        if (!terminalDrawerCreateMenuOpen.value) return;
-        const button = document.querySelector<HTMLElement>('[data-action="toggle-terminal-create-menu"]'),
-          menu = document.querySelector<HTMLElement>('.terminal-drawer__create-menu');
-        if (!button || !menu) return;
-        const position = drawerCreateMenuPosition(button.getBoundingClientRect(), {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        });
-        menu.dataset.side = position.side;
-        menu.style.left = `${position.left}px`;
-        menu.style.maxHeight = `${position.maxHeight}px`;
-      });
-    });
   delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
     const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
-    terminalDrawerCreateMenuOpen.value = false;
     if (kind === 'default-shell') {
       void createProjectTerminal();
       return;
@@ -483,14 +458,6 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   delegate(document.body, 'click', '[data-action="open-saved-conversation"]', () => {
     void openSavedConversation();
   });
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (terminalDrawerCreateMenuOpen.value && !(event.target as Element).closest('.terminal-drawer__create-wrap'))
-        terminalDrawerCreateMenuOpen.value = false;
-    },
-    { capture: true },
-  );
   delegate(document.body, 'click', '[data-action="create-project-terminal"]', () => {
     void createProjectTerminal();
   });
