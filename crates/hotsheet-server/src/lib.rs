@@ -7897,6 +7897,43 @@ fn watch_broker_terminal_session_exit(
     });
 }
 
+/// Release the claims of chat drives the previous server run left open: drives live only in
+/// server memory, so their tool sessions ended with it (HS2-VFXEF4). Each drive's store is
+/// opened directly because a project's store may not be hosted yet. Returns the released slugs.
+pub async fn release_orphaned_drive_sessions(state: &AppState) -> Vec<String> {
+    let orphaned = state.client_drives.take_orphaned_drives();
+    if orphaned.is_empty() {
+        return Vec::new();
+    }
+    tokio::task::spawn_blocking(move || {
+        let mut released = Vec::new();
+        for drive in orphaned {
+            match FsStore::open(&drive.store_path)
+                .map_err(|error| error.to_string())
+                .and_then(|store| {
+                    ops::release_worker(&store, now(), &drive.worker_id)
+                        .map_err(|error| error.to_string())
+                }) {
+                Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
+                Err(error) => eprintln!(
+                    "releasing {}'s claims in {} failed: {error}",
+                    drive.worker_id,
+                    drive.store_path.display()
+                ),
+            }
+        }
+        if !released.is_empty() {
+            eprintln!(
+                "released claims left by ended chat drives: {}",
+                released.join(", ")
+            );
+        }
+        released
+    })
+    .await
+    .unwrap_or_default()
+}
+
 /// After a restart, resume the session monitors of terminals that survived in the broker: an
 /// AI terminal gets its busy feed and exit release back, a shell terminal its exit release.
 /// Terminals from a broker too old to report a worker id keep relying on lease expiry.

@@ -169,6 +169,20 @@ impl From<&StoredClientSession> for ClientSessionInfo {
 struct SessionCatalog {
     #[serde(default)]
     sessions: Vec<StoredClientSession>,
+    /// Drives open when the catalog was last written. Drives live only in this server's memory,
+    /// so any left here at startup ended with the previous run (HS2-VFXEF4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    live_drives: Vec<LiveDrive>,
+}
+
+/// A drive whose session may hold ticket claims, persisted so a restart can release them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LiveDrive {
+    pub connection_id: String,
+    /// The session worker id its tool claims with.
+    pub worker_id: String,
+    /// The ticket store the drive works in.
+    pub store_path: PathBuf,
 }
 
 struct ClientConnection {
@@ -194,6 +208,8 @@ pub struct ClientDriveManager {
     session_path: Option<PathBuf>,
     home_root: Option<PathBuf>,
     active_sessions: Arc<Mutex<HashSet<String>>>,
+    /// Drives the previous server run left open, taken once at startup.
+    orphaned_drives: Arc<Mutex<Vec<LiveDrive>>>,
 }
 
 impl Default for ClientDriveManager {
@@ -211,6 +227,7 @@ impl ClientDriveManager {
             session_path: None,
             home_root: None,
             active_sessions: Arc::new(Mutex::new(HashSet::new())),
+            orphaned_drives: Arc::default(),
         }
     }
 
@@ -219,7 +236,7 @@ impl ClientDriveManager {
         session_path: PathBuf,
         home_root: PathBuf,
     ) -> Result<Self, ClientDriveError> {
-        let sessions = if session_path.exists() {
+        let mut sessions: SessionCatalog = if session_path.exists() {
             let text = std::fs::read_to_string(&session_path)
                 .map_err(|error| ClientDriveError::Persistence(error.to_string()))?;
             serde_json::from_str(&text)
@@ -227,6 +244,7 @@ impl ClientDriveManager {
         } else {
             SessionCatalog::default()
         };
+        let orphaned = std::mem::take(&mut sessions.live_drives);
         Ok(Self {
             backend,
             connections: Arc::new(Mutex::new(HashMap::new())),
@@ -234,6 +252,7 @@ impl ClientDriveManager {
             session_path: Some(session_path),
             home_root: Some(home_root),
             active_sessions: Arc::new(Mutex::new(HashSet::new())),
+            orphaned_drives: Arc::new(Mutex::new(orphaned)),
         })
     }
 
@@ -311,6 +330,19 @@ impl ClientDriveManager {
             .lock()
             .map_err(|_| ClientDriveError::Unavailable)?
             .insert(id, connection.clone());
+        // Best effort: without the ledger entry a restart falls back to lease expiry.
+        if let Err(error) = self.update_catalog(|catalog| {
+            catalog
+                .live_drives
+                .retain(|drive| drive.worker_id != connection.worker_id);
+            catalog.live_drives.push(LiveDrive {
+                connection_id: connection.id.clone(),
+                worker_id: connection.worker_id.clone(),
+                store_path: connection.store_path.clone(),
+            });
+        }) {
+            eprintln!("recording drive {}: {error}", connection.id);
+        }
         if let Some(session_id) = session_id {
             if let Err(error) = self.record_session(&connection, session_id) {
                 if let Ok(mut connections) = self.connections.lock() {
@@ -391,6 +423,9 @@ impl ClientDriveManager {
             return None;
         };
         let ended = state.closing.then(|| connection.worker_id.clone());
+        if let Some(worker) = &ended {
+            self.forget_live_drive(worker);
+        }
         state.busy = false;
         state.control = None;
         if let Some(key) = state.active_session_key.take() {
@@ -455,6 +490,11 @@ impl ClientDriveManager {
             }
         };
         connections.remove(id);
+        drop(state);
+        drop(connections);
+        if matches!(closed, DriveClosed::Ended { .. }) {
+            self.forget_live_drive(&connection.worker_id);
+        }
         Ok(closed)
     }
 
@@ -515,24 +555,54 @@ impl ClientDriveManager {
         connection: &ClientConnection,
         session_id: String,
     ) -> Result<(), ClientDriveError> {
+        self.update_catalog(|next| {
+            next.sessions.retain(|session| {
+                !(session.project == connection.project
+                    && session.tool == connection.tool
+                    && session.session_id == session_id)
+            });
+            next.sessions.push(StoredClientSession {
+                connection_id: connection.id.clone(),
+                tool: connection.tool.clone(),
+                project: connection.project.clone(),
+                session_id,
+                updated_at_ms: now_ms(),
+                home_id: connection.home_id.clone(),
+            });
+        })
+    }
+
+    /// Drop an ended drive from the persisted live-drive ledger.
+    fn forget_live_drive(&self, worker_id: &str) {
+        if let Err(error) = self.update_catalog(|catalog| {
+            catalog
+                .live_drives
+                .retain(|drive| drive.worker_id != worker_id);
+        }) {
+            eprintln!("forgetting drive {worker_id}: {error}");
+        }
+    }
+
+    /// The drives the previous server run left open (their tool sessions ended with it), taken
+    /// once so their claims can be released (HS2-VFXEF4).
+    pub fn take_orphaned_drives(&self) -> Vec<LiveDrive> {
+        self.orphaned_drives
+            .lock()
+            .map(|mut drives| std::mem::take(&mut *drives))
+            .unwrap_or_default()
+    }
+
+    /// Apply `change` to the session catalog and persist it atomically when persistence is on.
+    fn update_catalog(
+        &self,
+        change: impl FnOnce(&mut SessionCatalog),
+    ) -> Result<(), ClientDriveError> {
         let mut catalog = self
             .sessions
             .lock()
             .map_err(|_| ClientDriveError::Unavailable)?;
         let mut next = catalog.clone();
-        next.sessions.retain(|session| {
-            !(session.project == connection.project
-                && session.tool == connection.tool
-                && session.session_id == session_id)
-        });
-        next.sessions.push(StoredClientSession {
-            connection_id: connection.id.clone(),
-            tool: connection.tool.clone(),
-            project: connection.project.clone(),
-            session_id,
-            updated_at_ms: now_ms(),
-            home_id: connection.home_id.clone(),
-        });
+        change(&mut next);
         if let Some(path) = &self.session_path {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)
@@ -808,6 +878,80 @@ mod tests {
             None,
             "a turn on an open drive does not end its session"
         );
+    }
+
+    /// Drives open when a server stops are reported once by the next run, so their claims can
+    /// be released; drives that ended cleanly are not (HS2-VFXEF4).
+    #[test]
+    fn drives_left_open_by_a_previous_run_are_reported_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = dir.path().join("sessions.json");
+        let backend = || {
+            Arc::new(StubBackend {
+                supports_interrupt: true,
+                envs: Mutex::default(),
+            })
+        };
+        let first = ClientDriveManager::with_persistence(
+            backend(),
+            catalog.clone(),
+            dir.path().join("homes"),
+        )
+        .unwrap();
+        for id in ["open", "closed", "interrupted"] {
+            first
+                .create_or_attach(prepare("/project"), Some(id.into()), None)
+                .unwrap();
+        }
+        assert!(matches!(
+            first.close("/project", "closed").unwrap(),
+            DriveClosed::Ended { .. }
+        ));
+        let job = first.begin_turn("interrupted", None, None, None).unwrap();
+        assert_eq!(
+            first.close("/project", "interrupted").unwrap(),
+            DriveClosed::Ending
+        );
+        assert!(
+            first
+                .finish_turn(&job, &done(hotsheet_aitools::DoneReason::Interrupted))
+                .is_some()
+        );
+        assert!(
+            first.take_orphaned_drives().is_empty(),
+            "a fresh catalog has no orphans"
+        );
+
+        // "Restart": only the drive still open is orphaned, reported once.
+        let second = ClientDriveManager::with_persistence(
+            backend(),
+            catalog.clone(),
+            dir.path().join("homes"),
+        )
+        .unwrap();
+        assert_eq!(
+            second.take_orphaned_drives(),
+            [LiveDrive {
+                connection_id: "open".into(),
+                worker_id: "fake-open".into(),
+                store_path: PathBuf::from("/store"),
+            }]
+        );
+        assert!(second.take_orphaned_drives().is_empty());
+
+        // The next write drops the stale ledger; a new drive is recorded on its own.
+        second
+            .create_or_attach(prepare("/project"), Some("next".into()), None)
+            .unwrap();
+        let third =
+            ClientDriveManager::with_persistence(backend(), catalog, dir.path().join("homes"))
+                .unwrap();
+        let orphaned: Vec<String> = third
+            .take_orphaned_drives()
+            .into_iter()
+            .map(|drive| drive.connection_id)
+            .collect();
+        assert_eq!(orphaned, ["next"]);
     }
 
     /// A drive's tool gets a session worker id, and only closing the drive ends the session

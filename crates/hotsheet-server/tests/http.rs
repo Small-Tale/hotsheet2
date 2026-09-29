@@ -12393,3 +12393,74 @@ async fn closing_a_chat_drive_releases_its_session_claims() {
 fn authed_owned(method: &str, uri: String) -> Request<Body> {
     authed(method, &uri, None)
 }
+
+#[tokio::test]
+async fn a_restarted_server_releases_the_claims_of_drives_the_last_run_left_open() {
+    let (store_dir, base) = state();
+    let store = FsStore::open(store_dir.path()).unwrap();
+    let checkout = tempfile::tempdir().unwrap();
+    let persistence = tempfile::tempdir().unwrap();
+    let sessions = persistence.path().join("sessions.json");
+    let homes = persistence.path().join("homes");
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store_dir.path());
+    let router = app(base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend_persistence(
+            Arc::new(FakeClientDriveBackend::default()),
+            sessions.clone(),
+            homes.clone(),
+        )
+        .unwrap());
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout.path(), "sources": [source]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(
+                &serde_json::json!({"tool": "fake", "checkout": checkout_id, "connection_id": "left-open"})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let session = claimed_by(&store, "fake-left-open");
+    let other = claimed_by(&store, "someone-else");
+
+    // The server stops without closing the drive; a new run over the same catalog cleans up.
+    drop(router);
+    let (_second_primary, second) = state();
+    let second = second
+        .with_client_drive_backend_persistence(
+            Arc::new(FakeClientDriveBackend::default()),
+            sessions,
+            homes,
+        )
+        .unwrap();
+    let released = hotsheet_server::release_orphaned_drive_sessions(&second).await;
+    assert_eq!(released.len(), 1, "{released:?}");
+    assert_eq!(claim_holder(&store, &session), None);
+    assert_eq!(
+        claim_holder(&store, &other).as_deref(),
+        Some("someone-else")
+    );
+    assert!(
+        hotsheet_server::release_orphaned_drive_sessions(&second)
+            .await
+            .is_empty(),
+        "orphans are released once"
+    );
+}
