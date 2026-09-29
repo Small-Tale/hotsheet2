@@ -1986,7 +1986,8 @@ one-shot input focus; plus
 opens Kerf PopupMenu choices for Default shell, AI shell, AI chat, and saved conversations.
 The menu has no redundant heading or submenu chevrons. Its popup keeps the commands within the
 viewport as the drawer and window resize, and supplies native menu keyboard navigation
-(HS2-ZKKRZS, HS2-R8SMK2).
+(HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection
+working even while Web Awesome's previous hide animation is finishing (HS2-1PM38K).
 The rail and terminal inset
 use Kerf's canonical 8 px within-group rhythm, and the tab-strip focus gutter and icon-label clusters
 use 4 px (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a

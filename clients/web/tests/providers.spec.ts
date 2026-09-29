@@ -4963,6 +4963,32 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
 });
 
+test('selects a drawer command after rapidly closing and reopening its popup', async ({ page }) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    trigger = drawer.getByRole('button', { name: 'New drawer item' }),
+    menu = drawer.locator('[data-terminal-drawer-create]');
+  await trigger.click();
+  await expect(menu).toHaveAttribute('open', '');
+  await page.keyboard.press('Escape');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toHaveAttribute('open', '');
+  const firstCommand = menu.locator('wa-dropdown-item').first();
+  await firstCommand.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.locator('wa-dropdown-item').nth(1)).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(firstCommand).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
+});
+
 test('double-clicks the drawer rail or any terminal tab to toggle maximization', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);

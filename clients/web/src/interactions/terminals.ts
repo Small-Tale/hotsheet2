@@ -35,6 +35,10 @@ import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter'
 import { data } from './dom';
 import { type Control, type Project } from './types';
 
+export function allowInterruptedDrawerPopupShow(menu: { open: boolean; popup?: { active: boolean } }) {
+  if (menu.open && menu.popup?.active) menu.popup.active = false;
+}
+
 /** Live application bindings used by this handler group. */
 export interface TerminalInteractionsDependencies {
   readonly terminalDrawerBounds: Signal<{ width: number; height: number }>;
@@ -443,6 +447,13 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   delegate(document.body, 'click', '[data-action="select-drawer-item"]', (_event, target) => {
     const tab = target.closest<HTMLElement>('[data-tab-kind]');
     selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
+  });
+  void delegateCapture(document.body, 'wa-show', '[data-terminal-drawer-create]', (event, target) => {
+    if (event.target !== target) return;
+    const menu = target as HTMLElement & { open: boolean; popup?: { active: boolean } };
+    // Web Awesome keeps popup.active during its hide animation. Its next
+    // showMenu call otherwise returns early and misses the keyboard listener.
+    allowInterruptedDrawerPopupShow(menu);
   });
   delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
     const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
