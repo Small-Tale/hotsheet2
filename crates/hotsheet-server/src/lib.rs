@@ -6553,6 +6553,7 @@ async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionI
                 connection: request.connection,
                 tool: request.tool,
                 action: request.action,
+                agent: request.agent,
                 always_allow_supported: rule_projects.contains_key(&request.project),
             })
             .collect(),
@@ -6568,6 +6569,8 @@ struct PermissionInfo {
     connection: String,
     tool: String,
     action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent: Option<String>,
     always_allow_supported: bool,
 }
 
@@ -6581,6 +6584,65 @@ struct AskBody {
     /// The tool/action asking (e.g. `"Bash"`, `"Edit"`) — the rule-match key.
     tool: String,
     action: String,
+    #[serde(default)]
+    agent: Option<String>,
+}
+
+/// A disconnected hook is no longer waiting for a decision. Remove its pending prompt
+/// immediately instead of leaving it visible until the 24-hour safety timeout.
+struct PermissionAskGuard {
+    state: Arc<PermissionAskState>,
+}
+
+struct PermissionAskState {
+    server: AppState,
+    project: String,
+    pending_id: AtomicU64,
+    cancelled: AtomicBool,
+}
+
+impl PermissionAskState {
+    fn mark_pending(&self, id: u64) {
+        self.pending_id.store(id, Ordering::Release);
+        if self.cancelled.load(Ordering::Acquire) {
+            self.cancel_pending(id);
+        }
+    }
+
+    fn cancel_pending(&self, id: u64) {
+        if self
+            .server
+            .permissions
+            .resolve(
+                id,
+                hotsheet_aitools::PermissionDecision::Deny,
+                hotsheet_aitools::PermissionScope::Once,
+            )
+            .is_some()
+        {
+            self.server.emit(ChangeEvent {
+                cursor: None,
+                store: self.project.clone(),
+                kind: "permission_resolved".into(),
+                id: id.to_string(),
+                slug: String::new(),
+                message: None,
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+        }
+    }
+}
+
+impl Drop for PermissionAskGuard {
+    fn drop(&mut self) {
+        self.state.cancelled.store(true, Ordering::Release);
+        let id = self.state.pending_id.load(Ordering::Acquire);
+        if id != 0 {
+            self.state.cancel_pending(id);
+        }
+    }
 }
 
 /// `POST /permissions/ask` `{connection, tool, action}` — raise a permission request and
@@ -6597,19 +6659,33 @@ async fn ask_permission(
     } else {
         body.project
     };
+    let cancellation = Arc::new(PermissionAskState {
+        server: state,
+        project: project.clone(),
+        pending_id: AtomicU64::new(0),
+        cancelled: AtomicBool::new(false),
+    });
+    let guard = PermissionAskGuard {
+        state: cancellation.clone(),
+    };
     // request_blocking_timeout blocks (Condvar); run it off the async runtime.
     let decision = tokio::task::spawn_blocking(move || {
-        bridge.request_blocking_timeout_for_project(
-            project,
-            body.connection,
-            body.tool,
-            body.action,
+        bridge.request_blocking_timeout_with_pending(
+            hotsheet_aitools::PermissionAsk {
+                project,
+                connection: body.connection,
+                tool: body.tool,
+                action: body.action,
+                agent: body.agent,
+            },
             hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
             hotsheet_aitools::PermissionDecision::Deny,
+            |id| cancellation.mark_pending(id),
         )
     })
     .await
     .unwrap_or(hotsheet_aitools::PermissionDecision::Deny);
+    drop(guard);
     let allow = decision == hotsheet_aitools::PermissionDecision::Allow;
     Json(serde_json::json!({ "decision": if allow { "allow" } else { "deny" } }))
 }
@@ -7522,7 +7598,8 @@ fn terminal_launch(
     }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let mut env = terminal_permission_route_env(state);
+    let mut env = terminal_permission_route_env(state, req);
+    env.push(("HOTSHEET_AGENT".to_string(), tool.to_string()));
     // The session's worker id: its claims are released when the terminal exits (HS2-1VAW1C).
     env.push((
         hotsheet_aitools::WORKER_ID_ENV.to_string(),
@@ -7674,13 +7751,11 @@ fn shell_history_environment(
 /// (Claude, Codex) started by hand in a shell raises its permission prompts in the app just
 /// like a Connect-launched one (HS2-HE4AVD). Without a known server URL, only the project is
 /// set and the tool's native prompt stays in charge.
-fn terminal_permission_route_env(state: &AppState) -> Vec<(String, String)> {
+fn terminal_permission_route_env(state: &AppState, req: &OpenTerminalReq) -> Vec<(String, String)> {
+    let project = terminal_permission_project(state, req);
     let mut env = vec![
         ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
-        (
-            "HOTSHEET_PROJECT".to_string(),
-            state.store.root().display().to_string(),
-        ),
+        ("HOTSHEET_PROJECT".to_string(), project),
     ];
     if let Ok(url) = state.terminal_server_url.lock()
         && let Some(url) = url.as_ref()
@@ -7688,6 +7763,39 @@ fn terminal_permission_route_env(state: &AppState) -> Vec<(String, String)> {
         env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
     }
     env
+}
+
+fn terminal_permission_project(state: &AppState, req: &OpenTerminalReq) -> String {
+    let Some(cwd) = req.cwd.as_deref() else {
+        return state.store.root().display().to_string();
+    };
+    let cwd = FsPath::new(cwd)
+        .canonicalize()
+        .unwrap_or_else(|_| cwd.into());
+    let checkout = state
+        .checkout_registry
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|checkout| cwd.starts_with(&checkout.root))
+        .max_by_key(|checkout| checkout.root.len());
+    if let Some(checkout) = checkout {
+        let git_source = checkout
+            .default_source
+            .as_deref()
+            .and_then(|id| checkout.source(id))
+            .filter(|source| source.provider == "git")
+            .or_else(|| {
+                checkout
+                    .sources
+                    .iter()
+                    .find(|source| source.provider == "git")
+            });
+        return git_source
+            .map(|source| source.locator.clone())
+            .unwrap_or(checkout.root);
+    }
+    cwd.display().to_string()
 }
 
 /// Shell and command terminals: [`terminal_shell_history_env`] plus the session worker id.
@@ -7712,7 +7820,7 @@ fn terminal_shell_history_env(
     terminal_id: &str,
     command: &str,
 ) -> Result<Vec<(String, String)>, ApiError> {
-    let mut env = terminal_permission_route_env(state);
+    let mut env = terminal_permission_route_env(state, req);
     env.extend(terminal_shell_history_only_env(
         state,
         req,
@@ -10969,8 +11077,23 @@ mod activity_distillation_tests {
 
 #[cfg(test)]
 mod terminal_permission_route_tests {
-    use super::{AppState, terminal_permission_route_env};
-    use hotsheet_ticketing::{FsStore, StoreMetadata};
+    use super::{
+        AppState, OpenTerminalReq, terminal_permission_project, terminal_permission_route_env,
+    };
+    use hotsheet_ticketing::{FsStore, StoreMetadata, checkouts::CheckoutRegistry};
+
+    fn request(cwd: Option<String>) -> OpenTerminalReq {
+        OpenTerminalReq {
+            command: None,
+            shell_command: None,
+            args: Vec::new(),
+            cwd,
+            id: None,
+            connect: None,
+            model: None,
+            effort: None,
+        }
+    }
 
     #[test]
     fn every_terminal_route_carries_the_secret_project_and_server_once_known() {
@@ -10984,7 +11107,7 @@ mod terminal_permission_route_tests {
         };
 
         // Before the listener URL is known the tool can't reach the server, so no route.
-        let env = terminal_permission_route_env(&state);
+        let env = terminal_permission_route_env(&state, &request(None));
         assert_eq!(value(&env, "HOTSHEET_SECRET").as_deref(), Some("secret"));
         assert_eq!(
             value(&env, "HOTSHEET_PROJECT"),
@@ -10993,10 +11116,45 @@ mod terminal_permission_route_tests {
         assert_eq!(value(&env, "HOTSHEET_SERVER"), None);
 
         state.set_terminal_server_url("http://127.0.0.1:4175".into());
-        let env = terminal_permission_route_env(&state);
+        let env = terminal_permission_route_env(&state, &request(None));
         assert_eq!(
             value(&env, "HOTSHEET_SERVER").as_deref(),
             Some("http://127.0.0.1:4175")
+        );
+    }
+
+    #[test]
+    fn terminal_uses_its_checkout_store_instead_of_the_primary_server_store() {
+        let root = tempfile::tempdir().unwrap();
+        let primary =
+            FsStore::init(root.path().join("primary.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let project = root.path().join("domotion");
+        std::fs::create_dir_all(project.join("nested")).unwrap();
+        let project_store =
+            FsStore::init(root.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
+        let registry_path = root.path().join("checkouts.json");
+        CheckoutRegistry::new(&registry_path)
+            .register(
+                &project,
+                None,
+                None,
+                vec![project_store.root().to_path_buf()],
+            )
+            .unwrap();
+        let state = AppState::new(primary, "secret".into())
+            .unwrap()
+            .with_checkout_registry(registry_path);
+        let req = request(Some(project.join("nested").display().to_string()));
+        let expected = project_store
+            .root()
+            .canonicalize()
+            .unwrap()
+            .display()
+            .to_string();
+        assert_eq!(terminal_permission_project(&state, &req), expected);
+        assert!(
+            terminal_permission_route_env(&state, &req)
+                .contains(&("HOTSHEET_PROJECT".into(), expected))
         );
     }
 }

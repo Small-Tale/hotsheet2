@@ -574,10 +574,13 @@ another client or transport answers: every attached client refetches pending req
 retains the disappeared request in notification history, including generic tools such as
 `ToolSearch` whose action/details string is empty.
 
-`Always Allow` rules are personal machine state, stored per primary project under
+`Always Allow` rules match the same project, tool, and exact action text (for example,
+the same Bash command); a different command asks again. They are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each
 pending request so clients only render that action when durable rule storage is active.
+If the asking hook disconnects, its pending request is removed and the clients are
+notified immediately; an abandoned request does not remain as a false popup.
 The server retains an eventual safe-deny guard of 24 hours. This is intentionally much
 longer than client-side automation windows: an ignored or otherwise hidden popup does
 not advance a client's visible-presentation countdown and must not disappear after the
@@ -599,7 +602,9 @@ environment. Codex permissions also remain supported through Hot Sheet's app-ser
 
 **Hot Sheet's own shell terminals.** Every shell and command terminal that the server
 hosts carries the same route-back as a Connect launch: `HOTSHEET_SECRET`,
-`HOTSHEET_PROJECT` and, once the listener URL is known, `HOTSHEET_SERVER` (HS2-HE4AVD).
+`HOTSHEET_PROJECT` (the terminal checkout's linked git store) and, once the listener URL is known,
+`HOTSHEET_SERVER` (HS2-HE4AVD). The installed permission hook identifies its own agent,
+so a Codex request for `Bash` appears as Codex rather than being inferred as Claude.
 Running `claude` or `codex` by hand in an app shell therefore raises its permission
 prompts in the app, as long as the project's setup has installed the tool's
 `PermissionRequest` hook. Without the hook, the variables go unused and the tool's

@@ -9,6 +9,7 @@ export interface WirePermissionRequest {
   connection: string;
   tool: string;
   action: string;
+  agent?: string;
   always_allow_supported?: boolean;
 }
 export interface ToolConnection {
@@ -139,8 +140,8 @@ export class PermissionInbox {
           key,
           projectId: project.id,
           projectName: project.name,
-          agent: connection?.tool || friendlyAgent(request.tool),
-          role: connection?.role === 'worker' ? 'worker' : 'main worker',
+          agent: displayAgent(connection?.tool || request.agent),
+          role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
           receivedAt: now,
           ignored: false,
         });
@@ -151,8 +152,8 @@ export class PermissionInbox {
         ...existing,
         ...request,
         projectName: project.name,
-        agent: connection?.tool || existing.agent,
-        role: connection?.role === 'worker' ? 'worker' : existing.role,
+        agent: displayAgent(connection?.tool || request.agent || existing.agent),
+        role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
       };
       if (
         existing.connection !== next.connection ||
@@ -193,6 +194,13 @@ export class PermissionInbox {
   }
 }
 
+function displayAgent(agent?: string) {
+  if (!agent) return 'AI tool';
+  if (agent.toLowerCase() === 'codex') return 'Codex';
+  if (agent.toLowerCase() === 'claude') return 'Claude';
+  return agent;
+}
+
 export class VisiblePermissionTimer {
   private remaining = new Map<string, number>();
   private active?: { key: string; at: number };
@@ -231,11 +239,4 @@ export class VisiblePermissionTimer {
     this.remaining.set(this.active.key, Math.max(0, value - (now - this.active.at)));
     this.active.at = now;
   }
-}
-
-function friendlyAgent(tool: string) {
-  const value = tool.toLowerCase();
-  if (value.includes('codex')) return 'Codex';
-  if (value.includes('claude') || ['bash', 'edit', 'write', 'read'].includes(value)) return 'Claude';
-  return tool || 'AI tool';
 }

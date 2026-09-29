@@ -365,6 +365,7 @@ export interface PermissionRequest {
   connection: string;
   tool: string;
   action: string;
+  agent?: string;
   always_allow_supported?: boolean;
 }
 export interface AiModelDescriptor {

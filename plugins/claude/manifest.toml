@@ -76,7 +76,7 @@ machine_local = true
 # the shared adapter ignores ordinary PreToolUse events in an interactive terminal.
 event = "PermissionRequest"
 additional_events = ["PreToolUse"]
-command = "hotsheet-cli permission-hook"
+command = "hotsheet-cli permission-hook --agent claude"
 timeout_seconds = 86430
 
 [activity]

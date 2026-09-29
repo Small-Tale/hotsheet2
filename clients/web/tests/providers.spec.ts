@@ -7914,12 +7914,14 @@ test('switches settings categories from the project sidebar', async ({ page }) =
 });
 
 test('renders exactly once when the long poll announces a permission request', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);
   let pending: Array<{
     id: number;
     connection: string;
     tool: string;
     action: string;
+    agent?: string;
     always_allow_supported: boolean;
   }> = [];
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
@@ -7939,15 +7941,30 @@ test('renders exactly once when the long poll announces a permission request', a
   await resetRenderMetrics(page);
   await page.waitForTimeout(100);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
-  pending = [{ id: 77, connection: 'codex-session', tool: 'Bash', action: 'cargo test', always_allow_supported: true }];
+  pending = [
+    {
+      id: 77,
+      connection: 'codex-session',
+      tool: 'Bash',
+      action: 'cargo test',
+      agent: 'codex',
+      always_allow_supported: true,
+    },
+  ];
   cursor += 1;
   await polls.shift()!.fulfill({
     json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '77', slug: 'Bash' }], overflow: false },
   });
-  await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toBeVisible();
+  await expect(popup.locator('.permission-request-card__identity')).toHaveText('Codex');
   const metrics = await renderMetrics(page);
   expect(metrics?.passes).toBe(1);
   expect(metrics?.mutations).toBeGreaterThan(0);
+  await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await expect(popup).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-narrow.png', fullPage: true });
 });
 
 test('records externally resolved empty-action permissions in notification history', async ({ page }) => {

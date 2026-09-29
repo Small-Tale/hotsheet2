@@ -160,7 +160,7 @@ mod tests {
             .filter(|e| {
                 e["hooks"][0]["command"]
                     .as_str()
-                    .is_some_and(|c| c.ends_with("permission-hook"))
+                    .is_some_and(|c| c.contains("permission-hook --agent claude"))
             })
             .collect();
         assert_eq!(ours.len(), 1, "exactly one Hot Sheet hook, no duplicates");
@@ -177,7 +177,7 @@ mod tests {
             .filter(|e| {
                 e["hooks"][0]["command"]
                     .as_str()
-                    .is_some_and(|c| c.ends_with("permission-hook"))
+                    .is_some_and(|c| c.contains("permission-hook --agent claude"))
             })
             .collect();
         assert_eq!(ours.len(), 1, "one interactive permission hook");
@@ -195,7 +195,7 @@ mod tests {
         assert!(
             requests[0]["hooks"][0]["command"]
                 .as_str()
-                .is_some_and(|command| command.ends_with("permission-hook"))
+                .is_some_and(|command| command.contains("permission-hook --agent codex"))
         );
         assert_eq!(requests[0]["hooks"][0]["timeout"], 86_430);
     }
@@ -270,7 +270,7 @@ mod tests {
                 .filter(|entry| {
                     entry["hooks"][0]["command"]
                         .as_str()
-                        .is_some_and(|command| command.ends_with("permission-hook"))
+                        .is_some_and(|command| command.contains("permission-hook --agent codex"))
                 })
                 .count(),
             1

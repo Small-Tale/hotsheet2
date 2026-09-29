@@ -74,7 +74,7 @@ format = "lifecycle-json"
 matcher = ".*"
 machine_local = true
 event = "PermissionRequest"
-command = "hotsheet-cli permission-hook"
+command = "hotsheet-cli permission-hook --agent codex"
 timeout_seconds = 86430
 
 [activity]

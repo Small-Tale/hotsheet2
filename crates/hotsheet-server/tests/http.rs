@@ -9571,6 +9571,53 @@ async fn shell_and_command_terminals_carry_the_permission_route_back() {
     }
 }
 
+#[tokio::test]
+async fn shell_terminal_routes_permissions_to_its_own_checkout_store() {
+    let (_primary_dir, st) = state();
+    let other = tempfile::tempdir().unwrap();
+    let checkout = other.path().join("domotion");
+    std::fs::create_dir_all(&checkout).unwrap();
+    let store =
+        FsStore::init(other.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
+    let registry_path = other.path().join("checkouts.json");
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&checkout, None, None, vec![store.root().to_path_buf()])
+        .unwrap();
+    let app = app(st.with_checkout_registry(registry_path));
+    let expected = store.root().canonicalize().unwrap().display().to_string();
+    let request = serde_json::json!({
+        "id": "project-route",
+        "command": "/bin/sh",
+        "args": ["-c", "printf 'project:%s:end' \"$HOTSHEET_PROJECT\""],
+        "cwd": checkout,
+    });
+    let response = app
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(&request.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let marker = format!("project:{expected}:end");
+    for _ in 0..100 {
+        let terminal = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/terminals/project-route", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(&marker)
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("terminal did not receive the checkout store identity");
+}
+
 /// The `connect` busy feed must also work when the terminal lives in the **detached broker**
 /// (HS2-ERT00F item 5): the server can't read an in-process `Terminal`, so it polls the broker
 /// over the socket for busy/idle and mirrors it into the connection registry.
@@ -9825,14 +9872,14 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     let bridge = st.permission_bridge();
     let app = app(st);
 
-    // The asking side (a Claude hook) raises a blocking request.
+    // The asking side identifies its agent independently from the requested Bash tool.
     let ask_app = app.clone();
     let ask = tokio::spawn(async move {
         ask_app
             .oneshot(authed(
                 "POST",
                 "/permissions/ask",
-                Some(r#"{"connection":"claude-1","tool":"Bash","action":"rm x"}"#),
+                Some(r#"{"connection":"codex-1","tool":"Bash","action":"rm x","agent":"codex"}"#),
             ))
             .await
             .unwrap()
@@ -9846,7 +9893,8 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
             .await
             .unwrap();
         if let Some(first) = body_json(resp).await.as_array().unwrap().first() {
-            assert_eq!(first["connection"], "claude-1");
+            assert_eq!(first["connection"], "codex-1");
+            assert_eq!(first["agent"], "codex");
             break first["id"].as_u64().unwrap();
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -9863,6 +9911,57 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     let resp = ask.await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(body_json(resp).await["decision"], "allow");
+}
+
+#[tokio::test]
+async fn disconnected_permission_hook_does_not_leave_a_false_pending_popup() {
+    let (_d, st) = state();
+    let mut live = st.subscribe();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let ask_app = app.clone();
+    let ask = tokio::spawn(async move {
+        ask_app
+            .oneshot(authed(
+                "POST",
+                "/permissions/ask",
+                Some(r#"{"connection":"codex-1","tool":"Bash","action":"cargo test","agent":"codex"}"#),
+            ))
+            .await
+            .unwrap()
+    });
+    for _ in 0..100 {
+        if bridge.pending().len() == 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert_eq!(bridge.pending().len(), 1);
+    ask.abort();
+    let _ = ask.await;
+    for _ in 0..100 {
+        if bridge.pending().is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert!(
+        bridge.pending().is_empty(),
+        "the cancelled hook left a visible request"
+    );
+    let response = app
+        .oneshot(authed("GET", "/permissions", None))
+        .await
+        .unwrap();
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+    let (asked, event) = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        (live.recv().await.unwrap(), live.recv().await.unwrap())
+    })
+    .await
+    .unwrap();
+    assert_eq!(asked.kind, "permission_asked");
+    assert_eq!(event.kind, "permission_resolved");
+    assert_eq!(event.message, None, "disconnect is not a human denial");
 }
 
 #[tokio::test]

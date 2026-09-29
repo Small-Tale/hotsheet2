@@ -1222,7 +1222,7 @@ fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
             hs.iter().any(|h| {
                 h.get("command")
                     .and_then(serde_json::Value::as_str)
-                    .is_some_and(|c| c.trim_end().ends_with("permission-hook"))
+                    .is_some_and(|c| c.split_whitespace().any(|part| part == "permission-hook"))
             })
         })
 }

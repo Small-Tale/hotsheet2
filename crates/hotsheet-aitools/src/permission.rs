@@ -65,6 +65,18 @@ pub struct Request {
     pub tool: String,
     /// What it wants to do (the command / capability / path) — the rule-match key.
     pub action: String,
+    /// Asking agent, when the transport identifies it (distinct from tool name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+}
+
+/// The transport's identity and action before a pending id is assigned.
+pub struct PermissionAsk {
+    pub project: String,
+    pub connection: String,
+    pub tool: String,
+    pub action: String,
+    pub agent: Option<String>,
 }
 
 /// A persisted allow-rule: auto-answer any request matching `(project, tool, action)`.
@@ -147,6 +159,17 @@ impl PermissionBridge {
         tool: impl Into<String>,
         action: impl Into<String>,
     ) -> Outcome {
+        self.request_for_project_as(project, connection, tool, action, None)
+    }
+
+    pub fn request_for_project_as(
+        &mut self,
+        project: impl Into<String>,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+        agent: Option<String>,
+    ) -> Outcome {
         let project = project.into();
         let tool = tool.into();
         let action = action.into();
@@ -166,6 +189,7 @@ impl PermissionBridge {
             connection: connection.into(),
             tool,
             action,
+            agent,
         });
         Outcome::Pending(id)
     }
@@ -315,6 +339,7 @@ impl SharedPermissionBridge {
                 connection,
                 tool,
                 action,
+                agent: None,
             });
         }
         // Wait for the answer. If `resolve` already ran (before we started waiting), the
@@ -352,17 +377,40 @@ impl SharedPermissionBridge {
         timeout: Duration,
         on_timeout: Decision,
     ) -> Decision {
-        let (project, connection, tool, action) = (
-            project.into(),
-            connection.into(),
-            tool.into(),
-            action.into(),
-        );
-        let id = match self.inner.lock().unwrap().request_for_project(
+        self.request_blocking_timeout_with_pending(
+            PermissionAsk {
+                project: project.into(),
+                connection: connection.into(),
+                tool: tool.into(),
+                action: action.into(),
+                agent: None,
+            },
+            timeout,
+            on_timeout,
+            |_| {},
+        )
+    }
+
+    pub fn request_blocking_timeout_with_pending(
+        &self,
+        ask: PermissionAsk,
+        timeout: Duration,
+        on_timeout: Decision,
+        on_pending: impl FnOnce(u64),
+    ) -> Decision {
+        let PermissionAsk {
+            project,
+            connection,
+            tool,
+            action,
+            agent,
+        } = ask;
+        let id = match self.inner.lock().unwrap().request_for_project_as(
             project.clone(),
             connection.clone(),
             tool.clone(),
             action.clone(),
+            agent.clone(),
         ) {
             Outcome::Auto(d) => return d,
             Outcome::Pending(id) => id,
@@ -374,8 +422,10 @@ impl SharedPermissionBridge {
                 connection,
                 tool,
                 action,
+                agent,
             });
         }
+        on_pending(id);
         let deadline = Instant::now() + timeout;
         let mut results = self.results.lock().unwrap();
         loop {

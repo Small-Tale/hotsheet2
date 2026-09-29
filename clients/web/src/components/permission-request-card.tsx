@@ -107,8 +107,8 @@ export function PermissionRequestCard({
         <span class="permission-request-card__identity">
           <LucideIcon icon={Bot} name="bot" />
           <strong>{item.agent}</strong>
-          <span aria-hidden="true">·</span>
-          <span>{item.role}</span>
+          {item.role && <span aria-hidden="true">·</span>}
+          {item.role && <span>{item.role}</span>}
         </span>
         <span class="permission-request-card__project" title={item.projectName}>
           {item.projectName}

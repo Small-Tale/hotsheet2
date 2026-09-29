@@ -31,6 +31,18 @@ describe('permission notifications', () => {
     expect(inbox.reconcile(project, [{ ...request, action: 'cargo test' }], [], 40)).toBe(true);
     expect(inbox.reconcile(project, [], [], 50)).toBe(true);
   });
+  it('uses the asking agent from the hook without inventing a connection role', () => {
+    const inbox = new PermissionInbox();
+    const codex = { ...request, agent: 'codex', project: '/p' };
+    inbox.reconcile(project, [codex], [{ id: 'c', tool: 'codex', project: '/p', role: 'main', busy: true }], 5);
+    expect(inbox.visible()).toMatchObject({ agent: 'Codex', role: 'main worker' });
+    inbox.reconcile(project, [codex], [], 10);
+    expect(inbox.visible()).toMatchObject({ agent: 'Codex', role: '', projectName: 'Project' });
+    inbox.reconcile(project, [{ ...codex, agent: 'claude' }], [], 20);
+    expect(inbox.visible()).toMatchObject({ agent: 'Claude', role: '' });
+    inbox.reconcile(project, [{ ...request, agent: undefined }], [], 30);
+    expect(inbox.visible()).toMatchObject({ agent: 'Claude', role: '' });
+  });
   it('records known automatic decisions separately from pending state', () => {
     const inbox = new PermissionInbox();
     inbox.reconcile(project, [request], [], 10);

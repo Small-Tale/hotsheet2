@@ -454,7 +454,11 @@ enum Cmd {
     /// from Claude or Codex, asks the running Hot Sheet server (via
     /// $HOTSHEET_SERVER/$HOTSHEET_SECRET), and writes the provider-native decision. With no
     /// server or on transport failure it emits nothing, preserving the tool's normal prompt.
-    PermissionHook,
+    PermissionHook {
+        /// Provider that installed this hook; identifies the asking agent in the popup.
+        #[arg(long)]
+        agent: Option<String>,
+    },
     /// Launch an interactive AI tool in this terminal with permission requests routed to
     /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
     /// a `.hotsheet2/store` link (with legacy `.hotsheet/store` fallback), or conservative sibling discovery.
@@ -1235,7 +1239,7 @@ fn main() -> Result<()> {
             prune_before,
             team,
         } => cmd_metrics(&cli.path, roll_up, prune_before, team),
-        Cmd::PermissionHook => cmd_permission_hook(),
+        Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
         Cmd::Launch {
             tool,
             project,
@@ -2654,7 +2658,7 @@ fn cmd_metrics(
 /// Interactive PermissionRequest (Claude or Codex) and marked Claude headless PreToolUse
 /// events use their respective response schemas. Any error emits nothing so the provider's
 /// native flow remains authoritative, and the command always exits 0 so a hook cannot wedge it.
-fn cmd_permission_hook() -> Result<()> {
+fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     use hotsheet_cli::permission_hook::{
         PermissionHookEvent, decision_from_server, hook_connection, hook_decision_json,
         hook_tool_action, permission_hook_event, permission_request_decision_json,
@@ -2682,7 +2686,9 @@ fn cmd_permission_hook() -> Result<()> {
             let (tool, action) = hook_tool_action(&input);
             let connection = hook_connection(&input);
             let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
-            match ask_server(&url, &secret, &project, &connection, &tool, &action) {
+            let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+            let agent = installed_agent.or(env_agent.as_deref());
+            match ask_server(&url, &secret, &project, &connection, &tool, &action, agent) {
                 Ok(reply) => Some(decision_from_server(&reply)),
                 // Server unreachable / error → emit nothing and preserve Claude's native flow.
                 Err(_) => None,
@@ -2876,10 +2882,12 @@ fn ask_server(
     connection: &str,
     tool: &str,
     action: &str,
+    agent: Option<&str>,
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
     let body = serde_json::json!({
         "project": project, "connection": connection, "tool": tool, "action": action,
+        "agent": agent,
     })
     .to_string();
     let text = ureq::post(&endpoint)
