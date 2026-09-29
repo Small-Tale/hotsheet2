@@ -636,11 +636,17 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
       ),
     )
     .toContain('nano');
+  // The newest claim from a live viewer. A kept-alive drawer terminal reuses its first socket
+  // across round trips (HS2-WGTQ6X), so closed preview sockets must not count as newer.
   const latestClaim = () =>
     page.evaluate(() => {
       const sockets = (
-          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
-        ).__terminalFeedbackSockets.filter((socket) => socket.url.includes('/terminals/terminal-new/attach')),
+          window as unknown as {
+            __terminalFeedbackSockets: Array<{ url: string; sent: unknown[]; readyState: number }>;
+          }
+        ).__terminalFeedbackSockets.filter(
+          (socket) => socket.url.includes('/terminals/terminal-new/attach') && socket.readyState === 1,
+        ),
         claims = sockets.flatMap((socket) =>
           socket.sent
             .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))

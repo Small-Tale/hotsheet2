@@ -2,8 +2,14 @@ import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Project } from '../interactions/types';
-import { mountTerminalViewport, type TerminalFocusRequest } from '../terminal-viewport';
-import { createTerminalViewportsController } from './terminal-viewports';
+import {
+  mountTerminalViewport,
+  TERMINAL_VIEWPORT_PARK_EVENT,
+  TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_RESUME_EVENT,
+  type TerminalFocusRequest,
+} from '../terminal-viewport';
+import { createTerminalViewportsController, MAX_PARKED_TERMINAL_VIEWPORTS } from './terminal-viewports';
 
 vi.mock('../terminal-viewport', async (original) => ({
   ...(await original<typeof import('../terminal-viewport')>()),
@@ -181,5 +187,171 @@ describe('terminal viewport feature ownership (HS2-DHYGXJ)', () => {
     await paint();
     expect(mount).toHaveBeenCalledWith(restoredPreview, expect.any(Object));
     expect(mount).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', () => {
+  type Fake = HTMLElement & { events: string[]; removed: boolean };
+  function keepAlive(projectId: string, terminalId: string): Fake {
+    const target = new EventTarget() as unknown as Fake;
+    const dispatch = target.dispatchEvent.bind(target);
+    Object.assign(target, {
+      isConnected: true,
+      dataset: { projectId, terminalId, displayMode: 'interactive', mountPolicy: 'keep-alive' },
+      closest: () => null,
+      events: [] as string[],
+      removed: false,
+      remove() {
+        target.removed = true;
+      },
+      dispatchEvent(event: Event) {
+        target.events.push(event.type);
+        return dispatch(event);
+      },
+    });
+    return target;
+  }
+  function setup(projectIds = ['a', 'b']) {
+    const projects = signal(projectIds.map(project)),
+      parked: HTMLElement[] = [],
+      restored: Array<[HTMLElement, HTMLElement]> = [],
+      disposals = new Map<HTMLElement, ReturnType<typeof vi.fn>>();
+    let pending: TerminalFocusRequest | undefined;
+    mount.mockImplementation((element) => {
+      const dispose = vi.fn();
+      disposals.set(element, dispose);
+      return dispose;
+    });
+    const owner = createTerminalViewportsController({
+      projects,
+      get pendingTerminalFocus() {
+        return pending;
+      },
+      set pendingTerminalFocus(value) {
+        pending = value;
+      },
+      openTicketReference: vi.fn(),
+      parking: {
+        park: (element) => parked.push(element),
+        restore: (placeholder, element) => restored.push([placeholder, element]),
+      },
+    });
+    const show = (...next: HTMLElement[]) => {
+      elements = next;
+      owner.syncTerminalViewportMounts();
+    };
+    return {
+      projects,
+      parked,
+      restored,
+      disposals,
+      show,
+      focus: (request: TerminalFocusRequest | undefined) => (pending = request),
+      pending: () => pending,
+    };
+  }
+
+  it('parks a switched-away project terminal and restores the same live viewport on return', async () => {
+    const { parked, restored, disposals, show } = setup();
+    const a1 = keepAlive('a', 'one');
+    show(a1);
+    expect(mount).toHaveBeenCalledTimes(1);
+
+    // Switch to project b: a's viewport is parked, not disposed, and told to release resources.
+    const b1 = keepAlive('b', 'one');
+    show(b1);
+    await paint();
+    expect(parked).toEqual([a1]);
+    expect(a1.dataset.parked).toBe('true');
+    expect(a1.events).toContain(TERMINAL_VIEWPORT_PARK_EVENT);
+    expect(disposals.get(a1)).not.toHaveBeenCalled();
+
+    // Back to a: the fresh placeholder is replaced by the warm viewport; nothing new mounts.
+    const a1Again = keepAlive('a', 'one');
+    show(a1Again);
+    expect(restored).toEqual([[a1Again, a1]]);
+    expect(a1.dataset.parked).toBeUndefined();
+    expect(a1.events.at(-1)).toBe(TERMINAL_VIEWPORT_RESUME_EVENT);
+    expect(mount).toHaveBeenCalledTimes(2);
+    expect(parked).toEqual([a1, b1]);
+
+    // The restored viewport is owned again: leaving it once more parks it again (repeat cycle).
+    elements = [a1];
+    show(a1, keepAlive('b', 'one'));
+    expect(restored.at(-1)?.[1]).toBe(b1);
+    show(b1);
+    expect(parked.at(-1)).toBe(a1);
+    await paint();
+    for (const dispose of disposals.values()) expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('asks a restored viewport for focus only when a pending request names it', () => {
+    const { show, focus, pending } = setup();
+    const a1 = keepAlive('a', 'one');
+    show(a1);
+    show(keepAlive('b', 'one'));
+    focus({ projectId: 'a', terminalId: 'one' });
+    const resumed: unknown[] = [];
+    a1.addEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, (event) => resumed.push((event as CustomEvent).detail));
+    show(keepAlive('a', 'one'));
+    expect(resumed).toEqual([{ focus: true }]);
+    expect(pending()).toBeUndefined();
+
+    show(keepAlive('b', 'one'));
+    show(keepAlive('a', 'one'));
+    expect(resumed).toEqual([{ focus: true }, { focus: false }]);
+  });
+
+  it('evicts parked viewports when their project closes or their socket closes', () => {
+    const { projects, disposals, show } = setup(['a', 'b', 'c']);
+    const a1 = keepAlive('a', 'one'),
+      b1 = keepAlive('b', 'one');
+    show(a1);
+    show(b1);
+    show(keepAlive('c', 'one'));
+    expect(a1.dataset.parked).toBe('true');
+    expect(b1.dataset.parked).toBe('true');
+
+    // Closing project a disposes its warm viewport on the next sync.
+    projects.value = [project('b'), project('c')];
+    show(...elements);
+    expect(disposals.get(a1)).toHaveBeenCalledTimes(1);
+    expect(a1.removed).toBe(true);
+
+    // A parked socket that closes is evicted instead of reconnecting in the background.
+    b1.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT));
+    expect(disposals.get(b1)).toHaveBeenCalledTimes(1);
+    const b1Again = keepAlive('b', 'one');
+    show(b1Again);
+    expect(mount).toHaveBeenLastCalledWith(b1Again, expect.any(Object));
+
+    // A late close event from an evicted viewport is inert.
+    b1.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT));
+    expect(disposals.get(b1)).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds how many viewports stay warm, evicting the oldest parked first', () => {
+    const ids = Array.from({ length: MAX_PARKED_TERMINAL_VIEWPORTS + 2 }, (_, index) => `p${index}`);
+    const { disposals, show } = setup([...ids, 'last']);
+    const first = keepAlive('p0', 'one'),
+      second = keepAlive('p1', 'one');
+    show(first);
+    show(second);
+    for (const id of ids.slice(2)) show(keepAlive(id, 'one'));
+    show(keepAlive('last', 'one'));
+    expect(disposals.get(first)).toHaveBeenCalledTimes(1);
+    expect(disposals.get(second)).toHaveBeenCalledTimes(1);
+    const warm = [...disposals].filter(([, dispose]) => dispose.mock.calls.length === 0);
+    expect(warm).toHaveLength(MAX_PARKED_TERMINAL_VIEWPORTS + 1); // parked plus the visible one
+  });
+
+  it('keeps disposing viewports that are not kept alive', async () => {
+    const { parked, disposals, show } = setup();
+    const preview = viewport('a', 'one');
+    show(preview);
+    show();
+    await paint();
+    expect(parked).toEqual([]);
+    expect(disposals.get(preview)).toHaveBeenCalledTimes(1);
   });
 });

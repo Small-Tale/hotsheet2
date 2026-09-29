@@ -49,10 +49,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
-      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, and pending focus
+      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and kept-alive parking across project switches (HS2-WGTQ6X)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
-      terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, and refill transitions
+      terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor, shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main
       dom.ts                  # Shared delegated-host dataset helper
@@ -138,6 +138,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
     tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
+    tests/terminal-project-switch.spec.ts # Kept-alive drawer terminals: same emulator/socket and first-frame content after a project round trip, eviction on project close (HS2-WGTQ6X)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus pixel-verified dev-review draw/resize/scrolled-capture/review/submit flow

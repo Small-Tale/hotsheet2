@@ -33,6 +33,9 @@ import {
   TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
+  TERMINAL_VIEWPORT_PARK_EVENT,
+  TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
   terminalInverseScalePercent,
@@ -294,29 +297,45 @@ function initializeTerminalViewport(
       scaledPreview,
       settledResize && insideDrawer,
     );
-  if (
-    element.classList.contains('terminal-viewport--dedicated') &&
-    !mobile80xM() &&
-    terminalShouldUseWebgl(navigator.userAgent)
-  )
+  const loadWebgl = () => {
+    if (
+      !element.classList.contains('terminal-viewport--dedicated') ||
+      mobile80xM() ||
+      !terminalShouldUseWebgl(navigator.userAgent)
+    ) {
+      element.dataset.renderer = 'dom';
+      return;
+    }
     try {
-      webgl = new WebglAddon();
-      terminal.loadAddon(webgl);
+      const addon = new WebglAddon();
+      terminal.loadAddon(addon);
+      webgl = addon;
       element.dataset.renderer = 'webgl';
-      webgl.onContextLoss(() => {
-        webgl?.dispose();
+      addon.onContextLoss(() => {
+        if (webgl !== addon) return;
+        addon.dispose();
         webgl = undefined;
         element.dataset.renderer = 'dom';
       });
     } catch {
       element.dataset.renderer = 'dom';
     }
-  else element.dataset.renderer = 'dom';
+  };
+  const releaseWebgl = () => {
+    if (!webgl) return false;
+    const addon = webgl;
+    webgl = undefined;
+    addon.dispose();
+    element.dataset.renderer = 'dom';
+    return true;
+  };
+  loadWebgl();
   let socket: WebSocket | undefined,
     reconnect: number | undefined,
     heartbeat: number | undefined,
     fitFrame: number | undefined,
     dashboardFrame: number | undefined,
+    resumeFrame: number | undefined,
     attempt = 0,
     visible = false,
     disposed = false,
@@ -324,6 +343,8 @@ function initializeTerminalViewport(
     initialReplay = true,
     connectedOnce = false,
     replacementReplayPending = false,
+    parked = false,
+    webglParked = false,
     serverSize: { cols: number; rows: number } | undefined;
   own(() => {
     disposed = true;
@@ -331,6 +352,7 @@ function initializeTerminalViewport(
     if (heartbeat !== undefined) window.clearInterval(heartbeat);
     if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
     if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
+    if (resumeFrame !== undefined) window.cancelAnimationFrame(resumeFrame);
     socket?.close();
   });
   const claimsSizing = () => terminalViewportClaimsSizing(scaledPreview, fixedDashboardGrid);
@@ -503,11 +525,7 @@ function initializeTerminalViewport(
     if (disposed || element.closest('[hidden]')) return;
     try {
       if (mobile80xM()) {
-        if (webgl) {
-          webgl.dispose();
-          webgl = undefined;
-          element.dataset.renderer = 'dom';
-        }
+        releaseWebgl();
         terminal.resize(mobileCols(), mobileGridRows);
         scheduleDashboardFill();
       } else if (fixedDashboardGrid) {
@@ -621,6 +639,13 @@ function initializeTerminalViewport(
       if (socket !== current || disposed) return;
       if (heartbeat !== undefined) window.clearInterval(heartbeat);
       heartbeat = undefined;
+      // A parked viewport does not reconnect in the background: its owner evicts it, and the
+      // terminal remounts fresh if it is shown again (HS2-WGTQ6X).
+      if (parked) {
+        element.dataset.connection = 'closed';
+        element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT));
+        return;
+      }
       element.dataset.connection = 'reconnecting';
       const delay = terminalReconnectDelay(attempt++);
       reconnect = window.setTimeout(connect, delay);
@@ -630,6 +655,42 @@ function initializeTerminalViewport(
       current.close();
     });
   };
+  // Parking keeps the emulator, its scrollback and its socket alive while a project switch takes
+  // the viewport out of the page, so returning shows its content on the first frame (HS2-WGTQ6X).
+  const park = () => {
+    parked = true;
+    if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+    fitFrame = undefined;
+    if (resumeFrame !== undefined) window.cancelAnimationFrame(resumeFrame);
+    resumeFrame = undefined;
+    // Hidden viewports must not hold a WebGL context: browsers cap live contexts per page.
+    webglParked = releaseWebgl() || webglParked;
+  };
+  const resume = (event: Event) => {
+    parked = false;
+    fitAndClaim();
+    if (
+      (event as CustomEvent<{ focus?: boolean } | null>).detail?.focus &&
+      automaticInputFocusAllowed(window.innerWidth)
+    ) {
+      focusRequested = true;
+      terminal.focus();
+      claim();
+    }
+    if (!webglParked) return;
+    // Paint the first frame with the DOM renderer, then restore WebGL off the critical path.
+    webglParked = false;
+    resumeFrame = window.requestAnimationFrame(() => {
+      resumeFrame = undefined;
+      if (!disposed && !parked && !webgl) loadWebgl();
+    });
+  };
+  element.addEventListener(TERMINAL_VIEWPORT_PARK_EVENT, park);
+  element.addEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, resume);
+  own(() => {
+    element.removeEventListener(TERMINAL_VIEWPORT_PARK_EVENT, park);
+    element.removeEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, resume);
+  });
   const resize = new ResizeObserver(fitAndClaim);
   own(() => {
     resize.disconnect();

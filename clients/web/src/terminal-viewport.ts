@@ -42,6 +42,12 @@ export function isTerminalReplacementReplay(value: string): boolean {
 }
 
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
+/** Sent to a live viewport its owner moves out of the page to keep it warm (HS2-WGTQ6X). */
+export const TERMINAL_VIEWPORT_PARK_EVENT = 'hs-terminal-viewport-park';
+/** Sent when a parked viewport returns to the page; `detail.focus` requests input focus. */
+export const TERMINAL_VIEWPORT_RESUME_EVENT = 'hs-terminal-viewport-resume';
+/** Dispatched by a parked viewport whose socket closed, so its owner evicts it. */
+export const TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT = 'hs-terminal-viewport-parked-closed';
 /** How long an automatic initial focus waits for a second attempt, after layout and mounts settle. */
 export const TERMINAL_FOCUS_RETRY_MS = 120;
 export const TERMINAL_DRAWER_RESIZE_END_EVENT = 'hotsheet-terminal-drawer-resize-end';

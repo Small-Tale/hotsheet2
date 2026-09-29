@@ -1290,7 +1290,7 @@ export async function startHotSheetWebClient() {
   function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===terminalDrawerSelected.value):undefined;if(current)requestDrawerInputFocus(current.id,terminalDrawerSelected.value,chat);terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function selectDrawerItem(id:string){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current){localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id);requestDrawerInputFocus(current.id,id,chat)}}
+  function selectDrawerItem(id:string,focusInput=true){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current){localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id);if(focusInput)requestDrawerInputFocus(current.id,id,chat)}}
   function openTerminalInProject(key: string) {
     const session = terminalSession(key);
     if (!session) return;
@@ -1581,7 +1581,9 @@ export async function startHotSheetWebClient() {
       order.filter((id) => !requested.has(id)),
     );
     if (selectionChanges) {
-      selectDrawerItem(nextSelected);
+      // Closing from the tab bar keeps keyboard focus on the tabs, so repeated Delete keeps
+      // closing; do not also schedule input focus into the newly selected item.
+      selectDrawerItem(nextSelected, false);
       pendingTerminalFocus = undefined;
       focusDrawerTab(current.id, nextSelected);
     }

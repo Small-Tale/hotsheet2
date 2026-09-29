@@ -321,6 +321,7 @@ export function TerminalSession({ session, active = true }: { session: TerminalD
         data-morph-skip
         data-component="terminal-viewport"
         data-display-mode="interactive"
+        data-mount-policy="keep-alive"
         data-project-id={session.projectId}
         data-terminal-id={session.id}
         aria-label={`${session.title ?? session.id} interactive terminal`}

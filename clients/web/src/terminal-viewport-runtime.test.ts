@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns';
-import { TERMINAL_DRAWER_RESIZE_END_EVENT } from './terminal-viewport';
+import {
+  TERMINAL_DRAWER_RESIZE_END_EVENT,
+  TERMINAL_VIEWPORT_PARK_EVENT,
+  TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_RESUME_EVENT,
+} from './terminal-viewport';
 import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from './terminal-viewport-runtime';
 
 const allocated = vi.hoisted(() => ({
@@ -62,9 +67,17 @@ vi.mock('@xterm/addon-fit', () => ({
     }
   },
 }));
+const webglAddons = vi.hoisted(() => [] as Array<{ disposed: boolean }>);
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class {
-    dispose() {}
+    disposed = false;
+    constructor() {
+      webglAddons.push(this);
+    }
+    onContextLoss() {}
+    dispose() {
+      this.disposed = true;
+    }
   },
 }));
 
@@ -184,6 +197,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'focusin',
         'focusout',
         'hotsheet-terminal-key',
+        TERMINAL_VIEWPORT_PARK_EVENT,
+        TERMINAL_VIEWPORT_RESUME_EVENT,
         'pointerdown',
         'touchcancel',
         'touchend',
@@ -318,7 +333,7 @@ describe('terminal geometry settling (HS2-GSRZX6)', () => {
 
     // Burst of layout changes in one frame: one coalesced pass, one claim, at the new size.
     allocated.proposed = { cols: 100, rows: 30 };
-    terminal.resize(100, 30);
+    (terminal.resize as unknown as (cols: number, rows: number) => void)(100, 30);
     resize[0].callback();
     resize[0].callback();
     runFrames();
@@ -392,5 +407,70 @@ describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
     runRetries();
     expect(terminal.focus.mock.calls.length).toBeGreaterThan(1);
     dispose();
+  });
+});
+
+describe('parked terminal viewports (HS2-WGTQ6X)', () => {
+  it('releases WebGL while parked, restores it after the first resumed frame, and stops at a closed socket', () => {
+    webglAddons.length = 0;
+    windowMock.innerWidth = 1440;
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/140.0' });
+    const frames: Array<() => void> = [];
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    const dispatched: string[] = [],
+      handlers = new Map<string, (event: Event) => void>(),
+      viewport = {
+        dataset: { displayMode: 'interactive' } as Record<string, string>,
+        style: {},
+        classList: { contains: (name: string) => name === 'terminal-viewport--dedicated' },
+        closest: () => null,
+        addEventListener: (type: string, handler: (event: Event) => void) => handlers.set(type, handler),
+        removeEventListener: vi.fn(),
+        dispatchEvent: (event: Event) => dispatched.push(event.type),
+      } as unknown as HTMLElement,
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
+      socket = sockets[0];
+    expect(viewport.dataset.renderer).toBe('webgl');
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+
+    handlers.get(TERMINAL_VIEWPORT_PARK_EVENT)!(new CustomEvent(TERMINAL_VIEWPORT_PARK_EVENT));
+    expect(webglAddons[0].disposed).toBe(true);
+    expect(viewport.dataset.renderer).toBe('dom');
+
+    // Resume paints with the DOM renderer first, then restores WebGL on the next frame.
+    frames.length = 0;
+    handlers.get(TERMINAL_VIEWPORT_RESUME_EVENT)!(
+      new CustomEvent(TERMINAL_VIEWPORT_RESUME_EVENT, { detail: { focus: true } }),
+    );
+    expect(viewport.dataset.renderer).toBe('dom');
+    expect(allocated.terminals[0].focus).toHaveBeenCalled();
+    for (const frame of frames.splice(0)) frame();
+    expect(webglAddons).toHaveLength(2);
+    expect(viewport.dataset.renderer).toBe('webgl');
+
+    // Parked again, a closed socket is reported to the owner instead of reconnecting.
+    handlers.get(TERMINAL_VIEWPORT_PARK_EVENT)!(new CustomEvent(TERMINAL_VIEWPORT_PARK_EVENT));
+    scheduledTimeouts.length = 0;
+    socket.dispatchEvent(new Event('close'));
+    expect(dispatched).toContain(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT);
+    expect(viewport.dataset.connection).toBe('closed');
+    expect(scheduledTimeouts, 'no background reconnect').toHaveLength(0);
+    expect(sockets).toHaveLength(1);
+    dispose();
+  });
+
+  it('keeps reconnecting a visible viewport whose socket closes', () => {
+    const { viewport } = element();
+    mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' });
+    sockets[0].readyState = 1;
+    sockets[0].dispatchEvent(new Event('open'));
+    sockets[0].dispatchEvent(new Event('close'));
+    expect(viewport.dataset.connection).toBe('reconnecting');
+    scheduledTimeouts.at(-1)!();
+    expect(sockets).toHaveLength(2);
   });
 });

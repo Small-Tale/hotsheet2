@@ -2118,6 +2118,26 @@ the available frame, keeping glyph proportions, pointer hit-testing, selection, 
 aligned with the input surface
 (HS2-2DW829).
 
+**Kept-alive drawer terminals (HS2-WGTQ6X).** Switching projects, hiding the drawer, or
+leaving a dedicated tab for the project grid or an AI chat takes a dedicated drawer terminal
+out of the page. Its viewport (`data-mount-policy="keep-alive"`) is parked instead of disposed:
+the live element, with its xterm emulator, scrollback and attach socket, moves into a hidden
+holding area. When the same project terminal renders again, the parked element replaces the
+fresh placeholder, so its content appears on the first frame with no reconnect or scrollback
+replay.
+
+- **Sizing:** a parked viewport keeps its lease with `visible:false` heartbeats, so it never
+  drives the PTY size.
+- **Resources:** parking releases the WebGL context, since browsers cap live contexts per
+  page. The first resumed frame paints with the DOM renderer, and WebGL returns on the next
+  frame.
+- **Bounds:** at most `MAX_PARKED_TERMINAL_VIEWPORTS` (12) stay warm, and the oldest is
+  evicted first. Closing a project evicts its parked terminals. A parked socket that closes is
+  evicted rather than reconnected in the background, and the terminal mounts fresh if shown
+  again.
+- **Focus:** a restored terminal takes input focus only when a pending focus request names
+  it. Closing a drawer tab from the keyboard keeps focus on the tab bar.
+
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
 fallback after load failure or context loss). Apple WebKit uses the DOM renderer as a
