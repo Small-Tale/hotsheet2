@@ -1,7 +1,6 @@
 import './terminal-key-bar.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from 'lucide';
 
 import type { TerminalModifier, TerminalModifiers, TerminalSpecialKey } from '../terminal-keys';
@@ -58,7 +57,6 @@ function ModifierButton({ modifier, modifiers }: { modifier: TerminalModifier; m
  * a capture-phase `pointerdown` guard keeps focus in the terminal, so the soft keyboard stays up.
  */
 export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBarProps) {
-  const group = { tone: 'dark', size: 'compact', density: 'tight' } as const;
   return (
     <div
       class="terminal-key-bar"
@@ -67,7 +65,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
       role="toolbar"
       aria-label="Terminal keys"
     >
-      <ToolbarControlGroup label="Function row" {...group} content="text" buttonAppearance="push" single>
+      <div class="terminal-key-bar__group" role="group" aria-label="Function row" data-active={String(functionRow)}>
         <button
           type="button"
           tabindex="-1"
@@ -77,8 +75,8 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
         >
           Fn
         </button>
-      </ToolbarControlGroup>
-      <ToolbarControlGroup label="Escape, tab, and modifier keys" {...group} content="text" buttonAppearance="push">
+      </div>
+      <div class="terminal-key-bar__group" role="group" aria-label="Escape, tab, and modifier keys">
         <KeyButton keyName="Escape" label="Escape">
           Esc
         </KeyButton>
@@ -88,32 +86,32 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
         <ModifierButton modifier="ctrl" modifiers={modifiers} />
         <ModifierButton modifier="alt" modifiers={modifiers} />
         {functionRow && <ModifierButton modifier="shift" modifiers={modifiers} />}
-      </ToolbarControlGroup>
+      </div>
       {functionRow ? (
         <>
-          <ToolbarControlGroup label="Navigation keys" {...group} content="text">
+          <div class="terminal-key-bar__group" role="group" aria-label="Navigation keys">
             {NAVIGATION.map((item) => (
               <KeyButton keyName={item.key} label={item.label}>
                 {item.legend}
               </KeyButton>
             ))}
-          </ToolbarControlGroup>
-          <ToolbarControlGroup label="Function keys" {...group} content="text">
+          </div>
+          <div class="terminal-key-bar__group" role="group" aria-label="Function keys">
             {FUNCTION_KEYS.map((key) => (
               <KeyButton keyName={key} label={key}>
                 {key}
               </KeyButton>
             ))}
-          </ToolbarControlGroup>
+          </div>
         </>
       ) : (
-        <ToolbarControlGroup label="Arrow keys" {...group}>
+        <div class="terminal-key-bar__group" role="group" aria-label="Arrow keys">
           {ARROWS.map((arrow) => (
             <KeyButton keyName={arrow.key} label={arrow.label}>
               <LucideIcon icon={arrow.icon} name={arrow.name} />
             </KeyButton>
           ))}
-        </ToolbarControlGroup>
+        </div>
       )}
     </div>
   );

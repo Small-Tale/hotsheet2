@@ -1268,6 +1268,10 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
     }, height);
   await setKeyboard(420);
   await expect(keyBar).toBeVisible();
+  await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(3);
+  await expect(keyBar.locator('[data-component="toolbar-control-group"]')).toHaveCount(0);
+  await expect(keyBar.locator('.terminal-key-bar__group').first()).toHaveAttribute('aria-label', 'Function row');
+  expect(await keyBar.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
   const sent = () =>
     page.evaluate(() =>
       (
@@ -1306,6 +1310,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   // The Fn row carries function and navigation keys.
   await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
   await expect(keyBar.getByRole('button', { name: 'Up arrow' })).toHaveCount(0);
+  await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(4);
   before = (await sent()).length;
   await keyBar.getByRole('button', { name: 'F5', exact: true }).click();
   await keyBar.getByRole('button', { name: 'Page down' }).click();

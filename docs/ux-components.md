@@ -1767,11 +1767,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
-HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, and HS2-KB5YY6 is:
+HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, and HS2-2TN51D is:
 
 | Severity | Exact diagnostic budgets                                                |
 | -------- | ----------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 106; `KUI-L022` 66; `KUI-L201` 9 |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 104; `KUI-L022` 66; `KUI-L201` 7 |
 | review   | `KUI-L004` 82; `KUI-L006` 15; `KUI-L008` 25                             |
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
@@ -1800,3 +1800,7 @@ HS2-KB5YY6 composes the gallery's markup and zoom controls in a footer Toolbar a
 terminal visibility button/select in a compact Toolbar. The gallery retains its centered
 markup and right-aligned zoom actions; visibility controls retain their group selection
 and fit the dashboard header at desktop and phone widths.
+
+HS2-2TN51D gives the phone terminal key bar app-owned compact groups. Its Fn control can
+stay sticky in the same horizontal scroll container as the function keys, while the
+ordinary row fits the phone viewport and all keys retain their dark treatment.

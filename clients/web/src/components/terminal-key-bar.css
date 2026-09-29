@@ -1,5 +1,6 @@
-/* Phone terminal accessory bar (HS2-CKS78M): one horizontally scrolling row of Kerf dark control
-   groups on the terminal background, directly above the soft keyboard. */
+/* Phone terminal accessory bar (HS2-CKS78M): one horizontally scrolling row of app-owned dark key
+   groups on the terminal background, directly above the soft keyboard. The sticky Fn control needs
+   to share the scroll container with the keys, which a Toolbar's clipped zone cannot provide. */
 .terminal-key-bar {
   display: flex;
   flex: none;
@@ -21,21 +22,61 @@
 .terminal-key-bar::-webkit-scrollbar {
   display: none;
 }
-.terminal-key-bar > .kui-toolbar-control-group {
+.terminal-key-bar__group {
+  display: inline-flex;
   flex: none;
+  height: remify(34px);
+  min-width: remify(34px);
+  padding: 0;
+  box-sizing: border-box;
+  align-items: center;
+  gap: remify(4px);
+  border: 1px solid var(--kui-toolbar-control-dark-border, #353536);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--hs-terminal-foreground);
+  background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent);
 }
 /* Fn stays pinned at the leading edge while a row scrolls, so the other row is always one tap away;
    the keys scroll beneath it on the terminal-colored backing. */
-.terminal-key-bar > .kui-toolbar-control-group:first-child {
+.terminal-key-bar__group:first-child {
   position: sticky;
   z-index: 1;
   left: 0;
   box-shadow: calc(-1 * var(--kui-space-xs)) 0 0 var(--kui-space-xs) var(--hs-terminal-background);
 }
 .terminal-key-bar button {
-  min-width: remify(40px);
+  min-width: remify(35px);
+  height: remify(32px);
+  padding-inline: remify(5px);
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--wa-border-radius-pill);
+  color: inherit;
+  background: transparent;
+  font: inherit;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+.terminal-key-bar button svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.terminal-key-bar button:hover {
+  background: color-mix(in srgb, var(--wa-color-surface-default) 28%, transparent);
+}
+.terminal-key-bar button[aria-pressed='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-surface-default);
+}
+.terminal-key-bar__group:first-child[data-active='true'] {
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-neutral-fill-loud);
+}
+.terminal-key-bar button:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 1px;
 }
 /* A locked modifier is marked beyond the pressed chrome, so once and locked read differently. */
 .terminal-key-bar button[data-state='locked'] {

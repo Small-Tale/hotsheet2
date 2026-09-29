@@ -2374,6 +2374,8 @@ terminal) has the soft keyboard up, a key bar sits directly above the keyboard. 
 the row resets to its leading edge when toggled. A modifier tap cycles _once_ (applies to the next key,
 including a character typed on the soft keyboard, then clears) → _locked_ (marked with an underline;
 stays on) → off; leaving focus mode or closing the magnified terminal clears modifiers and the Fn row.
+Its compact dark groups are owned by the app so Fn can stay sticky inside the horizontally scrolling
+bar; the ordinary row still fits at 390px (HS2-2TN51D).
 Keys use xterm sequences: application-cursor-aware arrows and Home/End, `CSI 1;m` modifier forms, SS3
 F1–F4, `CSI n~` for F5–F12/PgUp/PgDn, Shift+Tab as `CSI Z`, Ctrl+letter control codes, and an ESC
 prefix for Alt. The bar's buttons are never focusable and a capture-phase `pointerdown` guard keeps
