@@ -2278,9 +2278,14 @@ async fn start_github_device_auth(
                     break;
                 }
                 Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
-                    let stored = serde_json::json!({"kind":"github_app","client_id":client_id,"web_base":web_base,"obtained_at":OffsetDateTime::now_utc().unix_timestamp(),"token":bundle});
-                    let result = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
-                        .set(&credential_reference, &stored.to_string());
+                    let result = hotsheet_extsync::store_device_authorization(
+                        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+                        &credential_reference,
+                        &client_id,
+                        &web_base,
+                        &bundle,
+                        OffsetDateTime::now_utc().unix_timestamp(),
+                    );
                     let next = match result {
                         Ok(()) => GitHubAuthStatus::Authorized {
                             credential_reference: credential_reference.clone(),
@@ -2470,123 +2475,43 @@ async fn list_provider_connections(
         .map_err(provider_transfer_error)
 }
 
-fn validate_external_connection(connection: &ProviderConnection) -> Result<(), ApiError> {
-    if connection.provider == "git" {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "git connections are managed through the store registry",
-        ));
-    }
-    hotsheet_extsync::descriptor(connection)
-        .map(|_| ())
-        .map_err(provider_transfer_error)
-}
-
 fn save_provider_connections(
     state: &AppState,
-    mut connections: Vec<ProviderConnection>,
+    connections: Vec<ProviderConnection>,
     connection: ProviderConnection,
     replacing: Option<&str>,
 ) -> Result<(), ApiError> {
-    validate_external_connection(&connection)?;
-    if connection.default {
-        for existing in &mut connections {
-            existing.default = false;
-        }
-    }
-    match replacing {
-        Some(id) => {
-            let slot = connections
-                .iter_mut()
-                .find(|candidate| candidate.id == id)
-                .ok_or_else(|| ApiError::not_found(id))?;
-            *slot = connection;
-        }
-        None => {
-            if connections
-                .iter()
-                .any(|candidate| candidate.id == connection.id)
+    let connections = hotsheet_extsync::updated_connections(connections, connection, replacing)
+        .map_err(|error| match error {
+            hotsheet_ticketing::ProviderError::UnknownConnection(id) => ApiError::not_found(&id),
+            hotsheet_ticketing::ProviderError::Conflict { message, .. }
+                if message == "provider connection id already exists" =>
             {
-                return Err(ApiError::new(
-                    StatusCode::CONFLICT,
-                    "provider connection id already exists",
-                ));
+                ApiError::new(StatusCode::CONFLICT, message)
             }
-            connections.push(connection);
-        }
-    }
-    connections.sort_by(|a, b| a.id.cmp(&b.id));
+            hotsheet_ticketing::ProviderError::Conflict { message, .. }
+                if message == "git connections are managed through the store registry" =>
+            {
+                ApiError::new(StatusCode::BAD_REQUEST, message)
+            }
+            other => provider_transfer_error(other),
+        })?;
     ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .save(&connections)
         .map_err(provider_transfer_error)
 }
 
 fn connection_token(connection: &ProviderConnection) -> Result<String, ApiError> {
-    let credential =
-        hotsheet_extsync::credential_reference(connection).map_err(provider_transfer_error)?;
-    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
-    let raw = keys.get(credential).map_err(provider_transfer_error)?;
-    if connection.provider != "github" {
-        return Ok(raw);
-    }
-    let Ok(mut stored) = serde_json::from_str::<serde_json::Value>(&raw) else {
-        return Ok(raw);
-    };
-    if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app") {
-        return Ok(raw);
-    }
-    let mut token: hotsheet_extsync::GitHubTokenBundle = serde_json::from_value(
-        stored.get("token").cloned().unwrap_or_default(),
+    hotsheet_extsync::connection_access_token(
+        connection,
+        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+        OffsetDateTime::now_utc().unix_timestamp(),
     )
-    .map_err(|error| {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            format!("stored GitHub authorization is invalid: {error}"),
-        )
-    })?;
-    let obtained = stored
-        .get("obtained_at")
-        .and_then(serde_json::Value::as_i64)
-        .unwrap_or(0);
-    let expires = token.expires_in.unwrap_or(u64::MAX);
-    let refresh_due = OffsetDateTime::now_utc().unix_timestamp()
-        >= obtained
-            .saturating_add(i64::try_from(expires).unwrap_or(i64::MAX))
-            .saturating_sub(60);
-    if refresh_due {
-        let refresh = token.refresh_token.as_deref().ok_or_else(|| {
-            ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "GitHub authorization expired; sign in with GitHub again",
-            )
-        })?;
-        let client_id = stored
-            .get("client_id")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
-        let web_base = stored
-            .get("web_base")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("https://github.com");
-        let previous_refresh = token.refresh_token.clone();
-        token = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base)
-            .refresh(refresh)
-            .map_err(|error| {
-                ApiError::new(
-                    StatusCode::UNAUTHORIZED,
-                    format!("GitHub authorization could not be refreshed; sign in again: {error}"),
-                )
-            })?;
-        if token.refresh_token.is_none() {
-            token.refresh_token = previous_refresh;
-        }
-        stored["obtained_at"] = OffsetDateTime::now_utc().unix_timestamp().into();
-        stored["token"] = serde_json::to_value(&token)
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-        keys.set(credential, &stored.to_string())
-            .map_err(provider_transfer_error)?;
-    }
-    Ok(token.access_token)
+    .map_err(|error| match error {
+        hotsheet_extsync::GitHubCredentialError::Provider(error) => provider_transfer_error(error),
+        hotsheet_extsync::GitHubCredentialError::Secret(error) => provider_transfer_error(error),
+        other => ApiError::new(StatusCode::UNAUTHORIZED, other.to_string()),
+    })
 }
 
 async fn create_provider_connection(

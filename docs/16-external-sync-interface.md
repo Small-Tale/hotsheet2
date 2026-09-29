@@ -320,6 +320,15 @@ to its provider URL, and derives enabled operations and copy/move destinations f
 advertised capabilities. Provider secrets never appear in connection responses;
 the UI names only a server-owned credential reference.
 
+The headless `github-sign-in` command uses the same GitHub App Client ID selection,
+device protocol, keychain bundle format, and refresh boundary as the server
+(HS2-DJA052). `github-connect` creates or updates the non-secret connection
+idempotently and can link a registered checkout; `providers`, `provider-ls`, and
+`provider-remove` then cover listing, live reads, and permanent removal without a
+server. A GitHub App credential is unwrapped before a CLI provider read and refreshed
+in the keychain when near expiry. The server and CLI prepare connection registry
+updates through the same validated workflow.
+
 Removing a data source is permanent and user-initiated (HS2-724S9N). One shared,
 idempotent workflow (`hotsheet_ticketing::connection_removal`) backs
 `DELETE /provider-connections/{id}`, `hotsheet provider-remove <id>`, and the web edit

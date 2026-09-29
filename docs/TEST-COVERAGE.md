@@ -290,6 +290,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | github-source-dialog-layout | docs/06-clients.md | Source setup uses shared panel, button, and field controls; the demo previews every modal state with responsive removal actions (HS2-7FYYN9). | `clients/web/src/components/ticket-source-surfaces.test.ts # sign-in, authorization, fields, removal variants` | `clients/web/tests/providers.spec.ts # onboarding and edit flow`; `clients/web/tests/ux-demo.spec.ts # wide and narrow state selector and captures` | `HS2-7FYYN9 # wide and narrow after screenshots` | double-covered |
 
+| github-headless-connection-parity | docs/04-core-server-cli.md; docs/16-external-sync-interface.md | The CLI performs GitHub device sign-in, creates or updates one connection and checkout source repeatably, and resolves or refreshes keychain bundles before provider reads (HS2-DJA052). | `crates/hotsheet-extsync/src/github_credential.rs # raw, fresh, due, malformed, expired, stored-bundle transitions`; `crates/hotsheet-extsync/src/lib.rs # default and duplicate connection transitions` | `crates/hotsheet-cli/tests/cli.rs # device denial, repeatable github-connect and checkout link, credential-backed provider read`; `crates/hotsheet-server/tests/http.rs # provider connection CRUD` | — | double-covered |
+
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
 <!-- coverage-matrix:end -->

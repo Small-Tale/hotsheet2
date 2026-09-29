@@ -451,6 +451,8 @@ hotsheet key set openai                    # hidden terminal prompt
 printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # automation via stdin; never argv/settings
 hotsheet key list                         # provider names only, never values
 hotsheet providers --json                 # git + configured external connections/capabilities
+hotsheet github-sign-in                    # print GitHub device URL/code, then save a keychain reference
+hotsheet github-connect acme/repo --credential github-app-<id> --checkout <checkout-id> --default
 hotsheet provider-ls github-main
 hotsheet provider-get github-main 42
 hotsheet provider-new github-main "Bug title"
@@ -460,6 +462,17 @@ hotsheet provider-disable github-main           # temporary: no reads/writes, ti
 hotsheet provider-enable github-main
 hotsheet provider-remove github-main [--json]  # permanent; unlinks checkouts, drops Hot Sheet-minted sign-in
 ```
+
+`github-sign-in` works without a running server. It prints GitHub's verification URL and
+one-time code, waits for approval, and then prints a `github-app-*` credential reference;
+it never prints the access or refresh token. Use `--web-base https://github.example.com`
+for Enterprise after configuring that origin's public Client ID in
+`HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS`. `github-connect` stores the non-secret
+connection in `providers.json` and optionally links a registered checkout. Repeating it
+for the same repository keeps the existing connection id and checkout source; `--id`
+selects a specific existing id for a name or credential update. It accepts a keychain
+reference from `github-sign-in` or `key set`, and GitHub App bundles refresh when a
+provider command reads them (HS2-DJA052).
 
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved

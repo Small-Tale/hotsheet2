@@ -3,7 +3,7 @@
 //! (`docs/04-core-server-cli.md` §4.4) and imports HS1 exports (`docs/07`).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -120,6 +120,32 @@ enum Cmd {
         /// Emit the full provider descriptor as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Sign in with the Hot Sheet GitHub App using GitHub's device code flow.
+    GithubSignIn {
+        /// GitHub.com or the web origin of a configured GitHub Enterprise instance.
+        #[arg(long, default_value = "https://github.com")]
+        web_base: String,
+    },
+    /// Create or update a GitHub Issues connection in this ticket store, safely repeatable.
+    GithubConnect {
+        /// Owner/repository reachable by the Hot Sheet GitHub App.
+        locator: String,
+        /// Credential reference printed by `github-sign-in` or created with `key set`.
+        #[arg(long)]
+        credential: String,
+        /// Display name (defaults to GitHub Issues).
+        #[arg(long)]
+        name: Option<String>,
+        /// Explicit connection id; otherwise use the existing locator or generate an id.
+        #[arg(long)]
+        id: Option<String>,
+        /// Make this connection the default for its store and, with --checkout, that checkout.
+        #[arg(long)]
+        default: bool,
+        /// Also link the connection to this registered checkout (id, alias, or path).
+        #[arg(long)]
+        checkout: Option<String>,
     },
     /// List tickets from one configured provider connection.
     ProviderLs { connection: String },
@@ -1002,6 +1028,23 @@ fn main() -> Result<()> {
         ),
         Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
         Cmd::Providers { json } => cmd_providers(&cli.path, json),
+        Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
+        Cmd::GithubConnect {
+            locator,
+            credential,
+            name,
+            id,
+            default,
+            checkout,
+        } => cmd_github_connect(
+            &cli.path,
+            &locator,
+            &credential,
+            name,
+            id,
+            default,
+            checkout,
+        ),
         Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
         Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
         Cmd::ProviderDisable { connection } => {
@@ -1947,6 +1990,155 @@ fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     Ok(())
 }
 
+fn cmd_github_sign_in(web_base: &str) -> Result<()> {
+    const BUNDLED_ID: &str = include_str!("../../hotsheet-server/github-app-client-id.txt");
+    let client_id =
+        hotsheet_extsync::github_app_config::client_id_for_web_base(BUNDLED_ID, web_base)
+            .map_err(anyhow::Error::msg)?;
+    let web_base = web_base.trim_end_matches('/');
+    let client = hotsheet_extsync::GitHubDeviceClient::live(&client_id, web_base);
+    let authorization = client.start()?;
+    println!("Open: {}", authorization.verification_uri);
+    println!("Enter code: {}", authorization.user_code);
+    std::io::stdout().flush()?;
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(authorization.expires_in);
+    let mut interval = authorization.interval.max(1);
+    while let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) {
+        if remaining.is_zero() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval).min(remaining));
+        match client.poll(&authorization.device_code)? {
+            hotsheet_extsync::DevicePoll::Pending => {}
+            hotsheet_extsync::DevicePoll::SlowDown => interval = interval.saturating_add(5),
+            hotsheet_extsync::DevicePoll::Expired => {
+                bail!("GitHub device code expired; run github-sign-in again")
+            }
+            hotsheet_extsync::DevicePoll::Denied => bail!("GitHub sign-in was denied"),
+            hotsheet_extsync::DevicePoll::Authorized(bundle) => {
+                let reference = format!(
+                    "github-app-{}",
+                    Ulid::new().to_string().to_ascii_lowercase()
+                );
+                hotsheet_extsync::store_device_authorization(
+                    &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+                    &reference,
+                    &client_id,
+                    web_base,
+                    &bundle,
+                    OffsetDateTime::now_utc().unix_timestamp(),
+                )?;
+                println!("Credential reference: {reference}");
+                return Ok(());
+            }
+        }
+    }
+    bail!("GitHub device code expired; run github-sign-in again")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_github_connect(
+    path: &Path,
+    locator: &str,
+    credential: &str,
+    name: Option<String>,
+    id: Option<String>,
+    make_default: bool,
+    checkout: Option<String>,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let home = hotsheet_plugins::hotsheet_home();
+    let keys = KeyRegistry::new(&home, OsKeychain);
+    let raw = keys
+        .get(credential)
+        .with_context(|| format!("credential reference '{credential}' was not found"))?;
+    let checkout_registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    if let Some(reference) = &checkout {
+        checkout_registry.resolve(reference)?;
+    }
+    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let connections = registry.load()?;
+    let existing = match id.as_deref() {
+        Some(id) => connections.iter().find(|item| item.id == id),
+        None => connections
+            .iter()
+            .find(|item| item.provider == "github" && item.locator.eq_ignore_ascii_case(locator)),
+    };
+    if existing.is_some_and(|item| item.provider != "github") {
+        bail!("connection id is already used by another provider");
+    }
+    if existing.is_some_and(|item| !item.locator.eq_ignore_ascii_case(locator)) {
+        bail!(
+            "an existing connection id cannot be retargeted to another repository; create a new connection"
+        );
+    }
+    let connection_id = id.unwrap_or_else(|| {
+        existing.map(|item| item.id.clone()).unwrap_or_else(|| {
+            hotsheet_ticketing::generate_connection_id(&connections, "github", locator)
+        })
+    });
+    let web_base = serde_json::from_str::<serde_json::Value>(&raw)
+        .ok()
+        .filter(|value| value.get("kind").and_then(serde_json::Value::as_str) == Some("github_app"))
+        .and_then(|value| {
+            value
+                .get("web_base")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        });
+    let api_base = web_base
+        .as_deref()
+        .filter(|base| *base != "https://github.com")
+        .map(|base| format!("{base}/api/v3"))
+        .or_else(|| {
+            existing.and_then(|item| {
+                item.settings
+                    .get("api_base")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+        });
+    let mut settings = serde_json::json!({"credential":{"secret":credential}});
+    if let Some(api_base) = api_base {
+        settings["api_base"] = api_base.into();
+    }
+    let connection = hotsheet_ticketing::ProviderConnection {
+        id: connection_id.clone(),
+        provider: "github".into(),
+        locator: locator.into(),
+        name: Some(name.unwrap_or_else(|| {
+            existing
+                .and_then(|item| item.name.clone())
+                .unwrap_or_else(|| "GitHub Issues".into())
+        })),
+        default: make_default || existing.is_some_and(|item| item.default),
+        settings,
+        disabled: existing.is_some_and(|item| item.disabled),
+    };
+    let replacing = existing.map(|item| item.id.clone());
+    let updated = hotsheet_extsync::updated_connections(
+        connections,
+        connection.clone(),
+        replacing.as_deref(),
+    )?;
+    registry.save(&updated)?;
+    if let Some(reference) = &checkout {
+        checkout_registry.add_source(
+            reference,
+            hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: connection_id.clone(),
+                provider: "github".into(),
+                locator: locator.into(),
+            },
+            make_default,
+        )?;
+    }
+    println!("Connected GitHub Issues as '{connection_id}'.");
+    Ok(())
+}
+
 fn configured_provider(path: &Path, connection_id: &str) -> Result<Arc<dyn TicketProvider>> {
     let store = FsStore::open(path)?;
     let git_id = git_connection_id(&store);
@@ -1964,8 +2156,11 @@ fn configured_provider(path: &Path, connection_id: &str) -> Result<Arc<dyn Ticke
         }
         .into());
     }
-    let credential = hotsheet_extsync::credential_reference(&connection)?;
-    let token = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain).get(credential)?;
+    let token = hotsheet_extsync::connection_access_token(
+        &connection,
+        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+        time::OffsetDateTime::now_utc().unix_timestamp(),
+    )?;
     Ok(hotsheet_extsync::live_provider(&connection, token)?)
 }
 

@@ -4223,6 +4223,193 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
 }
 
 #[test]
+fn github_connect_creates_and_links_one_connection_idempotently() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_API_KEY_CLI_GITHUB", "fixture-token")
+            .args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    run(&[
+        "checkout",
+        "register",
+        project.path().to_str().unwrap(),
+        "--alias",
+        "linked",
+    ])
+    .assert()
+    .success();
+    let args = [
+        "github-connect",
+        "acme/repo",
+        "--credential",
+        "cli-github",
+        "--default",
+        "--checkout",
+        "linked",
+    ];
+    run(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-acme-repo"));
+    run(&args)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-acme-repo"));
+    let file: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
+            .unwrap();
+    let connections = file["connections"].as_array().unwrap();
+    assert_eq!(connections.len(), 1);
+    assert_eq!(connections[0]["id"], "github-acme-repo");
+    assert_eq!(connections[0]["name"], "GitHub Issues");
+    assert_eq!(connections[0]["default"], true);
+    let checkout: serde_json::Value = serde_json::from_slice(
+        &run(&["checkout", "resolve", "linked"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(checkout["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(checkout["default_source"], "github-acme-repo");
+    run(&[
+        "github-connect",
+        "acme/repo",
+        "--credential",
+        "cli-github",
+        "--name",
+        "Product issues",
+    ])
+    .assert()
+    .success();
+    let file: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
+            .unwrap();
+    assert_eq!(file["connections"].as_array().unwrap().len(), 1);
+    assert_eq!(file["connections"][0]["name"], "Product issues");
+    run(&["providers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-acme-repo"));
+    run(&["provider-disable", "github-acme-repo"])
+        .assert()
+        .success();
+    run(&[
+        "github-connect",
+        "acme/repo",
+        "--credential",
+        "cli-github",
+        "--name",
+        "Updated issues",
+    ])
+    .assert()
+    .success();
+    run(&[
+        "github-connect",
+        "acme/other",
+        "--credential",
+        "cli-github",
+        "--id",
+        "github-acme-repo",
+    ])
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("cannot be retargeted"));
+    let file: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
+            .unwrap();
+    assert_eq!(file["connections"][0]["name"], "Updated issues");
+    assert_eq!(file["connections"][0]["disabled"], true);
+    assert_eq!(file["connections"][0]["locator"], "acme/repo");
+}
+
+#[test]
+fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write() {
+    use std::io::{Read, Write};
+    let dir = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        for index in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0; 4096];
+            let n = stream.read(&mut buf).unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]);
+            assert!(request.contains("IvTest12345678"));
+            let body = if index == 0 {
+                assert!(request.starts_with("POST /login/device/code "));
+                r#"{"device_code":"device-secret","user_code":"ABCD-EFGH","verification_uri":"https://github.test/login/device","expires_in":30,"interval":1}"#
+            } else {
+                assert!(request.starts_with("POST /login/oauth/access_token "));
+                assert!(request.contains("device-secret"));
+                r#"{"error":"access_denied"}"#
+            };
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        }
+    });
+    hs(dir.path())
+        .env(
+            "HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS",
+            format!(r#"{{"{origin}":"IvTest12345678"}}"#),
+        )
+        .args(["github-sign-in", "--web-base", &origin])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Open: https://github.test/login/device",
+        ))
+        .stdout(predicate::str::contains("Enter code: ABCD-EFGH"))
+        .stderr(predicate::str::contains("GitHub sign-in was denied"));
+    server.join().unwrap();
+}
+
+#[test]
+fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
+    use std::io::{Read, Write};
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path()).arg("init").assert().success();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::fs::write(dir.path().join("providers.json"), format!(
+        r#"{{"connections":[{{"id":"github-main","provider":"github","locator":"acme/repo","settings":{{"api_base":"http://{addr}","credential":{{"secret":"cli-bundle"}}}}}}]}}"#
+    )).unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0; 4096];
+        let n = stream.read(&mut buf).unwrap();
+        let request = String::from_utf8_lossy(&buf[..n]);
+        assert!(
+            request.starts_with("GET /repos/acme/repo/issues?"),
+            "{request}"
+        );
+        assert!(
+            request.contains("Authorization: Bearer fixture-access"),
+            "{request}"
+        );
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]").unwrap();
+    });
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let bundle = serde_json::json!({"kind":"github_app","client_id":"IvTest12345678","web_base":"https://github.com","obtained_at":now,"token":{"access_token":"fixture-access","refresh_token":"fixture-refresh","expires_in":28800}});
+    hs(dir.path())
+        .env("HOTSHEET_API_KEY_CLI_BUNDLE", bundle.to_string())
+        .args(["provider-ls", "github-main"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[]"));
+    server.join().unwrap();
+}
+
+#[test]
 fn provider_disable_blocks_provider_access_until_enabled() {
     // HS2-SF6W34: headless parity for temporarily disabling a data source.
     let dir = tempfile::tempdir().unwrap();
