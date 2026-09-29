@@ -30,9 +30,9 @@ import {
   TERMINAL_DASHBOARD_LINE_HEIGHT,
   TERMINAL_DASHBOARD_ROWS,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
+  TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
-  TERMINAL_RESIZE_SETTLE_MS,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
   terminalInverseScalePercent,
@@ -317,7 +317,6 @@ function initializeTerminalViewport(
     heartbeat: number | undefined,
     fitFrame: number | undefined,
     dashboardFrame: number | undefined,
-    settleClaim: number | undefined,
     attempt = 0,
     visible = false,
     disposed = false,
@@ -332,7 +331,6 @@ function initializeTerminalViewport(
     if (heartbeat !== undefined) window.clearInterval(heartbeat);
     if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
     if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
-    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
     socket?.close();
   });
   const claimsSizing = () => terminalViewportClaimsSizing(scaledPreview, fixedDashboardGrid);
@@ -534,18 +532,15 @@ function initializeTerminalViewport(
     claim();
   };
   const drawerResizeActive = () => insideDrawer && document.body.dataset.resizingRegion === 'vertical';
+  // One geometry pass per frame of layout change. The ResizeObserver reports every later size
+  // change, so no delayed re-settle is needed; a second pass only re-resized the PTY and made
+  // TUIs redraw after mount (HS2-GSRZX6).
   const fitAndClaim = () => {
     if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
-    if (settleClaim !== undefined) window.clearTimeout(settleClaim);
     if (drawerResizeActive()) return;
     fitFrame = window.requestAnimationFrame(() => {
       fitFrame = undefined;
       applySettledGeometry();
-      if (!fixedDashboardGrid)
-        settleClaim = window.setTimeout(() => {
-          settleClaim = undefined;
-          applySettledGeometry();
-        }, TERMINAL_RESIZE_SETTLE_MS);
     });
   };
   const finishDrawerResize = () => {
@@ -796,7 +791,7 @@ function initializeTerminalViewport(
     focusIfCurrent(true);
     window.requestAnimationFrame(() => {
       focusIfCurrent();
-      window.setTimeout(focusIfCurrent, TERMINAL_RESIZE_SETTLE_MS);
+      window.setTimeout(focusIfCurrent, TERMINAL_FOCUS_RETRY_MS);
     });
   }
 }

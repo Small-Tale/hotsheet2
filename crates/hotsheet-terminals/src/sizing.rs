@@ -83,6 +83,9 @@ pub struct SizeArbiter {
     /// genuine interaction. A different candidate must persist for `SIZE_FOCUS_HOLD_MS` past this
     /// before it takes over, debouncing rapid focus flips and stray double-taps.
     focus_changed_at_ms: u64,
+    /// When a change the min-interval suppressed may be applied (the trailing edge of the rate
+    /// limit), until a later `decide` applies or drops it.
+    deferred_until_ms: Option<u64>,
 }
 
 impl Default for SizeArbiter {
@@ -100,6 +103,7 @@ impl SizeArbiter {
             applied_at_ms: 0,
             driver: None,
             focus_changed_at_ms: 0,
+            deferred_until_ms: None,
         }
     }
 
@@ -174,14 +178,9 @@ impl SizeArbiter {
     /// within the min-interval, or a sub-min-delta change). A returned `Decision` is recorded
     /// as the applied size.
     pub fn decide(&mut self, now_ms: u64) -> Option<Decision> {
+        self.deferred_until_ms = None;
         let target = self.target(now_ms)?;
 
-        // Guard: don't resize too often.
-        if self.applied.is_some()
-            && now_ms.saturating_sub(self.applied_at_ms) < SIZE_RESIZE_MIN_INTERVAL_MS
-        {
-            return None;
-        }
         // Guard: ignore a sub-threshold change from what's already applied.
         if let Some((c, r)) = self.applied {
             let d_cols = c.abs_diff(target.cols);
@@ -190,9 +189,23 @@ impl SizeArbiter {
                 return None;
             }
         }
+        // Guard: don't resize too often. The change is deferred, not dropped: the owner calls
+        // `decide` again at `deferred_until` so the last size of a burst still lands.
+        if self.applied.is_some()
+            && now_ms.saturating_sub(self.applied_at_ms) < SIZE_RESIZE_MIN_INTERVAL_MS
+        {
+            self.deferred_until_ms = Some(self.applied_at_ms + SIZE_RESIZE_MIN_INTERVAL_MS);
+            return None;
+        }
         self.applied = Some((target.cols, target.rows));
         self.applied_at_ms = now_ms;
         Some(target)
+    }
+
+    /// When the change the last `decide` suppressed for the min-interval may be applied, if it
+    /// suppressed one (HS2-GSRZX6).
+    pub fn deferred_until(&self) -> Option<u64> {
+        self.deferred_until_ms
     }
 
     /// The size the policy wants right now (ignoring the resize-rate guards). `None` = no
@@ -318,17 +331,38 @@ mod tests {
         a.upsert(claim("v1", 100, 40, true, 0), 0);
         assert!(a.decide(0).is_some());
 
-        // A change within the min-interval is suppressed.
+        assert_eq!(a.deferred_until(), None);
+
+        // A change within the min-interval is suppressed, and deferred to the interval's end.
         a.upsert(claim("v1", 120, 50, true, 50), 50);
         assert!(a.decide(50).is_none(), "too soon after the last resize");
+        assert_eq!(a.deferred_until(), Some(SIZE_RESIZE_MIN_INTERVAL_MS));
 
         // After the interval, it applies.
         a.upsert(claim("v1", 120, 50, true, 100), 100);
         assert_eq!(a.decide(100).map(|d| (d.cols, d.rows)), Some((120, 50)));
+        assert_eq!(a.deferred_until(), None, "applying clears the deferral");
 
-        // A sub-min-delta change (±1) is ignored even after the interval.
+        // A sub-min-delta change (±1) is ignored even after the interval, and never deferred.
+        a.upsert(claim("v1", 121, 50, true, 150), 150);
+        assert!(a.decide(150).is_none());
+        assert_eq!(a.deferred_until(), None, "nothing worth applying later");
         a.upsert(claim("v1", 121, 50, true, 2000), 2000);
         assert!(a.decide(2000).is_none(), "±1 is below SIZE_MIN_DELTA");
+
+        // A change that returns to the applied size before the deferral fires drops it.
+        a.upsert(claim("v1", 140, 60, true, 2000), 2000);
+        assert!(a.decide(2000).is_some());
+        a.upsert(claim("v1", 160, 70, true, 2050), 2050);
+        assert!(a.decide(2050).is_none());
+        assert_eq!(a.deferred_until(), Some(2100));
+        a.upsert(claim("v1", 140, 60, true, 2080), 2080);
+        assert!(a.decide(2080).is_none());
+        assert_eq!(
+            a.deferred_until(),
+            None,
+            "the burst ended at the applied size"
+        );
     }
 
     #[test]

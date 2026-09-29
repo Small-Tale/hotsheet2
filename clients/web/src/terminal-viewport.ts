@@ -42,7 +42,8 @@ export function isTerminalReplacementReplay(value: string): boolean {
 }
 
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
-export const TERMINAL_RESIZE_SETTLE_MS = 120;
+/** How long an automatic initial focus waits for a second attempt, after layout and mounts settle. */
+export const TERMINAL_FOCUS_RETRY_MS = 120;
 export const TERMINAL_DRAWER_RESIZE_END_EVENT = 'hotsheet-terminal-drawer-resize-end';
 export const TERMINAL_DASHBOARD_COLS = 80;
 export const TERMINAL_DASHBOARD_ROWS = 24;

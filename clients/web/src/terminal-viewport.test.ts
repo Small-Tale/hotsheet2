@@ -10,11 +10,11 @@ import {
   TERMINAL_DASHBOARD_ROWS,
   TERMINAL_DEDICATED_SCROLLBACK,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
+  TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_MAGNIFIED_SCROLLBACK,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_PREVIEW_SCROLLBACK,
-  TERMINAL_RESIZE_SETTLE_MS,
   terminalBrowserWebSocketUrl,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
@@ -71,7 +71,7 @@ describe('terminal viewport protocol', () => {
     expect([0, 1, 2, 8].map(terminalReconnectDelay)).toEqual([250, 500, 1000, 8000]);
   });
   it('sends a final resize claim shortly after a drag settles', () => {
-    expect(TERMINAL_RESIZE_SETTLE_MS).toBe(120);
+    expect(TERMINAL_FOCUS_RETRY_MS).toBe(120);
   });
   it('uses one explicit drawer-resize completion event', () => {
     expect(TERMINAL_DRAWER_RESIZE_END_EVENT).toBe('hotsheet-terminal-drawer-resize-end');

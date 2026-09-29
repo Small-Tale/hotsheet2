@@ -55,6 +55,7 @@ vi.mock('@xterm/xterm', () => ({
 }));
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
+    fit = vi.fn();
     dispose() {}
     proposeDimensions() {
       return allocated.proposed;
@@ -67,7 +68,7 @@ vi.mock('@xterm/addon-webgl', () => ({
   },
 }));
 
-const resize: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
+const resize: Array<{ disconnect: ReturnType<typeof vi.fn>; callback: () => void }> = [],
   intersections: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
   sockets: Array<EventTarget & { close: ReturnType<typeof vi.fn>; readyState: number }> = [],
   scheduledTimeouts: Array<() => void> = [];
@@ -106,7 +107,7 @@ beforeEach(() => {
     'ResizeObserver',
     class {
       disconnect = vi.fn();
-      constructor() {
+      constructor(readonly callback: () => void) {
         resize.push(this);
       }
       observe() {
@@ -281,6 +282,51 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     size(120, 35);
     expect(terminal.resize).toHaveBeenCalledWith(120, 35);
     expect(terminal.registerMarker).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('terminal geometry settling (HS2-GSRZX6)', () => {
+  it('claims a stable layout once per frame, with no delayed re-settle that would resize the PTY again', () => {
+    const frames = new Map<number, () => void>(),
+      sent: string[] = [];
+    let nextFrame = 0;
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      nextFrame += 1;
+      frames.set(nextFrame, callback);
+      return nextFrame;
+    }) as never);
+    windowMock.cancelAnimationFrame.mockImplementation(((handle: number) => {
+      frames.delete(handle);
+    }) as never);
+    const { viewport } = element(),
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
+      socket = sockets[0] as unknown as EventTarget & { readyState: number; send: (value: string) => void },
+      terminal = allocated.terminals[0],
+      runFrames = () => {
+        const due = [...frames.values()];
+        frames.clear();
+        for (const frame of due) frame();
+      },
+      claims = () => sent.filter((value) => value.includes('"viewer"'));
+    socket.send = (value: string) => sent.push(value);
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    runFrames();
+    expect(claims()).toHaveLength(1);
+    expect(viewport.dataset.gridSize).toBe('80x24');
+    expect(scheduledTimeouts, 'geometry schedules no delayed second pass').toHaveLength(0);
+
+    // Burst of layout changes in one frame: one coalesced pass, one claim, at the new size.
+    allocated.proposed = { cols: 100, rows: 30 };
+    terminal.resize(100, 30);
+    resize[0].callback();
+    resize[0].callback();
+    runFrames();
+    expect(claims()).toHaveLength(2);
+    expect(JSON.parse(claims()[1]) as unknown).toMatchObject({ resize: { cols: 100, rows: 30 } });
+    expect(scheduledTimeouts).toHaveLength(0);
+    dispose();
+    windowMock.cancelAnimationFrame.mockReset();
   });
 });
 

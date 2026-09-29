@@ -2256,9 +2256,10 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   eligible viewport must remain eligible this long before its size is applied.
 - `SIZE_MIN_DELTA` (≥2 cols/rows) — ignore sub-threshold differences.
 - `SIZE_RESIZE_MIN_INTERVAL_MS` (~100 ms) — rate-limit actual PTY resizes to ten per
-  second. Browser viewports coalesce layout work to animation frames and send a final
-  claim 120 ms after resizing settles, so a suppressed in-window update cannot leave the
-  terminal at an obsolete size until its heartbeat.
+  second. A change inside the window is deferred, not dropped: the terminal decides again
+  when the window ends, so the last size of a burst lands without waiting for a viewer's
+  heartbeat (HS2-GSRZX6). Browser viewports coalesce layout work to one geometry claim per
+  animation frame, driven by their `ResizeObserver`, with no delayed re-settle claim.
 
 **Alternative policies (configurable per terminal), for when interaction-follows isn't
 wanted:**

@@ -228,7 +228,7 @@ impl OutputReplay {
 /// A running PTY terminal.
 pub struct Terminal {
     kind: TerminalKind,
-    master: Mutex<Box<dyn MasterPty + Send>>,
+    master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     writer: Mutex<Box<dyn Write + Send>>,
     output: Arc<OutputReplay>,
@@ -242,6 +242,33 @@ pub struct Terminal {
     size_tx: broadcast::Sender<Decision>,
     /// The session worker id its launcher assigned through [`WORKER_ID_ENV`], if any.
     worker_id: Option<String>,
+    /// A trailing re-decide is scheduled for a size change the min-interval deferred.
+    trailing_resize: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// Wall-clock milliseconds, the same clock the terminal's callers pass as `now_ms`.
+fn wall_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn resize_pty(
+    master: &Mutex<Box<dyn MasterPty + Send>>,
+    rows: u16,
+    cols: u16,
+) -> Result<(), TermError> {
+    master
+        .lock()
+        .map_err(|_| pty_err("master poisoned"))?
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(pty_err)
 }
 
 /// The launcher-assigned session worker id variable (mirrors `hotsheet_aitools::WORKER_ID_ENV`).
@@ -323,7 +350,7 @@ impl Terminal {
         sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
             kind: spec.kind,
-            master: Mutex::new(pair.master),
+            master: Arc::new(Mutex::new(pair.master)),
             child: Mutex::new(child),
             writer: Mutex::new(writer),
             output,
@@ -332,6 +359,7 @@ impl Terminal {
             sizer: Arc::new(Mutex::new(sizer)),
             size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
             worker_id,
+            trailing_resize: Arc::default(),
         })
     }
 
@@ -384,7 +412,54 @@ impl Terminal {
             let _ = self.resize(d.rows, d.cols);
             let _ = self.size_tx.send(d.clone());
         }
+        self.schedule_trailing_resize();
         decision
+    }
+
+    /// The trailing edge of the resize rate limit (HS2-GSRZX6): when the arbiter deferred a
+    /// change, decide again once the min-interval has passed so the last size of a burst lands
+    /// without waiting for a viewer's next claim. At most one trailing decide is pending.
+    fn schedule_trailing_resize(&self) {
+        let deferred = self.sizer.lock().ok().and_then(|s| s.deferred_until());
+        if deferred.is_none()
+            || self
+                .trailing_resize
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
+        }
+        let (sizer, master, size_tx, pending) = (
+            self.sizer.clone(),
+            self.master.clone(),
+            self.size_tx.clone(),
+            self.trailing_resize.clone(),
+        );
+        std::thread::spawn(move || {
+            let mut due = deferred;
+            loop {
+                while let Some(at) = due {
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        at.saturating_sub(wall_ms()),
+                    ));
+                    let (decision, next) = match sizer.lock() {
+                        Ok(mut s) => (s.decide(wall_ms()), s.deferred_until()),
+                        Err(_) => (None, None),
+                    };
+                    if let Some(d) = decision {
+                        let _ = resize_pty(&master, d.rows, d.cols);
+                        let _ = size_tx.send(d);
+                    }
+                    due = next;
+                }
+                pending.store(false, std::sync::atomic::Ordering::SeqCst);
+                // A claim deferred between the last decide and clearing the flag saw a pending
+                // trailing decide and did not schedule its own: pick it up here.
+                due = sizer.lock().ok().and_then(|s| s.deferred_until());
+                if due.is_none() || pending.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+            }
+        });
     }
 
     /// Atomically capture retained output and subscribe immediately after it. Every concurrently
@@ -403,16 +478,7 @@ impl Terminal {
 
     /// Resize the PTY (one size per terminal; multi-viewer arbitration is HS2-62).
     pub fn resize(&self, rows: u16, cols: u16) -> Result<(), TermError> {
-        self.master
-            .lock()
-            .map_err(|_| pty_err("master poisoned"))?
-            .resize(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(pty_err)
+        resize_pty(&self.master, rows, cols)
     }
 
     /// A snapshot of the scrollback ring (what a re-attaching viewer replays).
@@ -492,6 +558,47 @@ mod tests {
             ring.snapshot(),
             b"\x1b]8;;https://example.com\x1b\\link\x1b[0m"
         );
+    }
+
+    /// The last size of a burst inside the resize min-interval lands on its own, without a
+    /// viewer re-claiming it later (HS2-GSRZX6).
+    #[test]
+    fn a_deferred_size_change_applies_at_the_end_of_the_min_interval() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        let mut sizes = term.subscribe_size();
+        let claim = |cols, rows| ViewportClaim {
+            viewer_id: "v1".into(),
+            cols,
+            rows,
+            focus: true,
+            visible: true,
+            interacting: false,
+            activity_at_ms: wall_ms(),
+        };
+        assert!(term.claim_size(claim(100, 40), wall_ms()).is_some());
+        assert!(
+            term.claim_size(claim(110, 45), wall_ms()).is_none(),
+            "rate-limited"
+        );
+        assert!(
+            term.claim_size(claim(120, 50), wall_ms()).is_none(),
+            "rate-limited"
+        );
+        let first = sizes.blocking_recv().expect("the applied size");
+        assert_eq!((first.cols, first.rows), (100, 40));
+        let started = std::time::Instant::now();
+        let trailing = sizes.blocking_recv().expect("the trailing size");
+        assert_eq!(
+            (trailing.cols, trailing.rows),
+            (120, 50),
+            "the burst's last size"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        assert!(sizes.try_recv().is_err(), "one trailing resize, no repeats");
+        let _ = term.kill();
     }
 
     #[test]
