@@ -2687,14 +2687,16 @@ delegate(root, 'keydown', '[name="attachment-batch-label"]', (event, target) => 
   const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
   if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
   input.blur();
-  requestAnimationFrame(() => {
-    if (ids)
-      root
-        .querySelector<HTMLElement>(
-          `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-        )
-        ?.focus();
-  });
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (ids)
+        root
+          .querySelector<HTMLElement>(
+            `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+          )
+          ?.focus();
+    }),
+  );
 });
 delegate(root, 'change', '[name="attachment-batch-label"]', (_event, target) => {
   const batch = target.closest<HTMLElement>('[data-attachment-ids]');

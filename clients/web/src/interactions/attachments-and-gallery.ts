@@ -210,14 +210,16 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
     if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
     input.blur();
-    requestAnimationFrame(() => {
-      if (ids)
-        document.body
-          .querySelector<HTMLElement>(
-            `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-          )
-          ?.focus();
-    });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (ids)
+          document.body
+            .querySelector<HTMLElement>(
+              `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+            )
+            ?.focus();
+      }),
+    );
   });
   delegateCapture(document.body, 'blur', '[name="attachment-batch-label"]', (_event, target) => {
     delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;

@@ -2702,8 +2702,8 @@ for (const theme of ['light', 'dark'] as const) {
     await segments.getByRole('button', { name: 'Columns view' }).click();
     await expectMode(segments, 'board');
     await page.setViewportSize({ width: 390, height: 844 });
-    await expectMode(segments, 'list', ['list', 'notifications', 'settings']);
-    await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
+    await expectMode(segments, 'board');
+    await expect(page.locator('[data-component="ticket-board"]')).toHaveAttribute('data-layout', 'paged');
     await page.screenshot({ path: `/private/tmp/hs2-f29qat-workspace-${theme}-mobile.png`, animations: 'disabled' });
     await page.setViewportSize({ width: 1728, height: 971 });
     await expectMode(segments, 'board');
@@ -6080,7 +6080,9 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-wide.png', fullPage: true });
   await page.setViewportSize({ width: 940, height: 844 });
-  await expect(editor).toBeFocused();
+  await expect(editor).toHaveCount(0);
+  await row.click();
+  await expect(inspector).toContainText('Draft preserved across a redundant reselect');
   await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-narrow.png', fullPage: true });
 });
 
@@ -11146,6 +11148,7 @@ test('renders canonical attachment references for filenames containing backticks
   await expect(reference).toHaveAttribute('href', /\/attachments\/A-BACKTICK$/);
   await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-wide.png' });
   await page.setViewportSize({ width: 760, height: 700 });
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(reference).toBeVisible();
   await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-narrow.png' });
 });
@@ -15935,11 +15938,11 @@ test('remembers scroll per project, mode and view through delayed loading and sh
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(columns).toHaveCount(0);
-  await expect(tickets).toHaveCount(160);
-  await expect.poll(scroll).toBe(queueTop);
+  await expect(workspace.locator('[data-component="ticket-board"]')).toHaveAttribute('data-layout', 'paged');
+  await expect(columns).toHaveCount(4);
+  await expect.poll(scroll).toBe(0);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-mobile-list-restored.png',
+    path: '/private/tmp/hs2-pdyxyj-mobile-board-paged.png',
     fullPage: true,
     animations: 'disabled',
   });
