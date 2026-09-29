@@ -170,6 +170,15 @@ export class PermissionInbox {
     }
     return changed;
   }
+  discardProject(projectId: string) {
+    let changed = false;
+    for (const item of this.pendingItems.values())
+      if (item.projectId === projectId) {
+        this.pendingItems.delete(item.key);
+        changed = true;
+      }
+    return changed;
+  }
   ignore(key: string) {
     const item = this.pendingItems.get(key);
     if (item) this.pendingItems.set(key, { ...item, ignored: true });

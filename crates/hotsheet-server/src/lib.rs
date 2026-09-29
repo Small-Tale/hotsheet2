@@ -6620,18 +6620,22 @@ impl PermissionAskState {
             )
             .is_some()
         {
-            self.server.emit(ChangeEvent {
-                cursor: None,
-                store: self.project.clone(),
-                kind: "permission_resolved".into(),
-                id: id.to_string(),
-                slug: String::new(),
-                message: None,
-                activity: None,
-                assignment: None,
-                turn: None,
-            });
+            self.emit_removed(id);
         }
+    }
+
+    fn emit_removed(&self, id: u64) {
+        self.server.emit(ChangeEvent {
+            cursor: None,
+            store: self.project.clone(),
+            kind: "permission_resolved".into(),
+            id: id.to_string(),
+            slug: String::new(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
     }
 }
 
@@ -6668,6 +6672,7 @@ async fn ask_permission(
     let guard = PermissionAskGuard {
         state: cancellation.clone(),
     };
+    let expiry = cancellation.clone();
     // request_blocking_timeout blocks (Condvar); run it off the async runtime.
     let decision = tokio::task::spawn_blocking(move || {
         bridge.request_blocking_timeout_with_pending(
@@ -6681,6 +6686,7 @@ async fn ask_permission(
             hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
             hotsheet_aitools::PermissionDecision::Deny,
             |id| cancellation.mark_pending(id),
+            |id| expiry.emit_removed(id),
         )
     })
     .await

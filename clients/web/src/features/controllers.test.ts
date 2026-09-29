@@ -168,6 +168,88 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionCount('b')).toBe(0);
   });
 
+  it('removes stale permission popups when one project disconnects while reconciling another', async () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    owner.permissionInbox.reconcile(projects.value[0], [{ id: 1, connection: 'a', tool: 'Bash', action: 'old' }], []);
+    expect(owner.permissionPopupSurface()).toBeDefined();
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/a/permissions') return Response.json({ error: 'offline' }, { status: 503 });
+      if (url === '/api/b/permissions')
+        return json([{ id: 2, connection: 'b', tool: 'Edit', action: 'b.ts', project: '/work/b' }]);
+      return json([]);
+    });
+    await owner.refreshPermissions();
+    expect(owner.pendingPermissions().map((item) => item.key)).toEqual(['b:2']);
+    expect(owner.permissionPopupSurface()).toBeDefined();
+    expect(owner.projectPermissionHistory('a')).toEqual([]);
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/permissions')) return json([]);
+      return json([]);
+    });
+    await owner.refreshPermissions();
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    expect(owner.projectPermissionHistory('b')).toHaveLength(1);
+  });
+
+  it('repairs a missed permission event on the next scheduled reconciliation', async () => {
+    vi.stubGlobal('window', { setInterval });
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    let pending = [{ id: 1, connection: 'c', tool: 'Bash', action: 'old' }];
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return json(url.endsWith('/permissions') ? pending : []);
+    });
+    owner.startPermissionUpdates();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.pendingPermissions()).toHaveLength(1);
+    pending = [];
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(owner.pendingPermissions()).toEqual([]);
+    expect(owner.projectPermissionHistory('a')).toHaveLength(1);
+  });
+
+  it('reconciles again when a resolution arrives during an older permission fetch', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    const older = deferred<Response>();
+    let requests = 0;
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/connections')) return json([]);
+      requests += 1;
+      return requests === 1 ? older.promise : json([]);
+    });
+    const first = owner.refreshPermissions();
+    await owner.refreshPermissions();
+    older.resolve(json([{ id: 7, connection: 'c', tool: 'Bash', action: 'stale' }]));
+    await first;
+    await vi.waitFor(() => {
+      expect(requests).toBe(2);
+    });
+    await vi.waitFor(() => {
+      expect(owner.pendingPermissions()).toEqual([]);
+    });
+  });
+
+  it('does not restore a permission popup after its project closes during a fetch', async () => {
+    const projects = signal([project('a')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),
+      response = deferred<Response>();
+    owner.permissionInbox.reconcile(projects.value[0], [{ id: 1, connection: 'c', tool: 'Bash', action: 'old' }], []);
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return url.endsWith('/permissions') ? response.promise : json([]);
+    });
+    const refresh = owner.refreshPermissions();
+    projects.value = [];
+    response.resolve(json([{ id: 2, connection: 'c', tool: 'Edit', action: 'new' }]));
+    await refresh;
+    expect(owner.pendingPermissions()).toEqual([]);
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+  });
+
   it('resets gallery-owned playback, gestures, annotations and menu state before a second image edit', () => {
     const ticket: FullTicket = {
       id: 't',

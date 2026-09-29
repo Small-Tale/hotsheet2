@@ -558,8 +558,9 @@ hook is skipped until the user reviews its hash with `/hooks`. Hot Sheet does no
 `--dangerously-bypass-hook-trust`. Before trust, or whenever route-back is absent or
 unreachable, the adapter emits no decision and Codex presents its normal native prompt.
 An unanswered request that reaches the generic bridge uses its existing eventual safe-deny
-timeout; the generated provider hook timeout is slightly longer so that denial can be
-returned rather than the hook process being killed first. Allow and deny use Codex's native
+timeout and emits a removal event when it expires; the generated provider hook timeout is
+slightly longer so that denial can be returned rather than the hook process being killed
+first. Allow and deny use Codex's native
 result; retries remain independent.
 
 The client applies a user's decision optimistically: the popup and its clickable actions

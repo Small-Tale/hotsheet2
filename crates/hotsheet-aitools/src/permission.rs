@@ -388,6 +388,7 @@ impl SharedPermissionBridge {
             timeout,
             on_timeout,
             |_| {},
+            |_| {},
         )
     }
 
@@ -397,6 +398,7 @@ impl SharedPermissionBridge {
         timeout: Duration,
         on_timeout: Decision,
         on_pending: impl FnOnce(u64),
+        on_expired: impl FnOnce(u64),
     ) -> Decision {
         let PermissionAsk {
             project,
@@ -436,20 +438,22 @@ impl SharedPermissionBridge {
             if now >= deadline {
                 drop(results);
                 // Win the race to abandon it; if a human resolved it just now, honor that.
-                return match self
+                let expired = self
                     .inner
                     .lock()
                     .unwrap()
                     .resolve(id, on_timeout, Scope::Once)
-                {
-                    Some(_) => on_timeout,
-                    None => self
-                        .results
-                        .lock()
-                        .unwrap()
-                        .remove(&id)
-                        .unwrap_or(on_timeout),
-                };
+                    .is_some();
+                if expired {
+                    on_expired(id);
+                    return on_timeout;
+                }
+                return self
+                    .results
+                    .lock()
+                    .unwrap()
+                    .remove(&id)
+                    .unwrap_or(on_timeout);
             }
             let (guard, _) = self.cvar.wait_timeout(results, deadline - now).unwrap();
             results = guard;
@@ -597,6 +601,57 @@ mod tests {
         );
         assert_eq!(d, Decision::Deny, "timed out → the safe fallback");
         assert!(b.pending().is_empty(), "the timed-out request was cleared");
+    }
+
+    #[test]
+    fn expiry_callback_runs_only_when_an_unanswered_request_leaves_the_queue() {
+        use std::sync::{Arc, Mutex};
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        let expired = Arc::new(Mutex::new(Vec::new()));
+        let timeout_ids = expired.clone();
+        let decision = bridge.request_blocking_timeout_with_pending(
+            PermissionAsk {
+                project: "p".into(),
+                connection: "c".into(),
+                tool: "Bash".into(),
+                action: "timeout".into(),
+                agent: None,
+            },
+            Duration::from_millis(1),
+            Decision::Deny,
+            |_| {},
+            move |id| timeout_ids.lock().unwrap().push(id),
+        );
+        assert_eq!(decision, Decision::Deny);
+        assert_eq!(expired.lock().unwrap().len(), 1);
+        assert!(bridge.pending().is_empty());
+
+        let waiter_bridge = bridge.clone();
+        let human_ids = expired.clone();
+        let waiter = std::thread::spawn(move || {
+            waiter_bridge.request_blocking_timeout_with_pending(
+                PermissionAsk {
+                    project: "p".into(),
+                    connection: "c".into(),
+                    tool: "Bash".into(),
+                    action: "human".into(),
+                    agent: None,
+                },
+                Duration::from_secs(1),
+                Decision::Deny,
+                |_| {},
+                move |id| human_ids.lock().unwrap().push(id),
+            )
+        });
+        let id = loop {
+            if let Some(request) = bridge.pending().into_iter().next() {
+                break request.id;
+            }
+            std::thread::yield_now();
+        };
+        bridge.resolve(id, Decision::Allow, Scope::Once).unwrap();
+        assert_eq!(waiter.join().unwrap(), Decision::Allow);
+        assert_eq!(expired.lock().unwrap().len(), 1);
     }
 
     #[test]

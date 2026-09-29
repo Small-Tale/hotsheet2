@@ -50,7 +50,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const permissionAutomationByProject = signal<Record<string, PermissionAutomation>>({});
   const permissionResolutionErrors = signal<Record<string, string>>({});
   let permissionPolling = false,
+    permissionRefreshRequested = false,
     permissionTimerInterval: number | undefined,
+    permissionRefreshInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined;
   const pendingPermissions = () => permissionInbox.pending();
   const permissionHistory = () => permissionInbox.history();
@@ -67,13 +69,67 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     localStorage.setItem('hotsheet.permission-history', JSON.stringify(permissionInbox.history()));
   };
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function refreshPermissions(){if(permissionPolling)return;permissionPolling=true;try{let changed=false;await Promise.all(projects.value.map(async current=>{const client=new Api(current.apiPath);const [requests,connections]=await Promise.all([client.permissions(),client.activeToolConnections().catch(()=>[])]),owned=requests.filter(request=>permissionBelongsToProject(request,connections,projects.value,current.id));changed=permissionInbox.reconcile(current,owned,connections)||changed}));if(changed){updatePermissionTimer();permissionRevision.value+=1;persistPermissionHistory()}}catch{/* individual server disconnects remain represented by their last known requests */}finally{permissionPolling=false}}
+  async function refreshPermissions() {
+    if (permissionPolling) {
+      permissionRefreshRequested = true;
+      return;
+    }
+    permissionPolling = true;
+    try {
+      const results = await Promise.all(
+        projects.value.map(async (current) => {
+          const client = new Api(current.apiPath);
+          try {
+            const [requests, connections] = await Promise.all([
+              client.permissions(),
+              client.activeToolConnections().catch(() => []),
+            ]);
+            return {
+              current,
+              requests: requests.filter((request) =>
+                permissionBelongsToProject(request, connections, projects.value, current.id),
+              ),
+              connections,
+            };
+          } catch {
+            return { current };
+          }
+        }),
+      );
+      let changed = false;
+      for (const result of results) {
+        if (result.requests && projects.value.some((project) => project.id === result.current.id)) {
+          changed =
+            permissionInbox.reconcile(result.current, result.requests, result.connections, Date.now()) || changed;
+          continue;
+        }
+        const stale = permissionInbox.pending().filter((item) => item.projectId === result.current.id);
+        for (const item of stale) permissionTimer.remove(item.key);
+        if (stale.some((item) => item.key in permissionResolutionErrors.value))
+          permissionResolutionErrors.value = Object.fromEntries(
+            Object.entries(permissionResolutionErrors.value).filter(([key]) => !stale.some((item) => item.key === key)),
+          );
+        changed = permissionInbox.discardProject(result.current.id) || changed;
+      }
+      if (changed) {
+        updatePermissionTimer();
+        permissionRevision.value += 1;
+        persistPermissionHistory();
+      }
+    } finally {
+      permissionPolling = false;
+      if (permissionRefreshRequested) {
+        permissionRefreshRequested = false;
+        void refreshPermissions();
+      }
+    }
+  }
 
   function startPermissionUpdates() {
     if (permissionTimerInterval === undefined)
       permissionTimerInterval = window.setInterval(updatePermissionTimer, 1_000);
+    if (permissionRefreshInterval === undefined)
+      permissionRefreshInterval = window.setInterval(() => void refreshPermissions(), 10_000);
     void refreshPermissions();
   }
 

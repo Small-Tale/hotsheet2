@@ -31,6 +31,16 @@ describe('permission notifications', () => {
     expect(inbox.reconcile(project, [{ ...request, action: 'cargo test' }], [], 40)).toBe(true);
     expect(inbox.reconcile(project, [], [], 50)).toBe(true);
   });
+  it('hides a disconnected project without inventing a decision, then accepts its live refill', () => {
+    const inbox = new PermissionInbox();
+    inbox.reconcile(project, [request], [], 10);
+    expect(inbox.discardProject('p')).toBe(true);
+    expect(inbox.discardProject('p')).toBe(false);
+    expect(inbox.visible()).toBeUndefined();
+    expect(inbox.history(20)).toEqual([]);
+    inbox.reconcile(project, [request], [], 30);
+    expect(inbox.visible()).toMatchObject({ key: 'p:1', ignored: false });
+  });
   it('uses the asking agent from the hook without inventing a connection role', () => {
     const inbox = new PermissionInbox();
     const codex = { ...request, agent: 'codex', project: '/p' };

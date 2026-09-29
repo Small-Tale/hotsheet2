@@ -1717,8 +1717,11 @@ The local Allow/Deny path has the same immediate behavior: it optimistically rem
 request and records the presumed decision before awaiting transport. Only a communication
 failure rolls that history back and restores the popup with an inline error, so network
 latency never invites repeated clicks.
-There is no fixed-interval network polling. The main segmented control reflects only the
-selected project's pending count, while every project tab keeps its own badge; a non-modal
+Permission state also reconciles every ten seconds so a missed event cannot leave a stale
+popup on screen. If one project's permission endpoint is unavailable, its unverified
+prompt disappears without recording a decision; other projects still reconcile, and a
+live request returns when that endpoint recovers (HS2-4M6H99). The main segmented control
+reflects only the selected project's pending count, while every project tab keeps its own badge; a non-modal
 popup can still surface an urgent request even when another project is selected. When a
 phone-width project sidebar is open, the permission popup stays above the sidebar, fits
 inside the viewport, and keeps its identity, command, and decision controls reachable;

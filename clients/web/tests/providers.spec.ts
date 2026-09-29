@@ -8175,6 +8175,48 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.screenshot({ path: '/private/tmp/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
 });
 
+test('hides a permission popup when its server disconnects and restores only live requests', async ({ page }) => {
+  await mockProject(page);
+  let offline = false;
+  let pending = [{ id: 91, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+  await page.route('**/permissions', (route) =>
+    offline ? route.fulfill({ status: 503, json: { error: 'offline' } }) : route.fulfill({ json: pending }),
+  );
+  const polls: Array<import('@playwright/test').Route> = [];
+  let cursor = 0;
+  await page.route('**/ws/poll*', (route) => {
+    if (!new URL(route.request().url()).searchParams.has('since'))
+      return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toContainText('cargo test');
+  const announce = async (id: number) => {
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: {
+        cursor,
+        events: [{ store: '', kind: 'permission_asked', id: String(id), slug: 'Bash' }],
+        overflow: false,
+      },
+    });
+  };
+  offline = true;
+  await announce(91);
+  await expect(popup).toHaveCount(0);
+  offline = false;
+  pending = [{ id: 92, connection: 'codex-session', tool: 'Edit', action: 'live.ts', agent: 'codex' }];
+  await announce(92);
+  await expect(popup).toContainText('live.ts');
+  pending = [];
+  await announce(92);
+  await expect(popup).toHaveCount(0);
+});
+
 test('records externally resolved empty-action permissions in notification history', async ({ page }) => {
   await mockProject(page);
   let pending = [
