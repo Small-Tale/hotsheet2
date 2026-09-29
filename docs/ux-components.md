@@ -225,6 +225,9 @@ does not introduce polling or another network request.
     Its catalog-only example stack and fixture wrapper also opt into shrinking, keeping the
     embedded dialog and both heading toolbar actions inside the detail pane at 1280px and in the
     constrained layout without changing production popover sizing (HS2-MCHTAW).
+    At phone widths up to 600px, view navigation stacks above the independently scrollable
+    detail pane; repository metadata remains reachable by scrolling the navigation pane,
+    and the A/B comparison prompt and Open action remain visible at 390px (HS2-B2MD8Z).
 - `RepositorySetup` — **production built**: initialize a project folder's Git repository and
   optionally connect its origin without staging, committing, or pushing project files. Its major
   surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message
@@ -233,7 +236,8 @@ does not introduce polling or another network request.
   summary opens a repository-style master/detail dialog whose Docs, Tests, Source, and
   Other views reuse `ListHeader`, `ListItem`, middle-truncated paths, and Git-letter
   badges. Selecting a file opens its diff across the server-validated complete ticket
-  commit span. The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
+  commit span. It shares the phone-width stacked navigation and detail layout with
+  RepositorySummary (HS2-B2MD8Z). The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
 - `ListItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces. Its

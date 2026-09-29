@@ -2689,6 +2689,10 @@ copies relative or absolute paths, opens the file, or reveals it with host-speci
 Finder/File Explorer/file-manager wording. The server re-reads status and validates repository containment before any host
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
+At phone widths up to 600px, the shared repository status and change evidence dialogs
+stack the view navigation above the detail pane. The view rows stay visible first, while
+repository metadata remains reachable by scrolling the navigation pane. The detail pane
+keeps the comparison prompt, side selectors, and Open action usable at 390px (HS2-B2MD8Z).
 Value groups render each fact through the shared `ValueTableRow` contract, producing the
 canonical bordered surface, aligned label/value columns, and inset row separators while
 retaining a visible gap between repository identity and synchronization groups. Compare

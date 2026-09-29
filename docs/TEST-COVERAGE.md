@@ -314,6 +314,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | driven-approval-timeout-removal | docs/05-ai-tool-plugins.md | A driven approval timeout removes the request and immediately notifies clients once (HS2-J30B1J). | `crates/hotsheet-aitools/src/permission.rs # timeout and human-answer race` | `crates/hotsheet-server/tests/http.rs # timeout removal event and empty GET /permissions` | — | double-covered |
 
+| repository-phone-comparison-layout | docs/06-clients.md; docs/ux-components.md | Repository status and change evidence stack navigation above detail at phone width; all view rows, scrolled metadata, A/B prompt, and Open action stay reachable at 390px (HS2-B2MD8Z). | `clients/web/src/components/repository-status-popover.test.ts # responsive navigation and detail contract` | `clients/web/tests/providers.spec.ts # browses repository files and commits with host-native actions`; `clients/web/tests/providers.spec.ts # keeps change evidence interactive when launched from the modal ticket reader` | `HS2-B2MD8Z # wide and phone screenshots` | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

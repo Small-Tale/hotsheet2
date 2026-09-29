@@ -5543,11 +5543,34 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
   await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-wide.png' });
+  await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  const repositoryNavigation = popover.locator('.repository-status-popover__navigation'),
+    repositoryDetail = popover.locator('.repository-status-popover__detail');
+  await expect
+    .poll(async () => {
+      const [navigationBounds, detailBounds] = await Promise.all([
+        repositoryNavigation.boundingBox(),
+        repositoryDetail.boundingBox(),
+      ]);
+      return navigationBounds && detailBounds
+        ? Math.round(detailBounds.y - navigationBounds.y - navigationBounds.height)
+        : -1;
+    })
+    .toBeGreaterThanOrEqual(0);
+  await expect(repositoryNavigation.getByRole('button', { name: /Staged 2/ })).toBeInViewport({ ratio: 1 });
+  await expect(repositoryNavigation.getByRole('button', { name: /Commits 24/ })).toBeInViewport({ ratio: 1 });
+  await repositoryNavigation.getByText('Branch').scrollIntoViewIfNeeded();
+  await expect(repositoryNavigation.getByText('Branch')).toBeInViewport({ ratio: 1 });
+  expect(await repositoryNavigation.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await repositoryNavigation.evaluate((node) => {
+    node.scrollTop = 0;
+  });
   await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
-  await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-narrow.png' });
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(compareBanner).toContainText('Select the A side of the comparison.');
+  await expect(compareBanner.getByRole('button', { name: 'Open comparison in Glassbox' })).toBeInViewport({ ratio: 1 });
+  await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-phone.png' });
   await expect(popover.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
   await newest.locator('.ticket-code-review__commit-summary').click();
   await expect(newest.locator('.ticket-code-review__compare-label')).toHaveText('A');
@@ -5557,12 +5580,16 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(oldest.locator('.ticket-code-review__compare-label')).toHaveText('B');
   const openCompare = popover.getByRole('button', { name: 'Open comparison in Glassbox' });
   await expect(openCompare).toBeEnabled();
-  await openCompare.click();
+  await expect(openCompare).toBeInViewport({ ratio: 1 });
+  await openCompare.focus();
+  await expect(openCompare).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect
     .poll(() =>
       actions.some((action) => action.mode === 'compare' && action.from === 'bbb2222' && action.to === 'aaa1111'),
     )
     .toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toHaveCount(0);
@@ -5981,6 +6008,20 @@ test('keeps change evidence interactive when launched from the modal ticket read
     )
     .toBe(true);
   await page.screenshot({ path: '/private/tmp/hs2-6ev2es-evidence-over-reader.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const navigation = evidenceDialog.locator('.repository-status-popover__navigation'),
+    detail = evidenceDialog.locator('.repository-status-popover__detail');
+  await expect
+    .poll(async () => {
+      const [navigationBounds, detailBounds] = await Promise.all([navigation.boundingBox(), detail.boundingBox()]);
+      return navigationBounds && detailBounds
+        ? Math.round(detailBounds.y - navigationBounds.y - navigationBounds.height)
+        : -1;
+    })
+    .toBeGreaterThanOrEqual(0);
+  await expect(navigation.getByRole('button', { name: /Tests 1/ })).toBeInViewport({ ratio: 1 });
+  await expect(testFile).toBeInViewport({ ratio: 1 });
+  await evidenceDialog.screenshot({ path: '/private/tmp/hs2-b2md8z-evidence-phone.png' });
 });
 
 test('owns and restores sidebar and reader tabs independently', async ({ page }) => {

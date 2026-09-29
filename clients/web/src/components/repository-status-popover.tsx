@@ -224,30 +224,32 @@ export function RepositoryStatusPopover({
       {status && !recoveryStep && (
         <div class="repository-status-popover__layout">
           <aside class="repository-status-popover__navigation">
-            <ValueTable className="repository-status-popover__values" label="Repository identity">
-              <ValueTableRow label="Branch" value={branch} />
-              <ValueTableRow label="Upstream" value={upstream} />
-            </ValueTable>
-            <ValueTable className="repository-status-popover__values" label="Repository synchronization">
-              <ValueTableRow
-                label="Ahead"
-                value={
-                  <>
-                    <LucideIcon icon={ArrowUp} name="arrow-up" />
-                    {status.ahead}
-                  </>
-                }
-              />
-              <ValueTableRow
-                label="Behind"
-                value={
-                  <>
-                    <LucideIcon icon={ArrowDown} name="arrow-down" />
-                    {status.behind}
-                  </>
-                }
-              />
-            </ValueTable>
+            <div class="repository-status-popover__metadata">
+              <ValueTable className="repository-status-popover__values" label="Repository identity">
+                <ValueTableRow label="Branch" value={branch} />
+                <ValueTableRow label="Upstream" value={upstream} />
+              </ValueTable>
+              <ValueTable className="repository-status-popover__values" label="Repository synchronization">
+                <ValueTableRow
+                  label="Ahead"
+                  value={
+                    <>
+                      <LucideIcon icon={ArrowUp} name="arrow-up" />
+                      {status.ahead}
+                    </>
+                  }
+                />
+                <ValueTableRow
+                  label="Behind"
+                  value={
+                    <>
+                      <LucideIcon icon={ArrowDown} name="arrow-down" />
+                      {status.behind}
+                    </>
+                  }
+                />
+              </ValueTable>
+            </div>
             <nav aria-label="Repository views">
               <ListHeader label="Views" />
               {viewDefinitions.map((item) => (

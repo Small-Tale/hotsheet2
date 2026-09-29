@@ -252,3 +252,21 @@
     padding: var(--kui-space-m);
   }
 }
+@media (max-width: remify(600px)) {
+  .repository-status-popover__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 39%) minmax(0, 1fr);
+  }
+  .repository-status-popover__navigation {
+    display: flex;
+    flex-direction: column;
+    border-right: 0;
+    border-bottom: 1px solid var(--wa-color-surface-border);
+  }
+  .repository-status-popover__navigation > :is(nav, .repository-status-popover__metadata) {
+    flex: none;
+  }
+  .repository-status-popover__navigation nav {
+    order: -1;
+  }
+}

@@ -52,8 +52,13 @@ describe('RepositoryStatusPopover', () => {
     const markup = String(RepositoryStatusPopover({ status: status() }));
     const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
     expect(markup).toContain('<aside class="repository-status-popover__navigation">');
+    expect(markup).toContain('<div class="repository-status-popover__metadata">');
     expect(css).toMatch(/\.repository-status-popover__navigation \{[^}]*overflow: auto/);
     expect(css).not.toMatch(/\.repository-status-popover__layout > aside/);
+    expect(markup).toContain('<main class="repository-status-popover__detail" aria-live="polite">');
+    expect(css).toMatch(
+      /@media \(max-width: remify\(600px\)\)[\s\S]*grid-template-rows: minmax\(0, 39%\) minmax\(0, 1fr\)/,
+    );
   });
 
   it('classifies every repository state without hiding orthogonal counts', () => {
@@ -235,7 +240,7 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).not.toContain('cancel-repository-comparison');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatchSource(/__compare-banner \{[^}]*grid-template-columns: auto minmax\(0,1fr\) auto/);
-    expect(css).toMatch(/__compare-banner \[data-component='toolbar-control-group'\] \{[^}]*justify-self: start/);
+    expect(css).toMatch(/__compare-toolbar \{[^}]*justify-self: start/);
     expect(css).toMatch(/__compare-open \{[^}]*grid-column: 3/);
   });
 
