@@ -933,7 +933,10 @@ fn validate_number(native_id: &str) -> Result<(), ProviderError> {
     native_id
         .parse::<u64>()
         .map(|_| ())
-        .map_err(|_| ProviderError::InvalidNativeId(native_id.into()))
+        .map_err(|_| ProviderError::InvalidNativeId {
+            provider: "github",
+            id: native_id.into(),
+        })
 }
 
 fn parse_priority(value: &str) -> Option<Priority> {
@@ -1054,6 +1057,25 @@ fn github_state_reason(reason: CloseReason) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_non_numeric_id_is_rejected_as_a_github_id_shape_mismatch() {
+        // HS2-GKERTK: the error names the provider that rejected the id, so a git ULID probed
+        // against a linked GitHub source is not reported as a git-provider failure.
+        let error = validate_number("01M3NAHJV0JM0QR0FHWYW6H1B2").unwrap_err();
+        assert!(matches!(
+            error,
+            ProviderError::InvalidNativeId {
+                provider: "github",
+                ..
+            }
+        ));
+        assert_eq!(
+            error.to_string(),
+            "invalid native id '01M3NAHJV0JM0QR0FHWYW6H1B2' for the github provider"
+        );
+        assert!(validate_number("42").is_ok());
+    }
 
     #[test]
     fn close_reasons_map_to_githubs_two_state_reasons() {

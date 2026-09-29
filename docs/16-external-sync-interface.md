@@ -151,6 +151,11 @@ Queries can target one connection or aggregate all connections in a project. The
 fans out, normalizes, applies capability-aware filters, and returns a stable page with
 qualified ids. Mutations always route to exactly one connection. New tickets use the
 explicit connection or the project's configured default; ambiguity is an error.
+An unqualified id is probed against every linked source. A source whose native-id shape
+cannot represent the id (a git ULID sent to GitHub, which numbers its issues) simply does not
+hold it; a source that fails to answer (auth, rate limit, network) only surfaces its error
+when no other source owns the id. Id-shape errors name the provider that raised them
+(HS2-GKERTK).
 
 Cross-provider operations are explicit compositions, not background synchronization
 and not assumed atomic transactions. Copying a ticket asks the destination provider

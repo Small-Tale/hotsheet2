@@ -743,7 +743,10 @@ fn validate_iid(value: &str) -> Result<(), ProviderError> {
     value
         .parse::<u64>()
         .map(|_| ())
-        .map_err(|_| ProviderError::InvalidNativeId(value.into()))
+        .map_err(|_| ProviderError::InvalidNativeId {
+            provider: "gitlab",
+            id: value.into(),
+        })
 }
 
 fn encode_path(value: &str) -> String {

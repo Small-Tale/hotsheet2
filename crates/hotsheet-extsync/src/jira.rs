@@ -770,7 +770,10 @@ fn validate_key(value: &str) -> Result<(), ProviderError> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        Err(ProviderError::InvalidNativeId(value.into()))
+        Err(ProviderError::InvalidNativeId {
+            provider: "jira",
+            id: value.into(),
+        })
     } else {
         Ok(())
     }

@@ -676,8 +676,10 @@ pub enum ProviderError {
     Store(#[from] StoreError),
     #[error(transparent)]
     Operation(#[from] OpError),
-    #[error("invalid native id '{0}' for the git provider")]
-    InvalidNativeId(String),
+    /// `id` does not have the shape `provider` uses for native ids (e.g. a git ULID sent to
+    /// GitHub, which numbers its issues), so it cannot name a ticket in that provider.
+    #[error("invalid native id '{id}' for the {provider} provider")]
+    InvalidNativeId { provider: &'static str, id: String },
 }
 
 /// Synchronous domain boundary; async network adapters are wrapped at the host edge.
@@ -1220,8 +1222,10 @@ impl TicketProvider for GitProvider {
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
-        let note_id = Ulid::from_string(note_id)
-            .map_err(|_| ProviderError::InvalidNativeId(note_id.into()))?;
+        let note_id = Ulid::from_string(note_id).map_err(|_| ProviderError::InvalidNativeId {
+            provider: "git",
+            id: note_id.into(),
+        })?;
         let updated = ops::edit_note(&self.store, &ticket.id, &note_id, now, text)?;
         Ok(ApiTicket::from_provider(
             &updated,
@@ -1237,8 +1241,10 @@ impl TicketProvider for GitProvider {
         now: Timestamp,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
-        let note_id = Ulid::from_string(note_id)
-            .map_err(|_| ProviderError::InvalidNativeId(note_id.into()))?;
+        let note_id = Ulid::from_string(note_id).map_err(|_| ProviderError::InvalidNativeId {
+            provider: "git",
+            id: note_id.into(),
+        })?;
         let updated = ops::delete_note(&self.store, &ticket.id, &note_id, now)?;
         Ok(ApiTicket::from_provider(
             &updated,
@@ -1253,8 +1259,11 @@ impl TicketProvider for GitProvider {
         attachment_id: &str,
     ) -> Result<Vec<u8>, ProviderError> {
         let ticket = self.ticket(native_id)?;
-        let attachment_id = Ulid::from_string(attachment_id)
-            .map_err(|_| ProviderError::InvalidNativeId(attachment_id.into()))?;
+        let attachment_id =
+            Ulid::from_string(attachment_id).map_err(|_| ProviderError::InvalidNativeId {
+                provider: "git",
+                id: attachment_id.into(),
+            })?;
         let attachment = ticket
             .attachments
             .iter()
@@ -1279,8 +1288,11 @@ impl TicketProvider for GitProvider {
         bytes: Vec<u8>,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
-        let attachment_id = Ulid::from_string(&attachment.id)
-            .map_err(|_| ProviderError::InvalidNativeId(attachment.id))?;
+        let attachment_id =
+            Ulid::from_string(&attachment.id).map_err(|_| ProviderError::InvalidNativeId {
+                provider: "git",
+                id: attachment.id,
+            })?;
         let (updated, _) = self.store.write_attachment_with_metadata(
             &ticket.id,
             attachment_id,

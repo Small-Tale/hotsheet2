@@ -4409,6 +4409,7 @@ fn checkout_ticket_owner(
         }
     }
     let mut found = Vec::new();
+    let mut unavailable = None;
     for source in checkout.sources {
         let exists = if source.provider == "git" {
             state
@@ -4419,10 +4420,13 @@ fn checkout_ticket_owner(
                 .flatten()
                 .is_some()
         } else {
-            match provider_for(state, &source.connection_id)?.get(id) {
-                Ok(_) => true,
-                Err(hotsheet_ticketing::ProviderError::NotFound { .. }) => false,
-                Err(error) => return Err(provider_transfer_error(error)),
+            match probe_provider_source(state, &source.connection_id, id) {
+                Ok(ticket) => ticket.is_some(),
+                // A source that could not answer only matters when no other source owns the id.
+                Err(error) => {
+                    unavailable.get_or_insert(error);
+                    false
+                }
             }
         };
         if exists {
@@ -4431,7 +4435,7 @@ fn checkout_ticket_owner(
     }
     match found.as_slice() {
         [source] => Ok((source.clone(), id.to_string())),
-        [] => Err(ApiError::not_found(id)),
+        [] => Err(unavailable.unwrap_or_else(|| ApiError::not_found(id))),
         _ => Err(ApiError::new(
             StatusCode::CONFLICT,
             format!("ticket {id} is ambiguous across checkout sources; use its qualified id"),
@@ -4530,8 +4534,17 @@ fn resolve_checkout_ticket(
     }
     let (checkout, _) = checkout_settings(state, reference)?;
     let mut found = None;
+    let mut unavailable = None;
     for source in &checkout.sources {
-        if let Some(ticket) = read_checkout_ticket_source(state, source, id, false)? {
+        // A source that could not answer only matters when no other source owns the id.
+        let ticket = match read_checkout_ticket_source(state, source, id, false) {
+            Ok(ticket) => ticket,
+            Err(error) => {
+                unavailable.get_or_insert(error);
+                None
+            }
+        };
+        if let Some(ticket) = ticket {
             if found.is_some() {
                 return Err(ApiError::new(
                     StatusCode::CONFLICT,
@@ -4543,7 +4556,8 @@ fn resolve_checkout_ticket(
             found = Some((source.clone(), ticket));
         }
     }
-    let (source, ticket) = found.ok_or_else(|| ApiError::not_found(id))?;
+    let (source, ticket) =
+        found.ok_or_else(|| unavailable.unwrap_or_else(|| ApiError::not_found(id)))?;
     Ok((checkout, source, ticket))
 }
 
@@ -4573,12 +4587,28 @@ fn read_checkout_ticket_source(
             store,
         }));
     }
-    match provider_for(state, &source.connection_id)?.get(id) {
-        Ok(ticket) => Ok(Some(ResolvedTicket {
+    Ok(
+        probe_provider_source(state, &source.connection_id, id)?.map(|ticket| ResolvedTicket {
             store: source.connection_id.clone(),
             ticket,
-        })),
-        Err(hotsheet_ticketing::ProviderError::NotFound { .. }) => Ok(None),
+        }),
+    )
+}
+
+/// Read `id` from an external provider source. `None` when the source does not hold it,
+/// including an id the provider cannot represent: a git ULID is never a GitHub issue number,
+/// so probing every linked source for an unqualified id must not fail on that (HS2-GKERTK).
+fn probe_provider_source(
+    state: &AppState,
+    connection_id: &str,
+    id: &str,
+) -> Result<Option<ApiTicket>, ApiError> {
+    match provider_for(state, connection_id)?.get(id) {
+        Ok(ticket) => Ok(Some(ticket)),
+        Err(
+            hotsheet_ticketing::ProviderError::NotFound { .. }
+            | hotsheet_ticketing::ProviderError::InvalidNativeId { .. },
+        ) => Ok(None),
         Err(error) => Err(provider_transfer_error(error)),
     }
 }

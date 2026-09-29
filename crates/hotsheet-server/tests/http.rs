@@ -10619,6 +10619,109 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
 }
 
 #[tokio::test]
+async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
+    // HS2-GKERTK: probing every linked source for a bare git ULID asked GitHub too, whose
+    // "not an issue number" rejection aborted the lookup with a 409 toast.
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(
+        workspace.path().join("mixed.hs2"),
+        &StoreMetadata::new("MIX"),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(vec![github_response(500, serde_json::json!({}))].into()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            transport.clone(),
+        ))));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Local ticket"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let linked = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/sources/github-mixed"),
+            Some(r#"{"provider":"github","locator":"acme/repo","make_default":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(linked.status(), StatusCode::OK);
+
+    let read = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/tickets/{id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(body_json(read).await["title"], "Local ticket");
+    let updated = router
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/{checkout_id}/tickets/{id}"),
+            Some(r#"{"title":"Still local"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    assert_eq!(body_json(updated).await["title"], "Still local");
+    assert_eq!(
+        transport.responses.lock().unwrap().len(),
+        1,
+        "a git ULID must never reach the GitHub API"
+    );
+
+    // An id no source holds still reports the source that could not answer, not a bare 404.
+    let unreachable = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/tickets/11"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_ne!(unreachable.status(), StatusCode::OK);
+    assert_ne!(unreachable.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn checkout_pages_globally_merge_local_and_provider_sources_across_continuations() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();
