@@ -37,6 +37,8 @@ export interface TicketSourceSetupDialogProps {
   providerError?: string;
   /** The edited connection awaiting confirmation of its permanent removal (HS2-724S9N). */
   removingProviderId?: string;
+  /** Demo-only state picker, rendered within the modal so its controls remain reachable. */
+  previewScenario?: string;
 }
 
 export function TicketSourceSetupDialog({
@@ -53,6 +55,7 @@ export function TicketSourceSetupDialog({
   providerBusy = false,
   providerError = '',
   removingProviderId,
+  previewScenario,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
     disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" />,
@@ -164,9 +167,14 @@ export function TicketSourceSetupDialog({
       class="ticket-source-setup ticket-source-setup__screen ticket-source-setup__complete ticket-source-setup__remote-form"
       data-action="connect-ticket-store-remote"
     >
-      <button class="provider-setup-form__back" type="button" data-action="back-ticket-store-remote">
-        <LucideIcon icon={ChevronLeft} name="chevron-left" /> Ticket source types
-      </button>
+      <wa-button
+        class="provider-setup-form__back"
+        appearance="plain"
+        type="button"
+        data-action="back-ticket-store-remote"
+      >
+        <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
+      </wa-button>
       <div class="ticket-source-setup__remote">
         <LucideIcon icon={GitBranch} name="git-branch" />
         <div>
@@ -294,6 +302,7 @@ export function TicketSourceSetupDialog({
       data-component="ticket-source-setup-dialog"
       data-ticket-source-setup-dialog
       data-navigation={navigation}
+      data-preview-scenario={previewScenario}
       label={detailLabel}
       with-footer
       open={Boolean(target)}
@@ -308,6 +317,29 @@ export function TicketSourceSetupDialog({
         a={rootLabel as never}
         b={detailLabel as never}
       />
+      {previewScenario && (
+        <wa-select
+          data-demo-ticket-source-scenario
+          name="scenario"
+          label="Preview dialog state"
+          value={previewScenario}
+        >
+          {(
+            [
+              ['root', 'Choose source'],
+              ['signed-out', 'GitHub signed out'],
+              ['waiting', 'Waiting for GitHub'],
+              ['authorized', 'GitHub authorized'],
+              ['editing', 'Editing connection'],
+              ['removing', 'Confirm removal'],
+              ['busy', 'Saving connection'],
+              ['remote', 'Back up repository'],
+            ] as const
+          ).map(([value, label]) => (
+            <wa-option value={value}>{label}</wa-option>
+          ))}
+        </wa-select>
+      )}
       <ContentTransition
         active={active}
         style={navigationStyle}

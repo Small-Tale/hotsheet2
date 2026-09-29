@@ -714,6 +714,14 @@ and identity-less legacy entries remain conservatively blocking.
   configuration screen within that dialog. Its shared multiline menu rows use intrinsic
   height, so wrapped paths and descriptions retain vertical padding and cannot cross the
   inset separators; shared value-table rows likewise reserve block padding when values wrap.
+  The GitHub configuration screen groups sign-in in a Kerf sunken panel, uses shared buttons
+  and labeled Web Awesome fields (also used by GitLab and Jira), and places its back action
+  inside the dialog content.
+  Repository search retains a native datalist for browser filtering. The default-source
+  checkbox carries its help text below the label. Removal confirmation puts its explanation
+  above the footer actions at narrow and wide widths. The UX demo's selector sits inside
+  the open modal and previews source choice, sign-in, authorized, editing, removal, busy,
+  and remote-backup states (HS2-7FYYN9).
   Multiple connections of one provider type are
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.

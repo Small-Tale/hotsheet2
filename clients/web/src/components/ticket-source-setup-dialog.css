@@ -22,22 +22,19 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   justify-content: flex-end;
 }
 .ticket-source-setup__removal {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
+  display: grid;
+  width: 100%;
   align-items: center;
-  justify-content: flex-end;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--wa-space-xs);
 }
 /* Destructive and availability actions group at the start; Cancel/Save stay at the end. */
 .ticket-source-setup__toggle,
-.ticket-source-setup__removal-prompt {
+.ticket-source-setup__remove {
   margin-inline-end: auto;
 }
 .ticket-source-setup__removal-prompt {
-  flex: 1 1 remify(240px);
-}
-.ticket-source-setup__removal-prompt {
+  grid-column: 1 / -1;
   margin-block: 0;
   color: var(--wa-color-neutral-on-quiet);
   line-height: 1.4;

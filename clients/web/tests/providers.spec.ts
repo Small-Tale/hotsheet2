@@ -1958,7 +1958,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByLabel('Connection ID')).toHaveCount(0);
   await expect(providerForm.getByText('Use a credential reference instead')).toHaveCount(0);
   await expect(providerForm.getByLabel(/Credential reference/)).toHaveCount(0);
-  const creates: Array<{ id: string; name: string }> = [];
+  const creates: Array<{ id: string; name: string; default: boolean }> = [];
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
       creates.push(request.postDataJSON());
@@ -1985,7 +1985,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await repository.fill('small-tale/hotsheet2');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(1);
-  expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues' });
+  expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues', default: true });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
@@ -2004,13 +2004,19 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
-  await providerForm.getByLabel('Use as the default ticket source').uncheck();
+  await providerForm.locator('wa-checkbox[name="make-default"] label[part~="base"]').click();
+  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
   await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect.poll(() => creates.length).toBe(2);
+  expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', default: false });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
   await page.getByRole('button', { name: 'Edit GitHub Issues' }).click();
-  await expect(providerForm.locator('input[name="connection-locator"]')).toHaveValue('small-tale/hotsheet2');
+  await expect(providerForm.locator('wa-input[name="connection-locator"]')).toHaveJSProperty(
+    'value',
+    'small-tale/hotsheet2',
+  );
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect(setup).toHaveJSProperty('open', false);

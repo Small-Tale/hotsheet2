@@ -2,6 +2,36 @@ import { expect, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
+test('previews every ticket-source dialog state at wide and narrow widths (HS2-7FYYN9)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=ticket-source-setup-dialog&dev-review=false');
+    const dialog = page.locator('[data-ticket-source-setup-dialog]'),
+      scenario = dialog.locator('[data-demo-ticket-source-scenario]');
+    for (const [value, expected] of [
+      ['root', 'Set up ticket support'],
+      ['signed-out', 'Sign in with GitHub'],
+      ['waiting', 'ABCD-EFGH'],
+      ['authorized', 'Signed in to GitHub.'],
+      ['editing', 'Save changes'],
+      ['removing', 'Remove Product issues?'],
+      ['busy', 'Saving…'],
+      ['remote', 'Back up this ticket repository'],
+    ] as const) {
+      await scenario.evaluate((node: HTMLElement & { value: string }, selected) => {
+        node.value = selected;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+      await expect(dialog).toHaveAttribute('data-preview-scenario', value);
+      await expect(dialog).toContainText(expected);
+      await dialog.evaluate(async (node) => {
+        await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+      });
+      await page.screenshot({ path: `/private/tmp/hs2-7fyyn9-${value}-${width}.png`, fullPage: true });
+    }
+  }
+});
+
 test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', async ({ page }) => {
   test.setTimeout(90_000);
   for (const width of [1280, 390]) {

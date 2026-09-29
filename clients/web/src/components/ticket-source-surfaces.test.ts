@@ -33,7 +33,9 @@ describe('ticket source surfaces', () => {
       String(ProviderSetupForm({ kind: 'github', auth }));
     const idle = form();
     expect(idle).toContain('data-action="start-github-sign-in"');
-    expect(idle).toContain('Sign in with GitHub</button>');
+    expect(idle).toContain('Sign in with GitHub</wa-button>');
+    expect(idle).toContain('data-component="sunken-panel"');
+    expect(idle).toContain('appearance="accent"');
     expect(idle).toContain('data-action="choose-github-enterprise"');
     expect(idle).toContain('copies your one-time code');
     expect(idle).not.toContain('data-component="grid"');
@@ -42,6 +44,7 @@ describe('ticket source surfaces', () => {
     const enterprise = form({ ...blank, state: 'idle', enterprise: true, enterpriseUrl: 'https://ghe.test' });
     expect(enterprise).toContain('GitHub Enterprise server URL');
     expect(enterprise).toContain('name="github-enterprise-url"');
+    expect(enterprise).toContain('label="GitHub Enterprise server URL"');
     expect(enterprise).toContain('value="https://ghe.test"');
     expect(enterprise).toContain('Sign in with GitHub Enterprise');
     expect(enterprise).toContain('data-action="choose-github-dotcom"');
@@ -224,6 +227,8 @@ describe('ticket source surfaces', () => {
     );
     expect(signedIn).toContain('Signed in to GitHub.');
     expect(signedIn).toContain('data-component="grid"');
+    expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
+    expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
     expect(signedIn).toContain('data-columns="2"');
     expect(signedIn).toContain('--_kui-grid-gap:var(--kui-space-m)');
     expect(signedIn).not.toContain('name="api-base"');

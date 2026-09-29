@@ -331,6 +331,9 @@ const defaultDemo = 'tag-chip';
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
+type TicketSourceScenario =
+  'root' | 'signed-out' | 'waiting' | 'authorized' | 'editing' | 'removing' | 'busy' | 'remote';
+const ticketSourceScenario = signal<TicketSourceScenario>('root');
 const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
 const catalogTheme = signal<'light' | 'dark'>(
   localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light',
@@ -635,14 +638,51 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'manual-model-dialog')
     return <ManualModelDialog state={{ target: 'settings', providerName: 'Codex', value: 'gpt-5.6-sol-preview' }} />;
   if (item.id === 'keyboard-settings') return <KeyboardSettings overrides={{}} apple={true} />;
-  if (item.id === 'ticket-source-setup-dialog')
+  if (item.id === 'ticket-source-setup-dialog') {
+    const scenario = ticketSourceScenario.value,
+      editing = scenario === 'editing' || scenario === 'removing' || scenario === 'busy',
+      connection = {
+        id: 'github-main',
+        provider: 'github',
+        locator: 'small-tale/hotsheet2',
+        name: 'Product issues',
+        default: true,
+        settings: {},
+      };
     return (
       <TicketSourceSetupDialog
         project={{ root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
-        providerConnections={[]}
+        providerKind={scenario === 'root' || scenario === 'remote' ? undefined : 'github'}
+        providerConnections={editing ? [connection] : []}
+        editingProviderId={editing ? connection.id : undefined}
+        removingProviderId={scenario === 'removing' ? connection.id : undefined}
+        providerBusy={scenario === 'busy'}
+        githubAuth={
+          scenario === 'waiting'
+            ? {
+                session: 'demo',
+                userCode: 'ABCD-EFGH',
+                verificationUri: 'https://github.com/login/device',
+                state: 'waiting',
+                copied: true,
+              }
+            : scenario === 'authorized'
+              ? {
+                  session: 'demo',
+                  userCode: 'ABCD-EFGH',
+                  verificationUri: 'https://github.com/login/device',
+                  state: 'authorized',
+                  repositories: ['small-tale/hotsheet2'],
+                  installations: [{ account: 'small-tale', selection: 'all' }],
+                }
+              : undefined
+        }
+        createdGitTicketStore={scenario === 'remote' ? '/work/demo.hs2' : undefined}
+        previewScenario={scenario}
         navigation="none"
       />
     );
+  }
   if (item.id === 'provider-setup-form')
     return (
       <ProviderSetupForm
@@ -1816,6 +1856,9 @@ delegate(root, 'change', '[data-settings="repository-status-popover"] [name="sce
 });
 delegate(root, 'change', '[data-settings="connection-details-dialog"] [name="scenario"]', (_event, target) => {
   connectionDetailsScenario.value = (target as FormControl).value as typeof connectionDetailsScenario.value;
+});
+delegate(root, 'change', '[data-demo-ticket-source-scenario]', (_event, target) => {
+  ticketSourceScenario.value = (target as FormControl).value as TicketSourceScenario;
 });
 delegate(root, 'change', '[data-settings="permission-request"] [name]', (_event, target) => {
   const control = target as FormControl;

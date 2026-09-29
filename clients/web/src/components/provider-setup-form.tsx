@@ -1,8 +1,9 @@
 import './provider-setup-form.css';
-import './flow-back-button.css';
+import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
 import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { ChevronLeft, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderConnection } from '../api';
@@ -73,17 +74,13 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
       data-component="provider-setup-form"
       data-action="save-provider-connection"
     >
-      <button class="provider-setup-form__back" type="button" data-action="back-provider-kind">
-        <LucideIcon icon={ChevronLeft} name="chevron-left" /> Ticket source types
-      </button>
+      <wa-button class="provider-setup-form__back" appearance="plain" type="button" data-action="back-provider-kind">
+        <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
+      </wa-button>
       {/* Buttons carry `data-key` so a re-render never recycles the clicked control into a different
           action while that click is still dispatching (for example Enterprise ↔ GitHub.com; KF-HK7WE8). */}
       {kind === 'github' && !editing && (
-        <section
-          class="provider-setup-form__github-auth"
-          aria-label="GitHub sign in"
-          data-state={auth?.state ?? 'idle'}
-        >
+        <SunkenPanel className="provider-setup-form__github-auth" ariaLabel="GitHub sign in">
           {auth?.state === 'waiting' ? (
             <>
               <p>
@@ -94,15 +91,25 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
                 {auth.userCode}
               </output>
               <div class="provider-setup-form__auth-actions">
-                <button type="button" data-action="copy-github-code" data-key="copy-github-code">
-                  <LucideIcon icon={Copy} name="copy" /> {auth.copied ? 'Copy again' : 'Copy code'}
-                </button>
-                <button type="button" data-action="reopen-github-sign-in" data-key="reopen-github-sign-in">
-                  <LucideIcon icon={ExternalLink} name="external-link" /> Reopen GitHub
-                </button>
-                <button type="button" data-action="cancel-github-sign-in" data-key="cancel-github-sign-in">
+                <wa-button appearance="accent" type="button" data-action="copy-github-code" data-key="copy-github-code">
+                  <LucideIcon slot="start" icon={Copy} name="copy" /> {auth.copied ? 'Copy again' : 'Copy code'}
+                </wa-button>
+                <wa-button
+                  appearance="plain"
+                  type="button"
+                  data-action="reopen-github-sign-in"
+                  data-key="reopen-github-sign-in"
+                >
+                  <LucideIcon slot="start" icon={ExternalLink} name="external-link" /> Reopen GitHub
+                </wa-button>
+                <wa-button
+                  appearance="plain"
+                  type="button"
+                  data-action="cancel-github-sign-in"
+                  data-key="cancel-github-sign-in"
+                >
                   Cancel
-                </button>
+                </wa-button>
               </div>
               <p class="provider-setup-form__auth-waiting" role="status">
                 Waiting for GitHub…
@@ -115,24 +122,33 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
             </p>
           ) : auth?.enterprise ? (
             <>
-              <label>
-                GitHub Enterprise server URL
-                <input
-                  name="github-enterprise-url"
-                  type="url"
-                  required
-                  placeholder="https://github.example.com"
-                  value={auth.enterpriseUrl ?? ''}
-                />
-                <small>The address you use to open GitHub Enterprise in a browser.</small>
-              </label>
+              <wa-input
+                name="github-enterprise-url"
+                type="url"
+                label="GitHub Enterprise server URL"
+                required
+                placeholder="https://github.example.com"
+                value={auth.enterpriseUrl ?? ''}
+              >
+                <span slot="hint">The address you use to open GitHub Enterprise in a browser.</span>
+              </wa-input>
               <div class="provider-setup-form__auth-actions">
-                <button type="button" data-action="start-github-sign-in" data-key="start-github-sign-in">
-                  <LucideIcon icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
-                </button>
-                <button type="button" data-action="choose-github-dotcom" data-key="choose-github-dotcom">
+                <wa-button
+                  appearance="accent"
+                  type="button"
+                  data-action="start-github-sign-in"
+                  data-key="start-github-sign-in"
+                >
+                  <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
+                </wa-button>
+                <wa-button
+                  appearance="plain"
+                  type="button"
+                  data-action="choose-github-dotcom"
+                  data-key="choose-github-dotcom"
+                >
                   Use GitHub.com instead
-                </button>
+                </wa-button>
               </div>
             </>
           ) : (
@@ -142,56 +158,77 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
                 for you.
               </p>
               <div class="provider-setup-form__auth-actions">
-                <button type="button" data-action="start-github-sign-in" data-key="start-github-sign-in">
-                  <LucideIcon icon={LogIn} name="log-in" /> Sign in with GitHub
-                </button>
-                <button type="button" data-action="choose-github-enterprise" data-key="choose-github-enterprise">
+                <wa-button
+                  appearance="accent"
+                  type="button"
+                  data-action="start-github-sign-in"
+                  data-key="start-github-sign-in"
+                >
+                  <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub
+                </wa-button>
+                <wa-button
+                  appearance="plain"
+                  type="button"
+                  data-action="choose-github-enterprise"
+                  data-key="choose-github-enterprise"
+                >
                   Use GitHub Enterprise…
-                </button>
+                </wa-button>
               </div>
             </>
           )}
           {auth && ['denied', 'expired', 'cancelled', 'error'].includes(auth.state) && (
             <p role="alert">{auth.message ?? `GitHub sign in was ${auth.state}. Try again.`}</p>
           )}
-          {auth?.message && !['denied', 'expired', 'cancelled', 'error'].includes(auth.state) && (
+          {auth?.message && !['denied', 'expired', 'cancelled', 'error'].includes(auth.state) ? (
             <p role="alert">{auth.message}</p>
+          ) : (
+            <></>
           )}
-        </section>
+        </SunkenPanel>
       )}
       {showFields && (
         <Grid className="provider-setup-form__grid" columns={2} gap="m">
-          <label class="provider-setup-form__wide">
-            Display name
-            <input name="connection-name" placeholder={labels[0]} value={connection?.name ?? ''} />
-            <small>Leave blank to use “{labels[0]}”.</small>
-          </label>
-          <label class="provider-setup-form__wide">
-            {kind === 'jira' ? 'Project key' : 'Repository'}
-            {choosing ? (
-              // A searchable list: typing filters every repository the app can reach (HS2-27T5WT).
-              <>
-                <input
-                  name="connection-locator"
-                  required
-                  list="provider-setup-github-repositories"
-                  autocomplete="off"
-                  placeholder="Search your repositories…"
-                />
-                <datalist id="provider-setup-github-repositories">
-                  {repositories.map((repository) => (
-                    <option value={repository}></option>
-                  ))}
-                </datalist>
-                <small>
-                  {repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type
-                  to filter.
-                </small>
-              </>
-            ) : (
-              <input name="connection-locator" required placeholder={labels[1]} value={connection?.locator ?? ''} />
-            )}
-          </label>
+          <wa-input
+            class="provider-setup-form__wide"
+            name="connection-name"
+            label="Display name"
+            placeholder={labels[0]}
+            value={connection?.name ?? ''}
+          >
+            <span slot="hint">Leave blank to use “{labels[0]}”.</span>
+          </wa-input>
+          {choosing ? (
+            <label class="provider-setup-form__wide">
+              Repository
+              {/* Native datalist keeps browser search over every reachable repository (HS2-27T5WT). */}
+              <input
+                name="connection-locator"
+                required
+                list="provider-setup-github-repositories"
+                autocomplete="off"
+                placeholder="Search your repositories…"
+              />
+              <datalist id="provider-setup-github-repositories">
+                {repositories.map((repository) => (
+                  <option value={repository}></option>
+                ))}
+              </datalist>
+              <small>
+                {repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to
+                filter.
+              </small>
+            </label>
+          ) : (
+            <wa-input
+              class="provider-setup-form__wide"
+              name="connection-locator"
+              label={kind === 'jira' ? 'Project key' : 'Repository'}
+              required
+              placeholder={labels[1]}
+              value={connection?.locator ?? ''}
+            ></wa-input>
+          )}
           {choosing && (
             <section
               class="provider-setup-form__wide provider-setup-form__repository-access"
@@ -247,48 +284,58 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
           )}
           {/* GitHub uses the credential saved by Sign in with GitHub; there is no manual reference (HS2-48GA17). */}
           {kind !== 'github' && (
-            <label class="provider-setup-form__wide">
-              Credential reference
-              <input
-                name="credential-reference"
-                required
-                placeholder={labels[2]}
-                value={connectionCredential(connection)}
-              />
-              <small>
+            <wa-input
+              class="provider-setup-form__wide"
+              name="credential-reference"
+              label="Credential reference"
+              required
+              placeholder={labels[2]}
+              value={connectionCredential(connection)}
+            >
+              <span slot="hint">
                 Create this reference first with <code>hotsheet key set</code>; the token is never returned to the
                 browser.
-              </small>
-            </label>
+              </span>
+            </wa-input>
           )}
           {kind === 'jira' && (
             <>
-              <label>
-                Account email
-                <input name="jira-email" type="email" required value={connectionSetting(connection, 'email')} />
-              </label>
-              <label>
-                Jira site URL
-                <input
-                  name="api-base"
-                  type="url"
-                  required
-                  placeholder="https://company.atlassian.net"
-                  value={apiBase}
-                />
-              </label>
+              <wa-input
+                name="jira-email"
+                type="email"
+                label="Account email"
+                required
+                value={connectionSetting(connection, 'email')}
+              ></wa-input>
+              <wa-input
+                name="api-base"
+                type="url"
+                label="Jira site URL"
+                required
+                placeholder="https://company.atlassian.net"
+                value={apiBase}
+              ></wa-input>
             </>
           )}
           {kind === 'gitlab' && (
-            <label class="provider-setup-form__wide">
-              API base URL (optional)
-              <input name="api-base" type="url" placeholder="https://gitlab.com/api/v4" value={apiBase} />
-            </label>
+            <wa-input
+              class="provider-setup-form__wide"
+              name="api-base"
+              type="url"
+              label="API base URL (optional)"
+              placeholder="https://gitlab.com/api/v4"
+              value={apiBase}
+            ></wa-input>
           )}
-          <label class="provider-setup-form__option provider-setup-form__wide">
-            <input name="make-default" type="checkbox" checked={connection?.default ?? true} /> Use as the default
-            ticket source <span>New tickets will be created here.</span>
-          </label>
+          <wa-checkbox
+            class="provider-setup-form__wide"
+            name="make-default"
+            value="on"
+            checked={connection?.default ?? true}
+          >
+            Use as the default ticket source
+            <span slot="hint">New tickets will be created here.</span>
+          </wa-checkbox>
         </Grid>
       )}
       {error && (

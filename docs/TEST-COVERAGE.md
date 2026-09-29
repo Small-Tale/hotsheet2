@@ -288,6 +288,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | drawer-keyboard-close-focus | docs/06-clients.md | Keyboard closing an AI chat or terminal tab cancels older deferred input-focus frames so the selected surviving tab retains focus for repeated Delete (HS2-DAXSH5). | `clients/web/src/drawer-tab-order.test.ts # focus generation and user-focus ownership transitions` | `clients/web/tests/drawer-tab-order.spec.ts # repeated mixed-tab Delete flow` | — | double-covered |
 
+| github-source-dialog-layout | docs/06-clients.md | Source setup uses shared panel, button, and field controls; the demo previews every modal state with responsive removal actions (HS2-7FYYN9). | `clients/web/src/components/ticket-source-surfaces.test.ts # sign-in, authorization, fields, removal variants` | `clients/web/tests/providers.spec.ts # onboarding and edit flow`; `clients/web/tests/ux-demo.spec.ts # wide and narrow state selector and captures` | `HS2-7FYYN9 # wide and narrow after screenshots` | double-covered |
+
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
 <!-- coverage-matrix:end -->
