@@ -1767,11 +1767,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
-HS2-GX51F7, and HS2-NBMT1Q is:
+HS2-GX51F7, HS2-NBMT1Q, and HS2-8D3QSE is:
 
 | Severity | Exact diagnostic budgets                                                 |
 | -------- | ------------------------------------------------------------------------ |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 107; `KUI-L022` 67; `KUI-L201` 14 |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 106; `KUI-L022` 67; `KUI-L201` 12 |
 | review   | `KUI-L004` 82; `KUI-L006` 15; `KUI-L008` 26                              |
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
@@ -1791,3 +1791,7 @@ removes a consumer rule targeting TabBar's trailing internals; all `KUI-L202` an
 HS2-NBMT1Q renders every ToolbarControlGroup catalog variant through a Toolbar leading
 zone. The eight group variants and their interactions remain available; the doctor no
 longer reports their parent composition.
+
+HS2-8D3QSE puts the saved-view token search and repository comparison-side controls
+inside Toolbar zones. Their form and review actions remain controlled by the app, while
+the group geometry belongs to ToolbarControlGroup.

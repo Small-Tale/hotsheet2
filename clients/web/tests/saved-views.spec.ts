@@ -150,6 +150,9 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(dialog.getByRole('textbox', { name: 'View name' })).toBeVisible();
   await dialog.getByRole('textbox', { name: 'View name' }).fill('Needs docs');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
+  await expect(
+    dialog.locator('.saved-view-dialog__query-toolbar [data-component="toolbar-control-group"]'),
+  ).toHaveCount(1);
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect

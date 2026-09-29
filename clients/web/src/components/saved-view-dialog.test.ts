@@ -9,7 +9,7 @@ describe('SavedViewDialog', () => {
   it('owns the full query width independently of the collapsed workspace toolbar', () => {
     const css = readFileSync(new URL('./saved-view-dialog.css', import.meta.url), 'utf8');
     expect(css).toMatch(
-      /\.saved-view-dialog__query > \.saved-view-dialog__query-field\s*\{[^}]*width: 100%;[^}]*min-width: 0;/,
+      /\.saved-view-dialog__query > \.saved-view-dialog__query-toolbar\s*\{[^}]*width: 100%;[^}]*min-width: 0;/,
     );
   });
   it('collects a shared view name in the standard tokenized query editor', () => {
@@ -24,6 +24,8 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('data-component="saved-view-dialog"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
+    expect(markup).toContain('class="kui-toolbar saved-view-dialog__query-toolbar"');
+    expect(markup).toContain('data-center-align="stretch"');
     expect(markup).toContain('data-token-search-editor="saved-view-query"');
     expect(markup).toContain('data-component="token-search-token"');
     expect(markup).toContain('data-token-value="tag:docs"');

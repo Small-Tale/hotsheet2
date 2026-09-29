@@ -180,6 +180,7 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-lucide="git-compare"');
     expect(markup).toContain('Select the <strong>B</strong> side');
+    expect(markup).toContain('class="kui-toolbar ticket-code-review__compare-toolbar"');
     expect(markup).toContain('data-review-mode="compare" data-review-from="aaa1111" data-review-to="ddd4444"');
     expect(markup).toContain('class="ticket-code-review__compare-label">A</b>');
     expect(markup).toContain('class="ticket-code-review__compare-label">B</b>');

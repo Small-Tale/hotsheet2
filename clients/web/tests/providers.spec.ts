@@ -5519,6 +5519,18 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the A side');
+  const compareBanner = popover.locator('.ticket-code-review__compare-banner');
+  await expect(
+    compareBanner.locator('.ticket-code-review__compare-toolbar [data-component="toolbar-control-group"]'),
+  ).toHaveCount(1);
+  await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
+  await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
+  await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(popover.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
   await newest.locator('.ticket-code-review__commit-summary').click();
   await expect(newest.locator('.ticket-code-review__compare-label')).toHaveText('A');

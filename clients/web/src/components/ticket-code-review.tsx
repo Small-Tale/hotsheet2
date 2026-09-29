@@ -125,26 +125,31 @@ export function TicketCodeReview({
                     Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
                   </span>
                 </div>
-                <ToolbarControlGroup label="Comparison side" size="compact">
-                  <button
-                    type="button"
-                    data-action="set-repository-comparison-side"
-                    data-comparison-side="a"
-                    data-selected={String(comparison.side === 'a')}
-                    aria-pressed={comparison.side === 'a'}
-                  >
-                    A
-                  </button>
-                  <button
-                    type="button"
-                    data-action="set-repository-comparison-side"
-                    data-comparison-side="b"
-                    data-selected={String(comparison.side === 'b')}
-                    aria-pressed={comparison.side === 'b'}
-                  >
-                    B
-                  </button>
-                </ToolbarControlGroup>
+                <Toolbar
+                  className="ticket-code-review__compare-toolbar"
+                  leading={
+                    <ToolbarControlGroup label="Comparison side" size="compact">
+                      <button
+                        type="button"
+                        data-action="set-repository-comparison-side"
+                        data-comparison-side="a"
+                        data-selected={String(comparison.side === 'a')}
+                        aria-pressed={comparison.side === 'a'}
+                      >
+                        A
+                      </button>
+                      <button
+                        type="button"
+                        data-action="set-repository-comparison-side"
+                        data-comparison-side="b"
+                        data-selected={String(comparison.side === 'b')}
+                        aria-pressed={comparison.side === 'b'}
+                      >
+                        B
+                      </button>
+                    </ToolbarControlGroup>
+                  }
+                />
                 <button
                   type="button"
                   class="ticket-code-review__compare-open"

@@ -114,7 +114,9 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.ticket-code-review__compare-banner [data-component='toolbar-control-group'] {
+.ticket-code-review__compare-toolbar {
+  width: max-content;
+  min-width: remify(96px);
   justify-self: start;
 }
 .ticket-code-review__compare-banner .kui-toolbar-control-group > button[data-selected='true'] {

@@ -6,6 +6,7 @@ import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
+import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 
 import { type InlineSearchToken, orderedSearchText, toTokenSearchToken } from '../inline-search';
@@ -67,26 +68,32 @@ export function SavedViewDialog({
             <span>
               Search query <sup aria-hidden="true">*</sup>
             </span>
-            <ToolbarControlGroup
-              className="workspace-header__search-group saved-view-dialog__query-field"
-              expanded
-              content="search"
-              focusRing="halo"
-            >
-              <TokenSearchField
-                presentation="toolbar-group"
-                id="saved-view-query"
-                label="Search query"
-                query={query}
-                tokens={queryTokens.map(toTokenSearchToken)}
-                placeholder="Search tickets"
-                disabled={busy}
-                editAction="edit-saved-view-query-token"
-                removeAction="remove-saved-view-query-token"
-                clearAction="clear-saved-view-query"
-                clearLabel="Clear search query"
-              />
-            </ToolbarControlGroup>
+            <Toolbar
+              className="saved-view-dialog__query-toolbar"
+              centerAlign="stretch"
+              center={
+                <ToolbarControlGroup
+                  className="workspace-header__search-group saved-view-dialog__query-field"
+                  expanded
+                  content="search"
+                  focusRing="halo"
+                >
+                  <TokenSearchField
+                    presentation="toolbar-group"
+                    id="saved-view-query"
+                    label="Search query"
+                    query={query}
+                    tokens={queryTokens.map(toTokenSearchToken)}
+                    placeholder="Search tickets"
+                    disabled={busy}
+                    editAction="edit-saved-view-query-token"
+                    removeAction="remove-saved-view-query-token"
+                    clearAction="clear-saved-view-query"
+                    clearLabel="Clear search query"
+                  />
+                </ToolbarControlGroup>
+              }
+            />
             <input type="hidden" name="saved-view-query" value={queryValue} />
             <small>Use the same words, fields, operators, and filter chips as ticket search.</small>
           </label>
