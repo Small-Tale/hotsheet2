@@ -31,27 +31,10 @@ pub fn instance_path(home: &Path, store: &Path) -> PathBuf {
     home.join("instances").join(format!("{id}.json"))
 }
 
-/// Resolve a capability-aware launch. Only tools declaring a native permission hook may use
-/// this external-terminal path: injecting environment variables into an unrelated prompt
-/// would otherwise misleadingly claim Hot Sheet is governing it.
-pub fn prepare(
-    store: &Path,
-    tool: &str,
-    extra_args: Vec<String>,
-    home: &Path,
-) -> Result<ExternalLaunch> {
-    let plugin =
-        hotsheet_plugins::find(tool).with_context(|| format!("unknown AI tool plugin '{tool}'"))?;
-    let launch = plugin.manifest.launch.as_ref().with_context(|| {
-        format!("AI tool '{tool}' does not declare an interactive terminal launch")
-    })?;
-    if plugin.manifest.hooks.is_none() {
-        bail!(
-            "AI tool '{tool}' cannot yet route permissions from its native interactive CLI \
-             into Hot Sheet; use `hotsheet-cli trigger {tool}` for a Hot Sheet-driven turn"
-        );
-    }
-
+/// Read the live server route for a ticket store. Retained terminal sessions may outlive
+/// the server whose URL and secret they inherited, so permission hooks call this for each
+/// request instead of trusting their launch-time environment indefinitely.
+pub fn discover_running_server(store: &Path, home: &Path) -> Result<ServerInstance> {
     let record_path = instance_path(home, store);
     let text = std::fs::read_to_string(&record_path).with_context(|| {
         format!(
@@ -77,6 +60,31 @@ pub fn prepare(
     if canonical != recorded {
         bail!("server instance record belongs to a different ticket store");
     }
+    Ok(server)
+}
+
+/// Resolve a capability-aware launch. Only tools declaring a native permission hook may use
+/// this external-terminal path: injecting environment variables into an unrelated prompt
+/// would otherwise misleadingly claim Hot Sheet is governing it.
+pub fn prepare(
+    store: &Path,
+    tool: &str,
+    extra_args: Vec<String>,
+    home: &Path,
+) -> Result<ExternalLaunch> {
+    let plugin =
+        hotsheet_plugins::find(tool).with_context(|| format!("unknown AI tool plugin '{tool}'"))?;
+    let launch = plugin.manifest.launch.as_ref().with_context(|| {
+        format!("AI tool '{tool}' does not declare an interactive terminal launch")
+    })?;
+    if plugin.manifest.hooks.is_none() {
+        bail!(
+            "AI tool '{tool}' cannot yet route permissions from its native interactive CLI \
+             into Hot Sheet; use `hotsheet-cli trigger {tool}` for a Hot Sheet-driven turn"
+        );
+    }
+
+    let server = discover_running_server(store, home)?;
 
     let mut args = launch.args.clone();
     args.extend(extra_args);
@@ -150,5 +158,42 @@ mod tests {
         .unwrap();
         assert_eq!(launch.program, "codex");
         assert_eq!(launch.args, ["--model", "gpt-test"]);
+    }
+
+    #[test]
+    fn retained_hook_discovers_replaced_server_route() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, store) = write_instance(root.path());
+        let first = discover_running_server(&store, &home).unwrap();
+        assert_eq!(first.secret, "test-secret");
+
+        let path = instance_path(&home, &store);
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "pid": std::process::id(),
+                "url": "http://127.0.0.1:9797",
+                "secret": "replacement-secret",
+                "store_path": store.canonicalize().unwrap(),
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let replacement = discover_running_server(&store, &home).unwrap();
+        assert_eq!(replacement.url, "http://127.0.0.1:9797");
+        assert_eq!(replacement.secret, "replacement-secret");
+
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "pid": std::process::id(),
+                "url": "http://127.0.0.1:9797",
+                "secret": "wrong-project",
+                "store_path": root.path(),
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(discover_running_server(&store, &home).is_err());
     }
 }

@@ -618,6 +618,11 @@ Running `claude` or `codex` by hand in an app shell therefore raises its permiss
 prompts in the app, as long as the project's setup has installed the tool's
 `PermissionRequest` hook. Without the hook, the variables go unused and the tool's
 native prompt stays in charge.
+Because the detached broker retains terminals across a server restart, the hook resolves
+the current registered server URL and secret for `HOTSHEET_PROJECT` on each permission
+request. Launch-time route-back variables remain a fallback when no instance record is
+available. A retained Codex or Claude session can therefore send a new approval request
+to the replacement server without restarting the terminal (HS2-39S586).
 
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)

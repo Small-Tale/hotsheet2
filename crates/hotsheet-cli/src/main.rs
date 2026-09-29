@@ -477,7 +477,7 @@ enum Cmd {
         team: bool,
     },
     /// Native lifecycle **permission hook** (docs/05 §5.7): reads PermissionRequest JSON
-    /// from Claude or Codex, asks the running Hot Sheet server (via
+    /// from Claude or Codex, finds the current project server (falling back to
     /// $HOTSHEET_SERVER/$HOTSHEET_SECRET), and writes the provider-native decision. With no
     /// server or on transport failure it emits nothing, preserving the tool's normal prompt.
     PermissionHook {
@@ -2872,15 +2872,29 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let Some(decision) = (match (
-        std::env::var("HOTSHEET_SERVER").ok(),
-        std::env::var("HOTSHEET_SECRET").ok(),
-    ) {
+    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let current = (!project.is_empty())
+        .then(|| {
+            hotsheet_cli::external_launch::discover_running_server(
+                Path::new(&project),
+                &hotsheet_plugins::hotsheet_home(),
+            )
+            .ok()
+        })
+        .flatten();
+    let route = current
+        .map(|server| (server.url, server.secret))
+        .or_else(|| {
+            Some((
+                std::env::var("HOTSHEET_SERVER").ok()?,
+                std::env::var("HOTSHEET_SECRET").ok()?,
+            ))
+        });
+    let Some(decision) = (match route {
         // Governed by a Hot Sheet server: raise a blocking request and honor the answer.
-        (Some(url), Some(secret)) => {
+        Some((url, secret)) => {
             let (tool, action) = hook_tool_action(&input);
             let connection = hook_connection(&input);
-            let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
             match ask_server(&url, &secret, &project, &connection, &tool, &action, agent) {
@@ -2890,7 +2904,7 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             }
         }
         // Not a Hot Sheet-governed run → emit nothing and preserve Claude's native flow.
-        _ => None,
+        None => None,
     }) else {
         return Ok(());
     };

@@ -7,6 +7,106 @@ use predicates::prelude::*;
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[test]
+fn retained_permission_hook_uses_restarted_server_route() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let current_url = format!("http://{}", listener.local_addr().unwrap());
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": current_url,
+            "secret": "current-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let store_for_server = store.clone();
+    let server = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "hook did not reach the restarted server"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => panic!("accept failed: {error}"),
+            }
+        };
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(line.trim_end(), "POST /permissions/ask HTTP/1.1");
+        let mut length = 0;
+        let mut secret = String::new();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                length = value.trim().parse().unwrap();
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                secret = value.trim().to_string();
+            }
+        }
+        assert_eq!(secret, "current-secret");
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body).unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["project"], store_for_server.to_string_lossy().as_ref());
+        assert_eq!(body["agent"], "codex");
+        assert_eq!(body["action"], "git push");
+        let reply = r#"{"decision":"allow"}"#;
+        write!(
+            reader.get_mut(),
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{reply}",
+            reply.len()
+        )
+        .unwrap();
+    });
+    let output = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_PROJECT", &store)
+        .env("HOTSHEET_SERVER", "http://127.0.0.1:1")
+        .env("HOTSHEET_SECRET", "stale-secret")
+        .args(["permission-hook", "--agent", "codex"])
+        .write_stdin(
+            r#"{"hook_event_name":"PermissionRequest","session_id":"codex-retained","tool_name":"Bash","tool_input":{"command":"git push"}}"#,
+        )
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    server.join().unwrap();
+    let answer: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        answer["hookSpecificOutput"]["decision"]["behavior"],
+        "allow"
+    );
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
