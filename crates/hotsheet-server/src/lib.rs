@@ -7246,6 +7246,12 @@ async fn open_terminal(
     } else {
         hotsheet_terminals::TerminalKind::Shell
     };
+    // Record a launch directory for every terminal, even one whose shell never reports OSC 7:
+    // it is what keeps a checkout's stores hosted while the terminal lives (HS2-R5KV1Q).
+    let cwd = req
+        .cwd
+        .clone()
+        .unwrap_or_else(|| state.store.root().to_string_lossy().into_owned());
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -7262,7 +7268,7 @@ async fn open_terminal(
                 kind,
                 command: launch.command,
                 args: launch.args,
-                cwd: req.cwd,
+                cwd: Some(cwd),
                 env: launch.env,
             })
             .await
@@ -7286,11 +7292,7 @@ async fn open_terminal(
         kind,
         command: launch.command,
         args: launch.args,
-        cwd: Some(
-            req.cwd
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| state.store.root().to_path_buf()),
-        ),
+        cwd: Some(std::path::PathBuf::from(cwd)),
         env: launch.env,
         rows: 24,
         cols: 80,
@@ -8669,6 +8671,12 @@ async fn sweep_unhosted(state: &AppState) {
     let remaining = tokio::task::spawn_blocking(move || {
         let state = sweeping;
         let checkouts = state.checkout_registry.list().unwrap_or_default();
+        // Checkout roots are canonical; compare terminal directories in the same form (for
+        // example `/var` vs `/private/var` on macOS) or a terminal inside a checkout never matches.
+        let terminal_dirs: Vec<std::path::PathBuf> = terminal_dirs
+            .into_iter()
+            .map(|dir| dir.canonicalize().unwrap_or(dir))
+            .collect();
         let in_terminal = |checkout: &hotsheet_ticketing::checkouts::Checkout| {
             terminal_dirs
                 .iter()

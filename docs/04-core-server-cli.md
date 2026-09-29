@@ -191,7 +191,10 @@ The web bridge adds `checkout`, since the browser only knows its project.
 - **What the sweep keeps:** it unhosts a project store only when no live lease names a checkout
   that references it, and nothing else needs it. Live needs are a drive on the store, a live
   terminal whose working directory lies inside such a checkout, or an unexpired claim in the
-  store.
+  store. A terminal's working directory is the one its shell last reported with OSC 7, or its
+  launch directory until then, so a program that never reports one still counts (HS2-R5KV1Q).
+  A terminal opened without a `cwd`, in-process or in the broker, launches in the primary
+  store's root. Both paths are compared in canonical form.
 - **Grace period:** without an explicit close, the sweep runs 10 minutes after the leases lapse.
 - **Unhosting** drops the store's index, watcher, discovery file and writer lock, and stops the
   repository monitor of any checkout nobody has open.

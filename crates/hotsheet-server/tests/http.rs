@@ -4016,6 +4016,133 @@ async fn closing_the_last_open_project_unhosts_its_store_until_it_is_needed_agai
     );
 }
 
+/// A terminal whose program never reports OSC 7 still keeps its checkout's stores hosted,
+/// through the launch directory it was opened in (HS2-R5KV1Q).
+#[tokio::test]
+async fn a_terminal_without_osc7_keeps_its_checkout_store_hosted() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let store_path = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout, "stores": [store_path]}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let hosted = |app: axum::Router| async move {
+        body_json(app.oneshot(authed("GET", "/stores", None)).await.unwrap())
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["prefix"] == "AP")
+    };
+    let status = |app: axum::Router, method: &'static str, uri: String, body: Option<String>| async move {
+        app.oneshot(authed(method, &uri, body.as_deref()))
+            .await
+            .unwrap()
+            .status()
+    };
+
+    // `sleep` never prints, so the only directory the server knows is the launch cwd.
+    let body =
+        serde_json::json!({"command": "sleep", "args": ["30"], "id": "quiet", "cwd": checkout});
+    assert_eq!(
+        status(
+            app.clone(),
+            "POST",
+            "/terminals".into(),
+            Some(body.to_string())
+        )
+        .await,
+        StatusCode::OK
+    );
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        listed[0]["cwd"],
+        checkout.to_string_lossy().as_ref(),
+        "the launch cwd is recorded without OSC 7: {listed}"
+    );
+    assert_eq!(
+        status(
+            app.clone(),
+            "GET",
+            format!("/ws/poll?since=0&timeout_ms=0&checkout={id}&client=tab"),
+            None
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        status(
+            app.clone(),
+            "POST",
+            format!("/checkouts/{id}/close?client=tab"),
+            None
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        hosted(app.clone()).await,
+        "the live terminal still needs the store"
+    );
+
+    // Once the terminal is gone, the next sweep unhosts the store.
+    assert!(
+        status(app.clone(), "DELETE", "/terminals/quiet".into(), None)
+            .await
+            .is_success()
+    );
+    assert_eq!(
+        status(
+            app.clone(),
+            "GET",
+            format!("/ws/poll?since=0&timeout_ms=0&checkout={id}&client=tab"),
+            None
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        status(
+            app.clone(),
+            "POST",
+            format!("/checkouts/{id}/close?client=tab"),
+            None
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let mut unhosted = false;
+    for _ in 0..50 {
+        if !hosted(app.clone()).await {
+            unhosted = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(unhosted, "the store stayed hosted after its terminal ended");
+}
+
 /// A subscription that names no checkout (an older client) pins every project store.
 #[tokio::test]
 async fn an_untagged_change_stream_keeps_every_project_store_hosted() {
@@ -8818,6 +8945,43 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+/// A broker terminal opened without a cwd records the store root as its launch directory,
+/// like an in-process terminal, so it is never missing a working directory (HS2-R5KV1Q).
+#[tokio::test]
+async fn a_broker_terminal_without_a_cwd_records_the_store_root() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let (primary, st) = state();
+    let app = app(st.with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"sleep","args":["30"],"id":"quiet"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let info = body_json(resp).await;
+    let root = std::fs::canonicalize(primary.path()).unwrap();
+    let recorded = std::fs::canonicalize(info["cwd"].as_str().expect("a recorded cwd")).unwrap();
+    assert_eq!(recorded, root, "{info}");
+    let _ = app
+        .oneshot(authed("DELETE", "/terminals/quiet", None))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
