@@ -16,6 +16,7 @@ import '@kerfjs/ui/list-header.css';
 import '@kerfjs/ui/list-inset-text.css';
 import '@kerfjs/ui/catalog.css';
 import '@kerfjs/ui/floating-toolbar.css';
+import '@kerfjs/ui/tab-bar.css';
 import '@kerfjs/ui/select/register';
 import '@kerfjs/ui/popup-menu/register';
 import '../hot-sheet-tokens.css';
@@ -26,6 +27,7 @@ import { Catalog, CatalogExampleStack } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
+import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
@@ -755,27 +757,29 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
   if (item.id === 'app-tab')
     return (
-      <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo">
-        <AppTab
-          id="project"
-          name="Project tab"
-          selected
-          className="project-tab"
-          rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }}
-          leading={<LucideIcon icon={FolderGit2} name="folder-git-2" />}
-        />
-        <AppTab
-          id="terminal"
-          name="Terminal tab"
-          className="terminal-tab"
-          rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': 'terminal' }}
-          leading={<LucideIcon icon={Terminal} name="terminal" />}
-          trailing={
-            <span aria-label="Busy">
-              <LucideIcon icon={Activity} name="activity" />
-            </span>
-          }
-        />
+      <section class="app-tab-demo">
+        <TabBar id="app-tab-demo" label="Shared application tab demo">
+          <AppTab
+            id="project"
+            name="Project tab"
+            selected
+            className="project-tab"
+            rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }}
+            leading={<LucideIcon icon={FolderGit2} name="folder-git-2" />}
+          />
+          <AppTab
+            id="terminal"
+            name="Terminal tab"
+            className="terminal-tab"
+            rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': 'terminal' }}
+            leading={<LucideIcon icon={Terminal} name="terminal" />}
+            trailing={
+              <span aria-label="Busy">
+                <LucideIcon icon={Activity} name="activity" />
+              </span>
+            }
+          />
+        </TabBar>
       </section>
     );
   if (item.id === 'terminal-drawer') {

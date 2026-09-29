@@ -4,6 +4,7 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   ALargeSmall,
@@ -189,53 +190,59 @@ export function TerminalDrawer({
             // Terminal selection replaces the controlled tab nodes and changes a live work surface.
             // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
             activation="manual"
+            trailingPlacement="adjacent"
             trailing={
-              <>
-                <div class="terminal-drawer__create-wrap">
-                  <PopupMenu
-                    label="New drawer item"
-                    icon={<LucideIcon icon={Plus} name="plus" />}
-                    caret={false}
-                    placement="top-start"
-                    rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
-                    items={[
-                      {
-                        label: 'Default shell',
-                        action: 'create-terminal-drawer-item',
-                        icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
-                        attributes: { 'data-item-id': 'default-shell' },
-                      },
-                      {
-                        label: 'AI shell',
-                        action: 'create-terminal-drawer-item',
-                        icon: <LucideIcon icon={Bot} name="bot" />,
-                        attributes: { 'data-item-id': 'ai-shell' },
-                      },
-                      {
-                        label: 'AI chat',
-                        action: 'create-terminal-drawer-item',
-                        icon: <LucideIcon icon={MessageSquare} name="message-square" />,
-                        attributes: { 'data-item-id': 'ai-chat' },
-                      },
-                      {
-                        label: 'Saved conversation…',
-                        action: 'open-saved-conversation',
-                        icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
-                      },
-                    ]}
-                  />
-                </div>
-                <div class="terminal-drawer__actions">
-                  <button
-                    type="button"
-                    data-action="toggle-terminal-drawer"
-                    aria-label="Hide terminal drawer"
-                    title="Hide terminal drawer"
-                  >
-                    <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
-                  </button>
-                </div>
-              </>
+              <ToolbarControlGroup
+                className="terminal-drawer__create-wrap"
+                appearance="borderless"
+                single
+                nestedDropdown
+              >
+                <PopupMenu
+                  label="New drawer item"
+                  icon={<LucideIcon icon={Plus} name="plus" />}
+                  caret={false}
+                  placement="top-start"
+                  rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
+                  items={[
+                    {
+                      label: 'Default shell',
+                      action: 'create-terminal-drawer-item',
+                      icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
+                      attributes: { 'data-item-id': 'default-shell' },
+                    },
+                    {
+                      label: 'AI shell',
+                      action: 'create-terminal-drawer-item',
+                      icon: <LucideIcon icon={Bot} name="bot" />,
+                      attributes: { 'data-item-id': 'ai-shell' },
+                    },
+                    {
+                      label: 'AI chat',
+                      action: 'create-terminal-drawer-item',
+                      icon: <LucideIcon icon={MessageSquare} name="message-square" />,
+                      attributes: { 'data-item-id': 'ai-chat' },
+                    },
+                    {
+                      label: 'Saved conversation…',
+                      action: 'open-saved-conversation',
+                      icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+                    },
+                  ]}
+                />
+              </ToolbarControlGroup>
+            }
+            end={
+              <ToolbarControlGroup className="terminal-drawer__actions" appearance="borderless" single>
+                <button
+                  type="button"
+                  data-action="toggle-terminal-drawer"
+                  aria-label="Hide terminal drawer"
+                  title="Hide terminal drawer"
+                >
+                  <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
+                </button>
+              </ToolbarControlGroup>
             }
           >
             {tabs}

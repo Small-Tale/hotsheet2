@@ -73,19 +73,21 @@ describe('TerminalDrawer', () => {
     expect(markup).toMatch(/class="kui-app-tab terminal-tab"[^>]*style="[^"]*144px"/);
     expect(markup).toContain('data-size="compact"');
   });
-  it('renders one automatic Kerf tab bar with draggable terminal tabs before its trailing actions', () => {
+  it('renders a manual Kerf tab bar with adjacent creation and a far-edge hide action', () => {
     const markup = render();
     expect(markup).toContain('data-mode="grid"');
     expect(markup).toContain('data-maximized="false"');
     expect(markup).toContain('data-component="tab-bar"');
     expect(markup).toContain('data-tab-bar-id="terminal-drawer"');
     expect(markup).toContain('data-tab-activation="manual"');
+    expect(markup).toContain('data-trailing-placement="adjacent"');
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
     expect(markup).toMatch(
       /data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*terminal-drawer__create/,
     );
+    expect(markup).toMatch(/kui-tab-bar__end[\s\S]*terminal-drawer__actions[\s\S]*Hide terminal drawer/);
     expect(markup).toContain('data-component="app-tab"');
     expect(markup).toContain('data-tab-kind="terminal"');
     expect(markup).toContain('draggable="true"');

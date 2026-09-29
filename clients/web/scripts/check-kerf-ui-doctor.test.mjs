@@ -17,7 +17,7 @@ function report(overrides = {}) {
       { id: 'browser', status: 'skipped' },
     ],
     diagnostics,
-    summary: { errors: 232, review: 129, warnings: 1276, suppressed: 0 },
+    summary: { errors: 199, review: 123, warnings: 1280, suppressed: 0 },
     ...overrides,
   };
 }
@@ -25,9 +25,9 @@ function report(overrides = {}) {
 describe('Kerf UI doctor baseline', () => {
   it('accepts the classified error and review budget with browser evaluation disabled', () => {
     expect(assertKerfUiDoctorBaseline(report())).toEqual({
-      errors: 232,
-      review: 129,
-      warnings: 1276,
+      errors: 199,
+      review: 123,
+      warnings: 1280,
       suppressed: 0,
     });
   });
@@ -42,7 +42,7 @@ describe('Kerf UI doctor baseline', () => {
     const increased = report({
       diagnostics: [...report().diagnostics, { id: 'KUI-L004', severity: 'review' }],
     });
-    expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 88 found, budget 87');
+    expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 83 found, budget 82');
   });
 
   it('rejects failed stages, configuration failures, and an enabled browser stage', () => {

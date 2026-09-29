@@ -1766,12 +1766,13 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
-error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, and HS2-90B8WH is:
+error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH, and
+HS2-GX51F7 is:
 
-| Severity | Exact diagnostic budgets                                                                             |
-| -------- | ---------------------------------------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 108; `KUI-L022` 67; `KUI-L201` 24; `KUI-L202` 1; `KUI-L203` 1 |
-| review   | `KUI-L004` 87; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1                                            |
+| Severity | Exact diagnostic budgets                                                 |
+| -------- | ------------------------------------------------------------------------ |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 107; `KUI-L022` 67; `KUI-L201` 22 |
+| review   | `KUI-L004` 82; `KUI-L006` 15; `KUI-L008` 26                              |
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
 gave count labels application-owned classes, switched the List demo to a standard gap,
@@ -1780,5 +1781,9 @@ The public region size variable still previews drag size; the component's render
 expanded size is refreshed on the settled render. The remaining beta.58 ownership
 findings are tracked by HS2-GTX61Q and its child tickets.
 HS2-90B8WH composes ticket-view selects through ToolbarControlGroup in Toolbar leading zones
-and uses ToolbarText's placeholder for the loading inspector's center zone. The remaining
-`KUI-L202` finding belongs to TabBar trailing composition under HS2-GX51F7.
+and uses ToolbarText's placeholder for the loading inspector's center zone. Its one
+remaining `KUI-L202` finding was TabBar trailing composition.
+HS2-GX51F7 uses TabBar's adjacent trailing and far-edge end zones for terminal drawer
+creation and hide actions, and gives the AppTab catalog example a TabBar parent. It also
+removes a consumer rule targeting TabBar's trailing internals; all `KUI-L202` and
+`KUI-L203` findings are now cleared.

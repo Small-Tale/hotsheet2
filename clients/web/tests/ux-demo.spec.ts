@@ -4393,14 +4393,32 @@ test('catalogs the drawer phone focus-mode text-size control with and without th
 test('catalogs shared application tabs and terminal-drawer tabs', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=app-tab');
+  await expect(
+    page.locator('.app-tab-demo [data-component="tab-bar"]').getByRole('tablist', {
+      name: 'Shared application tab demo',
+    }),
+  ).toBeVisible();
   const sharedTabs = page.locator('[data-component$="-tab"]');
   await expect(sharedTabs).toHaveCount(2);
   await expect(page.getByRole('tab', { name: /Project tab/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('button', { name: 'Close Terminal tab' })).toBeAttached();
+  await page.locator('.app-tab-demo').screenshot({ path: '/private/tmp/hs2-gx51f7-app-tabs-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.app-tab-demo').screenshot({ path: '/private/tmp/hs2-gx51f7-app-tabs-narrow.png' });
+  const demoTabStrip = page.locator('.app-tab-demo [data-kui-tab-list]');
+  expect(await demoTabStrip.evaluate((node) => node.scrollWidth)).toBeGreaterThan(
+    await demoTabStrip.evaluate((node) => node.clientWidth),
+  );
+  await demoTabStrip.evaluate((node) => (node.scrollLeft = node.scrollWidth));
+  await expect(page.getByRole('tab', { name: /Terminal tab/ })).toBeInViewport();
   await page.goto('/ux-demo?component=terminal-drawer');
   const terminalDrawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
   await expect(terminalDrawer).toBeVisible();
   await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
+  await expect(terminalDrawer.locator('.kui-tab-bar__trailing [data-component="toolbar-control-group"]')).toHaveCount(
+    1,
+  );
+  await expect(terminalDrawer.locator('.kui-tab-bar__end [data-component="toolbar-control-group"]')).toHaveCount(1);
   await expect(terminalDrawer.getByRole('button', { name: 'Close Development' })).toBeAttached();
   const gridTab = terminalDrawer.getByRole('tab', { name: 'Project grid' }),
     gridRoot = terminalDrawer.locator('.terminal-drawer__grid-tab'),

@@ -116,31 +116,11 @@
   flex: 0 1 auto;
   gap: var(--kui-space-xs);
 }
-.terminal-drawer__views .kui-tab-bar__trailing {
-  gap: var(--kui-space-xs);
-  flex: 1 1 auto;
-}
 .terminal-drawer__grid-tab {
   position: sticky;
   z-index: 2;
   left: 0;
   background: var(--wa-color-surface-default);
-}
-.terminal-drawer__rail > button,
-.terminal-drawer__actions > button {
-  display: inline-flex;
-  min-width: remify(32px);
-  height: remify(32px);
-  padding: 0 var(--kui-space-xs);
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  gap: var(--kui-space-2xs);
-  font: inherit;
 }
 .terminal-drawer__rail .terminal-tab i {
   width: remify(7.2px);
@@ -148,15 +128,6 @@
   border-radius: var(--wa-border-radius-circle);
   background: var(--wa-color-success-fill-loud);
   flex: none;
-}
-.terminal-drawer__rail > button:hover,
-.terminal-drawer__actions > button:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.terminal-drawer__rail > button:focus-visible,
-.terminal-drawer__actions > button:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
 }
 .terminal-drawer__rail svg {
   width: remify(16px);
@@ -183,16 +154,6 @@
   padding-inline: var(--kui-space-xs);
   border-radius: var(--wa-border-radius-pill);
   color: var(--wa-color-neutral-on-quiet);
-}
-.terminal-drawer__actions {
-  display: flex;
-  margin-left: auto;
-  align-items: center;
-  flex: none;
-  gap: var(--kui-space-xs);
-}
-.terminal-drawer__actions button span {
-  font-size: var(--wa-font-size-2xs);
 }
 .terminal-drawer__content {
   min-width: 0;
