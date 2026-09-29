@@ -268,7 +268,14 @@ the credential, and editing keeps the existing one (HS2-48GA17). A pre-registere
 (`hotsheet key set`) can still be named in `providers.json` as a headless/advanced path. New
 connections need no user-chosen id: a create request with an empty `id` gets a readable
 unique one (`github-small-tale-hotsheet2`, then `-2`, …), and a blank display name defaults to
-the provider name ("GitHub Issues"). The first-party public
+the provider name ("GitHub Issues"). After sign-in the repository field is a searchable list of
+every repository the app can reach, gathered across all of the user's app installations with
+`Link: rel="next"` pagination (HS2-27T5WT). GitHub only exposes repositories the app is
+installed on, so the list response also reports each installation's account, whether it grants
+`all` or `selected` repositories, and its settings page; the dialog explains a missing
+repository, links to **Change access** for limited installations and to **Add another account
+or organization** (the app's `installations/new` page, derived from the installations'
+`app_slug`), and offers **Refresh list** after the user changes access on GitHub. The first-party public
 GitHub.com Client ID (`Iv23lialgSTESydkTreA`) is bundled into development and release server
 builds; it is an identifier, not a secret. `HOTSHEET_GITHUB_APP_CLIENT_ID` may override it
 for development builds. The server build fails clearly if neither the override nor the

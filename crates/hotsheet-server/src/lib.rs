@@ -2360,6 +2360,9 @@ async fn cancel_github_device_auth(
 #[derive(Debug, Serialize)]
 struct GitHubRepositoriesResponse {
     repositories: Vec<String>,
+    /// What each app installation grants and where to change it (HS2-27T5WT).
+    installations: Vec<hotsheet_extsync::AppInstallation>,
+    install_url: Option<String>,
 }
 
 async fn list_github_auth_repositories(
@@ -2409,12 +2412,15 @@ async fn list_github_auth_repositories(
         session.client_id.clone(),
         session.web_base.clone(),
     );
-    let repositories =
-        tokio::task::spawn_blocking(move || client.installed_repositories(&token.access_token))
-            .await
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-            .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
-    Ok(Json(GitHubRepositoriesResponse { repositories }))
+    let access = tokio::task::spawn_blocking(move || client.repository_access(&token.access_token))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
+    Ok(Json(GitHubRepositoriesResponse {
+        repositories: access.repositories,
+        installations: access.installations,
+        install_url: access.install_url,
+    }))
 }
 
 /// `GET /providers` — capability-bearing ticket-provider connections. The current

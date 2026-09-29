@@ -3,7 +3,7 @@ import './flow-back-button.css';
 
 import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronLeft } from 'lucide';
+import { ChevronLeft, ExternalLink, RefreshCw } from 'lucide';
 
 import type { ProviderConnection } from '../api';
 
@@ -16,6 +16,11 @@ export interface GithubAuthState {
   state: 'waiting' | 'authorized' | 'denied' | 'expired' | 'cancelled' | 'error';
   credential?: string;
   repositories?: string[];
+  /** What each GitHub App installation grants, to explain a missing repository (HS2-27T5WT). */
+  installations?: Array<{ account: string; selection: string; settingsUrl?: string }>;
+  installUrl?: string;
+  /** Re-listing repositories after the user changed the app's access on GitHub. */
+  refreshing?: boolean;
   message?: string;
 }
 
@@ -49,7 +54,9 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
     }[kind],
     editing = Boolean(connection),
     apiBase = connectionSetting(connection, kind === 'jira' ? 'base_url' : 'api_base'),
-    repositories = auth?.repositories ?? [];
+    repositories = auth?.repositories ?? [],
+    choosing = kind === 'github' && !editing && auth?.state === 'authorized' && auth.repositories !== undefined,
+    limited = (auth?.installations ?? []).filter((installation) => installation.selection !== 'all');
   return (
     <form
       id="provider-setup-form"
@@ -81,8 +88,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
           )}
           {auth?.state === 'authorized' && (
             <p role="status">
-              Signed in securely.{' '}
-              {repositories.length ? 'Choose an installed repository below.' : 'Loading installed repositories…'}
+              Signed in securely. {auth.repositories ? 'Choose a repository below.' : 'Loading your repositories…'}
             </p>
           )}
           {auth?.message && <p role="alert">{auth.message}</p>}
@@ -99,17 +105,78 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
         </label>
         <label class="provider-setup-form__wide">
           {kind === 'jira' ? 'Project key' : 'Repository'}
-          {kind === 'github' && !editing && repositories.length ? (
-            <select name="connection-locator" required>
-              <option value="">Choose a repository…</option>
-              {repositories.map((repository) => (
-                <option value={repository}>{repository}</option>
-              ))}
-            </select>
+          {choosing ? (
+            // A searchable list: typing filters every repository the app can reach (HS2-27T5WT).
+            <>
+              <input
+                name="connection-locator"
+                required
+                list="provider-setup-github-repositories"
+                autocomplete="off"
+                placeholder="Search your repositories…"
+              />
+              <datalist id="provider-setup-github-repositories">
+                {repositories.map((repository) => (
+                  <option value={repository}></option>
+                ))}
+              </datalist>
+              <small>
+                {repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to
+                filter.
+              </small>
+            </>
           ) : (
             <input name="connection-locator" required placeholder={labels[1]} value={connection?.locator ?? ''} />
           )}
         </label>
+        {choosing && (
+          <section
+            class="provider-setup-form__wide provider-setup-form__repository-access"
+            aria-label="GitHub repository access"
+          >
+            {auth.installations?.length ? (
+              <p>
+                Missing a repository? GitHub only shows repositories the Hot Sheet app is installed on
+                {limited.length ? (
+                  <>
+                    , and it can see only the repositories you chose on{' '}
+                    {limited.map((installation, index) => (
+                      <>
+                        {index > 0 && ', '}
+                        <strong>{installation.account}</strong>
+                      </>
+                    ))}
+                  </>
+                ) : (
+                  ''
+                )}
+                .
+              </p>
+            ) : (
+              <p>
+                The Hot Sheet GitHub App is not installed on any account yet, so no repositories are available. Install
+                it on GitHub, then refresh this list.
+              </p>
+            )}
+            <div class="provider-setup-form__repository-actions">
+              {limited
+                .filter((installation) => installation.settingsUrl)
+                .map((installation) => (
+                  <a href={installation.settingsUrl} target="_blank" rel="noopener">
+                    Change access for {installation.account} <LucideIcon icon={ExternalLink} name="external-link" />
+                  </a>
+                ))}
+              {auth.installUrl && (
+                <a href={auth.installUrl} target="_blank" rel="noopener">
+                  Add another account or organization <LucideIcon icon={ExternalLink} name="external-link" />
+                </a>
+              )}
+              <button type="button" data-action="refresh-github-repositories" disabled={auth.refreshing}>
+                <LucideIcon icon={RefreshCw} name="refresh-cw" /> {auth.refreshing ? 'Refreshing…' : 'Refresh list'}
+              </button>
+            </div>
+          </section>
+        )}
         {/* GitHub uses the credential saved by Sign in with GitHub; there is no manual reference (HS2-48GA17). */}
         {kind !== 'github' && (
           <label class="provider-setup-form__wide">

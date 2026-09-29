@@ -12,7 +12,8 @@ pub use github::{
     UreqGitHubTransport, parse_webhook,
 };
 pub use github_device::{
-    DeviceAuthorization, DevicePoll, GitHubDeviceClient, GitHubDeviceError, GitHubTokenBundle,
+    AppInstallation, DeviceAuthorization, DevicePoll, GitHubDeviceClient, GitHubDeviceError,
+    GitHubTokenBundle, RepositoryAccess,
 };
 pub use gitlab::{GitLabConfig, GitLabProvider};
 pub use jira::{JiraConfig, JiraProvider};

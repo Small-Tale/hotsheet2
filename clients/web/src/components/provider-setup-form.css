@@ -85,3 +85,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+.provider-setup-form__repository-access {
+  display: grid;
+  font-size: var(--wa-font-size-s);
+  gap: var(--wa-space-xs);
+  padding: var(--wa-space-s) var(--wa-space-m);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.provider-setup-form__repository-access p {
+  margin: 0;
+  line-height: 1.4;
+}
+.provider-setup-form__repository-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wa-space-xs) var(--wa-space-m);
+}
+.provider-setup-form__repository-actions a,
+.provider-setup-form__repository-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wa-space-2xs);
+}
+.provider-setup-form__repository-actions svg {
+  width: remify(14px);
+  height: remify(14px);
+}
+.provider-setup-form__repository-actions button {
+  padding: 0;
+  border: 0;
+  color: var(--wa-color-brand-on-quiet);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.provider-setup-form__repository-actions button:disabled {
+  color: var(--wa-color-neutral-on-quiet);
+  cursor: not-allowed;
+}

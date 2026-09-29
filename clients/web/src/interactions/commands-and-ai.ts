@@ -125,6 +125,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly cancelProviderRemoval: () => void;
   readonly removeExternalProvider: () => Promise<void>;
   readonly toggleProviderDisabled: () => Promise<void>;
+  readonly refreshGitHubRepositories: () => Promise<void>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -221,6 +222,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     cancelProviderRemoval,
     removeExternalProvider,
     toggleProviderDisabled,
+    refreshGitHubRepositories,
   } = dependencies;
   delegate(document.body, 'click', '[data-action="toggle-command-group"]', () => {
     commandGroupExpanded.value = !commandGroupExpanded.value;
@@ -844,6 +846,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   });
   delegate(document.body, 'click', '[data-action="toggle-provider-disabled"]', () => {
     void toggleProviderDisabled();
+  });
+  delegate(document.body, 'click', '[data-action="refresh-github-repositories"]', () => {
+    void refreshGitHubRepositories();
   });
   delegate(document.body, 'click', '[data-action="select-provider-kind"]', (_event, target) => {
     ticketSourceSetupNavigation.value = 'push';

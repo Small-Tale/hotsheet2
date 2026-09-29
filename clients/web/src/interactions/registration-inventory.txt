@@ -257,6 +257,7 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="request-provider-r
 commands-and-ai	delegate	document.body	'click'	'[data-action="cancel-provider-removal"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-provider-removal"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-provider-disabled"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="refresh-github-repositories"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-provider-kind"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="back-provider-kind"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="start-github-sign-in"]'

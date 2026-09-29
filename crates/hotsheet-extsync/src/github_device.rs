@@ -55,6 +55,25 @@ pub enum GitHubDeviceError {
     Rejected(String),
 }
 
+/// What the signed-in user can reach through the Hot Sheet GitHub App (HS2-27T5WT).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct RepositoryAccess {
+    /// `owner/name`, case-insensitively sorted, across every installation.
+    pub repositories: Vec<String>,
+    pub installations: Vec<AppInstallation>,
+    /// Where to install the app on another account or organization, when known.
+    pub install_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AppInstallation {
+    pub account: String,
+    /// `all` or `selected`: whether the installation grants every repository or a chosen few.
+    pub selection: String,
+    /// The installation's GitHub settings page, where its repository access is changed.
+    pub settings_url: Option<String>,
+}
+
 pub struct GitHubDeviceClient {
     client_id: String,
     web_base: String,
@@ -123,6 +142,17 @@ impl GitHubDeviceClient {
         &self,
         access_token: &str,
     ) -> Result<Vec<String>, GitHubDeviceError> {
+        Ok(self.repository_access(access_token)?.repositories)
+    }
+
+    /// Every repository the signed-in user can reach through the app's installations, following
+    /// `Link: rel="next"` pagination, plus what each installation grants and where to change it.
+    /// GitHub only exposes repositories the app is installed on, so the installation details let
+    /// clients explain a missing repository and link to fix it (HS2-27T5WT).
+    pub fn repository_access(
+        &self,
+        access_token: &str,
+    ) -> Result<RepositoryAccess, GitHubDeviceError> {
         let api_base = if self.web_base == "https://github.com" {
             "https://api.github.com".to_owned()
         } else {
@@ -134,37 +164,74 @@ impl GitHubDeviceClient {
             ("X-GitHub-Api-Version", "2022-11-28".into()),
             ("User-Agent", "hotsheet2".into()),
         ];
-        let installations = self.get_json(
+        let mut access = RepositoryAccess::default();
+        let mut app_slug = None;
+        for installation in self.get_pages(
             &format!("{api_base}/user/installations?per_page=100"),
             &headers,
-        )?;
-        let mut repositories = Vec::new();
-        for installation in installations
-            .get("installations")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
+            "installations",
+        )? {
             let Some(id) = installation.get("id").and_then(Value::as_u64) else {
                 continue;
             };
-            let value = self.get_json(
-                &format!("{api_base}/user/installations/{id}/repositories?per_page=100"),
-                &headers,
-            )?;
-            repositories.extend(
+            let text = |key: &str| {
+                installation
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            };
+            app_slug = app_slug.or_else(|| text("app_slug"));
+            access.installations.push(AppInstallation {
+                account: installation
+                    .pointer("/account/login")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                selection: text("repository_selection").unwrap_or_else(|| "selected".into()),
+                settings_url: text("html_url"),
+            });
+            access.repositories.extend(
+                self.get_pages(
+                    &format!("{api_base}/user/installations/{id}/repositories?per_page=100"),
+                    &headers,
+                    "repositories",
+                )?
+                .iter()
+                .filter_map(|repository| repository.get("full_name").and_then(Value::as_str))
+                .map(str::to_owned),
+            );
+        }
+        access.repositories.sort_by_key(|name| name.to_lowercase());
+        access.repositories.dedup();
+        access.install_url =
+            app_slug.map(|slug| format!("{}/apps/{slug}/installations/new", self.web_base));
+        Ok(access)
+    }
+
+    /// Collect `key`'s array across every page of a paginated GitHub list.
+    fn get_pages(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        key: &str,
+    ) -> Result<Vec<Value>, GitHubDeviceError> {
+        let mut items = Vec::new();
+        let mut next = Some(url.to_owned());
+        // A bound keeps a misbehaving `Link` header from looping forever.
+        for _ in 0..100 {
+            let Some(url) = next.take() else { break };
+            let (value, link) = self.get_json_page(&url, headers)?;
+            items.extend(
                 value
-                    .get("repositories")
+                    .get(key)
                     .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
-                    .filter_map(|repository| repository.get("full_name").and_then(Value::as_str))
-                    .map(str::to_owned),
+                    .cloned(),
             );
+            next = link;
         }
-        repositories.sort();
-        repositories.dedup();
-        Ok(repositories)
+        Ok(items)
     }
 
     fn require_client_id(&self) -> Result<(), GitHubDeviceError> {
@@ -200,7 +267,11 @@ impl GitHubDeviceClient {
         Ok(value)
     }
 
-    fn get_json(&self, url: &str, headers: &[(&str, String)]) -> Result<Value, GitHubDeviceError> {
+    fn get_json_page(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+    ) -> Result<(Value, Option<String>), GitHubDeviceError> {
         let response = self
             .transport
             .request("GET", url, headers, None)
@@ -226,7 +297,11 @@ impl GitHubDeviceClient {
                 },
             });
         }
-        Ok(value)
+        let next = response
+            .headers
+            .get("link")
+            .and_then(|link| crate::github::next_link(link));
+        Ok((value, next))
     }
 }
 
@@ -306,6 +381,72 @@ mod tests {
             vec!["small-tale/docs", "small-tale/hotsheet2"]
         );
         assert!(fake.requests.lock().unwrap()[0].get("scope").is_none());
+    }
+
+    #[test]
+    fn repository_access_follows_pagination_and_reports_installation_grants() {
+        // HS2-27T5WT: users with many repositories saw one page (or one installation's picks).
+        let page = |body: Value, next: Option<&str>| HttpResponse {
+            status: 200,
+            headers: next
+                .map(|url| HashMap::from([("link".to_string(), format!("<{url}>; rel=\"next\""))]))
+                .unwrap_or_default(),
+            body: body.to_string(),
+        };
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(VecDeque::from([
+                page(
+                    json!({"installations":[{"id":1,"app_slug":"hot-sheet","repository_selection":"selected","html_url":"https://github.test/settings/installations/1","account":{"login":"westphal"}}]}),
+                    Some("https://api.test/user/installations?page=2"),
+                ),
+                page(
+                    json!({"installations":[{"id":2,"repository_selection":"all","account":{"login":"Small-Tale"}}]}),
+                    None,
+                ),
+                page(
+                    json!({"repositories":[{"full_name":"westphal/Zeta"}]}),
+                    Some("https://api.test/user/installations/1/repositories?page=2"),
+                ),
+                page(
+                    json!({"repositories":[{"full_name":"westphal/alpha"}]}),
+                    None,
+                ),
+                page(
+                    json!({"repositories":[{"full_name":"Small-Tale/hotsheet2"},{"full_name":"westphal/alpha"}]}),
+                    None,
+                ),
+            ])),
+            requests: Mutex::new(vec![]),
+        });
+        let client = GitHubDeviceClient::new("client", "https://github.test", fake.clone());
+        let access = client.repository_access("token").unwrap();
+        assert_eq!(
+            access.repositories,
+            ["Small-Tale/hotsheet2", "westphal/alpha", "westphal/Zeta"]
+        );
+        assert_eq!(
+            access.installations,
+            [
+                AppInstallation {
+                    account: "westphal".into(),
+                    selection: "selected".into(),
+                    settings_url: Some("https://github.test/settings/installations/1".into()),
+                },
+                AppInstallation {
+                    account: "Small-Tale".into(),
+                    selection: "all".into(),
+                    settings_url: None,
+                },
+            ]
+        );
+        assert_eq!(
+            access.install_url.as_deref(),
+            Some("https://github.test/apps/hot-sheet/installations/new")
+        );
+        assert!(
+            fake.responses.lock().unwrap().is_empty(),
+            "every page was read"
+        );
     }
 
     #[test]

@@ -28,6 +28,41 @@ describe('ticket source surfaces', () => {
       expect(markup).toContain(label);
   });
 
+  it('lists every reachable repository for search and explains missing ones (HS2-27T5WT)', () => {
+    const form = (auth: Partial<import('./provider-setup-form').GithubAuthState>) =>
+      String(
+        ProviderSetupForm({
+          kind: 'github',
+          auth: { session: 's', userCode: 'C', verificationUri: 'https://github.test', state: 'authorized', ...auth },
+        }),
+      );
+    const limited = form({
+      repositories: ['acme/one', 'acme/two'],
+      installations: [
+        { account: 'acme', selection: 'all' },
+        { account: 'me', selection: 'selected', settingsUrl: 'https://github.test/settings/installations/7' },
+      ],
+      installUrl: 'https://github.test/apps/hot-sheet/installations/new',
+    });
+    expect(limited).toContain('list="provider-setup-github-repositories"');
+    expect(limited).toContain('<option value="acme/one"></option>');
+    expect(limited).toContain('2 repositories available.');
+    expect(limited).toContain('you chose on <strong>me</strong>');
+    expect(limited).not.toContain('<strong>acme</strong>');
+    expect(limited).toContain('href="https://github.test/settings/installations/7"');
+    expect(limited).toContain('Add another account or organization');
+    expect(limited).toContain('data-action="refresh-github-repositories"');
+    expect(limited).not.toContain('<select');
+    const none = form({ repositories: [], installations: [] });
+    expect(none).toContain('not installed on any account yet');
+    expect(none).toContain('0 repositories available.');
+    expect(form({ repositories: ['a/b'], installations: [], refreshing: true })).toMatch(
+      /refresh-github-repositories" disabled[\s\S]*?Refreshing…/,
+    );
+    // Before the list arrives there is nothing to search yet.
+    expect(form({})).not.toContain('provider-setup-github-repositories');
+  });
+
   it('toggles availability while editing and marks disabled connections in settings (HS2-SF6W34)', () => {
     const connection = {
         id: 'github-main',

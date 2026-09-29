@@ -993,7 +993,7 @@ fn github_message(body: &str) -> String {
         .unwrap_or_else(|| body.to_string())
 }
 
-fn next_link(header: &str) -> Option<String> {
+pub(crate) fn next_link(header: &str) -> Option<String> {
     header.split(',').find_map(|part| {
         let (url, relation) = part.trim().split_once(';')?;
         (relation.trim() == "rel=\"next\"").then(|| {

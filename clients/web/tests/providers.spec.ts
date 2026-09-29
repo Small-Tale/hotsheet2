@@ -385,6 +385,7 @@ async function mockProject(
   let createdTerminal = false;
   const closedTerminals = new Set<string>();
   let folderChoice = 0;
+  let repositoryListings = 0;
   let ticketSourceConfigured = !emptyAtFirst;
   let gitStores = ticketSourceConfigured ? [...project.stores] : [];
   let providerConnectionRecords: Array<{
@@ -456,8 +457,29 @@ async function mockProject(
       await new Promise((resolve) => setTimeout(resolve, 100));
       return route.fulfill({ json: { state: 'authorized', credential_reference: 'github-app-auth-1' } });
     }
-    if (path.endsWith('/github-auth/device/auth-1/repositories') && request.method() === 'GET')
-      return route.fulfill({ json: { repositories: ['small-tale/hotsheet2', 'small-tale/secondary'] } });
+    if (path.endsWith('/github-auth/device/auth-1/repositories') && request.method() === 'GET') {
+      // The real server's shape: names plus what each app installation grants (HS2-27T5WT). A later
+      // listing reflects access the user granted on GitHub in the meantime.
+      repositoryListings += 1;
+      return route.fulfill({
+        json: {
+          repositories: [
+            'small-tale/hotsheet2',
+            'small-tale/secondary',
+            ...(repositoryListings > 1 ? ['westphal/newly-granted'] : []),
+          ],
+          installations: [
+            { account: 'small-tale', selection: 'all', settings_url: null },
+            {
+              account: 'westphal',
+              selection: 'selected',
+              settings_url: 'https://github.test/settings/installations/7',
+            },
+          ],
+          install_url: 'https://github.test/apps/hot-sheet/installations/new',
+        },
+      });
+    }
     if (path.endsWith('/github-auth/device/auth-1') && request.method() === 'DELETE')
       return route.fulfill({ status: 204 });
     const providerConnection = path.match(/\/provider-connections\/([^/]+)$/);
@@ -1901,7 +1923,26 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
       creates.push(request.postDataJSON());
   });
-  await providerForm.getByLabel('Repository').selectOption('small-tale/hotsheet2');
+  // A searchable list of every reachable repository, with guidance for missing ones (HS2-27T5WT).
+  const repository = providerForm.locator('input[name="connection-locator"]'),
+    access = providerForm.getByRole('region', { name: 'GitHub repository access' });
+  await expect(repository).toHaveAttribute('placeholder', 'Search your repositories…');
+  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(2);
+  await expect(providerForm.getByText('2 repositories available.')).toBeVisible();
+  await expect(access).toContainText('can see only the repositories you chose on westphal');
+  await expect(access.getByRole('link', { name: 'Change access for westphal' })).toHaveAttribute(
+    'href',
+    'https://github.test/settings/installations/7',
+  );
+  await expect(access.getByRole('link', { name: 'Add another account or organization' })).toHaveAttribute(
+    'href',
+    'https://github.test/apps/hot-sheet/installations/new',
+  );
+  await page.screenshot({ path: '/private/tmp/hs2-27t5wt-repository-picker-wide.png', fullPage: true });
+  await access.getByRole('button', { name: 'Refresh list' }).click();
+  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
+  await repository.fill('small-tale/hotsheet2');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(1);
   expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues' });
@@ -1922,14 +1963,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
   await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
-  await providerForm.getByLabel('Repository').selectOption('small-tale/secondary');
+  await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
   await providerForm.getByLabel('Use as the default ticket source').uncheck();
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
   await page.getByRole('button', { name: 'Edit GitHub Issues' }).click();
-  await expect(providerForm.getByLabel('Repository')).toHaveValue('small-tale/hotsheet2');
+  await expect(providerForm.locator('input[name="connection-locator"]')).toHaveValue('small-tale/hotsheet2');
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect(setup).toHaveJSProperty('open', false);

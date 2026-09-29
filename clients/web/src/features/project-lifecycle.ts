@@ -665,19 +665,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       if (githubAuth.value?.session !== started.session_id || result.state === 'pending') return;
       if (result.state === 'authorized') {
         githubAuth.value = { ...githubAuth.value, state: 'authorized', credential: result.credential_reference };
-        try {
-          const listed = await client.githubAuthRepositories(started.session_id);
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async cancellation may replace the live auth signal while this request is pending.
-          if (githubAuth.value?.session === started.session_id)
-            githubAuth.value = { ...githubAuth.value, repositories: listed.repositories };
-        } catch (reason) {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async cancellation may replace the live auth signal while this request is pending.
-          if (githubAuth.value?.session === started.session_id)
-            githubAuth.value = {
-              ...githubAuth.value,
-              message: reason instanceof Error ? reason.message : String(reason),
-            };
-        }
+        await loadGitHubRepositories(client, started.session_id);
       } else {
         githubAuth.value = {
           ...githubAuth.value,
@@ -688,6 +676,42 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     } catch (reason) {
       providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
     }
+  }
+
+  /** List (or re-list) the repositories the signed-in session can reach, with installation grants. */
+  async function loadGitHubRepositories(client: Api, session: string) {
+    try {
+      const listed = await client.githubAuthRepositories(session);
+      if (githubAuth.value?.session !== session) return;
+      githubAuth.value = {
+        ...githubAuth.value,
+        repositories: listed.repositories,
+        installations: (listed.installations ?? []).map((item) => ({
+          account: item.account,
+          selection: item.selection,
+          settingsUrl: item.settings_url ?? undefined,
+        })),
+        installUrl: listed.install_url ?? undefined,
+        refreshing: false,
+        message: undefined,
+      };
+    } catch (reason) {
+      if (githubAuth.value?.session === session)
+        githubAuth.value = {
+          ...githubAuth.value,
+          refreshing: false,
+          message: reason instanceof Error ? reason.message : String(reason),
+        };
+    }
+  }
+
+  /** Re-list after the user granted the app more repositories on GitHub (HS2-27T5WT). */
+  async function refreshGitHubRepositories() {
+    const target = ticketSourceSetupProject.value,
+      current = githubAuth.value;
+    if (!target || current?.state !== 'authorized' || current.refreshing) return;
+    githubAuth.value = { ...current, refreshing: true };
+    await loadGitHubRepositories(new Api(target.apiPath), current.session);
   }
 
   function cancelGitHubSignIn() {
@@ -797,6 +821,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     cancelProviderRemoval,
     removeExternalProvider,
     toggleProviderDisabled,
+    refreshGitHubRepositories,
     providerSettingsError,
     githubAuth,
     ticketSourceSetupNavigation,

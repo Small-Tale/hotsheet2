@@ -53,6 +53,16 @@ export interface ConnectionRemoval {
   deleted_credential: string | null;
   kept_credential: string | null;
 }
+/** Repositories the signed-in user can pick, and what each app installation grants (HS2-27T5WT). */
+export interface GitHubRepositoryAccess {
+  repositories: string[];
+  installations?: Array<{
+    account: string; /** `all` or `selected`. */
+    selection: string;
+    settings_url: string | null;
+  }>;
+  install_url?: string | null;
+}
 export interface GitHubAuthStart {
   session_id: string;
   user_code: string;
@@ -580,7 +590,7 @@ export class Api {
   waitGitHubAuth = (session: string) =>
     this.request<GitHubAuthStatus>(`/github-auth/device/${encodeURIComponent(session)}`);
   githubAuthRepositories = (session: string) =>
-    this.request<{ repositories: string[] }>(`/github-auth/device/${encodeURIComponent(session)}/repositories`);
+    this.request<GitHubRepositoryAccess>(`/github-auth/device/${encodeURIComponent(session)}/repositories`);
   cancelGitHubAuth = (session: string) =>
     this.request<void>(`/github-auth/device/${encodeURIComponent(session)}`, { method: 'DELETE' });
   addCheckoutSource = (checkout: string, connection: ProviderConnection, makeDefault = false) =>
