@@ -432,6 +432,11 @@ and identity-less legacy entries remain conservatively blocking.
   reconciliation surface (HS2-K9SG2R). Background refresh also leaves
   an in-flight or queued autosave draft alone; the write response and token retry path
   distinguish this client's earlier partial save from a genuinely competing edit.
+  Every project refresh — event-driven or direct, such as the one after an attachment
+  upload — waits for this client's in-flight ticket writes before reading, and a write
+  that begins mid-refresh drops that refresh's results. A read that raced a save therefore
+  never lands afterward carrying the user's own older text, which would otherwise look like
+  a remote edit and raise a spurious merge prompt (HS2-RE1PS6).
   The freeform blocked reason uses the same silent blur-flush path and is the single source
   of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
   an empty edit sends `null` to clear it, and the authoritative response exits

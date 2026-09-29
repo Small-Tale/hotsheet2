@@ -288,3 +288,286 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
   // The real external divergence (default → urgent, vs the user's high) must raise the field conflict.
   await expect(page.locator('[data-component="ticket-field-conflict"]')).toBeVisible();
 });
+
+// HS2-RE1PS6: appending to the same line again while an earlier details autosave is still in flight must
+// base the next save on the committed text, never treat the user's own saved words as a concurrent edit.
+test('continued typing during an in-flight details autosave never prompts a merge (HS2-RE1PS6)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let token = 'T0',
+    tokenSeq = 0,
+    details = 'Intro',
+    firstPatchDelayed = false,
+    conflicts = 0;
+  const patches: string[] = [];
+  const full = () => ({
+    store: 'git-local',
+    ...listRow,
+    details,
+    blocked_reason: null,
+    notes: [],
+    attachments: [],
+    concurrency_token: token,
+  });
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname,
+      method = request.method();
+    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (/\/tickets\/01$/.test(path) && method === 'PATCH') {
+      const body = request.postDataJSON() as { details?: string; expected_token?: string };
+      if (body.expected_token && body.expected_token !== token) {
+        conflicts += 1;
+        return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      }
+      if (body.details !== undefined) {
+        details = body.details;
+        patches.push(body.details);
+      }
+      tokenSeq += 1;
+      token = `T${tokenSeq}`;
+      const snapshot = full();
+      if (!firstPatchDelayed) {
+        firstPatchDelayed = true;
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      return route.fulfill({ json: snapshot });
+    }
+    if (/\/tickets\/01$/.test(path) && method === 'GET') return route.fulfill({ json: full() });
+    if (path.endsWith('/tickets') && method === 'GET')
+      return route.fulfill({
+        json: {
+          items: [listRow],
+          counts: {
+            total: 1,
+            queued: 1,
+            backlog: 0,
+            archive: 0,
+            open: 1,
+            up_next: 0,
+            active: 1,
+            started: 1,
+            completed_today: 0,
+            completion_trend: [0, 0, 0, 0, 0, 0, 0],
+          },
+        },
+      });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/ws/poll')) {
+      if (url.searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      return;
+    }
+    if (
+      path.endsWith('/terminals') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+
+  // First autosave goes out and is held in flight; the user keeps appending at the same spot twice.
+  await editor.fill('Intro\n- the sign in');
+  await expect.poll(() => tokenSeq).toBe(1);
+  await editor.fill('Intro\n- the sign in flow is');
+  await page.waitForTimeout(300);
+  await editor.fill('Intro\n- the sign in flow is quite awkward');
+
+  await expect.poll(() => details).toBe('Intro\n- the sign in flow is quite awkward');
+  expect(conflicts).toBe(0);
+  await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await expect(editor).toHaveValue('Intro\n- the sign in flow is quite awkward');
+  expect(patches[0]).toBe('Intro\n- the sign in');
+});
+
+// HS2-RE1PS6: adding an attachment refreshes the project outside the local-mutation barrier. That refresh's
+// ticket read could be answered with the pre-save details and land after the details autosave committed, so
+// the user's own older text looked like a remote edit ("Their latest version") and raised a merge prompt —
+// or, when the user had stopped typing, silently replaced the draft with the older text.
+for (const keepTyping of [true, false])
+  test(`an attachment refresh racing a details autosave never ${keepTyping ? 'conflicts' : 'reverts'} the draft (HS2-RE1PS6)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    let token = 'T0',
+      tokenSeq = 0,
+      details = 'Intro',
+      attachments: Array<{ id: string; filename: string; created_at: string }> = [];
+    const patches: string[] = [],
+      gets: Array<() => void> = [];
+    let releasePatch: (() => void) | undefined,
+      holdReads = false;
+    const full = () => ({
+      store: 'git-local',
+      ...listRow,
+      details,
+      blocked_reason: null,
+      notes: [],
+      attachments,
+      concurrency_token: token,
+    });
+    await page.route('**/*', async (route) => {
+      const request = route.request(),
+        url = new URL(request.url()),
+        path = url.pathname,
+        method = request.method();
+      if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+      if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+      if (path.endsWith('/providers'))
+        return route.fulfill({
+          json: [
+            {
+              connection_id: 'git-local',
+              provider: 'git',
+              display_name: 'Hot Sheet git',
+              locator: '/tickets',
+              default: true,
+              capabilities,
+            },
+          ],
+        });
+      if (/\/tickets\/01\/attachments$/.test(path) && method === 'POST') {
+        attachments = [...attachments, { id: 'A1', filename: 'proof.txt', created_at: '2026-09-14T00:00:00Z' }];
+        return route.fulfill({ status: 201, json: full() });
+      }
+      if (/\/tickets\/01$/.test(path) && method === 'PATCH') {
+        const body = request.postDataJSON() as { details?: string; expected_token?: string };
+        // The first save is held open so the attachment refresh can read the ticket before it commits.
+        if (patches.length === 0) await new Promise<void>((resolve) => (releasePatch = resolve));
+        if (body.expected_token && body.expected_token !== token)
+          return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+        if (body.details !== undefined) {
+          details = body.details;
+          patches.push(body.details);
+        }
+        tokenSeq += 1;
+        token = `T${tokenSeq}`;
+        return route.fulfill({ json: full() });
+      }
+      if (/\/tickets\/01$/.test(path) && method === 'GET') {
+        // During the race window, snapshot on arrival and answer only when the test releases it.
+        const snapshot = full();
+        if (!holdReads) return route.fulfill({ json: snapshot });
+        await new Promise<void>((resolve) => gets.push(resolve));
+        return route.fulfill({ json: snapshot });
+      }
+      if (path.endsWith('/tickets') && method === 'GET')
+        return route.fulfill({
+          json: {
+            items: [listRow],
+            counts: {
+              total: 1,
+              queued: 1,
+              backlog: 0,
+              archive: 0,
+              open: 1,
+              up_next: 0,
+              active: 1,
+              started: 1,
+              completed_today: 0,
+              completion_trend: [0, 0, 0, 0, 0, 0, 0],
+            },
+          },
+        });
+      if (path.endsWith('/repository/status'))
+        return route.fulfill({
+          json: {
+            branch: 'main',
+            ahead: 0,
+            behind: 0,
+            staged: 0,
+            unstaged: 0,
+            untracked: 0,
+            conflicted: 0,
+            clean: true,
+          },
+        });
+      if (path.endsWith('/ws/poll')) {
+        if (url.searchParams.get('since') === null)
+          return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+        return;
+      }
+      if (
+        path.endsWith('/terminals') ||
+        path.endsWith('/connections') ||
+        path.endsWith('/commands') ||
+        path.endsWith('/command-runs') ||
+        path.endsWith('/views') ||
+        path.endsWith('/corrupt-tickets')
+      )
+        return route.fulfill({ json: [] });
+      return route.continue();
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
+    const inspector = page.locator('[data-component="ticket-inspector"]');
+    await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+
+    await editor.fill('Intro\n- the sign in');
+    await expect.poll(() => Boolean(releasePatch)).toBe(true);
+    // While that save is still open, drop an attachment onto the ticket; its refresh reads the ticket.
+    holdReads = true;
+    await inspector.evaluate((node) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['proof'], 'proof.txt', { type: 'text/plain' }));
+      node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    });
+    // Give the refresh time to reach the ticket read (it may wait for the save before reading).
+    await page.waitForTimeout(400);
+    releasePatch?.();
+    await expect.poll(() => patches.length).toBe(1);
+    const finalText = keepTyping ? 'Intro\n- the sign in flow is quite awkward' : 'Intro\n- the sign in';
+    if (keepTyping) {
+      await editor.fill(finalText);
+      await expect.poll(() => details).toBe(finalText);
+    }
+    await page.waitForTimeout(300);
+    // Now answer every held read; a stale one must not be mistaken for someone else's edit.
+    holdReads = false;
+    while (gets.length) gets.shift()?.();
+    await page.waitForTimeout(500);
+    while (gets.length) gets.shift()?.();
+    await page.waitForTimeout(300);
+    await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+    await expect(editor).toHaveValue(finalText);
+    expect(details).toBe(finalText);
+    // Typing on after the stale read lands must still save cleanly, without a merge prompt.
+    const later = `${finalText}\n- one more thought`;
+    await editor.fill(later);
+    await expect.poll(() => details).toBe(later);
+    await page.waitForTimeout(300);
+    await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+    await expect(editor).toHaveValue(later);
+    await page.screenshot({ path: `/private/tmp/hs2-re1ps6-no-merge-prompt-${keepTyping ? 'typing' : 'idle'}.png` });
+  });

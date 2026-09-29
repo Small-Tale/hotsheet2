@@ -518,6 +518,8 @@ export async function startHotSheetWebClient() {
   let ticketSelectionAnchor: string | undefined;
   const histories = new Map<string, TicketHistory>();
   const mutationGenerations = new Map<string, number>();
+  // Open local ticket writes; every project refresh waits on it before reading tickets (HS2-RE1PS6).
+  const localTicketMutationBarrier = createRefreshBarrier();
   // Per-ticket single-edit mutation sequencing (HS2-K9SG2R). Rapid same-ticket field edits used to read
   // the same pre-first concurrency token and self-conflict ("the ticket was modified"). `committedTickets`
   // holds the latest server-committed full ticket per slug so each queued edit bases off the previous
@@ -2841,6 +2843,12 @@ export async function startHotSheetWebClient() {
     if (showLoading) loading.value = true;
     const active = () => generation === projectRefreshGeneration && project()?.id === current.id;
     try {
+      // A read racing an in-flight save can answer with pre-save values; reconciled into the open editor after
+      // that save committed, the user's own older text would look like someone else's edit and raise a merge
+      // prompt. Direct refreshes (after an attachment upload, a restore, …) wait for local writes like
+      // event-driven ones do; a write that begins later bumps the generation and drops this refresh (HS2-RE1PS6).
+      await localTicketMutationBarrier.wait();
+      if (!active()) return;
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         view = selectedView.value,
         query = sortedTicketQuery(ticketViewQuery(view)),
@@ -3292,7 +3300,6 @@ export async function startHotSheetWebClient() {
     }
   }
   const openSelect = () => [...document.querySelectorAll<Control>('wa-select')].find((node) => node.open);
-  const localTicketMutationBarrier = createRefreshBarrier();
   function beginLocalTicketMutation() {
     // A refresh may already have passed the barrier and be waiting on an older
     // ticket snapshot. Invalidate that active-project response before applying
