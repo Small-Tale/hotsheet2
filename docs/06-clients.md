@@ -1731,9 +1731,10 @@ do not duplicate that dismissal with a header close button. The Notifications vi
 Pending/24 Hours/7 Days counts, and newest-first machine-local client history are scoped to
 the selected project and switch immediately with its tab; a request that
 disappears without this client resolving it is labeled “Decision made outside Hot
-Sheet.” Responded history cards retain the same full bottom inset when their action is
-empty and no decision-button footer is rendered, so the final summary cannot sit against
-the card edge. The right inspector region remains present and manually collapsible in this
+Sheet.” Responded history cards name the tool even when their action is empty, so a
+response still identifies the permission it covered. They retain the full bottom inset
+without a details box or decision-button footer, keeping the summary away from the card
+edge. The right inspector region remains present and manually collapsible in this
 view rather than changing the workspace width.
 
 Ignore is client-only and hides the popup without answering. When the server advertises

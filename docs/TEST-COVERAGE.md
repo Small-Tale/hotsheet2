@@ -279,6 +279,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | qualified-single-ticket-routing | docs/06-clients.md | Single-ticket reads, mutations, attachments, and code review use qualified connection:native identifiers when the source ticket is known, so git and external sources route directly (HS2-HX0VM9). | `clients/web/src/api.test.ts # qualified checkout ticket routes` | `clients/web/tests/providers.spec.ts # routes mixed git and external ticket reads and edits by qualified id` | — | double-covered |
 
+| permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

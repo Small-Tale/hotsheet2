@@ -127,10 +127,11 @@ describe('permission presentation components', () => {
   });
 
   it('marks responded list items for footer-equivalent bottom padding even without details or actions', () => {
-    const resolvedWithoutAction: PermissionHistoryItem = { ...history, action: '' };
+    const resolvedWithoutAction: PermissionHistoryItem = { ...history, tool: 'ToolSearch', action: '' };
     const markup = String(PermissionRequestCard({ item: resolvedWithoutAction }));
     const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
     expect(markup).toContain('data-resolved="true"');
+    expect(markup).toContain('ToolSearch: Decision made outside Hot Sheet');
     expect(markup).not.toContain('permission-request-card__details');
     expect(markup).not.toContain('permission-request-card__footer');
     expect(css).toMatchSource(

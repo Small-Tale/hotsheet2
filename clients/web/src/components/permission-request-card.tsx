@@ -70,7 +70,7 @@ export function PermissionRequestCard({
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
-  const statusLabel = history ? historyLabel(item) : operationLabel(item);
+  const statusLabel = history ? `${item.tool}: ${historyLabel(item)}` : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
     ? item.decision === 'allow'
