@@ -2595,7 +2595,9 @@ Local ticket mutations project their renderable fields into the current list and
 inspector immediately, then reconcile from the authoritative PATCH response. A
 single-ticket mutation must not synchronously reload the ticket collection, selected
 ticket, or repository status. Responses carry a per-ticket generation: late responses
-are ignored, while the current failed request restores its captured projection and
+are ignored. Single-ticket reads, mutations, attachment operations, and code review
+use the ticket's qualified `connection:native` identifier, so linked external sources route directly without probing every source
+(HS2-HX0VM9). The current failed request restores its captured projection and
 shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
 phase durations for local profiling.
 

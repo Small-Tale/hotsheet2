@@ -32,6 +32,27 @@ describe('server-busy tracking option (HS2-AZZ9TF)', () => {
   });
 });
 
+describe('qualified checkout ticket routes (HS2-HX0VM9)', () => {
+  it('preserves the source and native id on both read and write', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify({ store: 'jira-1', id: 'PROJ-7' }), { status: 200 }));
+    try {
+      const api = new Api('/api');
+      await api.checkoutTicket('mixed', 'jira-1:PROJ-7');
+      await api.updateCheckoutTicket('mixed', 'jira-1:PROJ-7', { title: 'Updated' });
+      expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/checkouts/mixed/tickets/jira-1%3APROJ-7', expect.any(Object));
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        '/api/checkouts/mixed/tickets/jira-1%3APROJ-7',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Updated' }) }),
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
+
 describe('attachment filename transport', () => {
   it('encodes macOS screenshot names as an ASCII-safe header value', () => {
     const encoded = encodeAttachmentFilename('Screenshot 2026-08-31 at 8.49.09 AM.png');

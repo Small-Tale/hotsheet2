@@ -277,6 +277,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | permission-popup-mobile-visibility | docs/06-clients.md | At phone width, the pending permission popup stays above an open project sidebar and keeps its identity, command, and decision controls in the viewport (HS2-Y1HN0D). | `clients/web/src/components/app-shell-components.test.ts # composes viewport overlay after side panels` | `clients/web/tests/providers.spec.ts # renders exactly once when the long poll announces a permission request` | `HS2-Y1HN0D # 390px popup over open sidebar screenshot` | double-covered |
 
+| qualified-single-ticket-routing | docs/06-clients.md | Single-ticket reads, mutations, attachments, and code review use qualified connection:native identifiers when the source ticket is known, so git and external sources route directly (HS2-HX0VM9). | `clients/web/src/api.test.ts # qualified checkout ticket routes` | `clients/web/tests/providers.spec.ts # routes mixed git and external ticket reads and edits by qualified id` | — | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

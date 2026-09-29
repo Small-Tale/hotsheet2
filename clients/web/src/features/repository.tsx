@@ -195,7 +195,7 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
     codeReviewLoading.value = true;
     codeReviewMessage.value = '';
     try {
-      const review = await new Api(current.apiPath).codeReview(current.id, ticket.id);
+      const review = await new Api(current.apiPath).codeReview(current.id, ticket.qualified_id);
       if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) codeReview.value = review;
     } catch (reason) {
       if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {

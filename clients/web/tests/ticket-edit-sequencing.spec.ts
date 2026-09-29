@@ -77,7 +77,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
-      path = url.pathname,
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
     if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
@@ -195,7 +195,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
-      path = url.pathname,
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
     if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
@@ -311,7 +311,7 @@ test('continued typing during an in-flight details autosave never prompts a merg
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
-      path = url.pathname,
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
     if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
@@ -437,7 +437,7 @@ for (const keepTyping of [true, false])
     await page.route('**/*', async (route) => {
       const request = route.request(),
         url = new URL(request.url()),
-        path = url.pathname,
+        path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
         method = request.method();
       if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
       if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });

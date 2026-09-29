@@ -633,7 +633,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       noteId = data(target).noteId;
     if (!current || !ticket || !noteId || !canDeleteNotes()) return;
     void api()
-      .deleteCheckoutNote(current.id, ticket.id, noteId)
+      .deleteCheckoutNote(current.id, ticket.qualified_id, noteId)
       .then((result) => {
         selectedTicket.value = result.ticket;
         editingNoteId.value = undefined;
@@ -814,7 +814,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     if (!current || !ticket || !reviewTarget) return;
     codeReviewMessage.value = 'Opening diff tool…';
     void new Api(current.apiPath)
-      .openCodeReview(current.id, ticket.id, reviewTarget)
+      .openCodeReview(current.id, ticket.qualified_id, reviewTarget)
       .then(() => {
         if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
           codeReviewMessage.value = '';

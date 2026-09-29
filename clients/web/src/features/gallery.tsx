@@ -69,7 +69,8 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
   let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
   let attachmentAnnotationSession:
-    { projectId: string; ticketId: string; attachmentId: string; before: MediaAnnotation[] } | undefined;
+    | { projectId: string; ticketId: string; qualifiedId: string; attachmentId: string; before: MediaAnnotation[] }
+    | undefined;
   let attachmentAnnotationSave = Promise.resolve();
 
   let attachmentGallerySvgFrame: number | undefined, attachmentGallerySvgPreviousFrame: number | undefined;
@@ -87,9 +88,9 @@ export function createGalleryController(dependencies: GalleryDependencies) {
         .map((item) => ({
           id: item.id,
           name: item.filename,
-          url: api().checkoutAttachmentUrl(current.id, ticket.id, item.id),
+          url: api().checkoutAttachmentUrl(current.id, ticket.qualified_id, item.id),
           thumbnailUrl: isVideoAttachment(item.filename)
-            ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.id, item.id)
+            ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id)
             : undefined,
           aliases: [attachmentReferenceUrl(context, { filename: item.filename })],
           ticket: ticket.slug,
@@ -328,6 +329,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentAnnotationSession = {
       projectId: current.id,
       ticketId: ticket.id,
+      qualifiedId: ticket.qualified_id,
       attachmentId: attachment.id,
       before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
     };
@@ -343,7 +345,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       try {
         const result = await api().updateCheckoutAttachmentAnnotations(
           session.projectId,
-          session.ticketId,
+          session.qualifiedId,
           session.attachmentId,
           annotations,
         );

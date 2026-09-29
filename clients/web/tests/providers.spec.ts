@@ -400,7 +400,9 @@ async function mockProject(
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
-      path = url.pathname;
+      // The checkout API accepts both native and qualified ticket routes; use the native fixture
+      // lookup below while retaining the original request URL for route assertions.
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
     if (path === '/__hotsheet/projects/open') {
       const opened = hs1Migration
         ? {
@@ -1080,6 +1082,7 @@ async function mockProject(
         ...row,
         id: '02',
         native_id: '02',
+        qualified_id: 'git-local:02',
         slug: 'HS2-NEW001',
         title: normalized.title,
         tags: normalized.tags,
@@ -5571,7 +5574,7 @@ test('enlarges reader description and note text 1.5× with a remembered global t
       },
     ],
   };
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...richFull } })
       : route.fallback(),
@@ -5777,7 +5780,7 @@ test('lists associated commits and opens a validated commit or range in the conf
 test('renders the exact shared Code Review component in the inspector and reader', async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 1000 });
   await mockProject(page);
-  await page.route('**/tickets/01/code-review', (route) =>
+  await page.route('**/tickets/*01/code-review', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { difftool: 'Glassbox', truncated: false, ranges: [], commits: [] } })
       : route.fallback(),
@@ -5805,7 +5808,7 @@ test('renders the exact shared Code Review component in the inspector and reader
 
 test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', async ({ page }) => {
   const actions = await mockProject(page);
-  await page.route('**/tickets/01/code-review', (route) =>
+  await page.route('**/tickets/*01/code-review', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: {
@@ -6050,7 +6053,11 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   const patches = await mockProject(page);
   let detailReads = 0;
   page.on('request', (request) => {
-    if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/tickets/01')) detailReads += 1;
+    if (
+      request.method() === 'GET' &&
+      decodeURIComponent(new URL(request.url()).pathname).endsWith('/tickets/git-local:01')
+    )
+      detailReads += 1;
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -6084,6 +6091,101 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await row.click();
   await expect(inspector).toContainText('Draft preserved across a redundant reselect');
   await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-narrow.png', fullPage: true });
+});
+
+test('routes mixed git and external ticket reads and edits by qualified id', async ({ page }) => {
+  await mockProject(page);
+  const external = {
+      ...row,
+      id: 'PROJ-7',
+      native_id: 'PROJ-7',
+      qualified_id: 'jira-1:PROJ-7',
+      connection_id: 'jira-1',
+      slug: 'JIRA-7',
+      title: 'Jira routed ticket',
+    },
+    requests: Array<{ method: string; path: string }> = [];
+  let externalFull = { ...full, ...external, details: 'Before edit' };
+  page.on('request', (request) => {
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path.includes('/checkouts/demo-checkout/tickets/')) requests.push({ method: request.method(), path });
+  });
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'Hot Sheet git',
+          locator: '/tickets',
+          default: true,
+          capabilities: { update: true, notes: true },
+        },
+        {
+          connection_id: 'jira-1',
+          provider: 'jira',
+          display_name: 'Jira',
+          locator: 'https://jira.test',
+          default: false,
+          capabilities: { update: true, notes: true },
+        },
+      ],
+    }),
+  );
+  await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+    const request = route.request(),
+      path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path.endsWith('/tickets') && request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          items: [row, external],
+          counts: {
+            total: 2,
+            queued: 2,
+            backlog: 0,
+            archive: 0,
+            trash: 0,
+            open: 2,
+            up_next: 0,
+            active: 0,
+            started: 2,
+            completed_today: 0,
+          },
+        },
+      });
+    if (path.endsWith('/tickets/jira-1:PROJ-7') && request.method() === 'GET')
+      return route.fulfill({ json: { store: 'jira-1', ...externalFull } });
+    if (path.endsWith('/tickets/jira-1:PROJ-7') && request.method() === 'PATCH') {
+      externalFull = { ...externalFull, ...request.postDataJSON(), concurrency_token: 'after-edit' };
+      return route.fulfill({ json: { store: 'jira-1', ...externalFull } });
+    }
+    return route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toContainText('Jira routed ticket');
+  await expect(inspector).toContainText('Before edit');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('textbox', { name: 'Ticket details' }).fill('After edit');
+  await expect
+    .poll(() =>
+      requests.some((request) => request.method === 'PATCH' && request.path.endsWith('/tickets/jira-1:PROJ-7')),
+    )
+    .toBe(true);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(inspector).toContainText('Use real project tickets');
+  expect(requests.some((request) => request.method === 'GET' && request.path.endsWith('/tickets/jira-1:PROJ-7'))).toBe(
+    true,
+  );
+  expect(requests.some((request) => request.method === 'GET' && request.path.endsWith('/tickets/git-local:01'))).toBe(
+    true,
+  );
+  expect(
+    requests.some((request) => request.path.endsWith('/tickets/PROJ-7') || request.path.endsWith('/tickets/01')),
+  ).toBe(false);
 });
 
 test('omits separators below every right-sidebar toolbar state', async ({ page }) => {
@@ -8303,7 +8405,7 @@ test('updates the open project after external ticket additions edits and deletio
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
   );
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...liveFull } })
       : route.fallback(),
@@ -8379,7 +8481,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
   );
-  await page.route('**/tickets/01', (route) => {
+  await page.route('**/tickets/*01', (route) => {
     const request = route.request();
     if (request.method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
     if (request.method() !== 'PATCH') return route.fallback();
@@ -8482,7 +8584,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   let liveFull = { ...full, details: 'Intro\nMiddle\nEnd', concurrency_token: 'base' },
     churn = 0;
   const patches: Record<string, unknown>[] = [];
-  await page.route('**/tickets/01', (route) => {
+  await page.route('**/tickets/*01', (route) => {
     const request = route.request();
     if (request.method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
     if (request.method() !== 'PATCH') return route.fallback();
@@ -8542,7 +8644,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
   await mockProject(page);
   let liveFull = { ...full, title: 'Fix the parser bug', concurrency_token: 'base' };
   const patches: Record<string, unknown>[] = [];
-  await page.route('**/tickets/01', (route) => {
+  await page.route('**/tickets/*01', (route) => {
     const request = route.request();
     if (request.method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
     if (request.method() !== 'PATCH') return route.fallback();
@@ -8585,7 +8687,7 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
   );
-  await page.route('**/tickets/01', (route) => {
+  await page.route('**/tickets/*01', (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
     if (route.request().method() === 'PATCH') {
       writes.push(route);
@@ -8705,7 +8807,7 @@ test('projects Up Next immediately and reconciles without a full project refresh
   page.on('request', (request) => {
     requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
-  await page.route('**/tickets/05', async (route) => {
+  await page.route('**/tickets/*05', async (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback();
     await new Promise((resolve) => setTimeout(resolve, 250));
     const body = route.request().postDataJSON();
@@ -8929,7 +9031,7 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await restore.click();
   await expect
     .poll(() => restoreRequests)
-    .toEqual(['/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets/12/restore']);
+    .toEqual(['/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets/git-local%3A12/restore']);
   await expect(deleted).toHaveCount(0);
   // Trash stays while selected so restoring the last ticket does not yank the view away; leaving it hides the empty Trash.
   await expect(trashItem).toBeVisible();
@@ -9289,7 +9391,7 @@ test('aligns the empty Notes text and preserves Add note before the first note e
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await mockProject(page);
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...full, notes: [] } })
       : route.fallback(),
@@ -10544,7 +10646,10 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await mockProject(page);
   const uploads: string[] = [];
   page.on('request', (request) => {
-    if (request.method() === 'POST' && new URL(request.url()).pathname.match(/\/tickets\/02\/attachments$/))
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname.match(/\/tickets\/git-local%3A02\/attachments$/i)
+    )
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
   await page.goto('/');
@@ -10606,7 +10711,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
     videoBodies = new Map<string, Buffer>();
   await page.route('**/*', async (route) => {
     const request = route.request(),
-      path = new URL(request.url()).pathname,
+      path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       attachment = path.match(/\/tickets\/01\/attachments\/([^/]+)$/),
       thumbnail = path.match(/\/tickets\/01\/attachments\/([^/]+)\/thumbnail$/);
     if (path.endsWith('/tickets/01') && request.method() === 'GET')
@@ -10723,10 +10828,10 @@ test('releases video resources and event work after repeated gallery playback cy
   await mockProject(page);
   const requests: string[] = [];
   page.on('request', (request) => {
-    const path = new URL(request.url()).pathname;
-    if (path.endsWith('/tickets/01/attachments/V1')) requests.push(path);
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path.endsWith('/tickets/git-local:01/attachments/V1')) requests.push(path);
   });
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: {
@@ -10737,7 +10842,7 @@ test('releases video resources and event work after repeated gallery playback cy
         })
       : route.fallback(),
   );
-  await page.route('**/tickets/01/attachments/V1', (route) =>
+  await page.route('**/tickets/*01/attachments/V1', (route) =>
     route.fulfill({ contentType: 'video/mp4', body: 'video fixture' }),
   );
   await page.goto('/?dev-review=false');
@@ -10876,16 +10981,16 @@ test('keeps decoded video seeks responsive across repeated real playback session
       feedback_needed: false,
       attachments: [{ id: 'V1', filename: 'reliability.webm', created_at: '2026-08-30T00:40:00Z' }],
     };
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: { store: 'git-local', ...ticket } }) : route.fallback(),
   );
-  await page.route('**/tickets/01/attachments/V1/thumbnail', (route) =>
+  await page.route('**/tickets/*01/attachments/V1/thumbnail', (route) =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#355070"/><text x="320" y="190" text-anchor="middle" fill="white" font-size="38">Video ready</text></svg>',
     }),
   );
-  await page.route('**/tickets/01/attachments/V1', (route) => {
+  await page.route('**/tickets/*01/attachments/V1', (route) => {
     const rangeHeader = route.request().headers().range;
     requests.push({ range: rangeHeader });
     const headers = { 'accept-ranges': 'bytes', 'content-type': 'video/webm' };
@@ -11135,7 +11240,7 @@ test('renders canonical attachment references for filenames containing backticks
       ],
       attachments: [{ id: 'A-BACKTICK', filename, created_at: '2026-08-30T00:40:00Z' }],
     };
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: { store: 'git-local', ...ticket } }) : route.fallback(),
   );
   await page.goto('/');
@@ -11240,12 +11345,12 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
       { id: 'A1', filename: 'proof.png', created_at: '2026-08-30T00:41:00Z' },
     ],
   };
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...videoTicket } })
       : route.fallback(),
   );
-  await page.route('**/tickets/01/attachments/V1', (route) => {
+  await page.route('**/tickets/*01/attachments/V1', (route) => {
     if (route.request().method() === 'GET') {
       const headers = {
           'accept-ranges': 'bytes',
@@ -11282,7 +11387,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
     }
     return route.fallback();
   });
-  await page.route('**/tickets/01/attachments/V1/thumbnail', (route) =>
+  await page.route('**/tickets/*01/attachments/V1/thumbnail', (route) =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#211d35"/><stop offset="1" stop-color="#59407c"/></linearGradient></defs><rect width="1280" height="720" fill="url(#g)"/><rect x="96" y="82" width="1088" height="556" rx="24" fill="#ffffff" opacity=".08"/><text x="640" y="330" text-anchor="middle" font-family="sans-serif" font-size="58" fill="white">Video annotation review</text><text x="640" y="400" text-anchor="middle" font-family="sans-serif" font-size="30" fill="#d7c9ef">Real pointer scrub · selected five-percent range</text></svg>',
@@ -11533,7 +11638,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
 
 test('links ticket references in details and notes and layers the referenced ticket', async ({ page }) => {
   await mockProject(page);
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: {
@@ -13830,7 +13935,7 @@ test('opens shared Markdown links safely in new tabs across the real inspector a
 
 test('opens ticket references without leaving column view (HS2-230NY7)', async ({ page }) => {
   await mockProject(page);
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...full, details: 'Continue with HS2-START02.' } })
       : route.fallback(),
@@ -13892,7 +13997,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
     return route.fulfill({ json: other ? [otherUnique, sharedOther] : [row, sharedDemo] });
   });
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: {
@@ -13905,12 +14010,12 @@ test('resolves exact ticket links across projects and shows only a compact ambig
         })
       : route.fallback(),
   );
-  await page.route('**/tickets/other-unique', (route) =>
+  await page.route('**/tickets/*other-unique', (route) =>
     route.fulfill({
       json: { store: 'git-local', ...otherUnique, details: 'Cross-project destination.', notes: [], attachments: [] },
     }),
   );
-  await page.route('**/tickets/shared-other', (route) =>
+  await page.route('**/tickets/*shared-other', (route) =>
     route.fulfill({
       json: {
         store: 'git-local',
@@ -14027,7 +14132,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
   };
   await mockProject(page);
   // The source ticket's rendered details mention the old HS1 number.
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: { store: 'git-local', ...full, details: 'Superseded by legacy HS-7. Ignore AB-1.', notes: [] },
@@ -14042,7 +14147,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
       : route.fallback();
   });
   // Opening the resolved match loads the imported ticket by its ULID.
-  await page.route('**/tickets/imp1', (route) =>
+  await page.route('**/tickets/*imp1', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({
           json: { store: 'git-local', ...imported, details: 'The imported ticket body.', notes: [], attachments: [] },
@@ -14212,7 +14317,7 @@ test('falls back to visible best-effort progress when a provider cannot update a
 
 test('keeps successful best-effort writes when another selected ticket fails (HS2-967BWM)', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, false);
-  await page.route('**/tickets/08', (route) =>
+  await page.route('**/tickets/*08', (route) =>
     route.request().method() === 'PATCH'
       ? route.fulfill({ status: 409, json: { error: 'stale imported ticket' } })
       : route.fallback(),
@@ -14575,7 +14680,9 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await ticket.click();
   const nextPatch = () =>
     page.waitForResponse(
-      (response) => response.request().method() === 'PATCH' && new URL(response.url()).pathname.endsWith('/tickets/01'),
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        decodeURIComponent(new URL(response.url()).pathname).endsWith('/tickets/git-local:01'),
     );
   await page.locator('wa-select[name="inspector-status"]').click();
   let response = nextPatch();
@@ -16026,7 +16133,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   let rows = [...items];
   await page.route('**/*', async (route) => {
     const request = route.request(),
-      path = new URL(request.url()).pathname;
+      path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
     if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -16270,12 +16377,12 @@ test('edits and contains a wrapping attachment group title through the productio
     })),
   };
   await mockProject(page);
-  await page.route('**/tickets/01', (route) =>
+  await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { store: 'git-local', ...liveFull } })
       : route.fallback(),
   );
-  await page.route('**/tickets/01/attachments', async (route) => {
+  await page.route('**/tickets/*01/attachments', async (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback();
     const body = route.request().postDataJSON() as Record<string, unknown>;
     writes.push(body);
@@ -16350,9 +16457,9 @@ test('moves a media thumbnail between batches and removes active media from its 
     ],
   };
   await mockProject(page);
-  await page.route('**/tickets/01**', async (route) => {
+  await page.route('**/tickets/*01**', async (route) => {
     const request = route.request(),
-      path = new URL(request.url()).pathname;
+      path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
     if (path.endsWith('/tickets/01') && request.method() === 'GET')
       return route.fulfill({ json: { store: 'git-local', ...ticket } });
     if (path.endsWith('/tickets/01/attachments') && request.method() === 'POST') {

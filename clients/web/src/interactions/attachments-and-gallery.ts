@@ -6,6 +6,7 @@ import {
   type AttachmentPurpose,
   type FullTicket,
   type MediaAnnotation,
+  type TicketRow,
 } from '../api';
 import { browserRandomId } from '../browser-id';
 import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
@@ -28,6 +29,7 @@ import { type AttachmentMenu, type GallerySource, type Project } from './types';
 /** Live application bindings used by this handler group. */
 export interface AttachmentAndGalleryInteractionsDependencies {
   readonly selectedTicket: Signal<FullTicket | null>;
+  readonly tickets: Signal<TicketRow[]>;
   readonly addAttachments: (slug: string, files: FileList | File[]) => Promise<void>;
   readonly project: () => Project | undefined;
   readonly api: () => Api;
@@ -87,6 +89,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
 export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAndGalleryInteractionsDependencies) {
   const {
     selectedTicket,
+    tickets,
     addAttachments,
     project,
     api,
@@ -121,6 +124,10 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     attachmentGalleryVolume,
     canUseAttachments,
   } = dependencies;
+  const routedTicketId = (slug: string) =>
+    (selectedTicket.value?.slug === slug ? selectedTicket.value.qualified_id : undefined) ??
+    tickets.value.find((ticket) => ticket.slug === slug)?.qualified_id ??
+    slug;
   delegate(document.body, 'change', 'input[name="ticket-attachments"]', (_event, target) => {
     const input = target as HTMLInputElement,
       slug = input.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug;
@@ -146,7 +153,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     const current = project(),
       ticket = selectedTicket.value;
     if (!current || !ticket) return;
-    await api().checkoutAttachmentAction(current.id, ticket.id, id, 'open');
+    await api().checkoutAttachmentAction(current.id, ticket.qualified_id, id, 'open');
   }
   function metadataForBatch(
     batch: HTMLElement,
@@ -173,7 +180,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     if (!current || !ticket || !ids.length) return;
     attachmentMessage.value = 'Updating attachment group…';
     try {
-      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.id, ids, metadata);
+      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.qualified_id, ids, metadata);
       selectedTicket.value = result.ticket;
       attachmentMessage.value = '';
       showToast('Attachment group updated.');
@@ -389,7 +396,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       name = data(target).attachmentName;
     if (current && ticket && name)
       void api()
-        .checkoutAttachmentByNameAction(current.id, ticket, name, 'open')
+        .checkoutAttachmentByNameAction(current.id, routedTicketId(ticket), name, 'open')
         .catch((reason: unknown) => {
           error.value = reason instanceof Error ? reason.message : String(reason);
         });
@@ -423,8 +430,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       ticket = selectedTicket.value;
     if (!current || !ticket) return undefined;
     return menu.id && menu.ticket === ticket.slug
-      ? api().checkoutAttachmentAction(current.id, ticket.id, menu.id, action)
-      : api().checkoutAttachmentByNameAction(current.id, menu.ticket, menu.name, action);
+      ? api().checkoutAttachmentAction(current.id, ticket.qualified_id, menu.id, action)
+      : api().checkoutAttachmentByNameAction(current.id, routedTicketId(menu.ticket), menu.name, action);
   }
   delegate(document.body, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
     const menu = attachmentMenu.value,
@@ -470,7 +477,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         filename = window.prompt('Attachment filename', menu.name);
       if (current && ticket && menu.id && filename?.trim())
         void api()
-          .renameCheckoutAttachment(current.id, ticket.id, menu.id, filename.trim())
+          .renameCheckoutAttachment(current.id, ticket.qualified_id, menu.id, filename.trim())
           .then((result) => {
             selectedTicket.value = result.ticket;
             showToast('Attachment renamed.');
@@ -862,7 +869,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     if (!current || !ticket || !id || !canUseAttachments()) return;
     attachmentMessage.value = 'Removing attachment…';
     try {
-      const result = await api().deleteCheckoutAttachment(current.id, ticket.id, id);
+      const result = await api().deleteCheckoutAttachment(current.id, ticket.qualified_id, id);
       selectedTicket.value = result.ticket;
       attachmentMessage.value = '';
       showToast('Attachment removed.');

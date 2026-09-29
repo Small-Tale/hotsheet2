@@ -1979,7 +1979,7 @@ export async function startHotSheetWebClient() {
       if (selection.length === 1) {
         const row = tickets.value.find((ticket) => ticket.slug === selection[0]);
         if (row) {
-          const full = (await new Api(current.apiPath).checkoutTicket(current.id, row.id)).ticket;
+          const full = (await new Api(current.apiPath).checkoutTicket(current.id, row.qualified_id)).ticket;
           if (!active()) return;
           presentTicket(full);
         }
@@ -2558,7 +2558,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function openTicketLinkMatch(match:TicketLinkMatch){const target=projects.value.find(item=>item.id===match.projectId);if(!target){showToast(`No open project matches ${match.projectId}.`);return}ticketLinkChoice.value=undefined;const cached=ticketRowsByProject.value[target.id]??[],row=cached.find(item=>item.qualified_id===match.qualifiedId);if(row)ticketRowsByProject.value={...ticketRowsByProject.value,[target.id]:mergeTicketLinkRows(cached,[row])};try{const ticket=(await new Api(target.apiPath).checkoutTicket(target.id,match.ticketId)).ticket,capabilities=capabilitiesFor(ticket.connection_id);if(!capabilities)throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);const id=browserRandomId(),trigger=ticketLinkReturnFocus;ticketLinkReturnFocus=undefined;linkedReaderStack.value=pushTicketReaderFrame(linkedReaderStack.value,{id,open:false,projectId:target.id,projectName:target.name,apiPath:target.apiPath,ticket,activeTab:'info',capabilities,edit:ticketReaderEditState(ticket)});presentTicketReaderDialog(id,trigger,()=>{replaceLinkedReaderFrame(id,frame=>({...frame,open:true}))})}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
+  async function openTicketLinkMatch(match:TicketLinkMatch){const target=projects.value.find(item=>item.id===match.projectId);if(!target){showToast(`No open project matches ${match.projectId}.`);return}ticketLinkChoice.value=undefined;const cached=ticketRowsByProject.value[target.id]??[],row=cached.find(item=>item.qualified_id===match.qualifiedId);if(row)ticketRowsByProject.value={...ticketRowsByProject.value,[target.id]:mergeTicketLinkRows(cached,[row])};try{const ticket=(await new Api(target.apiPath).checkoutTicket(target.id,match.qualifiedId)).ticket,capabilities=capabilitiesFor(ticket.connection_id);if(!capabilities)throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);const id=browserRandomId(),trigger=ticketLinkReturnFocus;ticketLinkReturnFocus=undefined;linkedReaderStack.value=pushTicketReaderFrame(linkedReaderStack.value,{id,open:false,projectId:target.id,projectName:target.name,apiPath:target.apiPath,ticket,activeTab:'info',capabilities,edit:ticketReaderEditState(ticket)});presentTicketReaderDialog(id,trigger,()=>{replaceLinkedReaderFrame(id,frame=>({...frame,open:true}))})}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
   async function selectLinkedTicket(
     slug: string,
     projectId?: string,
@@ -2937,7 +2937,7 @@ export async function startHotSheetWebClient() {
         // During an active search the selected ticket may legitimately be absent from the base-view page; keep
         // it selected and still reconcile its latest fields into the open inspector (HS2-6AXG6Z).
         if (matching || searchActive) {
-          const refreshed = (await client.checkoutTicket(current.id, previous.id)).ticket;
+          const refreshed = (await client.checkoutTicket(current.id, previous.qualified_id)).ticket;
           if (active() && selectedTicketSlugs.value.includes(refreshed.slug))
             reconcileRefreshedSelected(previous, refreshed);
         }
@@ -3657,8 +3657,8 @@ export async function startHotSheetWebClient() {
     return ticket.attachments.map((item) => ({
       id: item.id,
       name: item.filename,
-      url: api().checkoutAttachmentUrl(current.id, ticket.id, item.id),
-      thumbnailUrl: api().checkoutAttachmentThumbnailUrl(current.id, ticket.id, item.id),
+      url: api().checkoutAttachmentUrl(current.id, ticket.qualified_id, item.id),
+      thumbnailUrl: api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id),
       manageVideoPoster: true,
       annotationCount: item.annotations?.length ?? 0,
       round: rounds.get(item.id),

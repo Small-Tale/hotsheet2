@@ -446,7 +446,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         // Base off the last edit this client committed for the ticket (its up-to-date token), falling back to
         // the pre-edit selection or a fresh fetch. A real external write still fails the token check below.
         let base =
-          committedTickets.get(slug) ?? selectedBefore ?? (await api().checkoutTicket(current.id, ticket.id)).ticket;
+          committedTickets.get(slug) ??
+          selectedBefore ??
+          (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket;
         // A draft typed on top of an older value must merge with what the ticket holds now, or the save would
         // silently overwrite a concurrent edit to the same field (HS2-A4XCXE).
         const rebased = rebaseDraftPatch(patch, base);
@@ -475,7 +477,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             updated = (
               await api().updateCheckoutTicket(
                 current.id,
-                ticket.id,
+                ticket.qualified_id,
                 base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
               )
             ).ticket;
@@ -486,7 +488,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             });
           } catch (reason) {
             if (!isTicketConcurrencyConflict(reason) || attempt >= MAX_CONCURRENT_EDIT_RETRIES) throw reason;
-            const remote = (await api().checkoutTicket(current.id, ticket.id)).ticket,
+            const remote = (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket,
               reconciled = reconcileTicketPatch(base, remote, pending);
             committedTickets.set(slug, remote);
             rollbackRow = ticketRowFromFull(ticket, remote);
@@ -630,13 +632,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           ticket = (
             await client.updateCheckoutTicket(
               frame.projectId,
-              frame.ticket.id,
+              frame.ticket.qualified_id,
               base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
             )
           ).ticket;
         } catch (reason) {
           if (!isTicketConcurrencyConflict(reason) || attempt >= MAX_CONCURRENT_EDIT_RETRIES) throw reason;
-          const remote = (await client.checkoutTicket(frame.projectId, frame.ticket.id)).ticket,
+          const remote = (await client.checkoutTicket(frame.projectId, frame.ticket.qualified_id)).ticket,
             reconciled = reconcileTicketPatch(base, remote, pending);
           if (reconciled.conflicts.length) {
             replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, remote));
@@ -761,7 +763,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         requestOperations = operations.map((operation) => {
           const ticket = before.find((item) => item.slug === operation.slug),
             token = selectedBefore?.slug === operation.slug ? selectedBefore.concurrency_token : ticket?.updated_at;
-          return { ...operation, patch: token ? { ...operation.patch, expected_token: token } : operation.patch };
+          if (!ticket) throw new Error(`Ticket ${operation.slug} is no longer available for update.`);
+          return {
+            ...operation,
+            patch: token ? { ...operation.patch, expected_token: token } : operation.patch,
+          };
         }),
         atomic = canAtomicallyBulkUpdate(before, capabilitiesFor),
         updated: FullTicket[] = [],
@@ -777,7 +783,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         showToast(`Updating tickets… 0 of ${requestOperations.length}`);
         for (const operation of requestOperations) {
           try {
-            updated.push((await client.updateCheckoutTicket(current.id, operation.id, operation.patch)).ticket);
+            const ticket = before.find((item) => item.slug === operation.slug)!;
+            updated.push((await client.updateCheckoutTicket(current.id, ticket.qualified_id, operation.patch)).ticket);
           } catch (reason) {
             failures.push({ slug: operation.slug, message: reason instanceof Error ? reason.message : String(reason) });
           }
@@ -837,7 +844,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         (ticket) => targetSlugs.includes(ticket.slug) && isTrashedTicket(ticket),
       );
     try {
-      for (const row of rows) await api.restoreCheckoutTicket(current.id, row.id);
+      for (const row of rows) await api.restoreCheckoutTicket(current.id, row.qualified_id);
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
@@ -960,7 +967,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function copySelection(cut:boolean){const current=project(),rows=selectedRows();if(!current||!rows.length)return;const snapshot={tickets:rows.map(ticket=>clipboardTicket(ticket,selectedTicket.value?.id===ticket.id?selectedTicket.value:undefined)),cut,source:current};state.clipboard=snapshot;selectedTicketSlugs.value=[...selectedTicketSlugs.value];void Promise.all(rows.map(ticket=>api().checkoutTicket(current.id,ticket.id).then(value=>value.ticket))).then(full=>{if(state.clipboard!==snapshot)return;snapshot.tickets=full.map(ticket=>clipboardTicket(ticket));const text=full.map(ticket=>[`${ticket.slug}: ${ticket.title}`,ticket.details,...ticket.notes.map(note=>`- ${note.text}`)].filter(Boolean).join('\n\n')).join('\n\n');void navigator.clipboard?.writeText(text).catch(()=>undefined)}).catch((reason:unknown)=>{error.value=reason instanceof Error?reason.message:String(reason)})}
+  function copySelection(cut:boolean){const current=project(),rows=selectedRows();if(!current||!rows.length)return;const snapshot={tickets:rows.map(ticket=>clipboardTicket(ticket,selectedTicket.value?.qualified_id===ticket.qualified_id?selectedTicket.value:undefined)),cut,source:current};state.clipboard=snapshot;selectedTicketSlugs.value=[...selectedTicketSlugs.value];void Promise.all(rows.map(ticket=>api().checkoutTicket(current.id,ticket.qualified_id).then(value=>value.ticket))).then(full=>{if(state.clipboard!==snapshot)return;snapshot.tickets=full.map(ticket=>clipboardTicket(ticket));const text=full.map(ticket=>[`${ticket.slug}: ${ticket.title}`,ticket.details,...ticket.notes.map(note=>`- ${note.text}`)].filter(Boolean).join('\n\n')).join('\n\n');void navigator.clipboard?.writeText(text).catch(()=>undefined)}).catch((reason:unknown)=>{error.value=reason instanceof Error?reason.message:String(reason)})}
   async function patchTransferTickets(client: Api, checkout: string, changes: Array<{ id: string; status: string }>) {
     for (const change of changes) await client.updateCheckoutTicket(checkout, change.id, { status: change.status });
     return true;
@@ -985,10 +992,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           ...copiedTicketPlacement(source),
           tags: source.tags,
         });
-        created.push({ id: ticket.id, slug: ticket.slug, status: ticket.status ?? 'not_started' });
+        created.push({ id: ticket.qualified_id, slug: ticket.slug, status: ticket.status ?? 'not_started' });
         for (const note of source.notes)
           ticket = (
-            await destinationApi.updateCheckoutTicket(current.id, ticket.id, {
+            await destinationApi.updateCheckoutTicket(current.id, ticket.qualified_id, {
               note: note.text,
               note_kind: note.kind,
               note_summary: note.summary,
@@ -1002,10 +1009,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       }
       if (snapshot.cut) {
         for (const source of snapshot.tickets)
-          await sourceApi.updateCheckoutTicket(snapshot.source.id, source.id, { status: 'deleted' });
+          await sourceApi.updateCheckoutTicket(snapshot.source.id, `${source.connection_id}:${source.native_id}`, {
+            status: 'deleted',
+          });
         state.clipboard = undefined;
       }
-      const originals = snapshot.tickets.map((ticket) => ({ id: ticket.id, status: ticket.status ?? 'not_started' }));
+      const originals = snapshot.tickets.map((ticket) => ({
+        id: `${ticket.connection_id}:${ticket.native_id}`,
+        status: ticket.status ?? 'not_started',
+      }));
       history().recordExternal(
         async () => {
           await patchTransferTickets(
@@ -1053,7 +1065,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       const [sources, destinationRows] = await Promise.all([
           Promise.all(
             sourceRows.map((ticket) =>
-              sourceApi.checkoutTicket(drag.source.id, ticket.id).then((result) => result.ticket),
+              sourceApi.checkoutTicket(drag.source.id, ticket.qualified_id).then((result) => result.ticket),
             ),
           ),
           // De-duplicate against every destination title, not just loaded rows, via
@@ -1072,10 +1084,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           ...copiedTicketPlacement(source),
           tags: source.tags,
         });
-        created.push({ id: ticket.id, slug: ticket.slug, status: ticket.status ?? 'not_started' });
+        created.push({ id: ticket.qualified_id, slug: ticket.slug, status: ticket.status ?? 'not_started' });
         for (const note of source.notes.filter((note) => note.kind !== 'activity'))
           ticket = (
-            await destinationApi.updateCheckoutTicket(destination.id, ticket.id, {
+            await destinationApi.updateCheckoutTicket(destination.id, ticket.qualified_id, {
               note: note.text,
               note_kind: note.kind,
             })
@@ -1202,10 +1214,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     metadata: AttachmentMetadata,
   ) {
     const previousIds = new Set(ticket.attachments.map((item) => item.id)),
-      result = await client.addCheckoutAttachment(current.id, ticket.id, file, metadata),
+      result = await client.addCheckoutAttachment(current.id, ticket.qualified_id, file, metadata),
       added = result.ticket.attachments.find((item) => !previousIds.has(item.id));
     if (added && isVideoAttachment(file.name)) {
-      const posterUrl = client.checkoutAttachmentThumbnailUrl(current.id, ticket.id, added.id);
+      const posterUrl = client.checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, added.id);
       void ensureVideoPoster(posterUrl, file);
     }
     return result.ticket;
@@ -1352,7 +1364,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       current = project();
     if (ticket && current)
       return api()
-        .checkoutTicket(current.id, ticket.id)
+        .checkoutTicket(current.id, ticket.qualified_id)
         .then((result) => {
           if (
             project()?.id === current.id &&
@@ -1723,7 +1735,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   // prettier-ignore
 
-  async function submitNotWorking(){const target=notWorkingTarget.value;if(!target.slug||notWorkingSubmitting.value)return;const owning=projects.value.find(item=>item.id===target.projectId);if(!owning){notWorkingError.value='The project is no longer open.';return}const client=new Api(target.apiPath),capabilities=capabilitiesFor(target.connectionId),note=(capabilities?.notes??true)?notWorkingNote.value:'',files=[...notWorkingFiles.value],scope=draftScope('not-working',target.projectId);notWorkingSubmitting.value=true;notWorkingError.value='';notWorkingTarget.value=CLOSED_NOT_WORKING_TARGET;try{const current=(await client.checkoutTicket(target.projectId,target.ticketId)).ticket;let full:FullTicket=current;await submitNotWorkingReport({note,files:files.map(item=>item.file)},{report:async(text,evidence)=>{full=await client.reportNotWorking(target.connectionId,target.ticketId,text,evidence,current.concurrency_token)}});if(project()?.id===owning.id){setProjectTicketRows(owning.id,projectTabTicketRows(owning.id).map(row=>row.id===full.id?ticketRowFromFull(row,full):row));selectedTicketSlugs.value=[target.slug];state.ticketSelectionAnchor=target.slug;presentTicket(full)}notWorkingNote.value='';notWorkingFiles.value=[];notWorkingSubmitting.value=false;void deleteDraftFiles(scope,files.map(item=>item.id));scheduleProjectSessionPersistence()}catch(reason){notWorkingTarget.value=target;notWorkingNote.value=note;notWorkingFiles.value=files;notWorkingError.value=reason instanceof Error?reason.message:String(reason);notWorkingSubmitting.value=false;scheduleProjectSessionPersistence();presentNotWorkingDialog()}}
+  async function submitNotWorking(){const target=notWorkingTarget.value;if(!target.slug||notWorkingSubmitting.value)return;const owning=projects.value.find(item=>item.id===target.projectId);if(!owning){notWorkingError.value='The project is no longer open.';return}const client=new Api(target.apiPath),capabilities=capabilitiesFor(target.connectionId),note=(capabilities?.notes??true)?notWorkingNote.value:'',files=[...notWorkingFiles.value],scope=draftScope('not-working',target.projectId);notWorkingSubmitting.value=true;notWorkingError.value='';notWorkingTarget.value=CLOSED_NOT_WORKING_TARGET;try{const current=(await client.checkoutTicket(target.projectId,`${target.connectionId}:${target.ticketId}`)).ticket;let full:FullTicket=current;await submitNotWorkingReport({note,files:files.map(item=>item.file)},{report:async(text,evidence)=>{full=await client.reportNotWorking(target.connectionId,target.ticketId,text,evidence,current.concurrency_token)}});if(project()?.id===owning.id){setProjectTicketRows(owning.id,projectTabTicketRows(owning.id).map(row=>row.id===full.id?ticketRowFromFull(row,full):row));selectedTicketSlugs.value=[target.slug];state.ticketSelectionAnchor=target.slug;presentTicket(full)}notWorkingNote.value='';notWorkingFiles.value=[];notWorkingSubmitting.value=false;void deleteDraftFiles(scope,files.map(item=>item.id));scheduleProjectSessionPersistence()}catch(reason){notWorkingTarget.value=target;notWorkingNote.value=note;notWorkingFiles.value=files;notWorkingError.value=reason instanceof Error?reason.message:String(reason);notWorkingSubmitting.value=false;scheduleProjectSessionPersistence();presentNotWorkingDialog()}}
 
   return {
     applyTicketPatch,

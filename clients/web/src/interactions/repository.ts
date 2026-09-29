@@ -320,7 +320,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     if (!current || !ticket) return;
     codeReviewMessage.value = `Opening ${paths.length === 1 ? 'file diff' : `${paths.length} files in one diff`}…`;
     void new Api(current.apiPath)
-      .openCodeReview(current.id, ticket.id, { mode: 'ticket_file', paths })
+      .openCodeReview(current.id, ticket.qualified_id, { mode: 'ticket_file', paths })
       .then(() => {
         if (project()?.id === current.id && selectedTicket.value?.id === ticket.id) {
           codeReviewMessage.value = '';

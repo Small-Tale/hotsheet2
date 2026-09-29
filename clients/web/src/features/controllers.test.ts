@@ -281,7 +281,7 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
     };
     const linkedImages = owner.galleryImages(source.ticket, source.project);
     expect(linkedImages.map((image) => image.name)).toEqual(['l1.png', 'l2.png']);
-    expect(linkedImages[0].url).toContain('/checkouts/b/tickets/linked/attachments/l1');
+    expect(linkedImages[0].url).toContain('/checkouts/b/tickets/git%3Alinked/attachments/l1');
     // Opened for the linked reader: the gallery's own view and annotations follow that ticket.
     owner.resetAttachmentGallery(linkedImages[0].url, source);
     expect(owner.galleryImages().map((image) => image.name)).toEqual(['l1.png', 'l2.png']);
@@ -295,7 +295,7 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
     owner.attachmentGalleryAnnotations.value = [{ id: 'new', x: 0, y: 0, width: 1, height: 1, text: 'edited' }];
     owner.finishGalleryAnnotationSession();
     await vi.waitFor(() => {
-      expect(saved).toEqual([['b', 'linked', 'l1']]);
+      expect(saved).toEqual([['b', 'git:linked', 'l1']]);
     });
     await vi.waitFor(() => {
       expect(updates.map((ticket) => ticket.title)).toEqual(['saved']);
