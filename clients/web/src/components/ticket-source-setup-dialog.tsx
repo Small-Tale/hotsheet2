@@ -279,7 +279,12 @@ export function TicketSourceSetupDialog({
         <wa-button appearance="plain" type="button" data-action="dismiss-ticket-source-setup">
           Cancel
         </wa-button>
-        <wa-button appearance="accent" type="button" data-action="submit-provider-setup" disabled={providerBusy}>
+        <wa-button
+          appearance="accent"
+          type="button"
+          data-action="submit-provider-setup"
+          disabled={providerBusy || (kind === 'github' && !editing && githubAuth?.state !== 'authorized')}
+        >
           {providerBusy ? 'Saving…' : editing ? 'Save changes' : 'Connect provider'}
         </wa-button>
       </>

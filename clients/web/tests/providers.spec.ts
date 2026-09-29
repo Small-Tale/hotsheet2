@@ -386,6 +386,7 @@ async function mockProject(
   const closedTerminals = new Set<string>();
   let folderChoice = 0;
   let repositoryListings = 0;
+  let githubAuthWaits = 0;
   let ticketSourceConfigured = !emptyAtFirst;
   let gitStores = ticketSourceConfigured ? [...project.stores] : [];
   let providerConnectionRecords: Array<{
@@ -454,7 +455,9 @@ async function mockProject(
         },
       });
     if (path.endsWith('/github-auth/device/auth-1') && request.method() === 'GET') {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // The first sign-in stays pending long enough to inspect the waiting state (HS2-1JT25R).
+      githubAuthWaits += 1;
+      await new Promise((resolve) => setTimeout(resolve, githubAuthWaits === 1 ? 1500 : 100));
       return route.fulfill({ json: { state: 'authorized', credential_reference: 'github-app-auth-1' } });
     }
     if (path.endsWith('/github-auth/device/auth-1/repositories') && request.method() === 'GET') {
@@ -1912,8 +1915,42 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     .poll(() => transition.locator('[data-side="b"]').evaluate((node) => getComputedStyle(node).animationName))
     .toBe('content-transition-push-out-end');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  // Sign in comes first: nothing else to fill in, and nothing to connect, until GitHub authorizes (HS2-1JT25R).
+  await expect(providerForm.getByLabel('Display name')).toHaveCount(0);
+  await expect(providerForm.getByLabel(/API base URL/)).toHaveCount(0);
+  await expect(setup.getByRole('button', { name: 'Connect provider' })).toHaveJSProperty('disabled', true);
+  await transition.evaluate(async (node) => {
+    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-sign-in-first-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-sign-in-first-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+  await page
+    .context()
+    .route('https://github.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Device activation</title>' }),
+    );
+  // One click opens a small GitHub window and copies the one-time code.
+  const popupOpened = page.waitForEvent('popup');
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
-  await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
+  const githubWindow = await popupOpened;
+  await expect.poll(() => githubWindow.url()).toBe('https://github.test/login/device');
+  await expect(providerForm.getByLabel('One-time GitHub code')).toHaveText('ABCD-EFGH');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('ABCD-EFGH');
+  await expect(providerForm).toContainText('it is already on your clipboard');
+  // The short waiting screen is never scrolled into the hidden source list's space.
+  await expect(transition).toHaveJSProperty('scrollTop', 0);
+  await expect(providerForm.getByRole('button', { name: 'Ticket source types' })).toBeInViewport();
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-waiting-for-github-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-waiting-for-github-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  // GitHub's approval closes that window and reveals the connection settings.
+  await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
+  await expect.poll(() => githubWindow.isClosed()).toBe(true);
+  await expect(setup.getByRole('button', { name: 'Connect provider' })).toHaveJSProperty('disabled', false);
   // No connection id to invent, no credential reference, and a blank name defaults to the provider (HS2-48GA17).
   await expect(providerForm.getByLabel('Connection ID')).toHaveCount(0);
   await expect(providerForm.getByText('Use a credential reference instead')).toHaveCount(0);
@@ -1961,7 +1998,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.getByRole('button', { name: 'Add data source' }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
-  await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
+  await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
   await providerForm.getByLabel('Use as the default ticket source').uncheck();
@@ -2054,6 +2091,59 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveCount(0);
   expect(toggles).toEqual([{ disabled: true }, { disabled: false }]);
   await expect(page.locator('.app-error')).toHaveCount(0);
+});
+
+test('signs in to GitHub Enterprise from its server address before connecting (HS2-1JT25R)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, root: '/work/enterprise', stores: [], needsTicketSetup: true } }),
+  );
+  await page
+    .context()
+    .route('https://github.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Device</title>' }),
+    );
+  const starts: unknown[] = [],
+    creates: Array<{ settings: Record<string, unknown> }> = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/github-auth/device')) starts.push(request.postDataJSON());
+    if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]'),
+    form = setup.locator('[data-action="save-provider-connection"]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
+  const server = form.getByLabel('GitHub Enterprise server URL');
+  await expect(server).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Sign in with GitHub Enterprise' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-enterprise-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-enterprise-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  // An address is required before GitHub is contacted.
+  await form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).click();
+  await expect(form.getByRole('alert')).toContainText('Enter your GitHub Enterprise server address');
+  expect(starts).toEqual([]);
+  // Switching back and forth keeps what was typed.
+  await server.fill('ghe.test/');
+  await form.getByRole('button', { name: 'Use GitHub.com instead' }).click();
+  await expect(form.getByRole('button', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
+  await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
+  await server.fill('ghe.test/');
+  const popupOpened = page.waitForEvent('popup');
+  await form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).click();
+  await popupOpened;
+  await expect(form.getByText('Signed in to ghe.test.')).toBeVisible({ timeout: 10_000 });
+  expect(starts).toEqual([{ web_base: 'https://ghe.test' }]);
+  await form.locator('input[name="connection-locator"]').fill('small-tale/hotsheet2');
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect(setup).toHaveJSProperty('open', false);
+  expect(creates[0].settings).toMatchObject({ api_base: 'https://ghe.test/api/v3' });
 });
 
 test('blocks a new ticket store before an older project server can accept it', async ({ page }) => {

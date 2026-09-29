@@ -11,6 +11,9 @@
 .content-transition__side[data-active='false'] {
   position: absolute;
   inset: 0;
+  /* Clip the hidden side so its taller content never extends the region's scroll area: a focus
+     change could otherwise scroll the region into blank space above the short active side. */
+  overflow: hidden;
   visibility: hidden;
   opacity: 0;
   pointer-events: none;

@@ -126,6 +126,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly removeExternalProvider: () => Promise<void>;
   readonly toggleProviderDisabled: () => Promise<void>;
   readonly refreshGitHubRepositories: () => Promise<void>;
+  readonly chooseGitHubEnterprise: (enterprise: boolean) => void;
+  readonly copyGitHubCode: () => Promise<void>;
+  readonly reopenGitHubSignIn: () => void;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -223,6 +226,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     removeExternalProvider,
     toggleProviderDisabled,
     refreshGitHubRepositories,
+    chooseGitHubEnterprise,
+    copyGitHubCode,
+    reopenGitHubSignIn,
   } = dependencies;
   delegate(document.body, 'click', '[data-action="toggle-command-group"]', () => {
     commandGroupExpanded.value = !commandGroupExpanded.value;
@@ -849,6 +855,18 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   });
   delegate(document.body, 'click', '[data-action="refresh-github-repositories"]', () => {
     void refreshGitHubRepositories();
+  });
+  delegate(document.body, 'click', '[data-action="choose-github-enterprise"]', () => {
+    chooseGitHubEnterprise(true);
+  });
+  delegate(document.body, 'click', '[data-action="choose-github-dotcom"]', () => {
+    chooseGitHubEnterprise(false);
+  });
+  delegate(document.body, 'click', '[data-action="copy-github-code"]', () => {
+    void copyGitHubCode();
+  });
+  delegate(document.body, 'click', '[data-action="reopen-github-sign-in"]', () => {
+    reopenGitHubSignIn();
   });
   delegate(document.body, 'click', '[data-action="select-provider-kind"]', (_event, target) => {
     ticketSourceSetupNavigation.value = 'push';

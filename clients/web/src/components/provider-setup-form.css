@@ -17,25 +17,57 @@
   margin: 0;
   font-size: var(--wa-font-size-s);
 }
-.provider-setup-form__github-auth > button {
-  width: fit-content;
-  min-height: remify(40px);
-  padding: 0 var(--wa-space-m);
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-normal);
-  background: var(--wa-color-brand-fill-normal);
-  font: inherit;
+.provider-setup-form__github-auth label {
+  display: grid;
+  gap: var(--wa-space-2xs);
+  font-size: var(--wa-font-size-s);
   font-weight: var(--wa-font-weight-semibold);
+}
+.provider-setup-form__auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wa-space-xs) var(--wa-space-m);
+}
+.provider-setup-form__auth-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wa-space-xs);
+  padding: 0;
+  border: 0;
+  color: var(--wa-color-brand-on-quiet);
+  background: none;
+  font: inherit;
+  font-size: var(--wa-font-size-s);
   cursor: pointer;
 }
-.provider-setup-form__github-auth > button:disabled {
-  opacity: 0.55;
-  cursor: wait;
+/* The first action is the primary step (sign in, or copy the code). */
+.provider-setup-form__auth-actions button:first-child {
+  min-height: remify(40px);
+  padding: 0 var(--wa-space-m);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-brand-on-loud);
+  background: var(--wa-color-brand-fill-loud);
+  font-weight: var(--wa-font-weight-semibold);
 }
-.provider-setup-form__github-auth > button + button {
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-neutral-fill-normal);
+.provider-setup-form__auth-actions svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.provider-setup-form__device-code {
+  justify-self: start;
+  padding: var(--wa-space-xs) var(--wa-space-m);
+  border: 1px dashed var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  font-family: var(--wa-font-family-code);
+  font-size: var(--wa-font-size-xl);
+  font-weight: var(--wa-font-weight-semibold);
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+.provider-setup-form__auth-waiting {
+  color: var(--wa-color-neutral-on-quiet);
 }
 .provider-setup-form details > summary {
   color: var(--wa-color-brand-on-normal);

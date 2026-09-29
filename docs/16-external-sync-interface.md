@@ -256,6 +256,16 @@ resolve it, while the host coordinator serializes same-process attempts.
 The opt-in live contract was validated against `Small-Tale/hotsheet2` with a
 repository-scoped OS-keychain credential: create, read, comment, and close all passed.
 
+In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
+stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**
+opens a small GitHub window and copies the one-time code to the clipboard within the same
+click (the popup and a promise-backed clipboard write start before any network wait, so
+Safari still treats them as user-initiated); the dialog shows the code with **Copy code**,
+**Reopen GitHub**, and **Cancel**, and closes the GitHub window itself once authorization
+succeeds. GitHub Enterprise has an explicit **Use GitHub Enterprise…** path that asks for the
+server address before sign-in and stores `{origin}/api/v3` as the connection's API base; the
+dialog no longer has an API-base field for GitHub, and editing keeps the existing base.
+
 GitHub App device authorization is the default interactive setup path. The browser starts
 an authorization session and performs one blocking wait; only the user code, verification
 URL, installed repository names, and an opaque credential reference cross the browser

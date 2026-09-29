@@ -2,6 +2,7 @@ import { type Signal, signal } from 'kerfjs';
 
 import { Api, type Capabilities, type Checkout, type CustomView, type ProviderConnection } from '../api';
 import { isRemoteClient } from '../client-origin';
+import { copyWhenReady } from '../clipboard-when-ready';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
@@ -519,8 +520,20 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         kind === 'github' ? 'Sign in with GitHub first.' : 'Enter an existing OS-keychain credential reference.';
       return;
     }
-    const settings: Record<string, unknown> = { credential: { secret: credential } },
-      apiBase = read('api-base'),
+    const existingApiBase = existing?.settings.api_base,
+      settings: Record<string, unknown> = { credential: { secret: credential } },
+      // GitHub has no API-base field: Enterprise derives it from the server signed in to, and an edit
+      // keeps the connection's existing one (HS2-1JT25R).
+      apiBase =
+        kind === 'github'
+          ? editingId
+            ? typeof existingApiBase === 'string'
+              ? existingApiBase
+              : ''
+            : githubAuth.value?.enterpriseUrl
+              ? `${githubAuth.value.enterpriseUrl}/api/v3`
+              : ''
+          : read('api-base'),
       email = read('jira-email');
     if (apiBase) settings[kind === 'jira' ? 'base_url' : 'api_base'] = apiBase;
     if (kind === 'jira') {
@@ -640,30 +653,69 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
-  function githubWebBase(apiBase: string) {
-    const normalized = apiBase.trim().replace(/\/$/, '');
-    if (!normalized || normalized === 'https://api.github.com') return 'https://github.com';
-    return normalized.replace(/\/api\/v3$/, '');
+  /** The Enterprise web origin typed in the form: `https://host[:port]`, or an error message. */
+  function enterpriseOrigin(form: HTMLFormElement): { origin: string } | { error: string } {
+    const raw = form.querySelector<Control>('[name="github-enterprise-url"]')?.value.trim() ?? '';
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      if (!raw || !url.hostname.includes('.')) throw new Error('missing host');
+      if (url.hostname === 'github.com' || url.hostname === 'api.github.com') return { origin: 'https://github.com' };
+      return { origin: url.origin };
+    } catch {
+      return { error: 'Enter your GitHub Enterprise server address, such as https://github.example.com.' };
+    }
   }
 
+  let githubPopup: Window | null = null;
+  const GITHUB_POPUP = 'hotsheet-github-sign-in',
+    GITHUB_POPUP_FEATURES = 'popup,width=560,height=760';
+
+  /**
+   * Sign in with GitHub's device flow (HS2-1JT25R). Called from the click itself: the sized popup and
+   * the clipboard write both start before the first await, while the browser still treats them as
+   * user-initiated. The popup is pointed at GitHub once the one-time code exists and is closed again
+   * when GitHub authorizes Hot Sheet.
+   */
   async function startGitHubSignIn(form: HTMLFormElement) {
-    const target = ticketSourceSetupProject.value;
-    if (!target || githubAuth.value?.state === 'waiting') return;
+    const target = ticketSourceSetupProject.value,
+      current = githubAuth.value;
+    if (!target || current?.state === 'waiting') return;
     providerSettingsError.value = '';
+    const enterprise = current?.enterprise ? enterpriseOrigin(form) : undefined;
+    if (enterprise && 'error' in enterprise) {
+      githubAuth.value = { ...current!, state: 'idle', message: enterprise.error };
+      return;
+    }
+    const webBase = enterprise?.origin ?? 'https://github.com',
+      enterpriseUrl = webBase === 'https://github.com' ? undefined : webBase;
+    githubPopup = window.open('', GITHUB_POPUP, GITHUB_POPUP_FEATURES);
+    let provideCode!: (code: string) => void, withholdCode!: (reason: unknown) => void;
+    const code = new Promise<string>((resolve, reject) => {
+      provideCode = resolve;
+      withholdCode = reject;
+    });
+    const copied = copyWhenReady(code);
     try {
-      const apiBase = form.querySelector<Control>('[name="api-base"]')?.value ?? '',
-        client = new Api(target.apiPath),
-        started = await client.startGitHubAuth(githubWebBase(apiBase));
+      const client = new Api(target.apiPath),
+        started = await client.startGitHubAuth(webBase);
+      provideCode(started.user_code);
+      if (githubPopup && !githubPopup.closed) githubPopup.location.href = started.verification_uri;
       githubAuth.value = {
         session: started.session_id,
         userCode: started.user_code,
         verificationUri: started.verification_uri,
         state: 'waiting',
+        enterprise: current?.enterprise,
+        enterpriseUrl,
       };
+      void copied.then((ok) => {
+        if (githubAuth.value?.session === started.session_id) githubAuth.value = { ...githubAuth.value, copied: ok };
+      });
       const result = await client.waitGitHubAuth(started.session_id);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async cancellation may replace the live auth signal while this request is pending.
       if (githubAuth.value?.session !== started.session_id || result.state === 'pending') return;
       if (result.state === 'authorized') {
+        closeGitHubPopup();
         githubAuth.value = { ...githubAuth.value, state: 'authorized', credential: result.credential_reference };
         await loadGitHubRepositories(client, started.session_id);
       } else {
@@ -674,8 +726,45 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         };
       }
     } catch (reason) {
+      withholdCode(reason);
+      closeGitHubPopup();
       providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
     }
+  }
+
+  function closeGitHubPopup() {
+    if (githubPopup && !githubPopup.closed) githubPopup.close();
+    githubPopup = null;
+  }
+
+  /** Switch the not-yet-started sign-in between GitHub.com and GitHub Enterprise. */
+  function chooseGitHubEnterprise(enterprise: boolean) {
+    const current = githubAuth.value;
+    if (current?.state === 'waiting') return;
+    githubAuth.value = {
+      session: '',
+      userCode: '',
+      verificationUri: '',
+      state: 'idle',
+      enterprise,
+      enterpriseUrl: current?.enterpriseUrl,
+    };
+  }
+
+  /** Copy the waiting code again, for when the automatic copy was refused or overwritten. */
+  async function copyGitHubCode() {
+    const current = githubAuth.value;
+    if (current?.state !== 'waiting') return;
+    const ok = await copyWhenReady(Promise.resolve(current.userCode));
+    if (githubAuth.value?.session === current.session) githubAuth.value = { ...githubAuth.value, copied: ok };
+    dependencies.showToast(ok ? 'Code copied.' : 'Copy the code shown in the dialog.');
+  }
+
+  /** Bring the GitHub window back if the user closed it before approving. */
+  function reopenGitHubSignIn() {
+    const current = githubAuth.value;
+    if (current?.state !== 'waiting') return;
+    githubPopup = window.open(current.verificationUri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
   }
 
   /** List (or re-list) the repositories the signed-in session can reach, with installation grants. */
@@ -718,7 +807,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     const target = ticketSourceSetupProject.value,
       current = githubAuth.value;
     if (target && current?.state === 'waiting') void new Api(target.apiPath).cancelGitHubAuth(current.session);
-    if (current) githubAuth.value = { ...current, state: 'cancelled' };
+    closeGitHubPopup();
+    if (current?.state === 'waiting') githubAuth.value = { ...current, state: 'cancelled' };
   }
 
   async function chooseProjectPath(button: Element) {
@@ -822,6 +912,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     removeExternalProvider,
     toggleProviderDisabled,
     refreshGitHubRepositories,
+    chooseGitHubEnterprise,
+    copyGitHubCode,
+    reopenGitHubSignIn,
     providerSettingsError,
     githubAuth,
     ticketSourceSetupNavigation,
