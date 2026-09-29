@@ -224,6 +224,18 @@ still holds, leaving other workers' claims and every ticket's status alone:
 - **Connect terminals:** a server `connect` terminal uses its terminal id as the session. When
   the terminal exits or is deleted, the server releases the id's claims in every hosted
   store. This works both in-process and with the detached terminal broker.
+- **Shell and command terminals:** every other server terminal gets `terminal-<terminal id>`,
+  so a tool a user starts in it by hand claims under that id. The server releases the id's
+  claims when the terminal exits or is deleted (HS2-RXWXQ8).
+- **After a server restart:** each terminal records the worker id from its launch
+  environment and the detached broker reports it. On startup the server resumes the monitors
+  of terminals that survived in the broker: an AI terminal gets its busy feed and exit
+  release back, a shell terminal its exit release. A terminal hosted by a broker too old to
+  report the id still relies on lease expiry.
+- **AI chat drives:** a client-owned drive (`POST /drive/connections`) gives its tool
+  `<tool>-<connection id>`. The session spans turns, so the claims are released when the
+  drive is closed: at once for an idle drive, or when the interrupted turn finishes for a
+  busy one.
 - **External launches:** `hotsheet-cli launch <tool>` now spawns the tool and waits, instead
   of replacing itself. It ignores the terminal's interrupt, quit and hang-up signals, which
   belong to the tool, so it can release the session's claims even when the terminal window
@@ -231,8 +243,8 @@ still holds, leaving other workers' claims and every ticket's status alone:
 - **By hand:** `hotsheet-cli release --all --worker <id>` is the same release, headless.
 
 Lease expiry remains the backstop for anything a launcher cannot observe. That includes a
-broker terminal that survives a server restart, a shell terminal where a user starts a tool
-by hand, and a session that picked its own id.
+drive that disappears with a server restart instead of being closed, a tool that exits while
+its shell terminal stays open, and a session that picked its own id.
 
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same

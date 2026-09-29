@@ -6822,11 +6822,15 @@ async fn delete_drive_connection(
     let project = std::path::PathBuf::from(checkout.root)
         .display()
         .to_string();
-    let removed = state
+    let closed = state
         .client_drives
         .close(&project, &id)
         .map_err(client_drive_api_error)?;
-    if removed {
+    // An idle drive's session ends now; a busy one's when its interrupted turn finishes.
+    if let client_drive::DriveClosed::Ended { worker_id } = &closed {
+        release_session_claims(state.host.clone(), worker_id.clone()).await;
+    }
+    if closed != client_drive::DriveClosed::NotFound {
         let permissions = state.permission_bridge();
         for request in permissions
             .pending()
@@ -6988,7 +6992,9 @@ async fn send_drive_turn(
                 thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
             }
         }
-        manager.finish_turn(&job, &result);
+        if let Some(worker) = manager.finish_turn(&job, &result) {
+            release_session_claims_blocking(&thread_state.host, &worker);
+        }
         if let Ok(info) = manager.get(&thread_id) {
             thread_state.emit_drive_updated(&info);
         }
@@ -7281,8 +7287,16 @@ async fn open_terminal(
         };
         // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
         // broker-hosted terminal's inference (polled over the socket), once per fresh terminal.
-        if let (Some(tool), true) = (&req.connect, newly_spawned) {
-            register_broker_terminal_connection(&state, &id, tool, tb.clone());
+        if newly_spawned {
+            match &req.connect {
+                Some(tool) => register_broker_terminal_connection(&state, &id, tool, tb.clone()),
+                None => watch_broker_terminal_session_exit(
+                    &state,
+                    &id,
+                    terminal_session_worker_id(&id),
+                    tb.clone(),
+                ),
+            }
         }
         return Ok(Json(broker_info(info)));
     }
@@ -7304,8 +7318,13 @@ async fn open_terminal(
 
     // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
     // terminal's inference, once per fresh terminal (not on a reattach).
-    if let (Some(tool), true) = (&req.connect, newly_spawned) {
-        register_terminal_connection(&state, &id, tool, term.clone());
+    if newly_spawned {
+        match &req.connect {
+            Some(tool) => register_terminal_connection(&state, &id, tool, term.clone()),
+            None => {
+                watch_terminal_session_exit(&state, term.clone(), terminal_session_worker_id(&id))
+            }
+        }
     }
     Ok(Json(term_info(&term, &id)))
 }
@@ -7335,7 +7354,7 @@ fn terminal_launch(
         let command = user_default_shell();
         return Ok(PreparedTerminalLaunch {
             args: shell_command_args(shell_command, &command),
-            env: terminal_shell_history_env(state, req, terminal_id, &command)?,
+            env: terminal_session_env(state, req, terminal_id, &command)?,
             command,
         });
     }
@@ -7343,13 +7362,13 @@ fn terminal_launch(
         return Ok(PreparedTerminalLaunch {
             command: command.clone(),
             args: req.args.clone(),
-            env: terminal_shell_history_env(state, req, terminal_id, command)?,
+            env: terminal_session_env(state, req, terminal_id, command)?,
         });
     }
     let Some(tool) = req.connect.as_deref() else {
         let command = user_default_shell();
         return Ok(PreparedTerminalLaunch {
-            env: terminal_shell_history_env(state, req, terminal_id, &command)?,
+            env: terminal_session_env(state, req, terminal_id, &command)?,
             command,
             args: req.args.clone(),
         });
@@ -7546,6 +7565,21 @@ fn terminal_permission_route_env(state: &AppState) -> Vec<(String, String)> {
         env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
     }
     env
+}
+
+/// Shell and command terminals: [`terminal_shell_history_env`] plus the session worker id.
+fn terminal_session_env(
+    state: &AppState,
+    req: &OpenTerminalReq,
+    terminal_id: &str,
+    command: &str,
+) -> Result<Vec<(String, String)>, ApiError> {
+    let mut env = terminal_shell_history_env(state, req, terminal_id, command)?;
+    env.push((
+        hotsheet_aitools::WORKER_ID_ENV.to_string(),
+        terminal_session_worker_id(terminal_id),
+    ));
+    Ok(env)
 }
 
 /// Shell and command terminals: per-terminal shell history plus the permission route-back.
@@ -7793,24 +7827,101 @@ fn register_broker_terminal_connection(
 /// safety net for a session that stopped without releasing (HS2-1VAW1C). The store watcher
 /// reindexes and announces the released tickets like any other write.
 async fn release_session_claims(host: multistore::StoreHost, worker: String) {
-    let result = tokio::task::spawn_blocking(move || {
-        let mut released = Vec::new();
-        for (id, _) in host.locations() {
-            let Some(entry) = host.get(&id) else {
-                continue;
-            };
-            match ops::release_worker(&entry.store, now(), &worker) {
-                Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
-                Err(error) => eprintln!("releasing {worker}'s claims in {id} failed: {error}"),
+    let _ =
+        tokio::task::spawn_blocking(move || release_session_claims_blocking(&host, &worker)).await;
+}
+
+/// The blocking body of [`release_session_claims`], for callers already off the async runtime
+/// (a chat drive's turn thread). Returns the released ticket slugs.
+fn release_session_claims_blocking(host: &multistore::StoreHost, worker: &str) -> Vec<String> {
+    let mut released = Vec::new();
+    for (id, _) in host.locations() {
+        let Some(entry) = host.get(&id) else {
+            continue;
+        };
+        match ops::release_worker(&entry.store, now(), worker) {
+            Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
+            Err(error) => eprintln!("releasing {worker}'s claims in {id} failed: {error}"),
+        }
+    }
+    if !released.is_empty() {
+        eprintln!("released claims left by {worker}: {}", released.join(", "));
+    }
+    released
+}
+
+/// The worker id of a shell or command terminal's session. A user may start an AI tool in it
+/// by hand; the tool claims with this id and the server releases it when the terminal ends
+/// (HS2-RXWXQ8).
+fn terminal_session_worker_id(terminal_id: &str) -> String {
+    hotsheet_aitools::session_worker_id("terminal", terminal_id)
+}
+
+/// Release a shell or command terminal's session claims once its in-process PTY exits.
+fn watch_terminal_session_exit(
+    state: &AppState,
+    term: std::sync::Arc<hotsheet_terminals::Terminal>,
+    worker: String,
+) {
+    let host = state.host.clone();
+    tokio::spawn(async move {
+        while term.is_alive() {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        release_session_claims(host, worker).await;
+    });
+}
+
+/// The broker-mode counterpart of [`watch_terminal_session_exit`]: poll the broker until the
+/// terminal is gone, not alive, or the broker is unreachable, then release the claims.
+fn watch_broker_terminal_session_exit(
+    state: &AppState,
+    id: &str,
+    worker: String,
+    broker: terminal_broker::TerminalBroker,
+) {
+    let host = state.host.clone();
+    let id = id.to_string();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            match broker
+                .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
+                .await
+            {
+                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {}
+                _ => break,
             }
         }
-        (worker, released)
-    })
-    .await;
-    if let Ok((worker, released)) = result
-        && !released.is_empty()
-    {
-        eprintln!("released claims left by {worker}: {}", released.join(", "));
+        release_session_claims(host, worker).await;
+    });
+}
+
+/// After a restart, resume the session monitors of terminals that survived in the broker: an
+/// AI terminal gets its busy feed and exit release back, a shell terminal its exit release.
+/// Terminals from a broker too old to report a worker id keep relying on lease expiry.
+pub async fn resume_broker_terminal_sessions(state: &AppState) {
+    let Some(broker) = state.terminal_broker.clone() else {
+        return;
+    };
+    let Ok(hotsheet_terminals::BrokerResponse::List { terminals }) =
+        broker.call(hotsheet_terminals::BrokerRequest::List).await
+    else {
+        return;
+    };
+    for info in terminals.into_iter().filter(|info| info.alive) {
+        let Some(worker) = info.worker else {
+            continue;
+        };
+        let tool = worker
+            .strip_suffix(&format!("-{}", info.id))
+            .filter(|tool| !tool.is_empty());
+        match (info.kind, tool) {
+            (hotsheet_terminals::TerminalKind::Ai, Some(tool)) => {
+                register_broker_terminal_connection(state, &info.id, tool, broker.clone());
+            }
+            _ => watch_broker_terminal_session_exit(state, &info.id, worker, broker.clone()),
+        }
     }
 }
 

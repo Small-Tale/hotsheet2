@@ -156,6 +156,9 @@ pub struct BrokerTermInfo {
     pub link: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<u8>,
+    /// The session worker id from the terminal's launch environment. Older brokers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker: Option<String>,
 }
 
 fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
@@ -168,6 +171,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         cwd: osc.cwd,
         link: osc.link,
         progress: osc.progress,
+        worker: term.worker_id().map(str::to_string),
     }
 }
 

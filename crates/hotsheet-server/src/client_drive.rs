@@ -178,6 +178,8 @@ struct ClientConnection {
     source: String,
     store_path: PathBuf,
     home_id: String,
+    /// The session worker id the drive's tool claims with (HS2-RXWXQ8).
+    worker_id: String,
     drive: Arc<dyn PreparedClientDrive>,
     model: Option<String>,
     effort: Option<String>,
@@ -271,6 +273,11 @@ impl ClientDriveManager {
             return Ok(connection_info(&existing));
         }
 
+        // The drive's session worker id: its claims are released when the drive closes.
+        let worker_id = hotsheet_aitools::session_worker_id(&request.tool, &id);
+        request
+            .env
+            .push(format!("{}={worker_id}", hotsheet_aitools::WORKER_ID_ENV));
         let model = request.model.clone();
         let effort = request.effort.clone();
         let source = request.source_id.clone();
@@ -287,6 +294,7 @@ impl ClientDriveManager {
             source,
             store_path,
             home_id,
+            worker_id,
             drive,
             model,
             effort,
@@ -368,14 +376,21 @@ impl ClientDriveManager {
         })
     }
 
-    pub fn finish_turn(&self, job: &ClientTurnJob, result: &Result<TurnDone, String>) {
+    /// Record a finished turn. Returns the drive's worker id when the drive was closed while
+    /// the turn ran: its session ended with this turn, so the caller releases its claims.
+    pub fn finish_turn(
+        &self,
+        job: &ClientTurnJob,
+        result: &Result<TurnDone, String>,
+    ) -> Option<String> {
         let connection = &job.connection;
         let Ok(mut active_sessions) = self.active_sessions.lock() else {
-            return;
+            return None;
         };
         let Ok(mut state) = connection.state.lock() else {
-            return;
+            return None;
         };
+        let ended = state.closing.then(|| connection.worker_id.clone());
         state.busy = false;
         state.control = None;
         if let Some(key) = state.active_session_key.take() {
@@ -398,21 +413,22 @@ impl ClientDriveManager {
                 state.last_error = Some(error.to_string());
             }
         }
+        ended
     }
 
     /// Close one client-owned drive without exposing whether the id belongs to another
     /// checkout. A busy drive is removed only after its interrupt signal is accepted; the
     /// running job retains its `Arc` so `finish_turn` can still release session ownership.
-    pub fn close(&self, project: &str, id: &str) -> Result<bool, ClientDriveError> {
+    pub fn close(&self, project: &str, id: &str) -> Result<DriveClosed, ClientDriveError> {
         let mut connections = self
             .connections
             .lock()
             .map_err(|_| ClientDriveError::Unavailable)?;
         let Some(connection) = connections.get(id).cloned() else {
-            return Ok(false);
+            return Ok(DriveClosed::NotFound);
         };
         if connection.project != project {
-            return Ok(false);
+            return Ok(DriveClosed::NotFound);
         }
         let mut state = connection
             .state
@@ -431,8 +447,15 @@ impl ClientDriveManager {
                 .request_interrupt();
         }
         state.closing = true;
+        let closed = if state.busy {
+            DriveClosed::Ending
+        } else {
+            DriveClosed::Ended {
+                worker_id: connection.worker_id.clone(),
+            }
+        };
         connections.remove(id);
-        Ok(true)
+        Ok(closed)
     }
 
     pub fn interrupt(&self, id: &str) -> Result<(), ClientDriveError> {
@@ -569,6 +592,18 @@ fn now_ms() -> u64 {
         .map_or(0, |duration| duration.as_millis() as u64)
 }
 
+/// What closing a drive did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DriveClosed {
+    /// No drive with that id belongs to the project.
+    NotFound,
+    /// The idle drive's session ended now; release its worker's claims.
+    Ended { worker_id: String },
+    /// The running turn was asked to stop; its session ends when [`ClientDriveManager::finish_turn`]
+    /// returns the worker id.
+    Ending,
+}
+
 pub struct ClientTurnJob {
     connection: Arc<ClientConnection>,
     control: TurnControl,
@@ -645,6 +680,7 @@ mod tests {
 
     struct StubBackend {
         supports_interrupt: bool,
+        envs: Mutex<Vec<Vec<String>>>,
     }
 
     struct StubDrive {
@@ -654,6 +690,7 @@ mod tests {
 
     impl ClientDriveBackend for StubBackend {
         fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
+            self.envs.lock().unwrap().push(request.env.clone());
             Ok(Arc::new(StubDrive {
                 tool: request.tool,
                 supports_interrupt: self.supports_interrupt,
@@ -680,7 +717,22 @@ mod tests {
     }
 
     fn manager(supports_interrupt: bool) -> ClientDriveManager {
-        ClientDriveManager::new(Arc::new(StubBackend { supports_interrupt }))
+        stub_manager(supports_interrupt).0
+    }
+
+    fn stub_manager(supports_interrupt: bool) -> (ClientDriveManager, Arc<StubBackend>) {
+        let backend = Arc::new(StubBackend {
+            supports_interrupt,
+            envs: Mutex::default(),
+        });
+        (ClientDriveManager::new(backend.clone()), backend)
+    }
+
+    fn done(reason: hotsheet_aitools::DoneReason) -> Result<TurnDone, String> {
+        Ok(TurnDone {
+            reason,
+            session_id: None,
+        })
     }
 
     fn prepare(project: &str) -> PrepareDrive {
@@ -707,22 +759,30 @@ mod tests {
             .begin_turn("connection-1", None, None, None)
             .unwrap();
 
-        assert!(!manager.close("/project-b", "connection-1").unwrap());
+        assert_eq!(
+            manager.close("/project-b", "connection-1").unwrap(),
+            DriveClosed::NotFound
+        );
         assert!(manager.get("connection-1").unwrap().busy);
-        assert!(manager.close("/project-a", "connection-1").unwrap());
+        assert_eq!(
+            manager.close("/project-a", "connection-1").unwrap(),
+            DriveClosed::Ending,
+            "a busy drive's session ends when its interrupted turn finishes"
+        );
         assert!(job.control.interrupt_requested());
         assert!(matches!(
             manager.get("connection-1"),
             Err(ClientDriveError::NotFound(_))
         ));
-        assert!(!manager.close("/project-a", "connection-1").unwrap());
+        assert_eq!(
+            manager.close("/project-a", "connection-1").unwrap(),
+            DriveClosed::NotFound
+        );
 
-        manager.finish_turn(
-            &job,
-            &Ok(TurnDone {
-                reason: hotsheet_aitools::DoneReason::Interrupted,
-                session_id: None,
-            }),
+        assert_eq!(
+            manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Interrupted)),
+            Some("fake-connection-1".into()),
+            "the interrupted turn ends the closed drive's session"
         );
         assert!(manager.active_sessions.lock().unwrap().is_empty());
     }
@@ -743,12 +803,50 @@ mod tests {
         ));
         assert!(manager.get("connection-1").unwrap().busy);
 
-        manager.finish_turn(
-            &job,
-            &Ok(TurnDone {
-                reason: hotsheet_aitools::DoneReason::Completed,
-                session_id: None,
-            }),
+        assert_eq!(
+            manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed)),
+            None,
+            "a turn on an open drive does not end its session"
+        );
+    }
+
+    /// A drive's tool gets a session worker id, and only closing the drive ends the session
+    /// whose claims are released (HS2-RXWXQ8).
+    #[test]
+    fn a_drive_session_worker_id_is_released_only_when_the_drive_closes() {
+        let (manager, backend) = stub_manager(true);
+        manager
+            .create_or_attach(prepare("/project"), Some("connection-1".into()), None)
+            .unwrap();
+        assert_eq!(
+            backend.envs.lock().unwrap().as_slice(),
+            [vec!["HOTSHEET_WORKER_ID=fake-connection-1".to_string()]]
+        );
+        // Attaching again reuses the drive, and its worker id, without preparing again.
+        manager
+            .create_or_attach(prepare("/project"), Some("connection-1".into()), None)
+            .unwrap();
+        assert_eq!(backend.envs.lock().unwrap().len(), 1);
+
+        // Turns on an open drive keep the session (and its claims) alive.
+        for _ in 0..2 {
+            let job = manager
+                .begin_turn("connection-1", None, None, None)
+                .unwrap();
+            assert_eq!(
+                manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed)),
+                None
+            );
+        }
+        assert_eq!(
+            manager.close("/project", "connection-1").unwrap(),
+            DriveClosed::Ended {
+                worker_id: "fake-connection-1".into()
+            }
+        );
+        assert_eq!(
+            manager.close("/project", "connection-1").unwrap(),
+            DriveClosed::NotFound
         );
     }
 }

@@ -206,6 +206,9 @@ async fn main() -> Result<()> {
     if extra > 0 {
         println!("hosting {extra} configured store(s) from stores.json");
     }
+    // Terminals that survived a restart in the broker get their session monitors back, so an
+    // ended session still releases its claims (HS2-RXWXQ8).
+    hotsheet_server::resume_broker_terminal_sessions(&state).await;
 
     // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;

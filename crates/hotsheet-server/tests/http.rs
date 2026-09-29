@@ -12088,3 +12088,306 @@ async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
         assert_eq!(pages, 3, "{base}");
     }
 }
+
+// --- Session claim release for shell terminals, restarted broker terminals, and chat drives
+// (HS2-RXWXQ8) ---
+
+/// Create a ticket in `store` claimed by `worker` under a far-future lease; returns its id.
+fn claimed_by(store: &FsStore, worker: &str) -> hotsheet_model::Ulid {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let ticket = ops::create(
+        store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-09-28T00:00:00Z"),
+        NewTicket {
+            title: format!("claimed by {worker}"),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::claim(
+        store,
+        &ticket.id,
+        &Timestamp::new("2026-09-28T00:00:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        worker,
+        None,
+    )
+    .unwrap();
+    ticket.id
+}
+
+fn claim_holder(store: &FsStore, id: &hotsheet_model::Ulid) -> Option<String> {
+    store.read_ticket(id).unwrap().claimed_by
+}
+
+/// Wait up to 5 s for a ticket's claim to be released.
+async fn released_eventually(store: &FsStore, id: &hotsheet_model::Ulid) -> bool {
+    for _ in 0..50 {
+        if claim_holder(store, id).is_none() {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    false
+}
+
+#[tokio::test]
+async fn a_shell_terminal_session_releases_its_claims_when_the_terminal_ends() {
+    let (dir, st) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let app = app(st);
+    // The shell sees its session worker id, as an AI started in it by hand would.
+    let body = serde_json::json!({
+        "command": "sh",
+        "args": ["-c", "printf 'id=%s\\n' \"$HOTSHEET_WORKER_ID\"; sleep 30"],
+        "id": "sh1"
+    });
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(&body.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut seen = String::new();
+    for _ in 0..50 {
+        seen = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/terminals/sh1", None))
+                .await
+                .unwrap(),
+        )
+        .await["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if seen.contains("id=terminal-sh1") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(seen.contains("id=terminal-sh1"), "{seen}");
+
+    let session = claimed_by(&store, "terminal-sh1");
+    let other = claimed_by(&store, "someone-else");
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    assert_eq!(
+        claim_holder(&store, &session).as_deref(),
+        Some("terminal-sh1"),
+        "a live terminal keeps its session's claims"
+    );
+    let _ = app
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/sh1", None))
+        .await
+        .unwrap();
+    assert!(released_eventually(&store, &session).await);
+    assert_eq!(
+        claim_holder(&store, &other).as_deref(),
+        Some("someone-else")
+    );
+}
+
+#[tokio::test]
+async fn broker_terminal_sessions_release_claims_including_after_a_server_restart() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let broker = TerminalBroker::at(&sock, "proj");
+
+    // A fresh shell terminal in the broker releases on exit, and the broker reports its id.
+    let (dir1, st1) = state();
+    let store1 = FsStore::open(dir1.path()).unwrap();
+    let app1 = app(st1.with_terminal_broker_at(broker.clone()));
+    for id in ["fresh", "survivor"] {
+        let body = serde_json::json!({"command": "sleep", "args": ["30"], "id": id});
+        let resp = app1
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(&body.to_string())))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+    let Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) = broker
+        .call(hotsheet_terminals::BrokerRequest::Read { id: "fresh".into() })
+        .await
+    else {
+        panic!("the broker hosts the terminal");
+    };
+    assert_eq!(info.worker.as_deref(), Some("terminal-fresh"));
+    let fresh = claimed_by(&store1, "terminal-fresh");
+    let _ = app1
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/fresh", None))
+        .await
+        .unwrap();
+    assert!(released_eventually(&store1, &fresh).await);
+
+    // An AI terminal the broker kept across the restart (as a Connect terminal leaves it).
+    let resp = broker
+        .call(hotsheet_terminals::BrokerRequest::Open {
+            id: "ai1".into(),
+            kind: hotsheet_terminals::TerminalKind::Ai,
+            command: "sleep".into(),
+            args: vec!["30".into()],
+            cwd: None,
+            env: vec![("HOTSHEET_WORKER_ID".into(), "claude-ai1".into())],
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        resp,
+        hotsheet_terminals::BrokerResponse::Terminal { .. }
+    ));
+
+    // "Restart": a fresh server on the same broker resumes both sessions' monitors.
+    let (dir2, st2) = state();
+    let store2 = FsStore::open(dir2.path()).unwrap();
+    let st2 = st2.with_terminal_broker_at(broker.clone());
+    hotsheet_server::resume_broker_terminal_sessions(&st2).await;
+    let app2 = app(st2);
+    let connections = body_json(
+        app2.clone()
+            .oneshot(authed("GET", "/connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        connections
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "ai1" && c["tool"] == "claude"),
+        "the AI terminal's busy feed resumed: {connections}"
+    );
+    assert!(
+        !connections
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "survivor"),
+        "a shell terminal is not an AI connection: {connections}"
+    );
+    let survivor = claimed_by(&store2, "terminal-survivor");
+    let ai = claimed_by(&store2, "claude-ai1");
+    for id in ["survivor", "ai1"] {
+        let _ = app2
+            .clone()
+            .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+    }
+    assert!(released_eventually(&store2, &survivor).await);
+    assert!(released_eventually(&store2, &ai).await);
+}
+
+#[tokio::test]
+async fn closing_a_chat_drive_releases_its_session_claims() {
+    let (store_dir, base) = state();
+    let store = FsStore::open(store_dir.path()).unwrap();
+    let checkout = tempfile::tempdir().unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store_dir.path());
+    let backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let router = app(base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend(backend.clone()));
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout.path(), "sources": [source]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for id in ["idle", "busy"] {
+        let created = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections",
+                Some(
+                    &serde_json::json!({"tool": "fake", "checkout": checkout_id, "connection_id": id})
+                        .to_string(),
+                ),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::CREATED);
+    }
+    assert!(
+        backend
+            .preparations
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, _, _, env)| env.contains(&"HOTSHEET_WORKER_ID=fake-idle".to_string())),
+        "the drive's tool gets its session worker id"
+    );
+    let idle = claimed_by(&store, "fake-idle");
+    let busy = claimed_by(&store, "fake-busy");
+    let delete = |id: &str| {
+        authed_owned(
+            "DELETE",
+            format!("/checkouts/{checkout_id}/drive/connections/{id}"),
+        )
+    };
+
+    // An idle drive's session ends as soon as it closes.
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(delete("idle"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(claim_holder(&store, &idle), None);
+
+    // A busy drive keeps its claims until the interrupted turn actually finishes.
+    let started = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/busy/turns",
+            Some(r#"{"content":"hold"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(delete("busy"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(released_eventually(&store, &busy).await);
+}
+
+fn authed_owned(method: &str, uri: String) -> Request<Body> {
+    authed(method, &uri, None)
+}

@@ -240,11 +240,24 @@ pub struct Terminal {
     sizer: Arc<Mutex<SizeArbiter>>,
     /// Broadcasts the arbiter's chosen size to every attached viewer when it changes.
     size_tx: broadcast::Sender<Decision>,
+    /// The session worker id its launcher assigned through [`WORKER_ID_ENV`], if any.
+    worker_id: Option<String>,
 }
+
+/// The launcher-assigned session worker id variable (mirrors `hotsheet_aitools::WORKER_ID_ENV`).
+/// A terminal remembers it so a host that reattaches after a restart can still release the
+/// session's claims when the terminal ends (HS2-RXWXQ8).
+pub const WORKER_ID_ENV: &str = "HOTSHEET_WORKER_ID";
 
 impl Terminal {
     /// Spawn `spec` in a fresh PTY, scrubbing the environment and starting the drain thread.
     pub fn spawn(spec: TermSpec) -> Result<Terminal, TermError> {
+        let worker_id = spec
+            .env
+            .iter()
+            .rev()
+            .find(|(key, _)| key == WORKER_ID_ENV)
+            .map(|(_, value)| value.clone());
         let initial_cwd = spec
             .cwd
             .as_ref()
@@ -318,7 +331,13 @@ impl Terminal {
             osc,
             sizer: Arc::new(Mutex::new(sizer)),
             size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
+            worker_id,
         })
+    }
+
+    /// The session worker id the launcher assigned in the spawn environment, if any.
+    pub fn worker_id(&self) -> Option<&str> {
+        self.worker_id.as_deref()
     }
 
     /// The immutable creation kind, independent of the process's output or current command.
@@ -473,6 +492,23 @@ mod tests {
             ring.snapshot(),
             b"\x1b]8;;https://example.com\x1b\\link\x1b[0m"
         );
+    }
+
+    #[test]
+    fn records_the_launch_worker_id() {
+        let mut spec = TermSpec::new("true");
+        spec.env = vec![
+            (WORKER_ID_ENV.into(), "first".into()),
+            (WORKER_ID_ENV.into(), "terminal-t1".into()),
+        ];
+        let term = Terminal::spawn(spec).expect("spawn");
+        assert_eq!(
+            term.worker_id(),
+            Some("terminal-t1"),
+            "the last value wins, as in the env"
+        );
+        let plain = Terminal::spawn(TermSpec::new("true")).expect("spawn");
+        assert_eq!(plain.worker_id(), None);
     }
 
     #[test]
