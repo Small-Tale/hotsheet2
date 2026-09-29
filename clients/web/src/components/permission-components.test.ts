@@ -169,12 +169,12 @@ describe('permission presentation components', () => {
     expect(markup).toContain('data-component="list"');
     expect(markup).not.toContain('divider-sides');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
-    expect(markup.match(/class="kui-list-item__count"/g)).toHaveLength(3);
-    expect(markup).toContain('class="kui-list-item__count" data-attention="true">2</small>');
+    expect(markup.match(/class="notification-navigation__count"/g)).toHaveLength(3);
+    expect(markup).toContain('class="notification-navigation__count" data-attention="true">2</small>');
     expect(markup).toContain('data-item-id="day"');
     expect(markup).toContain('aria-current="page"');
     expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain(
-      'class="kui-list-item__count" data-attention="false">0</small>',
+      'class="notification-navigation__count" data-attention="false">0</small>',
     );
   });
 });

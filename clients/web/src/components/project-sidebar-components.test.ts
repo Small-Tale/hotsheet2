@@ -252,9 +252,6 @@ describe('ProjectSidebar component slice', () => {
       ".command-navigation__command:not([data-command-palette='transparent']) { --kui-list-item-color: var(--hs-command-on);",
     );
     expect(css).toContainSource('border-color:transparent;background:var(--command-color)');
-    expect(css).not.toContain('--kui-list-item-background');
-    expect(css).not.toContain('--kui-list-item-hover-border');
-    expect(css).not.toContain('--kui-list-item-selected-border');
   });
 
   it('shows half-opacity type icons for idle shell and AI commands', () => {

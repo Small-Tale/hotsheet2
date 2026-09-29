@@ -569,6 +569,7 @@ test('represents the shared repository-status composition in the UX catalog', as
     headerGap: 4,
     rowGaps: [0, 0, 0, 0],
   });
+  await expect(dialog.locator('.repository-status-popover__count')).toHaveCount(5);
   await page.locator('[data-action="toggle-settings"]').click();
   const inspector = page.getByRole('complementary', { name: 'RepositoryStatusPopover settings' }),
     scenario = inspector.locator('wa-select[name="scenario"]');

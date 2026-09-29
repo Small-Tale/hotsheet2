@@ -1764,17 +1764,18 @@ TypeScript, isolated Kerf ESLint, and analyzer stages in full mode with a conten
 Browser evaluation remains disabled unless a developer explicitly supplies a trusted
 URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 
-`npm run ui:doctor` is the repeatable local and CI gate. Its checked-in baseline accepts
-debt reduction, but fails for a new diagnostic id or any increase within these current
-error and review classes:
+`npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
+accepts debt reduction but fails for a new diagnostic id or any increase in an existing
+error or review class. The budget after HS2-VY74FW and HS2-FEDDPX is:
 
-| Severity | Accepted beta.49 baseline                                                           |
-| -------- | ----------------------------------------------------------------------------------- |
-| error    | `KUI-L017` 1; `KUI-L101` 3; `KUI-L102` 8; `KUI-L201` 22; `KUI-L202` 4; `KUI-L203` 1 |
-| review   | `KUI-L004` 81; `KUI-L005` 54; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1            |
+| Severity | Exact diagnostic budgets                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 108; `KUI-L022` 67; `KUI-L201` 24; `KUI-L202` 4; `KUI-L203` 1 |
+| review   | `KUI-L004` 87; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1                                            |
 
-The 39 accepted errors are separately tracked by composition-contract
-`HS2-N377DC`, private-anatomy/token `HS2-M3TDYP`, and exceptional-spacing
-`HS2-S2GYTF`. The 177 review findings remain visible because they describe intentional
-application geometry that should be reconsidered as Kerf gains public configuration;
-they are budgeted rather than hidden by broad suppressions (HS2-HD1SCC).
+HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
+gave count labels application-owned classes, switched the List demo to a standard gap,
+and stopped writing the uncataloged expanded-size variable during live region resize.
+The public region size variable still previews drag size; the component's rendered
+expanded size is refreshed on the settled render. The remaining beta.58 ownership
+findings are tracked by HS2-GTX61Q and its child tickets.

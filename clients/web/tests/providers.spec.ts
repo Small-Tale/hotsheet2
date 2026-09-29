@@ -15668,7 +15668,11 @@ test('scopes the notification center, navigation counts, and header badge to the
     navigation = page.locator('.settings-navigation[aria-label="Notification views"]');
   await expect(center).toContainText('other pending action');
   await expect(center).not.toContainText('demo pending action');
-  await expect(navigation.locator('.kui-list-item__count')).toHaveText(['1', '1', '1']);
+  await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
+  await page.screenshot({ path: '/private/tmp/hs2-feddpx-notifications-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-feddpx-notifications-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await navigation.getByRole('button', { name: /Last 7 Days/ }).click();
   await expect(center).toContainText('other history action');
   await expect(center).not.toContainText('demo history action');

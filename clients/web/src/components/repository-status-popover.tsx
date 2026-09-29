@@ -272,7 +272,9 @@ export function RepositoryStatusPopover({
                     />
                   }
                   label={item.label}
-                  trailing={<small class="kui-list-item__count">{repositoryViewCount(status, item.id)}</small>}
+                  trailing={
+                    <small class="repository-status-popover__count">{repositoryViewCount(status, item.id)}</small>
+                  }
                 />
               ))}
             </nav>
@@ -450,7 +452,9 @@ export function ChangeEvidenceDialog({
                 icon={<LucideIcon icon={item.icon} name={item.id} />}
                 label={item.label}
                 trailing={
-                  <small class="kui-list-item__count">{files.filter((file) => file.category === item.id).length}</small>
+                  <small class="repository-status-popover__count">
+                    {files.filter((file) => file.category === item.id).length}
+                  </small>
                 }
               />
             ))}

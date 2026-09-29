@@ -77,11 +77,11 @@ describe('project dialogs', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'project-dialog.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(localMarkup).toContain('data-component="list"');
-    expect(localMarkup).toContain('--_kui-list-gap:var(--kui-space-m)');
+    expect(localMarkup).toContain('data-gap="true"');
     expect(localMarkup).toContain('data-component="row"');
     expect(localMarkup).toContain('data-h-align="right"');
     expect(remoteMarkup).toContain('data-component="list"');
-    expect(remoteMarkup).toContain('--_kui-list-gap:var(--kui-space-m)');
+    expect(remoteMarkup).toContain('data-gap="true"');
     expect(css).toMatch(/\.project-dialog__path \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.remote-project-dialog__list \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatch(/\.remote-project-dialog__copy \{[^}]*gap: var\(--kui-space-2xs\)/);

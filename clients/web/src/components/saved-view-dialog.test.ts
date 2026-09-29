@@ -31,7 +31,7 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('Everyone using this ticket store will see it.');
     expect(markup).toContain('data-action="save-saved-view"');
     expect(markup).toContain('data-component="list"');
-    expect(markup).toContain('--_kui-list-gap:var(--kui-space-l)');
+    expect(markup).toContain('data-gap="true"');
     expect(markup).toContain('data-component="row"');
     expect(markup).toContain('data-h-align="right"');
   });

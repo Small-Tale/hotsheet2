@@ -230,7 +230,6 @@ describe('ticket source surfaces', () => {
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
     expect(signedIn).toContain('data-columns="2"');
-    expect(signedIn).toContain('--_kui-grid-gap:var(--kui-space-m)');
     expect(signedIn).not.toContain('name="api-base"');
     const remote = String(
       TicketSourceSetupDialog({

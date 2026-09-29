@@ -70,7 +70,7 @@ describe('TerminalDrawer', () => {
   it('sizes terminal names from their content instead of reserving icon-width name space', () => {
     const markup = render();
     expect(markup).toContain('class="kui-app-tab terminal-tab"');
-    expect(markup).toContain('style="--kui-app-tab-label-max-width:144px"');
+    expect(markup).toMatch(/class="kui-app-tab terminal-tab"[^>]*style="[^"]*144px"/);
     expect(markup).toContain('data-size="compact"');
   });
   it('renders one automatic Kerf tab bar with draggable terminal tabs before its trailing actions', () => {

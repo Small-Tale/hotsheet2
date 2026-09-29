@@ -182,7 +182,7 @@ describe('shared client theme', () => {
     expect(source).not.toMatch(/--wa-[\w-]+\s*:/);
   });
 
-  it('mirrors the kerf --kui-space-* spacing scale so components can author against it (HS2-4Y6SM9)', () => {
+  it('mirrors the Kerf spacing scale so components can author against it (HS2-4Y6SM9)', () => {
     const source = css(tokenPath);
     // Identical to kerf's foundation.css so the canonical scale resolves app-wide without importing
     // foundation wholesale (which also carries color-scheme/color/font foundations).

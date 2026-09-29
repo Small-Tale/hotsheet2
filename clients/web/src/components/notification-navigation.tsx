@@ -70,7 +70,7 @@ export function NotificationNavigation({
                 label={item.label}
                 trailing={
                   <small
-                    class="kui-list-item__count"
+                    class="notification-navigation__count"
                     data-attention={String(item.id === 'pending' && counts.pending > 0)}
                   >
                     {counts[item.id]}

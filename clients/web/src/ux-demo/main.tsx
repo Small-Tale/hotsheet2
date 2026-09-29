@@ -1776,7 +1776,6 @@ window.addEventListener('pointermove', (event) => {
   drag.frame = requestAnimationFrame(() => {
     drag.frame = undefined;
     drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
-    drag.region.style.setProperty('--kui-resizable-region-expanded-size', `${drag.pendingSize}px`);
     drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
   });
 });
