@@ -451,6 +451,22 @@ async function mockProject(
     if (path.endsWith('/github-auth/device/auth-1') && request.method() === 'DELETE')
       return route.fulfill({ status: 204 });
     const providerConnection = path.match(/\/provider-connections\/([^/]+)$/);
+    if (providerConnection && request.method() === 'DELETE') {
+      // The real server's idempotent removal report (HS2-724S9N).
+      const id = decodeURIComponent(providerConnection[1]),
+        removed = providerConnectionRecords.find((item) => item.id === id);
+      providerConnectionRecords = providerConnectionRecords.filter((item) => item.id !== id);
+      const credential = (removed?.settings as { credential?: { secret?: string } } | undefined)?.credential?.secret;
+      return route.fulfill({
+        json: {
+          connection_id: id,
+          removed_connection: Boolean(removed),
+          unlinked_checkouts: removed ? ['demo-checkout'] : [],
+          deleted_credential: credential?.startsWith('github-app-') ? credential : null,
+          kept_credential: credential && !credential.startsWith('github-app-') ? credential : null,
+        },
+      });
+    }
     if (providerConnection && request.method() === 'PATCH') {
       const id = decodeURIComponent(providerConnection[1]),
         updated = { ...request.postDataJSON(), id };
@@ -1890,6 +1906,48 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
+
+  // Permanent removal lives in the edit dialog behind an inline confirmation (HS2-724S9N).
+  const deletes: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'DELETE' && request.url().includes('/provider-connections/'))
+      deletes.push(new URL(request.url()).pathname.split('/').pop()!);
+  });
+  await page.getByRole('button', { name: 'Edit GitHub Secondary' }).click();
+  await expect(setup).toHaveJSProperty('open', true);
+  const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
+  await expect(footer.getByRole('button', { name: 'Remove data source…' })).toBeVisible();
+  await setup.evaluate(async (node) => {
+    const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+    await Promise.all(animations.map((animation) => animation.finished));
+  });
+  await expect.poll(() => setup.evaluate((node) => getComputedStyle(node).opacity)).toBe('1');
+  await page.screenshot({ path: '/private/tmp/hs2-724s9n-edit-with-remove-wide.png', fullPage: true });
+  await footer.getByRole('button', { name: 'Remove data source…' }).click();
+  const prompt = footer.getByRole('alert');
+  await expect(prompt).toContainText('Remove GitHub Secondary?');
+  await expect(footer.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-724s9n-remove-confirm-wide.png', fullPage: true });
+  // Keep backs out without removing anything; the confirmation re-arms cleanly.
+  await footer.getByRole('button', { name: 'Keep' }).click();
+  await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
+  expect(deletes).toEqual([]);
+  await footer.getByRole('button', { name: 'Remove data source…' }).click();
+  await page.setViewportSize({ width: 620, height: 760 });
+  await expect(prompt).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-724s9n-remove-confirm-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await footer.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(setup).toHaveJSProperty('open', false);
+  expect(deletes).toEqual(['github-secondary']);
+  await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed.');
+  await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
+  // Reopening another connection starts without a stale confirmation.
+  await page.getByRole('button', { name: 'Edit GitHub Primary' }).click();
+  await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
+  await expect(footer.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.app-error')).toHaveCount(0);
 });
 

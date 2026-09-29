@@ -2608,21 +2608,33 @@ async fn update_provider_connection(
     Ok(Json(connection))
 }
 
+/// Permanently remove a connection and every local reference to it: checkout links and
+/// defaults, the `providers.json` entry, and a Hot Sheet–minted credential. Idempotent —
+/// removing an already-removed id still cleans dangling checkout links (HS2-724S9N).
 async fn delete_provider_connection(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-) -> Result<StatusCode, ApiError> {
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-    let mut connections = registry.load().map_err(provider_transfer_error)?;
-    let before = connections.len();
-    connections.retain(|connection| connection.id != connection_id);
-    if connections.len() == before {
-        return Err(ApiError::not_found(&connection_id));
-    }
-    registry
-        .save(&connections)
-        .map_err(provider_transfer_error)?;
-    Ok(StatusCode::NO_CONTENT)
+) -> Result<Json<hotsheet_ticketing::connection_removal::ConnectionRemoval>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        hotsheet_ticketing::connection_removal::remove_provider_connection(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.checkout_registry,
+            &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+            &connection_id,
+        )
+        .map(Json)
+        .map_err(|error| match error {
+            hotsheet_ticketing::connection_removal::ConnectionRemovalError::GitSource(_) => {
+                ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+            }
+            hotsheet_ticketing::connection_removal::ConnectionRemovalError::Provider(error) => {
+                provider_transfer_error(error)
+            }
+            other => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
+        })
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 #[derive(Debug, Deserialize)]

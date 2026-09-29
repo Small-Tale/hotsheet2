@@ -125,6 +125,15 @@ enum Cmd {
     ProviderLs { connection: String },
     /// Get one provider-native ticket.
     ProviderGet { connection: String, id: String },
+    /// Permanently remove an external provider connection and every local reference to it:
+    /// checkout links and defaults, its `providers.json` entry, and a credential Hot Sheet
+    /// minted for it (user-managed keys are kept). Safe to repeat.
+    ProviderRemove {
+        connection: String,
+        /// Emit the removal report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Create a ticket directly in a configured provider.
     ProviderNew {
         connection: String,
@@ -986,6 +995,9 @@ fn main() -> Result<()> {
         Cmd::Providers { json } => cmd_providers(&cli.path, json),
         Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
         Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
+        Cmd::ProviderRemove { connection, json } => {
+            cmd_provider_remove(&cli.path, &connection, json)
+        }
         Cmd::ProviderNew {
             connection,
             title,
@@ -1935,6 +1947,41 @@ fn cmd_provider_ls(path: &Path, connection: &str) -> Result<()> {
 fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Result<()> {
     let ticket = configured_provider(path, connection)?.get(id)?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    if connection == git_connection_id(&store) {
+        anyhow::bail!(
+            "'{connection}' is this store's git ticket source, not an external provider connection"
+        );
+    }
+    let home = hotsheet_plugins::hotsheet_home();
+    let report = hotsheet_ticketing::connection_removal::remove_provider_connection(
+        &ProviderConfigRegistry::new(store.root().join("providers.json")),
+        &hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")),
+        &KeyRegistry::new(&home, OsKeychain),
+        connection,
+    )?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    if report.removed_connection {
+        println!("Removed provider connection '{connection}'.");
+    } else {
+        println!("Provider connection '{connection}' was already removed.");
+    }
+    for checkout in &report.unlinked_checkouts {
+        println!("Unlinked it from checkout {checkout}.");
+    }
+    if let Some(credential) = &report.deleted_credential {
+        println!("Deleted its Hot Sheet credential '{credential}'.");
+    }
+    if let Some(credential) = &report.kept_credential {
+        println!("Kept credential '{credential}' (user-managed or still in use).");
+    }
     Ok(())
 }
 

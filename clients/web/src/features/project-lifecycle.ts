@@ -88,6 +88,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerEditingId = signal<string | undefined>(undefined),
     providerSettingsBusy = signal(false),
     providerSettingsError = signal(''),
+    providerRemovingId = signal<string | undefined>(undefined),
     githubAuth = signal<GithubAuthState | undefined>(undefined),
     ticketSourceSetupNavigation = signal<'none' | 'push' | 'pop'>('none'),
     createdGitTicketStore = signal(''),
@@ -547,17 +548,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       await client.addCheckoutSource(current.id, saved, makeDefault);
       if (editingId && !makeDefault && providerConnections.value.find((item) => item.id === editingId)?.default)
         await client.setCheckoutDefaultSource(current.id, null);
-      providerConnections.value = await client.connections();
-      const descriptors = await client.providers(),
-        selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
-      defaultProviders.value = {
-        ...defaultProviders.value,
-        [current.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
-      };
-      providerCapabilities.value = {
-        ...providerCapabilities.value,
-        ...Object.fromEntries(descriptors.map((item) => [item.connection_id, item.capabilities])),
-      };
+      await reloadProviderDescriptors(client, current);
       projects.value = projects.value.map((item) =>
         item.id === current.id ? { ...item, needsTicketSetup: false } : item,
       );
@@ -566,6 +557,53 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       providerEditingId.value = undefined;
       await dependencies.refreshProject();
       dependencies.showToast(editingId ? `${saved.name ?? saved.id} updated.` : `${saved.name ?? saved.id} connected.`);
+    } catch (reason) {
+      providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      providerSettingsBusy.value = false;
+    }
+  }
+
+  async function reloadProviderDescriptors(client: Api, current: Project) {
+    providerConnections.value = await client.connections();
+    const descriptors = await client.providers(),
+      selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+    defaultProviders.value = {
+      ...defaultProviders.value,
+      [current.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+    };
+    providerCapabilities.value = {
+      ...providerCapabilities.value,
+      ...Object.fromEntries(descriptors.map((item) => [item.connection_id, item.capabilities])),
+    };
+  }
+
+  /** Ask to confirm permanently removing the connection open for editing (HS2-724S9N). */
+  function requestProviderRemoval() {
+    providerRemovingId.value = providerEditingId.value;
+    providerSettingsError.value = '';
+  }
+  function cancelProviderRemoval() {
+    providerRemovingId.value = undefined;
+  }
+  /** Remove the confirmed connection and every local reference to it, then close the dialog. */
+  async function removeExternalProvider() {
+    const current = ticketSourceSetupProject.value ?? dependencies.project(),
+      id = providerRemovingId.value;
+    if (!current || !id || id !== providerEditingId.value || providerSettingsBusy.value) return;
+    const connection = providerConnections.value.find((item) => item.id === id);
+    providerSettingsBusy.value = true;
+    providerSettingsError.value = '';
+    try {
+      const client = new Api(current.apiPath);
+      await client.deleteConnection(id);
+      await reloadProviderDescriptors(client, current);
+      ticketSourceSetupProject.value = undefined;
+      providerSetupKind.value = undefined;
+      providerEditingId.value = undefined;
+      providerRemovingId.value = undefined;
+      await dependencies.refreshProject();
+      dependencies.showToast(`${connection?.name ?? id} removed.`);
     } catch (reason) {
       providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
     } finally {
@@ -725,6 +763,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerSetupKind,
     providerEditingId,
     providerSettingsBusy,
+    providerRemovingId,
+    requestProviderRemoval,
+    cancelProviderRemoval,
+    removeExternalProvider,
     providerSettingsError,
     githubAuth,
     ticketSourceSetupNavigation,

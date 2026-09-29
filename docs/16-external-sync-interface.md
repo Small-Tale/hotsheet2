@@ -298,6 +298,18 @@ to its provider URL, and derives enabled operations and copy/move destinations f
 advertised capabilities. Provider secrets never appear in connection responses;
 the UI names only a server-owned credential reference.
 
+Removing a data source is permanent and user-initiated (HS2-724S9N). One shared,
+idempotent workflow (`hotsheet_ticketing::connection_removal`) backs
+`DELETE /provider-connections/{id}`, `hotsheet provider-remove <id>`, and the web edit
+dialog's **Remove data source…** action (confirmed inline). It unlinks the connection
+from every registered checkout (clearing a default that named it), drops its
+`providers.json` entry, and deletes its keychain credential only when Hot Sheet minted
+it during GitHub sign-in (`github-app-*`) and no other connection shares it;
+user-managed keys registered with `hotsheet key set` are kept. Ticket data stays in the
+provider — nothing is mirrored locally — so no other local state names the connection.
+Repeating a removal reports nothing left to remove and still cleans dangling checkout
+links left by older clients. The response reports what was removed or kept.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)

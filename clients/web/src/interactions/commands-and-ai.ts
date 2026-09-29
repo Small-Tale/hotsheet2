@@ -120,6 +120,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly cancelGitHubSignIn: () => void;
   readonly startGitHubSignIn: (form: HTMLFormElement) => Promise<void>;
   readonly saveExternalProvider: (form: HTMLFormElement) => Promise<void>;
+  readonly providerRemovingId: Signal<string | undefined>;
+  readonly requestProviderRemoval: () => void;
+  readonly cancelProviderRemoval: () => void;
+  readonly removeExternalProvider: () => Promise<void>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -211,6 +215,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     cancelGitHubSignIn,
     startGitHubSignIn,
     saveExternalProvider,
+    providerRemovingId,
+    requestProviderRemoval,
+    cancelProviderRemoval,
+    removeExternalProvider,
   } = dependencies;
   delegate(document.body, 'click', '[data-action="toggle-command-group"]', () => {
     commandGroupExpanded.value = !commandGroupExpanded.value;
@@ -820,7 +828,17 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ticketSourceSetupProject.value = current;
     providerSetupKind.value = connection.provider as ExternalProviderKind;
     providerEditingId.value = connection.id;
+    providerRemovingId.value = undefined;
     providerSettingsError.value = '';
+  });
+  delegate(document.body, 'click', '[data-action="request-provider-removal"]', () => {
+    requestProviderRemoval();
+  });
+  delegate(document.body, 'click', '[data-action="cancel-provider-removal"]', () => {
+    cancelProviderRemoval();
+  });
+  delegate(document.body, 'click', '[data-action="confirm-provider-removal"]', () => {
+    void removeExternalProvider();
   });
   delegate(document.body, 'click', '[data-action="select-provider-kind"]', (_event, target) => {
     ticketSourceSetupNavigation.value = 'push';

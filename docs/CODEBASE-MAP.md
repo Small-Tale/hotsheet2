@@ -173,6 +173,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
+      src/connection_removal.rs # shared idempotent removal of an external provider connection: checkout links/defaults, providers.json, Hot Sheet-minted credential (HS2-724S9N)
       src/checkouts.rs       #   readable path-derived checkout ids + OS-locked/atomic machine registry; many-to-many checkout/store discovery, scoped routing, and backup-first recovery of the legacy duplicated-suffix race (HS2-NGC8AE/VSPFD9/1S6DS9)
       src/repository_status.rs # git porcelain-v2 repository snapshot parser/runner (HS2-RPVFA4)
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
@@ -184,7 +185,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
+      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close/remove, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; unrelated interactive PreToolUse events remain native; the `permission-hook` cmd POSTs /permissions/ask when governed
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)

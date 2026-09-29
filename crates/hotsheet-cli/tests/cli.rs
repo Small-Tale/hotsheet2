@@ -4160,3 +4160,64 @@ fn cert_issue_role_renew_and_revoke_flow() {
         .success()
         .stdout(predicate::str::contains("next TLS connection"));
 }
+
+#[test]
+fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
+    // HS2-724S9N: headless parity for permanently removing a data source.
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    std::fs::write(
+        dir.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","default":true,"settings":{"credential":{"secret":"cli-user-pat"}}}]}"#,
+    )
+    .unwrap();
+    let project_path = project.path().to_str().unwrap();
+    run(&["checkout", "register", project_path, "--alias", "linked"])
+        .assert()
+        .success();
+    run(&[
+        "checkout",
+        "add-source",
+        "linked",
+        "github-main",
+        "github",
+        "acme/repo",
+        "--default",
+    ])
+    .assert()
+    .success();
+
+    let report = run(&["provider-remove", "github-main", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: serde_json::Value = serde_json::from_slice(&report).unwrap();
+    assert_eq!(report["removed_connection"], true);
+    assert_eq!(report["unlinked_checkouts"].as_array().unwrap().len(), 1);
+    // A user-registered key may serve other tools; only Hot Sheet-minted ones are deleted.
+    assert_eq!(report["kept_credential"], "cli-user-pat");
+    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    assert!(!providers.contains("github-main"), "{providers}");
+    let checkout = run(&["checkout", "resolve", "linked"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let checkout: serde_json::Value = serde_json::from_slice(&checkout).unwrap();
+    assert!(!checkout.to_string().contains("github-main"), "{checkout}");
+
+    run(&["provider-remove", "github-main"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already removed"));
+}

@@ -28,6 +28,53 @@ describe('ticket source surfaces', () => {
       expect(markup).toContain(label);
   });
 
+  it('offers permanent removal only while editing, behind an inline confirmation (HS2-724S9N)', () => {
+    const connection = {
+        id: 'github-main',
+        provider: 'github',
+        locator: 'acme/repo',
+        name: 'Product issues',
+        default: true,
+        settings: {},
+      },
+      base = {
+        project: { root: '/work/demo', name: 'Demo', stores: [] },
+        providerKind: 'github' as const,
+        providerConnections: [connection],
+        navigation: 'none' as const,
+      };
+    const connecting = String(TicketSourceSetupDialog(base));
+    expect(connecting).not.toContain('request-provider-removal');
+    const editing = String(TicketSourceSetupDialog({ ...base, editingProviderId: 'github-main' }));
+    expect(editing).toContain('data-action="request-provider-removal"');
+    expect(editing).toContain('Remove data source…');
+    expect(editing).toContain('data-lucide="trash-2"');
+    expect(editing).toContain('data-action="submit-provider-setup"');
+    expect(editing).not.toContain('confirm-provider-removal');
+    const confirming = String(
+      TicketSourceSetupDialog({ ...base, editingProviderId: 'github-main', removingProviderId: 'github-main' }),
+    );
+    expect(confirming).toContain('<strong>Remove Product issues?</strong>');
+    expect(confirming).toContain('Tickets stay in GitHub Issues.');
+    expect(confirming).toContain('data-action="confirm-provider-removal"');
+    expect(confirming).toContain('data-action="cancel-provider-removal"');
+    expect(confirming).not.toContain('data-action="submit-provider-setup"');
+    // A stale confirmation for another connection never arms this one.
+    const stale = String(
+      TicketSourceSetupDialog({ ...base, editingProviderId: 'github-main', removingProviderId: 'github-old' }),
+    );
+    expect(stale).not.toContain('confirm-provider-removal');
+    const busy = String(
+      TicketSourceSetupDialog({
+        ...base,
+        editingProviderId: 'github-main',
+        removingProviderId: 'github-main',
+        providerBusy: true,
+      }),
+    );
+    expect(busy).toContain('Removing…');
+  });
+
   it('renders provider editing, GitHub authorization, and remote-backup states from props', () => {
     const auth = String(
       ProviderSetupForm({

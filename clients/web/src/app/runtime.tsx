@@ -929,6 +929,10 @@ export async function startHotSheetWebClient() {
     providerEditingId,
     providerSettingsBusy,
     providerSettingsError,
+    providerRemovingId,
+    requestProviderRemoval,
+    cancelProviderRemoval,
+    removeExternalProvider,
     githubAuth,
     ticketSourceSetupNavigation,
     createdGitTicketStore,
@@ -4681,6 +4685,7 @@ export async function startHotSheetWebClient() {
           remoteBusy={ticketSourceRemoteBusy.value}
           providerBusy={providerSettingsBusy.value}
           providerError={providerSettingsError.value}
+          removingProviderId={providerRemovingId.value}
         />
         <TerminalRenameDialog target={terminalRename.value} />
         <TerminalVisibilityDialog
@@ -4893,7 +4898,7 @@ export async function startHotSheetWebClient() {
     reorderCommandSettings, updateCommandSetting, updateCommandAiSelection, effectiveCommandAiSelection, showLoadingActivity, inheritGlobalShellHistory, terminalSettingsMessage, trashSettingsMessagesByProject,
     trashCleanupDaysByProject, resetProgressiveTicketRendering, viewMode, setSettingsCategory, refreshProviderConnections, refreshTerminalSettings, refreshTrashSettings, capturingShortcutId,
     saveAiDefaults, selectDefaultModel, restoreCommandEditorAfterManualModel, aiDefaults, providerConnections, githubAuth, cancelGitHubSignIn, startGitHubSignIn,
-    saveExternalProvider, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions,
+    saveExternalProvider, providerRemovingId, requestProviderRemoval, cancelProviderRemoval, removeExternalProvider, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions,
     resolvePermission, selectedProjectId, hideVerifiedByProject, selectLinkedTicket, ticketLinkChoice, openTicketLinkMatch, cancelTicketLinkChoice, searchOpen,
     readWorkspaceSearchEditor, updateTicketSearch, restoreWorkspaceSearchEnd, removeWorkspaceSearchToken, addWorkspaceSearchTag, editWorkspaceSearchToken, searchHelpOpen, replaceActiveWorkspaceSearchToken,
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,

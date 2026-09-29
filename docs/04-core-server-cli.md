@@ -456,6 +456,7 @@ hotsheet provider-get github-main 42
 hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
+hotsheet provider-remove github-main [--json]  # permanent; unlinks checkouts, drops Hot Sheet-minted sign-in
 ```
 
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,

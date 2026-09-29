@@ -43,6 +43,14 @@ export interface ProviderConnection {
   default: boolean;
   settings: Record<string, unknown>;
 }
+/** What a permanent provider-connection removal cleaned up (HS2-724S9N). */
+export interface ConnectionRemoval {
+  connection_id: string;
+  removed_connection: boolean;
+  unlinked_checkouts: string[];
+  deleted_credential: string | null;
+  kept_credential: string | null;
+}
 export interface GitHubAuthStart {
   session_id: string;
   user_code: string;
@@ -559,7 +567,7 @@ export class Api {
       body: JSON.stringify(value),
     });
   deleteConnection = (id: string) =>
-    this.request<void>(`/provider-connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    this.request<ConnectionRemoval>(`/provider-connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
   startGitHubAuth = (web_base = 'https://github.com') =>
     this.request<GitHubAuthStart>('/github-auth/device', { method: 'POST', body: JSON.stringify({ web_base }) });
   waitGitHubAuth = (session: string) =>

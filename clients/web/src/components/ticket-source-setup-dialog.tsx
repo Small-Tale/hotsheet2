@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronLeft, ChevronRight, GitBranch } from 'lucide';
+import { ChevronLeft, ChevronRight, GitBranch, Trash2 } from 'lucide';
 
 import type { ProviderConnection } from '../api';
 import { ContentTransition } from './content-transition';
@@ -35,6 +35,8 @@ export interface TicketSourceSetupDialogProps {
   remoteBusy?: boolean;
   providerBusy?: boolean;
   providerError?: string;
+  /** The edited connection awaiting confirmation of its permanent removal (HS2-724S9N). */
+  removingProviderId?: string;
 }
 
 export function TicketSourceSetupDialog({
@@ -50,6 +52,7 @@ export function TicketSourceSetupDialog({
   remoteBusy = false,
   providerBusy = false,
   providerError = '',
+  removingProviderId,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
     disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" />,
@@ -221,8 +224,42 @@ export function TicketSourceSetupDialog({
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
+    ) : editing && removingProviderId === editing.id ? (
+      // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
+      // "Remove data source…" button into "Keep" while that same click is still dispatching.
+      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
+        <p class="ticket-source-setup__removal-prompt" role="alert">
+          <strong>Remove {editing.name ?? editing.id}?</strong> It is unlinked from every project, and a sign-in Hot
+          Sheet saved for it is deleted. Tickets stay in {providerName(editing.provider as ExternalProviderKind)}.
+        </p>
+        <wa-button appearance="plain" type="button" data-action="cancel-provider-removal" disabled={providerBusy}>
+          Keep
+        </wa-button>
+        <wa-button
+          variant="danger"
+          appearance="accent"
+          type="button"
+          data-action="confirm-provider-removal"
+          disabled={providerBusy}
+        >
+          {providerBusy ? 'Removing…' : 'Remove'}
+        </wa-button>
+      </div>
     ) : (
       <>
+        {editing && (
+          <wa-button
+            class="ticket-source-setup__remove"
+            variant="danger"
+            appearance="plain"
+            type="button"
+            data-action="request-provider-removal"
+            disabled={providerBusy}
+          >
+            <LucideIcon slot="start" icon={Trash2} name="trash-2" />
+            Remove data source…
+          </wa-button>
+        )}
         <wa-button appearance="plain" type="button" data-action="dismiss-ticket-source-setup">
           Cancel
         </wa-button>

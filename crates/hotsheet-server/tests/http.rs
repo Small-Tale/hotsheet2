@@ -10958,8 +10958,15 @@ async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract()
 
 #[tokio::test]
 async fn provider_connections_crud_keeps_only_references_and_one_default() {
+    // Hermetic: removal walks the checkout registry and key metadata (nextest isolates each
+    // test process, so the env var cannot leak).
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
     let (_dir, st) = state();
-    let app = app(st);
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let github = serde_json::json!({
         "id":"github-main","provider":"github","locator":"acme/repo",
         "name":"Public bugs","default":true,
@@ -11032,14 +11039,56 @@ async fn provider_connections_crud_keeps_only_references_and_one_default() {
     assert_eq!(updated["id"], "github-main");
     assert_eq!(updated["locator"], "acme/renamed");
 
+    // Link gitlab-team to a checkout as its default, then remove the connection: every
+    // local reference goes with it, and a user-managed credential is left alone (HS2-724S9N).
+    let checkout = tempfile::tempdir().unwrap();
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "linked",
+        "sources": [{"connection_id":"gitlab-team","provider":"gitlab","locator":"team/project"}],
+        "default_source": "gitlab-team"
+    })
+    .to_string();
     assert_eq!(
         app.clone()
-            .oneshot(authed("DELETE", "/provider-connections/gitlab-team", None,))
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
             .await
             .unwrap()
             .status(),
-        StatusCode::NO_CONTENT
+        StatusCode::CREATED
     );
+    let removed = app
+        .clone()
+        .oneshot(authed("DELETE", "/provider-connections/gitlab-team", None))
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), StatusCode::OK);
+    let report = body_json(removed).await;
+    assert_eq!(report["removed_connection"], true);
+    assert_eq!(report["unlinked_checkouts"].as_array().unwrap().len(), 1);
+    assert_eq!(report["kept_credential"], "gitlab-work");
+    assert!(report["deleted_credential"].is_null());
+    let linked = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/linked", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(linked["sources"].as_array().unwrap().is_empty(), "{linked}");
+    assert!(
+        linked
+            .get("default_source")
+            .is_none_or(serde_json::Value::is_null)
+    );
+    // Idempotent: a repeat reports nothing left to remove instead of failing.
+    let repeat = app
+        .clone()
+        .oneshot(authed("DELETE", "/provider-connections/gitlab-team", None))
+        .await
+        .unwrap();
+    assert_eq!(repeat.status(), StatusCode::OK);
+    assert_eq!(body_json(repeat).await["removed_connection"], false);
     let listed = body_json(
         app.oneshot(authed("GET", "/provider-connections", None))
             .await
