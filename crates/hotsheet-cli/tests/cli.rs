@@ -4221,3 +4221,47 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
         .success()
         .stdout(predicate::str::contains("already removed"));
 }
+
+#[test]
+fn provider_disable_blocks_provider_access_until_enabled() {
+    // HS2-SF6W34: headless parity for temporarily disabling a data source.
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    std::fs::write(
+        dir.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-github-fixture"}}}]}"#,
+    )
+    .unwrap();
+    for _ in 0..2 {
+        run(&["provider-disable", "github-main"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("is disabled"));
+    }
+    run(&["providers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(disabled)"));
+    // Refused before any credential lookup or network request.
+    run(&["provider-ls", "github-main"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is disabled"));
+    run(&["provider-enable", "github-main"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("is enabled"));
+    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    assert!(!providers.contains("disabled"), "{providers}");
+    run(&["providers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(disabled)").not());
+    run(&["provider-disable", "missing"]).assert().failure();
+}

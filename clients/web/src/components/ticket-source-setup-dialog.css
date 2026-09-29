@@ -10,6 +10,7 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='label'] {
 }
 wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .content-transition__side {
   display: flex;
+  flex-wrap: wrap;
   width: 100%;
   align-items: center;
   gap: var(--wa-space-xs);
@@ -28,7 +29,8 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   justify-content: flex-end;
   gap: var(--wa-space-xs);
 }
-.ticket-source-setup__remove,
+/* Destructive and availability actions group at the start; Cancel/Save stay at the end. */
+.ticket-source-setup__toggle,
 .ticket-source-setup__removal-prompt {
   margin-inline-end: auto;
 }

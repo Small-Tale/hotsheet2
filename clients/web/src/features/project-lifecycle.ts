@@ -578,6 +578,35 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     };
   }
 
+  /**
+   * Switch the connection open for editing off or back on (HS2-SF6W34). While disabled the server
+   * neither reads nor writes it, so its tickets drop out of the refreshed views.
+   */
+  async function toggleProviderDisabled() {
+    const current = ticketSourceSetupProject.value ?? dependencies.project(),
+      id = providerEditingId.value,
+      connection = providerConnections.value.find((item) => item.id === id);
+    if (!current || !id || !connection || providerSettingsBusy.value) return;
+    const disabled = !connection.disabled;
+    providerSettingsBusy.value = true;
+    providerSettingsError.value = '';
+    try {
+      const client = new Api(current.apiPath);
+      await client.setConnectionDisabled(id, disabled);
+      await reloadProviderDescriptors(client, current);
+      ticketSourceSetupProject.value = undefined;
+      providerSetupKind.value = undefined;
+      providerEditingId.value = undefined;
+      providerRemovingId.value = undefined;
+      await dependencies.refreshProject();
+      dependencies.showToast(`${connection.name ?? id} ${disabled ? 'disabled' : 'enabled'}.`);
+    } catch (reason) {
+      providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      providerSettingsBusy.value = false;
+    }
+  }
+
   /** Ask to confirm permanently removing the connection open for editing (HS2-724S9N). */
   function requestProviderRemoval() {
     providerRemovingId.value = providerEditingId.value;
@@ -767,6 +796,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     requestProviderRemoval,
     cancelProviderRemoval,
     removeExternalProvider,
+    toggleProviderDisabled,
     providerSettingsError,
     githubAuth,
     ticketSourceSetupNavigation,

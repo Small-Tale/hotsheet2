@@ -451,6 +451,19 @@ async function mockProject(
     if (path.endsWith('/github-auth/device/auth-1') && request.method() === 'DELETE')
       return route.fulfill({ status: 204 });
     const providerConnection = path.match(/\/provider-connections\/([^/]+)$/);
+    const providerDisabled = path.match(/\/provider-connections\/([^/]+)\/disabled$/);
+    if (providerDisabled && request.method() === 'PUT') {
+      // The real server's toggle: flips the record and returns it, omitting `disabled` when enabled.
+      const id = decodeURIComponent(providerDisabled[1]),
+        { disabled } = request.postDataJSON() as { disabled: boolean };
+      providerConnectionRecords = providerConnectionRecords.map((item) => {
+        if (item.id !== id) return item;
+        const { disabled: _previous, ...rest } = item as typeof item & { disabled?: boolean };
+        return disabled ? { ...rest, disabled: true } : rest;
+      });
+      const updated = providerConnectionRecords.find((item) => item.id === id);
+      return updated ? route.fulfill({ json: updated }) : route.fulfill({ status: 404, json: { error: id } });
+    }
     if (providerConnection && request.method() === 'DELETE') {
       // The real server's idempotent removal report (HS2-724S9N).
       const id = decodeURIComponent(providerConnection[1]),
@@ -1948,6 +1961,42 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.getByRole('button', { name: 'Edit GitHub Primary' }).click();
   await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
   await expect(footer.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+
+  // Disabling is temporary and reversible from the same dialog (HS2-SF6W34).
+  const toggles: unknown[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && request.url().endsWith('/disabled')) toggles.push(request.postDataJSON());
+  });
+  await footer.getByRole('button', { name: 'Disable' }).click();
+  await expect(setup).toHaveJSProperty('open', false);
+  await expect(page.locator('.app-toast')).toContainText('GitHub Primary disabled.');
+  const primaryRow = page.getByRole('button', { name: 'Edit GitHub Primary' });
+  await expect(primaryRow.locator('[data-state="disabled"]')).toHaveText('Disabled');
+  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-disabled-row-wide.png', fullPage: true });
+  await primaryRow.click();
+  await expect(footer.getByRole('button', { name: 'Enable' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Disable' })).toHaveCount(0);
+  await setup.evaluate(async (node) => {
+    const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+    await Promise.all(animations.map((animation) => animation.finished));
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-enable-action-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  // At phone width the footer actions wrap inside the dialog instead of overflowing it.
+  const footerBox = (await footer.boundingBox())!;
+  for (const action of await footer.locator('wa-button').all()) {
+    const box = (await action.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(footerBox.x - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(footerBox.x + footerBox.width + 1);
+  }
+  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-enable-action-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await footer.getByRole('button', { name: 'Enable' }).click();
+  await expect(setup).toHaveJSProperty('open', false);
+  await expect(page.locator('.app-toast')).toContainText('GitHub Primary enabled.');
+  await expect(primaryRow.locator('[data-state="disabled"]')).toHaveCount(0);
+  expect(toggles).toEqual([{ disabled: true }, { disabled: false }]);
   await expect(page.locator('.app-error')).toHaveCount(0);
 });
 

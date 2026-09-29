@@ -10722,6 +10722,186 @@ async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
 }
 
 #[tokio::test]
+async fn a_disabled_source_is_never_contacted_and_its_tickets_return_when_enabled() {
+    // HS2-SF6W34: disabling is temporary; while disabled the provider is neither read nor written.
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(
+        workspace.path().join("mixed.hs2"),
+        &StoreMetadata::new("MIX"),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            (0..40)
+                .map(|_| {
+                    github_response(200, serde_json::json!([github_issue(11, "Remote issue")]))
+                })
+                .collect(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            transport.clone(),
+        ))));
+    let call = |method: &'static str, path: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let opened = body_json(
+        call(
+            "POST",
+            "/projects/open".into(),
+            Some(serde_json::json!({"root":checkout}).to_string()),
+        )
+        .await,
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let local = body_json(
+        call(
+            "POST",
+            format!("/checkouts/{checkout_id}/tickets"),
+            Some(r#"{"title":"Local ticket"}"#.into()),
+        )
+        .await,
+    )
+    .await;
+    let connection = serde_json::json!({
+        "id":"github-mixed","provider":"github","locator":"acme/repo","name":"Issues",
+        "default":false,"settings":{"credential":{"secret":"github-fixture"}}
+    });
+    assert_eq!(
+        call(
+            "POST",
+            "/provider-connections".into(),
+            Some(connection.to_string())
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        call(
+            "PUT",
+            format!("/checkouts/{checkout_id}/sources/github-mixed"),
+            Some(r#"{"provider":"github","locator":"acme/repo","make_default":false}"#.into()),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let titles = |rows: serde_json::Value| {
+        let mut titles: Vec<String> = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["title"].as_str().unwrap().to_string())
+            .collect();
+        titles.sort();
+        titles
+    };
+    let list = || call("GET", format!("/checkouts/{checkout_id}/tickets"), None);
+    assert_eq!(
+        titles(body_json(list().await).await),
+        ["Local ticket", "Remote issue"]
+    );
+
+    let disabled = call(
+        "PUT",
+        "/provider-connections/github-mixed/disabled".into(),
+        Some(r#"{"disabled":true}"#.into()),
+    )
+    .await;
+    assert_eq!(disabled.status(), StatusCode::OK);
+    assert_eq!(body_json(disabled).await["disabled"], true);
+    let before = transport.responses.lock().unwrap().len();
+    assert_eq!(titles(body_json(list().await).await), ["Local ticket"]);
+    let qualified = call(
+        "GET",
+        format!("/checkouts/{checkout_id}/tickets/github-mixed:11"),
+        None,
+    )
+    .await;
+    assert_eq!(qualified.status(), StatusCode::CONFLICT);
+    assert!(
+        body_json(qualified).await.to_string().contains("disabled"),
+        "a qualified read explains that the source is disabled"
+    );
+    let write = call(
+        "PATCH",
+        format!("/checkouts/{checkout_id}/tickets/github-mixed:11"),
+        Some(r#"{"title":"blocked"}"#.into()),
+    )
+    .await;
+    assert_eq!(write.status(), StatusCode::CONFLICT);
+    let local_id = local["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            "GET",
+            format!("/checkouts/{checkout_id}/tickets/{local_id}"),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        transport.responses.lock().unwrap().len(),
+        before,
+        "a disabled source must never be contacted"
+    );
+    // An ordinary settings edit keeps it disabled; only the toggle changes that.
+    let renamed = body_json(
+        call(
+            "PATCH",
+            "/provider-connections/github-mixed".into(),
+            Some(connection.to_string().replace("\"Issues\"", "\"Renamed\"")),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(renamed["disabled"], true);
+
+    let enabled = call(
+        "PUT",
+        "/provider-connections/github-mixed/disabled".into(),
+        Some(r#"{"disabled":false}"#.into()),
+    )
+    .await;
+    assert!(body_json(enabled).await.get("disabled").is_none());
+    assert_eq!(
+        titles(body_json(list().await).await),
+        ["Local ticket", "Remote issue"]
+    );
+    assert_eq!(
+        call(
+            "PUT",
+            "/provider-connections/missing/disabled".into(),
+            Some(r#"{"disabled":true}"#.into()),
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn checkout_pages_globally_merge_local_and_provider_sources_across_continuations() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

@@ -97,6 +97,10 @@ pub struct ProviderConnection {
     pub default: bool,
     #[serde(default)]
     pub settings: serde_json::Value,
+    /// Temporarily switched off: Hot Sheet neither reads from nor writes to the provider,
+    /// and its tickets are not shown until it is enabled again (HS2-SF6W34).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -147,6 +151,37 @@ impl ProviderConfigRegistry {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Disable or re-enable one connection (HS2-SF6W34). Idempotent; `None` when no such
+    /// connection exists. Shared by the server route and the headless CLI.
+    pub fn set_disabled(
+        &self,
+        connection_id: &str,
+        disabled: bool,
+    ) -> Result<Option<ProviderConnection>, ProviderError> {
+        let mut connections = self.load()?;
+        let Some(connection) = connections
+            .iter_mut()
+            .find(|connection| connection.id == connection_id)
+        else {
+            return Ok(None);
+        };
+        if connection.disabled != disabled {
+            connection.disabled = disabled;
+            let updated = connection.clone();
+            self.save(&connections)?;
+            return Ok(Some(updated));
+        }
+        Ok(Some(connection.clone()))
+    }
+
+    /// The connection's record when it is disabled; lets hosts refuse before contacting it.
+    pub fn disabled(&self, connection_id: &str) -> Result<bool, ProviderError> {
+        Ok(self
+            .load()?
+            .iter()
+            .any(|connection| connection.id == connection_id && connection.disabled))
     }
 }
 
@@ -672,6 +707,10 @@ pub enum ProviderError {
         connection_id: String,
         retry_after_seconds: Option<u64>,
     },
+    #[error(
+        "provider connection '{connection_id}' is disabled; enable it to read or change its tickets"
+    )]
+    Disabled { connection_id: String },
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error(transparent)]
@@ -2193,6 +2232,44 @@ mod tests {
     }
 
     #[test]
+    fn config_registry_toggles_disabled_idempotently_and_omits_the_default_flag() {
+        // HS2-SF6W34: disabled is off by default, round-trips, and never rewrites other fields.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = ProviderConfigRegistry::new(dir.path().join("providers.json"));
+        registry
+            .save(&[ProviderConnection {
+                id: "github-main".into(),
+                provider: "github".into(),
+                locator: "acme/repo".into(),
+                name: Some("Issues".into()),
+                default: true,
+                settings: serde_json::json!({"credential": {"secret": "github-app-1"}}),
+                disabled: false,
+            }])
+            .unwrap();
+        let text = || std::fs::read_to_string(registry.path()).unwrap();
+        assert!(
+            !text().contains("disabled"),
+            "an enabled connection omits the flag"
+        );
+        assert!(!registry.disabled("github-main").unwrap());
+        for _ in 0..2 {
+            let off = registry.set_disabled("github-main", true).unwrap().unwrap();
+            assert!(off.disabled && off.default && off.locator == "acme/repo");
+            assert!(registry.disabled("github-main").unwrap());
+        }
+        assert!(text().contains("\"disabled\": true"));
+        let on = registry
+            .set_disabled("github-main", false)
+            .unwrap()
+            .unwrap();
+        assert!(!on.disabled);
+        assert!(!text().contains("disabled"));
+        assert!(registry.set_disabled("missing", true).unwrap().is_none());
+        assert!(!registry.disabled("missing").unwrap());
+    }
+
+    #[test]
     fn config_registry_round_trips_non_secret_connections_and_rejects_ambiguity() {
         let dir = tempfile::tempdir().unwrap();
         let registry = ProviderConfigRegistry::new(dir.path().join("providers.json"));
@@ -2203,6 +2280,7 @@ mod tests {
             name: Some("Public issues".into()),
             default: true,
             settings: serde_json::json!({"credential":{"secret":"github-small-tale"}}),
+            disabled: false,
         }];
         registry.save(&connections).unwrap();
         assert_eq!(registry.load().unwrap(), connections);
@@ -2217,6 +2295,7 @@ mod tests {
             name: None,
             default: true,
             settings: serde_json::Value::Null,
+            disabled: false,
         });
         assert!(registry.save(&duplicate_default).is_err());
     }

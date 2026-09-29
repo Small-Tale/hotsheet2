@@ -55,6 +55,7 @@ export function TicketSourcesSettings({
                     <strong>
                       {connection.name ?? connection.id}
                       {connection.default && <small>Default</small>}
+                      {connection.disabled && <small data-state="disabled">Disabled</small>}
                     </strong>
                     <small>
                       {providerName(connection.provider as ExternalProviderKind)} · {connection.locator}

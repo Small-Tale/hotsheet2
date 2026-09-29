@@ -128,6 +128,11 @@ enum Cmd {
     /// Permanently remove an external provider connection and every local reference to it:
     /// checkout links and defaults, its `providers.json` entry, and a credential Hot Sheet
     /// minted for it (user-managed keys are kept). Safe to repeat.
+    /// Temporarily disable an external provider connection: Hot Sheet stops reading from and
+    /// writing to it, and its tickets are hidden until it is enabled again.
+    ProviderDisable { connection: String },
+    /// Re-enable a disabled provider connection.
+    ProviderEnable { connection: String },
     ProviderRemove {
         connection: String,
         /// Emit the removal report as JSON.
@@ -995,6 +1000,12 @@ fn main() -> Result<()> {
         Cmd::Providers { json } => cmd_providers(&cli.path, json),
         Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
         Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
+        Cmd::ProviderDisable { connection } => {
+            cmd_provider_set_disabled(&cli.path, &connection, true)
+        }
+        Cmd::ProviderEnable { connection } => {
+            cmd_provider_set_disabled(&cli.path, &connection, false)
+        }
         Cmd::ProviderRemove { connection, json } => {
             cmd_provider_remove(&cli.path, &connection, json)
         }
@@ -1896,6 +1907,11 @@ fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     let store = FsStore::open(path)?;
     let connections = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
     let external_default = connections.iter().any(|connection| connection.default);
+    let disabled: Vec<String> = connections
+        .iter()
+        .filter(|connection| connection.disabled)
+        .map(|connection| connection.id.clone())
+        .collect();
     let descriptor = GitProvider::new(git_connection_id(&store), store.clone())
         .with_default(!external_default)
         .descriptor();
@@ -1911,11 +1927,16 @@ fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     } else {
         for descriptor in descriptors {
             println!(
-                "{}  {}  {}  {}",
+                "{}  {}  {}  {}{}",
                 descriptor.connection_id,
                 descriptor.provider,
                 if descriptor.default { "default" } else { "" },
-                descriptor.locator
+                descriptor.locator,
+                if disabled.contains(&descriptor.connection_id) {
+                    "  (disabled)"
+                } else {
+                    ""
+                }
             );
         }
     }
@@ -1933,6 +1954,12 @@ fn configured_provider(path: &Path, connection_id: &str) -> Result<Arc<dyn Ticke
         .into_iter()
         .find(|connection| connection.id == connection_id)
         .ok_or_else(|| anyhow::anyhow!("provider connection '{connection_id}' was not found"))?;
+    if connection.disabled {
+        return Err(hotsheet_ticketing::ProviderError::Disabled {
+            connection_id: connection_id.into(),
+        }
+        .into());
+    }
     let credential = hotsheet_extsync::credential_reference(&connection)?;
     let token = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain).get(credential)?;
     Ok(hotsheet_extsync::live_provider(&connection, token)?)
@@ -1947,6 +1974,18 @@ fn cmd_provider_ls(path: &Path, connection: &str) -> Result<()> {
 fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Result<()> {
     let ticket = configured_provider(path, connection)?.get(id)?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_set_disabled(path: &Path, connection: &str, disabled: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    ProviderConfigRegistry::new(store.root().join("providers.json"))
+        .set_disabled(connection, disabled)?
+        .ok_or_else(|| anyhow::anyhow!("provider connection '{connection}' was not found"))?;
+    println!(
+        "Provider connection '{connection}' is {}.",
+        if disabled { "disabled" } else { "enabled" }
+    );
     Ok(())
 }
 

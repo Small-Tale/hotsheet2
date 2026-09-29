@@ -140,6 +140,7 @@ mod tests {
             name: None,
             default,
             settings: serde_json::json!({"credential": {"secret": credential}}),
+            disabled: false,
         }
     }
 
@@ -286,6 +287,7 @@ mod tests {
             name: None,
             default: false,
             settings: serde_json::Value::Null,
+            disabled: false,
         });
         f.providers.save(&connections).unwrap();
         assert!(matches!(

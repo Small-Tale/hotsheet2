@@ -1107,6 +1107,7 @@ mod tests {
                 "base_url":std::env::var("HOTSHEET_JIRA_LIVE_BASE_URL").expect("base url"),
                 "email":std::env::var("HOTSHEET_JIRA_LIVE_EMAIL").expect("email")
             }),
+            disabled: false,
         };
         let provider = JiraProvider::live(
             JiraConfig::from_connection(

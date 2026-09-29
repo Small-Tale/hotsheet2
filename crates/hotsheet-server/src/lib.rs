@@ -1634,6 +1634,10 @@ pub fn app(state: AppState) -> Router {
             "/provider-connections/{connection_id}",
             patch(update_provider_connection).delete(delete_provider_connection),
         )
+        .route(
+            "/provider-connections/{connection_id}/disabled",
+            put(set_provider_connection_disabled),
+        )
         .route("/github-auth/device", post(start_github_device_auth))
         .route(
             "/github-auth/device/{session_id}",
@@ -2599,6 +2603,11 @@ async fn update_provider_connection(
     let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .load()
         .map_err(provider_transfer_error)?;
+    // Only the dedicated toggle changes whether a connection is disabled (HS2-SF6W34); an
+    // ordinary settings edit keeps it as it was.
+    connection.disabled = connections
+        .iter()
+        .any(|existing| existing.id == connection_id && existing.disabled);
     save_provider_connections(
         &state,
         connections,
@@ -2606,6 +2615,33 @@ async fn update_provider_connection(
         Some(&connection_id),
     )?;
     Ok(Json(connection))
+}
+
+#[derive(Debug, Deserialize)]
+struct ProviderConnectionDisabledBody {
+    disabled: bool,
+}
+
+/// Temporarily switch a connection off (or back on). While disabled, Hot Sheet neither reads
+/// from nor writes to it: aggregate views skip it and direct operations fail explicitly
+/// (HS2-SF6W34).
+async fn set_provider_connection_disabled(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+    Json(body): Json<ProviderConnectionDisabledBody>,
+) -> Result<Json<ProviderConnection>, ApiError> {
+    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .set_disabled(&connection_id, body.disabled)
+        .map_err(provider_transfer_error)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(&connection_id))
+}
+
+/// Whether `connection_id` names a disabled external connection in `providers.json`.
+fn connection_disabled(state: &AppState, connection_id: &str) -> Result<bool, ApiError> {
+    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .disabled(connection_id)
+        .map_err(provider_transfer_error)
 }
 
 /// Permanently remove a connection and every local reference to it: checkout links and
@@ -2701,6 +2737,14 @@ fn provider_for(
 ) -> Result<Arc<dyn hotsheet_ticketing::TicketProvider>, ApiError> {
     if let Some(entry) = state.host.get(connection_id) {
         return Ok(Arc::new(GitProvider::new(connection_id, entry.store)));
+    }
+    // Refuse before building a client, so a disabled source is never contacted (HS2-SF6W34).
+    if connection_disabled(state, connection_id)? {
+        return Err(provider_transfer_error(
+            hotsheet_ticketing::ProviderError::Disabled {
+                connection_id: connection_id.into(),
+            },
+        ));
     }
     if let Ok(provider) = state.injected_providers.get(connection_id) {
         return Ok(provider);
@@ -3995,11 +4039,17 @@ fn merge_checkout_page(
     let contexts = auto_context::effective(&checkout.settings())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let entries = checkout_entries(state, reference)?;
-    let external_sources = checkout
+    // A disabled source is left out of the merged view rather than failing it (HS2-SF6W34).
+    let mut external_sources = Vec::new();
+    for source in checkout
         .sources
         .iter()
         .filter(|source| source.provider != "git")
-        .collect::<Vec<_>>();
+    {
+        if !connection_disabled(state, &source.connection_id)? {
+            external_sources.push(source);
+        }
+    }
     let source_keys = entries
         .iter()
         .map(|(store_id, _)| checkout_page::git_source_key(store_id))
@@ -4599,6 +4649,14 @@ fn read_checkout_ticket_source(
             store,
         }));
     }
+    // A qualified reference names this source explicitly, so say why it cannot be read.
+    if required && connection_disabled(state, &source.connection_id)? {
+        return Err(provider_transfer_error(
+            hotsheet_ticketing::ProviderError::Disabled {
+                connection_id: source.connection_id.clone(),
+            },
+        ));
+    }
     Ok(
         probe_provider_source(state, &source.connection_id, id)?.map(|ticket| ResolvedTicket {
             store: source.connection_id.clone(),
@@ -4615,6 +4673,10 @@ fn probe_provider_source(
     connection_id: &str,
     id: &str,
 ) -> Result<Option<ApiTicket>, ApiError> {
+    // A disabled source is not read, so for an unqualified probe it holds nothing (HS2-SF6W34).
+    if connection_disabled(state, connection_id)? {
+        return Ok(None);
+    }
     match provider_for(state, connection_id)?.get(id) {
         Ok(ticket) => Ok(Some(ticket)),
         Err(
@@ -4765,6 +4827,11 @@ async fn get_checkout_ticket_duplicate_backlinks(
                                     continue;
                                 }
                             }
+                        } else if connection_disabled(&state, &source.connection_id)
+                            .unwrap_or(false)
+                        {
+                            // Disabled sources are not read; they are not "inaccessible" (HS2-SF6W34).
+                            continue;
                         } else {
                             match provider_for(&state, &source.connection_id).and_then(|provider| {
                                 provider

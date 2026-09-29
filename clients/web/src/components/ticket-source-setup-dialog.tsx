@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronLeft, ChevronRight, GitBranch, Trash2 } from 'lucide';
+import { ChevronLeft, ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderConnection } from '../api';
 import { ContentTransition } from './content-transition';
@@ -258,6 +258,22 @@ export function TicketSourceSetupDialog({
           >
             <LucideIcon slot="start" icon={Trash2} name="trash-2" />
             Remove data source…
+          </wa-button>
+        )}
+        {editing && (
+          <wa-button
+            class="ticket-source-setup__toggle"
+            appearance="plain"
+            type="button"
+            data-action="toggle-provider-disabled"
+            disabled={providerBusy}
+          >
+            <LucideIcon
+              slot="start"
+              icon={editing.disabled ? Power : PowerOff}
+              name={editing.disabled ? 'power' : 'power-off'}
+            />
+            {editing.disabled ? 'Enable' : 'Disable'}
           </wa-button>
         )}
         <wa-button appearance="plain" type="button" data-action="dismiss-ticket-source-setup">

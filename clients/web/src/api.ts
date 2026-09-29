@@ -42,6 +42,8 @@ export interface ProviderConnection {
   name: string | null;
   default: boolean;
   settings: Record<string, unknown>;
+  /** Temporarily switched off; absent when enabled (HS2-SF6W34). */
+  disabled?: boolean;
 }
 /** What a permanent provider-connection removal cleaned up (HS2-724S9N). */
 export interface ConnectionRemoval {
@@ -565,6 +567,11 @@ export class Api {
     this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(value),
+    });
+  setConnectionDisabled = (id: string, disabled: boolean) =>
+    this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}/disabled`, {
+      method: 'PUT',
+      body: JSON.stringify({ disabled }),
     });
   deleteConnection = (id: string) =>
     this.request<ConnectionRemoval>(`/provider-connections/${encodeURIComponent(id)}`, { method: 'DELETE' });

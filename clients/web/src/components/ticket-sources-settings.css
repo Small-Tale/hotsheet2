@@ -79,6 +79,10 @@
   background: var(--wa-color-brand-fill-quiet);
   font-size: var(--wa-font-size-2xs);
 }
+.ticket-provider-settings__connection-copy strong small[data-state='disabled'] {
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+}
 .ticket-provider-settings__connection-copy > small {
   min-width: 0;
   color: var(--wa-color-neutral-on-quiet);

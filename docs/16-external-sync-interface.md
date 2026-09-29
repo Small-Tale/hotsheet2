@@ -310,6 +310,18 @@ provider — nothing is mirrored locally — so no other local state names the c
 Repeating a removal reports nothing left to remove and still cleans dangling checkout
 links left by older clients. The response reports what was removed or kept.
 
+Disabling a data source is temporary (HS2-SF6W34). A disabled connection keeps its
+`providers.json` record (with `"disabled": true`; the flag is omitted when enabled), its
+checkout links, and its credential, but Hot Sheet neither reads from nor writes to it:
+the server refuses to build its provider before any credential or network use, merged
+checkout views and counts leave it out (its tickets are simply not shown — nothing is
+mirrored locally), unqualified lookups skip it, and a qualified read or any mutation fails
+with an explicit "connection is disabled" error. Duplicate-backlink scans skip it rather
+than reporting it inaccessible. Toggle it with `PUT /provider-connections/{id}/disabled`
+(`{"disabled": bool}`), `hotsheet provider-disable|provider-enable <id>`, or the web edit
+dialog's **Disable / Enable** action; the settings list badges it **Disabled**. An ordinary
+connection edit preserves the flag.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)

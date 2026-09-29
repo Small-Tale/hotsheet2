@@ -1068,6 +1068,7 @@ mod tests {
             name: None,
             default: false,
             settings: json!({"api_base":std::env::var("HOTSHEET_GITLAB_LIVE_API_BASE").unwrap_or_else(|_|"https://gitlab.com/api/v4".into())}),
+            disabled: false,
         };
         let provider = GitLabProvider::live(
             GitLabConfig::from_connection(

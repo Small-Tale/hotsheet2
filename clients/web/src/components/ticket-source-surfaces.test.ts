@@ -28,6 +28,45 @@ describe('ticket source surfaces', () => {
       expect(markup).toContain(label);
   });
 
+  it('toggles availability while editing and marks disabled connections in settings (HS2-SF6W34)', () => {
+    const connection = {
+        id: 'github-main',
+        provider: 'github',
+        locator: 'acme/repo',
+        name: 'Product issues',
+        default: false,
+        settings: {},
+      },
+      dialog = (disabled: boolean) =>
+        String(
+          TicketSourceSetupDialog({
+            project: { root: '/work/demo', name: 'Demo', stores: [] },
+            providerKind: 'github',
+            providerConnections: [{ ...connection, disabled }],
+            editingProviderId: 'github-main',
+            navigation: 'none',
+          }),
+        );
+    expect(dialog(false)).toContain('data-action="toggle-provider-disabled"');
+    expect(dialog(false)).toContain('data-lucide="power-off"');
+    expect(dialog(false)).toMatch(/power-off[\s\S]*?Disable<\/wa-button>/);
+    expect(dialog(true)).toContain('data-lucide="power"');
+    expect(dialog(true)).toMatch(/Enable<\/wa-button>/);
+    const connecting = String(
+      TicketSourceSetupDialog({
+        project: { root: '/work/demo', name: 'Demo', stores: [] },
+        providerKind: 'github',
+        providerConnections: [],
+        navigation: 'none',
+      }),
+    );
+    expect(connecting).not.toContain('toggle-provider-disabled');
+    const settings = (disabled: boolean) =>
+      String(TicketSourcesSettings({ stores: [], providerConnections: [{ ...connection, disabled }] }));
+    expect(settings(true)).toContain('<small data-state="disabled">Disabled</small>');
+    expect(settings(false)).not.toContain('data-state="disabled"');
+  });
+
   it('offers permanent removal only while editing, behind an inline confirmation (HS2-724S9N)', () => {
     const connection = {
         id: 'github-main',
