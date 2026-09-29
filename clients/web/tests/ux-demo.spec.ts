@@ -5680,3 +5680,28 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await expect(keys.getByRole('button', { name: 'Escape' })).toHaveCSS('cursor', 'pointer');
   await demo.screenshot({ path: test.info().outputPath('hs2-cks78m-demo.png') });
 });
+
+test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ux-demo?component=ticket-sources-settings');
+    const card = page.locator('.ticket-provider-settings__connections'),
+      rows = card.locator('.kui-list-item');
+    await expect(rows).toHaveCount(2);
+    await rows.first().hover();
+    const cardBox = (await card.boundingBox())!,
+      rowBox = (await rows.first().boundingBox())!;
+    // Only the card's 1px border separates the row from the card edge: no inline inset.
+    expect(rowBox.x - cardBox.x).toBeCloseTo(1, 0);
+    expect(cardBox.x + cardBox.width - (rowBox.x + rowBox.width)).toBeCloseTo(1, 0);
+    const hovered = await rows.first().evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { left: style.borderLeftWidth, right: style.borderRightWidth, background: style.backgroundColor };
+    });
+    // No per-row hover outline doubling the card border; the hover fill still shows.
+    expect(hovered.left).toBe('0px');
+    expect(hovered.right).toBe('0px');
+    expect(hovered.background).not.toBe('rgba(0, 0, 0, 0)');
+    await expect(rows.nth(1)).toHaveCSS('border-top-width', '1px');
+  }
+});

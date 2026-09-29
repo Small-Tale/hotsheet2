@@ -34,6 +34,10 @@
   color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-provider-settings__connections {
+  /* Rows fill the bordered card edge to edge; kerf's default inline inset drew the hover
+     box inside the card (HS2-KZP94T). */
+  --kui-layout-inline-margin: 0;
+  --kui-layout-rounded-radius: 0;
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
@@ -42,7 +46,8 @@
 .ticket-provider-settings__connections .kui-list-item {
   min-height: remify(64px);
   padding: var(--wa-space-s);
-  border-radius: 0;
+  /* The card border frames the rows; a per-row hover outline would double it. */
+  border-width: 0;
 }
 .ticket-provider-settings__connections .kui-list-item + .kui-list-item {
   border-top: 1px solid var(--wa-color-neutral-border-quiet);

@@ -668,6 +668,14 @@ function demoContent(item: DemoDefinition) {
             default: true,
             settings: {},
           },
+          {
+            id: 'github-docs',
+            provider: 'github',
+            locator: 'small-tale/hotsheet-docs',
+            name: 'Docs issues',
+            default: false,
+            settings: {},
+          },
         ]}
       />
     );
