@@ -2161,7 +2161,9 @@ replay.
   evicted rather than reconnected in the background, and the terminal mounts fresh if shown
   again.
 - **Focus:** a restored terminal takes input focus only when a pending focus request names
-  it. Closing a drawer tab from the keyboard keeps focus on the tab bar.
+  it. Closing a drawer tab from the keyboard keeps focus on the tab bar and cancels older
+  deferred input-focus frames, so the newly selected tab keeps focus through repeated Delete
+  presses (HS2-DAXSH5).
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM

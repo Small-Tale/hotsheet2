@@ -286,6 +286,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | bulk-board-refill | docs/06-clients.md | Moving the loaded first 100 rows out of a longer board column projects whole-checkout totals, shows immediate column loading, and refills from the first remaining page after commit; archiving the moved Verified batch removes it immediately (HS2-CE1E7J). | `clients/web/src/ticket-bulk-operations.test.ts # 309-row verify then archive count transition` | `clients/web/tests/providers.spec.ts # verify and archive 100 of 309 through the board with held batch responses` | — | double-covered |
 
+| drawer-keyboard-close-focus | docs/06-clients.md | Keyboard closing an AI chat or terminal tab cancels older deferred input-focus frames so the selected surviving tab retains focus for repeated Delete (HS2-DAXSH5). | `clients/web/src/drawer-tab-order.test.ts # focus generation and user-focus ownership transitions` | `clients/web/tests/drawer-tab-order.spec.ts # repeated mixed-tab Delete flow` | — | double-covered |
+
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
 <!-- coverage-matrix:end -->

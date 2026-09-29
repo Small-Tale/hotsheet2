@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  drawerInputFocusRequestStillOwned,
   drawerTabCloseIds,
   drawerTabFocusRequestStillOwned,
   drawerTabOrderStorageKey,
@@ -38,6 +39,16 @@ describe('drawer tab ordering', () => {
     expect(drawerTabFocusRequestStillOwned(scheduled, scheduled, body)).toBe(true);
     expect(drawerTabFocusRequestStillOwned(scheduled, body, body)).toBe(true);
     expect(drawerTabFocusRequestStillOwned(scheduled, newFocus, body)).toBe(false);
+  });
+
+  it('cancels an older input-focus frame after keyboard close while allowing the newest request', () => {
+    const body = {},
+      oldTab = {},
+      newTab = {};
+    expect(drawerInputFocusRequestStillOwned(1, 1, oldTab, body, body)).toBe(true);
+    expect(drawerInputFocusRequestStillOwned(1, 2, oldTab, body, body)).toBe(false);
+    expect(drawerInputFocusRequestStillOwned(1, 2, oldTab, newTab, body)).toBe(false);
+    expect(drawerInputFocusRequestStillOwned(3, 3, newTab, newTab, body)).toBe(true);
   });
 
   it('finds the selected terminal or writable chat input without focusing inactive surfaces', () => {

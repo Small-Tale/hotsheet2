@@ -153,6 +153,7 @@ import { loadConversationStates, saveConversationStates } from '../conversation-
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import {
+  drawerInputFocusRequestStillOwned,
   drawerTabFocusRequestStillOwned,
   drawerTabSelectionAfterClose,
   loadDrawerTabOrder,
@@ -468,6 +469,7 @@ export async function startHotSheetWebClient() {
     terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
+  let drawerInputFocusGeneration = 0;
   const { syncTerminalViewportMounts } = createTerminalViewportsController({
     projects,
     mobileTerminalColumns: () => mobileTerminalColumns.peek(),
@@ -1225,14 +1227,25 @@ export async function startHotSheetWebClient() {
   }
   function focusDrawerInput(projectId: string) {
     if (!automaticInputFocusAllowed(window.innerWidth)) return;
-    const scheduled = document.activeElement;
+    const scheduled = document.activeElement,
+      generation = ++drawerInputFocusGeneration;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const drawer = [...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(
             (item) => item.dataset.projectId === projectId,
           ),
           input = drawer ? selectedDrawerInput(drawer) : undefined;
-        if (input && drawerTabFocusRequestStillOwned(scheduled, document.activeElement, document.body)) input.focus();
+        if (
+          input &&
+          drawerInputFocusRequestStillOwned(
+            generation,
+            drawerInputFocusGeneration,
+            scheduled,
+            document.activeElement,
+            document.body,
+          )
+        )
+          input.focus();
       }),
     );
   }
@@ -1592,6 +1605,7 @@ export async function startHotSheetWebClient() {
     if (selectionChanges) {
       // Closing from the tab bar keeps keyboard focus on the tabs, so repeated Delete keeps
       // closing; do not also schedule input focus into the newly selected item.
+      drawerInputFocusGeneration += 1;
       selectDrawerItem(nextSelected, false);
       pendingTerminalFocus = undefined;
       focusDrawerTab(current.id, nextSelected);

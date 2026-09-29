@@ -56,6 +56,17 @@ export function drawerTabFocusRequestStillOwned(
   return current === scheduled || current === body;
 }
 
+/** A newer drawer focus intent cancels an older input-focus frame before it can steal tab focus. */
+export function drawerInputFocusRequestStillOwned(
+  scheduledGeneration: number,
+  currentGeneration: number,
+  scheduled: object | null,
+  current: object | null,
+  body: object,
+): boolean {
+  return scheduledGeneration === currentGeneration && drawerTabFocusRequestStillOwned(scheduled, current, body);
+}
+
 /** Return the keyboard-input surface for the drawer's currently selected live item. */
 export function selectedDrawerInput(drawer: ParentNode): HTMLElement | undefined {
   return (
