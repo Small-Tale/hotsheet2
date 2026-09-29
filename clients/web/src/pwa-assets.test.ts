@@ -15,7 +15,8 @@ function pngSize(filename: string): { width: number; height: number } {
 describe('PWA identity', () => {
   it('publishes matching browser, installed-app, and Apple metadata', () => {
     const html = readFileSync(resolve(webRoot, 'index.html'), 'utf8');
-    expect(html).toContainSource('<meta name="theme-color" content="#f2f2f7">');
+    expect(html).toContainSource('<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">');
+    expect(html).toContainSource('<meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">');
     expect(html).toContainSource('<link rel="manifest" href="/manifest.webmanifest">');
     expect(html).toContainSource('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
     expect(html).toContainSource('<link rel="icon" href="/favicon-256.png" type="image/png" sizes="256x256">');
@@ -38,7 +39,7 @@ describe('PWA identity', () => {
       name: 'Hot Sheet 2',
       short_name: 'Hot Sheet',
       display: 'standalone',
-      theme_color: '#f2f2f7',
+      theme_color: '#ffffff',
       background_color: '#f2f2f7',
     });
     expect(manifest.icons).toEqual([

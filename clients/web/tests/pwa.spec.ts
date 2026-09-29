@@ -2,7 +2,30 @@ import { expect, test } from '@playwright/test';
 
 test('serves installable PWA identity and decodable branding assets', async ({ page, request }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f2f2f7');
+  const lightTheme = page.locator('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
+  const darkTheme = page.locator('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
+  await expect(lightTheme).toHaveAttribute('content', '#ffffff');
+  await expect(darkTheme).toHaveAttribute('content', '#1c1c1e');
+  await page.emulateMedia({ colorScheme: 'light' });
+  expect(await lightTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(true);
+  expect(await darkTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(false);
+  const surfaceColor = () =>
+    page.evaluate(() => {
+      const sample = document.createElement('div');
+      sample.style.background = 'var(--wa-color-surface-default)';
+      document.body.append(sample);
+      const color = getComputedStyle(sample).backgroundColor;
+      sample.remove();
+      return color;
+    });
+  expect(await surfaceColor()).toBe('rgb(255, 255, 255)');
+  await page.screenshot({ path: '/private/tmp/hs2-h229wa-light-wide.png', fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  expect(await lightTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(false);
+  expect(await darkTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(true);
+  expect(await surfaceColor()).toBe('rgb(28, 28, 30)');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-h229wa-dark-narrow.png', fullPage: true });
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
   await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/apple-touch-icon.png');
 

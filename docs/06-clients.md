@@ -233,8 +233,9 @@ and identity-less legacy entries remain conservatively blocking.
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,
   a maskable 512-pixel icon, and a 180-pixel Apple touch icon. Browser chrome and the
-  installed launch surface use the same lowered-surface `#f2f2f7` color as the client
-  shell. The manifest launches at the application root in standalone display mode.
+  browser chrome follows the standard surface: `#ffffff` in light mode and `#1c1c1e`
+  in dark mode. The manifest uses the light surface as its theme color and retains a
+  lowered-surface `#f2f2f7` splash background. It launches at the application root in standalone display mode.
   These static identity assets are bundled into production; Hot Sheet does not use a
   service worker to cache live project/API responses or introduce a second client
   version lifecycle.
