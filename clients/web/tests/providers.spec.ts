@@ -15583,6 +15583,20 @@ test('shows and resolves cross-project permission notifications with badges and 
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(popup).toBeVisible();
   await expect(page.locator('.notification-inspector-empty')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const navigation = page.locator('.settings-navigation[aria-label="Notification views"]');
+  await expect
+    .poll(async () => {
+      const bounds = await navigation.boundingBox();
+      return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(0);
+  await expect(popup).toBeInViewport({ ratio: 1 });
+  await expect(popup.getByRole('button', { name: 'Deny' })).toBeInViewport({ ratio: 1 });
+  await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
+  await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-pending-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.screenshot({ path: '/private/tmp/hotsheet-permission-shell.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(popup).toBeInViewport();
@@ -15684,7 +15698,24 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
   await page.screenshot({ path: '/private/tmp/hs2-feddpx-notifications-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-feddpx-notifications-narrow.png' });
+  await expect
+    .poll(async () => {
+      const bounds = await navigation.boundingBox();
+      return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(0);
+  const pendingCard = center.locator('.permission-request-card--list').first();
+  await expect(pendingCard).toBeInViewport({ ratio: 1 });
+  await expect(pendingCard.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
+  await expect(pendingCard.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-notifications-phone.png' });
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect
+    .poll(async () => (await navigation.boundingBox())?.x ?? Number.NEGATIVE_INFINITY)
+    .toBeGreaterThanOrEqual(0);
+  await expect(navigation.getByRole('button', { name: /Pending/ })).toBeInViewport({ ratio: 1 });
+  await expect(navigation.getByRole('button', { name: /Last 7 Days/ })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-navigation-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await navigation.getByRole('button', { name: /Last 7 Days/ }).click();
   await expect(center).toContainText('other history action');
