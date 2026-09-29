@@ -24,14 +24,17 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
     node.style.width = '520px';
   });
   await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-narrow.png' });
-  await drawer.evaluate((node) => {
+  const overflow = await drawer.evaluate((node) => {
     const tabs = node.querySelector('.kui-tab-bar__tabs')!;
     const source = tabs.querySelector('[data-tab-kind="terminal"]')!;
     for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));
+    return {
+      count: tabs.querySelectorAll('[data-tab-kind="terminal"]').length,
+      scrollWidth: tabs.scrollWidth,
+      clientWidth: tabs.clientWidth,
+    };
   });
-  await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);
+  expect(overflow.count).toBe(9);
+  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
   expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
-  expect(await tabs.evaluate((node) => node.scrollWidth)).toBeGreaterThan(
-    await tabs.evaluate((node) => node.clientWidth),
-  );
 });
