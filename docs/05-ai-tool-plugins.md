@@ -226,7 +226,12 @@ still holds, leaving other workers' claims and every ticket's status alone:
   store. This works both in-process and with the detached terminal broker.
 - **Shell and command terminals:** every other server terminal gets `terminal-<terminal id>`,
   so a tool a user starts in it by hand claims under that id. The server releases the id's
-  claims when the terminal exits or is deleted (HS2-RXWXQ8).
+  claims when the terminal exits or is deleted (HS2-RXWXQ8). It also releases them whenever
+  a command the user started, such as an AI tool, exits back to the prompt while the shell
+  stays open (HS2-WQQYT1). The signal is the PTY's foreground process group changing from the
+  command back to the shell, checked every 500 ms on Unix, so it needs no shell integration. A
+  claim in that terminal therefore lasts only as long as the foreground command that took it.
+  On platforms without the signal, the terminal's exit still releases the claims.
 - **After a server restart:** each terminal records the worker id from its launch
   environment and the detached broker reports it. On startup the server resumes the monitors
   of terminals that survived in the broker: an AI terminal gets its busy feed and exit
@@ -245,8 +250,8 @@ still holds, leaving other workers' claims and every ticket's status alone:
 - **By hand:** `hotsheet-cli release --all --worker <id>` is the same release, headless.
 
 Lease expiry remains the backstop for anything a launcher cannot observe. That includes a
-tool that exits while its shell terminal stays open, a server that crashes before recording a
-new drive, and a session that picked its own id.
+command shorter than the 500 ms foreground check, a server that crashes before recording a new
+drive, and a session that picked its own id.
 
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same

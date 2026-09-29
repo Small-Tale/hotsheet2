@@ -499,6 +499,23 @@ impl Terminal {
         self.osc.lock().map(|o| o.state()).unwrap_or_default()
     }
 
+    /// Whether a command other than the terminal's own process holds the PTY foreground: a
+    /// program the user started from the shell, until it exits back to the prompt (HS2-WQQYT1).
+    /// Compares the PTY's foreground process group with the child's pid, as tmux does for its
+    /// current command. `None` where the platform cannot tell.
+    pub fn foreground_command_running(&self) -> Option<bool> {
+        #[cfg(unix)]
+        {
+            let leader = self.master.lock().ok()?.process_group_leader()?;
+            let own = self.child.lock().ok()?.process_id()?;
+            Some(i64::from(leader) != i64::from(own))
+        }
+        #[cfg(not(unix))]
+        {
+            None
+        }
+    }
+
     /// Whether the child process is still running.
     pub fn is_alive(&self) -> bool {
         self.child
@@ -598,6 +615,32 @@ mod tests {
         assert!(started.elapsed() < std::time::Duration::from_secs(1));
         std::thread::sleep(std::time::Duration::from_millis(250));
         assert!(sizes.try_recv().is_err(), "one trailing resize, no repeats");
+        let _ = term.kill();
+    }
+
+    /// An interactive shell's foreground switches to a command while it runs and back to the
+    /// shell when it exits (HS2-WQQYT1).
+    #[cfg(unix)]
+    #[test]
+    fn reports_a_foreground_command_until_it_exits_back_to_the_shell() {
+        let mut spec = TermSpec::new("/bin/sh");
+        spec.args = vec!["-i".into()];
+        spec.env = vec![("PS1".into(), "$ ".into())];
+        let term = Terminal::spawn(spec).expect("spawn");
+        assert!(
+            wait_until(|| term.foreground_command_running() == Some(false), 5),
+            "an idle shell holds its own foreground"
+        );
+        term.write(b"sleep 1\n").unwrap();
+        assert!(
+            wait_until(|| term.foreground_command_running() == Some(true), 5),
+            "the command takes the foreground"
+        );
+        assert!(
+            wait_until(|| term.foreground_command_running() == Some(false), 5),
+            "the shell takes it back when the command exits"
+        );
+        assert!(term.is_alive(), "the shell stays open");
         let _ = term.kill();
     }
 

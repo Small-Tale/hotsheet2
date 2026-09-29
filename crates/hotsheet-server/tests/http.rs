@@ -12464,3 +12464,86 @@ async fn a_restarted_server_releases_the_claims_of_drives_the_last_run_left_open
         "orphans are released once"
     );
 }
+
+/// Run a command in a shell terminal and check that a claim its session takes meanwhile is
+/// released when the command exits back to the prompt, while the shell stays open.
+async fn a_finished_foreground_command_releases_claims(
+    app: axum::Router,
+    store: &FsStore,
+    id: &str,
+) {
+    let body = serde_json::json!({"command": "/bin/sh", "args": ["-i"], "id": id});
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(&body.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    let before = claimed_by(store, &format!("terminal-{id}"));
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    assert!(
+        claim_holder(store, &before).is_some(),
+        "an idle prompt does not release"
+    );
+
+    // An AI tool stand-in: a command that holds the foreground for a while, then exits.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/terminals/{id}/input"),
+            Some(r#"{"data":"sleep 2\n"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+    let during = claimed_by(store, &format!("terminal-{id}"));
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    assert!(
+        claim_holder(store, &during).is_some(),
+        "a running command keeps its claims"
+    );
+    assert!(released_eventually(store, &during).await);
+    assert_eq!(claim_holder(store, &before), None);
+    let info = body_json(
+        app.clone()
+            .oneshot(authed("GET", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(info["alive"], true, "the shell stays open: {info}");
+    let _ = app
+        .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+        .await
+        .unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_shell_terminal_releases_claims_when_its_foreground_command_exits() {
+    let (dir, st) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    a_finished_foreground_command_releases_claims(app(st), &store, "fg1").await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_broker_shell_terminal_releases_claims_when_its_foreground_command_exits() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+
+    let sockets = tempfile::tempdir().unwrap();
+    let sock = sockets.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let (dir, st) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let app = app(st.with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    a_finished_foreground_command_releases_claims(app, &store, "fg2").await;
+}

@@ -159,6 +159,9 @@ pub struct BrokerTermInfo {
     /// The session worker id from the terminal's launch environment. Older brokers omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<String>,
+    /// Whether a command the user started holds the PTY foreground; absent where unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreground_command: Option<bool>,
 }
 
 fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
@@ -172,6 +175,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         link: osc.link,
         progress: osc.progress,
         worker: term.worker_id().map(str::to_string),
+        foreground_command: term.foreground_command_running(),
     }
 }
 

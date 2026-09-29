@@ -7627,6 +7627,25 @@ fn terminal_shell_history_only_env(
 }
 
 #[cfg(test)]
+mod foreground_command_tests {
+    use super::ForegroundCommand;
+
+    #[test]
+    fn a_finish_is_a_running_to_idle_transition_only() {
+        let mut fg = ForegroundCommand::default();
+        assert!(!fg.finished(Some(false)), "idle at the prompt");
+        assert!(!fg.finished(None), "unknown changes nothing");
+        assert!(!fg.finished(Some(true)), "a command starts");
+        assert!(!fg.finished(Some(true)), "still running");
+        assert!(!fg.finished(None), "a missed observation keeps it running");
+        assert!(fg.finished(Some(false)), "back at the prompt: finished");
+        assert!(!fg.finished(Some(false)), "reported once");
+        assert!(!fg.finished(Some(true)));
+        assert!(fg.finished(Some(false)), "a later command finishes too");
+    }
+}
+
+#[cfg(test)]
 mod terminal_history_tests {
     use super::{shell_command_args, shell_history_environment};
 
@@ -7857,7 +7876,29 @@ fn terminal_session_worker_id(terminal_id: &str) -> String {
     hotsheet_aitools::session_worker_id("terminal", terminal_id)
 }
 
-/// Release a shell or command terminal's session claims once its in-process PTY exits.
+/// Tracks a shell terminal's foreground command so its session claims are released when a
+/// program the user started there (such as an AI tool) exits back to the prompt, while the shell
+/// stays open (HS2-WQQYT1).
+#[derive(Debug, Default)]
+struct ForegroundCommand {
+    running: bool,
+}
+
+impl ForegroundCommand {
+    /// Record the latest observation; `true` when a running command just finished. An unknown
+    /// observation (`None`) changes nothing.
+    fn finished(&mut self, observed: Option<bool>) -> bool {
+        let Some(running) = observed else {
+            return false;
+        };
+        let finished = self.running && !running;
+        self.running = running;
+        finished
+    }
+}
+
+/// Release a shell or command terminal's session claims when its foreground command finishes
+/// and once its in-process PTY exits.
 fn watch_terminal_session_exit(
     state: &AppState,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
@@ -7865,7 +7906,11 @@ fn watch_terminal_session_exit(
 ) {
     let host = state.host.clone();
     tokio::spawn(async move {
+        let mut foreground = ForegroundCommand::default();
         while term.is_alive() {
+            if foreground.finished(term.foreground_command_running()) {
+                release_session_claims(host.clone(), worker.clone()).await;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         release_session_claims(host, worker).await;
@@ -7883,13 +7928,18 @@ fn watch_broker_terminal_session_exit(
     let host = state.host.clone();
     let id = id.to_string();
     tokio::spawn(async move {
+        let mut foreground = ForegroundCommand::default();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match broker
                 .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
                 .await
             {
-                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {}
+                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
+                    if foreground.finished(info.foreground_command) {
+                        release_session_claims(host.clone(), worker.clone()).await;
+                    }
+                }
                 _ => break,
             }
         }
