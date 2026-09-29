@@ -9969,6 +9969,47 @@ async fn disconnected_permission_hook_does_not_leave_a_false_pending_popup() {
 }
 
 #[tokio::test]
+async fn cancelled_driven_approval_clears_the_server_queue_and_notifies_clients() {
+    let (_d, st) = state();
+    let mut live = st.subscribe();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let waiter_bridge = bridge.clone();
+    let waiter = std::thread::spawn(move || {
+        waiter_bridge.request_blocking_timeout_for_project(
+            "project",
+            "codex-session",
+            "execCommandApproval",
+            "cargo test",
+            std::time::Duration::from_secs(2),
+            hotsheet_aitools::PermissionDecision::Deny,
+        )
+    });
+    let id = loop {
+        if let Some(request) = bridge.pending().into_iter().next() {
+            break request.id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    assert!(bridge.cancel(id));
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    let response = app
+        .oneshot(authed("GET", "/permissions", None))
+        .await
+        .unwrap();
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+    let asked = live.recv().await.unwrap();
+    let removed = live.recv().await.unwrap();
+    assert_eq!(asked.kind, "permission_asked");
+    assert_eq!(removed.kind, "permission_resolved");
+    assert_eq!(removed.id, id.to_string());
+    assert_eq!(removed.message, None);
+}
+
+#[tokio::test]
 async fn permissions_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)

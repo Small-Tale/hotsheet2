@@ -585,6 +585,9 @@ ticket repository. `GET /permissions` advertises `always_allow_supported` on eac
 pending request so clients only render that action when durable rule storage is active.
 If the asking hook disconnects, its pending request is removed and the clients are
 notified immediately; an abandoned request does not remain as a false popup.
+The same removal applies to a driven Codex app-server approval when its RPC connection
+closes: the bridge wakes that waiter with a one-time denial, publishes a removal event,
+and leaves unrelated approvals and remembered rules untouched (HS2-V5Y8WW).
 The server retains an eventual safe-deny guard of 24 hours. This is intentionally much
 longer than client-side automation windows: an ignored or otherwise hidden popup does
 not advance a client's visible-presentation countdown and must not disappear after the

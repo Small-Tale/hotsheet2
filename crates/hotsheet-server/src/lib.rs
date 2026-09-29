@@ -258,6 +258,27 @@ impl AppState {
                 emit_change(&log, &events, ev);
             });
         }
+        {
+            let events = events.clone();
+            let log = event_log.clone();
+            permissions.set_on_cancelled(move |req| {
+                emit_change(
+                    &log,
+                    &events,
+                    ChangeEvent {
+                        cursor: None,
+                        store: req.project.clone(),
+                        kind: "permission_resolved".into(),
+                        id: req.id.to_string(),
+                        slug: req.tool.clone(),
+                        message: None,
+                        activity: None,
+                        assignment: None,
+                        turn: None,
+                    },
+                );
+            });
+        }
         let command_defs =
             hotsheet_ticketing::commands::from_settings(&Settings::new(store.root()))
                 .unwrap_or_default();

@@ -296,6 +296,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | permission-stale-popup | docs/05-ai-tool-plugins.md | A resolved or missing approval cannot reopen a stale popup through an older fetch or a 404 answer (HS2-7S0G60). | `clients/web/src/features/controllers.test.ts # in-flight fetch and 404 transitions`; `clients/web/src/permission-notifications.test.ts # external removal` | `clients/web/tests/providers.spec.ts # 404 approval after popup click` | — | double-covered |
 
+| codex-rpc-approval-close | docs/05-ai-tool-plugins.md | Closing a driven Codex RPC connection cancels only its pending approval, wakes the waiter, and notifies clients (HS2-V5Y8WW). | `crates/hotsheet-aitools/src/codex.rs # close while approval blocked`; `crates/hotsheet-aitools/src/permission.rs # interleaved cancellation and human resolution` | `crates/hotsheet-server/tests/http.rs # cancelled approval leaves GET /permissions empty and emits removal` | — | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

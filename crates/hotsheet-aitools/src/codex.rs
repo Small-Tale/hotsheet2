@@ -17,7 +17,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -37,6 +37,7 @@ use crate::procio::StreamChild;
 /// auto-resolve **blocks the turn** for a human answering over the server's route-back
 /// (`POST /permissions/{id}`), up to `timeout`, then falls back to `default` (typically
 /// `Deny`) so an unattended run can't hang.
+#[derive(Clone)]
 pub struct PermissionPolicy {
     pub bridge: Arc<SharedPermissionBridge>,
     /// Stable project identity used to isolate remembered rules.
@@ -72,6 +73,7 @@ struct Inner {
     /// How approval ServerRequests are decided; `None` = permissively auto-approve (the
     /// back-compat default, and what the isolated headless launch expects).
     permission: Mutex<Option<PermissionPolicy>>,
+    active_approval: AtomicU64,
 }
 
 impl Inner {
@@ -153,17 +155,41 @@ impl Inner {
     /// Headless approval policy is `never`, so approval ServerRequests shouldn't fire;
     /// if one does (e.g. an MCP elicitation), answer permissively so the turn can't hang.
     fn auto_answer_server_request(&self, v: &Value) {
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
         let Some(id) = v.get("id") else { return };
         let method = v.get("method").and_then(Value::as_str).unwrap_or("");
         let params = v.get("params").cloned().unwrap_or(Value::Null);
-        let policy = self.permission.lock().unwrap();
-        let result = decide_approval(policy.as_ref(), method, &params);
+        let policy = self.permission.lock().unwrap().clone();
+        let result = decide_approval_with_pending(policy.as_ref(), method, &params, |id| {
+            self.active_approval.store(id, Ordering::Release);
+            if self.closed.load(Ordering::Acquire) {
+                if let Some(policy) = policy.as_ref() {
+                    policy.bridge.cancel(id);
+                }
+            }
+        });
+        self.active_approval.store(0, Ordering::Release);
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
         let reply = json!({ "jsonrpc": "2.0", "id": id, "result": result });
         let _ = self.send_raw(&reply.to_string());
     }
 
+    fn cancel_active_approval(&self) {
+        let id = self.active_approval.load(Ordering::Acquire);
+        if id != 0 {
+            if let Some(policy) = self.permission.lock().unwrap().as_ref() {
+                policy.bridge.cancel(id);
+            }
+        }
+    }
+
     fn mark_closed(&self) {
         self.closed.store(true, Ordering::SeqCst);
+        self.cancel_active_approval();
         // Wake any turn blocked in `wait_for_completed` so it can observe the close.
         let _guard = self.notes.lock().unwrap();
         self.cvar.notify_all();
@@ -171,6 +197,7 @@ impl Inner {
 
     fn close(&self) {
         if !self.closed.swap(true, Ordering::SeqCst) {
+            self.cancel_active_approval();
             if let Ok(mut writer) = self.writer.lock() {
                 writer.close();
             }
@@ -184,13 +211,23 @@ impl Inner {
 /// (back-compat — what the isolated headless launch expects). With one, the
 /// [`PermissionBridge`] answers from its allow-rules and anything it can't auto-resolve
 /// falls back to the policy `default`. An unknown request method → empty result (no-op).
+#[cfg(test)]
 fn decide_approval(policy: Option<&PermissionPolicy>, method: &str, params: &Value) -> Value {
+    decide_approval_with_pending(policy, method, params, |_| {})
+}
+
+fn decide_approval_with_pending(
+    policy: Option<&PermissionPolicy>,
+    method: &str,
+    params: &Value,
+    on_pending: impl FnOnce(u64),
+) -> Value {
     let Some((yes, no)) = approval_tokens(method) else {
         return json!({}); // not an approval we recognize → empty result
     };
     let decision = match policy {
         None => Decision::Allow,
-        Some(p) => resolve_decision(p, method, params),
+        Some(p) => resolve_decision(p, method, params, on_pending),
     };
     let tok = if decision == Decision::Allow { yes } else { no };
     json!({ "decision": tok })
@@ -211,15 +248,25 @@ fn approval_tokens(method: &str) -> Option<(&'static str, &'static str)> {
 /// human answering over the route-back (up to `timeout`, then the safe `default`). Runs on
 /// the RPC reader thread, so the turn is paused exactly while approval is pending — the
 /// route-back resolve arrives on a different (server HTTP) thread and wakes it.
-fn resolve_decision(p: &PermissionPolicy, method: &str, params: &Value) -> Decision {
+fn resolve_decision(
+    p: &PermissionPolicy,
+    method: &str,
+    params: &Value,
+    on_pending: impl FnOnce(u64),
+) -> Decision {
     let action = approval_action(params);
-    p.bridge.request_blocking_timeout_for_project(
-        p.project.clone(),
-        p.connection.clone(),
-        method,
-        action,
+    p.bridge.request_blocking_timeout_with_pending(
+        crate::permission::PermissionAsk {
+            project: p.project.clone(),
+            connection: p.connection.clone(),
+            tool: method.into(),
+            action,
+            agent: Some("codex".into()),
+        },
         p.timeout,
         p.default,
+        on_pending,
+        |_| {},
     )
 }
 
@@ -255,6 +302,7 @@ impl CodexRpc {
             cvar: Condvar::new(),
             closed: AtomicBool::new(false),
             permission: Mutex::new(None),
+            active_approval: AtomicU64::new(0),
         });
         let ri = inner.clone();
         std::thread::spawn(move || {
@@ -1366,6 +1414,13 @@ mod approval_tests {
     use super::*;
     use crate::permission::{Decision, PermissionBridge, Rule, SharedPermissionBridge};
 
+    struct NullWriter;
+    impl RpcWriter for NullWriter {
+        fn send(&mut self, _: &str) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     fn policy(rules: Vec<Rule>, default: Decision) -> PermissionPolicy {
         PermissionPolicy {
             bridge: Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
@@ -1470,6 +1525,42 @@ mod approval_tests {
             waiter.join().unwrap()["decision"],
             "approved",
             "the blocked approval got the human's answer"
+        );
+    }
+
+    #[test]
+    fn closing_rpc_connection_withdraws_its_unanswered_approval() {
+        let policy = policy_with_timeout(Duration::from_secs(10));
+        let bridge = policy.bridge.clone();
+        let inner = Arc::new(Inner {
+            writer: Mutex::new(Box::new(NullWriter)),
+            request_timeout: REQUEST_TIMEOUT,
+            next_id: AtomicI64::new(1),
+            pending: Mutex::new(HashMap::new()),
+            notes: Mutex::new(Vec::new()),
+            cvar: Condvar::new(),
+            closed: AtomicBool::new(false),
+            permission: Mutex::new(Some(policy)),
+            active_approval: AtomicU64::new(0),
+        });
+        let reader = inner.clone();
+        let waiter = std::thread::spawn(move || {
+            reader.on_message(
+                &json!({"jsonrpc":"2.0","id":1,"method":"execCommandApproval","params":{"command":["git","push"]}}).to_string(),
+            );
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while bridge.pending().is_empty() && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert_eq!(bridge.pending().len(), 1);
+        inner.close();
+        waiter.join().unwrap();
+        assert!(bridge.pending().is_empty());
+        inner.on_message(&json!({"jsonrpc":"2.0","id":2,"method":"execCommandApproval","params":{"command":["git","push"]}}).to_string());
+        assert!(
+            bridge.pending().is_empty(),
+            "closed RPC messages must not create approvals"
         );
     }
 

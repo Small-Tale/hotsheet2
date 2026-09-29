@@ -268,6 +268,8 @@ pub struct SharedPermissionBridge {
     /// (HS2-9R9YZW). `None` = headless / no observer.
     #[allow(clippy::type_complexity)]
     on_pending: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
+    #[allow(clippy::type_complexity)]
+    on_cancelled: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
 }
 
 impl SharedPermissionBridge {
@@ -277,12 +279,18 @@ impl SharedPermissionBridge {
             results: Mutex::new(HashMap::new()),
             cvar: Condvar::new(),
             on_pending: Mutex::new(None),
+            on_cancelled: Mutex::new(None),
         }
     }
 
     /// Register the enqueue observer (the server's WS/event-bus nudge). Replaces any prior.
     pub fn set_on_pending(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
         *self.on_pending.lock().unwrap() = Some(Box::new(f));
+    }
+
+    /// Notify clients when a transport closes while its approval is pending.
+    pub fn set_on_cancelled(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
+        *self.on_cancelled.lock().unwrap() = Some(Box::new(f));
     }
 
     /// Replace the bridge's allow-rules (e.g. seeding durable `Always` rules loaded from
@@ -473,6 +481,25 @@ impl SharedPermissionBridge {
         self.cvar.notify_all();
         Some(resolved)
     }
+
+    /// Withdraw an approval whose asking transport can no longer accept a decision.
+    /// This wakes its waiter with a one-time denial and never creates a durable rule.
+    pub fn cancel(&self, id: u64) -> bool {
+        let request = {
+            let mut bridge = self.inner.lock().unwrap();
+            let Some(request) = bridge.pending().find(|request| request.id == id).cloned() else {
+                return false;
+            };
+            bridge.resolve(id, Decision::Deny, Scope::Once);
+            request
+        };
+        self.results.lock().unwrap().insert(id, Decision::Deny);
+        self.cvar.notify_all();
+        if let Some(callback) = self.on_cancelled.lock().unwrap().as_ref() {
+            callback(&request);
+        }
+        true
+    }
 }
 
 // ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
@@ -585,6 +612,59 @@ mod tests {
             Decision::Deny,
             "the waiter got the human's answer"
         );
+    }
+
+    #[test]
+    fn cancelling_one_transport_request_wakes_only_its_waiter_and_persists_no_rule() {
+        use std::sync::Arc;
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        let cancelled = Arc::new(Mutex::new(Vec::new()));
+        let observed = cancelled.clone();
+        bridge.set_on_cancelled(move |request| observed.lock().unwrap().push(request.id));
+        let first_bridge = bridge.clone();
+        let first =
+            std::thread::spawn(move || first_bridge.request_blocking("first", "Bash", "rm x"));
+        let second_bridge = bridge.clone();
+        let second =
+            std::thread::spawn(move || second_bridge.request_blocking("second", "Bash", "rm x"));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let (first_id, second_id) = loop {
+            let pending = bridge.pending();
+            let first = pending.iter().find(|request| request.connection == "first");
+            let second = pending
+                .iter()
+                .find(|request| request.connection == "second");
+            if let (Some(first), Some(second)) = (first, second) {
+                break (first.id, second.id);
+            }
+            assert!(
+                Instant::now() < deadline,
+                "both approvals should enter the queue"
+            );
+            std::thread::yield_now();
+        };
+        assert!(bridge.cancel(first_id));
+        assert!(!bridge.cancel(first_id));
+        assert!(
+            bridge
+                .resolve(first_id, Decision::Allow, Scope::Always)
+                .is_none()
+        );
+        assert_eq!(first.join().unwrap(), Decision::Deny);
+        assert_eq!(
+            bridge
+                .pending()
+                .iter()
+                .map(|request| request.id)
+                .collect::<Vec<_>>(),
+            vec![second_id]
+        );
+        assert_eq!(*cancelled.lock().unwrap(), vec![first_id]);
+        bridge
+            .resolve(second_id, Decision::Allow, Scope::Once)
+            .unwrap();
+        assert_eq!(second.join().unwrap(), Decision::Allow);
+        assert!(bridge.inner.lock().unwrap().rules().is_empty());
     }
 
     #[test]
