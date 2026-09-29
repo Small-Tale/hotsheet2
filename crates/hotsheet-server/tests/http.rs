@@ -4876,6 +4876,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     let slug = created["slug"].as_str().unwrap();
+    let qualified_id = created["qualified_id"].as_str().unwrap();
     let listed = body_json(
         app.clone()
             .oneshot(authed("GET", "/checkouts/combo/tickets", None))
@@ -4901,7 +4902,9 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let video_bytes = vec![0x5a; 3 * 1024 * 1024];
     let video_request = Request::builder()
         .method("POST")
-        .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
+        .uri(format!(
+            "/checkouts/combo/tickets/{qualified_id}/attachments"
+        ))
         .header("x-hotsheet-secret", SECRET)
         .header("x-hotsheet-filename", "choppy.mov")
         .header("x-hotsheet-attachment-batch", "gesture-1")
@@ -4932,7 +4935,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
             Request::builder()
                 .method("GET")
                 .uri(format!(
-                    "/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"
+                    "/checkouts/combo/tickets/{qualified_id}/attachments/{video_attachment_id}"
                 ))
                 .header("x-hotsheet-secret", SECRET)
                 .header("range", "bytes=10-19")
@@ -4954,8 +4957,9 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     );
     let poster_cache = tempfile::tempdir().unwrap();
     unsafe { std::env::set_var("HOTSHEET_CACHE_DIR", poster_cache.path()) };
-    let poster_uri =
-        format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}/thumbnail");
+    let poster_uri = format!(
+        "/checkouts/combo/tickets/{qualified_id}/attachments/{video_attachment_id}/thumbnail"
+    );
     let missing_poster = app
         .clone()
         .oneshot(authed("GET", &poster_uri, None))

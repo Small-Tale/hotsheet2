@@ -5146,8 +5146,7 @@ async fn add_checkout_ticket_attachment(
     body: Bytes,
 ) -> Result<(StatusCode, Json<ResolvedTicket>), ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let filename = attachment_filename(&headers)?;
     let metadata = attachment_metadata(&headers)?;
     let (updated, _) = entry.store.write_attachment_with_metadata(
@@ -5168,13 +5167,28 @@ async fn add_checkout_ticket_attachment(
     ))
 }
 
+fn checkout_attachment_ticket(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+) -> Result<(StoreEntry, Ticket), ApiError> {
+    let (source, native_id) = checkout_ticket_owner(state, reference, id)?;
+    let entry = state.hosted_source(&source).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout links an unhosted git source",
+        )
+    })?;
+    let ticket = ops::resolve(&entry.store, &native_id)?.ok_or_else(|| ApiError::not_found(id))?;
+    Ok((entry, ticket))
+}
+
 async fn get_checkout_ticket_attachment(
     State(state): State<AppState>,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let attachment = ticket
@@ -5230,8 +5244,7 @@ async fn get_checkout_ticket_attachment_thumbnail(
     State(state): State<AppState>,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
 ) -> Result<Response, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
@@ -5280,8 +5293,7 @@ async fn put_checkout_ticket_attachment_thumbnail(
             "video poster cannot be empty",
         ));
     }
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
@@ -5327,8 +5339,7 @@ fn checkout_attachment_by_name(
     id: &str,
     filename: &str,
 ) -> Result<(StoreEntry, Ticket, Ulid), ApiError> {
-    let entry = checkout_entry_for_ticket(state, reference, id)?;
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let (entry, ticket) = checkout_attachment_ticket(state, reference, id)?;
     let attachment_id = ticket
         .attachments
         .iter()
@@ -5371,8 +5382,7 @@ async fn act_on_checkout_ticket_attachment(
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     Json(request): Json<AttachmentHostActionRequest>,
 ) -> Result<Json<AttachmentHostActionResponse>, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, _) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
@@ -5423,8 +5433,7 @@ async fn delete_checkout_ticket_attachment(
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let updated = entry
@@ -5480,8 +5489,7 @@ async fn update_checkout_ticket_attachment_metadata(
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let updated =
         entry
             .store
@@ -5510,8 +5518,7 @@ async fn rename_checkout_ticket_attachment(
         ));
     }
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id = Ulid::from_string(&attachment_id)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid attachment ULID"))?;
     let updated =
@@ -5536,8 +5543,7 @@ async fn update_checkout_ticket_attachment_annotations(
     Json(body): Json<UpdateAttachmentAnnotationsBody>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (entry, ticket) = checkout_attachment_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let mut seen = std::collections::HashSet::new();

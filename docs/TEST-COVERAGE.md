@@ -282,6 +282,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | qualified-single-ticket-routing | docs/06-clients.md | Single-ticket reads, mutations, attachments, and code review use qualified connection:native identifiers when the source ticket is known, so git and external sources route directly (HS2-HX0VM9). | `clients/web/src/api.test.ts # qualified checkout ticket routes` | `clients/web/tests/providers.spec.ts # routes mixed git and external ticket reads and edits by qualified id` | — | double-covered |
 
+| qualified-checkout-attachments | docs/04-core-server-cli.md | Checkout attachment handlers resolve a qualified ticket id to its owning git source and native id before upload, read, thumbnail, metadata, and removal operations (HS2-VATCY8). | `clients/web/src/api.test.ts # qualified checkout attachment URLs` | `crates/hotsheet-server/tests/http.rs # checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores uploads, ranges, and thumbnails through a qualified id` | — | double-covered |
+
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
 <!-- coverage-matrix:end -->

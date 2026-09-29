@@ -109,31 +109,31 @@ describe('attachment filename transport', () => {
       .mockImplementation(async () => new Response(JSON.stringify(response), { status: 200 }));
     const api = new Api('/api'),
       file = new File(['x'], 'evidence one.png', { type: 'image/png' });
-    await api.addCheckoutAttachment('folder', 'ticket', file, {
+    await api.addCheckoutAttachment('folder', 'git:ticket', file, {
       batch_id: 'gesture 1',
       actor: { identity: 'codex tool', role: 'ai' },
       purpose: 'correctness_evidence',
     });
     const upload = fetchMock.mock.calls[0];
-    expect(upload[0]).toBe('/api/checkouts/folder/tickets/ticket/attachments');
+    expect(upload[0]).toBe('/api/checkouts/folder/tickets/git%3Aticket/attachments');
     expect(new Headers((upload[1] as RequestInit).headers).get('X-Hotsheet-Attachment-Batch')).toBe('gesture%201');
     expect(new Headers((upload[1] as RequestInit).headers).get('X-Hotsheet-Actor-Role')).toBe('ai');
-    await api.updateCheckoutAttachmentMetadata('folder', 'ticket', ['one', 'two'], {
+    await api.updateCheckoutAttachmentMetadata('folder', 'git:ticket', ['one', 'two'], {
       batch_id: 'merged',
       purpose: 'reference',
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/checkouts/folder/tickets/ticket/attachments',
+      '/api/checkouts/folder/tickets/git%3Aticket/attachments',
       expect.objectContaining({
         method: 'PATCH',
         body: '{"attachment_ids":["one","two"],"batch_id":"merged","purpose":"reference"}',
       }),
     );
-    await api.renameCheckoutAttachment('folder', 'ticket', 'one', 'renamed.png');
+    await api.renameCheckoutAttachment('folder', 'git:ticket', 'one', 'renamed.png');
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      '/api/checkouts/folder/tickets/ticket/attachments/one',
+      '/api/checkouts/folder/tickets/git%3Aticket/attachments/one',
       expect.objectContaining({ method: 'PATCH', body: '{"filename":"renamed.png"}' }),
     );
     fetchMock.mockRestore();
