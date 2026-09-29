@@ -468,7 +468,8 @@ async function mockProject(
         { disabled } = request.postDataJSON() as { disabled: boolean };
       providerConnectionRecords = providerConnectionRecords.map((item) => {
         if (item.id !== id) return item;
-        const { disabled: _previous, ...rest } = item as typeof item & { disabled?: boolean };
+        const rest: typeof item & { disabled?: boolean } = { ...item };
+        delete rest.disabled;
         return disabled ? { ...rest, disabled: true } : rest;
       });
       const updated = providerConnectionRecords.find((item) => item.id === id);
