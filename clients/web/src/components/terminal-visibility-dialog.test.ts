@@ -35,6 +35,9 @@ describe('TerminalVisibilityDialog', () => {
       }),
     );
     expect(markup).toContain('data-terminal-type-filter');
+    expect(markup).toContain('class="terminal-visibility-dialog__type-select"');
+    expect(markup).toContain('class="terminal-visibility-dialog__type-icon"');
+    expect(markup).not.toContain('kui-select');
     expect(markup).toContain('data-selected-types=""');
     expect(markup).toContain('multiple');
     expect(markup).toContain('value="select-all"');

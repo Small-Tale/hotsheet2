@@ -4652,6 +4652,9 @@ for (const theme of ['light', 'dark'] as const) {
     const dialog = page.locator('[data-terminal-visibility-dialog]');
     const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
     const rows = dialog.locator('[data-action="toggle-terminal-visibility"]');
+    await expect(types).toHaveClass('terminal-visibility-dialog__type-select');
+    await expect(types.locator('.terminal-visibility-dialog__type-icon')).toHaveCount(6);
+    await expect(types.locator('.kui-select__icon')).toHaveCount(0);
     await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
     await expect(rows).toHaveCount(3);
     await dialog

@@ -1795,7 +1795,10 @@ filter only, keep the popup open, and never change visibility. Hide listed / Sho
 apply only to matching rows in the selected visibility group. No selected types yields an
 explicit empty result and disabled bulk actions. Switching groups retains the filter;
 reopening the dialog resets it to all supported types. Web Browsers is disabled until
-browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
+browser tiles ship under HS2-7VS6SF. The type filter uses Web Awesome's select directly
+because its special Select All, Deselect All, and disabled Web Browsers options are outside
+the Kerf Select choice contract; its option icons use application-owned markup rather than
+Kerf Select anatomy (HS2-VY74FW). Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).

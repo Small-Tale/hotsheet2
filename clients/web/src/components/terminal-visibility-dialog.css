@@ -124,3 +124,8 @@
 .terminal-visibility-dialog__filter wa-select {
   width: 100%;
 }
+.terminal-visibility-dialog__type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

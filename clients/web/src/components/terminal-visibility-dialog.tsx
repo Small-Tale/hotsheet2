@@ -3,7 +3,6 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
-import '@kerfjs/ui/select.css';
 import './terminal-visibility-dialog.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
@@ -114,7 +113,7 @@ export function TerminalVisibilityDialog({
         </div>
         <div class="terminal-visibility-dialog__filter" data-selected-types={types.join(',')}>
           <wa-select
-            class="kui-select"
+            class="terminal-visibility-dialog__type-select"
             data-terminal-type-filter
             data-morph-skip
             name="terminal-visibility-types"
@@ -124,38 +123,38 @@ export function TerminalVisibilityDialog({
             max-options-visible={3}
           >
             <wa-option value="shell">
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={Terminal} name="terminal" />
               </span>
               Shell Terminals
             </wa-option>
             <wa-option value="ai">
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={Sparkles} name="sparkles" />
               </span>
               AI Terminals
             </wa-option>
             <wa-option value="chat">
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={MessageSquare} name="message-square" />
               </span>
               AI Chat
             </wa-option>
             <wa-option value="browser" disabled>
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={Globe} name="globe" />
               </span>
               Web Browsers
             </wa-option>
             <wa-divider></wa-divider>
             <wa-option value="select-all">
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={CheckCheck} name="check-check" />
               </span>
               Select All
             </wa-option>
             <wa-option value="deselect-all">
-              <span slot="start" class="kui-select__icon">
+              <span slot="start" class="terminal-visibility-dialog__type-icon">
                 <LucideIcon icon={X} name="x" />
               </span>
               Deselect All
