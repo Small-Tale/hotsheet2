@@ -194,6 +194,13 @@ export class PermissionInbox {
     this.record({ ...item, decision, scope, resolvedAt: now, automatic });
     return true;
   }
+  removeExternal(key: string, now = Date.now()) {
+    const item = this.pendingItems.get(key);
+    if (!item) return false;
+    this.pendingItems.delete(key);
+    this.record({ ...item, decision: 'external', resolvedAt: now });
+    return true;
+  }
   restore(item: PermissionItem) {
     this.historyItems = this.historyItems.filter((value) => value.key !== item.key);
     this.pendingItems.set(item.key, { ...item, ignored: false });

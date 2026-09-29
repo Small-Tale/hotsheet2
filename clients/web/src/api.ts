@@ -541,6 +541,15 @@ export const CHANGE_STREAM_CLIENT_ID =
     ? crypto.randomUUID()
     : `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
+export class ApiHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export class Api {
   private readonly trackBusy: boolean;
   constructor(
@@ -562,7 +571,11 @@ export class Api {
     if (trackBusy) beginServerRequest(describeServerRequest(init.method ?? 'GET', path));
     try {
       const response = await fetch(`${this.origin}${path}`, { ...init, headers });
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? `${response.status}`);
+      if (!response.ok)
+        throw new ApiHttpError(
+          (await response.json().catch(() => null))?.error ?? `${response.status}`,
+          response.status,
+        );
       return response.status === 204 ? (undefined as T) : await response.json();
     } finally {
       if (trackBusy) endServerRequest();

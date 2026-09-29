@@ -233,6 +233,48 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     });
   });
 
+  it('never reopens an externally resolved popup from an older in-flight permissions response', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    owner.permissionInbox.reconcile(project('a'), [{ id: 7, connection: 'c', tool: 'Bash', action: 'stale' }], []);
+    const older = deferred<Response>();
+    let requests = 0;
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/connections')) return json([]);
+      requests += 1;
+      return requests === 1 ? older.promise : json([]);
+    });
+    const first = owner.refreshPermissions();
+    owner.serverResolvedPermission('a:7');
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    older.resolve(json([{ id: 7, connection: 'c', tool: 'Bash', action: 'stale' }]));
+    await first;
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    await vi.waitFor(() => {
+      expect(requests).toBe(2);
+    });
+    expect(owner.pendingPermissions()).toEqual([]);
+    expect(owner.projectPermissionHistory('a')).toEqual([expect.objectContaining({ decision: 'external' })]);
+  });
+
+  it('does not restore a popup when the server says its approval request is gone', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    owner.permissionInbox.reconcile(project('a'), [{ id: 7, connection: 'c', tool: 'Bash', action: 'stale' }], []);
+    const response = deferred<Response>();
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return url.endsWith('/permissions/7') ? response.promise : json([]);
+    });
+    const item = owner.pendingPermissions()[0];
+    const answer = owner.resolvePermission(item, 'allow', 'once');
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    response.resolve(Response.json({ error: 'Request missing' }, { status: 404 }));
+    await answer;
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    expect(owner.pendingPermissions()).toEqual([]);
+    expect(owner.projectPermissionHistory('a')).toEqual([expect.objectContaining({ decision: 'external' })]);
+  });
+
   it('does not restore a permission popup after its project closes during a fetch', async () => {
     const projects = signal([project('a')]),
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),

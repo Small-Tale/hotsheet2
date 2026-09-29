@@ -568,7 +568,10 @@ disappear in the same render that begins the network request, preventing latency
 looking like a missed click or allowing duplicate answers. The presumed history entry is
 kept when delivery succeeds. A communication failure removes that presumed history and
 restores the request with an inline retryable error; authoritative resolution still wins
-if another client answered while the request was in flight (HS2-66TBWX).
+if another client answered while the request was in flight (HS2-66TBWX). A 404 means
+the request is already gone, so the client keeps the popup closed and reconciles with
+the server. An older in-flight permissions fetch cannot reopen a request after a
+resolution event (HS2-7S0G60).
 
 Both enqueue and resolution publish replayable event nudges. Resolution nudges matter when
 another client or transport answers: every attached client refetches pending requests and

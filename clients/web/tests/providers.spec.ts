@@ -10221,6 +10221,28 @@ test('restores an optimistically dismissed permission only when communication fa
   await page.screenshot({ path: '/private/tmp/hs2-66tbwx-permission-failure-restored-narrow.png', fullPage: true });
 });
 
+test('does not reopen a permission popup after the server reports that approval is gone', async ({ page }) => {
+  await mockProject(page);
+  let pending = [
+    { id: 44, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+  ];
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/44', (route) => {
+    pending = [];
+    return route.fulfill({ status: 404, json: { error: 'Unknown permission request' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toBeVisible();
+  await popup.getByRole('button', { name: 'Allow Once' }).click();
+  await expect(popup).toHaveCount(0);
+  await expect.poll(() => pending.length).toBe(0);
+  await expect(popup).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Notifications view' })).toBeVisible();
+});
+
 test('presents a legible, aligned AI chat without exposing its session id', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

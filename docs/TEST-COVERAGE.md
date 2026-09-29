@@ -294,6 +294,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
+| permission-stale-popup | docs/05-ai-tool-plugins.md | A resolved or missing approval cannot reopen a stale popup through an older fetch or a 404 answer (HS2-7S0G60). | `clients/web/src/features/controllers.test.ts # in-flight fetch and 404 transitions`; `clients/web/src/permission-notifications.test.ts # external removal` | `clients/web/tests/providers.spec.ts # 404 approval after popup click` | — | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

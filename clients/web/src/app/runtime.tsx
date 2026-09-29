@@ -867,10 +867,10 @@ export async function startHotSheetWebClient() {
     projectPermissionHistory,
     permissionCount,
     permissionAutomation,
-    persistPermissionHistory,
     refreshPermissions,
     startPermissionUpdates,
     resolvePermission,
+    serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,
   } = permissionsController;
@@ -3419,16 +3419,12 @@ export async function startHotSheetWebClient() {
             }
           },
           onEvents: async (response) => {
-            let resolved = false;
             const acceptedTurns = new Set(turnStreamEvents(response));
             for (const event of response.events) {
               if (event.kind === 'permission_resolved') {
                 const resolution = parsePermissionResolution(event.message),
                   key = `${current.id}:${event.id}`;
-                if (resolution && permissionInbox.resolve(key, resolution.decision, resolution.scope)) {
-                  permissionTimer.remove(key);
-                  resolved = true;
-                }
+                serverResolvedPermission(key, resolution);
               }
               if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn))
                 updateConversation(event.turn.connection_id, (state) =>
@@ -3440,11 +3436,6 @@ export async function startHotSheetWebClient() {
                 if (connection)
                   updateConversation(connection.id, (state) => applyConversationActivity(state, activity));
               }
-            }
-            if (resolved) {
-              updatePermissionTimer();
-              permissionRevision.value += 1;
-              persistPermissionHistory();
             }
             if (
               response.events.some((event) => event.kind === 'permission_asked' || event.kind === 'permission_resolved')

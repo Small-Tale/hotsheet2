@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
 
-import { Api } from '../api';
+import { Api, ApiHttpError } from '../api';
 import { updatePermissionCountdownText } from '../components/permission-request-card';
 import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
@@ -51,6 +51,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const permissionResolutionErrors = signal<Record<string, string>>({});
   let permissionPolling = false,
     permissionRefreshRequested = false,
+    permissionResolutionEpoch = 0,
     permissionTimerInterval: number | undefined,
     permissionRefreshInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined;
@@ -76,6 +77,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
     permissionPolling = true;
     try {
+      const resolutionEpoch = permissionResolutionEpoch;
       const results = await Promise.all(
         projects.value.map(async (current) => {
           const client = new Api(current.apiPath);
@@ -96,6 +98,10 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           }
         }),
       );
+      if (resolutionEpoch !== permissionResolutionEpoch) {
+        permissionRefreshRequested = true;
+        return;
+      }
       let changed = false;
       for (const result of results) {
         if (result.requests && projects.value.some((project) => project.id === result.current.id)) {
@@ -146,6 +152,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       Object.entries(permissionResolutionErrors.value).filter(([key]) => key !== item.key),
     );
     if (!permissionInbox.resolve(item.key, decision, scope, automatic)) return;
+    permissionResolutionEpoch += 1;
     persistPermissionHistory();
     permissionTimer.remove(item.key);
     updatePermissionTimer();
@@ -154,19 +161,36 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     try {
       await new Api(owning.apiPath).resolvePermission(item.id, decision, scope);
     } catch (reason) {
+      const noLongerPending = reason instanceof ApiHttpError && reason.status === 404;
       permissionInbox.restore(item);
+      if (noLongerPending) permissionInbox.removeExternal(item.key);
       persistPermissionHistory();
-      permissionResolutionErrors.value = {
-        ...permissionResolutionErrors.value,
-        [item.key]:
-          reason instanceof Error && reason.message.includes('404')
-            ? 'This request changed before Hot Sheet could answer it. Review it and try again.'
-            : `Could not send the permission decision. ${reason instanceof Error ? reason.message : String(reason)}`,
-      };
-      updatePermissionTimer();
-      permissionRevision.value += 1;
-      if (reason instanceof Error && reason.message.includes('404')) await refreshPermissions();
+      if (!noLongerPending)
+        permissionResolutionErrors.value = {
+          ...permissionResolutionErrors.value,
+          [item.key]: `Could not send the permission decision. ${reason instanceof Error ? reason.message : String(reason)}`,
+        };
+      if (!noLongerPending) {
+        updatePermissionTimer();
+        permissionRevision.value += 1;
+      }
+      if (noLongerPending) await refreshPermissions();
     }
+  }
+
+  function serverResolvedPermission(
+    key: string,
+    resolution?: { decision: PermissionDecision; scope: PermissionScope },
+  ) {
+    permissionResolutionEpoch += 1;
+    const removed = resolution
+      ? permissionInbox.resolve(key, resolution.decision, resolution.scope)
+      : permissionInbox.removeExternal(key);
+    if (!removed) return;
+    permissionTimer.remove(key);
+    updatePermissionTimer();
+    permissionRevision.value += 1;
+    persistPermissionHistory();
   }
 
   function updatePermissionTimer() {
@@ -227,6 +251,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     refreshPermissions,
     startPermissionUpdates,
     resolvePermission,
+    serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,
     get permissionCountdown() {

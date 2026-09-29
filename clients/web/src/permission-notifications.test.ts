@@ -70,6 +70,14 @@ describe('permission notifications', () => {
       expect.objectContaining({ key: 'p:1', decision: 'allow', scope: 'once', resolvedAt: 20 }),
     ]);
   });
+  it('removes a disconnected approval without treating it as a human denial', () => {
+    const inbox = new PermissionInbox();
+    inbox.reconcile(project, [request], [], 10);
+    expect(inbox.removeExternal('p:1', 20)).toBe(true);
+    expect(inbox.removeExternal('p:1', 30)).toBe(false);
+    expect(inbox.visible()).toBeUndefined();
+    expect(inbox.history(30)).toEqual([expect.objectContaining({ decision: 'external', resolvedAt: 20 })]);
+  });
   it('restores an optimistically resolved request without retaining its presumed history', () => {
     const inbox = new PermissionInbox();
     inbox.reconcile(project, [request], [], 10);
