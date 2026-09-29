@@ -56,13 +56,15 @@ export function TerminalTicketRail({
         className="terminal-ticket-rail__project"
         dividerSides=""
         leading={
-          <Select
-            name="terminal-rail-project"
-            value={selectedProjectId}
-            ariaLabel="Ticket rail project"
-            choices={projects.map((project) => ({ value: project.id, label: project.name }))}
-            renderSelected={(choice) => <span>{choice.label}</span>}
-          />
+          <ToolbarControlGroup single appearance="borderless">
+            <Select
+              name="terminal-rail-project"
+              value={selectedProjectId}
+              ariaLabel="Ticket rail project"
+              choices={projects.map((project) => ({ value: project.id, label: project.name }))}
+              renderSelected={(choice) => <span>{choice.label}</span>}
+            />
+          </ToolbarControlGroup>
         }
         trailing={
           <ToolbarControlGroup appearance="borderless" single>

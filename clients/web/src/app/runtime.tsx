@@ -3,6 +3,7 @@ import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/r
 import { Select } from '@kerfjs/ui/select';
 import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
@@ -4457,14 +4458,16 @@ export async function startHotSheetWebClient() {
           className="app-shell__mobile-view-header"
           dividerSides=""
           leading={
-            <Select
-              className="app-shell__mobile-view"
-              name="mobile-view"
-              value={railView}
-              ariaLabel="Ticket view"
-              choices={mobileViewChoices}
-              renderSelected={(choice) => <span>{choice.label}</span>}
-            />
+            <ToolbarControlGroup single appearance="borderless">
+              <Select
+                className="app-shell__mobile-view"
+                name="mobile-view"
+                value={railView}
+                ariaLabel="Ticket view"
+                choices={mobileViewChoices}
+                renderSelected={(choice) => <span>{choice.label}</span>}
+              />
+            </ToolbarControlGroup>
           }
           trailing={ticketViewAction(selectedView.value, canCreate)}
         />

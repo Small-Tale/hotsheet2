@@ -91,7 +91,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
       <header class="ticket-inspector__header">
         <Toolbar
           dividerSides=""
-          center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width={rem(5.5)} height={rem(1)} />}
+          center={slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />}
           trailing={actions}
         />
         <div class="ticket-inspector__ph-title" aria-hidden="true">

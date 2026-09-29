@@ -24,6 +24,7 @@ describe('TerminalTicketRail', () => {
   it('starts on a compact project ticket surface whose project menu can grow to fit longer names', () => {
     const markup = String(TerminalTicketRail({ ...props, active: 'root' }));
     expect(markup).toContain('name="terminal-rail-project"');
+    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><wa-select[^>]*name="terminal-rail-project"/);
     expect(markup).toContain('Project One');
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');

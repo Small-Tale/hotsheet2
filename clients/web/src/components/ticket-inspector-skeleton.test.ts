@@ -10,6 +10,7 @@ describe('TicketInspectorSkeleton', () => {
     // It reuses the real inspector chrome so it still looks like the inspector.
     expect(markup).toContain('class="ticket-inspector ticket-inspector--placeholder"');
     expect(markup).toContain('class="kui-tab-bar ticket-inspector__tabs"');
+    expect(markup).toContain('data-component="toolbar-text" data-size="small" data-placeholder="true"');
     expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
     // Real Kerf tab bar with four disabled placeholder tabs and Info selected.
     expect(markup.match(/data-component="app-tab"/g)).toHaveLength(4);
@@ -33,7 +34,7 @@ describe('TicketInspectorSkeleton', () => {
 
   it('shows the known slug while its ticket loads, and a skeleton slug otherwise', () => {
     expect(String(TicketInspectorSkeleton({ slug: 'HS2-4J50K3' }))).toContain('HS2-4J50K3');
-    // Without a known slug the header slug is a Skeleton block, not ticket text.
+    // Without a known slug the header uses ToolbarText's own placeholder, not ticket text.
     expect(String(TicketInspectorSkeleton())).not.toMatch(/HS2-/);
   });
 });

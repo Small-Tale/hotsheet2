@@ -1766,11 +1766,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
-error or review class. The budget after HS2-VY74FW and HS2-FEDDPX is:
+error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, and HS2-90B8WH is:
 
 | Severity | Exact diagnostic budgets                                                                             |
 | -------- | ---------------------------------------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 108; `KUI-L022` 67; `KUI-L201` 24; `KUI-L202` 4; `KUI-L203` 1 |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 108; `KUI-L022` 67; `KUI-L201` 24; `KUI-L202` 1; `KUI-L203` 1 |
 | review   | `KUI-L004` 87; `KUI-L006` 15; `KUI-L008` 26; `KUI-L017` 1                                            |
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
@@ -1779,3 +1779,6 @@ and stopped writing the uncataloged expanded-size variable during live region re
 The public region size variable still previews drag size; the component's rendered
 expanded size is refreshed on the settled render. The remaining beta.58 ownership
 findings are tracked by HS2-GTX61Q and its child tickets.
+HS2-90B8WH composes ticket-view selects through ToolbarControlGroup in Toolbar leading zones
+and uses ToolbarText's placeholder for the loading inspector's center zone. The remaining
+`KUI-L202` finding belongs to TabBar trailing composition under HS2-GX51F7.

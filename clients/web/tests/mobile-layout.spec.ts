@@ -598,6 +598,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   // The page-header view title is replaced by a view Select that switches ticket views.
   const viewSelect = page.locator('wa-select[name="mobile-view"]');
   await expect(viewSelect).toBeVisible();
+  await expect(viewSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
   await viewSelect.click();
   await viewSelect.locator('wa-option[value="backlog"]').click();

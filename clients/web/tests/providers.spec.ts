@@ -2755,6 +2755,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     launcher = rail.getByRole('button', { name: 'Ticket…' });
   await expect(rail).toBeVisible();
   await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
+  await expect(projectSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(rail.getByRole('button', { name: /List view/ })).toBeVisible();
