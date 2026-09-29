@@ -9084,7 +9084,8 @@ async fn terminal_surfaces_osc7_cwd_in_its_state() {
 
     // Poll the state until the parsed cwd appears.
     let mut cwd = None;
-    for _ in 0..60 {
+    // About 5 s: a PTY (and a login shell) can start slowly under a loaded full suite (HS2-4V3XAQ).
+    for _ in 0..200 {
         let resp = app
             .clone()
             .oneshot(authed("GET", &format!("/terminals/{id}"), None))
@@ -9129,7 +9130,8 @@ async fn shell_command_runs_in_and_immediately_reports_its_requested_cwd() {
     assert_eq!(opened["cwd"], cwd.path().to_string_lossy().as_ref());
 
     let marker = cwd.path().join("command-ran.txt");
-    for _ in 0..60 {
+    // About 5 s: a PTY (and a login shell) can start slowly under a loaded full suite (HS2-4V3XAQ).
+    for _ in 0..200 {
         if marker.exists() {
             break;
         }
