@@ -346,8 +346,10 @@
   width: 100%;
 }
 .attachment-gallery__footer-actions {
-  display: grid;
+  --kui-toolbar-gap: 0px;
+  --kui-toolbar-group-size: remify(40px);
   min-height: remify(40px);
+  padding: 0;
   grid-template-columns: 1fr auto 1fr;
 }
 .attachment-gallery__markup {

@@ -4732,6 +4732,23 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
     codex = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
     manage = page.getByRole('button', { name: 'Manage workspace visibility' }),
     selector = page.locator('wa-select[name="terminal-visibility-group"]');
+  const visibilityToolbar = page.locator('.terminal-dashboard-controls__visibility-toolbar');
+  await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
+  await expect(manage).toBeInViewport({ ratio: 1 });
+  await expect(selector).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-kb5yy6-visibility-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(async () => {
+      const bounds = await page.locator('.app-shell > [data-region-id="app-sidebar"]').boundingBox();
+      return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(0);
+  await page.waitForTimeout(600);
+  await expect(manage).toBeInViewport({ ratio: 1 });
+  await expect(selector).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-kb5yy6-visibility-phone.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await manage.click();
   let dialog = page.locator('[data-terminal-visibility-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
@@ -11410,6 +11427,16 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  const footerToolbar = gallery.locator('.attachment-gallery__footer-actions');
+  await expect(footerToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
+  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
+  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await gallery.screenshot({ path: '/private/tmp/hs2-kb5yy6-gallery-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
+  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await gallery.screenshot({ path: '/private/tmp/hs2-kb5yy6-gallery-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
   const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
     box = (await surface.boundingBox())!;

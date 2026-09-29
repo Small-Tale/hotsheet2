@@ -21,6 +21,14 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
+.terminal-dashboard-controls__visibility-toolbar {
+  --kui-toolbar-gap: var(--wa-space-xs);
+  --kui-toolbar-group-size: remify(44px);
+  width: max-content;
+  min-width: remify(208px);
+  min-height: remify(44px);
+  padding: 0;
+}
 .terminal-dashboard-controls__count {
   position: absolute;
   top: remify(-4px);

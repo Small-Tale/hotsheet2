@@ -222,6 +222,7 @@ describe('TerminalDashboard', () => {
         TerminalDashboardControls({ hiddenCount: 2, visibilityGroups, activeVisibilityGroupId: 'focus' }),
       );
     expect(markup).toContain('data-action="open-terminal-visibility"');
+    expect(markup).toContain('class="kui-toolbar terminal-dashboard-controls__visibility-toolbar"');
     expect(markup).toContain('>2</span>');
     expect(markup).toContain('name="terminal-visibility-group"');
     expect(markup).toContain('class="kui-select__custom-selected"><span>Focus</span>');

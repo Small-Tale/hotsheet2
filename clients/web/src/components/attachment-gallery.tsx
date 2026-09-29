@@ -546,46 +546,51 @@ export function AttachmentGallery({
             )}
           </div>
         )}
-        <div class="attachment-gallery__footer-actions">
-          {markup && (
-            <ToolbarControlGroup className="attachment-gallery__markup" label="Media markup" tone="dark">
-              <GalleryButton
-                action="toggle-gallery-draw"
-                label="Add rectangle"
-                icon={Scan}
-                className={drawMode ? 'attachment-gallery__pressed' : ''}
-              />
-              <GalleryButton
-                action="delete-gallery-annotation"
-                label="Erase selected annotation"
-                icon={Eraser}
-                disabled={!selectedAnnotation}
-              />
+        <Toolbar
+          className="attachment-gallery__footer-actions"
+          center={
+            markup && (
+              <ToolbarControlGroup className="attachment-gallery__markup" label="Media markup" tone="dark">
+                <GalleryButton
+                  action="toggle-gallery-draw"
+                  label="Add rectangle"
+                  icon={Scan}
+                  className={drawMode ? 'attachment-gallery__pressed' : ''}
+                />
+                <GalleryButton
+                  action="delete-gallery-annotation"
+                  label="Erase selected annotation"
+                  icon={Eraser}
+                  disabled={!selectedAnnotation}
+                />
+              </ToolbarControlGroup>
+            )
+          }
+          trailing={
+            <ToolbarControlGroup className="attachment-gallery__zoom" label="Media zoom" tone="dark">
+              <button
+                type="button"
+                data-action="zoom-gallery-image"
+                data-zoom-direction="out"
+                aria-label="Zoom out"
+                title="Zoom out"
+                disabled={!zoom.canZoomOut}
+              >
+                <LucideIcon icon={Minus} name="minus" />
+              </button>
+              <button
+                type="button"
+                data-action="zoom-gallery-image"
+                data-zoom-direction="in"
+                aria-label="Zoom in"
+                title="Zoom in"
+                disabled={!zoom.canZoomIn}
+              >
+                <LucideIcon icon={Plus} name="plus" />
+              </button>
             </ToolbarControlGroup>
-          )}
-          <ToolbarControlGroup className="attachment-gallery__zoom" label="Media zoom" tone="dark">
-            <button
-              type="button"
-              data-action="zoom-gallery-image"
-              data-zoom-direction="out"
-              aria-label="Zoom out"
-              title="Zoom out"
-              disabled={!zoom.canZoomOut}
-            >
-              <LucideIcon icon={Minus} name="minus" />
-            </button>
-            <button
-              type="button"
-              data-action="zoom-gallery-image"
-              data-zoom-direction="in"
-              aria-label="Zoom in"
-              title="Zoom in"
-              disabled={!zoom.canZoomIn}
-            >
-              <LucideIcon icon={Plus} name="plus" />
-            </button>
-          </ToolbarControlGroup>
-        </div>
+          }
+        />
       </footer>
       {overlay}
     </dialog>

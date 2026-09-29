@@ -5,6 +5,7 @@ import './terminal-dashboard.css';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
+import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ALargeSmall, Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus, X } from 'lucide';
 
@@ -106,32 +107,39 @@ export function TerminalVisibilityControls({
   const choices = groups.map((group) => ({ value: group.id, label: group.name }));
   return (
     <div class="terminal-dashboard-controls__visibility-group" data-visibility-scope={scope}>
-      <ToolbarControlGroup single>
-        <button
-          type="button"
-          class="terminal-dashboard-controls__visibility"
-          data-action="open-terminal-visibility"
-          aria-label="Manage workspace visibility"
-          title="Manage Workspace Visibility"
-        >
-          <LucideIcon icon={Eye} name="eye" />
-          {hiddenCount > 0 && (
-            <span class="terminal-dashboard-controls__count" aria-hidden="true">
-              {hiddenCount}
-            </span>
-          )}
-        </button>
-      </ToolbarControlGroup>
-      <ToolbarControlGroup single>
-        <Select
-          className="terminal-dashboard-controls__visibility-select"
-          name="terminal-visibility-group"
-          ariaLabel="Terminal visibility group"
-          value={activeId}
-          choices={choices}
-          renderSelected={(choice) => <span>{choice.label}</span>}
-        />
-      </ToolbarControlGroup>
+      <Toolbar
+        className="terminal-dashboard-controls__visibility-toolbar"
+        leading={
+          <>
+            <ToolbarControlGroup single>
+              <button
+                type="button"
+                class="terminal-dashboard-controls__visibility"
+                data-action="open-terminal-visibility"
+                aria-label="Manage workspace visibility"
+                title="Manage Workspace Visibility"
+              >
+                <LucideIcon icon={Eye} name="eye" />
+                {hiddenCount > 0 && (
+                  <span class="terminal-dashboard-controls__count" aria-hidden="true">
+                    {hiddenCount}
+                  </span>
+                )}
+              </button>
+            </ToolbarControlGroup>
+            <ToolbarControlGroup single>
+              <Select
+                className="terminal-dashboard-controls__visibility-select"
+                name="terminal-visibility-group"
+                ariaLabel="Terminal visibility group"
+                value={activeId}
+                choices={choices}
+                renderSelected={(choice) => <span>{choice.label}</span>}
+              />
+            </ToolbarControlGroup>
+          </>
+        }
+      />
     </div>
   );
 }
