@@ -840,7 +840,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
-  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.51.
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.58.
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
   against an exact no-regression error/review budget, while executable browser evaluation

@@ -163,7 +163,7 @@ describe('permission presentation components', () => {
       NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }),
     );
     expect(markup).toContain('data-component="pane"');
-    expect(markup).toContain('class="kui-text kui-list-header__label"');
+    expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Notifications</h2>');
     expect(markup).toContain('<nav aria-label="Notification views">');
     expect(markup).toContain('data-component="list"');

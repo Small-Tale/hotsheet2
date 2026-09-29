@@ -436,7 +436,7 @@ and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Shee
 only product compositions that translate domain state or actions into that shared anatomy;
 it does not carry local renderer wrappers for the package primitives.
 Hot Sheet pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` together at
-5.0.0-beta.51 and treats the strengthened declaration unions introduced in beta.22 as
+5.0.0-beta.58 and treats the strengthened declaration unions introduced in beta.22 as
 integration requirements: Select adapters
 choose one accessible-name branch, while ListHeader compositions choose a complete
 passive or action branch. This keeps disabled/read-only surfaces semantically passive
@@ -1635,6 +1635,16 @@ demos and production flows.
 
 The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
 examples using the package component unchanged, including explicit edge dividers.
+
+### Kerf beta.57–58 adoption
+
+Beta.57 fixes delegated action matching when an earlier handler synchronously rerenders
+and recycles the event target. Beta.58 adds `Toolbar` leading/center/trailing composition
+and `ToolbarControlGroup.relocateOnCollapse`; these are available to future panel work
+without changing Hot Sheet's existing toolbar layouts. The UI doctor now diagnoses
+previously unreported component anatomy and styling ownership. Hot Sheet pins the first
+beta.58 report by diagnostic ID, then reduces that baseline in HS2-GTX61Q
+(HS2-SM3JK0). The Claude Code kerf-app drop-ins were updated to 1.25.0.
 
 ### Kerf beta.56 adoption
 

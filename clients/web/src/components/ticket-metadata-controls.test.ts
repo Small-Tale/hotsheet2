@@ -35,7 +35,7 @@ describe('ticket metadata controls and inspector panels', () => {
         }),
       );
       expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
-      expect(markup).toContain('class="kui-text kui-list-header__label"');
+      expect(markup).toContain('class="kui-text" data-component="text"');
       expect(markup).toContain('data-font="default" data-border="none">Details</h2>');
       expect(markup).toContain(`data-mode="${detailsMode}"`);
     }
@@ -126,7 +126,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('Deleted');
     expect(deleted).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
     expect(deleted).not.toContain('name="inspector-status"');
-    expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text kui-list-header__label"');
+    expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text" data-component="text"');
     expect(info).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">0<\/span>/);
     expect(info).toContain('class="kui-list-item ticket-notes__add" data-component="list-item"');
     const blocked = String(

@@ -20,7 +20,7 @@ describe('TicketDuplicateBacklinks', () => {
         target: { id: '@project-b/git-b:two', projectName: 'Beta', slug: 'HS2-SAME', title: 'Canonical report' },
       }),
     );
-    expect(markup).toContain('class="kui-text kui-list-header__label"');
+    expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Duplicate of</h2>');
     expect(markup).toContain('Beta · HS2-SAME');
     expect(markup).toContain('Canonical report');
@@ -44,7 +44,7 @@ describe('TicketDuplicateBacklinks', () => {
         ],
       }),
     );
-    expect(markup).toContain('aria-label="Duplicates, 2 duplicates" class="kui-text kui-list-header__label"');
+    expect(markup).toContain('aria-label="Duplicates, 2 duplicates" class="kui-text" data-component="text"');
     expect(markup).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">2<\/span>/);
     expect(markup.match(/data-component="list-item"/g)).toHaveLength(2);
     expect(markup).toContain('Alpha · HS2-SAME');

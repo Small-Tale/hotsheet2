@@ -6,16 +6,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const KERF_UI_DOCTOR_BUDGET = {
   error: {
+    'KUI-L001': 2,
+    'KUI-L011': 1,
     'KUI-L017': 1,
+    'KUI-L019': 108,
+    'KUI-L020': 7,
+    'KUI-L022': 67,
     'KUI-L101': 3,
-    'KUI-L102': 8,
-    'KUI-L201': 22,
+    'KUI-L102': 7,
+    'KUI-L103': 7,
+    'KUI-L201': 24,
     'KUI-L202': 4,
     'KUI-L203': 1,
   },
   review: {
-    'KUI-L004': 81,
-    'KUI-L005': 54,
+    'KUI-L004': 87,
     'KUI-L006': 15,
     'KUI-L008': 26,
     'KUI-L017': 1,

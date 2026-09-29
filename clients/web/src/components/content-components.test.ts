@@ -192,7 +192,7 @@ describe('content components', () => {
     );
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('aria-label="Notes, 1 note" class="kui-text kui-list-header__label"');
+    expect(markup).toContain('aria-label="Notes, 1 note" class="kui-text" data-component="text"');
     expect(markup).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">1<\/span>/);
     expect(markup).toContain('data-has-count="true"');
     expect(markup).toContain('<wa-dialog');
