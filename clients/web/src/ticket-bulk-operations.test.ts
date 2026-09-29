@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Capabilities, TicketRow } from './api';
+import type { Capabilities, CheckoutTicketCounts, TicketRow } from './api';
 import {
   bulkTagChoices,
   BulkTicketMutationSequencer,
   bulkTicketPatch,
   canAtomicallyBulkUpdate,
   canBulkUpdate,
+  projectBulkTicketCounts,
 } from './ticket-bulk-operations';
 
 const ticket = (slug: string, connection_id = 'git', tags: string[] = []): TicketRow => ({
@@ -25,6 +26,35 @@ const ticket = (slug: string, connection_id = 'git', tags: string[] = []): Ticke
 const capabilities = (update: boolean, atomic_batch = update) => ({ update, atomic_batch }) as Capabilities;
 
 describe('bulk ticket operations', () => {
+  it('keeps unseen Completed totals available through verify then archive projections', () => {
+    const counts: CheckoutTicketCounts = {
+        total: 309,
+        queued: 309,
+        backlog: 0,
+        archive: 0,
+        open: 0,
+        up_next: 0,
+        active: 0,
+        started: 0,
+        verified: 0,
+        completed_today: 0,
+      },
+      completed = Array.from({ length: 100 }, (_, index) => ({ ...ticket(`CP${index}`), status: 'completed' })),
+      verified = completed.map((item) => ({ ...item, status: 'verified' })),
+      archived = verified.map((item) => ({ ...item, status: 'archive' }));
+    const afterVerify = projectBulkTicketCounts(
+      counts,
+      completed.map((before, index) => ({ before, after: verified[index] })),
+    );
+    expect(afterVerify).toMatchObject({ queued: 309, archive: 0, verified: 100 });
+    expect(afterVerify.queued - afterVerify.open - (afterVerify.verified ?? 0)).toBe(209);
+    const afterArchive = projectBulkTicketCounts(
+      afterVerify,
+      verified.map((before, index) => ({ before, after: archived[index] })),
+    );
+    expect(afterArchive).toMatchObject({ queued: 209, archive: 100, verified: 0 });
+    expect(afterArchive.queued - afterArchive.open - (afterArchive.verified ?? 0)).toBe(209);
+  });
   it('allows best-effort bulk updates while distinguishing atomic providers', () => {
     const selected = [ticket('ONE', 'git'), ticket('TWO', 'jira')];
     expect(canBulkUpdate(selected, (id) => capabilities(id === 'git'))).toBe(false);

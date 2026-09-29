@@ -762,6 +762,10 @@ and identity-less legacy entries remain conservatively blocking.
   switch) reloads each column back to its loaded length in one commit, in pages of at most 500, so an
   external change does not reset a column's pagination. Warm project tabs keep their column cursors with
   their rows. Mobile uses the same per-column loading in its paged board layout (HS2-ZYJMDP).
+  A bulk status change preserves projected checkout totals while its request is pending. If moving the
+  loaded rows exposes more tickets in their old column, that column immediately shows **Loading…** and
+  refills its first page after the batch commits, without waiting for the next live-change poll
+  (HS2-CE1E7J). Archiving the moved batch removes those rows from Verified immediately.
   Single-collection Backlog/Archive/Trash boards and search keep the global cursor.
   A column pages an _ordered list_ of statuses, not just one: when the **Hide Verified column** setting
   merges Verified into Completed, that column exhausts its `completed` stream and then continues into

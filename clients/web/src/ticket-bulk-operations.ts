@@ -1,5 +1,6 @@
-import type { Capabilities, TicketRow } from './api';
+import type { Capabilities, CheckoutTicketCounts, TicketRow } from './api';
 import type { TicketPatch } from './ticket-operations';
+import { isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket } from './ticket-views';
 
 export type BulkTicketAction =
   | { kind: 'field'; field: 'category' | 'priority' | 'status'; value: string }
@@ -30,6 +31,29 @@ export class BulkTicketMutationSequencer {
     });
     return result;
   }
+}
+
+/** Keep board totals useful while a bulk response and its replacement page are pending. */
+export function projectBulkTicketCounts(
+  counts: CheckoutTicketCounts,
+  changes: readonly { before: TicketRow; after: TicketRow }[],
+): CheckoutTicketCounts {
+  const next = { ...counts };
+  for (const { before, after } of changes) {
+    const delta = (key: keyof CheckoutTicketCounts, was: boolean, now: boolean) => {
+      if (was === now || typeof next[key] !== 'number') return;
+      (next as unknown as Record<string, number>)[key] = Math.max(0, next[key] + (now ? 1 : -1));
+    };
+    delta('queued', isQueuedTicket(before), isQueuedTicket(after));
+    delta('backlog', before.status === 'backlog', after.status === 'backlog');
+    delta('archive', isArchivedTicket(before), isArchivedTicket(after));
+    delta('trash', before.status === 'deleted', after.status === 'deleted');
+    delta('open', isOpenTicket(before) && isQueuedTicket(before), isOpenTicket(after) && isQueuedTicket(after));
+    delta('started', before.status === 'started', after.status === 'started');
+    delta('verified', before.status === 'verified', after.status === 'verified');
+    delta('up_next', isUpNextTicket(before), isUpNextTicket(after));
+  }
+  return next;
 }
 
 /** Bulk editing is offered when every selected ticket's provider can update tickets. */

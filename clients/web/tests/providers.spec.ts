@@ -12451,6 +12451,104 @@ test('loads each board column independently, 100 rows at a time in the active so
   await expect(columnRows('Started')).toHaveCount(4);
 });
 
+test('refills the loaded Completed page promptly after verifying and archiving 100 of 309 tickets (HS2-CE1E7J)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const completed = Array.from({ length: 309 }, (_, index) => ({
+      ...row,
+      id: `cp-${index}`,
+      native_id: `cp-${index}`,
+      qualified_id: `git-local:cp-${index}`,
+      slug: `HS2-CP${String(index).padStart(3, '0')}`,
+      title: `Completed ${index}`,
+      status: 'completed',
+      up_next: false,
+    })),
+    streams: Record<string, typeof completed> = { not_started: [], started: [], completed, verified: [] },
+    counts = {
+      total: 309,
+      queued: 309,
+      backlog: 0,
+      archive: 0,
+      open: 0,
+      up_next: 0,
+      active: 0,
+      started: 0,
+      verified: 0,
+      completed_today: 0,
+    };
+  let releaseVerify!: () => void, releaseArchive!: () => void;
+  const verifyGate = new Promise<void>((resolve) => {
+      releaseVerify = resolve;
+    }),
+    archiveGate = new Promise<void>((resolve) => {
+      releaseArchive = resolve;
+    });
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const url = new URL(route.request().url()),
+      status = url.searchParams.get('status');
+    if (route.request().method() !== 'GET') return route.fallback();
+    if (status) return route.fulfill({ json: boardStatusPage(streams[status] ?? [], url, counts) });
+    return route.fulfill({ json: boardStatusPage(streams.completed, url, counts) });
+  });
+  await page.route('**/checkouts/demo-checkout/batch', async (route) => {
+    const updates = (route.request().postDataJSON() as { updates: Array<{ id: string; status: string }> }).updates,
+      status = updates[0]?.status;
+    if (status === 'verified') await verifyGate;
+    if (status === 'archive') await archiveGate;
+    const changed = updates.map(({ id }) => {
+      const source = Object.values(streams)
+        .flat()
+        .find((item) => item.id === id)!;
+      streams[source.status] = streams[source.status].filter((item) => item.id !== id);
+      const updated = { ...source, status };
+      if (status === 'verified') counts.verified += 1;
+      if (status === 'archive') {
+        counts.verified -= 1;
+        counts.queued -= 1;
+        counts.archive += 1;
+      }
+      if (status === 'verified') streams.verified.push(updated);
+      return {
+        store: 'git-local',
+        ...updated,
+        details: '',
+        blocked_reason: null,
+        notes: [],
+        attachments: [],
+        concurrency_token: 'committed',
+      };
+    });
+    await route.fulfill({ json: changed });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Columns view').click();
+  const completedColumn = page.locator('[data-column-id="completed"]'),
+    verifiedColumn = page.locator('[data-column-id="verified"]'),
+    menu = page.getByRole('menu', { name: 'Ticket actions' });
+  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+  await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
+  await completedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
+  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(0);
+  await expect(completedColumn.getByRole('button', { name: 'Loading…' })).toBeVisible();
+  await expect(completedColumn.getByLabel('209 tickets')).toBeVisible();
+  releaseVerify();
+  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+  await expect(completedColumn.getByRole('button', { name: 'Load more tickets' })).toBeVisible();
+  await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+  await verifiedColumn.getByRole('button', { name: 'Select all Verified tickets' }).click();
+  await verifiedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
+  await menu.locator('[data-context-action="Archive ticket"]').click();
+  await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(0);
+  releaseArchive();
+  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+});
+
 test('paginates the merged Completed column through completed then verified when Verified is hidden (HS2-F2N4ZN)', async ({
   page,
 }) => {

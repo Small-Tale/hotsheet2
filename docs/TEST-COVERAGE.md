@@ -284,6 +284,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | qualified-checkout-attachments | docs/04-core-server-cli.md | Checkout attachment handlers resolve a qualified ticket id to its owning git source and native id before upload, read, thumbnail, metadata, and removal operations (HS2-VATCY8). | `clients/web/src/api.test.ts # qualified checkout attachment URLs` | `crates/hotsheet-server/tests/http.rs # checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores uploads, ranges, and thumbnails through a qualified id` | — | double-covered |
 
+| bulk-board-refill | docs/06-clients.md | Moving the loaded first 100 rows out of a longer board column projects whole-checkout totals, shows immediate column loading, and refills from the first remaining page after commit; archiving the moved Verified batch removes it immediately (HS2-CE1E7J). | `clients/web/src/ticket-bulk-operations.test.ts # 309-row verify then archive count transition` | `clients/web/tests/providers.spec.ts # verify and archive 100 of 309 through the board with held batch responses` | — | double-covered |
+
 | permission-history-tool-identity | docs/06-clients.md | Responded permission history names the requested tool even when the action is empty (HS2-18FEQA). | `clients/web/src/components/permission-components.test.ts # responded list items without action` | `clients/web/tests/providers.spec.ts # records externally resolved empty-action permissions in notification history` | — | double-covered |
 
 <!-- coverage-matrix:end -->

@@ -40,6 +40,7 @@ import {
   bulkTicketPatch,
   canAtomicallyBulkUpdate,
   canBulkUpdate,
+  projectBulkTicketCounts,
 } from '../ticket-bulk-operations';
 import {
   duplicateReference,
@@ -181,6 +182,13 @@ export interface TicketWorkflowDependencies {
   visibleTickets: () => WireTicketRow[];
   projectTabTicketRows: (projectId: string) => WireTicketRow[];
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
+  beginBulkBoardRefill: (
+    projectId: string,
+    before: readonly WireTicketRow[],
+    after: readonly WireTicketRow[],
+    counts: CheckoutTicketCounts | undefined,
+  ) => void;
+  finishBulkBoardRefill: (projectId: string) => Promise<void>;
   publishOptimisticTicketRows: (projectId: string) => void;
   beginLocalTicketMutation: () => () => void;
   beginLocalTicketCreation: () => () => Promise<void>;
@@ -292,6 +300,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     visibleTickets,
     projectTabTicketRows,
     projectTicketCounts,
+    beginBulkBoardRefill,
+    finishBulkBoardRefill,
     publishOptimisticTicketRows,
     beginLocalTicketMutation,
     beginLocalTicketCreation,
@@ -724,13 +734,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     complete: boolean;
     succeeded: Set<string>;
   }
-  function setProjectTicketRows(projectId: string, rows: WireTicketRow[]) {
+  function setProjectTicketRows(projectId: string, rows: WireTicketRow[], counts?: CheckoutTicketCounts) {
     if (!projects.value.some((item) => item.id === projectId)) return;
     if (project()?.id === projectId) tickets.value = rows;
     ticketRowsByProject.value = { ...ticketRowsByProject.value, [projectId]: rows };
-    ticketCountsByProject.value = Object.fromEntries(
-      Object.entries(ticketCountsByProject.value).filter(([id]) => id !== projectId),
-    );
+    ticketCountsByProject.value = counts
+      ? { ...ticketCountsByProject.value, [projectId]: counts }
+      : Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id]) => id !== projectId));
   }
   function reportBulkFailure(current: Project, message: string) {
     if (project()?.id === current.id) error.value = message;
@@ -745,14 +755,21 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       releaseRefresh = beginLocalTicketMutation(),
       slugs = new Set(operations.map((item) => item.slug)),
       before = projectTabTicketRows(current.id).filter((ticket) => slugs.has(ticket.slug)),
+      beforeCounts = Object.hasOwn(ticketCountsByProject.value, current.id)
+        ? ticketCountsByProject.value[current.id]
+        : undefined,
       selectedBefore = project()?.id === current.id ? selectedTicket.value : null;
-    setProjectTicketRows(
-      current.id,
-      projectTabTicketRows(current.id).map((ticket) => {
+    const optimistic = projectTabTicketRows(current.id).map((ticket) => {
         const operation = operations.find((item) => item.slug === ticket.slug);
         return operation ? projectTicketPatch(ticket, operation.patch) : ticket;
       }),
-    );
+      optimisticChanges = before.map((ticket) => ({
+        before: ticket,
+        after: optimistic.find((item) => item.slug === ticket.slug) ?? ticket,
+      })),
+      optimisticCounts = beforeCounts && projectBulkTicketCounts(beforeCounts, optimisticChanges);
+    setProjectTicketRows(current.id, optimistic, optimisticCounts);
+    beginBulkBoardRefill(current.id, before, optimistic, optimisticCounts);
     if (project()?.id === current.id && selectedTicket.value) {
       const operation = operations.find((item) => item.slug === selectedTicket.value?.slug);
       if (operation) selectedTicket.value = projectTicketPatch(selectedTicket.value, operation.patch);
@@ -808,7 +825,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             ? (before.find((item) => item.slug === ticket.slug) ?? ticket)
             : ticket,
         );
-      setProjectTicketRows(current.id, next);
+      const actualCounts =
+        beforeCounts &&
+        projectBulkTicketCounts(
+          beforeCounts,
+          before.map((ticket) => ({ before: ticket, after: next.find((item) => item.slug === ticket.slug) ?? ticket })),
+        );
+      setProjectTicketRows(current.id, next, actualCounts);
       if (project()?.id === current.id) {
         const selectedUpdate = selectedTicket.value && updated.find((item) => item.id === selectedTicket.value?.id);
         if (selectedUpdate) selectedTicket.value = selectedUpdate;
@@ -826,6 +849,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       setProjectTicketRows(
         current.id,
         projectTabTicketRows(current.id).map((ticket) => before.find((item) => item.slug === ticket.slug) ?? ticket),
+        beforeCounts,
       );
       if (project()?.id === current.id && selectedBefore && slugs.has(selectedBefore.slug))
         selectedTicket.value = selectedBefore;
@@ -833,6 +857,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       return { complete: false, succeeded: new Set<string>() };
     } finally {
       releaseRefresh();
+      await finishBulkBoardRefill(current.id);
     }
   }
   /** Restore Trash tickets through the server so each returns to its pre-deletion status. */
