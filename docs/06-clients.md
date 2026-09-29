@@ -1719,6 +1719,9 @@ latency never invites repeated clicks.
 There is no fixed-interval network polling. The main segmented control reflects only the
 selected project's pending count, while every project tab keeps its own badge; a non-modal
 popup can still surface an urgent request even when another project is selected. When a
+phone-width project sidebar is open, the permission popup stays above the sidebar, fits
+inside the viewport, and keeps its identity, command, and decision controls reachable;
+the popup scrolls within the viewport if vertical space is short (HS2-Y1HN0D). When a
 standalone AI conversation is open, the active permission popup is
 promoted into that dialog's top layer so it remains visible and interactive instead of
 being trapped beneath the modal; resolving it uses the same authoritative permission

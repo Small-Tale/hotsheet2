@@ -40,6 +40,8 @@ export interface AppShellProps {
   mobile?: boolean;
   workspacePresentation?: 'inset' | 'edge-to-edge';
   overlay?: SafeHtml;
+  /** Foreground anchored to the viewport, outside the mobile side-panel stacking contexts. */
+  viewportOverlay?: SafeHtml;
   terminalDrawer?: SafeHtml;
   terminalDrawerVisible?: boolean;
   terminalDrawerSize?: number;
@@ -69,6 +71,7 @@ export function AppShell({
   mobile = false,
   workspacePresentation = 'inset',
   overlay,
+  viewportOverlay,
   terminalDrawer,
   terminalDrawerVisible = false,
   terminalDrawerSize = 320,
@@ -226,6 +229,7 @@ export function AppShell({
           {inspector}
         </ResizableRegion>
       )}
+      {viewportOverlay}
     </section>
   );
 }

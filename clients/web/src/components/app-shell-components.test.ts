@@ -570,12 +570,14 @@ describe('application shell components', () => {
         inspector: 'inspect' as never,
         banner: 'banner' as never,
         overlay: 'overlay' as never,
+        viewportOverlay: 'viewport-overlay' as never,
       }),
     );
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
+    expect(markup.indexOf('viewport-overlay')).toBeGreaterThan(markup.indexOf('data-region-id="app-inspector"'));
     expect(markup).toContain('Ticket workspace');
     // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would

@@ -256,7 +256,13 @@
 }
 @media (max-width: remify(672px)) {
   .permission-request-popup {
-    right: remify(8.8px);
-    width: calc(100% - remify(17.6px));
+    position: fixed;
+    z-index: 100;
+    top: calc(env(safe-area-inset-top) + remify(56px));
+    right: remify(8px);
+    left: remify(8px);
+    width: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - remify(64px));
+    overflow-y: auto;
   }
 }

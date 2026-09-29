@@ -7999,6 +7999,51 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(popup).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
+  await expect(page.locator('.project-sidebar')).toBeVisible();
+  const popupBounds = await popup.boundingBox();
+  expect(popupBounds).not.toBeNull();
+  expect(popupBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(popupBounds!.x + popupBounds!.width).toBeLessThanOrEqual(390);
+  expect(popupBounds!.y + popupBounds!.height).toBeLessThanOrEqual(844);
+  expect(
+    await popup.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(rect.left + 10, rect.top + 100));
+    }),
+  ).toBe(true);
+  for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
+    const button = popup.getByRole('button', { name, exact: true }),
+      bounds = await button.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+    expect(
+      await button.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      }),
+    ).toBe(true);
+  }
+  await page.reload();
+  await expect(popup).toBeVisible();
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect(page.locator('.project-sidebar')).toBeVisible();
+  expect(
+    await popup.locator('.permission-request-card__identity').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(rect.left + 8, rect.top + rect.height / 2));
+    }),
+  ).toBe(true);
+  expect(
+    await popup.getByRole('button', { name: 'Always Allow' }).evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return element === document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
 });
 
 test('records externally resolved empty-action permissions in notification history', async ({ page }) => {

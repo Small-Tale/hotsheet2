@@ -4351,7 +4351,8 @@ export async function startHotSheetWebClient() {
           inspectorVisible={viewportMobile.value ? mobileOverlay.value.inspector : inspectorVisible.value}
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
-          overlay={popup}
+          overlay={viewportMobile.value ? undefined : popup}
+          viewportOverlay={viewportMobile.value ? popup : undefined}
         />
       );
     }
@@ -4363,7 +4364,8 @@ export async function startHotSheetWebClient() {
           header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
           workspace={<ProjectRestoreError {...restoreFailure} />}
           inspectorVisible={false}
-          overlay={popup}
+          overlay={viewportMobile.value ? undefined : popup}
+          viewportOverlay={viewportMobile.value ? popup : undefined}
         />
       );
     if (!current) return <AppEmptyState />;
@@ -4545,10 +4547,11 @@ export async function startHotSheetWebClient() {
         inspectorSize={inspectorSize.value}
         overlay={
           <>
-            {popup}
+            {!viewportMobile.value && popup}
             {ticketContextMenuSurface()}
           </>
         }
+        viewportOverlay={viewportMobile.value ? popup : undefined}
       />
     );
   }
