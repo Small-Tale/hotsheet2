@@ -4901,6 +4901,40 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await page.screenshot({ path: '/private/tmp/hs2-4fzgm7-drawer-max.png', fullPage: true });
 });
 
+test('keeps the drawer create menu on screen when the drawer reaches the page header', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+    drawer = page.locator('[data-component="terminal-drawer"]');
+  await handle.focus();
+  for (let step = 0; step < 32; step += 1) await page.keyboard.press('ArrowUp');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  const menu = drawer.getByRole('menu', { name: 'New drawer item' });
+  await expect(menu).toHaveAttribute('data-side', 'below');
+  await expect(menu.getByText('Saved conversation…')).toBeVisible();
+  const bounds = await menu.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBeGreaterThanOrEqual(8);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900 - 8);
+  expect(bounds!.x).toBeGreaterThanOrEqual(8);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440 - 8);
+  await page.screenshot({ path: '/private/tmp/hs2-zkkrzs-tall-drawer-menu.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 300 });
+  await expect(menu).toHaveAttribute('data-side', 'below');
+  await expect
+    .poll(async () => {
+      const shortBounds = await menu.boundingBox();
+      return shortBounds ? shortBounds.y + shortBounds.height : Infinity;
+    })
+    .toBeLessThanOrEqual(300 - 8);
+  await menu.getByText('Saved conversation…').scrollIntoViewIfNeeded();
+  await expect(menu.getByText('Saved conversation…')).toBeVisible();
+});
+
 test('double-clicks the drawer rail or any terminal tab to toggle maximization', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);

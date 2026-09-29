@@ -1976,7 +1976,11 @@ the explicit quiet pill-shaped plus action immediately after the last tab and th
 at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
 one-shot input focus; plus
 opens a direct shared-menu choice of Default shell, AI shell, or AI chat. The menu has no
-redundant heading, and leaf actions do not display submenu chevrons. The rail and terminal inset
+redundant heading, and leaf actions do not display submenu chevrons. The menu stays within the
+viewport: it opens on the side of the rail with more space, shifts
+inward at the horizontal edge, updates while the viewport changes, and scrolls when neither
+side can show its full height (HS2-ZKKRZS).
+The rail and terminal inset
 use Kerf's canonical 8 px within-group rhythm, the tab-strip focus gutter and icon-label clusters
 use 4 px, and connected create-menu rows use no extra gap (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
 plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed

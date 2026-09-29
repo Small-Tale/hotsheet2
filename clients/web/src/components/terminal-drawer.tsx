@@ -19,6 +19,7 @@ import {
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
+import type { DrawerCreateMenuPosition } from '../terminal-drawer-menu-position';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import {
   type MobileMagnifiedTerminal,
@@ -54,6 +55,7 @@ export interface TerminalDrawerProps {
   message?: string;
   maximized?: boolean;
   createMenuOpen?: boolean;
+  createMenuPosition?: DrawerCreateMenuPosition;
   focusMode?: boolean;
   focusViewport?: MobileTerminalViewport;
   /** Phone focus-mode text-size control state (columns + keyboard visibility); undefined off phones (HS2-ZSFAHF). */
@@ -82,6 +84,7 @@ export function TerminalDrawer({
   message = '',
   maximized = false,
   createMenuOpen = false,
+  createMenuPosition,
   focusMode = false,
   focusViewport,
   focusTextSize,
@@ -204,7 +207,17 @@ export function TerminalDrawer({
                     <LucideIcon icon={Plus} name="plus" />
                   </button>
                   {createMenuOpen && (
-                    <div class="terminal-drawer__create-menu" role="menu" aria-label="New drawer item">
+                    <div
+                      class="terminal-drawer__create-menu"
+                      data-side={createMenuPosition?.side ?? 'above'}
+                      role="menu"
+                      aria-label="New drawer item"
+                      style={
+                        createMenuPosition
+                          ? `left:${createMenuPosition.left}px;max-height:${createMenuPosition.maxHeight}px`
+                          : undefined
+                      }
+                    >
                       <wa-dropdown-item data-action="create-terminal-drawer-item" data-item-id="default-shell">
                         <span slot="icon">
                           <LucideIcon icon={SquareTerminal} name="square-terminal" />

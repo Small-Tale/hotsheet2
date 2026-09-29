@@ -129,6 +129,7 @@ describe('TerminalDrawer', () => {
           fitHigh: 2,
           selectedId: 'chat:one',
           createMenuOpen: true,
+          createMenuPosition: { side: 'below', left: -20, maxHeight: 100 },
         }),
       );
     expect(chat).toContain('data-mode="ai-chat"');
@@ -138,6 +139,8 @@ describe('TerminalDrawer', () => {
     for (const item of ['Default shell', 'AI shell', 'AI chat', 'Saved conversation…']) expect(chat).toContain(item);
     expect(chat).toContain('data-action="open-saved-conversation"');
     expect(chat).toContain('role="menu"');
+    expect(chat).toContain('data-side="below"');
+    expect(chat).toContain('left:-20px;max-height:100px');
     expect(chat).not.toContain('data-component="list-header"');
     expect(chat).not.toContain('data-lucide="chevron-right"');
     expect(chat.match(/<wa-dropdown-item/g)).toHaveLength(4);

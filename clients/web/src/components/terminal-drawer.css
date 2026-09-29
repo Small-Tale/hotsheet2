@@ -179,13 +179,19 @@
   bottom: calc(100% + var(--kui-space-xs));
   left: 0;
   display: grid;
-  width: remify(224px);
+  box-sizing: border-box;
+  width: min(remify(224px), calc(100vw - remify(16px)));
+  overflow-y: auto;
   padding: var(--kui-space-xs);
   border: 1px solid var(--wa-color-surface-border);
   border-radius: var(--wa-border-radius-m);
   background: var(--wa-color-surface-raised);
   box-shadow: var(--wa-shadow-l);
   gap: var(--kui-space-none);
+}
+.terminal-drawer__create-menu[data-side='below'] {
+  top: calc(100% + var(--kui-space-xs));
+  bottom: auto;
 }
 .terminal-drawer__create-menu wa-dropdown-item {
   width: 100%;
