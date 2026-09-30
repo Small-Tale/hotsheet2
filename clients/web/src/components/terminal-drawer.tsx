@@ -116,7 +116,8 @@ export function TerminalDrawer({
         name="Project grid"
         selected={selected === 'grid'}
         closable={false}
-        className="terminal-drawer__grid-tab"
+        // Kerf keeps the leading tab visible while its peers scroll (beta.62 `pinned`, HS2-WF3W6A).
+        pinned
         presentation="icon-only"
         size="compact"
         selectAction="select-drawer-item"

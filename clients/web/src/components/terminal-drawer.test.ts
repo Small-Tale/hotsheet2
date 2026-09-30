@@ -41,9 +41,12 @@ const render = (selectedId: string = 'grid') =>
   );
 describe('TerminalDrawer', () => {
   it('keeps the grid tab fixed while the shared tab strip overflows', () => {
+    // Kerf's pinned AppTab owns the sticky treatment; the app adds no rule or class (HS2-WF3W6A).
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
-    expect(css).toMatch(/\.terminal-drawer__grid-tab \{[^}]*position: sticky/);
+    expect(css).not.toContain('terminal-drawer__grid-tab');
+    expect(render()).toMatch(/data-tab-id="grid"[^>]*data-pinned="true"/);
+    expect(render()).not.toContain('terminal-drawer__grid-tab');
   });
   it('keeps the PopupMenu trigger on the compact pill button surface through Kerf props', () => {
     // Kerf beta.59 sizes a compact PopupMenu trigger from the group's size prop; no app ::part rule (HS2-MYVVK3).

@@ -115,12 +115,6 @@
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
 }
-.terminal-drawer__grid-tab {
-  position: sticky;
-  z-index: 2;
-  left: 0;
-  background: var(--wa-color-surface-default);
-}
 .terminal-drawer__rail .terminal-tab i {
   width: remify(7.2px);
   height: remify(7.2px);

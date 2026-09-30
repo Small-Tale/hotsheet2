@@ -2101,8 +2101,8 @@ closeable tab. The segmented dashboard and view controls likewise expose each ch
 order. The horizontally scrolling tab strips reserve a canonical 4 px inset on every edge so pill shadows
 and focus rings remain complete at either end. The project strip places the dashboard-mode
 buttons in `TabBar`'s leading slot and the add-project action in its trailing slot. The drawer
-strip keeps its Project grid tab sticky at the start of the shared horizontal scroller and
-places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
+strip keeps its Project grid tab pinned at the start of the shared horizontal scroller (Kerf's
+`pinned` AppTab, HS2-WF3W6A) and places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while

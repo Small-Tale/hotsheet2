@@ -4474,7 +4474,7 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   await expect(terminalDrawer.locator('.kui-tab-bar__end [data-component="toolbar-control-group"]')).toHaveCount(1);
   await expect(terminalDrawer.getByRole('button', { name: 'Close Development' })).toBeAttached();
   const gridTab = terminalDrawer.getByRole('tab', { name: 'Project grid' }),
-    gridRoot = terminalDrawer.locator('.terminal-drawer__grid-tab'),
+    gridRoot = terminalDrawer.locator('[data-component="app-tab"][data-pinned="true"]'),
     gridWidth = (await gridTab.boundingBox())!.width;
   await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();
   await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);
