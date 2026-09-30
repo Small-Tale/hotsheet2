@@ -88,13 +88,13 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                     itemId={duplicateTargetKey(candidate)}
                     icon={<LucideIcon icon={CopyX} name="copy-x" />}
                     label={
-                      <>
+                      <span class="ticket-close-dialog__candidate">
                         <strong>
                           {candidate.slug}
                           <small>{candidate.projectName}</small>
                         </strong>
                         <span>{candidate.title}</span>
-                      </>
+                      </span>
                     }
                     multiline
                   />

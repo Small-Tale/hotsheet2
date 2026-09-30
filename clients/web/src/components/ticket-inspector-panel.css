@@ -106,16 +106,15 @@
 .ticket-inspector__content .ticket-inspector__details-section {
   gap: calc(var(--kui-font-xs) * 0.5);
 }
-.ticket-inspector__status-field > .kui-list-header,
-.ticket-inspector__status-field .kui-list-header__title,
-.ticket-inspector__details-section > .kui-list-header,
-.ticket-inspector__details-section .kui-list-header__title {
-  min-height: 0;
-}
-.ticket-inspector__status-field .kui-list-header__title,
-.ticket-inspector__details-section .kui-list-header__title {
-  padding-block: 0;
-  border-block: 0;
+/* Kerf beta.60 ListHeader tokens: no navigation-row height or borders; the 1px title padding keeps the
+   label aligned where its removed inline border used to inset it. */
+.ticket-inspector__status-field,
+.ticket-inspector__details-section {
+  --kui-list-header-min-height: 0;
+  --kui-list-header-title-min-height: 0;
+  --kui-list-header-title-padding-block: 0;
+  --kui-list-header-border-width: 0;
+  --kui-list-header-title-padding-inline: 1px;
 }
 .ticket-inspector__status-field .kui-list-header__label,
 .ticket-inspector__details-section .kui-list-header__label {
@@ -209,11 +208,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 /* Kerf beta 17 gives Web Awesome fields the canonical 1px + 8px inset and ListHeader-style label.
-   Category and Priority can therefore own their labels without an extra layout wrapper. */
-.ticket-inspector__metadata > .kui-select {
-  width: 100%;
-  min-width: 0;
-}
+   Category and Priority own their labels and fill their grid cells through `triggerWidth="fill"`. */
 .ticket-inspector__metadata > .ticket-inspector__status-field {
   display: grid;
   grid-column: 1 / -1;

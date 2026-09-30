@@ -70,8 +70,12 @@ describe('TerminalTicketRail', () => {
   it('uses the canonical compact-rail spacing while retaining control and transition geometry', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    // The project Toolbar keeps Kerf's own inset and height; the app adds no rule on that toolbar root.
-    expect(css).not.toMatch(/__project \{/);
+    // The project Toolbar keeps Kerf's own inset and height; the app only sets public tokens on it.
+    expect(css).toMatchSource(/__project \{ --kui-toolbar-trailing-justify-self:end;/);
+    expect(css).not.toMatch(/__project \{[^}]*\b(padding|min-height|height):/);
+    expect(css).not.toContain('.kui-select__custom-selected');
+    expect(css).not.toMatch(/\.kui-select \{/);
+    expect(css).not.toMatch(/__project \.kui-toolbar__/);
     // The controls Toolbar keeps Kerf's own inset; the app adds no rule on that toolbar root (HS2-K9KWJJ).
     expect(css).not.toMatch(/__controls \{/);
     // The heading wrapper only draws the rule; the Toolbar inside keeps Kerf's inset and height.

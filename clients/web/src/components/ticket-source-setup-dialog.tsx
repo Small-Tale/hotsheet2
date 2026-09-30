@@ -92,6 +92,7 @@ export function TicketSourceSetupDialog({
     itemId?: string,
     disabled = false,
     title?: string,
+    divider: 'none' | 'before' = 'before',
   ) => (
     <ListItem
       action={action}
@@ -99,6 +100,8 @@ export function TicketSourceSetupDialog({
       disabled={disabled}
       title={title}
       multiline
+      multilineIconAlign="center"
+      divider={divider}
       accessibleLabel={label}
       icon={icon as never}
       trailing={disclosure}
@@ -138,6 +141,7 @@ export function TicketSourceSetupDialog({
           undefined,
           defaultExists,
           defaultExists ? 'The recommended ticket repository is already connected.' : undefined,
+          'none',
         )}
         {option(
           'create-project-git-source-custom',

@@ -147,6 +147,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
         <section class="ticket-inspector__section">
           <ListHeader
             label="Tags"
+            actionDisabled
             action="add-tag"
             actionLabel="Add tag"
             actionIcon={<LucideIcon icon={Plus} name="plus" />}
@@ -155,6 +156,7 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
         <section class="ticket-inspector__section">
           <ListHeader
             label="Notes"
+            actionDisabled
             action="add-note"
             actionLabel="Add note"
             actionIcon={<LucideIcon icon={Plus} name="plus" />}

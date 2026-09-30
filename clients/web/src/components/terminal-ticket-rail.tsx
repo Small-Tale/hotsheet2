@@ -64,6 +64,7 @@ export function TerminalTicketRail({
               name="terminal-rail-project"
               value={selectedProjectId}
               ariaLabel="Ticket rail project"
+              triggerWidth="max-content"
               choices={projects.map((project) => ({ value: project.id, label: project.name }))}
               renderSelected={(choice) => <span>{choice.label}</span>}
             />

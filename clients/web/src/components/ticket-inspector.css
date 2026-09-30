@@ -138,12 +138,9 @@
   text-underline-offset: 0.12em;
 }
 .ticket-inspector__tabs-frame {
+  /* Fill allocation centers each tab; the icon-to-name gap tightens through the public layout token. */
+  --kui-layout-item-gap: var(--kui-space-2xs);
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
-}
-.ticket-inspector__tabs .kui-app-tab__select {
-  flex: 1;
-  justify-content: center;
-  gap: var(--kui-space-2xs);
 }
 .ticket-inspector__tabs .kui-app-tab__select > svg {
   width: remify(14.4px);
@@ -174,8 +171,10 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+/* The reader keeps segmented names and hides them only when its container is narrow; Kerf has no
+   container-responsive icon-only presentation yet (KF request filed with HS2-PKPGGZ). */
 @container (max-width: remify(832px)) {
-  .ticket-inspector__tabs .kui-app-tab__name {
+  .ticket-inspector--reader .ticket-inspector__tabs .kui-app-tab__name {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -183,9 +182,4 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-}
-
-/* Tab strips only scroll horizontally; Kerf's overflow-x: auto alone computes overflow-y to auto (HS2-QG4K9W). */
-.ticket-inspector__tabs .kui-tab-bar__tabs {
-  overflow-y: hidden;
 }

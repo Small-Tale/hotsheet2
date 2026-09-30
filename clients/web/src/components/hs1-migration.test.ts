@@ -15,7 +15,12 @@ describe('HS1 migration presentation', () => {
     expect(css).toMatchSource(
       /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-layout-item-gap:var\(--kui-space-m\)[^}]*--kui-layout-item-padding:var\(--kui-space-xs\) var\(--kui-space-m\)/,
     );
-    expect(css).toMatchSource(/\.kui-state-banner__copy[^}]*gap:var\(--kui-space-2xs\)/);
+    expect(css).toMatchSource(
+      /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-state-banner-copy-gap:var\(--kui-space-2xs\)/,
+    );
+    expect(css).not.toContain('.kui-state-banner__copy {');
+    expect(css).not.toMatch(/\.kui-state-banner__action \{/);
+    expect(css).not.toContain('.kui-state-banner {');
     // The app strip wraps the Kerf StateBanner (KUI-L022): it owns the bottom rule and the grid
     // that stretches the banner; the banner root carries no app class.
     expect(css).toMatchSource(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*display:grid/);
@@ -83,6 +88,8 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('<div class="hs1-cleanup-banner"><section class="kui-state-banner"');
     expect(markup).toContain('data-tone="success"');
     expect(markup).toContain('safely backed up');
+    // Kerf stacks the copy and places the actions below it (beta.60 props) instead of app grid rules.
+    expect(markup).toContain('data-copy-layout="stacked" data-action-placement="below"');
     expect(markup).toContain('class="kui-state-banner__action"><div class="hs1-cleanup-banner__actions"');
     expect(markup).toContain('data-action="remove-hs1-data"');
     expect(markup).toContain('data-action="dismiss-hs1-cleanup"');

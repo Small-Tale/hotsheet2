@@ -99,6 +99,7 @@ export function Hs1MigrationBanner({ databasePath }: { databasePath: string }) {
         detail={databasePath}
         tone="info"
         urgency="status"
+        copyLayout="stacked"
         icon={<LucideIcon icon={Database} name="database" />}
         action={
           <button type="button" data-action="open-hs1-migration">
@@ -117,6 +118,8 @@ export function Hs1CleanupBanner() {
         detail="The old local Hot Sheet 1 files can now be removed."
         tone="success"
         urgency="status"
+        copyLayout="stacked"
+        actionPlacement="below"
         icon={<LucideIcon icon={Trash2} name="trash-2" />}
         action={
           <div class="hs1-cleanup-banner__actions">
@@ -173,6 +176,7 @@ export function Hs1JobBanner({
         }
         tone={failed ? 'warning' : running ? 'info' : 'success'}
         urgency="status"
+        copyLayout="stacked"
         icon={<LucideIcon icon={ArchiveRestore} name="archive-restore" />}
         action={
           <div class="hs1-cleanup-banner__actions">

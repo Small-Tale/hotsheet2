@@ -19,25 +19,17 @@
   overflow: hidden;
   flex-direction: column;
 }
-.terminal-ticket-rail__project .kui-toolbar__leading {
-  min-width: 0;
-}
-.terminal-ticket-rail__project .kui-toolbar__trailing {
-  justify-self: end;
-}
-.terminal-ticket-rail__project .kui-select {
-  width: max-content;
-  max-width: 100%;
+/* Kerf beta.60 public tokens: the close control hugs the trailing edge and the project Select's
+   selected name reads at body size in the normal text color. */
+.terminal-ticket-rail__project {
+  --kui-toolbar-trailing-justify-self: end;
+  --kui-select-selected-color: var(--wa-color-neutral-on-normal);
+  --kui-select-selected-font-size: var(--wa-font-size-m);
 }
 /* The rail chrome clips overflow on several ancestors; inset the select focus ring so an
    overflow:hidden ancestor can never crop it (HS2-HEYASQ). */
 .terminal-ticket-rail .kui-select::part(combobox) {
   outline-offset: -3px;
-}
-.terminal-ticket-rail__project .kui-select__custom-selected {
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-m);
-  white-space: nowrap;
 }
 /* The rail's controls Toolbar stacks its trailing zone (the rail is always narrower than Kerf's
    `narrow` breakpoint) and wraps at group granularity: the view switcher fills the first row; sort,
@@ -64,6 +56,9 @@
   font-size: var(--wa-font-size-l);
 }
 .terminal-ticket-rail__view {
+  --kui-select-selected-color: var(--wa-color-neutral-on-normal);
+  --kui-select-selected-font-size: var(--wa-font-size-l);
+  --kui-select-selected-font-weight: var(--wa-font-weight-bold);
   display: flex;
   width: max-content;
   max-width: remify(192px);
@@ -75,12 +70,6 @@
 .terminal-ticket-rail__view .kui-select::part(expand-icon) {
   position: absolute;
   inset-inline-end: remify(2.4px);
-}
-.terminal-ticket-rail__view .kui-select__custom-selected {
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-l);
-  font-weight: var(--wa-font-weight-bold);
-  white-space: nowrap;
 }
 .terminal-ticket-rail .quick-ticket-composer__launcher {
   min-height: remify(36px);
@@ -118,6 +107,8 @@
   border-radius: 0;
   box-shadow: none;
 }
+/* The rail centers the ticket number on the rail, not on the free space beside its actions; Kerf's
+   Toolbar has no balanced-zone option yet (KF request filed with HS2-PKPGGZ), so these four rules stay. */
 .terminal-ticket-rail__inspector .ticket-inspector__header > .kui-toolbar {
   grid-template-columns: 1fr auto 1fr;
 }

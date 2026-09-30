@@ -44,8 +44,11 @@ describe('TicketInspector', () => {
           `data-inspector-tab="${tab}"[^>]*data-component="app-tab"[^>]*data-tab-id="${tab}"[^>]*data-selected="true"`,
         ),
       );
-      expect(markup).toContain(
-        `role="tab" aria-selected="true" data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,
+      // Icon-only tabs keep their name as the accessible name (Kerf beta.60 presentation).
+      expect(markup).toMatch(
+        new RegExp(
+          `role="tab" aria-selected="true" aria-label="[^"]+"[^>]*data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,
+        ),
       );
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
@@ -278,14 +281,16 @@ describe('TicketInspector', () => {
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-    expect(panelCss).toContainSource('.ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }');
+    // Category and Priority fill their grid cells through Kerf's trigger width prop (HS2-PKPGGZ).
+    expect(panelCss).not.toContain('.kui-select');
+    expect(markup).toContain('data-trigger-width="fill"');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatchSource(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatchSource(
       /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/,
     );
     expect(inspectorCss).toContainSource(
-      '@container (max-width: remify(832px)) { .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
+      '@container (max-width: remify(832px)) { .ticket-inspector--reader .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
     );
   });
 
@@ -300,12 +305,15 @@ describe('TicketInspector', () => {
     expect(inspectorCss).not.toMatch(/\.ticket-inspector__tabs \{[^}]*margin/);
     expect(markup).toMatch(/class="ticket-inspector__tabs-frame"><nav class="kui-tab-bar ticket-inspector__tabs"/);
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
-    expect(markup).toMatch(/data-inspector-tab="info"[^>]*data-presentation="segmented"[^>]*data-size="compact"/);
+    expect(markup).toMatch(/data-inspector-tab="info"[^>]*data-presentation="icon-only"[^>]*data-size="compact"/);
+    expect(String(TicketInspector({ ...base, presentation: 'reader' }))).toMatch(
+      /data-inspector-tab="info"[^>]*data-presentation="segmented"[^>]*data-size="compact"/,
+    );
     // The tabs are configured through AppTab props and the tab strip; no app class sits on the tab root.
     expect(markup).not.toContain('ticket-inspector__tab"');
-    expect(inspectorCss).toMatch(
-      /\.ticket-inspector__tabs \.kui-app-tab__select \{[^}]*flex: 1;[^}]*justify-content: center/,
-    );
+    // Fill allocation centers each tab; the icon-to-name gap is the public layout token.
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs-frame \{[^}]*--kui-layout-item-gap: var\(--kui-space-2xs\)/);
+    expect(inspectorCss).not.toMatch(/\.kui-app-tab__select \{/);
     expect(panelCss).toMatch(
       /\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
     );

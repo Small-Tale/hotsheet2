@@ -272,11 +272,21 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   }
   window.addEventListener('pointerup', finishAppRegionResize);
   window.addEventListener('pointercancel', finishAppRegionResize);
+  // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
+  // (project tabs, the composer) keep the app attribute only.
+  function markDragTarget(target: HTMLElement) {
+    target.dataset.draggingTicket = 'true';
+    if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
+  }
+  function clearDragTarget(target: HTMLElement) {
+    delete target.dataset.draggingTicket;
+    if (target.dataset.state === 'drag-target') delete target.dataset.state;
+  }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
-    document
-      .querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]')
-      .forEach((target) => delete target.dataset.draggingTicket);
+    document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
+      clearDragTarget(target);
+    });
   }
   delegate(document.body, 'dragstart', '[data-action="select-ticket-row"]', (event, target) => {
     const source = project(),
@@ -300,7 +310,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       const destinationProject = data(target).ticketDropProject;
       if (destinationProject === drag.source.id) return;
       event.preventDefault();
-      (target as HTMLElement).dataset.draggingTicket = 'true';
+      markDragTarget(target as HTMLElement);
       if ((event as DragEvent).dataTransfer)
         (event as DragEvent).dataTransfer!.dropEffect =
           destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
@@ -311,7 +321,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     'dragleave',
     '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
     (_event, target) => {
-      delete (target as HTMLElement).dataset.draggingTicket;
+      clearDragTarget(target as HTMLElement);
     },
   );
   delegate(document.body, 'drop', '[data-ticket-drop-status]', (event, target) => {

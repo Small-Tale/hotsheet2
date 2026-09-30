@@ -46,7 +46,8 @@ describe('AttachmentGallery', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/\.attachment-gallery__toolbar \{[^}]*padding:/);
-    expect(css).toMatchSource(/__toolbar \.kui-toolbar__trailing \{ gap: var\(--kui-space-m\)/);
+    expect(css).toMatchSource(/__toolbar \{ --kui-toolbar-trailing-gap: var\(--kui-space-m\)/);
+    expect(css).not.toContain('.kui-toolbar__trailing');
     expect(css).toMatch(/__canvas \{[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatchSource(
       /__footer \{[^}]*padding:var\(--kui-space-xs\) var\(--kui-space-m\) var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/,

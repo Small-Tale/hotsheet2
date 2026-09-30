@@ -33,12 +33,12 @@ function DuplicateTicketItem({
       itemId={id}
       icon={<LucideIcon icon={CopyX} name="copy-x" />}
       label={
-        <>
+        <span class="ticket-duplicate-backlinks__copy">
           <strong>
             {projectName} · {slug}
           </strong>
           <span>{title}</span>
-        </>
+        </span>
       }
       accessibleLabel={accessibleLabel}
       multiline

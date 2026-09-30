@@ -30,17 +30,18 @@ describe('application shell components', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
     expect(css).not.toContain('data-transitioning');
-    expect(css).toContainSource('.app-shell__terminal-drawer-restore.kui-floating-toolbar { position: static; }');
-    expect(css).toContainSource(
-      ".app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] { position: absolute; }",
-    );
+    // Kerf beta.60 owns the restore corner and the inline restore control; the shell only hands its
+    // regions their surface and focus-mode popup layer through public tokens (HS2-PKPGGZ).
+    expect(css).not.toContain('.kui-floating-toolbar');
+    expect(css).not.toMatch(/\.kui-resizable-region[^{]*\{[^}]*(background|z-index|overflow):/);
+    expect(css).toContainSource('.app-shell { --kui-resizable-region-background: var(--wa-color-surface-default); }');
+    expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-resizable-region-popup-z: 200; }");
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
-    expect(mobileSidePanelCss).toMatchSource(
-      /data-presentation="overlay"\]\[data-axis="horizontal"\] \{ max-height: 100dvh;/,
-    );
+    // Kerf caps only an overlay's resizable axis, so a side overlay already spans the full height.
+    expect(mobileSidePanelCss).not.toContain('max-height');
     // Safe-area insets live inside the scroll owners, never on a container that would shorten them
     // (HS2-4A29RR): the sidebar Pane owns its own; the inspector's header and scroller carry theirs.
     expect(mobileSidePanelCss).not.toContain('.project-sidebar {');
@@ -122,11 +123,9 @@ describe('application shell components', () => {
     );
     expect(css).not.toContain('--kui-resizable-region-separator-color');
   });
-  it('keeps inspector-sidebar tabs icon-only independently of the reader width', () => {
+  it('leaves the inspector-sidebar tab presentation to AppTab (HS2-PKPGGZ)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    expect(css).toContainSource(
-      '.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }',
-    );
+    expect(css).not.toContain('.kui-app-tab__name');
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
@@ -299,8 +298,9 @@ describe('application shell components', () => {
     );
     expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
     expect(barCss).toMatch(
-      /\.project-tab-bar \.kui-tab-bar__tabs \{[^}]*margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*padding: var\(--kui-space-2xs\);/,
+      /\.project-tab-bar \{[^}]*--kui-tab-bar-strip-margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*--kui-tab-bar-strip-padding: var\(--kui-space-2xs\);/,
     );
+    expect(barCss).not.toContain('.kui-tab-bar__tabs');
     // Kerf's adjacent placement keeps the trailing Add-project (+) beside the tabs rather than
     // sitting far-right (HS2-HV52WR).
     expect(
@@ -345,7 +345,7 @@ describe('application shell components', () => {
       /project-tab-bar__actions[^]*data-action="choose-project"[^]*project-tab-bar__workspace-action">new-ticket/,
     );
     const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/\.project-tab-bar \.kui-tab-bar__trailing,[^{]*\{[^}]*flex: 1 0 auto;/);
+    expect(css).toMatch(/\.project-tab-bar \{[^}]*--kui-tab-bar-trailing-flex: 1 0 auto;/);
     expect(css).toMatch(/\.project-tab-bar__workspace-action \{[^}]*margin-inline-start: auto;/);
     const mobile = String(
       ProjectTabBar({
@@ -483,9 +483,9 @@ describe('application shell components', () => {
     expect(collapsed).toContain('data-collapsed="true"');
     expect(collapsed).toContain('data-region-restore="app-terminal-drawer"');
     expect(collapsed).toContain('data-position="bottom-end"');
-    expect(collapsed).toContain('class="kui-floating-toolbar app-shell__terminal-drawer-restore"');
+    // The restore control sits in Kerf's corner in normal flow (placement="inline"); no app class.
     expect(collapsed).toContain(
-      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Terminal drawer controls"',
+      'class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end" data-placement="inline" role="toolbar" aria-label="Terminal drawer controls"',
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
     expect(collapsed).toContain('data-tone="default"');

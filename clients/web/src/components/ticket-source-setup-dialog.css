@@ -59,56 +59,23 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   background: var(--wa-color-surface-default);
   grid-auto-rows: max-content;
 }
-.ticket-source-setup__options .kui-list-item {
-  position: relative;
-  min-height: remify(68px);
-  padding: var(--wa-space-s);
-  border-radius: 0;
-  grid-template-columns: var(--wa-space-l) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--wa-space-s);
-}
-.ticket-source-setup__options .kui-list-item[data-action='create-project-git-source-custom'] {
-  min-height: remify(84px);
-}
-.ticket-source-setup__options .kui-list-item + .kui-list-item::before {
-  position: absolute;
-  top: 0;
-  right: var(--wa-space-s);
-  left: var(--wa-space-s);
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  content: '';
-}
-.ticket-source-setup__options .kui-list-item:hover {
-  color: var(--wa-color-brand-on-normal);
-  background: var(--wa-color-brand-fill-quiet);
-}
-.ticket-source-setup__options .kui-list-item__icon {
-  width: var(--wa-space-l);
-  height: var(--wa-space-l);
-  color: var(--wa-color-brand-on-quiet);
-  align-self: center;
-}
-.ticket-source-setup__options .kui-list-item[data-multiline='true'] .kui-list-item__icon {
-  margin-block-start: 0;
-  align-self: center;
-}
-.ticket-source-setup__options .kui-list-item__icon svg {
-  width: var(--wa-space-l);
-  height: var(--wa-space-l);
-}
-.ticket-source-setup__options .kui-list-item__trailing {
-  align-self: center;
-  color: var(--wa-color-neutral-on-quiet);
+/* Tall padded option rows with a large centered icon, quiet disclosure, brand hover fill, square
+   corners, and Kerf group dividers between rows (Kerf beta.60 public ListItem tokens, KF-8SD2EP). */
+.ticket-source-setup__options {
+  --kui-layout-inline-margin: 0;
+  --kui-list-item-min-height: remify(68px);
+  --kui-list-item-padding-block: var(--wa-space-s);
+  --kui-list-item-padding-inline: var(--wa-space-s);
+  --kui-list-item-radius: 0;
+  --kui-list-item-icon-size: var(--wa-space-l);
+  --kui-list-item-icon-color: var(--wa-color-brand-on-quiet);
+  --kui-list-item-gap: var(--wa-space-s);
+  --kui-list-item-hover-background: var(--wa-color-brand-fill-quiet);
+  --kui-list-item-trailing-color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-source-setup__options .kui-list-item__trailing svg {
   width: var(--wa-space-m);
   height: var(--wa-space-m);
-}
-.ticket-source-setup__options .kui-list-item__label {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
 }
 .ticket-source-setup__option-copy {
   display: grid;

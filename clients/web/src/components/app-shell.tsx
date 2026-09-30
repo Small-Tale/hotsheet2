@@ -194,11 +194,7 @@ export function AppShell({
             presentation="inline"
             restoreControl={
               !terminalDrawerTransitioning ? (
-                <FloatingToolbar
-                  label="Terminal drawer controls"
-                  position="bottom-end"
-                  className="app-shell__terminal-drawer-restore"
-                >
+                <FloatingToolbar label="Terminal drawer controls" position="bottom-end" placement="inline">
                   <ToolbarControlGroup single>
                     <button
                       type="button"

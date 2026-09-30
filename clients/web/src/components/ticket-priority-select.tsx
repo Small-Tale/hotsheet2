@@ -66,6 +66,7 @@ export function TicketPrioritySelect({
       choices={PRIORITIES}
       disabled={disabled}
       placeholder={placeholder}
+      triggerWidth="fill"
     />
   );
 }

@@ -12,8 +12,8 @@
   margin: 0;
   line-height: 1.5;
 }
-.connection-details-dialog__metadata > .kui-value-table__row {
-  grid-template-columns: minmax(remify(160px), auto) minmax(0, 1fr);
+.connection-details-dialog__metadata {
+  --kui-value-table-row-columns: minmax(remify(160px), auto) minmax(0, 1fr);
 }
 .connection-details-dialog__metadata code {
   font-size: var(--wa-font-size-xs);
@@ -29,10 +29,10 @@
   margin: 0;
 }
 @media (max-width: remify(512px)) {
-  .connection-details-dialog .connection-details-dialog__metadata > .kui-value-table__row {
-    padding-block: var(--kui-space-xs);
-    grid-template-columns: 1fr;
-    gap: var(--kui-space-2xs);
+  .connection-details-dialog .connection-details-dialog__metadata {
+    --kui-value-table-row-columns: 1fr;
+    --kui-value-table-row-gap: var(--kui-space-2xs);
+    --kui-value-table-row-padding-block: var(--kui-space-xs);
   }
   .connection-details-dialog .connection-details-dialog__metadata dd {
     justify-content: flex-start;

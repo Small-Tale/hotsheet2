@@ -141,7 +141,7 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
     document.documentElement.style.setProperty(['--kui', 'safe-area-block-end'].join('-'), '48px');
   });
   const restore = page.getByRole('button', { name: 'Show terminal drawer' }),
-    restoreToolbar = page.locator('.app-shell__terminal-drawer-restore');
+    restoreToolbar = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
   await expect(restore).toBeVisible();
   const rootGeometry = await page.evaluate(() => ({
     innerHeight,

@@ -10,10 +10,6 @@
 .project-tab {
   --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet);
 }
-.project-tab .kui-app-tab__name {
-  overflow: visible;
-  text-overflow: clip;
-}
 .project-tab__busy {
   display: grid;
   width: remify(16px);

@@ -1,15 +1,9 @@
 .repository-summary {
+  /* Kerf beta.60 per-part tokens tint the icon and weight the label (KF-8SD2EP); the branch name
+     itself is app markup and carries the brand color. */
+  --kui-list-item-icon-color: var(--wa-color-brand-on-quiet);
+  --kui-list-item-label-weight: 650;
   color: var(--wa-color-neutral-on-normal);
-}
-/* ListItem defines --kui-list-item-color on its own root, so an ancestor cannot retint it and no
-   prop exists yet; the brand tint stays an app rule until Kerf ships per-part color props (KF-8SD2EP). */
-.repository-summary .kui-list-item__icon,
-.repository-summary .kui-list-item__label {
-  color: var(--wa-color-brand-on-quiet);
-}
-.repository-summary .kui-list-item__label {
-  overflow: hidden;
-  font-weight: 650;
 }
 .repository-summary__metric {
   display: inline-flex;
@@ -19,6 +13,7 @@
 }
 .repository-summary__branch-name {
   min-width: 0;
+  color: var(--wa-color-brand-on-quiet);
   overflow: hidden;
   direction: rtl;
   text-align: left;
@@ -36,8 +31,10 @@
   color: var(--wa-color-neutral-on-quiet);
   background: var(--wa-color-neutral-border-quiet);
 }
-.repository-summary[data-state='conflicted'] .kui-list-item__icon,
-.repository-summary[data-state='error'] .kui-list-item__icon,
+.repository-summary[data-state='conflicted'],
+.repository-summary[data-state='error'] {
+  --kui-list-item-icon-color: var(--wa-color-danger-on-quiet);
+}
 .repository-summary__metric--error {
   color: var(--wa-color-danger-on-quiet);
 }

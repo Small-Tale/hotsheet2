@@ -387,8 +387,9 @@ describe('WorkspaceHeader', () => {
       /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__sort-group .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
+      '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); border-radius: var(--wa-border-radius-pill); }',
     );
+    expect(headerCss).not.toContain('.kui-select__custom-selected');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
     // The terminal rail's `--rail` groups are excluded: that toolbar wraps them onto rows instead of
     // yielding them to the menu (HS2-K9KWJJ).

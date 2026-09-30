@@ -48,6 +48,7 @@ export function TicketCategorySelect({
       choices={typedChoices}
       disabled={disabled}
       placeholder={placeholder}
+      triggerWidth="fill"
     />
   );
 }

@@ -5,9 +5,6 @@
    scroll padding), so the last item can always be scrolled clear of the home indicator (HS2-4A29RR).
    The project sidebar is a Kerf Pane, which already does exactly that for its header, scrolling
    content, and footer, so the app adds nothing there. */
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-presentation='overlay'][data-axis='horizontal'] {
-  max-height: 100dvh;
-}
 .app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
   min-height: 0;
   padding-inline-end: var(--hotsheet-safe-area-right);

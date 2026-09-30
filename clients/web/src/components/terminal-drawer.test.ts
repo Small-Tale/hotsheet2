@@ -55,19 +55,21 @@ describe('TerminalDrawer', () => {
   it('uses the Kerf spacing scale for the rail, content, and terminal inset', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    // The drawer's TabBar pads by its public gap token; the app wrapper adds the remaining inline inset.
+    // The drawer's TabBar pads by its public gap and strip tokens; the app wrapper adds the remaining
+    // inline inset so the tabs keep the xs inset.
     expect(css).toMatch(
-      /\.terminal-drawer__views \{[^}]*--kui-toolbar-gap: var\(--kui-space-xs\);[^}]*padding-inline: var\(--kui-space-xs\)/,
+      /\.terminal-drawer__views \{[^}]*--kui-toolbar-gap: var\(--kui-space-xs\);[^}]*padding-inline: var\(--kui-space-2xs\)/,
     );
     expect(css).toContain('padding-top: var(--kui-space-xs)');
     expect(css).toMatch(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
   });
   it('reserves a complete gutter for focus rings and selected-tab shadows inside the shared scroller', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8'),
-      rule = css.match(/\.terminal-drawer__views \.kui-tab-bar__tabs \{([^}]+)\}/)?.[1] ?? '';
+      rule = css.match(/\.terminal-drawer__views \{([^}]+)\}/)?.[1] ?? '';
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
-    expect(rule).toContain('padding: var(--kui-space-2xs)');
-    expect(rule).toContain('margin: calc(var(--kui-space-2xs) * -1)');
+    expect(rule).toContain('--kui-tab-bar-strip-padding: var(--kui-space-2xs)');
+    expect(rule).toContain('--kui-tab-bar-strip-margin-block: calc(var(--kui-space-2xs) * -1)');
+    expect(css).not.toContain('.kui-tab-bar__tabs');
   });
   it('sizes terminal names from their content instead of reserving icon-width name space', () => {
     const markup = render();

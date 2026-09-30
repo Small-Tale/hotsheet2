@@ -43,11 +43,12 @@ export function TicketSourcesSettings({
         {providerConnections.length > 0 && (
           <div class="ticket-provider-settings__connections">
             <List>
-              {providerConnections.map((connection) => (
+              {providerConnections.map((connection, index) => (
                 <ListItem
                   action="edit-provider-connection"
                   itemId={connection.id}
                   multiline
+                  divider={index > 0 ? 'before' : 'none'}
                   accessibleLabel={`Edit ${connection.name ?? connection.id}`}
                   icon={<LucideIcon icon={Cable} name="cable" />}
                   trailing={<LucideIcon icon={ChevronRight} name="chevron-right" />}

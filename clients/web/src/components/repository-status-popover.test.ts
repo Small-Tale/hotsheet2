@@ -149,8 +149,10 @@ describe('RepositoryStatusPopover', () => {
     expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-l\)/);
     expect(css).toMatch(/__navigation \{[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatchSource(/__values \+ \.repository-status-popover__values \{ margin-top: var\(--kui-space-m\)/);
-    expect(css).toMatchSource(/nav \{ display: grid; gap: var\(--kui-space-none\)/);
-    expect(css).toMatchSource(/nav > \.kui-list-header \{ margin-bottom: var\(--kui-space-2xs\)/);
+    // The nav spaces its header from the app-owned views wrapper; no margin on Kerf's ListHeader.
+    expect(css).toMatchSource(/nav \{ display: grid; row-gap: var\(--kui-space-2xs\)/);
+    expect(css).toMatchSource(/__views \{ display: grid/);
+    expect(css).not.toContain('.kui-list-header');
     expect(css).toMatch(
       /__context-menu button \{[^}]*padding: 0 var\(--kui-space-m\);[^}]*grid-template-columns: remify\(16px\)[^}]*gap: var\(--kui-space-xs\)/,
     );

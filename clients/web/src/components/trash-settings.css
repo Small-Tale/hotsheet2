@@ -1,12 +1,6 @@
 .trash-settings {
   max-width: remify(544px);
 }
-.trash-settings .kui-text {
-  margin: 0;
-}
-.trash-settings header .kui-text[data-tone='quiet'] {
-  line-height: 1.5;
-}
 .trash-settings__field {
   max-width: remify(256px);
 }

@@ -556,9 +556,11 @@ test('represents the shared repository-status composition in the UX catalog', as
       values = [...node.querySelectorAll<HTMLElement>('.repository-status-popover__values')],
       nav = node.querySelector<HTMLElement>('nav')!,
       header = nav.querySelector<HTMLElement>('[data-component="list-header"]')!.getBoundingClientRect(),
-      items = [...nav.querySelectorAll<HTMLElement>(':scope > [data-component="list-item"]')].map((item) =>
-        item.getBoundingClientRect(),
-      );
+      items = [
+        ...nav.querySelectorAll<HTMLElement>(
+          ':scope > .repository-status-popover__views > [data-component="list-item"]',
+        ),
+      ].map((item) => item.getBoundingClientRect());
     return {
       asidePadding: getComputedStyle(aside).padding,
       detailPadding: getComputedStyle(detail).padding,
@@ -4628,8 +4630,9 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   expect(Math.max(...animatedCenters.map(([, y]) => y)) - Math.min(...animatedCenters.map(([, y]) => y))).toBeLessThan(
     0.1,
   );
+  // Kerf's max-content tabs never truncate a project name; the strip scrolls instead.
   for (const name of await tabBar.locator('.kui-app-tab__name').all()) {
-    await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
+    expect(await name.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   }
   await page.setViewportSize({ width: 760, height: 900 });
   const overflowState = await tabBar.evaluate((node) => {
@@ -5799,11 +5802,11 @@ test('ticket source connection rows hover flush with their card edge (HS2-KZP94T
     expect(cardBox.x + cardBox.width - (rowBox.x + rowBox.width)).toBeCloseTo(1, 0);
     const hovered = await rows.first().evaluate((node) => {
       const style = getComputedStyle(node);
-      return { left: style.borderLeftWidth, right: style.borderRightWidth, background: style.backgroundColor };
+      return { left: style.borderLeftColor, right: style.borderRightColor, background: style.backgroundColor };
     });
-    // No per-row hover outline doubling the card border; the hover fill still shows.
-    expect(hovered.left).toBe('0px');
-    expect(hovered.right).toBe('0px');
+    // No visible per-row hover outline doubling the card border; the hover fill still shows.
+    expect(hovered.left).toBe('rgba(0, 0, 0, 0)');
+    expect(hovered.right).toBe('rgba(0, 0, 0, 0)');
     expect(hovered.background).not.toBe('rgba(0, 0, 0, 0)');
     await expect(rows.nth(1)).toHaveCSS('border-top-width', '1px');
   }

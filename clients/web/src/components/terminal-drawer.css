@@ -104,20 +104,16 @@
 .terminal-drawer__views {
   --kui-toolbar-group-size: remify(40px);
   --kui-toolbar-gap: var(--kui-space-xs);
+  /* The strip keeps a 2xs inset (cancelled by a negative block margin) so focus rings are not clipped,
+     grows with the tabs, and shrink-wraps them; all through Kerf's public strip tokens. */
+  --kui-tab-bar-strip-min-height: var(--kui-toolbar-group-size);
+  --kui-tab-bar-strip-margin-block: calc(var(--kui-space-2xs) * -1);
+  --kui-tab-bar-strip-padding: var(--kui-space-2xs);
+  --kui-tab-bar-strip-flex: 0 1 auto;
+  --kui-tab-bar-strip-gap: var(--kui-space-xs);
   display: grid;
-  padding-inline: var(--kui-space-xs);
-}
-.terminal-drawer__views .kui-tab-bar__tabs {
-  /* overflow-x: auto alone computes overflow-y to auto, so the few pixels the focus-ring inset adds let the
-     strip scroll vertically on touch; tab strips only scroll horizontally (HS2-QG4K9W). */
-  overflow-y: hidden;
-  /* Grow with the tabs (for example under larger platform text) instead of clipping them. */
-  height: auto;
-  min-height: var(--kui-toolbar-group-size);
-  margin: calc(var(--kui-space-2xs) * -1);
-  padding: var(--kui-space-2xs);
-  flex: 0 1 auto;
-  gap: var(--kui-space-xs);
+  /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
+  padding-inline: var(--kui-space-2xs);
 }
 .terminal-drawer__grid-tab {
   position: sticky;
@@ -182,9 +178,4 @@
 }
 .terminal-session .xterm {
   background: var(--hs-terminal-background);
-}
-@media (max-width: remify(768px)) {
-  .terminal-drawer__rail .terminal-tab .kui-app-tab__name {
-    max-width: remify(112px);
-  }
 }

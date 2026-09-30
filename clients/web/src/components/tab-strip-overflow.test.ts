@@ -5,25 +5,21 @@ import { describe, expect, it } from 'vitest';
 
 import { sourceTokens } from '../source-format-matchers';
 
-// Kerf's TabBar strip sets only overflow-x: auto, which computes overflow-y to auto; every consumer strip
-// must clamp the vertical axis so tabs never scroll vertically (HS2-QG4K9W).
-const strips = [
-  ['terminal-drawer.css', '.terminal-drawer__views .kui-tab-bar__tabs'],
-  ['project-tab-bar.css', '.project-tab-bar .kui-tab-bar__tabs'],
-  ['ticket-inspector.css', '.ticket-inspector__tabs .kui-tab-bar__tabs'],
-] as const;
+// Kerf beta.60's TabBar clamps its strip's block axis itself (`--kui-tab-bar-strip-overflow-block`
+// defaults to hidden), so no consumer strip needs an app rule on `.kui-tab-bar__tabs` (HS2-QG4K9W,
+// HS2-PKPGGZ).
+const strips = ['terminal-drawer.css', 'project-tab-bar.css', 'ticket-inspector.css'] as const;
 
 describe('tab strip overflow', () => {
-  it.each(strips)('%s clamps vertical scrolling on its TabBar strip', (file, selector) => {
-    const css = sourceTokens(readFileSync(resolve(import.meta.dirname, file), 'utf8')),
-      rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, head]) => head.endsWith(sourceTokens(selector)));
-    expect(rules.some(([, , body]) => body.includes('overflow-y:hidden'))).toBe(true);
+  it.each(strips)('%s leaves the TabBar strip axis clamp to Kerf', (file) => {
+    const css = readFileSync(resolve(import.meta.dirname, file), 'utf8');
+    expect(css).not.toContain('.kui-tab-bar__tabs');
   });
 
-  it('lets the drawer strip grow with its tabs instead of clipping them', () => {
+  it('lets the drawer strip grow with its tabs through the public strip tokens', () => {
     const css = sourceTokens(readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8')),
-      body = css.match(/\.terminal-drawer__views\.kui-tab-bar__tabs\{([^}]*)\}/)?.[1] ?? '';
-    expect(body).toContain('height:auto');
-    expect(body).toContain('min-height:var(--kui-toolbar-group-size)');
+      body = css.match(/\.terminal-drawer__views\{([^}]*)\}/)?.[1] ?? '';
+    expect(body).toContain('--kui-tab-bar-strip-min-height:var(--kui-toolbar-group-size)');
+    expect(body).toContain('--kui-tab-bar-strip-flex:');
   });
 });

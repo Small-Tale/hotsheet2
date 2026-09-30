@@ -48,9 +48,14 @@ describe('ConnectionDetailsDialog', () => {
     expect(css).not.toContain('__footer');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/__body \{[^}]*gap: var\(--kui-space-l\);[^}]*padding: var\(--kui-space-l\)/);
+    // Row geometry flows through Kerf's public ValueTable tokens (HS2-PKPGGZ).
     expect(css).toMatch(
-      /__metadata > \.kui-value-table__row \{[^}]*padding-block: var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
+      /__metadata \{[^}]*--kui-value-table-row-columns: minmax\(remify\(160px\), auto\) minmax\(0, 1fr\)/,
     );
+    expect(css).toMatch(
+      /__metadata \{[^}]*--kui-value-table-row-columns: 1fr;[^}]*--kui-value-table-row-gap: var\(--kui-space-2xs\);[^}]*--kui-value-table-row-padding-block: var\(--kui-space-xs\)/,
+    );
+    expect(css).not.toContain('.kui-value-table__row');
   });
 
   it('supports an embedded deterministic demo without changing production dismissal', () => {

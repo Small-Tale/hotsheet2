@@ -37,10 +37,10 @@
 }
 .repository-status-popover nav {
   display: grid;
-  gap: var(--kui-space-none);
+  row-gap: var(--kui-space-2xs);
 }
-.repository-status-popover nav > .kui-list-header {
-  margin-bottom: var(--kui-space-2xs);
+.repository-status-popover__views {
+  display: grid;
 }
 .repository-status-popover__detail {
   min-width: 0;

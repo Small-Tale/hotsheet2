@@ -23,8 +23,8 @@
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent);
   backdrop-filter: blur(remify(12px));
 }
-.attachment-gallery__toolbar .kui-toolbar__trailing {
-  gap: var(--kui-space-m);
+.attachment-gallery__toolbar {
+  --kui-toolbar-trailing-gap: var(--kui-space-m);
 }
 .attachment-gallery__toolbar .attachment-gallery__filename {
   max-width: min(remify(672px), 55vw);

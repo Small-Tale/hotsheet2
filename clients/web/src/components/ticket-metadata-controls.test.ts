@@ -18,11 +18,9 @@ describe('ticket metadata controls and inspector panels', () => {
       '.ticket-inspector__content .ticket-inspector__details-section { gap: calc(var(--kui-font-xs) * 0.5); }',
     );
     expect(css).toContainSource(
-      '.ticket-inspector__details-section > .kui-list-header, .ticket-inspector__details-section .kui-list-header__title { min-height: 0; }',
+      '.ticket-inspector__status-field, .ticket-inspector__details-section { --kui-list-header-min-height: 0; --kui-list-header-title-min-height: 0; --kui-list-header-title-padding-block: 0; --kui-list-header-border-width: 0; --kui-list-header-title-padding-inline: 1px; }',
     );
-    expect(css).toContainSource(
-      '.ticket-inspector__details-section .kui-list-header__title { padding-block: 0; border-block: 0; }',
-    );
+    expect(css).not.toMatch(/\.kui-list-header(__title)? \{/);
     for (const detailsMode of ['preview', 'write'] as const) {
       const markup = String(
         TicketInfoPanel({

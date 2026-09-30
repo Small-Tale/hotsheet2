@@ -28,19 +28,18 @@
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-m);
   padding: var(--kui-space-2xs);
+  /* Rows fill the bordered results box and align their icon to the first line (Kerf public tokens). */
+  --kui-layout-inline-margin: 0;
+  --kui-list-item-padding-block: var(--kui-space-xs);
+  --kui-list-item-align-items: start;
 }
-.ticket-close-dialog__results .kui-list-item {
-  width: 100%;
-  padding-block: var(--kui-space-xs);
-  align-items: start;
-}
-.ticket-close-dialog__results .kui-list-item__label {
+.ticket-close-dialog__candidate {
   display: grid;
   min-width: 0;
   line-height: 1.35;
   text-align: left;
 }
-.ticket-close-dialog__results .kui-list-item__label strong,
+.ticket-close-dialog__candidate strong,
 .ticket-close-dialog__selected strong {
   display: flex;
   min-width: 0;

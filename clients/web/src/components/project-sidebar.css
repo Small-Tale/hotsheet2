@@ -1,13 +1,6 @@
 /* Unpadded pane (kui-pane): the shell owns only card chrome; children own their
    8px inline inset. kerf ListItem/ListHeader self-inset via --kui-layout-inline-margin;
    ProjectSummary and the footer inset themselves since they are not menu rows. */
-/* Flex layout so a lone collapse control aligns to the 8px gutter; kerf's Toolbar grid
-   renders three cells and pushes a single trailing control ~16px in (HS2-V0ZH69). */
-.project-sidebar > .kui-pane__header > .kui-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
 .project-sidebar__content {
   display: grid;
   align-content: start;

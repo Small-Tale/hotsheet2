@@ -11,8 +11,9 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
-.app-shell > .kui-resizable-region {
-  background: var(--wa-color-surface-default);
+/* Kerf's inline regions are transparent; the shell hands them its surface through the public token. */
+.app-shell {
+  --kui-resizable-region-background: var(--wa-color-surface-default);
 }
 .app-shell__main {
   position: relative;
@@ -22,20 +23,10 @@
   flex: 1;
   flex-direction: column;
 }
-.app-shell__main > .kui-resizable-region {
-  background: var(--wa-color-surface-default);
-}
-.app-shell[data-terminal-focus-mode='true']
-  .app-shell__main
-  > .kui-resizable-region[data-region-id='app-terminal-drawer'] {
-  z-index: 200;
-  overflow: visible;
-}
-.app-shell__terminal-drawer-restore.kui-floating-toolbar {
-  position: static;
-}
-.app-shell__main > .kui-resizable-region__restore[data-region-restore='app-terminal-drawer'] {
-  position: absolute;
+/* Focus mode already lets the drawer's content escape (contentOverflow="visible"); raise Kerf's popup
+   layer so the magnified terminal paints above the rest of the shell. */
+.app-shell[data-terminal-focus-mode='true'] {
+  --kui-resizable-region-popup-z: 200;
 }
 .app-shell__main > .project-tab-bar {
   border-bottom: 0;
@@ -136,14 +127,6 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector__tabs .kui-app-tab__name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 @media (max-width: remify(672px)) {
   .app-shell__workspace {

@@ -321,7 +321,8 @@ export function TicketInspector({
               selected={activeTab === tab.id}
               closable={false}
               selectAction="set-inspector-tab"
-              presentation="segmented"
+              // Sidebar and rail inspectors are too narrow for names; icon-only keeps `name` accessible.
+              presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
               size="compact"
               rootAttributes={{ 'data-inspector-tab': tab.id }}
               leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}

@@ -1914,11 +1914,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, and HS2-AT4AAA is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, HS2-AT4AAA, and HS2-PKPGGZ is:
 
 | Severity | Exact diagnostic budgets                                              |
 | -------- | --------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 78; `KUI-L022` 3; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 10; `KUI-L022` 3; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                              |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
@@ -1938,7 +1938,29 @@ identity once the toolbar is narrower than Kerf's `narrow` breakpoint, so the ap
 grid rules are gone) and `ProjectTab` passes Kerf's `attention` prop, tinting the name through
 the public `--kui-app-tab-attention-color` token (78). `HS2-PKPGGZ` adopts the rest. The
 FloatingToolbar parent gap (`HS2-10KEHN`) persists in beta.60, so the doctor adapter accepts
-that version too.
+that version too. HS2-PKPGGZ then adopted the rest of beta.60 and took `KUI-L019` from 78 to 10:
+region surfaces and the focus-mode popup layer are `--kui-resizable-region-background` /
+`--kui-resizable-region-popup-z` tokens, the drawer restore control is a `placement="inline"`
+FloatingToolbar in Kerf's own corner, sidebar and rail inspector tabs use AppTab's `icon-only`
+presentation (fill allocation centers them; the icon gap is `--kui-layout-item-gap`), the project
+and drawer tab strips configure their inset, chrome, and growth through the `--kui-tab-bar-strip-*`
+and `--kui-tab-bar-trailing-flex` tokens, Selects size and style their selected content through
+`triggerWidth` and the `--kui-select-selected-*` tokens, list rows and headers use `density`,
+`divider`, `multilineIconAlign`, `actionDisabled`, Kerf's `drag-target` state (set by the drag
+handler), and the `--kui-list-item-*` / `--kui-list-header-*` geometry and color tokens (app copy
+inside a label lives in an app span such as `.ticket-close-dialog__candidate`), the HS1 banners use
+`copyLayout="stacked"` / `actionPlacement="below"` and `--kui-state-banner-copy-gap`, the
+connection details table uses the `--kui-value-table-row-*` tokens, the UX demo imports Kerf's
+document baseline for the app-root height chain, and the Text margin/line-height, toolbar zone,
+token-search editor, and overlay max-height rules were dead against beta.60's defaults. The ten
+remaining rules are the three Web Awesome ones above plus four residual gaps requested upstream:
+the terminal rail's inspector header keeps four rules that balance the Toolbar's leading and trailing
+tracks so the ticket number centers on the rail (`KF-R1TFTE`),
+the terminal drawer lets an open create PopupMenu escape the region through a CSS `:has([open])`
+rule because flipping `contentOverflow` would rerender the open menu (`KF-J55CGB`), the terminal
+rail heading needs a ToolbarText step at `--kui-font-l` between `large` and the page-title clamp
+(`KF-7JE0F2`), and the reader's tab names need a container-responsive icon-only presentation
+(`KF-6EPNA1`).
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers

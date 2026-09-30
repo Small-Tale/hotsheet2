@@ -1,7 +1,3 @@
 .manual-model-dialog {
   --width: min(remify(448px), calc(100vw - remify(32px)));
 }
-.manual-model-dialog__form > .kui-text {
-  margin: 0;
-  line-height: 1.45;
-}

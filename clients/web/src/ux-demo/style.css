@@ -12,18 +12,12 @@
   background: var(--wa-color-neutral-fill-quiet);
   font-synthesis: none;
 }
-* {
-  box-sizing: border-box;
-}
-html,
-body,
-.kui-app-root {
-  /* Kerf's Workbench-based Catalog needs a definite containing height. */
-  height: 100%;
-}
+/* Kerf's document baseline (imported in main.tsx) owns box sizing and the html → body → .kui-app-root
+   full-height chain the Workbench-based Catalog needs. */
 body {
   margin: 0;
   min-width: remify(832px);
+  background: var(--wa-color-neutral-fill-quiet);
 }
 body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
@@ -712,8 +706,8 @@ body[data-resizing-project-sidebar='true'] {
   height: remify(384px);
   flex-direction: column;
 }
-.resizable-region-demo .kui-resizable-region {
-  background: var(--wa-color-neutral-fill-quiet);
+.resizable-region-demo {
+  --kui-resizable-region-background: var(--wa-color-neutral-fill-quiet);
 }
 .resizable-region-demo__controls {
   display: flex;

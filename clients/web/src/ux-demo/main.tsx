@@ -19,6 +19,7 @@ import '@kerfjs/ui/floating-toolbar.css';
 import '@kerfjs/ui/tab-bar.css';
 import '@kerfjs/ui/select/register';
 import '@kerfjs/ui/popup-menu/register';
+import '@kerfjs/ui/document.css';
 import '../hot-sheet-tokens.css';
 import './style.css';
 

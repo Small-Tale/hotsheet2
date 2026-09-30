@@ -256,33 +256,35 @@ export function RepositoryStatusPopover({
             </div>
             <nav aria-label="Repository views">
               <ListHeader label="Views" />
-              {viewDefinitions.map((item) => (
-                <ListItem
-                  action="select-repository-view"
-                  itemId={item.id}
-                  selected={view === item.id}
-                  icon={
-                    <LucideIcon
-                      icon={item.icon}
-                      name={
-                        item.id === 'commits'
-                          ? 'git-commit-horizontal'
-                          : item.id === 'untracked'
-                            ? 'square-pen'
-                            : item.id === 'conflicted'
-                              ? 'square-x'
-                              : item.id === 'staged'
-                                ? 'square-plus'
-                                : 'square-minus'
-                      }
-                    />
-                  }
-                  label={item.label}
-                  trailing={
-                    <small class="repository-status-popover__count">{repositoryViewCount(status, item.id)}</small>
-                  }
-                />
-              ))}
+              <div class="repository-status-popover__views">
+                {viewDefinitions.map((item) => (
+                  <ListItem
+                    action="select-repository-view"
+                    itemId={item.id}
+                    selected={view === item.id}
+                    icon={
+                      <LucideIcon
+                        icon={item.icon}
+                        name={
+                          item.id === 'commits'
+                            ? 'git-commit-horizontal'
+                            : item.id === 'untracked'
+                              ? 'square-pen'
+                              : item.id === 'conflicted'
+                                ? 'square-x'
+                                : item.id === 'staged'
+                                  ? 'square-plus'
+                                  : 'square-minus'
+                        }
+                      />
+                    }
+                    label={item.label}
+                    trailing={
+                      <small class="repository-status-popover__count">{repositoryViewCount(status, item.id)}</small>
+                    }
+                  />
+                ))}
+              </div>
             </nav>
           </aside>
           <main class="repository-status-popover__detail" aria-live="polite">
@@ -450,20 +452,22 @@ export function ChangeEvidenceDialog({
         <aside class="repository-status-popover__navigation">
           <nav aria-label="Change evidence views">
             <ListHeader label="Views" />
-            {evidenceViews.map((item) => (
-              <ListItem
-                action="select-change-evidence-view"
-                itemId={item.id}
-                selected={view === item.id}
-                icon={<LucideIcon icon={item.icon} name={item.id} />}
-                label={item.label}
-                trailing={
-                  <small class="repository-status-popover__count">
-                    {files.filter((file) => file.category === item.id).length}
-                  </small>
-                }
-              />
-            ))}
+            <div class="repository-status-popover__views">
+              {evidenceViews.map((item) => (
+                <ListItem
+                  action="select-change-evidence-view"
+                  itemId={item.id}
+                  selected={view === item.id}
+                  icon={<LucideIcon icon={item.icon} name={item.id} />}
+                  label={item.label}
+                  trailing={
+                    <small class="repository-status-popover__count">
+                      {files.filter((file) => file.category === item.id).length}
+                    </small>
+                  }
+                />
+              ))}
+            </div>
           </nav>
         </aside>
         <main class="repository-status-popover__detail" aria-live="polite">

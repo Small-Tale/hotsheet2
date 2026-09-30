@@ -67,9 +67,9 @@
   --hs1-banner-border: var(--wa-color-brand-border-quiet);
   --kui-state-banner-foreground: var(--wa-color-brand-on-quiet);
 }
-.hs1-cleanup-banner .kui-state-banner__copy,
-.hs1-migration-banner .kui-state-banner__copy {
-  gap: var(--kui-space-2xs);
+.hs1-cleanup-banner,
+.hs1-migration-banner {
+  --kui-state-banner-copy-gap: var(--kui-space-2xs);
 }
 .hs1-cleanup-banner .kui-state-banner__action button,
 .hs1-migration-banner .kui-state-banner__action button {
@@ -78,21 +78,6 @@
 .hs1-cleanup-banner__actions {
   display: flex;
   gap: var(--kui-space-xs);
-}
-@media (max-width: remify(960px)) {
-  .hs1-cleanup-banner .kui-state-banner {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .hs1-cleanup-banner .kui-state-banner__copy {
-    display: grid;
-  }
-  .hs1-cleanup-banner .kui-state-banner__action {
-    grid-column: 2;
-    justify-self: start;
-  }
-  .hs1-cleanup-banner .kui-state-banner__copy span {
-    white-space: normal;
-  }
 }
 @media (max-width: remify(576px)) {
   .hs1-migration-dialog__destination {
@@ -117,10 +102,6 @@
   margin: var(--kui-space-xs) var(--kui-space-m);
   font-size: var(--wa-font-size-s);
   overflow-wrap: anywhere;
-}
-.hs1-job .kui-state-banner__copy {
-  display: grid;
-  gap: var(--kui-space-2xs);
 }
 .hs1-job .kui-state-banner__copy span {
   white-space: normal;

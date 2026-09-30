@@ -8,29 +8,24 @@
    variant is this same strip without a TabBar. */
 .project-tab-bar {
   --kui-toolbar-gap: var(--kui-space-2xs);
+  /* The strip keeps a 2xs inset (cancelled by a negative block margin so the bar height is unchanged)
+     so a focused/selected tab's pill focus ring and shadow are not clipped at the scrolling edges,
+     reserves the same scroll padding, and drops Kerf's track chrome; the trailing group grows so
+     Add-project sits right after the last tab (HS2-HV52WR, HS2-NE8JBS). Kerf beta.60 public tokens. */
+  --kui-tab-bar-strip-margin-block: calc(var(--kui-space-2xs) * -1);
+  --kui-tab-bar-strip-padding: var(--kui-space-2xs);
+  --kui-tab-bar-strip-scroll-padding-inline: var(--kui-space-2xs);
+  --kui-tab-bar-strip-border-width: 0;
+  --kui-tab-bar-strip-radius: 0;
+  --kui-tab-bar-strip-background: transparent;
+  --kui-tab-bar-strip-gap: var(--kui-space-2xs);
+  --kui-tab-bar-trailing-flex: 1 0 auto;
   display: grid;
   height: remify(60px);
   min-height: remify(60px);
   padding-inline: var(--kui-space-2xs);
   border-bottom: 1px solid var(--wa-color-surface-border);
   background: var(--wa-color-surface-lowered);
-}
-/* Don't let the tabs container grow to fill the strip (kerf defaults it to flex:1); shrink-wrap it so
-   the trailing Add-project (+) button sits immediately after the last tab instead of pushed to the far
-   right, while min-width:0 + overflow-x still let it shrink and scroll when tabs overflow (HS2-HV52WR). */
-.project-tab-bar .kui-tab-bar__tabs {
-  height: 100%;
-  /* Tab strips only scroll horizontally; overflow-x: auto alone would compute overflow-y to auto (HS2-QG4K9W). */
-  overflow-y: hidden;
-  margin-block: calc(var(--kui-space-2xs) * -1);
-  padding: var(--kui-space-2xs);
-  /* When the strip overflows, focus/selection scrolling stops at the tab's border edge; reserve the
-     same inset so the focus ring of a tab scrolled into view at either end is not clipped. */
-  scroll-padding-inline: var(--kui-space-2xs);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  gap: var(--kui-space-2xs);
 }
 .project-tab-bar__modes,
 .project-tab-bar__actions {
@@ -46,7 +41,6 @@
    remaining width so Add-project (+) sits right after the last tab while the workspace action
    (New ticket…) holds the far edge. When tabs overflow, the trailing group keeps its content width
    and the tabs shrink and scroll, bringing + beside the workspace action (HS2-NE8JBS). */
-.project-tab-bar .kui-tab-bar__trailing,
 .project-tab-bar > .kui-tab-bar .project-tab-bar__actions {
   flex: 1 0 auto;
 }

@@ -419,9 +419,9 @@ describe('ProjectSidebar component slice', () => {
     // Non-menu content children self-inset instead of leaning on the shell.
     expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.project-sidebar__footer-content \{[^}]*padding: var\(--kui-space-xs\)/);
-    // The collapse toolbar aligns its lone control to the gutter with flex, not the old negative-margin hack.
-    expect(css).toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/);
-    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
+    // Kerf's Toolbar pins its zones to their columns, so the lone collapse control already sits at the
+    // gutter; the app adds no rule on the pane header toolbar (HS2-PKPGGZ).
+    expect(css).not.toContain('.kui-toolbar');
     expect(css).not.toMatch(/\.project-sidebar \{/);
   });
 

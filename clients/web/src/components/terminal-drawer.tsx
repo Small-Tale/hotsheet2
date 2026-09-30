@@ -133,7 +133,8 @@ export function TerminalDrawer({
               draggable
               className="terminal-tab"
               size="compact"
-              labelMaxWidth={144}
+              // Narrow drawers (phones) truncate terminal names sooner.
+              labelMaxWidth={width <= 768 ? 112 : 144}
               selectAction="select-drawer-item"
               closeAction="close-terminal-tab"
               closeIcon={<LucideIcon icon={X} name="x" />}
