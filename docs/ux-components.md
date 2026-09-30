@@ -2041,10 +2041,10 @@ files), and `data-state`-keyed public tokens (visibility rows). The gallery foot
 app-owned balanced grid whose cells each host a gap-less Kerf Toolbar around one control group,
 the zoom FloatingToolbar hangs off a zero-size safe-area anchor, and the provider setup form
 uses an app-owned responsive grid (`KF-18Z9DC` requests a responsive Kerf `Grid`). The filled
-command rows paint their fill on the wrapper and neutralize the row border tones through the
-scoped semantic tokens until `KF-0PKY5K` catalogs the ListItem fill/border tokens. The three
-residual findings are documented in their stylesheets and gated on `KF-373HYM`, `KF-DTFQSC`,
-and `KF-3EZ92R`. The workspace sort trigger showed Kerf's icon-and-caret pill (the icon-only
+command rows painted their fill on the wrapper and neutralized the row border tones through the
+scoped semantic tokens until HS2-Z5YQWT moved them onto beta.62's public ListItem resting,
+hover, and selected tone tokens (`KF-0PKY5K`). The three residual `KUI-L022` findings were
+retired by HS2-3J2PX3, HS2-WF3W6A, and HS2-T67Z3N (see above). The workspace sort trigger showed Kerf's icon-and-caret pill (the icon-only
 Select contract) until HS2-4ZA33S adopted beta.62's `caret={false}` (`KF-3DX5BX`): the trigger is
 again a round 44px action on a `shape="pill"` group, and the expanded search field's floor went
 back to 19rem.

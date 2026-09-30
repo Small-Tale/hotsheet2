@@ -15,19 +15,19 @@
   border-radius: var(--kui-layout-rounded-radius, calc(1px + 0.6875rem));
   font-weight: 650;
 }
-/* A colored command row: the wrapper paints the resting fill behind the transparent ListItem (its
-   resting fill and border have no public token yet, KF request filed on HS2-VABS08); hover and
-   pressed use the public tokens, and the row's border tones are neutralized so the fill reads as one
-   pill in every state. */
+/* A colored command row paints its own fill through Kerf beta.62's public ListItem tone tokens
+   (KF-0PKY5K, HS2-Z5YQWT): resting, hover, and pressed all use the command color with transparent
+   borders so the row reads as one pill in every state; the wrapper paints nothing. */
 .command-navigation__command:not([data-command-palette='transparent']) {
   --kui-layout-inline-margin: 0;
-  --kui-color-neutral-border-normal: transparent;
-  --kui-color-brand-border-quiet: transparent;
+  --kui-list-item-background: var(--command-color);
+  --kui-list-item-border: transparent;
+  --kui-list-item-hover-border: transparent;
+  --kui-list-item-selected-border: transparent;
   --kui-list-item-color: var(--hs-command-on);
   --kui-list-item-hover-background: var(--command-color);
   --kui-list-item-selected-color: var(--hs-command-on);
   --kui-list-item-selected-background: var(--command-color);
-  background: var(--command-color);
 }
 .command-navigation__command[data-command-palette='blue'] {
   --command-color: var(--hs-command-blue);

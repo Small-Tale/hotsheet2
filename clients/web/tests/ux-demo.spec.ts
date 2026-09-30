@@ -4021,17 +4021,24 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     releaseGroup = commands.getByRole('button', { name: 'Release' });
   await expect(qualityGroup).toHaveAttribute('aria-expanded', 'true');
   await expect(releaseGroup).toHaveAttribute('aria-expanded', 'true');
-  // The fill is painted by the app wrapper behind the transparent Kerf row (HS2-VABS08).
-  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Verify project' })).toHaveCSS(
+  // The Kerf row paints its own fill through the public ListItem tone tokens; the app wrapper is
+  // transparent (HS2-Z5YQWT).
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS(
     'background-color',
     'rgb(20, 184, 166)',
   );
+  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Verify project' })).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
-  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Build clients' })).toHaveCSS(
+  await commands.getByRole('button', { name: 'Verify project' }).hover();
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
+  await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS(
     'background-color',
     'rgb(249, 115, 22)',
   );
-  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Publish preview' })).toHaveCSS(
+  await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS(
     'background-color',
     'rgb(139, 92, 246)',
   );

@@ -248,12 +248,14 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toContainSource(
       ".command-navigation__command[data-command-palette='blue'] { --command-color: var(--hs-command-blue); }",
     );
+    // The row paints its own tones through Kerf's public ListItem tokens; no broad border-token
+    // override and no wrapper fill (HS2-Z5YQWT).
     expect(css).toContainSource(
-      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-layout-inline-margin: 0; --kui-color-neutral-border-normal: transparent; --kui-color-brand-border-quiet: transparent; --kui-list-item-color: var(--hs-command-on);",
+      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-layout-inline-margin: 0; --kui-list-item-background: var(--command-color); --kui-list-item-border: transparent; --kui-list-item-hover-border: transparent; --kui-list-item-selected-border: transparent; --kui-list-item-color: var(--hs-command-on);",
     );
-    expect(css).toContainSource(
-      '--kui-list-item-selected-background:var(--command-color);background:var(--command-color)',
-    );
+    expect(css).not.toContain('--kui-color-neutral-border-normal');
+    expect(css).not.toContain('--kui-color-brand-border-quiet');
+    expect(css).not.toMatch(/command-navigation__command:not\([^)]*\) \{[^}]*\n {2}background:/);
     // The app wrapper, not the Kerf ListItem root, carries the command class (KUI-L022).
     expect(markup).toContain('<div class="command-navigation__command" data-command-palette="blue"><button');
     expect(markup).not.toContain('kui-list-item command-navigation__command');
