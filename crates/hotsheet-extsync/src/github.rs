@@ -290,20 +290,19 @@ impl GitHubProvider {
             .as_deref()
             .and_then(parse_priority)
             .unwrap_or_default();
-        let status = if issue.state == "closed" {
-            Status::Completed
-        } else if labels.iter().any(|label| label == "status:started") {
-            Status::Started
-        } else if labels.iter().any(|label| label == "status:backlog") {
-            Status::Backlog
-        } else {
-            Status::NotStarted
-        };
+        let status = issue_status(&issue.state, &labels);
         let close_reason = if issue.state == "closed" {
-            Some(match issue.state_reason.as_deref() {
-                Some("not_planned") => CloseReason::NotPlanned,
-                _ => CloseReason::Completed,
-            })
+            Some(
+                close_reason_from_labels(&labels).unwrap_or(match issue.state_reason.as_deref() {
+                    Some("not_planned") => CloseReason::NotPlanned,
+                    _ => CloseReason::Completed,
+                }),
+            )
+        } else {
+            None
+        };
+        let duplicate_of = if issue.state == "closed" {
+            mapped_label(&labels, DUPLICATE_OF_PREFIX)
         } else {
             None
         };
@@ -325,21 +324,19 @@ impl GitHubProvider {
             feedback_needed: false,
             tags: labels
                 .into_iter()
-                .filter(|label| {
-                    !label.starts_with("category:")
-                        && !label.starts_with("priority:")
-                        && !label.starts_with("status:")
-                })
+                .filter(|label| !is_provider_label(label))
                 .collect(),
             blocked_by: vec![],
             blocked_reason: None,
             created_at: issue.created_at,
             updated_at: issue.updated_at,
             completed_at: issue.closed_at.clone(),
-            verified_at: None,
+            verified_at: (status == Status::Verified)
+                .then(|| issue.closed_at.clone())
+                .flatten(),
             closed_at: issue.closed_at,
             close_reason,
-            duplicate_of: None,
+            duplicate_of,
             copied_from: None,
             transfer_operation_id: transfer_marker(&issue.body, "operation"),
             transferred_from: transfer_marker(&issue.body, "source"),
@@ -687,6 +684,8 @@ impl TicketProvider for GitHubProvider {
             draft.priority,
             &draft.tags,
             Some(draft.status),
+            None,
+            None,
         );
         let response = self.request(
             "POST",
@@ -729,15 +728,29 @@ impl TicketProvider for GitHubProvider {
         let priority = patch.priority.unwrap_or(current_ticket.priority);
         let tags = patch.tags.unwrap_or(current_ticket.tags);
         let status = patch.status.unwrap_or(current_ticket.status);
-        let state = if matches!(
-            status,
-            Status::Completed | Status::Verified | Status::Archive | Status::Deleted
-        ) {
-            "closed"
+        // A closed issue keeps the outcome it was closed with (HS2-K8R3T8): GitHub resets
+        // `state_reason` to `completed` on any PATCH that omits it, so every closed write
+        // re-sends the current reason and its `closed:` / `duplicate-of:` labels. Reopening
+        // drops them so a later close starts clean.
+        let closed = closes_issue(status);
+        let close_reason = closed.then(|| {
+            current_ticket
+                .close_reason
+                .unwrap_or(CloseReason::Completed)
+        });
+        let duplicate_of = if closed {
+            current_ticket.duplicate_of.clone()
         } else {
-            "open"
+            None
         };
-        let labels = mapped_labels(&category, priority, &tags, Some(status));
+        let labels = mapped_labels(
+            &category,
+            priority,
+            &tags,
+            Some(status),
+            close_reason,
+            duplicate_of.as_deref(),
+        );
         let mut body = patch
             .details
             .unwrap_or_else(|| current.body.clone().unwrap_or_default());
@@ -746,15 +759,19 @@ impl TicketProvider for GitHubProvider {
         {
             body.push_str(&marker);
         }
+        let mut payload = json!({
+            "title": patch.title.unwrap_or(current.title),
+            "body": body,
+            "state": if closed { "closed" } else { "open" },
+            "labels": labels,
+        });
+        if let Some(reason) = close_reason {
+            payload["state_reason"] = json!(github_state_reason(reason));
+        }
         let response = self.request(
             "PATCH",
             &self.endpoint(&format!("issues/{native_id}")),
-            Some(&json!({
-                "title": patch.title.unwrap_or(current.title),
-                "body": body,
-                "state": state,
-                "labels": labels,
-            })),
+            Some(&payload),
         )?;
         let issue: GitHubIssue = self.json(response)?;
         Ok(self.api_ticket(issue, vec![]))
@@ -788,13 +805,28 @@ impl TicketProvider for GitHubProvider {
         native_id: &str,
         _now: Timestamp,
         reason: CloseReason,
-        _duplicate_of: Option<String>,
+        duplicate_of: Option<String>,
     ) -> Result<ApiTicket, ProviderError> {
-        let state_reason = github_state_reason(reason);
+        // GitHub only records `completed` / `not_planned`; the exact Hot Sheet reason and the
+        // duplicate target ride on provider-owned labels so they survive a round trip
+        // (HS2-K8R3T8). The current labels are read first so ordinary tags are kept.
+        let current = self.api_ticket(self.issue(native_id)?, vec![]);
+        let labels = mapped_labels(
+            &current.category,
+            current.priority,
+            &current.tags,
+            Some(Status::Completed),
+            Some(reason),
+            duplicate_of.as_deref(),
+        );
         let response = self.request(
             "PATCH",
             &self.endpoint(&format!("issues/{native_id}")),
-            Some(&json!({"state":"closed","state_reason":state_reason})),
+            Some(&json!({
+                "state": "closed",
+                "state_reason": github_state_reason(reason),
+                "labels": labels,
+            })),
         )?;
         let issue: GitHubIssue = self.json(response)?;
         Ok(self.api_ticket(issue, vec![]))
@@ -966,20 +998,109 @@ fn mapped_label(labels: &[String], prefix: &str) -> Option<String> {
         .find_map(|label| label.strip_prefix(prefix).map(str::to_string))
 }
 
+/// Label prefix carrying the canonical ticket of a duplicate close (`duplicate-of:<ref>`).
+const DUPLICATE_OF_PREFIX: &str = "duplicate-of:";
+
+/// Prefixes of the labels the provider owns. They carry Hot Sheet state GitHub has no field
+/// for and are never surfaced as ordinary tags.
+const PROVIDER_LABEL_PREFIXES: [&str; 5] = [
+    "category:",
+    "priority:",
+    "status:",
+    "closed:",
+    DUPLICATE_OF_PREFIX,
+];
+
+fn is_provider_label(label: &str) -> bool {
+    PROVIDER_LABEL_PREFIXES
+        .iter()
+        .any(|prefix| label.starts_with(prefix))
+}
+
+/// Whether a Hot Sheet status is represented by a closed GitHub issue.
+fn closes_issue(status: Status) -> bool {
+    matches!(
+        status,
+        Status::Completed | Status::Verified | Status::Archive | Status::Deleted
+    )
+}
+
+/// The `status:` label for states GitHub's open/closed pair cannot express on its own.
+/// Started and Backlog qualify an open issue; Verified and Archived qualify a closed one.
+fn status_label(status: Status) -> Option<&'static str> {
+    match status {
+        Status::Started => Some("status:started"),
+        Status::Backlog => Some("status:backlog"),
+        Status::Verified => Some("status:verified"),
+        Status::Archive => Some("status:archived"),
+        Status::NotStarted | Status::Completed | Status::Deleted | Status::Moved => None,
+    }
+}
+
+/// The `closed:` label that keeps the exact Hot Sheet close reason beside GitHub's coarser
+/// `not_planned`. Completed and Not planned are GitHub's own reasons and need no label.
+fn close_reason_label(reason: CloseReason) -> Option<&'static str> {
+    match reason {
+        CloseReason::Completed | CloseReason::NotPlanned => None,
+        CloseReason::Duplicate => Some("closed:duplicate"),
+        CloseReason::Obsolete => Some("closed:obsolete"),
+        CloseReason::WorksAsDesigned => Some("closed:works-as-designed"),
+    }
+}
+
+fn close_reason_from_labels(labels: &[String]) -> Option<CloseReason> {
+    labels.iter().find_map(|label| match label.as_str() {
+        "closed:duplicate" => Some(CloseReason::Duplicate),
+        "closed:obsolete" => Some(CloseReason::Obsolete),
+        "closed:works-as-designed" => Some(CloseReason::WorksAsDesigned),
+        _ => None,
+    })
+}
+
+/// The Hot Sheet status of an issue: `state` decides open/closed and a `status:` label
+/// refines it. A stale open-only label on a closed issue (or vice versa) is ignored.
+fn issue_status(state: &str, labels: &[String]) -> Status {
+    let has = |name: &str| labels.iter().any(|label| label == name);
+    if state == "closed" {
+        if has("status:verified") {
+            Status::Verified
+        } else if has("status:archived") {
+            Status::Archive
+        } else {
+            Status::Completed
+        }
+    } else if has("status:started") {
+        Status::Started
+    } else if has("status:backlog") {
+        Status::Backlog
+    } else {
+        Status::NotStarted
+    }
+}
+
 fn mapped_labels(
     category: &str,
     priority: Priority,
     tags: &[String],
     status: Option<Status>,
+    close_reason: Option<CloseReason>,
+    duplicate_of: Option<&str>,
 ) -> Vec<String> {
-    let mut labels = tags.to_vec();
+    let mut labels = tags
+        .iter()
+        .filter(|tag| !is_provider_label(tag))
+        .cloned()
+        .collect::<Vec<_>>();
     labels.push(format!("category:{category}"));
     labels.push(format!("priority:{}", priority_name(priority)));
-    if let Some(Status::Started) = status {
-        labels.push("status:started".into());
+    if let Some(label) = status.and_then(status_label) {
+        labels.push(label.into());
     }
-    if let Some(Status::Backlog) = status {
-        labels.push("status:backlog".into());
+    if let Some(label) = close_reason.and_then(close_reason_label) {
+        labels.push(label.into());
+    }
+    if let Some(target) = duplicate_of.filter(|target| !target.is_empty()) {
+        labels.push(format!("{DUPLICATE_OF_PREFIX}{target}"));
     }
     labels.sort();
     labels.dedup();
@@ -1192,6 +1313,367 @@ mod tests {
                 .iter()
                 .any(|(name, value)| name == "Authorization" && value == "Bearer test-token")
         );
+    }
+
+    fn closed_issue(number: u64, state_reason: &str, labels: &[&str]) -> Value {
+        let mut value = issue(number, "closed widget", "details");
+        value["state"] = json!("closed");
+        value["state_reason"] = json!(state_reason);
+        value["closed_at"] = json!("2026-08-27T00:00:00Z");
+        value["labels"] = json!(
+            labels
+                .iter()
+                .map(|name| json!({"name": name}))
+                .collect::<Vec<_>>()
+        );
+        value
+    }
+
+    fn patch_body(transport: &FakeTransport, index: usize) -> Value {
+        let requests = transport.requests.lock().unwrap();
+        assert_eq!(requests[index].0, "PATCH", "request {index} is a PATCH");
+        requests[index].3.clone().expect("PATCH body")
+    }
+
+    fn label_names(body: &Value) -> Vec<String> {
+        body["labels"]
+            .as_array()
+            .expect("labels array")
+            .iter()
+            .map(|label| label.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn closed_issues_read_status_and_exact_close_reason_from_provider_labels() {
+        // HS2-K8R3T8: GitHub only has open/closed plus completed/not_planned, so Verified,
+        // Archived, Duplicate, Obsolete, and Works as designed ride on provider-owned labels.
+        type Case = (
+            &'static str,
+            &'static [&'static str],
+            Status,
+            CloseReason,
+            Option<&'static str>,
+        );
+        let cases: [Case; 6] = [
+            (
+                "completed",
+                &["category:bug"],
+                Status::Completed,
+                CloseReason::Completed,
+                None,
+            ),
+            (
+                "not_planned",
+                &["category:bug"],
+                Status::Completed,
+                CloseReason::NotPlanned,
+                None,
+            ),
+            (
+                "not_planned",
+                &[
+                    "category:bug",
+                    "status:verified",
+                    "closed:works-as-designed",
+                    "customer",
+                ],
+                Status::Verified,
+                CloseReason::WorksAsDesigned,
+                None,
+            ),
+            (
+                "completed",
+                &["category:bug", "status:archived"],
+                Status::Archive,
+                CloseReason::Completed,
+                None,
+            ),
+            (
+                "not_planned",
+                &[
+                    "category:bug",
+                    "closed:duplicate",
+                    "duplicate-of:acme/widgets#7",
+                ],
+                Status::Completed,
+                CloseReason::Duplicate,
+                Some("acme/widgets#7"),
+            ),
+            (
+                "not_planned",
+                &["category:bug", "closed:obsolete", "status:verified"],
+                Status::Verified,
+                CloseReason::Obsolete,
+                None,
+            ),
+        ];
+        for (state_reason, labels, status, reason, duplicate_of) in cases {
+            let transport = FakeTransport::with(vec![
+                response(200, closed_issue(9, state_reason, labels)),
+                response(200, json!([])),
+            ]);
+            let ticket = provider(transport).get("9").unwrap();
+            assert_eq!(ticket.status, status, "{labels:?}");
+            assert_eq!(ticket.close_reason, Some(reason), "{labels:?}");
+            assert_eq!(ticket.duplicate_of.as_deref(), duplicate_of, "{labels:?}");
+            assert_eq!(
+                ticket.verified_at.as_deref(),
+                (status == Status::Verified).then_some("2026-08-27T00:00:00Z"),
+                "{labels:?}"
+            );
+            assert!(
+                ticket.tags.iter().all(|tag| !tag.contains(':')),
+                "provider labels never surface as tags: {:?}",
+                ticket.tags
+            );
+        }
+        // An open issue ignores stale closed-only labels and reads its open-only label.
+        let mut open = issue(10, "open widget", "details");
+        open["labels"] = json!([{"name":"status:verified"},{"name":"status:started"},{"name":"closed:obsolete"}]);
+        let transport = FakeTransport::with(vec![response(200, open), response(200, json!([]))]);
+        let ticket = provider(transport).get("10").unwrap();
+        assert_eq!(ticket.status, Status::Started);
+        assert_eq!(ticket.close_reason, None);
+        assert_eq!(ticket.duplicate_of, None);
+    }
+
+    #[test]
+    fn verifying_a_closed_issue_keeps_its_close_reason_and_labels_it_verified() {
+        // The reported bug: moving a Works-as-designed ticket to Verified used to PATCH
+        // without `state_reason` (GitHub then reset it to completed) and read back as
+        // Completed because Verified had no representation.
+        let before = closed_issue(
+            42,
+            "not_planned",
+            &[
+                "category:bug",
+                "priority:high",
+                "customer",
+                "closed:works-as-designed",
+            ],
+        );
+        let mut after = before.clone();
+        after["labels"] = json!([
+            {"name":"category:bug"},{"name":"priority:high"},{"name":"customer"},
+            {"name":"closed:works-as-designed"},{"name":"status:verified"}
+        ]);
+        let transport = FakeTransport::with(vec![response(200, before), response(200, after)]);
+        let ticket = provider(transport.clone())
+            .update(
+                "42",
+                Timestamp::new("2026-08-28T00:00:00Z"),
+                ProviderPatch {
+                    status: Some(Status::Verified),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let body = patch_body(&transport, 1);
+        assert_eq!(body["state"], "closed");
+        assert_eq!(body["state_reason"], "not_planned");
+        assert_eq!(
+            label_names(&body),
+            [
+                "category:bug",
+                "closed:works-as-designed",
+                "customer",
+                "priority:high",
+                "status:verified"
+            ]
+        );
+        assert_eq!(ticket.status, Status::Verified);
+        assert_eq!(ticket.close_reason, Some(CloseReason::WorksAsDesigned));
+    }
+
+    #[test]
+    fn close_records_the_exact_reason_and_duplicate_target_while_keeping_tags() {
+        let open = issue(42, "dup widget", "details");
+        let mut closed = closed_issue(
+            42,
+            "not_planned",
+            &[
+                "category:bug",
+                "priority:high",
+                "customer",
+                "closed:duplicate",
+                "duplicate-of:@main/github-main:7",
+            ],
+        );
+        closed["title"] = json!("dup widget");
+        let transport = FakeTransport::with(vec![response(200, open), response(200, closed)]);
+        let ticket = provider(transport.clone())
+            .close(
+                "42",
+                Timestamp::new("2026-08-28T00:00:00Z"),
+                CloseReason::Duplicate,
+                Some("@main/github-main:7".into()),
+            )
+            .unwrap();
+        let body = patch_body(&transport, 1);
+        assert_eq!(body["state"], "closed");
+        assert_eq!(body["state_reason"], "not_planned");
+        assert_eq!(
+            label_names(&body),
+            [
+                "category:bug",
+                "closed:duplicate",
+                "customer",
+                "duplicate-of:@main/github-main:7",
+                "priority:high"
+            ]
+        );
+        assert_eq!(ticket.status, Status::Completed);
+        assert_eq!(ticket.close_reason, Some(CloseReason::Duplicate));
+        assert_eq!(ticket.duplicate_of.as_deref(), Some("@main/github-main:7"));
+        assert_eq!(ticket.tags, ["customer"]);
+    }
+
+    #[test]
+    fn close_verify_reopen_and_reclose_walk_the_status_transitions_without_leaking_labels() {
+        // Transition matrix across the closed/open boundary: each PATCH must carry exactly
+        // the labels and reason for its target state, and reopening must drop closed-only
+        // labels so the next close starts clean.
+        let base = ["category:bug", "priority:high", "customer"];
+        let step = |state: &str, reason: &str, extra: &[&str]| {
+            let labels = base.iter().chain(extra).copied().collect::<Vec<_>>();
+            if state == "open" {
+                let mut value = issue(42, "widget", "details");
+                value["labels"] = json!(
+                    labels
+                        .iter()
+                        .map(|name| json!({"name": name}))
+                        .collect::<Vec<_>>()
+                );
+                value
+            } else {
+                closed_issue(42, reason, &labels)
+            }
+        };
+        let transport = FakeTransport::with(vec![
+            // 1. close as works-as-designed: GET current, PATCH
+            response(200, step("open", "", &[])),
+            response(
+                200,
+                step("closed", "not_planned", &["closed:works-as-designed"]),
+            ),
+            // 2. verify: GET, PATCH
+            response(
+                200,
+                step("closed", "not_planned", &["closed:works-as-designed"]),
+            ),
+            response(
+                200,
+                step(
+                    "closed",
+                    "not_planned",
+                    &["closed:works-as-designed", "status:verified"],
+                ),
+            ),
+            // 3. reopen as started: GET, PATCH
+            response(
+                200,
+                step(
+                    "closed",
+                    "not_planned",
+                    &["closed:works-as-designed", "status:verified"],
+                ),
+            ),
+            response(200, step("open", "", &["status:started"])),
+            // 4. mark completed through the status patch: GET, PATCH
+            response(200, step("open", "", &["status:started"])),
+            response(200, step("closed", "completed", &[])),
+            // 5. archive: GET, PATCH
+            response(200, step("closed", "completed", &[])),
+            response(200, step("closed", "completed", &["status:archived"])),
+        ]);
+        let provider = provider(transport.clone());
+        let now = Timestamp::new("2026-08-28T00:00:00Z");
+        let status_patch = |status: Status| ProviderPatch {
+            status: Some(status),
+            ..Default::default()
+        };
+
+        let closed = provider
+            .close("42", now.clone(), CloseReason::WorksAsDesigned, None)
+            .unwrap();
+        assert_eq!(closed.close_reason, Some(CloseReason::WorksAsDesigned));
+        let body = patch_body(&transport, 1);
+        assert_eq!(body["state_reason"], "not_planned");
+        assert!(label_names(&body).contains(&"closed:works-as-designed".to_string()));
+
+        let verified = provider
+            .update("42", now.clone(), status_patch(Status::Verified))
+            .unwrap();
+        assert_eq!(verified.status, Status::Verified);
+        assert_eq!(verified.close_reason, Some(CloseReason::WorksAsDesigned));
+        let body = patch_body(&transport, 3);
+        assert_eq!(body["state"], "closed");
+        assert_eq!(body["state_reason"], "not_planned");
+        assert_eq!(
+            label_names(&body),
+            [
+                "category:bug",
+                "closed:works-as-designed",
+                "customer",
+                "priority:high",
+                "status:verified"
+            ]
+        );
+
+        let reopened = provider
+            .update("42", now.clone(), status_patch(Status::Started))
+            .unwrap();
+        assert_eq!(reopened.status, Status::Started);
+        assert_eq!(reopened.close_reason, None);
+        let body = patch_body(&transport, 5);
+        assert_eq!(body["state"], "open");
+        assert!(
+            body.get("state_reason").is_none(),
+            "reopen sends no state_reason"
+        );
+        assert_eq!(
+            label_names(&body),
+            [
+                "category:bug",
+                "customer",
+                "priority:high",
+                "status:started"
+            ]
+        );
+
+        let completed = provider
+            .update("42", now.clone(), status_patch(Status::Completed))
+            .unwrap();
+        assert_eq!(completed.status, Status::Completed);
+        assert_eq!(completed.close_reason, Some(CloseReason::Completed));
+        let body = patch_body(&transport, 7);
+        assert_eq!(body["state"], "closed");
+        assert_eq!(
+            body["state_reason"], "completed",
+            "a status close starts clean"
+        );
+        assert_eq!(
+            label_names(&body),
+            ["category:bug", "customer", "priority:high"]
+        );
+
+        let archived = provider
+            .update("42", now, status_patch(Status::Archive))
+            .unwrap();
+        assert_eq!(archived.status, Status::Archive);
+        let body = patch_body(&transport, 9);
+        assert_eq!(body["state_reason"], "completed");
+        assert_eq!(
+            label_names(&body),
+            [
+                "category:bug",
+                "customer",
+                "priority:high",
+                "status:archived"
+            ]
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 10);
     }
 
     #[test]

@@ -245,7 +245,28 @@ It paginates while excluding pull requests, sends incremental `since` queries, e
 webhook invalidations for authoritative re-read, checks opaque optimistic-concurrency
 tokens, and maps authentication/rate-limit/conflict failures to typed provider errors.
 Unsupported claims, dependencies, review requests, attachments, Up Next, and query
-dimensions are declared or rejected rather than discarded. Project `providers.json`
+dimensions are declared or rejected rather than discarded.
+
+GitHub has only `open`/`closed` plus a `completed`/`not_planned` close reason, so the
+provider carries the rest of Hot Sheet's state on **provider-owned labels** it writes and
+reads itself and never surfaces as tags (HS2-K8R3T8). `state` decides open versus closed and
+a label refines it:
+
+| Hot Sheet                                          | GitHub                                                                                             |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Not started / Started / Backlog                    | open; `status:started` or `status:backlog` when not Not started                                    |
+| Completed                                          | closed, no `status:` label                                                                         |
+| Verified / Archived                                | closed + `status:verified` / `status:archived`                                                     |
+| Closed as Completed / Not planned                  | `state_reason` `completed` / `not_planned`, no `closed:` label                                     |
+| Closed as Duplicate / Obsolete / Works as designed | `state_reason` `not_planned` + `closed:duplicate` / `closed:obsolete` / `closed:works-as-designed` |
+| `duplicate_of`                                     | `duplicate-of:<qualified ticket reference>`                                                        |
+
+Every write to a closed issue re-sends its current `state_reason` and `closed:` /
+`duplicate-of:` labels, because GitHub silently resets an omitted reason to `completed`;
+this is what lets a Works-as-designed ticket move to Verified and stay Verified. Reopening
+drops the closed-only labels so the next close starts clean, and a stale open-only or
+closed-only label on the other state is ignored on read. `verified_at` is reported as the
+issue's `closed_at` when the issue carries `status:verified`. Project `providers.json`
 contains connection metadata and a credential reference only; CLI/server resolve the
 token through the OS-key registry (or its explicit environment override). GitHub CRUD
 is available through `/providers/{connection}/tickets`, provider-aware MCP targeting,
