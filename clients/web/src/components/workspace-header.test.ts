@@ -154,7 +154,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('workspace-header__actions');
     expect(headerCss).not.toContain('.kui-toolbar-control-group');
     expect(headerCss).toContainSource(
-      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 17rem; flex: 1 1 17rem; }",
+      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 19rem; flex: 1 1 19rem; }",
     );
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
     expect(headerCss).not.toContain('.kui-token-search {');
@@ -378,16 +378,18 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('.workspace-header__sort::part(');
     // The focus ring is a single pill on the group (following its radius), not a mismatched ring on
     // the smaller inner combobox (HS2-M1DF1D).
-    expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*border-radius: var\(--wa-border-radius-pill\)/);
+    // The group's own pill shape (`shape="pill"`) carries the ring radius; no app radius rule.
+    expect(markup).toMatch(/workspace-header__sort-group[^>]*data-shape="pill"/);
+    expect(headerCss).not.toMatch(/\.workspace-header__sort-group \{[^}]*border-radius/);
     // Kerf paints the pill ring (`focusRing="outline"`); the app draws no ring of its own.
     expect(markup).toMatch(/workspace-header__sort-group[^>]*data-focus-ring="outline"/);
     expect(headerCss).not.toContain('.workspace-header__sort-group:focus-within');
     // The Select hands its focus ring to the group (`focusRingOwner="group"`).
     expect(markup).toMatch(
-      /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
+      /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-caret="false"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); border-radius: var(--wa-border-radius-pill); }',
+      '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).not.toContain('.kui-select__custom-selected');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');

@@ -2277,9 +2277,10 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
     };
   });
   // The icon-only sort group (HS2-06GDW3) is as wide as it is tall, so a true pill is a circle:
-  // the ring must follow the fully rounded group rather than a rectangle.
+  // the ring must follow the fully rounded group (Kerf's pill radius is half the 44px height,
+  // HS2-4ZA33S) rather than a rectangle.
   expect(geometry.width).toBeGreaterThanOrEqual(geometry.height);
-  expect(Number.parseFloat(geometry.radius)).toBeGreaterThan(geometry.height);
+  expect(Number.parseFloat(geometry.radius)).toBeGreaterThanOrEqual(geometry.height / 2);
   expect(geometry).toMatchObject({
     outlineStyle: 'solid',
     outlineWidth: '3px',
@@ -2394,12 +2395,20 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
       outer = combobox.getBoundingClientRect(),
       icon = selected.getBoundingClientRect(),
       arrow = expand.getBoundingClientRect();
-    return { width: outer.width, gap: arrow.left - icon.right, arrowOverflow: arrow.right - outer.right };
+    return {
+      width: outer.width,
+      height: outer.height,
+      caretHidden: getComputedStyle(expand).display === 'none',
+      iconCentered: Math.abs(icon.left + icon.width / 2 - (outer.left + outer.width / 2)),
+      arrowOverflow: arrow.right - outer.right,
+    };
   });
-  // Kerf's icon-only Select trigger is an icon-and-caret pill (HS2-VABS08, KF-3DX5BX asks for a caret option).
-  expect(triggerGeometry.width).toBeLessThanOrEqual(80);
-  // Kerf's icon-only trigger spaces its icon 12px from a 20px caret box (HS2-VABS08).
-  expect(triggerGeometry.gap).toBeLessThanOrEqual(24);
+  // Kerf's caret-free icon-only trigger (beta.62 `caret={false}`, HS2-4ZA33S) is a round action:
+  // as wide as it is tall, with the icon centered and no caret box.
+  expect(triggerGeometry.caretHidden).toBe(true);
+  expect(Math.abs(triggerGeometry.width - triggerGeometry.height)).toBeLessThanOrEqual(2);
+  // Kerf's caret-free trigger still sits its icon about 4px off center (KF-5TX9Z5); tighten to 1.5px when it ships.
+  expect(triggerGeometry.iconCentered).toBeLessThanOrEqual(4.5);
   expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="clock-arrow-down"]')).toBeVisible();
@@ -2588,8 +2597,8 @@ test('centers search controls on the first line while the query wraps', async ({
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('searchbox', { name: 'Search tickets' }),
     group = header.locator('.ticket-search-field');
-  // The expanded field's floor is 17rem (272px) so the header's groups keep one row (HS2-VABS08).
-  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(272);
+  // The expanded field's floor is 19rem (304px) so the header's groups keep one row (HS2-4ZA33S).
+  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(304);
   const geometry = async () =>
     group.evaluate((node) => {
       const box = (selector: string) => {

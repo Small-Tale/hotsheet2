@@ -393,6 +393,8 @@ export function WorkspaceControls({
         disabled={projectActionsDisabled}
         selectedPresentation="icon-only"
         presentation="toolbar-borderless"
+        // A caret-free icon trigger (Kerf beta.62) fills its single pill group like a round action.
+        caret={false}
         focusRingOwner="group"
         renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
       />
@@ -441,7 +443,7 @@ export function WorkspaceControls({
           {sortSelect}
         </ToolbarControlGroup>
       ) : (
-        <ToolbarControlGroup className="workspace-header__sort-group" single focusRing="outline">
+        <ToolbarControlGroup className="workspace-header__sort-group" single shape="pill" focusRing="outline">
           {sortSelect}
         </ToolbarControlGroup>
       )}

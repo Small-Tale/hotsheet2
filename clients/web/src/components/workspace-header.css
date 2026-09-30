@@ -59,7 +59,6 @@ wa-button.workspace-header__text-action::part(base) {
 }
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
-  border-radius: var(--wa-border-radius-pill);
 }
 /* The single sort group already paints the pill container/background; keep the Select's own
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
@@ -69,14 +68,14 @@ wa-button.workspace-header__text-action::part(base) {
    combobox (HS2-M1DF1D): the group owns the ring (`focusRing="outline"`) and the Select hands its
    focus to it (`focusRingOwner="group"`). The explicit pill radius keeps the ring pill-shaped. */
 /* Kerf's search group owns the collapsed size and the width transition. Expanded, the header field
-   takes the room its zone offers (HS2-W843B4); the group's chrome stays Kerf-owned. The 17rem floor
-   keeps the view, sort (Kerf's icon-and-caret trigger), and utility groups on one row beside the
-   field in a 640px-wide toolbar (HS2-VABS08). */
+   takes the room its zone offers (HS2-W843B4); the group's chrome stays Kerf-owned. The 19rem floor
+   keeps the view, sort (a caret-free 44px trigger since HS2-4ZA33S), and utility groups on one row
+   beside the field in a 640px-wide toolbar. */
 .ticket-search-field[data-content='search'][data-expanded='true'] {
   --kui-token-search-expanded-width: 48rem;
   max-width: 100%;
-  min-width: 17rem;
-  flex: 1 1 17rem;
+  min-width: 19rem;
+  flex: 1 1 19rem;
 }
 /* The overflow menu only appears where the container queries below yield controls to it. */
 .workspace-header__overflow-group {

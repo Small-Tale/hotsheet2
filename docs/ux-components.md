@@ -2044,9 +2044,10 @@ uses an app-owned responsive grid (`KF-18Z9DC` requests a responsive Kerf `Grid`
 command rows paint their fill on the wrapper and neutralize the row border tones through the
 scoped semantic tokens until `KF-0PKY5K` catalogs the ListItem fill/border tokens. The three
 residual findings are documented in their stylesheets and gated on `KF-373HYM`, `KF-DTFQSC`,
-and `KF-3EZ92R`. The workspace sort trigger now shows Kerf's icon-and-caret pill (the icon-only
-Select contract) rather than the app's former 44px circle; `KF-3DX5BX` requests a caret option,
-and the expanded search field's floor is 17rem so the header row still fits.
+and `KF-3EZ92R`. The workspace sort trigger showed Kerf's icon-and-caret pill (the icon-only
+Select contract) until HS2-4ZA33S adopted beta.62's `caret={false}` (`KF-3DX5BX`): the trigger is
+again a round 44px action on a `shape="pill"` group, and the expanded search field's floor went
+back to 19rem.
 
 HS2-P289N2 rebuilt `AppShell` on Kerf's `Workbench` (merged after HS2-S6JQX1, keeping `KUI-L019` at
 3): the
