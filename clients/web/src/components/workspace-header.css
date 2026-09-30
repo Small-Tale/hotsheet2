@@ -64,16 +64,9 @@ wa-button.workspace-header__text-action::part(base) {
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
    out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
    control groups. */
-/* Show one focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
-   combobox, whose shape does not match the pill (HS2-M1DF1D). :focus-within reflects the wa-select's
-   shadow-internal focus onto the group; [open] retains that ring while the listbox owns focus. The
-   explicit 999px pill radius stays pill-shaped after the outline expands beyond the 44px group
-   instead of retaining a 22px rounded-rectangle radius. */
-.workspace-header__sort-group:focus-within,
-.workspace-header__sort-group:has([open]) {
-  outline: var(--wa-focus-ring);
-  outline-offset: var(--wa-focus-ring-offset);
-}
+/* One focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
+   combobox (HS2-M1DF1D): the group owns the ring (`focusRing="outline"`) and the Select hands its
+   focus to it (`focusRingOwner="group"`). The explicit pill radius keeps the ring pill-shaped. */
 .workspace-header__sort-group .kui-select__custom-selected {
   color: var(--kui-toolbar-control-color);
 }

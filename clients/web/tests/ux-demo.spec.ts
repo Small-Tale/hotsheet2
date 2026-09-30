@@ -464,8 +464,8 @@ test('reopens dialog demos and keeps Feedback above the modal top layer', async 
 test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-banner&dev-review=false');
-  const migration = page.locator('.hs1-migration-banner'),
-    cleanup = page.locator('.hs1-cleanup-banner');
+  const migration = page.locator('.hs1-migration-banner > [data-component="state-banner"]'),
+    cleanup = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
   for (const [banner, tone] of [
     [migration, 'info'],
     [cleanup, 'success'],
@@ -886,8 +886,9 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__project')!),
       controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
-      heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
-      content = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__content')!),
+      heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading .kui-toolbar')!),
+      headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
+      content = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__content .kui-sunken-panel')!),
       launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
     return {
       mode: {
@@ -906,7 +907,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       projectPadding: projectChrome.padding,
       controlsPadding: controls.padding,
       headingPadding: heading.padding,
-      headingBorderBottom: heading.borderBottomWidth,
+      headingBorderBottom: headingWrap.borderBottomWidth,
       contentPadding: content.padding,
       launcherBackground: launcherStyle.backgroundColor,
       launcherRadius: launcherStyle.borderRadius,
@@ -1067,7 +1068,8 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   const rows = rail.locator('[data-component="ticket-list-row"]');
   const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
   await expect(rows).toHaveCount(7);
-  await expect(rail.locator('[data-view-mode="board"]')).toHaveCount(0);
+  // The rail offers Columns as well (HS2-656Q43).
+  await expect(rail.locator('[data-view-mode="board"]')).toHaveCount(1);
   await rail.getByRole('button', { name: 'Notifications view', exact: true }).click();
   await expect(rail.getByRole('button', { name: 'Notifications view', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -2254,8 +2256,6 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
   await header.getByRole('button', { name: 'Settings view' }).focus();
   await page.keyboard.press('Tab');
   await expect.poll(() => sort.evaluate((node) => node.matches(':focus-within'))).toBe(true);
-  await page.keyboard.press('Enter');
-  await expect(sort).toHaveJSProperty('open', true);
   const geometry = await group.evaluate((node) => {
     const style = getComputedStyle(node),
       box = node.getBoundingClientRect(),
@@ -2283,6 +2283,12 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
     outlineOffset: '1px',
     comboboxOutlineStyle: 'none',
   });
+  // Kerf's group-owned ring steps aside while the listbox is open: the popup shows focus instead.
+  await page.keyboard.press('Enter');
+  await expect(sort).toHaveJSProperty('open', true);
+  expect(await group.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
+  await page.keyboard.press('Escape');
+  await expect(sort).toHaveJSProperty('open', false);
   const box = (await group.boundingBox())!,
     x = Math.max(0, box.x - 12),
     y = Math.max(0, box.y - 12);
@@ -2299,7 +2305,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(header).toContainText('Hot Sheet 2');
   await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-chrome', 'outline');
   await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-tone', 'pop');
-  const sortIcon = header.locator('.workspace-header__sort .kui-select__custom-selected'),
+  const sortIcon = header.locator('.workspace-header__sort-group .kui-select__custom-selected'),
     idleViewIcon = header.getByRole('button', { name: 'Columns view' }),
     quietIconColor = await idleViewIcon.evaluate((node) => getComputedStyle(node).color);
   expect(await sortIcon.evaluate((node) => getComputedStyle(node).color)).toBe(quietIconColor);
@@ -2387,8 +2393,10 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
       arrow = expand.getBoundingClientRect();
     return { width: outer.width, gap: arrow.left - icon.right, arrowOverflow: arrow.right - outer.right };
   });
-  expect(triggerGeometry.width).toBeLessThanOrEqual(46);
-  expect(triggerGeometry.gap).toBeLessThanOrEqual(8);
+  // Kerf's icon-only Select trigger is an icon-and-caret pill (HS2-VABS08, KF-3DX5BX asks for a caret option).
+  expect(triggerGeometry.width).toBeLessThanOrEqual(80);
+  // Kerf's icon-only trigger spaces its icon 12px from a 20px caret box (HS2-VABS08).
+  expect(triggerGeometry.gap).toBeLessThanOrEqual(24);
   expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="clock-arrow-down"]')).toBeVisible();
@@ -2577,7 +2585,8 @@ test('centers search controls on the first line while the query wraps', async ({
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('searchbox', { name: 'Search tickets' }),
     group = header.locator('.ticket-search-field');
-  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(300);
+  // The expanded field's floor is 17rem (272px) so the header's groups keep one row (HS2-VABS08).
+  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(272);
   const geometry = async () =>
     group.evaluate((node) => {
       const box = (selector: string) => {
@@ -3381,7 +3390,8 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     };
   });
   expect(spacing).toEqual({
-    headingGap: '8px',
+    // The heading Toolbar drops its gap token; each ToolbarText keeps its own inline padding.
+    headingGap: '0px',
     evidenceMargin: '16px',
     evidencePadding: '8px',
     evidenceItemGap: '4px',
@@ -3588,11 +3598,22 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
   await expect(gallery.locator('[data-component="toolbar"]')).toBeVisible();
   const darkGroups = gallery.locator('[data-component="toolbar-control-group"]');
   await expect(darkGroups).toHaveCount(4);
+  // The header groups are dark-toned; the footer's floating groups take the FloatingToolbar's forced
+  // dark scheme instead (HS2-VABS08). Every group reads white on dark.
   for (const group of await darkGroups.all()) {
-    await expect(group).toHaveAttribute('data-tone', 'dark');
-    await expect(group).toHaveCSS('color', 'rgb(255, 255, 255)');
+    const light = await group
+      .locator('button:not([disabled])')
+      .first()
+      .evaluate((node) =>
+        getComputedStyle(node)
+          .color.match(/\d+/g)!
+          .slice(0, 3)
+          .every((channel) => Number(channel) > 150),
+      );
+    expect(light).toBe(true);
     await expect(group).not.toHaveCSS('border-color', 'rgb(209, 209, 214)');
   }
+  await expect(gallery.locator('[data-component="toolbar-control-group"][data-tone="dark"]')).toHaveCount(3);
   await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
   const fitWidth = await image.evaluate((node) => (node as HTMLElement).getBoundingClientRect().width);
   await gallery.getByRole('button', { name: 'Zoom in' }).click();
@@ -3663,7 +3684,7 @@ test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM
   const gallery = page.locator('[data-component="attachment-gallery"]');
   await expect(gallery).toBeVisible();
   const imageSpacing = await gallery.evaluate((node) => {
-    const toolbar = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__toolbar')!),
+    const toolbar = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__toolbar .kui-toolbar')!),
       trailing = getComputedStyle(node.querySelector<HTMLElement>('.kui-toolbar__trailing')!),
       canvas = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__canvas')!),
       footer = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__footer')!);
@@ -3988,16 +4009,17 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     releaseGroup = commands.getByRole('button', { name: 'Release' });
   await expect(qualityGroup).toHaveAttribute('aria-expanded', 'true');
   await expect(releaseGroup).toHaveAttribute('aria-expanded', 'true');
-  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS(
+  // The fill is painted by the app wrapper behind the transparent Kerf row (HS2-VABS08).
+  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Verify project' })).toHaveCSS(
     'background-color',
     'rgb(20, 184, 166)',
   );
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
-  await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS(
+  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Build clients' })).toHaveCSS(
     'background-color',
     'rgb(249, 115, 22)',
   );
-  await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS(
+  await expect(commands.locator('.command-navigation__command').filter({ hasText: 'Publish preview' })).toHaveCSS(
     'background-color',
     'rgb(139, 92, 246)',
   );
@@ -4488,8 +4510,10 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   expect(actionGeometry.addGap).toBeLessThan(24);
   expect(actionGeometry.actionGap).toBeGreaterThan(48);
   expect(actionGeometry.edgeGap).toBeLessThan(24);
-  await expect(tabBar).toHaveCSS('padding', '4px 8px');
-  await expect(tabBar).toHaveCSS('gap', '4px');
+  // The app strip adds the outer 4px inline inset; Kerf's TabBar pads and gaps by its 4px gap token.
+  await expect(tabBar).toHaveCSS('padding', '0px 4px');
+  await expect(tabBar.locator('[data-component="tab-bar"]')).toHaveCSS('padding', '4px');
+  await expect(tabBar.locator('[data-component="tab-bar"]')).toHaveCSS('gap', '4px');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   // The tabs strip does not stretch, so the trailing Add-project (+) button follows the tabs instead of
   // being pushed to the far right (HS2-HV52WR).
@@ -4569,7 +4593,9 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
     return { tab: tab.y + tab.height / 2, add: add.y + add.height / 2 };
   });
   expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
-  const order = await tabBar.locator(':scope > *').evaluateAll((nodes) => nodes.map((node) => node.className));
+  const order = await tabBar
+    .locator('[data-component="tab-bar"] > *')
+    .evaluateAll((nodes) => nodes.map((node) => node.className));
   expect(order).toEqual(['kui-tab-bar__leading', 'kui-tab-bar__tabs', 'kui-tab-bar__trailing']);
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__work');
@@ -4724,7 +4750,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   // The header identity and controls are Toolbar zone children, not wrapper components (HS2-EZ1N7Z).
   await expect(shell.locator('.kui-toolbar__leading > .workspace-header__identity')).toHaveCount(1);
   await expect(shell.locator('.kui-toolbar__trailing > .view-mode-switcher')).toHaveCount(1);
-  await expect(shell.locator('.project-sidebar > [data-component="pane"]')).toHaveCount(1);
+  await expect(shell.locator('.project-sidebar[data-component="pane"]')).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();
@@ -4782,7 +4808,10 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   ).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
-  await expect(shell.locator('.project-sidebar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
+    'background-color',
+    'rgb(255, 255, 255)',
+  );
   await shell.getByRole('button', { name: /New ticket/ }).click();
   const shellComposer = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();

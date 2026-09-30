@@ -379,9 +379,9 @@ describe('WorkspaceHeader', () => {
     // The focus ring is a single pill on the group (following its radius), not a mismatched ring on
     // the smaller inner combobox (HS2-M1DF1D).
     expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*border-radius: var\(--wa-border-radius-pill\)/);
-    expect(headerCss).toContainSource(
-      '.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has([open]) { outline: var(--wa-focus-ring)',
-    );
+    // Kerf paints the pill ring (`focusRing="outline"`); the app draws no ring of its own.
+    expect(markup).toMatch(/workspace-header__sort-group[^>]*data-focus-ring="outline"/);
+    expect(headerCss).not.toContain('.workspace-header__sort-group:focus-within');
     // The Select hands its focus ring to the group (`focusRingOwner="group"`).
     expect(markup).toMatch(
       /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,

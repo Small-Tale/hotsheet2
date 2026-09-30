@@ -113,41 +113,40 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     </div>
   );
   return (
-    <div class="project-sidebar">
-      <Pane
-        element="aside"
-        label="Project sidebar"
-        safeAreaEdges={['block-start', 'block-end', 'inline-start']}
-        header={header}
-        contentClassName="project-sidebar__content"
-        footerClassName="project-sidebar__footer"
-        footer={footer}
-      >
-        <ProjectSummary
-          completedToday={props.completedToday}
-          inProgress={props.inProgress}
-          trend={props.completionTrend}
+    <Pane
+      element="aside"
+      className="project-sidebar"
+      label="Project sidebar"
+      safeAreaEdges={['block-start', 'block-end', 'inline-start']}
+      header={header}
+      contentClassName="project-sidebar__content"
+      footerClassName="project-sidebar__footer"
+      footer={footer}
+    >
+      <ProjectSummary
+        completedToday={props.completedToday}
+        inProgress={props.inProgress}
+        trend={props.completionTrend}
+      />
+      <RepositorySummary
+        branch={props.branch}
+        unpushed={props.unpushed}
+        behind={props.behind}
+        uncommitted={props.uncommitted}
+        conflicted={props.conflicted}
+        error={props.repositoryError}
+      />
+      <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
+      {props.commands.length > 0 ? (
+        <CommandNavigation
+          label={props.commandGroupLabel}
+          commands={props.commands}
+          expanded={props.commandGroupExpanded}
+          collapsedGroups={props.collapsedCommandGroups}
         />
-        <RepositorySummary
-          branch={props.branch}
-          unpushed={props.unpushed}
-          behind={props.behind}
-          uncommitted={props.uncommitted}
-          conflicted={props.conflicted}
-          error={props.repositoryError}
-        />
-        <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
-        {props.commands.length > 0 ? (
-          <CommandNavigation
-            label={props.commandGroupLabel}
-            commands={props.commands}
-            expanded={props.commandGroupExpanded}
-            collapsedGroups={props.collapsedCommandGroups}
-          />
-        ) : (
-          <></>
-        )}
-      </Pane>
-    </div>
+      ) : (
+        <></>
+      )}
+    </Pane>
   );
 }

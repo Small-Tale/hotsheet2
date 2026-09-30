@@ -23,7 +23,7 @@ describe('TerminalOperationsSidebar', () => {
   it('adds an aggregate group only when multiple projects are open', () => {
     const multiple = String(TerminalOperationsSidebar({ projects })),
       single = String(TerminalOperationsSidebar({ projects: [projects[0]] }));
-    expect(multiple).toContain('<div class="terminal-operations-sidebar"><aside class="kui-pane"');
+    expect(multiple).toContain('class="kui-pane terminal-operations-sidebar"');
     expect(multiple).toContain('data-component="pane"');
     expect(multiple).toContain('class="kui-pane__content kui-content terminal-operations-sidebar__groups"');
     expect(multiple).toContain('All projects');

@@ -11,7 +11,7 @@
 .command-navigation__command {
   display: grid;
   min-height: remify(40px);
-  margin-inline: var(--kui-layout-inline-margin, var(--kui-space-xs));
+  margin-inline: var(--kui-space-xs);
   border-radius: var(--kui-layout-rounded-radius, calc(1px + 0.6875rem));
   font-weight: 650;
 }

@@ -5,7 +5,7 @@ test('sort hover stays within one centered pill surface', async ({ page }) => {
   await page.goto('/ux-demo?component=workspace-header');
 
   const group = page.locator('.workspace-header__sort-group');
-  const select = group.locator('.workspace-header__sort');
+  const select = group.locator('wa-select[name="workspace-sort"]');
   const comboboxBackground = () =>
     select.evaluate((node) => {
       const combobox = node.shadowRoot?.querySelector('[part~="combobox"]');
@@ -21,7 +21,7 @@ test('sort hover stays within one centered pill surface', async ({ page }) => {
   await expect(select).toHaveAttribute('data-selected-presentation', 'icon-only');
   const geometry = await group.evaluate((node) => {
     const outer = node.getBoundingClientRect(),
-      inner = node.querySelector<HTMLElement>('.workspace-header__sort')!.getBoundingClientRect();
+      inner = node.querySelector<HTMLElement>('wa-select[name="workspace-sort"]')!.getBoundingClientRect();
     return { left: inner.left - outer.left, right: outer.right - inner.right, inside: inner.width <= outer.width };
   });
   expect(geometry.inside).toBe(true);

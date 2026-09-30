@@ -13,7 +13,7 @@ import {
 describe('workspace composition surfaces', () => {
   it('owns settings, notification, and project sidebar routing', () => {
     expect(String(SidebarSurface({ kind: 'settings', selected: 'sources' }))).toContain(
-      '<div class="settings-navigation"><aside class="kui-pane"',
+      'class="kui-pane settings-navigation"',
     );
     expect(
       String(SidebarSurface({ kind: 'notifications', selected: 'day', counts: { pending: 1, day: 2, week: 3 } })),
@@ -39,7 +39,7 @@ describe('workspace composition surfaces', () => {
     expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo project statistics');
     expect(String(ProjectTerminalDrawerSurface({}))).toBe('');
     expect(String(TerminalOperationsSurface({ projects: [] }))).toContain(
-      '<div class="terminal-operations-sidebar"><aside class="kui-pane"',
+      'class="kui-pane terminal-operations-sidebar"',
     );
   });
 

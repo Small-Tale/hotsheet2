@@ -433,11 +433,15 @@ export function WorkspaceControls({
         </ToolbarControlGroup>
       )}
       {rail ? (
-        <ToolbarControlGroup className="workspace-header__sort-group workspace-header__sort-group--rail" single>
+        <ToolbarControlGroup
+          className="workspace-header__sort-group workspace-header__sort-group--rail"
+          single
+          focusRing="outline"
+        >
           {sortSelect}
         </ToolbarControlGroup>
       ) : (
-        <ToolbarControlGroup className="workspace-header__sort-group" single>
+        <ToolbarControlGroup className="workspace-header__sort-group" single focusRing="outline">
           {sortSelect}
         </ToolbarControlGroup>
       )}

@@ -1963,13 +1963,16 @@ moved onto app-owned wrapper elements; Web Awesome shadow parts are now addresse
 the wrapper's child element (`.ticket-status-menu > wa-select::part(combobox)`). Every
 remaining `KUI-L022` finding restyled a Kerf root's own contract.
 
-HS2-VABS08 then reduced `KUI-L022` from 33 to 3. The Pane shells (`.project-sidebar`,
-`.settings-navigation`, `.terminal-operations-sidebar`), the project tab strip, the drawer's
-tab strip, the rail heading/content/view, the attachment gallery toolbar and footer, the HS1
+HS2-VABS08 then reduced `KUI-L022` from 33 to 3. The project tab strip, the drawer's tab
+strip, the rail heading/content/view, the attachment gallery toolbar and footer, the HS1
 banners, the provider connections card, the command rows, and the code-review header are
 app-owned wrapper elements (`display: grid` shells that the Kerf component fills) which
 configure the component only through cataloged public tokens (`--kui-toolbar-gap`,
-`--kui-layout-*`, `--kui-state-banner-*`, `--kui-list-item-*`). Props replaced the rest:
+`--kui-layout-*`, `--kui-state-banner-*`, `--kui-list-item-*`). The sidebar Panes
+(`.project-sidebar`, `.settings-navigation`, `.terminal-operations-sidebar`) keep their class
+as an unstyled hook and stay the shell regions' only children, because Kerf routes device
+safe areas only into a sole Pane child; their card chrome lives in the UX demo stage
+(`.sidebar-demo-card`). Props replaced the rest:
 `Select` `presentation="toolbar-borderless"` and `focusRingOwner="group"` (workspace sort,
 rail project and view, mobile project switcher), `ListItem` `divider="after"` (repository
 files), and `data-state`-keyed public tokens (visibility rows). The gallery footer is an

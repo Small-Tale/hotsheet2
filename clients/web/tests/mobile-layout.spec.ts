@@ -155,10 +155,10 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   expect(restoreBottom).toBeCloseTo(64, 0);
   await page.screenshot({ path: '/private/tmp/hs2-43n9zb-mobile-drawer-restore.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const zoom = page.getByRole('toolbar', { name: 'Workspace tile zoom' }),
-    zoomToolbar = page.locator('.terminal-dashboard__zoom');
+  const zoom = page.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(zoom).toBeVisible();
-  const zoomBottom = await zoomToolbar.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
+  // `.terminal-dashboard__zoom` is the zero-size safe-area anchor; measure the floating toolbar itself.
+  const zoomBottom = await zoom.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
   expect(zoomBottom).toBeCloseTo(64, 0);
   await page.screenshot({ path: '/private/tmp/hs2-43n9zb-mobile-floating-controls.png', fullPage: true });
 });
@@ -744,13 +744,17 @@ test('mobile toolbar drops the project name, uses borderless content-fit selects
   // 1. The project name is gone from the main toolbar (the mobile project Select carries it instead).
   await expect(page.locator('.workspace-header__identity')).toHaveCount(0);
   // 2 & 3. The project and view selects are borderless (their combobox part has no border).
-  const comboBorder = (name: string) =>
+  // Kerf's toolbar-borderless Select presentation keeps a transparent 1px border in the combobox
+  // part, so "borderless" means no visible border, not a zero border width.
+  const comboBorderless = (name: string) =>
     page.locator(`wa-select[name="${name}"]`).evaluate((node) => {
       const part = (node as HTMLElement).shadowRoot?.querySelector('[part~="combobox"]');
-      return part ? getComputedStyle(part).borderTopWidth : 'no-part';
+      if (!part) return 'no-part';
+      const style = getComputedStyle(part);
+      return style.borderTopWidth === '0px' || style.borderTopColor === 'rgba(0, 0, 0, 0)';
     });
-  expect(await comboBorder('mobile-project')).toBe('0px');
-  expect(await comboBorder('mobile-view')).toBe('0px');
+  expect(await comboBorderless('mobile-project')).toBe(true);
+  expect(await comboBorderless('mobile-view')).toBe(true);
   // ...and sized to the selected label rather than stretching to fill the bar.
   const [selectBox, barBox] = await Promise.all([
     page.locator('wa-select[name="mobile-project"]').boundingBox(),

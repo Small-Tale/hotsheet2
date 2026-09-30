@@ -499,6 +499,18 @@ body[data-resizing-project-sidebar='true'] {
   place-items: center;
   gap: remify(16px);
 }
+/* Stage card around the standalone sidebar Panes (in the shell the Workbench rail owns their box). */
+.sidebar-demo-card {
+  display: grid;
+  width: min(remify(272px), 100%);
+  min-width: 250px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(14px);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
 .project-sidebar-demo {
   display: grid;
   min-height: remify(672px);

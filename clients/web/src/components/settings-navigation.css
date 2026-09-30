@@ -1,18 +1,7 @@
 /* Unpadded pane (kui-pane): the shell owns only card chrome; children own their inset
    (kerf ui rule 15). Shared by SettingsNavigation and NotificationNavigation. */
-.settings-navigation {
-  display: grid;
-  width: min(remify(272px), 100%);
-  min-width: 250px;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(14px);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
 /* Flex layout so a lone collapse control aligns to the 8px gutter (HS2-V0ZH69). */
-.settings-navigation > .kui-pane > .kui-pane__header > .kui-toolbar {
+.settings-navigation > .kui-pane__header > .kui-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;

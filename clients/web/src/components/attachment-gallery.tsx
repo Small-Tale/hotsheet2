@@ -552,7 +552,7 @@ export function AttachmentGallery({
         <div class="attachment-gallery__footer-actions">
           {markup && (
             <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
-              <ToolbarControlGroup label="Media markup" tone="dark">
+              <ToolbarControlGroup label="Media markup">
                 <GalleryButton
                   action="toggle-gallery-draw"
                   label="Add rectangle"
@@ -569,7 +569,7 @@ export function AttachmentGallery({
             </FloatingToolbar>
           )}
           <FloatingToolbar label="Media zoom" position="bottom-end" inset={px(0)}>
-            <ToolbarControlGroup label="Media zoom" tone="dark">
+            <ToolbarControlGroup label="Media zoom">
               <button
                 type="button"
                 data-action="zoom-gallery-image"

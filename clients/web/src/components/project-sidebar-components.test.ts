@@ -404,8 +404,9 @@ describe('ProjectSidebar component slice', () => {
         collapseControl: true,
       }),
     );
-    // The app shell div wraps the Kerf Pane; the Pane root carries no app class (KUI-L022).
-    expect(markup).toContain('<div class="project-sidebar"><aside class="kui-pane"');
+    // The Pane is the sidebar itself: its class is an app hook that no application rule styles
+    // (KUI-L022), so the Workbench rail sees a Pane-only child and routes safe areas to it.
+    expect(markup).toContain('class="kui-pane project-sidebar"');
     expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('class="kui-pane__content kui-content project-sidebar__content"');
     expect(markup).toContain('class="kui-pane__footer project-sidebar__footer"');
@@ -419,10 +420,9 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.project-sidebar__footer-content \{[^}]*padding: var\(--kui-space-xs\)/);
     // The collapse toolbar aligns its lone control to the gutter with flex, not the old negative-margin hack.
-    expect(css).toMatch(
-      /\.project-sidebar > \.kui-pane > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/,
-    );
-    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
+    expect(css).toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/);
+    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
+    expect(css).not.toMatch(/\.project-sidebar \{/);
   });
 
   it('omits the command section when the project has no commands', () => {

@@ -270,28 +270,33 @@ export function ProjectSidebarDemo() {
         class="project-sidebar-demo__resizer"
         style={`--project-sidebar-demo-height:${projectSidebarHeight.value}px`}
       >
-        <ProjectSidebar
-          completedToday={6}
-          inProgress={3}
-          completionTrend={completionTrend}
-          branch="feature/client-sidebar"
-          unpushed={6}
-          uncommitted={2}
-          views={sidebarViews}
-          selectedViewId={selectedViewId.value}
-          commandGroupLabel="Project commands"
-          commands={sidebarCommands.map((command) => ({ ...command, running: command.id === runningCommandId.value }))}
-          commandGroupExpanded={commandGroupExpanded.value}
-          collapsedCommandGroups={collapsedCommandGroups.value}
-          driveRunning={driveRunning.value}
-          driveTool="codex"
-          driveTools={demoAiTools}
-          driveSelection={{ tool: 'codex' }}
-          driveDefaultSelection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
-          openCount={17}
-          upNextCount={4}
-          activeCount={2}
-        />
+        <div class="sidebar-demo-card">
+          <ProjectSidebar
+            completedToday={6}
+            inProgress={3}
+            completionTrend={completionTrend}
+            branch="feature/client-sidebar"
+            unpushed={6}
+            uncommitted={2}
+            views={sidebarViews}
+            selectedViewId={selectedViewId.value}
+            commandGroupLabel="Project commands"
+            commands={sidebarCommands.map((command) => ({
+              ...command,
+              running: command.id === runningCommandId.value,
+            }))}
+            commandGroupExpanded={commandGroupExpanded.value}
+            collapsedCommandGroups={collapsedCommandGroups.value}
+            driveRunning={driveRunning.value}
+            driveTool="codex"
+            driveTools={demoAiTools}
+            driveSelection={{ tool: 'codex' }}
+            driveDefaultSelection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
+            openCount={17}
+            upNextCount={4}
+            activeCount={2}
+          />
+        </div>
         <div
           class="project-sidebar-demo__resize-handle"
           data-action="resize-project-sidebar"
@@ -316,7 +321,9 @@ export function SettingsNavigationDemo() {
   return (
     <section class="sidebar-component-demo">
       <div class="sidebar-component-demo__rail">
-        <SettingsNavigation selected="ai" collapseControl />
+        <div class="sidebar-demo-card">
+          <SettingsNavigation selected="ai" collapseControl />
+        </div>
       </div>
     </section>
   );
@@ -325,7 +332,9 @@ export function NotificationNavigationDemo() {
   return (
     <section class="sidebar-component-demo">
       <div class="sidebar-component-demo__rail">
-        <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
+        <div class="sidebar-demo-card">
+          <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
+        </div>
       </div>
     </section>
   );
@@ -334,19 +343,21 @@ export function TerminalOperationsSidebarDemo() {
   return (
     <section class="sidebar-component-demo">
       <div class="sidebar-component-demo__rail">
-        <TerminalOperationsSidebar
-          projects={[
-            { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
-            {
-              id: 'best-in-manila',
-              name: 'Best-in-Manila',
-              completedToday: 0,
-              inProgress: 0,
-              trend: [0, 0, 0, 0, 0, 0, 0],
-            },
-            { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
-          ]}
-        />
+        <div class="sidebar-demo-card">
+          <TerminalOperationsSidebar
+            projects={[
+              { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
+              {
+                id: 'best-in-manila',
+                name: 'Best-in-Manila',
+                completedToday: 0,
+                inProgress: 0,
+                trend: [0, 0, 0, 0, 0, 0, 0],
+              },
+              { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
+            ]}
+          />
+        </div>
       </div>
     </section>
   );
