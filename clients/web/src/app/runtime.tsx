@@ -306,7 +306,12 @@ import {
 import { createTrailingTask } from '../trailing-task';
 import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
 import { syncVideoPosters } from '../video-posters';
-import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView } from '../workspace-preferences';
+import {
+  loadWorkspacePreferences,
+  saveWorkspacePreferences,
+  sortableWorkspaceView,
+  type SortableWorkspaceViewMode,
+} from '../workspace-preferences';
 import {
   activeProjectRoot,
   hs1CleanupPromptDismissed,
@@ -541,6 +546,8 @@ export async function startHotSheetWebClient() {
     error = signal(''),
     toastMessage = signal(''),
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
+    // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
+    ticketViewMode = signal<SortableWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
     selectedView = signal<TicketView>('all'),
     ticketCollectionState = signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>(
       undefined,
@@ -1674,7 +1681,13 @@ export async function startHotSheetWebClient() {
       return;
     }
     selectedProjectRestoreRoot.value = '';
-    if (next === selectedProjectId.value) return;
+    if (next === selectedProjectId.value) {
+      // Re-selecting the current project from Notifications or Settings returns to the ticket view the user
+      // last had open (list or columns), like a home affordance (HS2-42T028).
+      if (viewMode.value === 'settings' || viewMode.value === 'notifications')
+        switchWorkspaceView(ticketViewMode.value);
+      return;
+    }
     const activated = activateOpenProject(next);
     if (activated) void refreshActivatedProject(activated, terminalDrawerVisible.value);
   }
@@ -1781,9 +1794,14 @@ export async function startHotSheetWebClient() {
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];
   }
+  effect(() => {
+    const mode = viewMode.value;
+    if (mode === 'list' || mode === 'board') ticketViewMode.value = mode;
+  });
   function persistWorkspacePreferences() {
     saveWorkspacePreferences(localStorage, {
       viewMode: viewMode.value,
+      ticketViewMode: ticketViewMode.value,
       sorts: workspaceSorts.value,
       sidebarVisible: sidebarVisible.value,
       inspectorVisible: inspectorVisible.value,

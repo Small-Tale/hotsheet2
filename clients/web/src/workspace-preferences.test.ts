@@ -23,6 +23,7 @@ describe('workspace preferences', () => {
     });
     expect(loadWorkspacePreferences({ getItem: () => stored })).toEqual({
       viewMode: 'board',
+      ticketViewMode: 'board',
       sorts: {
         list: { sort: 'priority', sortDirection: 'ascending' },
         board: { sort: 'priority', sortDirection: 'ascending' },
@@ -47,6 +48,7 @@ describe('workspace preferences', () => {
       { setItem: (key, value) => values.set(key, value) },
       {
         viewMode: 'settings',
+        ticketViewMode: 'board',
         sorts: {
           list: { sort: 'title', sortDirection: 'descending' },
           board: { sort: 'priority', sortDirection: 'ascending' },
@@ -59,6 +61,7 @@ describe('workspace preferences', () => {
     );
     expect(loadWorkspacePreferences({ getItem: (key) => values.get(key) ?? null })).toEqual({
       viewMode: 'settings',
+      ticketViewMode: 'board',
       sorts: {
         list: { sort: 'title', sortDirection: 'descending' },
         board: { sort: 'priority', sortDirection: 'ascending' },
@@ -68,6 +71,17 @@ describe('workspace preferences', () => {
       commandGroupExpanded: false,
       commandGroupsCollapsed: { project: ['Quality', 'Git'] },
     });
+  });
+
+  it('remembers the last ticket view independently of a persisted Notifications or Settings view (HS2-42T028)', () => {
+    const load = (record: Record<string, unknown>) =>
+      loadWorkspacePreferences({ getItem: () => JSON.stringify(record) }).ticketViewMode;
+    expect(load({ viewMode: 'settings', ticketViewMode: 'board' })).toBe('board');
+    expect(load({ viewMode: 'notifications', ticketViewMode: 'list' })).toBe('list');
+    // Records saved before the field existed derive it from a persisted ticket view, else list.
+    expect(load({ viewMode: 'board' })).toBe('board');
+    expect(load({ viewMode: 'settings' })).toBe('list');
+    expect(load({ viewMode: 'list', ticketViewMode: 'settings' })).toBe('list');
   });
 
   it('validates and independently toggles remembered named command groups per project', () => {

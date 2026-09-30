@@ -3538,6 +3538,50 @@ test('closes a terminal tab after its process has stopped (HS2-DPTG65)', async (
   await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
 });
 
+test('returns to the last ticket view when the current project tab is clicked from Notifications or Settings (HS2-42T028)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const tab = page.getByRole('tab', { name: 'demo' }),
+    list = page.locator('[data-component="ticket-list"]'),
+    board = page.locator('[data-component="ticket-board"]'),
+    settings = page.locator('[data-component="settings-workspace"]'),
+    notifications = page.locator('[data-component="notification-center"]');
+  await expect(list).toBeVisible();
+  // Settings → the already-current project tab → the remembered list view.
+  await page.getByLabel('Settings view').click();
+  await expect(settings).toBeVisible();
+  await tab.click();
+  await expect(settings).toHaveCount(0);
+  await expect(list).toBeVisible();
+  await expect(page.getByLabel('List view')).toHaveAttribute('aria-pressed', 'true');
+  // Clicking the current tab on a ticket view is a no-op.
+  await tab.click();
+  await expect(list).toBeVisible();
+  // Columns is remembered across a Notifications detour.
+  await page.getByLabel('Columns view').click();
+  await expect(board).toBeVisible();
+  await page.getByLabel('Notifications view').click();
+  await expect(notifications).toBeVisible();
+  await tab.click();
+  await expect(notifications).toHaveCount(0);
+  await expect(board).toBeVisible();
+  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
+  // The remembered ticket view survives a reload that restores Settings.
+  await page.getByLabel('Settings view').click();
+  await expect(settings).toBeVisible();
+  await page.reload();
+  await expect(settings).toBeVisible();
+  await tab.click();
+  await expect(settings).toHaveCount(0);
+  await expect(board).toBeVisible();
+});
+
 test('hides the bottom terminal drawer on Notifications and Settings views, preserving the open preference (HS2-EQEJC7)', async ({
   page,
 }) => {
