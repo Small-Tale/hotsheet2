@@ -19,7 +19,7 @@
   display: flex;
   width: max-content;
   margin: 0;
-  padding: 3px;
+  padding: var(--kui-space-2xs);
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--wa-color-neutral-on-quiet) 35%, transparent);
   border-radius: 8px;
@@ -29,7 +29,7 @@
   font:
     var(--wa-font-size-xs)/1.35 system-ui,
     sans-serif;
-  gap: 3px;
+  gap: var(--kui-space-2xs);
   pointer-events: auto;
   backdrop-filter: blur(12px);
 }
@@ -37,7 +37,7 @@
 .hs-dev-review__toolbar button {
   height: 22px;
   min-height: 22px;
-  padding: 0 6px;
+  padding: 0 var(--kui-space-xs);
   box-sizing: border-box;
   border: 0;
   border-radius: 5px;
@@ -109,7 +109,7 @@
   right: 0;
   display: grid;
   min-width: remify(144px);
-  padding: 3px;
+  padding: var(--kui-space-2xs);
   border: 1px solid var(--wa-color-surface-border);
   border-radius: 7px;
   background: var(--wa-color-surface-default);
@@ -127,7 +127,7 @@
   right: 6px;
   width: max-content;
   max-width: min(remify(384px), calc(100vw - 12px));
-  padding: 4px 7px;
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
   border-radius: 5px;
   color: var(--wa-color-neutral-on-loud);
   background: color-mix(in srgb, var(--wa-color-neutral-on-normal) 82%, transparent);
@@ -156,7 +156,7 @@
   position: absolute;
   top: 3px;
   left: 4px;
-  padding: 1px 4px;
+  padding: 0 var(--kui-space-2xs);
   border-radius: 3px;
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-brand-fill-loud);
@@ -330,7 +330,7 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
 .hs-dev-review__thumbnail {
   width: 96px;
   height: 64px !important;
-  padding: 2px !important;
+  padding: var(--kui-space-2xs) !important;
   border: 2px solid transparent !important;
   background: var(--wa-color-neutral-fill-normal) !important;
   line-height: normal !important;
@@ -432,12 +432,12 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
   display: flex;
   min-width: 0;
   max-width: 220px;
-  padding: 7px 28px 7px 8px;
+  padding: var(--kui-space-xs) calc(var(--kui-space-l) + var(--kui-space-2xs)) var(--kui-space-xs) var(--kui-space-xs);
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: 7px;
   background: var(--wa-color-neutral-fill-quiet);
   align-items: center;
-  gap: 7px;
+  gap: var(--kui-space-xs);
 }
 .hs-dev-review__attachment > img {
   width: 28px;
@@ -463,7 +463,7 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
   display: flex;
   min-height: remify(16px);
   align-items: center;
-  gap: 7px;
+  gap: var(--kui-space-xs);
   font-size: var(--wa-font-size-xs);
   font-weight: 500;
 }

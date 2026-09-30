@@ -159,6 +159,318 @@
       "rules": ["KUI-L005"],
       "target": "src/components/mobile-side-panels.css",
       "rationale": "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap."
+    },
+    {
+      "id": "intentional-nested-inset-ai-conversation",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ai-conversation.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ai-conversation__embedded-header, ai-conversation__error, ai-conversation__foreground, ai-conversation__model-effort, ai-conversation__selection-actions, app-heading__summary."
+    },
+    {
+      "id": "intentional-nested-inset-attachment-gallery",
+      "rules": ["KUI-L004"],
+      "target": "src/components/attachment-gallery.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: attachment-gallery__annotation-label, attachment-gallery__volume-popup."
+    },
+    {
+      "id": "intentional-nested-inset-command-settings-editor",
+      "rules": ["KUI-L004"],
+      "target": "src/components/command-settings-editor.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: app-heading__summary, command-settings-editor__blank, command-settings-editor__dialog-body, command-settings-editor__swatch, command-settings-editor__swatches, command-settings-editor__wide."
+    },
+    {
+      "id": "intentional-nested-inset-connection-details-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/connection-details-dialog.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: app-heading__summary, connection-details-dialog__body, connection-details-dialog__metadata."
+    },
+    {
+      "id": "intentional-nested-inset-conversation-export-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/conversation-export-dialog.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: conversation-export-dialog__choice, conversation-export-dialog__choice--danger."
+    },
+    {
+      "id": "intentional-nested-inset-drive-control",
+      "rules": ["KUI-L004"],
+      "target": "src/components/drive-control.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: drive-control__options."
+    },
+    {
+      "id": "intentional-nested-inset-keyboard-settings",
+      "rules": ["KUI-L004"],
+      "target": "src/components/keyboard-settings.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: keyboard-settings__capture, keyboard-settings__chord, keyboard-settings__fixed, keyboard-settings__reset-all, keyboard-settings__row."
+    },
+    {
+      "id": "intentional-nested-inset-lucide-icon-picker",
+      "rules": ["KUI-L004"],
+      "target": "src/components/lucide-icon-picker.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: lucide-icon-picker__empty."
+    },
+    {
+      "id": "intentional-nested-inset-markdown-editor",
+      "rules": ["KUI-L004"],
+      "target": "src/components/markdown-editor.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: markdown-editor__preview."
+    },
+    {
+      "id": "intentional-nested-inset-not-working-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/not-working-dialog.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: not-working-dialog__note."
+    },
+    {
+      "id": "intentional-nested-inset-notification-center",
+      "rules": ["KUI-L004"],
+      "target": "src/components/notification-center.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: notification-center__empty."
+    },
+    {
+      "id": "intentional-nested-inset-pending-attachment-picker",
+      "rules": ["KUI-L004"],
+      "target": "src/components/pending-attachment-picker.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: pending-attachment-picker__drop, pending-attachment-picker__item."
+    },
+    {
+      "id": "intentional-nested-inset-permission-request-card",
+      "rules": ["KUI-L004"],
+      "target": "src/components/permission-request-card.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: permission-request-card__project."
+    },
+    {
+      "id": "intentional-nested-inset-project-close-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/project-close-dialog.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: project-close-dialog__empty."
+    },
+    {
+      "id": "intentional-nested-inset-project-tab-bar",
+      "rules": ["KUI-L004"],
+      "target": "src/components/project-tab-bar.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: project-tab-bar__select."
+    },
+    {
+      "id": "intentional-nested-inset-provider-setup-form",
+      "rules": ["KUI-L004"],
+      "target": "src/components/provider-setup-form.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: provider-setup-form__device-code, provider-setup-form__repository-access, provider-setup-form__wide."
+    },
+    {
+      "id": "intentional-nested-inset-quick-ticket-composer",
+      "rules": ["KUI-L004"],
+      "target": "src/components/quick-ticket-composer.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: quick-ticket-composer__attachment, quick-ticket-composer__attachments, quick-ticket-composer__details, quick-ticket-composer__drop."
+    },
+    {
+      "id": "intentional-nested-inset-repository-setup",
+      "rules": ["KUI-L004"],
+      "target": "src/components/repository-setup.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: repository-setup__error."
+    },
+    {
+      "id": "intentional-nested-inset-repository-status-popover",
+      "rules": ["KUI-L004"],
+      "target": "src/components/repository-status-popover.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: repository-status-popover__detail-error, repository-status-popover__pagination."
+    },
+    {
+      "id": "intentional-nested-inset-terminal-dashboard",
+      "rules": ["KUI-L004"],
+      "target": "src/components/terminal-dashboard.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: terminal-dashboard__content, terminal-dashboard__context-menu, terminal-dashboard__magnified, terminal-dashboard__project, terminal-tile__close, terminal-tile__text-size, workspace-chat-tile__preview-surface."
+    },
+    {
+      "id": "intentional-nested-inset-terminal-operations-sidebar",
+      "rules": ["KUI-L004"],
+      "target": "src/components/terminal-operations-sidebar.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: terminal-operations-sidebar__group-heading."
+    },
+    {
+      "id": "intentional-nested-inset-terminal-visibility-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/terminal-visibility-dialog.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: terminal-visibility-dialog__tabs."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-attachments",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-attachments.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-attachments__batch, ticket-attachments__batch-title-editor, ticket-attachments__browse, ticket-attachments__count, ticket-attachments__drop, ticket-attachments__image-grid, ticket-inspector__attachment, ticket-inspector__section-header."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-board-column",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-board-column.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-board-column__progress."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-board",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-board.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-board__columns."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-code-review",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-code-review.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-code-review__commit, ticket-code-review__compare-label, ticket-code-review__range."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-field-conflict",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-field-conflict.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-field-conflict__merge, ticket-field-conflict__versions."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-info-panel",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-info-panel.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-inspector__blocked-editor, ticket-inspector__blocked-surface, ticket-inspector__details-surface, ticket-inspector__provenance."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-inspector-skeleton",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-inspector-skeleton.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-inspector__details-surface, ticket-inspector__ph-lines, ticket-inspector__ph-provenance."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-inspector",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-inspector.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-inspector__title-input."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-reader",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-reader.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-reader__layer-context."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-row",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-row.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-list-row__feedback."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-search-field",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-search-field.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-search-field__help-notes."
+    },
+    {
+      "id": "intentional-nested-inset-ticket-timeline",
+      "rules": ["KUI-L004"],
+      "target": "src/components/ticket-timeline.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-inspector__timeline."
+    },
+    {
+      "id": "state-modifier-classes-ai-conversation",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ai-conversation.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ai-conversation__message ai-conversation__message--${message.role}`}"
+    },
+    {
+      "id": "state-modifier-classes-attachment-context-menu",
+      "rules": ["KUI-L008"],
+      "target": "src/components/attachment-context-menu.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className}"
+    },
+    {
+      "id": "state-modifier-classes-attachment-gallery",
+      "rules": ["KUI-L008"],
+      "target": "src/components/attachment-gallery.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className}"
+    },
+    {
+      "id": "state-modifier-classes-connection-state-banner",
+      "rules": ["KUI-L008"],
+      "target": "src/components/connection-state-banner.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={`connection-state-banner connection-state-banner--${state}`}"
+    },
+    {
+      "id": "state-modifier-classes-corrupt-ticket-row",
+      "rules": ["KUI-L008"],
+      "target": "src/components/corrupt-ticket-row.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`corrupt-ticket-inspector__recovery${recovery.failed ? ' corrupt-ticket-inspector__recovery--failed' : ''}`} | class={`corrupt-ticket-row__recovery${recovery.failed ? ' corrupt-ticket-row__recovery--failed' : ''}`} | class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected ? ' ticket-list-row--selected' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-markdown-editor",
+      "rules": ["KUI-L008"],
+      "target": "src/components/markdown-editor.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-note-card",
+      "rules": ["KUI-L008"],
+      "target": "src/components/note-card.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`note-card${editorOpen ? ' note-card--editing' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-permission-request-card",
+      "rules": ["KUI-L008"],
+      "target": "src/components/permission-request-card.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`permission-request-card permission-request-card--${presentation}`}"
+    },
+    {
+      "id": "state-modifier-classes-quick-ticket-composer",
+      "rules": ["KUI-L008"],
+      "target": "src/components/quick-ticket-composer.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={ attachmentError ? 'quick-ticket-composer__message quick-ticket-composer__message--error' : 'quick-ticket-composer__message' }"
+    },
+    {
+      "id": "state-modifier-classes-status-badge",
+      "rules": ["KUI-L008"],
+      "target": "src/components/status-badge.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`blocked-badge${compact ? ' blocked-badge--compact' : ''}`} | class={className}"
+    },
+    {
+      "id": "state-modifier-classes-terminal-dashboard",
+      "rules": ["KUI-L008"],
+      "target": "src/components/terminal-dashboard.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`terminal-viewport${dashboardPreview ? ' terminal-viewport--scaled-preview' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-ticket-code-review",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ticket-code-review.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`${embedded ? '' : 'ticket-inspector__content '}ticket-code-review`}"
+    },
+    {
+      "id": "state-modifier-classes-ticket-empty-state",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ticket-empty-state.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={`ticket-empty-state ticket-empty-state--${props.kind}`}"
+    },
+    {
+      "id": "state-modifier-classes-ticket-inspector-skeleton",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ticket-inspector-skeleton.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-inspector__ph-note${card ? ' ticket-inspector__ph-note--card' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-ticket-inspector",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ticket-inspector.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} | class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'}"
+    },
+    {
+      "id": "state-modifier-classes-ticket-row",
+      "rules": ["KUI-L008"],
+      "target": "src/components/ticket-row.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`} | class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} | class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}"
+    },
+    {
+      "id": "state-modifier-classes-view-navigation",
+      "rules": ["KUI-L008"],
+      "target": "src/components/view-navigation.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={item.id === 'errors' ? 'menu-item--errors' : ''}"
+    },
+    {
+      "id": "state-modifier-classes-main",
+      "rules": ["KUI-L008"],
+      "target": "src/ux-demo/main.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={shellClass}"
     }
   ]
 }

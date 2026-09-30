@@ -101,7 +101,7 @@ describe('ServerBusyBars', () => {
     expect(css).toContain('height: 4px');
     expect(css).toContain('pointer-events: none');
     expect(css).toMatch(/\.server-busy-bars__bar \{[^}]*flex: 0 0 3px/);
-    expect(css).toMatch(/\.server-busy-bars \{[^}]*gap: 2px/);
+    expect(css).toMatch(/\.server-busy-bars \{[^}]*gap: remify\(2px\)/);
     expect(css).toContain('animation-play-state: paused');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });

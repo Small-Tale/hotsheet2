@@ -63,7 +63,7 @@ describe('TicketList', () => {
     expect(css).toContainSource(
       ':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)',
     );
-    expect(css).toContain('margin-top: -1px');
+    expect(css).toContain('margin-top: var(--hs-selected-row-overlap)');
   });
 
   it('keeps narrow-list rounding on the outer edges rather than every row', () => {

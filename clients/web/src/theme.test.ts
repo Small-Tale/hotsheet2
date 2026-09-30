@@ -111,6 +111,7 @@ describe('shared client theme', () => {
       '--hs-reader-font-size-s',
       '--hs-reader-font-size-m',
       '--hs-reader-font-size-l',
+      '--hs-selected-row-overlap',
     ];
     const cssReferences = required.filter(
       (token) => !token.startsWith('--hs-priority-') && token !== '--hs-category-fallback',

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -20,7 +20,7 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(24);
+    expect(profile.exceptions).toHaveLength(76);
     for (const exception of profile.exceptions.slice(0, 22)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
@@ -28,7 +28,7 @@ describe('Kerf application UI profile', () => {
       expect(exception.target).not.toMatch(/[?*]|\.\./);
       expect(exception.rationale).toContain('Web Awesome shadow parts');
     }
-    expect(profile.exceptions.slice(22)).toEqual([
+    expect(profile.exceptions.slice(22, 24)).toEqual([
       {
         id: 'mobile-side-panel-safe-area-composition',
         rules: ['KUI-L004'],
@@ -44,6 +44,26 @@ describe('Kerf application UI profile', () => {
           "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap.",
       },
     ]);
+    // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
+    // site; each exception is exact (one file, one rule) and its rationale names the classes or
+    // expressions it covers, so a new finding elsewhere still fails the gate.
+    const reviewed = profile.exceptions.slice(24);
+    expect(reviewed.length).toBeGreaterThan(0);
+    const ids = new Set<string>(),
+      targets = new Set<string>();
+    for (const exception of reviewed) {
+      expect(exception.id).toMatch(/^(?:intentional-nested-inset|state-modifier-classes)-[a-z0-9-]+$/);
+      expect(exception.rules).toEqual([exception.id.startsWith('intentional-') ? 'KUI-L004' : 'KUI-L008']);
+      expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.tsx$/);
+      expect(existsSync(new URL(`../${exception.target}`, import.meta.url)), exception.target).toBe(true);
+      expect(exception.rationale).toMatch(/^Reviewed HS2-M6B8AD: /);
+      if (exception.rules[0] === 'KUI-L004') expect(exception.rationale).toMatch(/design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
+      else expect(exception.rationale).toMatch(/Expressions: class(?:Name)?=\{/);
+      expect(ids.has(exception.id), exception.id).toBe(false);
+      ids.add(exception.id);
+      targets.add(`${exception.rules[0]} ${exception.target}`);
+    }
+    expect(targets.size).toBe(reviewed.length);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

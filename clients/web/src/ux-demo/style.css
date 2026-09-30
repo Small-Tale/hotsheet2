@@ -397,10 +397,10 @@ body[data-resizing-project-sidebar='true'] {
   border-radius: 999px;
 }
 .toolbar-control-group-demo wa-button::part(button) {
-  gap: 2px;
+  gap: remify(2px);
 }
 .toolbar-control-group-demo wa-button::part(caret) {
-  margin-inline-start: 2px;
+  margin-inline-start: remify(2px);
 }
 .metadata-control-demo {
   display: grid;

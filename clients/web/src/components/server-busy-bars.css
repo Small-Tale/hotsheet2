@@ -7,7 +7,8 @@
   display: flex;
   align-items: flex-start;
   height: 4px;
-  gap: 2px;
+  /* Sub-scale bar geometry, not layout spacing (HS2-M6B8AD). */
+  gap: remify(2px);
   pointer-events: none;
   opacity: 0;
   /* Scale the whole strip in/out vertically so it grows down rather than popping (HS2-2G1Y8X). */

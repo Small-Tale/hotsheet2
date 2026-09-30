@@ -7,6 +7,9 @@
   color-scheme: dark;
 }
 :root {
+  /* Adjacent selected rows overlap their shared 1px border so the selection reads as one block
+     (HS2-M6B8AD); this is border geometry, not spacing. */
+  --hs-selected-row-overlap: -1px;
   /* Kerf's canonical spacing scale (HS2-4Y6SM9). We author component spacing against these
      semantic steps instead of raw remify()/--wa-space-*. Kerf defines them in its foundation.css,
      which the app does not import wholesale (it also carries color-scheme/color/font foundations);

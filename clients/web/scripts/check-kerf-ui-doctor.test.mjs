@@ -88,7 +88,7 @@ describe('Kerf UI doctor baseline', () => {
     const increased = report({
       diagnostics: [...report().diagnostics, { id: 'KUI-L004', severity: 'review' }],
     });
-    expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 80 found, budget 79');
+    expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 1 found, budget 0');
   });
 
   it('rejects failed stages, configuration failures, and an enabled browser stage', () => {

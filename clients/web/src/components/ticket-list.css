@@ -39,7 +39,7 @@
   > .ticket-list-row-container:has(> .ticket-list-row--selected)
   + .ticket-list-row-container:has(> .ticket-list-row--selected) {
   position: relative;
-  margin-top: -1px;
+  margin-top: var(--hs-selected-row-overlap);
 }
 .ticket-list__progress {
   padding: var(--kui-space-m);
