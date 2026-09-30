@@ -1,22 +1,29 @@
 import { clampRegionSize } from '@kerfjs/ui/resizable-region';
 
-export type AppRegionId = 'app-sidebar' | 'app-inspector' | 'app-terminal-drawer';
+/** The shell's Workbench panel ids (`<workbench id>-left-rail` etc., HS2-P289N2). */
+export type AppRegionId = 'app-left-rail' | 'app-right-rail' | 'app-bottom-drawer';
 export const TERMINAL_DRAWER_MIN_SIZE = 228;
 export const TERMINAL_DRAWER_COLLAPSE_OVERSHOOT = 48;
 
 export const APP_REGION_BOUNDS: Record<AppRegionId, { min: number; max: number; fallback: number }> = {
-  'app-sidebar': { min: 250, max: 360, fallback: 272 },
-  'app-inspector': { min: 280, max: 520, fallback: 352 },
+  'app-left-rail': { min: 250, max: 360, fallback: 272 },
+  'app-right-rail': { min: 280, max: 520, fallback: 352 },
   // The drawer's real maximum is layout-dependent: the distance from the bottom
   // of the shell to the bottom of PageHeader. Keep persistence unbounded here;
   // MainShell supplies the measured maximum when rendering and resizing.
-  'app-terminal-drawer': { min: TERMINAL_DRAWER_MIN_SIZE, max: Number.POSITIVE_INFINITY, fallback: 320 },
+  'app-bottom-drawer': { min: TERMINAL_DRAWER_MIN_SIZE, max: Number.POSITIVE_INFINITY, fallback: 320 },
 };
 
 const storageKey = (id: AppRegionId) => `hotsheet.layout.${id}.size`;
+/** Storage keys written before the shell moved onto Workbench panel ids; read once as a fallback. */
+const LEGACY_STORAGE_KEYS: Record<AppRegionId, string> = {
+  'app-left-rail': 'hotsheet.layout.app-sidebar.size',
+  'app-right-rail': 'hotsheet.layout.app-inspector.size',
+  'app-bottom-drawer': 'hotsheet.layout.app-terminal-drawer.size',
+};
 
 export function isAppRegionId(value: string | undefined): value is AppRegionId {
-  return value === 'app-sidebar' || value === 'app-inspector' || value === 'app-terminal-drawer';
+  return value === 'app-left-rail' || value === 'app-right-rail' || value === 'app-bottom-drawer';
 }
 
 export function normalizeAppRegionSize(id: AppRegionId, size: number): number {
@@ -25,7 +32,7 @@ export function normalizeAppRegionSize(id: AppRegionId, size: number): number {
 }
 
 export function loadAppRegionSize(storage: Pick<Storage, 'getItem'>, id: AppRegionId): number {
-  const saved = Number(storage.getItem(storageKey(id)));
+  const saved = Number(storage.getItem(storageKey(id)) ?? storage.getItem(LEGACY_STORAGE_KEYS[id]));
   return Number.isFinite(saved) && saved > 0 ? normalizeAppRegionSize(id, saved) : APP_REGION_BOUNDS[id].fallback;
 }
 
@@ -36,7 +43,7 @@ export function saveAppRegionSize(storage: Pick<Storage, 'setItem'>, id: AppRegi
 }
 
 export function terminalDrawerMaximum(mainBottom: number, workAreaTop: number): number {
-  return Math.max(APP_REGION_BOUNDS['app-terminal-drawer'].min, Math.floor(mainBottom - workAreaTop));
+  return Math.max(APP_REGION_BOUNDS['app-bottom-drawer'].min, Math.floor(mainBottom - workAreaTop));
 }
 
 export function terminalDrawerDragDecision(rawSize: number, maximum: number): { size: number; collapse: boolean } {

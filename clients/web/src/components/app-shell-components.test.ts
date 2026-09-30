@@ -30,18 +30,16 @@ describe('application shell components', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
     expect(css).not.toContain('data-transitioning');
-    // Kerf beta.60 owns the restore corner and the inline restore control; the shell only hands its
-    // regions their surface and focus-mode popup layer through public tokens (HS2-PKPGGZ).
-    expect(css).not.toContain('.kui-floating-toolbar');
-    expect(css).not.toMatch(/\.kui-resizable-region[^{]*\{[^}]*(background|z-index|overflow):/);
-    expect(css).toContainSource('.app-shell { --kui-resizable-region-background: var(--wa-color-surface-default); }');
-    expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-resizable-region-popup-z: 200; }");
+    // The Workbench owns the panels' chrome, motion, and restore corners: no app rule targets them
+    // (HS2-P289N2); focus mode lifts the drawer through the public popup-layer token.
+    expect(css).not.toContain('kui-resizable-region');
+    expect(css).not.toContain('kui-workbench__');
+    expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-workbench-popup-z: 200; }");
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
-    // Kerf caps only an overlay's resizable axis, so a side overlay already spans the full height.
-    expect(mobileSidePanelCss).not.toContain('max-height');
+    expect(mobileSidePanelCss).not.toContain('kui-resizable-region');
     // Safe-area insets live inside the scroll owners, never on a container that would shorten them
     // (HS2-4A29RR): the sidebar Pane owns its own; the inspector's header and scroller carry theirs.
     expect(mobileSidePanelCss).not.toContain('.project-sidebar {');
@@ -58,7 +56,7 @@ describe('application shell components', () => {
       'html:root { --kui-safe-area-block-start: var(--hotsheet-safe-area-top); --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom); --kui-safe-area-inline-start: var(--hotsheet-safe-area-left); --kui-safe-area-inline-end: var(--hotsheet-safe-area-right); }',
     );
     expect(css).toMatchSource(
-      /\.app-shell\[data-mobile='true'\] \.app-shell__main:not\(:has\(> \.kui-resizable-region\[data-region-id='app-terminal-drawer'\]:not\(\[data-collapsed='true'\]\)\)\) \.app-shell__workspace:not\(\[data-presentation='edge-to-edge'\]\) \{ padding-bottom: calc\(var\(--app-shell-workspace-padding\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
+      /\.app-shell\[data-mobile='true'\]:not\( :has\(> \[data-component='workbench'\] > \* > \[data-workbench-drawer\]:not\(\[data-collapsed='true'\]\)\) \) \.app-shell__workspace:not\(\[data-presentation='edge-to-edge'\]\) \{ padding-bottom: calc\(var\(--app-shell-workspace-padding\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
     );
     expect(css).toMatchSource(
       /\.ticket-board-column__tickets \{ padding-bottom: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
@@ -146,7 +144,7 @@ describe('application shell components', () => {
     );
     expect(withComposer).toContain('data-has-composer="true"');
     expect(withoutComposer).toContain('data-has-composer="false"');
-    expect(withoutSidebar).not.toContain('data-region-id="app-sidebar"');
+    expect(withoutSidebar).not.toContain('data-region-id="app-left-rail"');
     expect(withoutSidebar).not.toContain('aria-label="Show project sidebar"');
     expect(css).toMatch(/\.app-shell__composer \{[^}]*padding: remify\(12px\) remify\(16px\);/);
     expect(css).toMatchSource(/data-has-composer="true"[^}]*app-shell__workspace \{[^}]*padding-top: 0;/);
@@ -447,14 +445,16 @@ describe('application shell components', () => {
         terminalDrawerSize: 340,
       }),
     );
-    expect(open).toContain('data-region-id="app-terminal-drawer"');
+    expect(open).toContain('id="app-bottom-drawer"');
+    expect(open).toContain('data-region-id="app-bottom-drawer"');
     expect(open).toContain('data-axis="vertical"');
     expect(open).toContain('data-edge="start"');
     expect(open).toContain('data-collapse-motion="fade-slide"');
     expect(open).toContain('data-content-overflow="clip"');
     expect(open).toContain('data-presentation="inline"');
     expect(open).toContain('aria-valuenow="340"');
-    expect(open.indexOf('data-region-id="app-terminal-drawer"')).toBeLessThan(open.indexOf('</main>'));
+    // The drawer docks under the main column inside the Workbench's center column.
+    expect(open.indexOf('data-region-id="app-bottom-drawer"')).toBeGreaterThan(open.indexOf('</main>'));
     const tall = String(
       AppShell({
         tabs: [],
@@ -470,7 +470,7 @@ describe('application shell components', () => {
     );
     expect(tall).toContain('aria-valuemax="760"');
     expect(tall).toContain('aria-valuenow="700"');
-    expect(tall).toContain('data-transitioning="true"');
+    expect(tall).toContain('data-terminal-drawer-transitioning="true"');
     const collapsed = String(
       AppShell({
         tabs: [],
@@ -481,11 +481,10 @@ describe('application shell components', () => {
       }),
     );
     expect(collapsed).toContain('data-collapsed="true"');
-    expect(collapsed).toContain('data-region-restore="app-terminal-drawer"');
-    expect(collapsed).toContain('data-position="bottom-end"');
-    // The restore control sits in Kerf's corner in normal flow (placement="inline"); no app class.
+    expect(collapsed).toContain('class="kui-workbench__restore" data-panel="bottom" data-position="bottom-end"');
+    expect(collapsed).toContain('class="kui-floating-toolbar" data-component="floating-toolbar"');
     expect(collapsed).toContain(
-      'class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end" data-placement="inline" role="toolbar" aria-label="Terminal drawer controls"',
+      'class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Terminal drawer controls"',
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
     expect(collapsed).toContain('data-tone="default"');
@@ -532,10 +531,10 @@ describe('application shell components', () => {
         inspector: 'ticket rail' as never,
       }),
     );
-    expect(markup).toContain('data-region-id="app-sidebar"');
-    expect(markup).toContain('aria-label="Operations sidebar"');
-    expect(markup).toContain('data-region-id="app-inspector"');
-    expect(markup).toContain('aria-label="Ticket rail"');
+    expect(markup).toContain('data-region-id="app-left-rail"');
+    expect(markup).toContain('aria-label="Operations rail"');
+    expect(markup).toContain('data-region-id="app-right-rail"');
+    expect(markup).toContain('aria-label="Tickets rail"');
     const hidden = String(
       AppShell({
         tabs: [],
@@ -588,10 +587,10 @@ describe('application shell components', () => {
       }),
     );
     expect(markup).toContain('data-component="app-shell"');
-    expect(markup).toContain('data-region-id="app-sidebar"');
+    expect(markup).toContain('data-region-id="app-left-rail"');
     expect(markup).toContain('aria-valuemin="250"');
-    expect(markup).toContain('data-region-id="app-inspector"');
-    expect(markup.indexOf('viewport-overlay')).toBeGreaterThan(markup.indexOf('data-region-id="app-inspector"'));
+    expect(markup).toContain('data-region-id="app-right-rail"');
+    expect(markup.indexOf('viewport-overlay')).toBeGreaterThan(markup.indexOf('data-region-id="app-right-rail"'));
     expect(markup).toContain('Ticket workspace');
     // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
@@ -609,8 +608,11 @@ describe('application shell components', () => {
     expect(markup).toContain('class="project-tab-bar__actions"');
     expect(markup).toContain('tab-action');
     expect(markup).toContain('data-component="toolbar"');
-    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
-    expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
+    // The popup overlay follows the tab strip inside the main column, before the right rail (the
+    // rails' own `data-*-overlay*` attributes also contain "overlay", so search from the strip).
+    const overlayAt = markup.indexOf('overlay', markup.indexOf('data-component="tab-bar"'));
+    expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(overlayAt);
+    expect(overlayAt).toBeLessThan(markup.indexOf('data-region-id="app-right-rail"'));
     expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="tab-bar"'));
     expect(markup.indexOf('data-component="tab-bar"')).toBeLessThan(markup.indexOf('id="all-tickets-title"'));
     const globalMarkup = String(
@@ -624,8 +626,8 @@ describe('application shell components', () => {
       }),
     );
     expect(globalMarkup).toContain('data-mode="stats"');
-    expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');
-    expect(globalMarkup).not.toContain('data-region-id="app-inspector"');
+    expect(globalMarkup).not.toContain('data-region-id="app-left-rail"');
+    expect(globalMarkup).not.toContain('data-region-id="app-right-rail"');
     const terminalMarkup = String(
       AppShell({
         mode: 'terminals',
@@ -636,8 +638,8 @@ describe('application shell components', () => {
         inspector: 'tickets' as never,
       }),
     );
-    expect(terminalMarkup).toContain('aria-label="Operations sidebar"');
-    expect(terminalMarkup).toContain('data-region-id="app-sidebar"');
+    expect(terminalMarkup).toContain('aria-label="Operations rail"');
+    expect(terminalMarkup).toContain('data-region-id="app-left-rail"');
     const collapsedTerminalMarkup = String(
       AppShell({
         mode: 'terminals',
@@ -658,7 +660,7 @@ describe('application shell components', () => {
         workspace: 'work' as never,
       }),
     );
-    expect(collapsedMarkup).toContain('data-region-id="app-sidebar"');
+    expect(collapsedMarkup).toContain('data-region-id="app-left-rail"');
     expect(collapsedMarkup).toContain('data-collapsed="true"');
     expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
     expect(collapsedMarkup.indexOf('aria-label="Show project sidebar"')).toBeLessThan(
@@ -675,7 +677,7 @@ describe('application shell components', () => {
       }),
     );
     expect(hiddenInspectorMarkup).toContain('aria-label="Show ticket inspector"');
-    expect(hiddenInspectorMarkup).toContain('data-region-id="app-inspector"');
+    expect(hiddenInspectorMarkup).toContain('data-region-id="app-right-rail"');
     expect(hiddenInspectorMarkup).toContain('data-collapsed="true"');
   });
 

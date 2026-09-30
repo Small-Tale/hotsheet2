@@ -141,7 +141,7 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
     document.documentElement.style.setProperty(['--kui', 'safe-area-block-end'].join('-'), '48px');
   });
   const restore = page.getByRole('button', { name: 'Show terminal drawer' }),
-    restoreToolbar = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
+    restoreToolbar = page.locator('.kui-workbench__restore[data-panel="bottom"] .kui-floating-toolbar');
   await expect(restore).toBeVisible();
   const rootGeometry = await page.evaluate(() => ({
     innerHeight,
@@ -276,8 +276,8 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await openDemoProject(page);
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toHaveAttribute('data-mobile', 'true');
-  const sidebar = page.locator('.kui-resizable-region[data-region-id="app-sidebar"]');
-  const inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  const sidebar = page.locator('#app-left-rail');
+  const inspector = page.locator('#app-right-rail');
   const scrim = page.locator('.app-shell__scrim');
   // Single column: both overlays start closed and the scrim is absent.
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
@@ -292,7 +292,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(scrim).toBeVisible();
   // The sidebar overlays the main column rather than sitting beside it.
   await expect(sidebar).toHaveCSS('position', 'absolute');
-  await expect(sidebar.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect(sidebar.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
 
   await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-sidebar-overlay.png', fullPage: true });
 
@@ -308,7 +308,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toBeVisible();
-  await expect(inspector.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect(inspector.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
   await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-inspector-overlay.png', fullPage: true });
 
   // Dismiss via the scrim strip the right inspector does not cover.
@@ -331,11 +331,11 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
   });
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
-    sidebarRegion = page.locator('.kui-resizable-region[data-region-id="app-sidebar"]'),
-    inspectorRegion = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+    sidebarRegion = page.locator('#app-left-rail'),
+    inspectorRegion = page.locator('#app-right-rail');
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(sidebarRegion).toHaveAttribute('data-collapsed', 'false');
-  await expect(sidebarRegion.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect(sidebarRegion.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
   await expect
     .poll(() =>
       sidebarRegion.evaluate((node) => {
@@ -366,7 +366,7 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
   await page.locator('.app-shell__scrim').click({ position: { x: 380, y: 400 } });
   await page.locator('[data-ticket-slug="HS2-M1"]').click();
   await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'false');
-  await expect(inspectorRegion.locator('.kui-resizable-region__content')).toHaveCSS('transform', 'none');
+  await expect(inspectorRegion.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
   await expect
     .poll(() =>
       inspectorRegion.evaluate((node) => {
@@ -421,15 +421,23 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
           scrollPaddingBottom: style.scrollPaddingBottom,
         };
       });
-  // The top bar sits under the translucent status bar: its surface starts at the edge and its
-  // controls clear the inset (Kerf adds its own 8px gap above the control band).
-  const toolbar = page.locator('.app-shell__main > [data-component="toolbar"]').first();
+  // The top bar is the Workbench work area's Pane header, which sits under the translucent status
+  // bar: the header surface starts at the edge and pads by the inset, and the toolbar inside it
+  // keeps Kerf's own 8px gap above the control band (HS2-P289N2).
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]').first(),
+    paneHeader = toolbar.locator('xpath=ancestor::*[contains(@class, "kui-pane__header")][1]');
+  expect(
+    await paneHeader.evaluate((node) => ({
+      top: node.getBoundingClientRect().top,
+      paddingTop: getComputedStyle(node).paddingTop,
+    })),
+  ).toEqual({ top: 0, paddingTop: '47px' });
   expect(
     await toolbar.evaluate((node) => ({
       top: node.getBoundingClientRect().top,
       paddingTop: getComputedStyle(node).paddingTop,
     })),
-  ).toEqual({ top: 0, paddingTop: '55px' });
+  ).toEqual({ top: 47, paddingTop: '8px' });
   expect(
     await toolbar
       .locator('button')
@@ -466,9 +474,7 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   await page.screenshot({ path: '/private/tmp/hs2-4a29rr-mobile-board-bottom.png', animations: 'disabled' });
   // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
-  await expect(
-    page.locator('.kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),
-  ).toBeVisible();
+  await expect(page.locator('#app-bottom-drawer[data-collapsed="false"]')).toBeVisible();
   expect(await geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
   await page.getByLabel('List view').click();
   expect(await geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
@@ -482,8 +488,8 @@ test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays witho
   const modifier = await page.evaluate(() =>
     /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent) ? 'Meta' : 'Control',
   );
-  const sidebar = page.locator('.kui-resizable-region[data-region-id="app-sidebar"]'),
-    inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]'),
+  const sidebar = page.locator('#app-left-rail'),
+    inspector = page.locator('#app-right-rail'),
     scrim = page.locator('.app-shell__scrim');
   await page.locator('[data-ticket-slug="HS2-M1"]').click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
@@ -562,10 +568,7 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   // Tapping a ticket inside the paged board still opens the mobile inspector overlay.
   await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').scrollIntoViewIfNeeded();
   await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
-  await expect(page.locator('.kui-resizable-region[data-region-id="app-inspector"]')).toHaveAttribute(
-    'data-collapsed',
-    'false',
-  );
+  await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'false');
   await page.locator('.app-shell__scrim').click({ position: { x: 8, y: 400 } });
 
   // Growing to desktop keeps the board preference in the side-by-side grid layout, and back again.
@@ -586,7 +589,7 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page);
-  const inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   const scrim = page.locator('.app-shell__scrim');
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
   // Inspector starts closed on mobile.
@@ -775,7 +778,7 @@ test('resizing from mobile back to desktop restores the side-by-side layout (HS2
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page);
   const shell = page.locator('[data-component="app-shell"]');
-  const sidebar = page.locator('.kui-resizable-region[data-region-id="app-sidebar"]');
+  const sidebar = page.locator('#app-left-rail');
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
   // Growing past the breakpoint drops mobile mode and its ephemeral open state.
@@ -793,7 +796,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
   await openDemoProject(page);
   await page.locator('[data-ticket-slug="HS2-M1"]').click();
   const shell = page.locator('[data-component="app-shell"]'),
-    inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]'),
+    inspector = page.locator('#app-right-rail'),
     content = inspector.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   // Crossing into mobile intentionally closes desktop panels. Reopen through the public
@@ -1161,7 +1164,7 @@ test('resizing the phone drawer never focuses its terminal, only a tap does (HS2
   await expect(terminalInput).not.toBeFocused();
   await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
 
-  const handle = page.locator('[data-region-id="app-terminal-drawer"] [data-kui-resize-handle]').first(),
+  const handle = page.locator('#app-bottom-drawer [data-kui-resize-handle]').first(),
     before = (await drawer.boundingBox())!.height;
   for (const delta of [-120, 80]) {
     const box = (await handle.boundingBox())!,

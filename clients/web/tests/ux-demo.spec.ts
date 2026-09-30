@@ -4072,8 +4072,8 @@ test('holds the AppShell at its 1024 by 600 supported floor', async ({ page }) =
   const bounds = await shell.boundingBox();
   expect(bounds?.width).toBeGreaterThanOrEqual(1024);
   expect(bounds?.height).toBeGreaterThanOrEqual(600);
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();
+  await expect(shell.locator('#app-left-rail')).toBeVisible();
+  await expect(shell.locator('#app-right-rail')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-501eph-shell-floor.png', fullPage: true });
 });
 
@@ -4757,7 +4757,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();
-    const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
+    const toolbarNode = node.querySelector('[data-component="toolbar"][aria-label="Workspace toolbar"]')!;
     const toolbar = toolbarNode.getBoundingClientRect();
     const leading = toolbarNode.querySelector('.kui-toolbar__leading')!.getBoundingClientRect();
     const trailing = toolbarNode.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
@@ -4790,11 +4790,11 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   expect(shellHierarchy.controlsRight).toBeCloseTo(shellHierarchy.trailingRight, 0);
   expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(8, 0);
   expect(shellHierarchy.toolbarGap).toBe('8px');
-  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute(
+  await expect(shell.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')).toHaveAttribute(
     'data-has-center',
     'false',
   );
-  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS(
+  await expect(shell.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')).toHaveCSS(
     'box-shadow',
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
@@ -4811,10 +4811,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   ).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
-    'background-color',
-    'rgb(255, 255, 255)',
-  );
+  await expect(shell.locator('#app-left-rail')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await shell.getByRole('button', { name: /New ticket/ }).click();
   const shellComposer = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
@@ -4852,14 +4849,14 @@ test('exercises the application-shell responsive composition', async ({ page }) 
       return { position: style.position, width: style.width, clipPath: style.clipPath };
     }),
   ).toEqual({ position: 'absolute', width: '1px', clipPath: 'inset(50%)' });
-  const sidebarHandle = shell.getByRole('separator', { name: 'Resize Project sidebar' });
+  const sidebarHandle = shell.getByRole('separator', { name: 'Resize Sidebar rail' });
   await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
   await sidebarHandle.focus();
   await expect(sidebarHandle).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '288');
-  const inspectorHandle = shell.getByRole('separator', { name: 'Resize Ticket inspector' });
+  const inspectorHandle = shell.getByRole('separator', { name: 'Resize Inspector rail' });
   await inspectorHandle.focus();
   await expect(inspectorHandle).toBeFocused();
   await page.keyboard.press('ArrowLeft');
@@ -4876,20 +4873,21 @@ test('exercises the application-shell responsive composition', async ({ page }) 
       (node as HTMLElement).dataset.resizeStability = 'same-node';
     });
   await page.mouse.move(inspectorHandleBox!.x + inspectorHandleBox!.width / 2, inspectorHandleBox!.y + 80);
-  const inspectorRegion = shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]');
+  const inspectorRegion = shell.locator('#app-right-rail');
   // HS2-4KZBTT: the region width must never animate — animating it reflows the whole ticket list
   // per frame. The content still slides via a compositor-only transform.
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await page.mouse.down();
-  // While dragging, the resize guard suppresses even the content transform transition.
+  // While dragging, Kerf's wiring marks the rail as resizing (the Workbench stylesheet does not yet
+  // suppress the content transform transition on that mark the way ResizableRegion does: KF request
+  // filed on HS2-P289N2).
   await expect(inspectorRegion).toHaveAttribute('data-resizing', 'true');
-  await expect(inspectorRegion.locator('.kui-resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
   await expect(shell.locator('[data-resize-stability="same-node"]')).toHaveCount(1);
   await page.mouse.up();
-  // After the drag ends the content transition returns, but the region width stays un-animated.
+  // After the drag ends the resizing mark clears, and the region width stays un-animated.
   await expect(inspectorRegion).not.toHaveAttribute('data-resizing');
-  await expect(inspectorRegion.locator('.kui-resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
+  await expect(inspectorRegion.locator('.kui-workbench__panel-content')).not.toHaveCSS('transition-duration', '0s');
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
   await shell.getByRole('tab', { name: 'Timeline' }).click();
@@ -4903,32 +4901,32 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shell.getByRole('button', { name: 'Hide inspector' }).click();
   const showInspector = shell.getByRole('button', { name: 'Show ticket inspector' });
   await expect(showInspector).toBeVisible();
-  const collapsedInspector = shell.locator(
-    ':scope > [data-component="resizable-region"][data-region-id="app-inspector"]',
-  );
+  const collapsedInspector = shell.locator('#app-right-rail');
   await expect(collapsedInspector).toHaveAttribute('data-collapsed', 'true');
   await expect(collapsedInspector).toHaveCSS('width', '0px');
-  await expect(collapsedInspector.locator('.kui-resizable-region__content')).toHaveCSS(
+  await expect(collapsedInspector.locator('.kui-workbench__panel-content')).toHaveCSS(
     'width',
     `${inspectorExpandedWidth}px`,
   );
-  await expect(collapsedInspector.locator('.kui-resizable-region__content')).not.toHaveCSS('transform', 'none');
+  await expect(collapsedInspector.locator('.kui-workbench__panel-content')).not.toHaveCSS('transform', 'none');
   await expect(showInspector.locator('[data-lucide="panel-right-open"]')).toHaveCount(1);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showInspector.click();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
-  const crampedToolbar = await shell.locator('.app-shell__main > [data-component="toolbar"]').evaluate((toolbar) => {
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const actionsRect = toolbar.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
-    return {
-      toolbarLeft: toolbarRect.left,
-      toolbarRight: toolbarRect.right,
-      actionsLeft: actionsRect.left,
-      actionsRight: actionsRect.right,
-    };
-  });
+  const crampedToolbar = await shell
+    .locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')
+    .evaluate((toolbar) => {
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const actionsRect = toolbar.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
+      return {
+        toolbarLeft: toolbarRect.left,
+        toolbarRight: toolbarRect.right,
+        actionsLeft: actionsRect.left,
+        actionsRight: actionsRect.right,
+      };
+    });
   expect(crampedToolbar.actionsLeft).toBeGreaterThanOrEqual(crampedToolbar.toolbarLeft);
   expect(crampedToolbar.actionsRight).toBeLessThanOrEqual(crampedToolbar.toolbarRight);
   const sidebarCollapseHit = await hideSidebar.evaluate((button) => {
@@ -4942,17 +4940,9 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   expect(sidebarCollapseHit).toEqual({ ownsHit: true, hitLabel: 'Hide project sidebar' });
   await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-narrow.png', fullPage: true });
   await hideSidebar.click();
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
-    'data-collapsed',
-    'true',
-  );
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS(
-    'width',
-    '0px',
-  );
-  const collapsedSidebarContent = shell.locator(
-    '[data-component="resizable-region"][data-region-id="app-sidebar"] .kui-resizable-region__content',
-  );
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('#app-left-rail')).toHaveCSS('width', '0px');
+  const collapsedSidebarContent = shell.locator('#app-left-rail .kui-workbench__panel-content');
   await expect(collapsedSidebarContent).toHaveCSS('width', '288px');
   await expect(collapsedSidebarContent).not.toHaveCSS('transform', 'none');
   const showSidebar = shell.getByRole('button', { name: 'Show project sidebar' });
@@ -4960,16 +4950,12 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showSidebar.click();
   await expect(shell.locator('.project-sidebar')).toBeVisible();
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
-    'data-collapsed',
-    'false',
-  );
-  await expect(
-    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]'),
-  ).toHaveAttribute('data-separator', 'auto');
-  const sidebarSeparator = await sidebarHandle.evaluate((node) => ({
-    width: getComputedStyle(node, '::before').width,
-    background: getComputedStyle(node, '::before').backgroundColor,
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'false');
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-separator', 'auto');
+  // The Workbench rail draws its separator as its own inline-end border.
+  const sidebarSeparator = await shell.locator('#app-left-rail').evaluate((node) => ({
+    width: getComputedStyle(node).borderInlineEndWidth,
+    background: getComputedStyle(node).borderInlineEndColor,
   }));
   expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(209, 209, 214)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
@@ -5019,7 +5005,9 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shellSearch.fill('long-tag-example');
   await expect(shell.locator('[data-component="ticket-list-row"]')).toHaveCount(1);
   await shellSearch.fill('');
-  await shellSearch.blur();
+  await expect(shell.locator('[data-component="ticket-list-row"]')).not.toHaveCount(1);
+  // Escape collapses an empty collapsible field (Kerf's `collapseOnEscape`).
+  await shellSearch.press('Escape');
   await expect(shell.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await shell.getByRole('button', { name: 'Workspace grid' }).click();
@@ -5027,7 +5015,8 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.locator('.project-sidebar')).toHaveCount(0);
   await expect(shell.getByRole('complementary', { name: 'Terminal operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
-  await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
+  await expect(shell.locator('#app-right-rail')).toHaveAttribute('aria-label', 'Tickets rail');
+  await expect(shell.locator('#app-right-rail')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.locator('.workspace-header__identity').getByText('Workspace grid', { exact: true })).toBeVisible();
@@ -5048,12 +5037,8 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shell.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(
-    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]'),
-  ).toBeVisible();
-  await expect(
-    shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]'),
-  ).toBeVisible();
+  await expect(shell.locator('#app-left-rail')).toBeVisible();
+  await expect(shell.locator('#app-right-rail')).toBeVisible();
   // Keep all three user-controlled regions mounted at the supported floor. The
   // center can be clipped until the user explicitly collapses a side region.
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(1);
@@ -5170,17 +5155,16 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
       return matches;
     }),
   ).toBe(true);
-  const sidebarRegion = page.locator('.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]');
+  const sidebarRegion = page.locator('#app-left-rail');
   expect(
     await sidebarRegion.evaluate((node) => {
+      // The Workbench rail draws its separator as its own border in the semantic border token.
       const probe = document.createElement('span');
-      probe.style.background = 'var(--kui-resizable-region-separator-color)';
+      probe.style.background = 'var(--kui-color-neutral-border-normal)';
       node.append(probe);
-      const handle = node.querySelector('.kui-resizable-region__handle')!;
       const result = {
-        divider: getComputedStyle(handle, '::before').backgroundColor,
-        dividerMatches:
-          getComputedStyle(handle, '::before').backgroundColor === getComputedStyle(probe).backgroundColor,
+        divider: getComputedStyle(node).borderInlineEndColor,
+        dividerMatches: getComputedStyle(node).borderInlineEndColor === getComputedStyle(probe).backgroundColor,
       };
       probe.remove();
       return result;

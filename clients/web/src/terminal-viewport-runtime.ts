@@ -250,7 +250,7 @@ function initializeTerminalViewport(
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
     settledResize = element.classList.contains('terminal-viewport--dedicated'),
-    insideDrawer = Boolean(element.closest('[data-region-id="app-terminal-drawer"]'));
+    insideDrawer = Boolean(element.closest('[data-region-id="app-bottom-drawer"]'));
   const background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;

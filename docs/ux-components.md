@@ -87,12 +87,20 @@ right; both regions remain explicitly hideable and restorable. It owns the top-l
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
-AppShell configures the shared `ResizableRegion` policies directly: side panels use
-`separator`, `collapseMotion="slide"`, and responsive inline/overlay `presentation`;
-the bottom drawer uses `collapseMotion="fade-slide"`, popup-aware `contentOverflow`,
-and a safe-area-aware `restoreControl` at `restorePosition="bottom-end"`. Magnified
-terminal mode suppresses side-panel separators through the typed policy instead of
-descendant CSS. The app still owns the signals and persistence (HS2-4Y6SM9).
+AppShell composes Kerf's `Workbench` (`id="app"`, HS2-P289N2): the sidebar is the
+`leftRail`, the inspector or ticket rail the `rightRail`, and the terminal drawer the
+`bottomDrawer`, each configured through the panel contract — `separator`,
+`collapseMotion="slide"` (rails) or `"fade-slide"` (drawer), inline/overlay `presentation`
+for the app's own mobile switch (`responsiveOverlayAt="never"`), popup-aware
+`contentOverflow`, `resizable` bounds, and a `restoreControl` in the drawer's
+`restorePosition="bottom-end"` corner. The Workbench derives the panel ids
+`app-left-rail`, `app-right-rail`, and `app-bottom-drawer`; `wireWorkbench` drives and
+persists the rails' sizes, while the drawer keeps the app's own drag for its measured
+maximum and drag-past-minimum collapse. Magnified terminal mode suppresses side-panel
+separators through the typed policy, and terminal focus mode lifts the drawer through the
+public `--kui-workbench-popup-z` token instead of descendant CSS. The main column (shell
+toolbar, project tab strip, banners, page header, work area) stays app-owned as the
+Workbench's `main` (HS2-4Y6SM9).
 The composer wrapper owns equal top and bottom inset around the creation surface. When
 it is present, the scrolling workspace removes its own top padding so list and board
 presentations receive one gap rather than two; composer-free settings, Archive, and
@@ -1357,7 +1365,7 @@ notification model.
 - `DrawerResizeHandle`
 - tab kinds: terminal first; activity, command output, or other tools may follow
 
-The shipped terminal drawer is a center-column-only vertical `ResizableRegion` with a
+The shipped terminal drawer is the Workbench's bottom drawer (center column only) with a
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
 persisted 228 px-to-workspace-boundary height, Kerf-managed fade/slide collapse, popup
 overflow, and a safe-area-positioned floating restore button when collapsed. The
@@ -2025,6 +2033,13 @@ residual findings are documented in their stylesheets and gated on `KF-373HYM`, 
 and `KF-3EZ92R`. The workspace sort trigger now shows Kerf's icon-and-caret pill (the icon-only
 Select contract) rather than the app's former 44px circle; `KF-3DX5BX` requests a caret option,
 and the expanded search field's floor is 17rem so the header row still fits.
+
+HS2-P289N2 rebuilt `AppShell` on Kerf's `Workbench`, which (rebased over HS2-PKPGGZ) takes
+`KUI-L019` from 10 to 9: the
+`app-shell.css` rules on `.kui-resizable-region` (panel backgrounds, the focus-mode drawer
+lift, restore-corner placement, the mobile overlay height cap, and the inspector's rail
+selectors) are gone because the Workbench owns that chrome; the remaining shell rules target
+Hot Sheet's own elements or the public `--kui-workbench-popup-z` token.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token

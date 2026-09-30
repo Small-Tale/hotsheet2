@@ -12,14 +12,14 @@ import {
 
 describe('production app region sizing', () => {
   it('recognizes only production shell regions and clamps their independent bounds', () => {
-    expect(isAppRegionId('app-sidebar')).toBe(true);
-    expect(isAppRegionId('app-inspector')).toBe(true);
-    expect(isAppRegionId('app-terminal-drawer')).toBe(true);
+    expect(isAppRegionId('app-left-rail')).toBe(true);
+    expect(isAppRegionId('app-right-rail')).toBe(true);
+    expect(isAppRegionId('app-bottom-drawer')).toBe(true);
     expect(isAppRegionId('resize-demo-horizontal')).toBe(false);
-    expect(normalizeAppRegionSize('app-sidebar', 100)).toBe(250);
-    expect(normalizeAppRegionSize('app-sidebar', 900)).toBe(360);
-    expect(normalizeAppRegionSize('app-inspector', 100)).toBe(280);
-    expect(normalizeAppRegionSize('app-inspector', 900)).toBe(520);
+    expect(normalizeAppRegionSize('app-left-rail', 100)).toBe(250);
+    expect(normalizeAppRegionSize('app-left-rail', 900)).toBe(360);
+    expect(normalizeAppRegionSize('app-right-rail', 100)).toBe(280);
+    expect(normalizeAppRegionSize('app-right-rail', 900)).toBe(520);
   });
 
   it('persists drawer heights above the old fixed cap for layout-time clamping', () => {
@@ -30,8 +30,8 @@ describe('production app region sizing', () => {
           storage.set(key, value);
         },
       };
-    expect(saveAppRegionSize(adapter, 'app-terminal-drawer', 700)).toBe(700);
-    expect(loadAppRegionSize(adapter, 'app-terminal-drawer')).toBe(700);
+    expect(saveAppRegionSize(adapter, 'app-bottom-drawer', 700)).toBe(700);
+    expect(loadAppRegionSize(adapter, 'app-bottom-drawer')).toBe(700);
   });
 
   it('measures the drawer maximum from the shell bottom to the work-area top', () => {
@@ -53,10 +53,10 @@ describe('production app region sizing', () => {
         values.set(key, value);
       },
     };
-    expect(loadAppRegionSize(storage, 'app-sidebar')).toBe(272);
+    expect(loadAppRegionSize(storage, 'app-left-rail')).toBe(272);
     values.set('hotsheet.layout.app-inspector.size', 'not-a-number');
-    expect(loadAppRegionSize(storage, 'app-inspector')).toBe(352);
-    expect(saveAppRegionSize(storage, 'app-inspector', 999)).toBe(520);
-    expect(loadAppRegionSize(storage, 'app-inspector')).toBe(520);
+    expect(loadAppRegionSize(storage, 'app-right-rail')).toBe(352);
+    expect(saveAppRegionSize(storage, 'app-right-rail', 999)).toBe(520);
+    expect(loadAppRegionSize(storage, 'app-right-rail')).toBe(520);
   });
 });

@@ -73,14 +73,14 @@ export const shellEvent = signal('Explore the application shell.');
 export const regionBounds: Record<string, { min: number; max: number }> = {
   'resize-demo-horizontal': { min: 250, max: 420 },
   'resize-demo-vertical': { min: 120, max: 260 },
-  'app-sidebar': { min: 250, max: 360 },
-  'app-inspector': { min: 280, max: 520 },
+  'app-left-rail': { min: 250, max: 360 },
+  'app-right-rail': { min: 280, max: 520 },
 };
 
 export function regionSize(id: string): number {
   if (id === 'resize-demo-horizontal') return resizeDemoWidth.value;
   if (id === 'resize-demo-vertical') return resizeDemoHeight.value;
-  if (id === 'app-sidebar') return shellSidebarSize.value;
+  if (id === 'app-left-rail') return shellSidebarSize.value;
   return shellInspectorSize.value;
 }
 
@@ -91,7 +91,7 @@ export function setRegionSize(id: string, size: number): void {
   const next = clampRegionSize(size, bounds.min, bounds.max);
   if (id === 'resize-demo-horizontal') resizeDemoWidth.value = next;
   else if (id === 'resize-demo-vertical') resizeDemoHeight.value = next;
-  else if (id === 'app-sidebar') shellSidebarSize.value = next;
+  else if (id === 'app-left-rail') shellSidebarSize.value = next;
   else shellInspectorSize.value = next;
 }
 

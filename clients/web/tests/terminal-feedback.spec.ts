@@ -116,10 +116,10 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     viewport = magnified.locator('[data-display-mode="interactive"]'),
-    sidebar = page.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]'),
-    inspector = page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]'),
-    sidebarHandle = page.locator('[data-kui-resize-handle][data-region-id="app-sidebar"]'),
-    inspectorHandle = page.locator('[data-kui-resize-handle][data-region-id="app-inspector"]');
+    sidebar = page.locator('#app-left-rail'),
+    inspector = page.locator('#app-right-rail'),
+    sidebarHandle = page.locator('[data-kui-resize-handle][data-region-id="app-left-rail"]'),
+    inspectorHandle = page.locator('[data-kui-resize-handle][data-region-id="app-right-rail"]');
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect.poll(() => rowText(viewport)).toEqual(['prompt %']);
   const focusPresentation = await page.locator('.app-shell__work-area').evaluate((element) => ({

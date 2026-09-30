@@ -5,6 +5,7 @@ import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
+import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { ChevronLeft, Trash2 } from 'lucide';
 
@@ -68,6 +69,7 @@ import {
 import { browserRandomId } from '../browser-id';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
+import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
@@ -446,7 +448,7 @@ export async function startHotSheetWebClient() {
   const terminalDrawerVisible = signal(initialTerminalDrawerVisible),
     terminalDrawerMounted = signal(initialTerminalDrawerVisible),
     terminalDrawerTransitioning = signal(false),
-    terminalDrawerSize = signal(loadAppRegionSize(localStorage, 'app-terminal-drawer')),
+    terminalDrawerSize = signal(loadAppRegionSize(localStorage, 'app-bottom-drawer')),
     terminalDrawerMax = signal(520),
     terminalDrawerMaximized = signal(false),
     terminalDrawerBounds = signal({ width: 900, height: 320 }),
@@ -657,8 +659,8 @@ export async function startHotSheetWebClient() {
     composerSubmitting = signal(false);
   let projectSessionTimer: number | undefined,
     restoringProjectSession = false;
-  const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-sidebar')),
-    inspectorSize = signal(loadAppRegionSize(localStorage, 'app-inspector'));
+  const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
+    inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
     detailsDraft = signal('');
   let detailsEditGeneration = 0;
@@ -1315,7 +1317,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function observeTerminalDrawer(){queueMicrotask(()=>{terminalDrawerObserver?.disconnect();if(!terminalDrawerVisible.value)return;const target=document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content');if(!target)return;terminalDrawerObserver=new ResizeObserver(entries=>{if(appRegionResizeDrag?.id==='app-terminal-drawer')return;const rect=entries[0]?.contentRect;if(rect)updateTerminalDrawerBounds(target,rect)});terminalDrawerObserver.observe(target)})}
+  function observeTerminalDrawer(){queueMicrotask(()=>{terminalDrawerObserver?.disconnect();if(!terminalDrawerVisible.value)return;const target=document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content');if(!target)return;terminalDrawerObserver=new ResizeObserver(entries=>{if(appRegionResizeDrag?.id==='app-bottom-drawer')return;const rect=entries[0]?.contentRect;if(rect)updateTerminalDrawerBounds(target,rect)});terminalDrawerObserver.observe(target)})}
   function requestDrawerInputFocus(projectId: string, id: string, chat: DrawerAIChat | undefined) {
     if (id === 'grid') return;
     if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
@@ -1699,15 +1701,15 @@ export async function startHotSheetWebClient() {
       : 'not_started';
   const priority = (value?: string): TicketPriority => priorityFromWire(value);
   const appRegionSize = (id: AppRegionId) =>
-    id === 'app-sidebar'
+    id === 'app-left-rail'
       ? sidebarSize.value
-      : id === 'app-inspector'
+      : id === 'app-right-rail'
         ? inspectorSize.value
         : terminalDrawerMaximized.value
           ? terminalDrawerMax.value
           : Math.min(terminalDrawerSize.value, terminalDrawerMax.value);
   function setAppRegionSize(id: AppRegionId, size: number) {
-    if (id === 'app-terminal-drawer') {
+    if (id === 'app-bottom-drawer') {
       const next = Math.min(terminalDrawerMax.value, normalizeAppRegionSize(id, size));
       if (terminalDrawerMaximized.value && next === terminalDrawerMax.value) return;
       terminalDrawerMaximized.value = false;
@@ -1715,14 +1717,16 @@ export async function startHotSheetWebClient() {
       return;
     }
     const next = saveAppRegionSize(localStorage, id, size);
-    if (id === 'app-sidebar') sidebarSize.value = next;
+    if (id === 'app-left-rail') sidebarSize.value = next;
     else inspectorSize.value = next;
   }
   function syncTerminalDrawerMaximum() {
-    const main = document.querySelector<HTMLElement>('.app-shell__main'),
-      workArea = main?.querySelector<HTMLElement>('.app-shell__work-area');
-    if (!main || !workArea) return;
-    const next = terminalDrawerMaximum(main.getBoundingClientRect().bottom, workArea.getBoundingClientRect().top);
+    // The drawer docks below the main column in the Workbench's center, so the column it may grow
+    // into ends at the shell's bottom edge, not at the main column's (which the drawer shortens).
+    const shell = document.querySelector<HTMLElement>('.app-shell'),
+      workArea = shell?.querySelector<HTMLElement>('.app-shell__work-area');
+    if (!shell || !workArea) return;
+    const next = terminalDrawerMaximum(shell.getBoundingClientRect().bottom, workArea.getBoundingClientRect().top);
     if (next !== terminalDrawerMax.value) terminalDrawerMax.value = next;
   }
   function settleTerminalDrawerGeometry() {
@@ -4590,7 +4594,7 @@ export async function startHotSheetWebClient() {
           ) : undefined
         }
         terminalDrawerVisible={terminalDrawerVisible.value && drawerViewAllowed}
-        terminalDrawerSize={appRegionSize('app-terminal-drawer')}
+        terminalDrawerSize={appRegionSize('app-bottom-drawer')}
         terminalDrawerMax={terminalDrawerMax.value}
         terminalDrawerTransitioning={terminalDrawerTransitioning.value}
         terminalFocusMode={
@@ -4835,6 +4839,15 @@ export async function startHotSheetWebClient() {
     );
   }
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
+  // Kerf drives the shell rails' resizing and persistence (HS2-P289N2); the terminal drawer keeps the
+  // app's own drag for its measured maximum and drag-past-minimum collapse.
+  wireWorkbench(appRoot, {
+    id: APP_WORKBENCH_ID,
+    panels: {
+      leftRail: { size: sidebarSize, storageKey: 'hotsheet.layout.app-left-rail.size' },
+      rightRail: { size: inspectorSize, storageKey: 'hotsheet.layout.app-right-rail.size' },
+    },
+  });
 
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);

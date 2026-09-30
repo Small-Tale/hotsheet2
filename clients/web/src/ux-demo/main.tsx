@@ -33,6 +33,7 @@ import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
+import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
@@ -113,7 +114,9 @@ import {
   selectProjectTab,
   setRegionSize,
   shellEvent,
+  shellInspectorSize,
   shellMode,
+  shellSidebarSize,
   shellSidebarVisible,
   shellStatsProjectName,
   shellTerminalDrawerVisible,
@@ -1157,6 +1160,11 @@ delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
     else if (surface === 'attachment') closeAttachmentDemoMenu();
   }, 0);
 });
+// The AppShell demo's rails resize through Kerf's Workbench wiring, as in the app (HS2-P289N2).
+wireWorkbench(root, {
+  id: 'app',
+  panels: { leftRail: { size: shellSidebarSize }, rightRail: { size: shellInspectorSize } },
+});
 wireTokenSearchFields(root, {
   collapsible: {
     signals: {
@@ -1772,9 +1780,13 @@ delegate(root, 'click', '[data-action="authenticate-connection"]', () => {
   shellEvent.value = 'Authentication requested.';
 });
 delegate(root, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
-  event.preventDefault();
   const handle = target as HTMLElement;
-  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
+  // The AppShell demo's Workbench rails are wired by Kerf; only the ResizableRegion demo drags here.
+  if (handle.dataset.regionId?.startsWith('app-')) return;
+  event.preventDefault();
+  const region = handle.closest<HTMLElement>(
+    '[data-workbench-rail], [data-workbench-drawer], [data-component="resizable-region"]',
+  )!;
   const axis = region.dataset.axis as 'horizontal' | 'vertical';
   const id = handle.dataset.regionId!;
   const startSize = regionSize(id);
@@ -1793,7 +1805,10 @@ delegate(root, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
 });
 delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
   const handle = target as HTMLElement;
-  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
+  if (handle.dataset.regionId?.startsWith('app-')) return;
+  const region = handle.closest<HTMLElement>(
+    '[data-workbench-rail], [data-workbench-drawer], [data-component="resizable-region"]',
+  )!;
   const axis = region.dataset.axis as 'horizontal' | 'vertical';
   const key = (event as KeyboardEvent).key;
   if (

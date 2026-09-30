@@ -8,7 +8,6 @@ import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { type TicketRow as WireTicketRow } from '../api';
 import {
   type AppRegionId,
-  isAppRegionId,
   normalizeAppRegionSize,
   TERMINAL_DRAWER_MIN_SIZE,
   terminalDrawerDragDecision,
@@ -187,9 +186,11 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   });
   delegate(document.body, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
     const handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-component="resizable-region"]'),
+      region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
       id = handle.dataset.regionId;
-    if (!region || !isAppRegionId(id) || region.dataset.collapsed === 'true') return;
+    // The rails are driven by Kerf's `wireWorkbench`; only the terminal drawer keeps the app's own drag
+    // (its measured maximum and drag-past-minimum collapse, HS2-P289N2).
+    if (!region || id !== 'app-bottom-drawer' || region.dataset.collapsed === 'true') return;
     event.preventDefault();
     const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
     dependencies.appRegionResizeDrag = {
@@ -208,9 +209,9 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   delegate(document.body, 'keydown', '[data-kui-resize-handle]', (event, target) => {
     const keyboard = event as KeyboardEvent,
       handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-component="resizable-region"]'),
+      region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
       id = handle.dataset.regionId;
-    if (!region || !isAppRegionId(id)) return;
+    if (!region || id !== 'app-bottom-drawer') return;
     const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
     if (
       (axis === 'horizontal' && !['ArrowLeft', 'ArrowRight'].includes(keyboard.key)) ||
@@ -221,11 +222,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     const direction = ['ArrowRight', 'ArrowDown'].includes(keyboard.key) ? 1 : -1,
       edge = (region.dataset.edge ?? 'end') as ResizableRegionEdge,
       raw = resizeRegionFromPointer(appRegionSize(id), direction * 16, edge);
-    if (
-      id === 'app-terminal-drawer' &&
-      appRegionSize(id) <= TERMINAL_DRAWER_MIN_SIZE &&
-      raw < TERMINAL_DRAWER_MIN_SIZE
-    ) {
+    if (appRegionSize(id) <= TERMINAL_DRAWER_MIN_SIZE && raw < TERMINAL_DRAWER_MIN_SIZE) {
       setTerminalDrawerVisible(false);
       return;
     }
@@ -236,7 +233,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     if (!drag) return;
     const point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
       raw = resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge);
-    if (drag.id === 'app-terminal-drawer') {
+    if (drag.id === 'app-bottom-drawer') {
       const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value);
       drag.pendingSize = decision.size;
       drag.collapseRequested = decision.collapse;
@@ -257,11 +254,11 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     delete drag.region.dataset.resizing;
     delete document.body.dataset.resizingRegion;
     setAppRegionSize(drag.id, drag.pendingSize);
-    if (drag.id === 'app-terminal-drawer' && drag.collapseRequested) {
+    if (drag.id === 'app-bottom-drawer' && drag.collapseRequested) {
       setTerminalDrawerVisible(false);
       return;
     }
-    if (drag.id === 'app-terminal-drawer')
+    if (drag.id === 'app-bottom-drawer')
       requestAnimationFrame(() => {
         const target = document.querySelector<HTMLElement>(
           '[data-terminal-drawer-measure="true"] .terminal-drawer__content',

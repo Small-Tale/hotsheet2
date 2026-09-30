@@ -166,7 +166,9 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' }),
-    toolbar = page.locator('.app-shell__main > .kui-toolbar').filter({ has: page.locator('.ticket-search-field') }),
+    toolbar = page
+      .locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')
+      .filter({ has: page.locator('.ticket-search-field') }),
     searchGroup = toolbar.locator('.ticket-search-field'),
     geometry = () =>
       page.evaluate(() => {
@@ -174,12 +176,14 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
             const value = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
             return { top: value.top, bottom: value.bottom, height: value.height };
           },
-          group = document.querySelector<HTMLElement>('.app-shell__main > .kui-toolbar .ticket-search-field')!;
+          group = document.querySelector<HTMLElement>(
+            '[data-component="toolbar"][aria-label="Workspace toolbar"] .ticket-search-field',
+          )!;
         return {
-          group: rect('.app-shell__main > .kui-toolbar .ticket-search-field'),
-          mode: rect('.app-shell__main > .kui-toolbar .view-mode-switcher'),
-          sort: rect('.app-shell__main > .kui-toolbar .workspace-header__sort-group'),
-          toolbar: rect('.app-shell__main > .kui-toolbar'),
+          group: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .ticket-search-field'),
+          mode: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .view-mode-switcher'),
+          sort: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .workspace-header__sort-group'),
+          toolbar: rect('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
           tabs: rect('.app-shell__main > .project-tab-bar'),
           radius: getComputedStyle(group.querySelector<HTMLElement>('.kui-token-search')!).borderRadius,
         };
@@ -489,7 +493,9 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
           scrollWidth: node.scrollWidth,
         };
       },
-      toolbar = document.querySelector<HTMLElement>('.app-shell__main > .kui-toolbar:has(.ticket-search-field)')!,
+      toolbar = document.querySelector<HTMLElement>(
+        '[data-component="toolbar"][aria-label="Workspace toolbar"]:has(.ticket-search-field)',
+      )!,
       trailing = toolbar.querySelector<HTMLElement>('.kui-toolbar__trailing')!,
       search = toolbar.querySelector<HTMLElement>('.ticket-search-field')!,
       projectBar = document.querySelector<HTMLElement>('.app-shell__main > [data-component="project-tab-bar"]')!,

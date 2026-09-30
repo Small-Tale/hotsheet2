@@ -122,7 +122,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   const list = page.locator('[data-component="ticket-list"]');
   const board = page.locator('[data-component="ticket-board"]');
   const appShell = page.locator('[data-component="app-shell"]');
-  const inspectorRegion = appShell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');
+  const inspectorRegion = appShell.locator('#app-right-rail');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   const composer = page.locator('[data-component="quick-ticket-composer"]');
   await expect(list).toBeVisible();

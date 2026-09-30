@@ -2363,7 +2363,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(dashboard).toHaveAttribute('data-fit', '2');
   await expect(operations).toBeVisible();
   await operations.getByRole('button', { name: 'Hide operations sidebar' }).click();
-  await expect(page.locator('section[data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show operations sidebar' }).click();
   await expect(operations).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-mh8qn2-terminal-operations-1024x600.png', fullPage: true });
@@ -2669,7 +2669,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    const toolbar = page.locator('.app-shell__main > .kui-toolbar');
+    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
     const segments = toolbar.getByRole('group', { name: 'View mode', exact: true });
     const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
     const expectMode = async (group: Locator, selected: keyof typeof icons, modes = Object.keys(icons)) => {
@@ -2916,7 +2916,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
   await rail.getByRole('button', { name: 'Hide ticket rail' }).click();
-  const railRegion = page.locator('section[data-region-id="app-inspector"]');
+  const railRegion = page.locator('#app-right-rail');
   await expect(railRegion).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show ticket rail' }).click();
   await expect(railRegion).toHaveAttribute('data-collapsed', 'false');
@@ -3343,7 +3343,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await handle.focus();
   await page.keyboard.press('ArrowUp');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
-  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-terminal-drawer.size'))).resolves.toBe(
+  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     '336',
   );
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
@@ -3658,7 +3658,7 @@ test('hides the bottom terminal drawer on Notifications and Settings views, pres
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  const drawerRegion = page.locator('[data-component="resizable-region"][data-region-id="app-terminal-drawer"]'),
+  const drawerRegion = page.locator('#app-bottom-drawer'),
     restore = page.getByRole('button', { name: 'Show terminal drawer' });
   // Open the drawer on a ticket view.
   await restore.click();
@@ -3749,7 +3749,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
-  const region = page.locator('[data-component="resizable-region"][data-region-id="app-terminal-drawer"]'),
+  const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New drawer item' });
   const createStyle = await create.evaluate((node) => {
@@ -3761,7 +3761,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   expect(Number.parseFloat(createStyle.borderRadius)).toBeGreaterThanOrEqual(16);
   expect(createStyle.height).toBe('32px');
   await create.click();
-  await expect(region.locator(':scope > .kui-resizable-region__content')).toHaveCSS('overflow', 'visible');
+  // The drawer itself lets the anchored popup escape its clip while the menu is open.
+  await expect(region).toHaveCSS('overflow', 'visible');
   const menu = drawer.locator('[data-terminal-drawer-create]');
   await expect(menu.getByText('Default shell')).toBeVisible();
   await expect(menu.getByText('AI shell')).toBeVisible();
@@ -3796,7 +3797,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await menu.getByText('AI chat').click({ modifiers: ['Alt'] });
-  await expect(region.locator(':scope > .kui-resizable-region__content')).toHaveCSS('overflow', 'hidden');
+  await expect(region).not.toHaveCSS('overflow', 'visible');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Claude chat' })).toHaveAttribute('aria-selected', 'true');
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
@@ -4720,9 +4721,10 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
-    region = page.locator('section[data-region-id="app-terminal-drawer"]'),
+    region = page.locator('#app-bottom-drawer'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' });
-  await expect(region).toHaveAttribute('data-transitioning', 'false');
+  await expect(region).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const grip = (await handle.boundingBox())!;
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
@@ -4862,7 +4864,8 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(async () => {
-      const bounds = await page.locator('.app-shell > [data-region-id="app-sidebar"]').boundingBox();
+      // A collapsed overlay rail keeps its box (pointer-events off) and slides its content out.
+      const bounds = await page.locator('#app-left-rail .kui-workbench__panel-content').boundingBox();
       return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
     })
     .toBeLessThanOrEqual(0);
@@ -5030,11 +5033,12 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
-  const main = page.locator('.app-shell__main'),
+  // The drawer may grow down to the shell's bottom edge (it docks below the main column).
+  const main = page.locator('.app-shell'),
     workArea = page.locator('.app-shell__work-area'),
-    region = page.locator('section[data-region-id="app-terminal-drawer"]'),
+    region = page.locator('#app-bottom-drawer'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' });
-  await expect(region).toHaveAttribute('data-transitioning', 'false');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const geometry = await main.evaluate(
       (element, workspace) => ({
         bottom: element.getBoundingClientRect().bottom,
@@ -5054,7 +5058,7 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
       { x: (await region.boundingBox())!.x + 20, y: geometry.top + 20 },
     ),
   ).toBe(true);
-  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-terminal-drawer.size'))).resolves.toBe(
+  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     String(expected),
   );
   await page.screenshot({ path: '/private/tmp/hs2-4fzgm7-drawer-max.png', fullPage: true });
@@ -5155,7 +5159,7 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   const maximum = await handle.getAttribute('aria-valuemax');
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await expect(handle).toHaveAttribute('aria-valuenow', maximum!);
-  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-terminal-drawer.size'))).resolves.toBe(
+  await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     '336',
   );
   await drawer.getByRole('tab', { name: 'Project grid' }).dispatchEvent('dblclick');
@@ -5180,21 +5184,21 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
-  const region = page.locator('section[data-region-id="app-terminal-drawer"]'),
+  const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
-    content = region.locator('.kui-resizable-region__content');
-  await expect(region).toHaveAttribute('data-transitioning', 'true');
+    content = region.locator('.kui-workbench__panel-content');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
   await expect(region).toHaveCSS('transition-duration', '0s');
   expect(await content.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.2s');
-  await expect(region).toHaveAttribute('data-transitioning', 'false');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await handle.focus();
   await page.keyboard.press('ArrowUp');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
-  await expect(region).toHaveAttribute('data-transitioning', 'false');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await expect(region).toHaveCSS('transition-duration', '0s');
   await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
-  await expect(region).toHaveAttribute('data-transitioning', 'true');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
   await expect(region).toHaveAttribute('data-collapsed', 'true');
   await expect(drawer).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toHaveCount(0);
@@ -5219,12 +5223,12 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
   await expect(restoreGroup).toHaveAttribute('data-tone', 'default');
   await expect(restoreGroup).toHaveCSS('color-scheme', 'dark');
   await expect(restoreGroup).toHaveCSS('background-color', 'rgb(58, 58, 60)');
-  // Kerf 5.0.0-beta.55 anchors the toolbar in its ResizableRegion restore corner, which owns the
-  // canonical inset; measure the rendered gap to the shell's main area rather than the toolbar's own offsets.
+  // Kerf anchors the toolbar in the Workbench drawer's restore corner, which owns the canonical inset
+  // from the work-area column; measure the rendered gap rather than the toolbar's own offsets.
   const insets = () =>
     restoreToolbar.evaluate((node) => {
       const box = node.getBoundingClientRect(),
-        main = node.closest('.app-shell__main')!.getBoundingClientRect();
+        main = node.closest('.kui-workbench__center')!.getBoundingClientRect();
       return { right: `${Math.round(main.right - box.right)}px`, bottom: `${Math.round(main.bottom - box.bottom)}px` };
     });
   expect(await insets()).toEqual({ right: '16px', bottom: '16px' });
@@ -6273,7 +6277,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const region = page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');
+  const region = page.locator('#app-right-rail');
   await expect(region).toBeVisible();
   const before = await region.evaluate((node) => node.getBoundingClientRect().width);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -6480,10 +6484,10 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const sidebar = page.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]'),
-    inspector = page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');
-  const sidebarHandle = sidebar.getByRole('separator', { name: 'Resize Project sidebar' }),
-    inspectorHandle = inspector.getByRole('separator', { name: 'Resize Ticket inspector' });
+  const sidebar = page.locator('#app-left-rail'),
+    inspector = page.locator('#app-right-rail');
+  const sidebarHandle = sidebar.getByRole('separator', { name: 'Resize Sidebar rail' }),
+    inspectorHandle = inspector.getByRole('separator', { name: 'Resize Inspector rail' });
   const initialSidebar = await sidebar.evaluate((node) => node.getBoundingClientRect().width),
     initialInspector = await inspector.evaluate((node) => node.getBoundingClientRect().width);
   const sidebarBox = (await sidebarHandle.boundingBox())!,
@@ -6504,7 +6508,6 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await page.mouse.move(dragPoint.x, dragPoint.y);
   await page.mouse.down();
   await expect(sidebar).toHaveAttribute('data-resizing', 'true');
-  await expect(sidebar.locator('.kui-resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(dragPoint.x + 32, dragPoint.y);
   await page.mouse.up();
   await expect(sidebar).not.toHaveAttribute('data-resizing');
@@ -6650,7 +6653,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const sidebarTabs = page.locator('[data-region-id="app-inspector"] .ticket-inspector__tabs');
+  const sidebarTabs = page.locator('#app-right-rail .ticket-inspector__tabs');
   const captureTabChrome = async (tabs: Locator, path: string) => {
     const clip = await tabs.evaluate((node) => {
       const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"]')!,
@@ -7246,7 +7249,7 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const inspector = page.locator('.kui-resizable-region[data-region-id="app-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
 
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -10007,14 +10010,8 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   expect(bounds?.width).toBe(800);
   expect(bounds?.height).toBeGreaterThanOrEqual(600);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute(
-    'data-collapsed',
-    'true',
-  );
-  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toHaveAttribute(
-    'data-collapsed',
-    'true',
-  );
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
   await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
@@ -10906,7 +10903,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
 
   const shell = page.locator('[data-component="app-shell"]'),
-    mainToolbar = shell.locator('.app-shell__main > [data-component="toolbar"]').first(),
+    mainToolbar = shell.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]').first(),
     projectTabs = shell.locator('.project-tab-bar'),
     title = page.locator('#workspace-page-title'),
     launcher = page.getByRole('button', { name: 'New ticket…' });
@@ -12304,7 +12301,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await row.dblclick();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     preview = reader.getByRole('button', { name: 'Edit Ticket details' });
-  const sidebar = page.locator('[data-region-id="app-inspector"]');
+  const sidebar = page.locator('#app-right-rail');
   await preview.dblclick();
   let source = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(source).toBeFocused();
@@ -12350,7 +12347,7 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-region-id="app-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     resize = async (locator: Locator, height: number) => {
       await locator.evaluate((node, value) => {
         const textarea = node as HTMLTextAreaElement;
@@ -14878,7 +14875,8 @@ for (const surface of ['workspace', 'rail'] as const) {
       if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
       else await page.getByRole('button', { name: 'Columns view', exact: true }).click();
       const rail = page.locator('[data-component="terminal-ticket-rail"]');
-      const controls = surface === 'rail' ? rail : page.locator('.app-shell__main > .kui-toolbar');
+      const controls =
+        surface === 'rail' ? rail : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
       const star = controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
       const icon = star.locator('.workspace-header__up-next-icon');
       const select = async (slug: string, toggle = false, single = true) => {
@@ -15006,7 +15004,7 @@ for (const surface of ['workspace', 'rail'] as const) {
     const controls =
       surface === 'rail'
         ? page.locator('[data-component="terminal-ticket-rail"]')
-        : page.locator('.app-shell__main > .kui-toolbar');
+        : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
     await expect(controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' })).toBeDisabled();
     await expect(controls.getByRole('button', { name: 'More actions for selected tickets' })).toBeDisabled();
   });
@@ -15018,12 +15016,12 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const toolbar = page.locator('.app-shell__main > .kui-toolbar'),
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
     overflow = toolbar.locator('[data-workspace-overflow]'),
     trigger = overflow.getByRole('button', { name: 'More workspace controls' }),
     first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]');
-  await expect(page.locator('section[data-region-id="app-inspector"]')).toBeVisible();
+  await expect(page.locator('#app-right-rail')).toBeVisible();
   await expect(overflow).toBeVisible();
   await expect(toolbar.locator('.workspace-header__utility-group')).toBeHidden();
   await first.click();

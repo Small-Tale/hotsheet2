@@ -348,7 +348,7 @@ function appendGhost(document: Document, ghost: HTMLElement, rect: DOMRect) {
     return;
   }
   const workspaceBounds = workspace.getBoundingClientRect(),
-    drawer = document.querySelector<HTMLElement>('[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),
+    drawer = document.querySelector<HTMLElement>('[data-region-id="app-bottom-drawer"][data-collapsed="false"]'),
     drawerTop = drawer?.getBoundingClientRect().top ?? workspaceBounds.bottom,
     bounds = {
       left: workspaceBounds.left,

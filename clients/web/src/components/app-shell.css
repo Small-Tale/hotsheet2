@@ -11,22 +11,21 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
-/* Kerf's inline regions are transparent; the shell hands them its surface through the public token. */
-.app-shell {
-  --kui-resizable-region-background: var(--wa-color-surface-default);
-}
+/* The main column fills the Workbench work area, which is a plain scroll box; the column owns its
+   own scrolling (the ticket workspace), so it never lets the work area scroll. */
 .app-shell__main {
   position: relative;
   display: flex;
   min-width: 0;
+  height: 100%;
   min-height: 0;
   flex: 1;
   flex-direction: column;
 }
-/* Focus mode already lets the drawer's content escape (contentOverflow="visible"); raise Kerf's popup
-   layer so the magnified terminal paints above the rest of the shell. */
+/* Focus mode lifts the drawer (rendered with visible overflow) above the whole main column through
+   the Workbench's public popup layer token. */
 .app-shell[data-terminal-focus-mode='true'] {
-  --kui-resizable-region-popup-z: 200;
+  --kui-workbench-popup-z: 200;
 }
 .app-shell__main > .project-tab-bar {
   border-bottom: 0;
@@ -120,7 +119,7 @@
   padding: remify(16px) 0 0;
   overflow: hidden;
 }
-.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
+.app-shell [data-region-id='app-right-rail'] .ticket-inspector {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -139,8 +138,8 @@
 .app-shell__work-area[data-has-composer='true'] > .app-shell__workspace {
   padding-top: 0;
 }
-/* Mobile side panels use ResizableRegion's overlay presentation. The shell remains
-   their positioning context, while Hot Sheet owns the click-away scrim. */
+/* Mobile side panels use the Workbench's overlay presentation, positioned within the Workbench,
+   while Hot Sheet owns the click-away scrim. */
 .app-shell[data-mobile='true'] {
   position: relative;
   min-width: 0;
@@ -150,21 +149,23 @@
    and carry the home-indicator inset as padding inside the scroller, with matching scroll padding,
    so the last ticket can be scrolled clear of the unsafe area (HS2-4A29RR). An expanded drawer owns
    the bottom edge instead, so the scrollers then keep their ordinary padding. */
-.app-shell[data-mobile='true']
-  .app-shell__main:not(:has(> .kui-resizable-region[data-region-id='app-terminal-drawer']:not([data-collapsed='true'])))
+.app-shell[data-mobile='true']:not(
+    :has(> [data-component='workbench'] > * > [data-workbench-drawer]:not([data-collapsed='true']))
+  )
   .app-shell__workspace:not([data-presentation='edge-to-edge']) {
   padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-safe-area-bottom));
   scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
 }
-.app-shell[data-mobile='true']
-  .app-shell__main:not(:has(> .kui-resizable-region[data-region-id='app-terminal-drawer']:not([data-collapsed='true'])))
+.app-shell[data-mobile='true']:not(
+    :has(> [data-component='workbench'] > * > [data-workbench-drawer]:not([data-collapsed='true']))
+  )
   .ticket-board-column__tickets {
   padding-bottom: calc(var(--kui-space-m) + var(--hotsheet-safe-area-bottom));
   scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
 }
-/* Viewport-fixed so it reliably covers the whole shell regardless of the app-shell's flex/containing
-   block; .app-shell is not a stacking context (position:relative + z-index:auto), so the z-index:41
-   overlay panels still paint above this z-index:40 scrim. */
+/* Viewport-fixed so it covers the whole shell. It renders inside the Workbench's isolated stacking
+   context (in the main column), so the z-index:41 overlay rails still paint above this z-index:40
+   scrim while it covers everything else. */
 .app-shell__scrim {
   position: fixed;
   z-index: 40;

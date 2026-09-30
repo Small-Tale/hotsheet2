@@ -33,7 +33,7 @@ function mockDocument(drawerTop?: number) {
     querySelector: vi.fn((selector: string) =>
       selector === '.app-shell__workspace'
         ? workspace
-        : selector === '[data-region-id="app-terminal-drawer"][data-collapsed="false"]'
+        : selector === '[data-region-id="app-bottom-drawer"][data-collapsed="false"]'
           ? drawer
           : null,
     ),
