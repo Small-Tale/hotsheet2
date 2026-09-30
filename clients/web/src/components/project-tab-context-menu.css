@@ -12,9 +12,6 @@
 .project-tab-context-menu wa-divider {
   --spacing: remify(4px);
 }
-.project-tab-context-menu wa-dropdown-item {
-  cursor: pointer;
-}
 .project-tab-context-menu [slot='icon'] {
   display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);

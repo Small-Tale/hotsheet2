@@ -327,7 +327,7 @@
   font-weight: 600;
   gap: var(--kui-space-2xs);
 }
-.command-settings-editor__ai-selection wa-dropdown {
+.command-settings-editor__ai-menu {
   min-width: 0;
 }
 .command-settings-editor .command-settings-editor__ai-trigger {

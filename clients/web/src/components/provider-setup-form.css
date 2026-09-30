@@ -75,7 +75,7 @@
   color: var(--wa-color-danger-on-quiet);
 }
 @media (max-width: remify(768px)) {
-  .provider-setup-form__grid[data-component='grid'] {
+  .provider-setup-form__grid {
     grid-template-columns: 1fr;
   }
 }

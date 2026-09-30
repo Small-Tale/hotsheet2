@@ -76,14 +76,16 @@ export function ProjectDialog({
                 Hot Sheet cannot verify active work. Recovery first asks process {recovery.expected.pid} to stop, then
                 force-stops only that exact registered instance if necessary.
               </p>
-              <wa-button
-                appearance="outlined"
-                type="button"
-                data-action="recover-unhealthy-server"
-                disabled={recoveryBusy}
-              >
-                {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
-              </wa-button>
+              <div class="project-dialog__server-recovery-action">
+                <wa-button
+                  appearance="outlined"
+                  type="button"
+                  data-action="recover-unhealthy-server"
+                  disabled={recoveryBusy}
+                >
+                  {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
+                </wa-button>
+              </div>
             </section>
           )}
           <footer>

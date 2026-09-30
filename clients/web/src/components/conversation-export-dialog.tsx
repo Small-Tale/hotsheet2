@@ -150,7 +150,9 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         </div>
         {existing && (
           <div class="conversation-export-dialog__collision" role="status">
-            <wa-tag variant="warning">Existing export</wa-tag>
+            <span class="conversation-export-dialog__collision-tag">
+              <wa-tag variant="warning">Existing export</wa-tag>
+            </span>
             <p>
               {sameConversation
                 ? `Revision ${existing.revision} of this conversation is already there.`

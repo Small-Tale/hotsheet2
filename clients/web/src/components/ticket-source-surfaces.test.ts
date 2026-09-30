@@ -288,7 +288,7 @@ describe('ticket source surfaces', () => {
     );
     expect(provider).toContain('.provider-setup-form');
     expect(provider).toMatch(
-      /@media \(max-width: remify\(768px\)\) \{\s*\.provider-setup-form__grid\[data-component='grid'\] \{\s*grid-template-columns: 1fr;/,
+      /@media \(max-width: remify\(768px\)\) \{\s*\.provider-setup-form__grid \{\s*grid-template-columns: 1fr;/,
     );
     expect(readFileSync(new URL('./ticket-sources-settings.css', import.meta.url), 'utf8')).toContain(
       '.ticket-provider-settings',

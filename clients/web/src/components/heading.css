@@ -5,7 +5,7 @@
   min-width: 0;
   gap: 0;
 }
-.app-heading__icon.kui-toolbar-control-group {
+.app-heading .app-heading__icon {
   --kui-toolbar-control-background: var(--kui-color-brand-fill-quiet);
   --kui-toolbar-control-border: var(--kui-color-brand-fill-quiet);
   color: var(--kui-color-brand-on-quiet);

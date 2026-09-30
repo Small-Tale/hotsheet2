@@ -1829,12 +1829,32 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, and HS2-MYVVK3 is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, and HS2-G5K1V0 is:
 
-| Severity | Exact diagnostic budgets                                                |
-| -------- | ----------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 102; `KUI-L022` 61; `KUI-L201` 0 |
-| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                                |
+| Severity | Exact diagnostic budgets                                               |
+| -------- | ---------------------------------------------------------------------- |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 87; `KUI-L022` 61; `KUI-L201` 0 |
+| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                               |
+
+HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
+Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
+`wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers
+them; Web Awesome geometry moved onto app-owned wrappers or containers (the trash-settings
+field, the export-collision tag, the project-dialog recovery action, the command AI menu,
+a stretching grid for the terminal-visibility filter, and grid footers for the narrow
+project-close and repository-setup actions); and two selectors dropped a Kerf class or
+attribute they did not need. Every remaining rule needs Kerf API that does not exist yet
+and is requested upstream, grouped by component in the kerf store: `KF-XNRXCK` (Toolbar
+zone layout and a trailing-priority responsive policy), `KF-9K8PTV` (Select trigger width
+and selected-content typography), `KF-8SD2EP` (ListItem/ListHeader geometry, per-part
+color, multi-line labels), `KF-E47GAW` (AppTab/TabBar icon-only names, truncation, strip
+geometry), `KF-96T4HM` (StateBanner copy layout and action placement), `KF-FT9R9M`
+(ResizableRegion/FloatingToolbar background, popup overflow, restore placement, inset),
+and `KF-GC3RKN` (TokenSearchField, Text, ValueTable, ToolbarText, app-root tokens). The
+Web Awesome element rules that remain (tab-bar action buttons, drive-options submenu
+items, the tag chip) resolve by composing through Kerf components instead
+(`HS2-CSRJ9Y` for menus; `HS2-402AXQ` for the rest). Adoption of the upstream APIs is
+tracked in `HS2-PKPGGZ`.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token

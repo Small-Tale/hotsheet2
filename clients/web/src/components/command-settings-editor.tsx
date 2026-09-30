@@ -148,48 +148,50 @@ function AiCommandSelection({
   return (
     <div class="command-settings-editor__wide command-settings-editor__ai-selection">
       <span>AI configuration</span>
-      <wa-dropdown placement="bottom-start" distance={4}>
-        <button
-          slot="trigger"
-          type="button"
-          class="command-settings-editor__ai-trigger"
-          aria-label={`AI configuration: ${summary}`}
-        >
-          <LucideIcon icon={Bot} name="bot" />
-          <span>{summary}</span>
-        </button>
-        <wa-dropdown-item type="checkbox" checked={!overridden} data-action="select-command-ai-default">
-          <span slot="icon">
-            <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-          </span>
-          Project Default
-        </wa-dropdown-item>
-        {active && (
-          <>
-            <wa-divider></wa-divider>
-            <ProviderModelEffortSubmenus
-              actions={{
-                provider: 'select-command-ai-tool',
-                model: 'select-command-ai-model',
-                effort: 'select-command-ai-effort',
-                manualModel: 'open-command-manual-model',
-              }}
-              providers={{
-                choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
-                currentId: active.id,
-                currentLabel: active.display_name,
-              }}
-              model={{
-                choices: active.models.map((item) => ({ id: item.id, label: item.label })),
-                currentId: model?.id,
-                currentLabel: model?.label ?? (modelId || 'Provider default'),
-                customModel,
-              }}
-              effort={{ efforts, current: effort }}
-            />
-          </>
-        )}
-      </wa-dropdown>
+      <div class="command-settings-editor__ai-menu">
+        <wa-dropdown placement="bottom-start" distance={4}>
+          <button
+            slot="trigger"
+            type="button"
+            class="command-settings-editor__ai-trigger"
+            aria-label={`AI configuration: ${summary}`}
+          >
+            <LucideIcon icon={Bot} name="bot" />
+            <span>{summary}</span>
+          </button>
+          <wa-dropdown-item type="checkbox" checked={!overridden} data-action="select-command-ai-default">
+            <span slot="icon">
+              <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+            </span>
+            Project Default
+          </wa-dropdown-item>
+          {active && (
+            <>
+              <wa-divider></wa-divider>
+              <ProviderModelEffortSubmenus
+                actions={{
+                  provider: 'select-command-ai-tool',
+                  model: 'select-command-ai-model',
+                  effort: 'select-command-ai-effort',
+                  manualModel: 'open-command-manual-model',
+                }}
+                providers={{
+                  choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
+                  currentId: active.id,
+                  currentLabel: active.display_name,
+                }}
+                model={{
+                  choices: active.models.map((item) => ({ id: item.id, label: item.label })),
+                  currentId: model?.id,
+                  currentLabel: model?.label ?? (modelId || 'Provider default'),
+                  customModel,
+                }}
+                effort={{ efforts, current: effort }}
+              />
+            </>
+          )}
+        </wa-dropdown>
+      </div>
       <small>Project Default follows this project's AI settings; choose an override only for this command.</small>
     </div>
   );

@@ -1,6 +1,8 @@
 .repository-summary {
   color: var(--wa-color-neutral-on-normal);
 }
+/* ListItem defines --kui-list-item-color on its own root, so an ancestor cannot retint it and no
+   prop exists yet; the brand tint stays an app rule until Kerf ships per-part color props (KF-8SD2EP). */
 .repository-summary .kui-list-item__icon,
 .repository-summary .kui-list-item__label {
   color: var(--wa-color-brand-on-quiet);

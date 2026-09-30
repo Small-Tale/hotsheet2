@@ -19,13 +19,15 @@ export function TrashSettings({ days, message = '' }: { days: number; message?: 
             </Text>
           </List>
         </header>
-        <wa-input
-          name="trash-cleanup-days"
-          type="number"
-          label="Keep deleted tickets for (days)"
-          value={String(days)}
-          required
-        ></wa-input>
+        <div class="trash-settings__field">
+          <wa-input
+            name="trash-cleanup-days"
+            type="number"
+            label="Keep deleted tickets for (days)"
+            value={String(days)}
+            required
+          ></wa-input>
+        </div>
         <footer>
           <Row vAlign="middle" gap="xs">
             <wa-button type="submit" variant="brand">

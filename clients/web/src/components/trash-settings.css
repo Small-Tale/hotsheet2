@@ -7,7 +7,7 @@
 .trash-settings header .kui-text[data-tone='quiet'] {
   line-height: 1.5;
 }
-.trash-settings wa-input {
+.trash-settings__field {
   max-width: remify(256px);
 }
 .trash-settings footer [role='status'] {

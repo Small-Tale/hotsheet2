@@ -80,6 +80,6 @@ wa-dialog[data-project-dialog] {
   margin: 0;
   line-height: 1.45;
 }
-.project-dialog__server-recovery wa-button {
+.project-dialog__server-recovery-action {
   justify-self: start;
 }

@@ -87,9 +87,6 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
-.terminal-visibility-dialog__context-menu wa-dropdown-item {
-  cursor: pointer;
-}
 .terminal-visibility-dialog__context-menu [slot='icon'] {
   display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);
@@ -117,12 +114,12 @@
 }
 
 .terminal-visibility-dialog__filter {
+  display: grid;
   min-width: 0;
   padding: var(--wa-space-s);
   border-bottom: 1px solid var(--wa-color-surface-border);
-}
-.terminal-visibility-dialog__filter wa-select {
-  width: 100%;
+  /* A grid item stretches to the filter's width without styling the Web Awesome host. */
+  justify-items: stretch;
 }
 .terminal-visibility-dialog__type-icon {
   display: inline-flex;

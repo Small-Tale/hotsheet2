@@ -174,12 +174,11 @@
   .project-close-dialog__chat {
     padding: 0;
   }
+  /* Equal-width actions come from the app-owned footer grid, not from styling the buttons. */
   .project-close-dialog__actions {
-    flex-wrap: nowrap;
-  }
-  .project-close-dialog__actions wa-button {
-    min-width: 0;
-    flex: 1;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
   }
   .project-close-dialog__actions wa-button::part(base) {
     padding-inline: var(--kui-space-2xs);

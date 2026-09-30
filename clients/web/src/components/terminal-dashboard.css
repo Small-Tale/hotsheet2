@@ -519,9 +519,6 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
-.terminal-dashboard__context-menu wa-dropdown-item {
-  cursor: pointer;
-}
 .terminal-dashboard__context-menu [slot='icon'] {
   display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);
