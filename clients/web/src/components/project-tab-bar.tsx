@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/tab-bar.css';
 import './project-tab-bar.css';
 
@@ -61,9 +60,17 @@ export function ProjectTabBar({
   );
   const actions = (
     <div class="project-tab-bar__actions">
-      <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project">
+      {/* A native button styled by the app: the strip sits beside Kerf's TabBar (whose trailing zone
+          takes only dormant decoration), so no Toolbar owns a control group here (HS2-402AXQ). */}
+      <button
+        type="button"
+        class="project-tab-bar__action"
+        data-action="choose-project"
+        aria-label="Add project"
+        title="Add project"
+      >
         <LucideIcon icon={Plus} name="plus" />
-      </wa-button>
+      </button>
       {!mobile && workspaceAction && <div class="project-tab-bar__workspace-action">{workspaceAction}</div>}
     </div>
   );

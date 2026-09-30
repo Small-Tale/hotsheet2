@@ -87,34 +87,27 @@
 .project-tab-bar__actions [hidden] {
   display: none;
 }
-.project-tab-bar__actions > wa-button {
-  display: inline-flex;
-  width: remify(32px);
-  height: remify(32px);
-  line-height: 0;
-  align-items: center;
-  justify-content: center;
-}
-.project-tab-bar__actions wa-dropdown {
-  display: inline-flex;
-  height: remify(32px);
-  align-items: center;
-}
-.project-tab-bar__actions > wa-button::part(base) {
+.project-tab-bar__action {
   display: grid;
   width: remify(32px);
   height: remify(32px);
-  min-height: remify(32px);
   padding: 0;
+  border: 0;
   border-radius: var(--wa-border-radius-pill);
+  color: inherit;
+  background: transparent;
   cursor: pointer;
   line-height: 0;
   place-items: center;
 }
-.project-tab-bar__actions > wa-button:hover::part(base) {
+.project-tab-bar__action:hover {
   background: var(--wa-color-neutral-fill-normal);
 }
-.project-tab-bar__actions > wa-button svg {
+.project-tab-bar__action:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+.project-tab-bar__action svg {
   display: block;
   width: remify(16px);
   height: remify(16px);

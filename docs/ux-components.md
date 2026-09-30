@@ -1867,15 +1867,23 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, and HS2-K9KWJJ is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, and HS2-402AXQ is:
 
 | Severity | Exact diagnostic budgets                                               |
 | -------- | ---------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 88; `KUI-L022` 33; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 86; `KUI-L022` 33; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                               |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
-rail's controls Toolbar now sizes the expanded search itself.
+rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
+tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app-styled native
+`.project-tab-bar__action` button (86): the strip sits beside Kerf's `TabBar`, whose trailing zone
+accepts only dormant decoration, so no `Toolbar` owns a control group there. The rules whose
+subject is still a raw Web Awesome element are deliberate: `cursor-semantics.css` applies the
+cursor policy through documented Web Awesome parts (`wa-dropdown-item` and friends) as
+CLAUDE.md requires; `tag-chip.css` keeps `wa-tag`'s compact geometry, 16px remove button, and
+disabled state until Kerf ships a removable chip primitive (`KF-PDPAVF`); and `drive-options-menu.css`
+styles the raw submenu items that `HS2-2EHD8R` replaces with `PopupMenu` context mode.
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers
