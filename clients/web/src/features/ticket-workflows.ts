@@ -22,7 +22,7 @@ import type { TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
-import { createDebouncedAutosave, type DebouncedAutosave } from '../debounced-autosave';
+import { createDebouncedAutosave, createFocusLossAutosave, type DebouncedAutosave } from '../debounced-autosave';
 import { presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
@@ -52,8 +52,16 @@ import {
   validateTicketClose,
 } from '../ticket-close';
 import {
+  clearTicketDraft,
+  loadTicketDraft,
+  saveTicketDraft,
+  type TicketDraftField,
+  ticketDraftKey,
+} from '../ticket-draft-store';
+import {
   isTicketConcurrencyConflict,
   rebaseDraftValue,
+  reconcileActiveDraft,
   reconcileTicketPatch,
   type TicketFieldConflict,
   ticketFieldLabel,
@@ -604,21 +612,138 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         ? history().execute(selectedTicket.value.slug, patch)
         : false;
   }
-  const detailsAutosave = createDebouncedAutosave((value: string) => updateSelectedTracked({ details: value }));
-  const readerDetailsAutosave = createDebouncedAutosave((value: string) => updateSelectedTracked({ details: value }));
-  const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) =>
-    updateSelected({ note_id: id, note: value }),
+  // Text edits stay local while the user types and reach the server once, when focus leaves the
+  // editing surface (HS2-RE1PS6). The debounced step only refreshes a localStorage recovery copy
+  // keyed by project, ticket, and field, together with the value the edit started from.
+  const draftStorage = (): Storage | undefined => (typeof localStorage === 'undefined' ? undefined : localStorage);
+  function selectedDraftKey(field: TicketDraftField, noteId?: string): string | undefined {
+    const current = project(),
+      ticket = selectedTicket.value;
+    return current && ticket ? ticketDraftKey(current.id, ticket.qualified_id, field, noteId) : undefined;
+  }
+  function persistSelectedDraft(field: TicketDraftField, base: string, draft: string, noteId?: string) {
+    const storage = draftStorage(),
+      key = selectedDraftKey(field, noteId);
+    if (storage && key) saveTicketDraft(storage, key, { base, draft });
+  }
+  /** Drop the recovery copy once the value it holds is committed; a newer copy typed meanwhile stays. */
+  function clearCommittedDraft(field: TicketDraftField, committed: string, noteId?: string) {
+    const storage = draftStorage(),
+      key = selectedDraftKey(field, noteId);
+    if (!storage || !key) return;
+    const stored = loadTicketDraft(storage, key);
+    if (!stored || stored.draft.trim() === committed.trim()) clearTicketDraft(storage, key);
+  }
+  /**
+   * The recovery copy for a field the user is about to edit, rebased onto the field's current value:
+   * the stored draft continues on the same base when nothing changed, merges when the remote change
+   * is disjoint, and is dropped (the current value wins) when it cannot be merged. `undefined` when
+   * there is nothing to restore.
+   */
+  function restoreTicketDraft(
+    field: TicketDraftField,
+    current: string,
+    noteId?: string,
+  ): { draft: string; base: string } | undefined {
+    const storage = draftStorage(),
+      key = selectedDraftKey(field, noteId);
+    if (!storage || !key) return undefined;
+    const stored = loadTicketDraft(storage, key);
+    if (!stored || stored.draft === stored.base || stored.draft === current) {
+      if (stored) clearTicketDraft(storage, key);
+      return undefined;
+    }
+    const next = reconcileActiveDraft(stored.base, stored.draft, current);
+    if (next.kind === 'conflict') {
+      clearTicketDraft(storage, key);
+      showToast('An unsaved edit could not be merged with a newer version of this ticket and was discarded.');
+      return undefined;
+    }
+    showToast('Restored an unsaved edit.');
+    return next.kind === 'unchanged'
+      ? { draft: stored.draft, base: stored.base }
+      : { draft: next.draft, base: next.base };
+  }
+  const savingDraft =
+    <T>(
+      field: TicketDraftField,
+      save: (value: T) => Promise<boolean>,
+      text: (value: T) => string,
+      noteId?: (value: T) => string | undefined,
+    ) =>
+    async (value: T) => {
+      const saved = await save(value);
+      if (saved) clearCommittedDraft(field, text(value), noteId?.(value));
+      return saved;
+    };
+  const plain = (value: string) => value,
+    noteText = ({ value }: { id: string; value: string }) => value;
+  const detailsAutosave = createFocusLossAutosave(
+    savingDraft('details', (value: string) => updateSelectedTracked({ details: value }), plain),
+    {
+      persist: (value) => {
+        persistSelectedDraft('details', state.detailsDraftBase, value);
+      },
+    },
   );
-  const readerNoteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) =>
-    updateSelected({ note_id: id, note: value }),
+  const readerDetailsAutosave = createFocusLossAutosave(
+    savingDraft('details', (value: string) => updateSelectedTracked({ details: value }), plain),
+    {
+      persist: (value) => {
+        persistSelectedDraft('details', state.readerDetailsDraftBase, value);
+      },
+    },
   );
-  const blockedReasonAutosave = createDebouncedAutosave((value: string) =>
-    updateSelected({ blocked_reason: value.trim() || null }),
+  const noteAutosave = createFocusLossAutosave(
+    savingDraft(
+      'note',
+      ({ id, value }: { id: string; value: string }) => updateSelected({ note_id: id, note: value }),
+      noteText,
+      ({ id }) => id,
+    ),
+    {
+      persist: ({ id, value }) => {
+        persistSelectedDraft('note', state.noteDraftBase, value, id);
+      },
+    },
   );
-  const readerBlockedReasonAutosave = createDebouncedAutosave((value: string) =>
-    updateSelected({ blocked_reason: value.trim() || null }),
+  const readerNoteAutosave = createFocusLossAutosave(
+    savingDraft(
+      'note',
+      ({ id, value }: { id: string; value: string }) => updateSelected({ note_id: id, note: value }),
+      noteText,
+      ({ id }) => id,
+    ),
+    {
+      persist: ({ id, value }) => {
+        persistSelectedDraft('note', state.readerNoteDraftBase, value, id);
+      },
+    },
   );
-  const titleAutosave = createDebouncedAutosave((value: string) => updateSelectedTracked({ title: value.trim() }));
+  const blockedReasonAutosave = createFocusLossAutosave(
+    savingDraft('blocked_reason', (value: string) => updateSelected({ blocked_reason: value.trim() || null }), plain),
+    {
+      persist: (value) => {
+        persistSelectedDraft('blocked_reason', state.blockedReasonDraftBase, value);
+      },
+    },
+  );
+  const readerBlockedReasonAutosave = createFocusLossAutosave(
+    savingDraft('blocked_reason', (value: string) => updateSelected({ blocked_reason: value.trim() || null }), plain),
+    {
+      persist: (value) => {
+        persistSelectedDraft('blocked_reason', state.readerBlockedReasonDraftBase, value);
+      },
+    },
+  );
+  const titleAutosave = createFocusLossAutosave(
+    savingDraft('title', (value: string) => updateSelectedTracked({ title: value.trim() }), plain),
+    {
+      persist: (value) => {
+        persistSelectedDraft('title', state.titleDraftBase, value);
+      },
+    },
+  );
   const tagsAutosave = createDebouncedAutosave((value: string[]) => updateSelectedTracked({ tags: value }));
   function linkedReaderFrame(target: Element) {
     const id = target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
@@ -693,11 +818,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     let saves = linkedReaderAutosaves.get(id);
     if (!saves) {
       saves = {
-        details: createDebouncedAutosave((value) => updateLinkedReader(id, { details: value })),
-        note: createDebouncedAutosave(({ id: noteId, value }) =>
+        details: createFocusLossAutosave((value) => updateLinkedReader(id, { details: value })),
+        note: createFocusLossAutosave(({ id: noteId, value }) =>
           updateLinkedReader(id, { note_id: noteId, note: value }),
         ),
-        blocked: createDebouncedAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null })),
+        blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null })),
       };
       linkedReaderAutosaves.set(id, saves);
     }
@@ -1346,6 +1471,19 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         .catch(() => undefined);
     if (inspectorTab.value === 'code-review') void refreshCodeReview();
   }
+  /** Send every unsaved text edit now (page hide, explicit save); each keeps its local copy until it commits. */
+  function flushTicketDrafts(): Promise<boolean> {
+    return Promise.all([
+      detailsAutosave.flush(),
+      readerDetailsAutosave.flush(),
+      noteAutosave.flush(),
+      readerNoteAutosave.flush(),
+      blockedReasonAutosave.flush(),
+      readerBlockedReasonAutosave.flush(),
+      titleAutosave.flush(),
+      ...[...linkedReaderAutosaves.keys()].map((frameId) => flushLinkedReader(frameId)),
+    ]).then((results) => results.every(Boolean));
+  }
   function cancelTicketDrafts() {
     state.detailsEditGeneration += 1;
     state.readerDetailsEditGeneration += 1;
@@ -1764,6 +1902,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
 
   return {
     applyTicketPatch,
+    restoreTicketDraft,
+    flushTicketDrafts,
     updateSelected,
     history,
     updateSelectedTracked,

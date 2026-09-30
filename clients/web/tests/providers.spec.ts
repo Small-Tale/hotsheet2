@@ -6208,10 +6208,9 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   await editor.fill('Draft preserved across a redundant reselect');
-  await expect
-    .poll(() => patches.some((patch) => patch.details === 'Draft preserved across a redundant reselect'))
-    .toBe(true);
-  await page.waitForTimeout(100);
+  // Typing never writes; the draft is only local until focus leaves the editor (HS2-RE1PS6).
+  await page.waitForTimeout(300);
+  expect(patches.some((patch) => patch.details === 'Draft preserved across a redundant reselect')).toBe(false);
   const readsBefore = detailReads;
   await editor.evaluate((node) => {
     (node as HTMLElement & { reselectionMarker?: boolean }).reselectionMarker = true;
@@ -6226,6 +6225,10 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   expect(detailReads).toBe(readsBefore);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-wide.png', fullPage: true });
+  await editor.blur();
+  await expect
+    .poll(() => patches.some((patch) => patch.details === 'Draft preserved across a redundant reselect'))
+    .toBe(true);
   await page.setViewportSize({ width: 940, height: 844 });
   await expect(editor).toHaveCount(0);
   await row.click();
@@ -6310,12 +6313,13 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   await expect(inspector).toContainText('Before edit');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   await inspector.getByRole('textbox', { name: 'Ticket details' }).fill('After edit');
+  // Selecting another ticket takes focus from the editor, which sends the edit to the routed provider.
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect
     .poll(() =>
       requests.some((request) => request.method === 'PATCH' && request.path.endsWith('/tickets/jira-1:PROJ-7')),
     )
     .toBe(true);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(inspector).toContainText('Use real project tickets');
   expect(requests.some((request) => request.method === 'GET' && request.path.endsWith('/tickets/jira-1:PROJ-7'))).toBe(
     true,
@@ -8710,6 +8714,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   liveFull = { ...liveFull, status: 'completed', concurrency_token: 'remote-status' };
   liveRows = liveRows.map((item) => (item.id === '01' ? { ...item, status: 'completed' } : item));
   await editor.fill('Local text after remote status');
+  await editor.blur();
   await expect
     .poll(() =>
       patches.some(
@@ -8718,7 +8723,6 @@ test('merges unrelated external ticket fields and offers an editable merge for t
     )
     .toBe(true);
   await expect(inspector.locator('wa-select[name="inspector-status"]')).toHaveJSProperty('value', 'completed');
-  await expect(editor).toHaveValue('Local text after remote status');
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
   await emit();
 
@@ -8730,9 +8734,12 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   editor = reader.getByRole('textbox', { name: 'Ticket details' });
   await editor.fill('My local wording');
+  await editor.blur();
   await expect.poll(() => patches.some((patch) => patch.details === 'My local wording')).toBe(true);
   liveFull = { ...liveFull, details: 'Their newer wording', concurrency_token: 'remote-conflict' };
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   await editor.fill('My revised local wording');
+  await editor.blur();
   const conflict = reader.locator('[data-component="ticket-field-conflict"]');
   await expect(conflict).toBeVisible();
   await expect(conflict).toContainText('Their newer wording');
@@ -8795,18 +8802,22 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   liveFull = { ...liveFull, details: 'Intro\nMiddle\nEnd\nAppended by the AI', concurrency_token: 'remote-append' };
   churn = 2;
   await editor.fill('Intro, edited locally\nMiddle\nEnd');
+  await editor.blur();
   await expect.poll(() => liveFull.details).toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
-  await expect(editor).toHaveValue('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await expect(editor).toHaveValue('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
   await page.screenshot({ path: test.info().outputPath('hs2-a4xcxe-merged-editor-wide.png') });
   await expect(page.locator('.app-error')).toHaveCount(0);
   // Two churned rejections, then the merged commit: the edit survives repeated stale-token rejections.
   expect(patches.filter((patch) => typeof patch.details === 'string')).toHaveLength(3);
   // Typing on after the merge builds on the merged text rather than overwriting the AI's line.
   await editor.fill('Intro, edited locally\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  await editor.blur();
   await expect
     .poll(() => liveFull.details)
     .toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   // Only a true overlap asks: the AI rewrites the line the user is rewriting too.
   liveFull = {
     ...liveFull,
@@ -8814,6 +8825,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
     concurrency_token: 'remote-overlap',
   };
   await editor.fill('Intro, rewritten by me\nMiddle\nEnd\nAppended by the AI\nMore from me');
+  await editor.blur();
   const conflict = inspector.locator('[data-component="ticket-field-conflict"]');
   await expect(conflict).toBeVisible();
   await expect(conflict).toContainText('Intro, rewritten by the AI');
@@ -8848,13 +8860,16 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
   // Another writer renames a different word of the same one-line title.
   liveFull = { ...liveFull, title: 'Fix the lexer bug', concurrency_token: 'remote-title' };
   await title.fill('Fix the parser crash');
+  await title.blur();
   await expect.poll(() => liveFull.title).toBe('Fix the lexer crash');
-  await expect(title).toHaveValue('Fix the lexer crash');
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+  await expect(title).toHaveValue('Fix the lexer crash');
   await page.screenshot({ path: test.info().outputPath('hs2-r8tycg-merged-title-wide.png') });
   // The same word changed on both sides still asks.
   liveFull = { ...liveFull, title: 'Fix the tokenizer crash', concurrency_token: 'remote-overlap' };
   await title.fill('Fix the scanner crash');
+  await title.blur();
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toContainText('Fix the tokenizer crash');
 });
@@ -8903,8 +8918,12 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   const partial = 'they should have round borders and outl',
     complete = 'they should have round borders and outlines';
   await editor.fill(partial);
+  await editor.blur();
   await expect.poll(() => writes.length).toBe(1);
+  // While that save is held open the user comes back and keeps typing, then leaves again.
+  await editor.click();
   await editor.fill(complete);
+  await editor.blur();
   await page.waitForTimeout(300);
   expect(writes).toHaveLength(1);
   const first = writes.shift()!;
@@ -8915,12 +8934,12 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   const second = writes.shift()!;
   expect(second.request().postDataJSON().expected_token).toBe('partial-token');
   await emit();
-  await expect(editor).toHaveValue(complete);
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
   liveFull = { ...liveFull, details: complete, concurrency_token: 'complete-token' };
   await second.fulfill({ json: { store: 'git-local', ...liveFull } });
-  await expect(editor).toHaveValue(complete);
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await expect(editor).toHaveValue(complete);
 });
 
 test('translates urgent priority through the canonical server contract', async ({ page }) => {
@@ -9453,6 +9472,9 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const details = inspector.getByRole('textbox', { name: 'Ticket details' });
   await details.fill('Autosaved details');
+  await page.waitForTimeout(300);
+  expect(patches.some((patch) => patch.details === 'Autosaved details')).toBe(false);
+  await details.blur();
   await expect.poll(() => patches.some((patch) => patch.details === 'Autosaved details')).toBe(true);
   await expect(inspector.getByRole('button', { name: /Save|Cancel/ })).toHaveCount(0);
 
@@ -9460,6 +9482,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await note.locator('.note-card__body p').first().dblclick();
   const noteEditor = note.getByRole('textbox', { name: 'Note body' });
   await noteEditor.fill('Autosaved note');
+  await noteEditor.blur();
   await expect
     .poll(() => patches.some((patch) => patch.note_id === 'N3' && patch.note === 'Autosaved note'))
     .toBe(true);
@@ -9471,8 +9494,8 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blocked = inspector.getByRole('textbox', { name: 'Blocked reason' });
   await blocked.fill('Waiting for review');
-  await expect.poll(() => patches.some((patch) => patch.blocked_reason === 'Waiting for review')).toBe(true);
   await blocked.blur();
+  await expect.poll(() => patches.some((patch) => patch.blocked_reason === 'Waiting for review')).toBe(true);
   await expect(inspector.getByText('Waiting for review', { exact: true })).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Blocked reason' })).toBeVisible();
   await inspector.screenshot({ path: '/private/tmp/hs2-72kryh-blocked-reason.png' });
@@ -9530,19 +9553,19 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   const feedbackEditor = inspector.getByRole('textbox', { name: 'Note body' });
   await expect(feedbackEditor).toHaveValue('Should this reader preserve the current draft?');
   await feedbackEditor.fill('Revised feedback question');
+  await feedbackEditor.blur();
   await expect
     .poll(() => patches.some((patch) => patch.note_id === 'N2' && patch.note === 'Revised feedback question'))
     .toBe(true);
-  await feedbackEditor.blur();
   const noteSurface = inspector.locator('[data-note-id="N3"] .note-card__body');
   await expect(noteSurface).toHaveAttribute('aria-label', 'Edit note');
   await noteSurface.locator('p').first().dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Note body' });
   await editor.fill('Edited lifecycle note');
+  await editor.blur();
   await expect
     .poll(() => patches.some((patch) => patch.note_id === 'N3' && patch.note === 'Edited lifecycle note'))
     .toBe(true);
-  await editor.blur();
   await expect(editor).toHaveCount(0);
   await inspector.locator('[data-note-id="N3"]').getByRole('button', { name: 'Delete note' }).click();
   await expect(inspector.locator('[data-note-id="N3"]')).toHaveCount(0);
@@ -9707,8 +9730,8 @@ test('edits title and tags through controlled capability-aware inspector state',
   await title.dblclick();
   const titleInput = inspector.getByRole('textbox', { name: 'Ticket title' });
   await titleInput.fill('Renamed ticket');
-  await expect.poll(() => patches.some((patch) => patch.title === 'Renamed ticket')).toBe(true);
   await titleInput.blur();
+  await expect.poll(() => patches.some((patch) => patch.title === 'Renamed ticket')).toBe(true);
   await expect(inspector.getByRole('heading', { name: 'Renamed ticket' })).toBeVisible();
   const tagsHeader = inspector.locator('[data-component="list-header"]').filter({ hasText: 'Tags' }),
     addTag = tagsHeader.getByRole('button', { name: 'Add tag' });

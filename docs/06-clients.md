@@ -438,6 +438,19 @@ and identity-less legacy entries remain conservatively blocking.
   that begins mid-refresh drops that refresh's results. A read that raced a save therefore
   never lands afterward carrying the user's own older text, which would otherwise look like
   a remote edit and raise a spurious merge prompt (HS2-RE1PS6).
+  Text fields (details, title, blocked reason, notes, in the inspector, the reader, and
+  linked readers) never write to the server while the user is typing. Keystrokes update the
+  controlled draft and, after a 150 ms debounce, a local recovery copy in `localStorage`
+  keyed by project, ticket, field, and note id, stored together with the value the edit
+  started from. The single server write happens when focus leaves the editing surface,
+  when the page hides, or when the app finishes the edit explicitly, and it merges against
+  that edit-start value, so one editing session produces one write (and one git commit)
+  instead of one per pause, and nothing this client typed can come back as "their"
+  version. Reopening an editor whose local copy differs from its base restores the copy on
+  the same base (a toast says so); if the ticket changed meanwhile the copy is merged when
+  the edits are disjoint and otherwise discarded in favour of the current value. A
+  successful save or an explicit cancel clears the copy; tag chips remain immediate
+  discrete saves (HS2-RE1PS6).
   The freeform blocked reason uses the same silent blur-flush path and is the single source
   of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
   an empty edit sends `null` to clear it, and the authoritative response exits
@@ -1068,7 +1081,7 @@ and identity-less legacy entries remain conservatively blocking.
   native shadow dialog alone owns pointer input, allowing a newer top-layer surface to receive it.
   Linked ticket readers keep their own qualified provider identity, provider capabilities,
   and text-edit sessions instead of borrowing the workspace selection. Details, note, and
-  blocked-reason drafts autosave independently; refresh reconciliation preserves a dirty
+  blocked-reason drafts autosave independently on focus loss; refresh reconciliation preserves a dirty
   local draft, and closing a reader flushes its pending writes through the owning project's
   checkout before the dialog is allowed to hide and the stack unwinds. Failed flushes veto
   dismissal and preserve the visible reader and its drafts.
@@ -2605,7 +2618,8 @@ the sidebar, reader, and terminal ticket rail. Exactly one tab is selected and k
 focusable; Arrow, Home, and End keys move focus and activate the corresponding panel, while
 narrow inspectors retain the same accessible tab names when their visible labels collapse
 to icons. Attachments keeps its visible and accessible count badge.
-Leaving the details editor flushes its pending autosave and returns that surface to
+Leaving the details editor performs its one server save (typing itself only updates the draft
+and its local recovery copy) and returns that surface to
 preview. When a pointer action outside the editor causes that blur, the save begins
 immediately but the editor remains mounted until the originating click has reached its
 target; Add note, tab changes, and other controls therefore act on the first click.

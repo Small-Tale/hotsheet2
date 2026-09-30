@@ -291,7 +291,9 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
 
 // HS2-RE1PS6: appending to the same line again while an earlier details autosave is still in flight must
 // base the next save on the committed text, never treat the user's own saved words as a concurrent edit.
-test('continued typing during an in-flight details autosave never prompts a merge (HS2-RE1PS6)', async ({ page }) => {
+test('typing never writes to the server and one blur saves the whole edit without a merge prompt (HS2-RE1PS6)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   let token = 'T0',
     tokenSeq = 0,
@@ -394,18 +396,158 @@ test('continued typing during an in-flight details autosave never prompts a merg
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 
-  // First autosave goes out and is held in flight; the user keeps appending at the same spot twice.
+  // The user keeps appending at the same spot with pauses longer than the old autosave debounce:
+  // nothing reaches the server, but the local recovery copy follows the draft on its edit-start base.
+  const storedDraft = () =>
+    page.evaluate(() => {
+      const entry = Object.entries(localStorage).find(([key]) => key.startsWith('hotsheet.ticket-draft:'));
+      return entry ? (JSON.parse(entry[1]) as { base: string; draft: string }) : undefined;
+    });
   await editor.fill('Intro\n- the sign in');
-  await expect.poll(() => tokenSeq).toBe(1);
+  await page.waitForTimeout(400);
   await editor.fill('Intro\n- the sign in flow is');
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   await editor.fill('Intro\n- the sign in flow is quite awkward');
+  await expect.poll(storedDraft).toMatchObject({ base: 'Intro', draft: 'Intro\n- the sign in flow is quite awkward' });
+  expect(tokenSeq).toBe(0);
+  expect(patches).toEqual([]);
+  await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
 
+  // Focus leaves the editor: exactly one write carries the whole edit, and the recovery copy is cleared.
+  await editor.blur();
   await expect.poll(() => details).toBe('Intro\n- the sign in flow is quite awkward');
+  expect(patches).toEqual(['Intro\n- the sign in flow is quite awkward']);
   expect(conflicts).toBe(0);
   await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
-  await expect(editor).toHaveValue('Intro\n- the sign in flow is quite awkward');
-  expect(patches[0]).toBe('Intro\n- the sign in');
+  await expect.poll(storedDraft).toBeUndefined();
+
+  // Continuing after the save bases the next write off the committed token; still no prompt.
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await editor.fill('Intro\n- the sign in flow is quite awkward\n- and the sign out too');
+  await page.waitForTimeout(400);
+  expect(tokenSeq).toBe(1);
+  await editor.blur();
+  await expect.poll(() => details).toBe('Intro\n- the sign in flow is quite awkward\n- and the sign out too');
+  expect(conflicts).toBe(0);
+  expect(tokenSeq).toBe(2);
+  await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+});
+
+test('restores an unsaved edit from its local recovery copy after a reload (HS2-RE1PS6)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let details = 'Intro',
+    token = 'T0';
+  const patches: Array<{ details?: string; expected_token?: string }> = [];
+  const full = () => ({
+    store: 'git-local',
+    ...listRow,
+    details,
+    blocked_reason: null,
+    notes: [],
+    attachments: [],
+    concurrency_token: token,
+  });
+  await page.route('**/*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
+      method = request.method();
+    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (/\/tickets\/01$/.test(path) && method === 'PATCH') {
+      const body = request.postDataJSON() as { details?: string; expected_token?: string };
+      patches.push(body);
+      if (body.details !== undefined) details = body.details;
+      token = 'T1';
+      return route.fulfill({ json: full() });
+    }
+    if (/\/tickets\/01$/.test(path) && method === 'GET') return route.fulfill({ json: full() });
+    if (path.endsWith('/tickets') && method === 'GET')
+      return route.fulfill({
+        json: {
+          items: [listRow],
+          counts: {
+            total: 1,
+            queued: 1,
+            backlog: 0,
+            archive: 0,
+            open: 1,
+            up_next: 0,
+            active: 1,
+            started: 1,
+            completed_today: 0,
+            completion_trend: [0, 0, 0, 0, 0, 0, 0],
+          },
+        },
+      });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/ws/poll')) {
+      if (url.searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      return;
+    }
+    if (
+      path.endsWith('/terminals') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  const open = async () => {
+    await page.goto('/');
+    const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
+    // A reload restores the remembered project on its own; the first visit opens it explicitly.
+    if (!(await row.isVisible().catch(() => false))) {
+      const opener = page.getByRole('button', { name: 'Open project' });
+      if (await opener.isVisible().catch(() => false)) {
+        await opener.click();
+        await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      }
+    }
+    await row.click();
+    const inspector = page.locator('[data-component="ticket-inspector"]');
+    await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    return inspector.getByRole('textbox', { name: 'Ticket details' });
+  };
+  let editor = await open();
+  await editor.fill('Intro\n- typed before the crash');
+  await expect
+    .poll(() => page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith('hotsheet.ticket-draft:'))))
+    .toBe(true);
+  expect(patches).toEqual([]);
+  // The page goes away without the editor ever losing focus (a crash, a closed tab).
+  editor = await open();
+  await expect(editor).toHaveValue('Intro\n- typed before the crash');
+  await expect(page.locator('.app-toast')).toContainText('Restored an unsaved edit.');
+  await editor.fill('Intro\n- typed before the crash\n- and after it');
+  await editor.blur();
+  await expect.poll(() => details).toBe('Intro\n- typed before the crash\n- and after it');
+  expect(patches).toHaveLength(1);
+  expect(patches[0].expected_token).toBe('T0');
+  await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith('hotsheet.ticket-draft:'))))
+    .toBe(false);
 });
 
 // HS2-RE1PS6: adding an attachment refreshes the project outside the local-mutation barrier. That refresh's
@@ -535,6 +677,8 @@ for (const keepTyping of [true, false])
     const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 
     await editor.fill('Intro\n- the sign in');
+    // The save starts when focus leaves the editor (HS2-RE1PS6).
+    await editor.blur();
     await expect.poll(() => Boolean(releasePatch)).toBe(true);
     // While that save is still open, drop an attachment onto the ticket; its refresh reads the ticket.
     holdReads = true;
@@ -549,7 +693,11 @@ for (const keepTyping of [true, false])
     await expect.poll(() => patches.length).toBe(1);
     const finalText = keepTyping ? 'Intro\n- the sign in flow is quite awkward' : 'Intro\n- the sign in';
     if (keepTyping) {
+      // The released save settles the editor into preview; the user reopens it and keeps typing.
+      await expect(editor).toBeHidden();
+      await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
       await editor.fill(finalText);
+      await editor.blur();
       await expect.poll(() => details).toBe(finalText);
     }
     await page.waitForTimeout(300);
@@ -560,14 +708,19 @@ for (const keepTyping of [true, false])
     while (gets.length) gets.shift()?.();
     await page.waitForTimeout(300);
     await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
-    await expect(editor).toHaveValue(finalText);
     expect(details).toBe(finalText);
-    // Typing on after the stale read lands must still save cleanly, without a merge prompt.
+    // Reopening shows the saved text; typing on after the stale read lands must still save cleanly on blur.
+    if (!(await editor.isVisible())) await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    await expect(editor).toHaveValue(finalText);
     const later = `${finalText}\n- one more thought`;
     await editor.fill(later);
+    await page.waitForTimeout(300);
+    expect(details).toBe(finalText);
+    await editor.blur();
     await expect.poll(() => details).toBe(later);
     await page.waitForTimeout(300);
     await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+    await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
     await expect(editor).toHaveValue(later);
     await page.screenshot({ path: `/private/tmp/hs2-re1ps6-no-merge-prompt-${keepTyping ? 'typing' : 'idle'}.png` });
   });

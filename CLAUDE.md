@@ -1,4 +1,5 @@
 <!-- hotsheet:begin section=ticket-driven-work v=3 -->
+
 ## Ticket-Driven Work
 
 When the user gives you work directly (not via the Hot Sheet channel or events), create Hot Sheet tickets before starting implementation — especially for substantial or multi-step work.
@@ -10,6 +11,7 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 - **Completion checklist** — before marking a ticket `completed`: (1) finish and verify its scope; (2) update required tests, coverage, and docs; (3) scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-unimplemented behavior, open questions, and known gaps; (4) immediately create a follow-up for every incomplete item; (5) include the result, verification, and all follow-up slugs in the completing note.
 - **UI evidence continuity** — when a UI ticket already contains an image demonstrating the problem or requested design, reproduce that component/state/viewport after the change, attach the resulting screenshot to the ticket, and reference it in the completion note. Do not silently leave the evidence only in a local temporary path; if capture or attachment is genuinely impossible, say exactly why in the completion note.
 - **Commit traceability** — every commit for ticket-driven work must include every ticket slug addressed by that commit in its commit message. This applies to both single-ticket and intentionally combined commits.
+
 <!-- hotsheet:end section=ticket-driven-work -->
 
 ## Identity terminology
@@ -146,12 +148,18 @@ only works in `/ux-demo` is a production bug. Browser coverage must exercise rep
 child actions through every shipped parent composition (for example TicketRow through both
 TicketList and TicketBoard), not merely through the isolated demo.
 
-Ticket text editing is autosaved with a 150 ms debounce. Do not add routine Save/Cancel
-buttons for details, notes, titles, tags, blocked reasons, or similar fields. Keep the
-controlled draft visible while saving, flush when focus leaves the editing surface, and
-test rapid coalescing, blur, composed-editor focus moves, and post-save editing. Explicit
+Ticket text editing autosaves when focus leaves the editing surface, never while the user
+is still typing: keystrokes update the controlled draft and, after a 150 ms debounce, a
+local recovery copy (localStorage, keyed by project, ticket, and field, with the value the
+edit started from); the single server write happens on blur, page hide, or an explicit
+finish, and merges against that edit-start value so a user's own typing can never be
+presented as a conflict. Do not add routine Save/Cancel buttons for details, notes, titles,
+tags, blocked reasons, or similar fields. Keep the controlled draft visible while saving,
+restore an unsaved local copy when the editor reopens, and test rapid coalescing, blur,
+composed-editor focus moves, post-save editing, and recovery after a reload. Explicit
 submission actions remain appropriate when they create a new object or complete a
-workflow rather than merely persisting an edit.
+workflow rather than merely persisting an edit; discrete edits such as tag chips still save
+immediately.
 
 Every change that can affect rendered client visuals requires a deliberate visual QA
 pass in a real browser before completion. Automated DOM, accessibility, computed-style,
@@ -191,6 +199,7 @@ Every actionable context-menu item should carry a meaningful Lucide icon; separa
 and other non-action structure are the only ordinary exception.
 
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
+
 ## Testing Philosophy
 
 - **Double coverage**: every feature covered by both unit tests AND E2E tests. Unit = logic in isolation; E2E = real user flows through the running app with minimal mocking.
@@ -202,7 +211,7 @@ and other non-action structure are the only ordinary exception.
   surface, run at least one integration or opt-in local-browser flow against the actual
   server; a mocked UI test alone cannot validate the adapter boundary.
 - **Coverage**: Merge all test coverage (e.g. unit, E2E server, E2E browser) into one report. Low-coverage files should get more of both test types. Aim for 100% coverage of code lines, 100% coverage of branches, and 100% of features described in the requirements documentation.
-- **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line *ran*, not that every *behavior* — or every *sequence* of behaviors — is *asserted*. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
+- **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line _ran_, not that every _behavior_ — or every _sequence_ of behaviors — is _asserted_. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
 - **Transition-matrix testing for stateful modules**: for anything with modes / multiple code paths / a cache / a state machine, enumerate the states AND the transitions between them, then write tests that walk realistic multi-step sequences crossing state boundaries — not just each operation from a clean initial state.
 - **Adversarial pass on stateful changes**: when adding or altering a stateful code path, deliberately try to break it with out-of-order / interleaved / repeated / empty-then-refill sequences; pin any that would have failed as permanent regression tests.
 - **Client state synchronization is bidirectional**: for every stateful control, test
@@ -245,13 +254,14 @@ and other non-action structure are the only ordinary exception.
   touched code is made safe.
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
+
 ### This project's test setup
 
-> **Early implementation.** The stack below is the *agreed plan* (see
+> **Early implementation.** The stack below is the _agreed plan_ (see
 > [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7,
 > the authority). What exists today: `cargo nextest run` (model + ticketing + CLI
 > unit/integration tests) and the migrator's `vitest` suite (`cd migrator && npx
-> vitest run`), including the cross-language conformance test (Rust `hotsheet import`
+vitest run`), including the cross-language conformance test (Rust `hotsheet import`
 > ingests the Node exporter's JSON). **Property tests** cover the parser (`proptest`:
 > round-trip + byte-idempotent + never-panics), and a **cargo-fuzz** target exists
 > (`crates/hotsheet-model/fuzz`, nightly: `cargo +nightly fuzz run parse_file`).
@@ -262,7 +272,7 @@ and other non-action structure are the only ordinary exception.
 > (`crates/hotsheet-server/tests/http.rs` — in-process HTTP/WS against a temp store);
 > snapshot tests and **web** (Playwright) E2E are not wired yet. Commands that work now:
 > `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
-> --all-targets --all-features -- -D warnings` · `npx vitest run` / `npm run test:coverage`
+--all-targets --all-features -- -D warnings` · `npx vitest run` / `npm run test:coverage`
 > (in `migrator/`).
 
 - **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
@@ -294,10 +304,12 @@ and other non-action structure are the only ordinary exception.
   `pnpm -C clients/web test:e2e` · migrator `pnpm -C migrator test` · coverage
   `cargo llvm-cov` (+ per-surface). Fast tier vs. full/live tier (GitHub-remote +
   creds-gated) in CI (GitHub Actions).
+
 <!-- hotsheet:end specifics=testing-philosophy -->
 <!-- hotsheet:end section=testing-philosophy -->
 
 <!-- hotsheet:begin section=requirements-documentation v=1 -->
+
 ## Requirements Documentation
 
 Keep human-readable requirements documents as the source of truth for what the project does, and **keep them up to date in the same change as the code** (add/remove/modify a requirement → update its doc). Create new docs for major new functional areas. Cross-reference related docs with relative links.
@@ -310,6 +322,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 - A **requirements summary** — a synthesized view of every requirements doc with status markers (e.g. Shipped / Partial / Design only / Deferred). Update it in the same change when you add a requirements doc, ship a design-only feature, or defer/regress a shipped one.
 
 <!-- hotsheet:begin specifics=requirements-documentation v=1 -->
+
 ### This project's docs layout
 
 - **Requirements docs** live in [`docs/`](docs/), numbered by topic (`00-…`, `01-…`,
@@ -326,6 +339,7 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
   AI-tool plugins, and terminal/permission infrastructure exist; clients remain
   design-only. See [`docs/README.md`](docs/README.md) for the index + core bets and
   [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for what's built.
+
 <!-- hotsheet:end specifics=requirements-documentation -->
 <!-- hotsheet:end section=requirements-documentation -->
 
@@ -345,6 +359,7 @@ required gates, commit it, and push it **before starting the next ticket**. Do n
 accumulate completed tickets as uncommitted or unpushed work.
 
 For each ticket:
+
 1. Implement the coherent ticket-sized change and update its docs and coverage matrix.
 2. **Lint and fix** every affected package — `cargo fmt --all --check` + `cargo lint`
    for Rust; `npm run lint` in affected TypeScript packages.
@@ -381,9 +396,9 @@ Inc.**:
 - User-facing "about"/credits strings, docs bylines, and app bundle identifiers →
   **Small Tale Inc.** (bundle id under a `com.smalltale.*` / similar namespace).
 - Individual developers still appear as normal git commit authors; that's separate
-  from how the *project* is attributed.
+  from how the _project_ is attributed.
 
-References to the *original* Hot Sheet (the predecessor at
+References to the _original_ Hot Sheet (the predecessor at
 `github.com/brianwestphal/hotsheet`) are historical/factual and may remain as
 predecessor links; they do not attribute Hot Sheet 2.
 
@@ -404,21 +419,23 @@ code-changing task. Skip ticketing only for trivial one-offs: simple questions, 
 lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
 
 **Find and plan the queue:**
+
 - `hotsheet-cli ls --up-next` — the prioritized Up Next queue.
 - `hotsheet-cli show <slug>` — read one ticket in full.
 - Or the MCP tools: `hotsheet_query` (with `up_next: true`) and `hotsheet_get`.
 
 **Claim a ticket before you work it — claiming, not `started`, is what signals live work:**
+
 - `hotsheet-cli claim <slug> --worker <your-id>` when you begin. This atomically moves a Not
-  Started ticket to **Started** *and* takes a renewable live lease that tells everyone you are
+  Started ticket to **Started** _and_ takes a renewable live lease that tells everyone you are
   actively on it. Always claim before you touch code. Prefer it over `hotsheet-cli edit <slug>
-  --status started`, which only flips the status and does **not** claim or signal live work.
+--status started`, which only flips the status and does **not** claim or signal live work.
   (Self-serve the top of the queue with `hotsheet-cli claim-next --worker <your-id>`.)
 - **Your worker id:** if `HOTSHEET_WORKER_ID` is set in your environment, use its value as
   `<your-id>`. Hot Sheet gave it to this session and releases whatever it still holds when the
   session ends. Otherwise choose one stable id for the session.
 - `hotsheet-cli renew <slug> --worker <your-id>` during long work; `hotsheet-cli release <slug>
-  --worker <your-id>` whenever you stop working it (see below).
+--worker <your-id>` whenever you stop working it (see below).
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
@@ -445,7 +462,7 @@ ticket's completing note, then continue.
 docs the change requires; scan for placeholders, TODO/FIXME, stubs, and documented-but-
 unbuilt behavior; create a follow-up for every incomplete item; and put the result,
 verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` is only for a
-blocker on the *current* ticket that needs a user decision or unavailable external state —
+blocker on the _current_ ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
 
@@ -473,11 +490,11 @@ local path only as clearly labeled machine-local diagnostic evidence.
   dependencies mocked) **and** end-to-end tests (real user flows through the running system,
   minimal mocking). Keep test fakes faithful to the real contract — same shapes, fields, and
   status codes.
-- **Coverage is a floor, not a ceiling.** 100% lines means every line *ran*, not that every
-  *behavior* — or every *sequence* of behaviors — is *asserted*. It is blind to missing state
+- **Coverage is a floor, not a ceiling.** 100% lines means every line _ran_, not that every
+  _behavior_ — or every _sequence_ of behaviors — is _asserted_. It is blind to missing state
   transitions.
 - **Stateful code gets transition-matrix + adversarial tests.** For anything with modes, a
-  cache, or a state machine, enumerate the states *and* the transitions, then walk realistic
+  cache, or a state machine, enumerate the states _and_ the transitions, then walk realistic
   multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
   interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
   regression test.

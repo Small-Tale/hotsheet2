@@ -59,6 +59,12 @@ export interface InspectorAndEditorInteractionsDependencies {
   };
   readonly readerDetailsAutosave: DebouncedAutosave<string>;
   readonly detailsAutosave: DebouncedAutosave<string>;
+  /** Local recovery copy of a field's unsaved edit, rebased onto its current value (HS2-RE1PS6). */
+  readonly restoreTicketDraft: (
+    field: 'details' | 'title' | 'blocked_reason' | 'note',
+    current: string,
+    noteId?: string,
+  ) => { draft: string; base: string } | undefined;
   readonly beginDetailsFinish: (reader?: boolean) => DetailsFinishTask;
   readonly finishDetailsEdit: (reader?: boolean) => Promise<boolean>;
   readonly readerEditingNoteId: Signal<string | undefined>;
@@ -133,6 +139,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     replaceLinkedReaderFrame,
     linkedReaderSaves,
     readerDetailsAutosave,
+    restoreTicketDraft,
     detailsAutosave,
     beginDetailsFinish,
     finishDetailsEdit,
@@ -270,9 +277,11 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   });
   function beginTitleEdit() {
     if (!selectedTicket.value || !canUpdateSelected()) return;
-    titleDraft.value = selectedTicket.value.title;
-    dependencies.titleDraftBase = selectedTicket.value.title;
+    const restoredTitle = restoreTicketDraft('title', selectedTicket.value.title);
+    titleDraft.value = restoredTitle?.draft ?? selectedTicket.value.title;
+    dependencies.titleDraftBase = restoredTitle?.base ?? selectedTicket.value.title;
     titleEditing.value = true;
+    if (restoredTitle) titleAutosave.schedule(titleDraft.value);
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   }
   delegate(document.body, 'dblclick', '[data-action="edit-ticket-title"]', () => {
@@ -410,9 +419,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     const editing = reader ? readerEditingNoteId : editingNoteId,
       draft = reader ? readerNoteDraft : noteDraft;
     editing.value = id;
-    draft.value = reader && note.kind === 'feedback_needed' ? '' : note.text;
-    if (reader) dependencies.readerNoteDraftBase = draft.value;
-    else dependencies.noteDraftBase = draft.value;
+    const initial = reader && note.kind === 'feedback_needed' ? '' : note.text,
+      restoredNote = initial === note.text ? restoreTicketDraft('note', note.text, id) : undefined;
+    draft.value = restoredNote?.draft ?? initial;
+    if (reader) dependencies.readerNoteDraftBase = restoredNote?.base ?? initial;
+    else dependencies.noteDraftBase = restoredNote?.base ?? initial;
+    if (restoredNote) (reader ? readerNoteAutosave : noteAutosave).schedule({ id, value: draft.value });
     queueMicrotask(() =>
       activeTicketSurface().querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus(),
     );
@@ -675,10 +687,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }
     const draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
       editing = reader ? readerBlockedReasonEditing : blockedReasonEditing;
-    draft.value = selectedTicket.value?.blocked_reason ?? '';
-    if (reader) dependencies.readerBlockedReasonDraftBase = draft.value;
-    else dependencies.blockedReasonDraftBase = draft.value;
+    const currentReason = selectedTicket.value?.blocked_reason ?? '',
+      restoredReason = restoreTicketDraft('blocked_reason', currentReason);
+    draft.value = restoredReason?.draft ?? currentReason;
+    if (reader) dependencies.readerBlockedReasonDraftBase = restoredReason?.base ?? currentReason;
+    else dependencies.blockedReasonDraftBase = restoredReason?.base ?? currentReason;
     editing.value = true;
+    if (restoredReason) (reader ? readerBlockedReasonAutosave : blockedReasonAutosave).schedule(draft.value);
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
   }
   delegate(document.body, 'click', '[data-action="edit-blocked-reason"]', (_event, target) => {
