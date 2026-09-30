@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@kerfjs/ui/ai/component-composition-extension.schema.json",
   "schemaVersion": 1,
   "package": "hotsheet-web",
-  "description": "Composition facts for Hot Sheet-owned wrappers of Kerf components. Kerf's ui-composition rule loads this file through .kerf-ui-profile.json `catalogs`; an entry's `rendersAs` lets the wrapper stand in for the cataloged root it renders inside Toolbar zones and parent checks (HS2-N5G6JS). The wrapper's own `parents` stay `any` because the rendered root already carries the Toolbar requirement; listing it twice makes the rule report the same placement twice. `placeableClasses` names the root class the wrapper itself writes onto that Kerf root. Keep each entry's id and source aligned with component-catalog-extension.json; catalog.test.ts checks that.",
+  "description": "Composition facts for Hot Sheet-owned wrappers of Kerf components. Kerf's ui-composition rule loads this file through .kerf-ui-profile.json `catalogs`; an entry's `rendersAs` lets the wrapper stand in for the cataloged root it renders inside Toolbar zones and parent checks (HS2-N5G6JS). Since Kerf beta.59 (KF-KV08Y0) a wrapper's own listed `parents` and its roots' parents report once per placement, so wrappers declare their Toolbar parent directly (HS2-N0R5W0). `placeableClasses` names the root classes the wrapper itself writes onto that Kerf root. Keep each entry's id and source aligned with component-catalog-extension.json; catalog.test.ts checks that.",
   "compatibility": {
     "componentCatalog": "./component-catalog-extension.json",
     "identity": "package:id"
@@ -23,8 +23,8 @@
       "source": "src/components/ticket-search-field.tsx",
       "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
       "parents": {
-        "mode": "any",
-        "entries": []
+        "mode": "listed",
+        "entries": ["@kerfjs/ui:toolbar"]
       },
       "contexts": ["toolbar-zone"],
       "zones": [],
@@ -110,8 +110,8 @@
       "source": "src/components/workspace-controls.tsx",
       "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
       "parents": {
-        "mode": "any",
-        "entries": []
+        "mode": "listed",
+        "entries": ["@kerfjs/ui:toolbar"]
       },
       "contexts": ["toolbar-zone"],
       "zones": [],

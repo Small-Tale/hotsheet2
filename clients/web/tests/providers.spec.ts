@@ -3644,7 +3644,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     return { background: style.backgroundColor, borderRadius: style.borderRadius, height: style.height };
   });
   expect(createStyle.background).toBe('rgba(0, 0, 0, 0)');
-  expect(createStyle.borderRadius).toBe('999px');
+  // Kerf's compact group rounds the 32px trigger fully; the radius token is Kerf's, not a literal pill (HS2-MYVVK3).
+  expect(Number.parseFloat(createStyle.borderRadius)).toBeGreaterThanOrEqual(16);
   expect(createStyle.height).toBe('32px');
   await create.click();
   await expect(region.locator(':scope > .kui-resizable-region__content')).toHaveCSS('overflow', 'visible');

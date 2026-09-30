@@ -147,14 +147,6 @@
 [data-region-id='app-terminal-drawer']:has([data-terminal-drawer-create][open]) > .kui-resizable-region__content {
   overflow: visible;
 }
-.terminal-drawer__create-wrap .kui-popup-menu > wa-button::part(base) {
-  min-width: remify(32px);
-  height: remify(32px);
-  min-height: remify(32px);
-  padding-inline: var(--kui-space-xs);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-}
 .terminal-drawer__content {
   min-width: 0;
   min-height: 0;

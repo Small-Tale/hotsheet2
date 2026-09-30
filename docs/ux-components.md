@@ -1683,6 +1683,20 @@ demos and production flows.
 The dedicated **List** demo exposes compact, standard-gap, and custom-gap scrollable
 examples using the package component unchanged, including explicit edge dividers.
 
+### Kerf beta.59 adoption
+
+HS2-MYVVK3 moves `clients/web` and `spikes/kerf-webawesome` to Kerf 5.0.0-beta.59 (`kerfjs`,
+`@kerfjs/ui`, `eslint-plugin-kerfjs`). Beta.59 fixes the duplicated `KUI-L201` report for a
+`rendersAs` wrapper (`KF-KV08Y0`), so `TicketSearchField` and `WorkspaceControls` now declare
+their Toolbar parent directly in `clients/web/ai/component-composition-extension.json`
+(HS2-N0R5W0). Its composition catalog still omits the FloatingToolbar → ToolbarControlGroup
+edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor.mjs` now
+covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
+opt-in managed `TokenSearchModel` (grammar, suggestions, evaluation) for `TokenSearchField`
+and extends `PopupMenu` for nested and context actions; Hot Sheet keeps its app-owned
+`TicketSearchField` suggestions and `wa-dropdown` menus for now (adoption tracked in
+`HS2-HHRYP9` and `HS2-CSRJ9Y`). Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+
 ### Kerf beta.57–58 adoption
 
 Beta.57 fixes delegated action matching when an earlier handler synchronously rerenders
@@ -1815,11 +1829,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, and HS2-M6B8AD is:
+HS2-EZ1N7Z, HS2-M6B8AD, and HS2-MYVVK3 is:
 
 | Severity | Exact diagnostic budgets                                                |
 | -------- | ----------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 102; `KUI-L022` 61; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 102; `KUI-L022` 61; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                                |
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf

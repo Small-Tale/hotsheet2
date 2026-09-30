@@ -27,7 +27,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
-  spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
+  spikes/kerf-webawesome/    # Kerf 5.0.0-beta.59 + Web Awesome Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression

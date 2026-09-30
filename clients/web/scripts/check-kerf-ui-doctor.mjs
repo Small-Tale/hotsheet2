@@ -8,7 +8,7 @@ import ts from 'typescript';
 export const KERF_UI_DOCTOR_BUDGET = {
   error: {
     'KUI-L001': 2,
-    'KUI-L011': 1,
+    'KUI-L011': 0,
     'KUI-L017': 0,
     'KUI-L019': 102,
     'KUI-L020': 0,
@@ -57,14 +57,18 @@ function isFloatingToolbarChild(source, line, column) {
   return Boolean(parent && ts.isJsxElement(parent) && floatingNames.has(parent.openingElement.tagName.getText(source)));
 }
 
-/** Kerf beta.58 documents ToolbarControlGroup as FloatingToolbar children, but its
+/** Kerf versions whose composition catalog still omits the documented FloatingToolbar →
+ * ToolbarControlGroup parent edge (HS2-10KEHN). Add a version only after confirming the gap. */
+const FLOATING_TOOLBAR_GAP_VERSIONS = new Set(['5.0.0-beta.58', '5.0.0-beta.59']);
+
+/** Kerf beta.58/59 document ToolbarControlGroup as FloatingToolbar children, but their
  * composition catalog lists only Toolbar as a parent. Apply that exact missing parent
  * edge locally until the upstream catalog includes it; every other L201 remains gated. */
 export function adaptFloatingToolbarComposition(report, workspace) {
   const kerfVersion = JSON.parse(
     readFileSync(resolve(workspace, 'node_modules/@kerfjs/ui/package.json'), 'utf8'),
   ).version;
-  if (kerfVersion !== '5.0.0-beta.58') return { ...report, floatingToolbarAdapted: 0 };
+  if (!FLOATING_TOOLBAR_GAP_VERSIONS.has(kerfVersion)) return { ...report, floatingToolbarAdapted: 0 };
   const sources = new Map();
   let adapted = 0;
   const diagnostics = report.diagnostics.filter((diagnostic) => {

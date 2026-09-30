@@ -45,12 +45,11 @@ describe('TerminalDrawer', () => {
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
     expect(css).toMatch(/\.terminal-drawer__grid-tab \{[^}]*position: sticky/);
   });
-  it('keeps the PopupMenu trigger on the compact pill button surface', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8'),
-      base =
-        css.match(/\.terminal-drawer__create-wrap \.kui-popup-menu > wa-button::part\(base\) \{([^}]+)\}/)?.[1] ?? '';
-    expect(base).toContainSource('height: remify(32px)');
-    expect(base).toContainSource('border-radius: var(--wa-border-radius-pill)');
+  it('keeps the PopupMenu trigger on the compact pill button surface through Kerf props', () => {
+    // Kerf beta.59 sizes a compact PopupMenu trigger from the group's size prop; no app ::part rule (HS2-MYVVK3).
+    const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
+    expect(css).not.toContain('wa-button::part(base)');
+    expect(render()).toMatch(/terminal-drawer__create-wrap"[^>]*data-size="compact"/);
     expect(render()).toContain('appearance="plain"');
   });
   it('uses the Kerf spacing scale for the rail, content, and terminal inset', () => {

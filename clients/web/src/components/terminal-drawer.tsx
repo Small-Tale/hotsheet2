@@ -194,6 +194,7 @@ export function TerminalDrawer({
             trailing={
               <ToolbarControlGroup
                 className="terminal-drawer__create-wrap"
+                size="compact"
                 appearance="borderless"
                 single
                 nestedDropdown
