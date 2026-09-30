@@ -506,8 +506,9 @@ stable id, sanitized filename, creation timestamp, and optional provenance. Chec
 linked store and returns the same ticket plus its store identity. `PATCH` on that
 collection atomically applies batch/actor/purpose metadata to a selected id set (reuse an
 id to merge; generate one to split), while `PATCH` on an individual attachment renames it.
-Checkout attachment routes accept a ticket slug, native id, or qualified
-`connection_id:native_id`; a qualified id selects its linked source directly.
+Every checkout-scoped single-ticket route (reads, updates, notes, assignment, restore,
+batch updates, attachments, and code review) accepts a ticket slug, native id, or qualified
+`connection_id:native_id`; a qualified id selects its linked source directly (HS2-QS9EQD).
 Attachment `GET` accepts one byte range and responds with native media MIME, `Accept-Ranges`,
 and exact `Content-Range`/`Content-Length` headers. The checkout server asynchronously seeks
 to the requested offset and streams only that bounded span; it does not materialize the whole

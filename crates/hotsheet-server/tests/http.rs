@@ -6445,6 +6445,115 @@ async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_o
 }
 
 #[tokio::test]
+async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_and_batch() {
+    // Every checkout-scoped single-ticket handler shares one resolver, so the qualified
+    // `connection:native` id the client sends (HS2-HX0VM9) works everywhere (HS2-QS9EQD).
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"qual","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/qual/tickets",
+                Some(r#"{"title":"Qualified routing"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let qualified_id = created["qualified_id"].as_str().unwrap().to_owned();
+    assert!(qualified_id.contains(':'), "{qualified_id}");
+
+    let noted = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/qual/tickets/{qualified_id}"),
+                Some(r#"{"note":"remove me"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let note_id = noted["notes"][0]["id"].as_str().unwrap().to_owned();
+    let note_deleted = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/qual/tickets/{qualified_id}/notes/{note_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(note_deleted.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(note_deleted).await["notes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let assigned = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/qual/tickets/{qualified_id}/assign"),
+            Some(r#"{"assignees":["reviewer"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(assigned.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(assigned).await["assignees"],
+        serde_json::json!(["reviewer"])
+    );
+
+    let batched = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/qual/batch",
+            Some(
+                &serde_json::json!({"updates":[{"id":qualified_id,"category":"bug"}]}).to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(batched.status(), StatusCode::OK);
+    assert_eq!(body_json(batched).await[0]["category"], "bug");
+
+    app.clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/qual/tickets/{qualified_id}"),
+            Some(r#"{"status":"deleted"}"#),
+        ))
+        .await
+        .unwrap();
+    let restored = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/qual/tickets/{qualified_id}/restore"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(restored.status(), StatusCode::OK);
+    assert_ne!(body_json(restored).await["status"], "deleted");
+}
+
+#[tokio::test]
 async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets() {
     let (store, st) = state();
     hotsheet_ticketing::Settings::new(store.path())
@@ -6549,6 +6658,33 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     assert_eq!(review["files"][0]["path"], "code.txt");
     assert_eq!(review["files"][0]["change"], "modified");
     assert_eq!(review["files"][0]["category"], "source");
+
+    // The client routes single-ticket requests by qualified id (HS2-HX0VM9); discovery and
+    // launch resolve it exactly like the bare id instead of answering 404 (HS2-QS9EQD).
+    let qualified_id = created["qualified_id"].as_str().unwrap();
+    assert!(qualified_id.contains(':'), "{qualified_id}");
+    let by_qualified = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/review/tickets/{qualified_id}/code-review"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(by_qualified.status(), StatusCode::OK);
+    let qualified_review = body_json(by_qualified).await;
+    assert_eq!(qualified_review["commits"], review["commits"]);
+    let launched_by_qualified = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/review/tickets/{qualified_id}/code-review"),
+            Some(&serde_json::json!({"mode":"commit","commit":first}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched_by_qualified.status(), StatusCode::NO_CONTENT);
 
     let invalid = app
         .clone()
