@@ -30,7 +30,8 @@ describe('providerModelEffortEntries (PopupMenu form, HS2-CSRJ9Y)', () => {
       'Model',
       'Effort',
     ]);
-    const [provider, model, effort] = entries as Array<PopupMenuItem & { submenu: PopupMenuItem[] }>;
+    // Kerf beta.62 submenus may hold headings and dividers; these hold items only.
+    const [provider, model, effort] = entries as Array<Omit<PopupMenuItem, 'submenu'> & { submenu: PopupMenuItem[] }>;
     expect(provider.submenu.map((item) => [item.action, item.value, item.checked])).toEqual([
       ['pick-provider', 'codex', true],
       ['pick-provider', 'claude', false],

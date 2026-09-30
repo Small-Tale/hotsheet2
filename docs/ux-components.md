@@ -1914,12 +1914,12 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, HS2-AT4AAA, and HS2-PKPGGZ is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, HS2-AT4AAA, HS2-PKPGGZ, and HS2-S6JQX1 is:
 
-| Severity | Exact diagnostic budgets                                              |
-| -------- | --------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 10; `KUI-L022` 3; `KUI-L201` 0 |
-| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                              |
+| Severity | Exact diagnostic budgets                                             |
+| -------- | -------------------------------------------------------------------- |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 3; `KUI-L022` 3; `KUI-L201` 0 |
+| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                             |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
@@ -1961,6 +1961,17 @@ rule because flipping `contentOverflow` would rerender the open menu (`KF-J55CGB
 rail heading needs a ToolbarText step at `--kui-font-l` between `large` and the page-title clamp
 (`KF-7JE0F2`), and the reader's tab names need a container-responsive icon-only presentation
 (`KF-6EPNA1`).
+HS2-S6JQX1 upgraded `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` to 5.0.0-beta.62, which
+shipped the four residual requests, and adopted them: the rail's inspector header Toolbar takes
+`centerAlign="balanced"` (`KF-R1TFTE`), the reader's TabBar takes `iconOnlyAt="wide"` so Kerf
+hides segmented tab names below 832px (`KF-6EPNA1`), the rail heading is a `ToolbarText`
+`size="xlarge-fixed"` at `--kui-font-l` (`KF-7JE0F2`), and ResizableRegion/Workbench release
+their clipping while a Web Awesome dropdown is open (`KF-J55CGB`), so the terminal drawer's
+`:has([open])` rules are gone. Only the three Web Awesome rules remain (3). The FloatingToolbar
+parent gap (`HS2-10KEHN`) persists in beta.62. Beta.62 also ships the removable `Chip`
+(`HS2-2GYQ6C`), ListItem tones and the caret-free Select trigger (`HS2-1QQGH4`), the
+TokenSearchModel additions (`HS2-06Q4MG`), and the scoped Workbench selectors that `HS2-P289N2`
+waits on (`KF-JTVA2F`).
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers

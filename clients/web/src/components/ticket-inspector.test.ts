@@ -289,9 +289,12 @@ describe('TicketInspector', () => {
     expect(noteCss).toMatchSource(
       /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/,
     );
-    expect(inspectorCss).toContainSource(
-      '@container (max-width: remify(832px)) { .ticket-inspector--reader .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
+    // Kerf beta.62 switches the reader's segmented tabs to icon-only below 832px itself.
+    expect(inspectorCss).not.toContain('@container');
+    expect(String(TicketInspector({ ...base, presentation: 'reader' }))).toMatch(
+      /ticket-inspector__tabs[^>]*data-icon-only-at="wide"/,
     );
+    expect(markup).not.toContain('data-icon-only-at');
   });
 
   it('contains equal full-width tab targets inside one compact inspector gutter (HS2-WKGMN4)', () => {

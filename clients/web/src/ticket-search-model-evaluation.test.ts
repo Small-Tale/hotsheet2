@@ -103,13 +103,15 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
     model.edit({ query: 'created-after:', tokens: [] });
     model.choose('created-after:2026-09-01');
     expect(model.state.value.tokens).toEqual([]);
-    // 3. Only `clear()` bumps `editorRevision`; a programmatic replacement (applying a saved view,
-    //    restoring a session) has no model action that rebuilds the DOM-owned editor text.
+    // 3. Only `clear()` bumps `editorRevision` through `edit`; Kerf beta.62 closed this gap with a
+    //    `replace` action that rebuilds the DOM-owned editor text (KF-ER975X), so a programmatic
+    //    replacement (applying a saved view, restoring a session) now has a model action. Adoption
+    //    is re-evaluated in HS2-06Q4MG.
     const revision = model.editorRevision.value;
     model.edit({ query: 'restored text', tokens: [] }, true);
     expect(model.editorRevision.value).toBe(revision);
     model.clear();
     expect(model.editorRevision.value).toBe(revision + 1);
-    expect(typeof (model as { replace?: unknown }).replace).toBe('undefined');
+    expect(typeof (model as { replace?: unknown }).replace).toBe('function');
   });
 });

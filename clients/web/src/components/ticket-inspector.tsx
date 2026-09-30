@@ -255,6 +255,8 @@ export function TicketInspector({
       <header class="ticket-inspector__header">
         <Toolbar
           dividerSides=""
+          // The rail centers the ticket number on the toolbar itself (Kerf beta.62 balanced tracks).
+          centerAlign={slugCentered ? 'balanced' : undefined}
           {...(slugCentered ? { center: slugButton } : { leading: slugButton })}
           trailing={actions}
         />
@@ -313,6 +315,8 @@ export function TicketInspector({
           activation="automatic"
           allocation="fill"
           presentation="inspector"
+          // The reader keeps segmented names and lets Kerf switch them to icon-only below 832px.
+          iconOnlyAt={presentation === 'reader' ? 'wide' : undefined}
         >
           {tabs.map((tab) => (
             <AppTab

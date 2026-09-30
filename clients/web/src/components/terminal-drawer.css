@@ -137,15 +137,6 @@
   position: relative;
   flex: none;
 }
-/* Keep Web Awesome's anchored popup outside the drawer clipping boundary without
-   rerendering the dropdown during its open lifecycle (HS2-R8SMK2). */
-[data-region-id='app-terminal-drawer']:has([data-terminal-drawer-create][open]) {
-  z-index: var(--kui-resizable-region-popup-z, 5);
-  overflow: visible;
-}
-[data-region-id='app-terminal-drawer']:has([data-terminal-drawer-create][open]) > .kui-resizable-region__content {
-  overflow: visible;
-}
 .terminal-drawer__content {
   min-width: 0;
   min-height: 0;

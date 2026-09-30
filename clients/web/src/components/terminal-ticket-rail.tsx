@@ -50,7 +50,7 @@ export function TerminalTicketRail({
       />
     </div>
   ) : (
-    <ToolbarText text={title} size="large" />
+    <ToolbarText text={title} size="xlarge-fixed" />
   );
   const root = (
     <section class="terminal-ticket-rail__root" aria-label="Project tickets">

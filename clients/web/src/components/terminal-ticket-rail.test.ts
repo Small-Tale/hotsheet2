@@ -62,7 +62,9 @@ describe('TerminalTicketRail', () => {
       /__controls \.ticket-search-field\[data-content="search"\]\[data-expanded="true"\] \{[^}]*width:100%[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
     );
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
-    expect(css).toMatchSource(/ticket-inspector__header > \.kui-toolbar \{[^}]*grid-template-columns:1fr auto 1fr/);
+    // Kerf beta.62 balances the toolbar tracks itself (`centerAlign="balanced"`).
+    expect(css).not.toContain('ticket-inspector__header > .kui-toolbar');
+    expect(css).not.toContain('.kui-toolbar-text');
     expect(css).toMatchSource(
       /terminal-ticket-rail__back \{[^}]*width:remify\(36px\)[^}]*color:var\(--wa-color-brand-on-quiet\)/,
     );

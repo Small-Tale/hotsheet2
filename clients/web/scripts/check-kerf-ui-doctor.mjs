@@ -10,7 +10,7 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L001': 2,
     'KUI-L011': 0,
     'KUI-L017': 0,
-    'KUI-L019': 10,
+    'KUI-L019': 3,
     'KUI-L020': 0,
     'KUI-L022': 3,
     'KUI-L101': 0,
@@ -59,9 +59,15 @@ function isFloatingToolbarChild(source, line, column) {
 
 /** Kerf versions whose composition catalog still omits the documented FloatingToolbar →
  * ToolbarControlGroup parent edge (HS2-10KEHN). Add a version only after confirming the gap. */
-const FLOATING_TOOLBAR_GAP_VERSIONS = new Set(['5.0.0-beta.58', '5.0.0-beta.59', '5.0.0-beta.60']);
+const FLOATING_TOOLBAR_GAP_VERSIONS = new Set([
+  '5.0.0-beta.58',
+  '5.0.0-beta.59',
+  '5.0.0-beta.60',
+  '5.0.0-beta.61',
+  '5.0.0-beta.62',
+]);
 
-/** Kerf beta.58–60 document ToolbarControlGroup as FloatingToolbar children, but their
+/** Kerf beta.58–62 document ToolbarControlGroup as FloatingToolbar children, but their
  * composition catalog lists only Toolbar as a parent. Apply that exact missing parent
  * edge locally until the upstream catalog includes it; every other L201 remains gated. */
 export function adaptFloatingToolbarComposition(report, workspace) {
