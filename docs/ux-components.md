@@ -2044,8 +2044,8 @@ and `KF-3EZ92R`. The workspace sort trigger now shows Kerf's icon-and-caret pill
 Select contract) rather than the app's former 44px circle; `KF-3DX5BX` requests a caret option,
 and the expanded search field's floor is 17rem so the header row still fits.
 
-HS2-P289N2 rebuilt `AppShell` on Kerf's `Workbench`, which (rebased over HS2-PKPGGZ) takes
-`KUI-L019` from 10 to 9: the
+HS2-P289N2 rebuilt `AppShell` on Kerf's `Workbench` (merged after HS2-S6JQX1, keeping `KUI-L019` at
+3): the
 `app-shell.css` rules on `.kui-resizable-region` (panel backgrounds, the focus-mode drawer
 lift, restore-corner placement, the mobile overlay height cap, and the inspector's rail
 selectors) are gone because the Workbench owns that chrome; the remaining shell rules target
