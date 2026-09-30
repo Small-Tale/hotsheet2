@@ -356,7 +356,7 @@ export type CodeReviewTarget =
   | { mode: 'commit'; commit: string }
   | { mode: 'range'; from: string; to: string }
   | { mode: 'compare'; from: string; to: string }
-  /** One or more ticket-changed files; several open together as one directory diff (HS2-J7HQ5E). */
+  /** One or more ticket-changed files; several share one `git difftool -- <paths>` launch (HS2-J7HQ5E, HS2-TRJ9P7). */
   | { mode: 'ticket_file'; paths: string[] }
   | { mode: 'worktree_file'; paths: string[]; area: 'staged' | 'unstaged' };
 export interface PermissionRequest {

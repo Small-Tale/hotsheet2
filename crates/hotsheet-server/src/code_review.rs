@@ -633,20 +633,19 @@ fn launch_worktree_files(
         return Err(CodeReviewError::InvalidTarget);
     }
     let mut command = Command::new("git");
-    command.arg("-C").arg(root).args(difftool_args(paths, &[]));
+    command.arg("-C").arg(root).args(difftool_args(&[]));
     if area == WorktreeArea::Staged {
         command.arg("--cached");
     }
     spawn_detached(command.arg("--").args(paths))
 }
 
-/// `git difftool` arguments before the pathspec. Several files open together as one
-/// directory diff; plain `git difftool` would launch the tool once per file.
-fn difftool_args<'a>(paths: &[String], revisions: &[&'a str]) -> Vec<&'a str> {
+/// `git difftool` arguments before the pathspec. Several files share one
+/// `git difftool --no-prompt -- <paths…>` invocation so the configured tool receives
+/// each file as an ordinary per-file diff against the real working tree, never a
+/// `--dir-diff` temporary copy (HS2-J7HQ5E, HS2-TRJ9P7).
+fn difftool_args<'a>(revisions: &[&'a str]) -> Vec<&'a str> {
     let mut args = vec!["difftool", "--no-prompt"];
-    if paths.len() > 1 {
-        args.push("--dir-diff");
-    }
     args.extend_from_slice(revisions);
     args
 }
@@ -702,7 +701,7 @@ fn spawn_difftool_files(
     command
         .arg("-C")
         .arg(root)
-        .args(difftool_args(paths, &[old, new]))
+        .args(difftool_args(&[old, new]))
         .arg("--")
         .args(paths);
     spawn_detached(&mut command)
@@ -1270,13 +1269,12 @@ mod tests {
     }
 
     #[test]
-    fn several_files_open_as_one_directory_diff() {
-        let one = vec!["a.rs".to_owned()];
-        let two = vec!["a.rs".to_owned(), "b.rs".to_owned()];
-        assert_eq!(difftool_args(&one, &[]), ["difftool", "--no-prompt"]);
+    fn several_files_share_one_plain_difftool_invocation() {
+        // HS2-TRJ9P7: no `--dir-diff`; the pathspec alone selects the files.
+        assert_eq!(difftool_args(&[]), ["difftool", "--no-prompt"]);
         assert_eq!(
-            difftool_args(&two, &["old", "new"]),
-            ["difftool", "--no-prompt", "--dir-diff", "old", "new"]
+            difftool_args(&["old", "new"]),
+            ["difftool", "--no-prompt", "old", "new"]
         );
     }
 }

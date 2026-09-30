@@ -6630,7 +6630,9 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
 
 #[tokio::test]
 async fn multi_file_diffs_launch_the_difftool_once() {
-    // HS2-J7HQ5E: several selected files open together as one directory diff.
+    // HS2-J7HQ5E / HS2-TRJ9P7: several selected files share one plain
+    // `git difftool --no-prompt -- <paths>` launch (no `--dir-diff`), so the configured
+    // tool sees each selected file once, from the same git process.
     let (store, st) = state();
     let checkout = tempfile::tempdir().unwrap();
     let log = checkout.path().join(".git").join("difftool.log");
@@ -6652,7 +6654,7 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     run(&["config", "user.email", "test@example.com"]);
     run(&["config", "diff.tool", "hs2-test"]);
     let record = format!(
-        "ls \"$REMOTE\" >> '{}'; echo --- >> '{}'",
+        "echo \"$PPID $REMOTE\" >> '{}'; echo --- >> '{}'",
         log.display(),
         log.display()
     );
@@ -6698,9 +6700,11 @@ async fn multi_file_diffs_launch_the_difftool_once() {
         .await
         .unwrap();
     assert_eq!(unstaged.status(), StatusCode::NO_CONTENT);
-    let text = wait_for_runs(1);
-    assert_eq!(text.matches("---").count(), 1, "one launch: {text}");
+    let text = wait_for_runs(2);
+    assert_eq!(text.matches("---").count(), 2, "one file each: {text}");
     assert!(text.contains("a.txt") && text.contains("b.txt") && !text.contains("c.txt"));
+    assert!(!text.contains("--dir-diff"));
+    assert_eq!(launch_parents(&text).len(), 1, "one git launch: {text}");
 
     // A path outside the changed set rejects the whole request.
     let unknown = app
@@ -6746,9 +6750,18 @@ async fn multi_file_diffs_launch_the_difftool_once() {
         .await
         .unwrap();
     assert_eq!(ticket.status(), StatusCode::NO_CONTENT);
-    let text = wait_for_runs(1);
-    assert_eq!(text.matches("---").count(), 1, "one launch: {text}");
+    let text = wait_for_runs(2);
+    assert_eq!(text.matches("---").count(), 2, "one file each: {text}");
     assert!(text.contains("b.txt") && text.contains("c.txt") && !text.contains("a.txt"));
+    assert_eq!(launch_parents(&text).len(), 1, "one git launch: {text}");
+}
+
+/// Distinct parent pids recorded by the test difftool: one per `git difftool` launch.
+fn launch_parents(log: &str) -> std::collections::HashSet<&str> {
+    log.lines()
+        .filter(|line| *line != "---")
+        .filter_map(|line| line.split_whitespace().next())
+        .collect()
 }
 
 #[tokio::test]
