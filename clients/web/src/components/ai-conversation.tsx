@@ -355,7 +355,9 @@ export function AIConversation({
     !readOnly && (providerChangeable || (canChangeModel && models.length) || (canChangeEffort && efforts.length)) ? (
       <div class="ai-conversation__model" data-component="conversation-model-control" aria-label="AI session settings">
         <span class="ai-conversation__model-current">
-          <LucideIcon icon={Brain} name="brain" className="ai-conversation__model-icon" />
+          <span class="ai-conversation__model-icon">
+            <LucideIcon icon={Brain} name="brain" />
+          </span>
           {canChangeModel && currentModelLabel && (
             <span class="ai-conversation__model-name" title={model}>
               {currentModelLabel}

@@ -82,9 +82,11 @@ export function TicketNotes({
         </List>
       ) : (
         !composing && (
-          <ListInsetText sides="rl" className="ticket-notes__empty-inset">
-            <p class="ticket-notes__empty">No notes added.</p>
-          </ListInsetText>
+          <div class="ticket-notes__empty-inset">
+            <ListInsetText sides="rl">
+              <p class="ticket-notes__empty">No notes added.</p>
+            </ListInsetText>
+          </div>
         )
       )}
       {composing && <NoteComposer value={composerDraft} />}

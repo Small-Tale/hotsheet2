@@ -71,23 +71,24 @@ export function SavedViewDialog({
             <span>
               Search query <sup aria-hidden="true">*</sup>
             </span>
-            <Toolbar
-              className="saved-view-dialog__query-toolbar"
-              centerAlign="stretch"
-              center={
-                <TicketSearchField
-                  id="saved-view-query"
-                  label="Search query"
-                  query={query}
-                  tokens={queryTokens}
-                  disabled={busy}
-                  tags={tags}
-                  helpOpen={helpOpen}
-                  clearLabel="Clear search query"
-                  surfaces="external"
-                />
-              }
-            />
+            <div class="saved-view-dialog__query-toolbar">
+              <Toolbar
+                centerAlign="stretch"
+                center={
+                  <TicketSearchField
+                    id="saved-view-query"
+                    label="Search query"
+                    query={query}
+                    tokens={queryTokens}
+                    disabled={busy}
+                    tags={tags}
+                    helpOpen={helpOpen}
+                    clearLabel="Clear search query"
+                    surfaces="external"
+                  />
+                }
+              />
+            </div>
             <TicketSearchSurfaces
               id="saved-view-query"
               query={query}

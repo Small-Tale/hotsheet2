@@ -1,6 +1,5 @@
 import './ticket-code-review.css';
 
-import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -85,7 +84,7 @@ export function TicketCodeReview({
                 aria-label="Open change evidence"
               >
                 <h3>Change evidence</h3>
-                <Grid className="ticket-code-review__evidence-grid" columns={2} gap="xs">
+                <div class="ticket-code-review__evidence-grid">
                   <span>
                     <LucideIcon icon={FileText} name="file-text" />
                     <strong>{review.summary.files.docs}</strong> docs
@@ -104,7 +103,7 @@ export function TicketCodeReview({
                       <strong>{review.summary.files.other}</strong> other
                     </span>
                   )}
-                </Grid>
+                </div>
                 <p data-tests-modified={review.summary.tests_modified > 0 ? 'true' : 'false'}>
                   {review.summary.tests_added} new test file{review.summary.tests_added === 1 ? '' : 's'} ·{' '}
                   {review.summary.tests_modified} existing test file{review.summary.tests_modified === 1 ? '' : 's'}{' '}
@@ -125,31 +124,32 @@ export function TicketCodeReview({
                     Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
                   </span>
                 </div>
-                <Toolbar
-                  className="ticket-code-review__compare-toolbar"
-                  leading={
-                    <ToolbarControlGroup label="Comparison side" size="compact">
-                      <button
-                        type="button"
-                        data-action="set-repository-comparison-side"
-                        data-comparison-side="a"
-                        data-selected={String(comparison.side === 'a')}
-                        aria-pressed={comparison.side === 'a'}
-                      >
-                        A
-                      </button>
-                      <button
-                        type="button"
-                        data-action="set-repository-comparison-side"
-                        data-comparison-side="b"
-                        data-selected={String(comparison.side === 'b')}
-                        aria-pressed={comparison.side === 'b'}
-                      >
-                        B
-                      </button>
-                    </ToolbarControlGroup>
-                  }
-                />
+                <div class="ticket-code-review__compare-toolbar">
+                  <Toolbar
+                    leading={
+                      <ToolbarControlGroup label="Comparison side" size="compact">
+                        <button
+                          type="button"
+                          data-action="set-repository-comparison-side"
+                          data-comparison-side="a"
+                          data-selected={String(comparison.side === 'a')}
+                          aria-pressed={comparison.side === 'a'}
+                        >
+                          A
+                        </button>
+                        <button
+                          type="button"
+                          data-action="set-repository-comparison-side"
+                          data-comparison-side="b"
+                          data-selected={String(comparison.side === 'b')}
+                          aria-pressed={comparison.side === 'b'}
+                        >
+                          B
+                        </button>
+                      </ToolbarControlGroup>
+                    }
+                  />
+                </div>
                 <button
                   type="button"
                   class="ticket-code-review__compare-open"

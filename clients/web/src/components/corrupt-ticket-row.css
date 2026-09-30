@@ -25,9 +25,14 @@
   content: '';
 }
 .corrupt-ticket-row__icon {
+  display: inline-flex;
+  color: var(--wa-color-danger-on-quiet);
   width: remify(26.4px);
   height: remify(26.4px);
-  color: var(--wa-color-danger-on-quiet);
+}
+.corrupt-ticket-row__icon > svg {
+  width: 100%;
+  height: 100%;
 }
 .corrupt-ticket-row__content {
   display: grid;

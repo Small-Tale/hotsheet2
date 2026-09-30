@@ -278,7 +278,9 @@ export function TicketInspector({
       </header>
       {feedbackNeeded && (
         <div class="ticket-inspector__feedback" role="status">
-          <LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" />
+          <span class="ticket-inspector__feedback-icon">
+            <LucideIcon icon={CircleAlert} name="circle-alert" />
+          </span>
           <span>Needs review</span>
         </div>
       )}

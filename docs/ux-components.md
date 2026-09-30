@@ -1829,11 +1829,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, and HS2-G5K1V0 is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, and HS2-57MAAH is:
 
 | Severity | Exact diagnostic budgets                                               |
 | -------- | ---------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 87; `KUI-L022` 61; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 89; `KUI-L022` 33; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                               |
 
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
@@ -1855,6 +1855,20 @@ Web Awesome element rules that remain (tab-bar action buttons, drive-options sub
 items, the tag chip) resolve by composing through Kerf components instead
 (`HS2-CSRJ9Y` for menus; `HS2-402AXQ` for the rest). Adoption of the upstream APIs is
 tracked in `HS2-PKPGGZ`.
+
+HS2-57MAAH reduced `KUI-L022` (an app class placed on a Kerf component root and styled
+by app CSS) from 61 to 33 without new Kerf API. Icon and spinner sizing moved off the
+`LucideIcon`/`LoadingSpinner` roots onto app-owned wrapper spans: the wrapper owns the
+box (`width`/`height` via `remify()`, `display`, color, and vertical alignment) and its
+`> svg` fills it, so no Kerf class or 1em icon root is restyled and the typography test
+keeps `font-size` on the Web Awesome scale. Layout-only classes (dialog bodies, settings
+lists, toolbar placement, value tables, the notes empty inset, the status menu trigger)
+moved onto app-owned wrapper elements; Web Awesome shadow parts are now addressed through
+the wrapper's child element (`.ticket-status-menu > wa-select::part(combobox)`). Every
+remaining `KUI-L022` finding restyles a Kerf root's own contract (Toolbar, Select, AppTab,
+TabBar, Pane, ListItem, StateBanner, SunkenPanel, Grid, ToolbarText, ListInsetControl,
+FloatingToolbar) and is covered by the same upstream requests listed above; `HS2-PKPGGZ`
+adopts them when they ship.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token

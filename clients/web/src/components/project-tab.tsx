@@ -122,7 +122,9 @@ export function ProjectTab({
     ) : undefined;
   const trailing = pending ? (
     <span class="project-tab__busy">
-      <LoadingSpinner className="project-tab__busy-spinner" label={`Opening ${name}`} />
+      <span class="project-tab__busy-spinner">
+        <LoadingSpinner label={`Opening ${name}`} />
+      </span>
     </span>
   ) : work || notification ? (
     <span class="project-tab__indicators">
@@ -131,12 +133,18 @@ export function ProjectTab({
     </span>
   ) : busy ? (
     <span class="project-tab__busy">
-      <LoadingSpinner className="project-tab__busy-spinner" label="Project busy" />
+      <span class="project-tab__busy-spinner">
+        <LoadingSpinner label="Project busy" />
+      </span>
     </span>
   ) : disconnected ? (
-    <LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />
+    <span class="project-tab__state">
+      <LucideIcon icon={WifiOff} name="wifi-off" />
+    </span>
   ) : attention ? (
-    <LucideIcon icon={CircleAlert} name="circle-alert" className="project-tab__state project-tab__state--attention" />
+    <span class="project-tab__state project-tab__state--attention">
+      <LucideIcon icon={CircleAlert} name="circle-alert" />
+    </span>
   ) : undefined;
   return (
     <AppTab

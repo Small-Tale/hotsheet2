@@ -225,30 +225,34 @@ export function RepositoryStatusPopover({
         <div class="repository-status-popover__layout">
           <aside class="repository-status-popover__navigation">
             <div class="repository-status-popover__metadata">
-              <ValueTable className="repository-status-popover__values" label="Repository identity">
-                <ValueTableRow label="Branch" value={branch} />
-                <ValueTableRow label="Upstream" value={upstream} />
-              </ValueTable>
-              <ValueTable className="repository-status-popover__values" label="Repository synchronization">
-                <ValueTableRow
-                  label="Ahead"
-                  value={
-                    <>
-                      <LucideIcon icon={ArrowUp} name="arrow-up" />
-                      {status.ahead}
-                    </>
-                  }
-                />
-                <ValueTableRow
-                  label="Behind"
-                  value={
-                    <>
-                      <LucideIcon icon={ArrowDown} name="arrow-down" />
-                      {status.behind}
-                    </>
-                  }
-                />
-              </ValueTable>
+              <div class="repository-status-popover__values">
+                <ValueTable label="Repository identity">
+                  <ValueTableRow label="Branch" value={branch} />
+                  <ValueTableRow label="Upstream" value={upstream} />
+                </ValueTable>
+              </div>
+              <div class="repository-status-popover__values">
+                <ValueTable label="Repository synchronization">
+                  <ValueTableRow
+                    label="Ahead"
+                    value={
+                      <>
+                        <LucideIcon icon={ArrowUp} name="arrow-up" />
+                        {status.ahead}
+                      </>
+                    }
+                  />
+                  <ValueTableRow
+                    label="Behind"
+                    value={
+                      <>
+                        <LucideIcon icon={ArrowDown} name="arrow-down" />
+                        {status.behind}
+                      </>
+                    }
+                  />
+                </ValueTable>
+              </div>
             </div>
             <nav aria-label="Repository views">
               <ListHeader label="Views" />

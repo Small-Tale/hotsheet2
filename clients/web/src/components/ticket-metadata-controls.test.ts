@@ -85,7 +85,9 @@ describe('ticket metadata controls and inspector panels', () => {
     );
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
-    expect(status).toContain('kui-select kui-select--custom-selected kui-select--label-hidden ticket-status-menu');
+    // The app-owned wrapper carries the placement class; the Kerf Select root keeps only its own classes.
+    expect(status).toContain('<span class="ticket-status-menu">');
+    expect(status).toContain('kui-select kui-select--custom-selected kui-select--label-hidden"');
     expect(status).toContain('name="inspector-status"');
     expect(status).toMatch(
       /<span[^>]*slot="start" class="kui-select__custom-selected"><span class="status-badge status-badge--completed/,

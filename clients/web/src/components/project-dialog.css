@@ -20,7 +20,7 @@ wa-dialog[data-project-dialog] {
   width: remify(16px);
   height: remify(16px);
 }
-.project-dialog > .kui-text {
+.project-dialog .kui-text {
   margin: 0;
   line-height: 1.5;
 }

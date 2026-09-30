@@ -20,10 +20,16 @@
   place-items: center;
 }
 .project-tab__busy-spinner {
+  display: inline-flex;
   width: remify(12.8px);
   height: remify(12.8px);
 }
+.project-tab__busy-spinner > svg {
+  width: 100%;
+  height: 100%;
+}
 .project-tab__state {
+  display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);
 }
 .project-tab__state--attention {

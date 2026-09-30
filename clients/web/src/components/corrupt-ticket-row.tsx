@@ -72,11 +72,12 @@ export function CorruptTicketRow({
       role="group"
       aria-label={`Unreadable ticket ${identity}`}
     >
-      <LucideIcon
-        icon={upgradeRequired ? RefreshCw : FileWarning}
-        name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
-        className="corrupt-ticket-row__icon"
-      />
+      <span class="corrupt-ticket-row__icon">
+        <LucideIcon
+          icon={upgradeRequired ? RefreshCw : FileWarning}
+          name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
+        />
+      </span>
       <div class="corrupt-ticket-row__content">
         <button
           type="button"

@@ -18,15 +18,16 @@ export function TicketStatusMenu({
 }) {
   const selected = statusPresentation(value);
   return (
-    <Select
-      className="ticket-status-menu"
-      name="inspector-status"
-      ariaLabel={`${disabled ? 'Status' : 'Change status'}, ${selected.label}`}
-      value={value}
-      choices={TICKET_STATUS_CHOICES}
-      disabled={disabled}
-      placeholder={placeholder}
-      renderSelected={(choice) => <StatusBadge status={choice.value} />}
-    />
+    <span class="ticket-status-menu">
+      <Select
+        name="inspector-status"
+        ariaLabel={`${disabled ? 'Status' : 'Change status'}, ${selected.label}`}
+        value={value}
+        choices={TICKET_STATUS_CHOICES}
+        disabled={disabled}
+        placeholder={placeholder}
+        renderSelected={(choice) => <StatusBadge status={choice.value} />}
+      />
+    </span>
   );
 }

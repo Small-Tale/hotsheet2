@@ -308,12 +308,12 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   const remote = page.locator('[data-remote-project-dialog]'),
     surface = remote.locator('.remote-project-dialog');
   await expect(surface).toBeVisible();
-  await expect(surface).toHaveAttribute('data-component', 'list');
+  await expect(surface.locator('> [data-component="list"]')).toHaveCount(1);
   await expect(remote.locator('[data-component="row"]')).toHaveCount(1);
   const spacing = await page.evaluate(() => {
     const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
     return {
-      dialogGap: style('.project-dialog').gap,
+      dialogGap: style('.project-dialog > [data-component="list"]').gap,
       pathGap: style('.project-dialog__path').gap,
       footerGap: style('.project-dialog footer [data-component="row"]').gap,
       listGap: style('.remote-project-dialog__list').gap,

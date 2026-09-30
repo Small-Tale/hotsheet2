@@ -39,7 +39,7 @@ describe('SavedViewDialog', () => {
     expect(markup.slice(groupStart, centerEnd)).not.toContain('aria-label="Search syntax"');
     expect(surfacesStart).toBeGreaterThan(centerEnd);
     expect(markup).toMatch(
-      /<\/header><div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
+      /<\/header><\/div><div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
     );
     expect(markup).toContain('data-action="select-ticket-search-tag" data-tag="design"');
     expect(markup).not.toContain('data-tag="docs"');
@@ -48,7 +48,7 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('aria-label="Clear search query"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
-    expect(markup).toContain('class="kui-toolbar saved-view-dialog__query-toolbar"');
+    expect(markup).toContain('<div class="saved-view-dialog__query-toolbar"><header class="kui-toolbar"');
     expect(markup).toContain('data-center-align="stretch"');
     expect(markup).toContain('data-token-search-editor="saved-view-query"');
     expect(markup).toContain('data-component="token-search-token"');

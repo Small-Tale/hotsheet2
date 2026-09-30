@@ -21,7 +21,8 @@ describe('content components', () => {
   it('offers the visible Add note action when the note list is empty', () => {
     const markup = String(TicketNotes({ notes: [] }));
     expect(markup).toContain('No notes added.');
-    expect(markup).toContain('class="kui-list-inset-text ticket-notes__empty-inset"');
+    expect(markup).toContain('<div class="ticket-notes__empty-inset">');
+    expect(markup).not.toContain('kui-list-inset-text ticket-notes__empty-inset');
     expect(markup).toContain('data-component="list-inset-text" data-sides="rl"');
     expect(markup).toContain('class="kui-list-item ticket-notes__add"');
     expect(markup).toContain(

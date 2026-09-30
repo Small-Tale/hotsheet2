@@ -142,8 +142,9 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('<strong>3</strong> tests');
     expect(markup).toContain('2 new test files · 1 existing test file modified');
     expect(markup).toContain('data-tests-modified="true"');
-    expect(markup).toContain('class="kui-grid ticket-code-review__evidence-grid"');
-    expect(markup).toContain('data-columns="2"');
+    expect(markup).toContain('<div class="ticket-code-review__evidence-grid">');
+    // The evidence row is an app-owned flex row, not a restyled Kerf Grid (HS2-57MAAH).
+    expect(markup).not.toContain('data-columns="2"');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatch(/__evidence \{[^}]*height: auto;[^}]*overflow: hidden;[^}]*box-sizing: border-box;/);
     expect(css).toContainSource('.ticket-code-review__evidence-grid { grid-template-columns: 1fr; }');
@@ -180,7 +181,7 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-lucide="git-compare"');
     expect(markup).toContain('Select the <strong>B</strong> side');
-    expect(markup).toContain('class="kui-toolbar ticket-code-review__compare-toolbar"');
+    expect(markup).toContain('<div class="ticket-code-review__compare-toolbar"><header class="kui-toolbar"');
     expect(markup).toContain('data-review-mode="compare" data-review-from="aaa1111" data-review-to="ddd4444"');
     expect(markup).toContain('class="ticket-code-review__compare-label">A</b>');
     expect(markup).toContain('class="ticket-code-review__compare-label">B</b>');

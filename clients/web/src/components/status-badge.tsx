@@ -43,7 +43,11 @@ export function StatusBadge({
   const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}`;
   const content = (
     <>
-      {showIcon && <LucideIcon className="status-badge__icon" icon={value.icon} name={value.iconName} />}
+      {showIcon && (
+        <span class="status-badge__icon">
+          <LucideIcon icon={value.icon} name={value.iconName} />
+        </span>
+      )}
       <span>{value.label}</span>
     </>
   );

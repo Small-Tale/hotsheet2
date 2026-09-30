@@ -66,7 +66,9 @@ function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
-      <LoadingSpinner className="ticket-list-row__claim-spinner" label={label} />
+      <span class="ticket-list-row__claim-spinner">
+        <LoadingSpinner label={label} />
+      </span>
     </span>
   );
 }
@@ -107,7 +109,9 @@ export function TicketRow(raw: TicketRowProps) {
       style={`color: ${resolveCategoryIconColor(props.categoryColor)}`}
       aria-label={`${props.category} category`}
     >
-      <LucideIcon icon={categoryIcon} name={props.categoryIcon!} className="ticket-list-row__category-icon" />
+      <span class="ticket-list-row__category-icon">
+        <LucideIcon icon={categoryIcon} name={props.categoryIcon!} />
+      </span>
     </span>
   ) : (
     <span
@@ -158,7 +162,9 @@ export function TicketRow(raw: TicketRowProps) {
                   aria-label={`${props.priority} priority`}
                   title={`${props.priority} priority`}
                 >
-                  <LucideIcon icon={priority.icon} name={priority.name} className="ticket-list-row__priority-icon" />
+                  <span class="ticket-list-row__priority-icon">
+                    <LucideIcon icon={priority.icon} name={priority.name} />
+                  </span>
                 </span>
                 <strong title={props.title}>{props.title}</strong>
               </div>
@@ -172,14 +178,18 @@ export function TicketRow(raw: TicketRowProps) {
                   aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                   title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                 >
-                  <LucideIcon icon={Star} name="star" className="ticket-list-row__up-next-icon" />
+                  <span class="ticket-list-row__up-next-icon">
+                    <LucideIcon icon={Star} name="star" />
+                  </span>
                 </button>
               )}
               {props.presentation === 'list' && <StatusBadge status={props.status} compact />}
               {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
               {needsReview && (
                 <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review">
-                  <LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-list-row__feedback-icon" />
+                  <span class="ticket-list-row__feedback-icon">
+                    <LucideIcon icon={CircleAlert} name="circle-alert" />
+                  </span>
                   Needs review
                 </span>
               )}

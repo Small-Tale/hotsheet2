@@ -9,34 +9,36 @@ import { Text } from '@kerfjs/ui/text';
 export function TrashSettings({ days, message = '' }: { days: number; message?: string }) {
   return (
     <form data-component="trash-settings" data-action="save-trash-settings">
-      <List className="trash-settings" gap="l">
-        <header>
-          <List gap="xs">
-            <Text variant="h2">Trash retention</Text>
-            <Text tone="quiet">
-              Deleted tickets remain recoverable until the automatic cleanup removes them. The default is 30 days. Git
-              history keeps every purged ticket file.
-            </Text>
-          </List>
-        </header>
-        <div class="trash-settings__field">
-          <wa-input
-            name="trash-cleanup-days"
-            type="number"
-            label="Keep deleted tickets for (days)"
-            value={String(days)}
-            required
-          ></wa-input>
-        </div>
-        <footer>
-          <Row vAlign="middle" gap="xs">
-            <wa-button type="submit" variant="brand">
-              Save retention
-            </wa-button>
-            <span role="status">{message}</span>
-          </Row>
-        </footer>
-      </List>
+      <div class="trash-settings">
+        <List gap="l">
+          <header>
+            <List gap="xs">
+              <Text variant="h2">Trash retention</Text>
+              <Text tone="quiet">
+                Deleted tickets remain recoverable until the automatic cleanup removes them. The default is 30 days. Git
+                history keeps every purged ticket file.
+              </Text>
+            </List>
+          </header>
+          <div class="trash-settings__field">
+            <wa-input
+              name="trash-cleanup-days"
+              type="number"
+              label="Keep deleted tickets for (days)"
+              value={String(days)}
+              required
+            ></wa-input>
+          </div>
+          <footer>
+            <Row vAlign="middle" gap="xs">
+              <wa-button type="submit" variant="brand">
+                Save retention
+              </wa-button>
+              <span role="status">{message}</span>
+            </Row>
+          </footer>
+        </List>
+      </div>
     </form>
   );
 }
