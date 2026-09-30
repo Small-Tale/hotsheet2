@@ -7,7 +7,7 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/ux-demo?component=ticket-source-setup-dialog&dev-review=false');
     const dialog = page.locator('[data-ticket-source-setup-dialog]'),
-      scenario = dialog.locator('[data-demo-ticket-source-scenario]');
+      scenario = dialog.locator('[data-demo-ticket-source-scenario] wa-select');
     for (const [value, expected] of [
       ['root', 'Set up ticket support'],
       ['signed-out', 'Sign in with GitHub'],

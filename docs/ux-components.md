@@ -1731,9 +1731,15 @@ forms from one module: `providerModelEffortEntries` (typed `PopupMenuEntry[]`, c
 `wa-dropdown` markup until `HS2-2EHD8R` adopts `PopupMenu` context mode; raw `wa-select`
 pickers move to `Select` in `HS2-CWA0S6` and hand-written demo dropdowns in `HS2-W0N1KP`.
 `PopupMenu` submenus cannot hold a divider (`KF-7KR1BC`), so the Model submenu's separator
-before "Other…" is absent in the entries form. `KUI-L301` (discouraged Web Awesome elements)
-fell from 108 to 102 findings with this adoption; it is a warning-level rule without an exact
-budget, so the remaining count is tracked here rather than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+before "Other…" is absent in the entries form. HS2-CWA0S6 then replaced the raw `wa-select`
+value pickers that Kerf `Select` covers: the Permissions settings' automatic-decision and delay
+selects (`settings-workspace.tsx`) and the ticket-source setup dialog's preview-state picker
+(`ticket-source-setup-dialog.tsx`, demo only). The terminal visibility dialog's "Item types"
+picker keeps raw `wa-select`/`wa-option` markup on purpose: it is a multiple select with a
+disabled choice and Select All / Deselect All action rows, which `Select` cannot express until
+`KF-F68TJS` ships. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to 102 with the
+PopupMenu adoption and to 94 with the Select adoption; it is a warning-level rule without an
+exact budget, so the remaining count is tracked here rather than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
 
 ### Kerf beta.57–58 adoption
 

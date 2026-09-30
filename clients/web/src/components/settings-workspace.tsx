@@ -1,5 +1,7 @@
 import './settings-workspace.css';
 
+import { Select } from '@kerfjs/ui/select';
+
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
 import type { PermissionAutomation } from '../permission-notifications';
 import { AiToolSettings } from './ai-tool-settings';
@@ -67,27 +69,26 @@ export function SettingsWorkspace({
       )}
       {category === 'permissions' && (
         <div class="project-settings__permission-grid">
-          <wa-select
+          <Select
             name="permission-automation-action"
             label="Automatic decision"
             value={permissions.automation.action}
-          >
-            <wa-option value="off">Off</wa-option>
-            <wa-option value="allow">Auto-allow</wa-option>
-            <wa-option value="deny">Auto-deny</wa-option>
-          </wa-select>
-          <wa-select
+            choices={[
+              { value: 'off', label: 'Off' },
+              { value: 'allow', label: 'Auto-allow' },
+              { value: 'deny', label: 'Auto-deny' },
+            ]}
+          />
+          <Select
             name="permission-automation-delay"
             label="After visible for"
             value={String(permissions.automation.delayMs)}
             disabled={permissions.automation.action === 'off'}
-          >
-            {permissions.delays.map((value) => (
-              <wa-option value={String(value)}>
-                {value < 60_000 ? '15 seconds' : `${value / 60_000} minute${value === 60_000 ? '' : 's'}`}
-              </wa-option>
-            ))}
-          </wa-select>
+            choices={permissions.delays.map((value) => ({
+              value: String(value),
+              label: value < 60_000 ? '15 seconds' : `${value / 60_000} minute${value === 60_000 ? '' : 's'}`,
+            }))}
+          />
           <p>
             Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
             auto-allow or Stop auto-deny disables that automatic decision for this request.

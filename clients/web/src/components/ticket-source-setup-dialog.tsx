@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { ChevronLeft, ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderConnection } from '../api';
@@ -14,6 +15,18 @@ import {
   providerName,
   ProviderSetupForm,
 } from './provider-setup-form';
+
+/** The UX demo's preview-state picker choices (production callers pass no `previewScenario`). */
+const previewScenarioChoices: readonly SelectChoice[] = [
+  { value: 'root', label: 'Choose source' },
+  { value: 'signed-out', label: 'GitHub signed out' },
+  { value: 'waiting', label: 'Waiting for GitHub' },
+  { value: 'authorized', label: 'GitHub authorized' },
+  { value: 'editing', label: 'Editing connection' },
+  { value: 'removing', label: 'Confirm removal' },
+  { value: 'busy', label: 'Saving connection' },
+  { value: 'remote', label: 'Back up repository' },
+];
 
 export interface TicketSourceSetupProject {
   root: string;
@@ -318,27 +331,14 @@ export function TicketSourceSetupDialog({
         b={detailLabel as never}
       />
       {previewScenario && (
-        <wa-select
-          data-demo-ticket-source-scenario
-          name="scenario"
-          label="Preview dialog state"
-          value={previewScenario}
-        >
-          {(
-            [
-              ['root', 'Choose source'],
-              ['signed-out', 'GitHub signed out'],
-              ['waiting', 'Waiting for GitHub'],
-              ['authorized', 'GitHub authorized'],
-              ['editing', 'Editing connection'],
-              ['removing', 'Confirm removal'],
-              ['busy', 'Saving connection'],
-              ['remote', 'Back up repository'],
-            ] as const
-          ).map(([value, label]) => (
-            <wa-option value={value}>{label}</wa-option>
-          ))}
-        </wa-select>
+        <div data-demo-ticket-source-scenario>
+          <Select
+            name="scenario"
+            label="Preview dialog state"
+            value={previewScenario}
+            choices={previewScenarioChoices}
+          />
+        </div>
       )}
       <ContentTransition
         active={active}

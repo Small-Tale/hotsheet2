@@ -1922,7 +1922,7 @@ delegate(root, 'change', '[data-settings="repository-status-popover"] [name="sce
 delegate(root, 'change', '[data-settings="connection-details-dialog"] [name="scenario"]', (_event, target) => {
   connectionDetailsScenario.value = (target as FormControl).value as typeof connectionDetailsScenario.value;
 });
-delegate(root, 'change', '[data-demo-ticket-source-scenario]', (_event, target) => {
+delegate(root, 'change', '[data-demo-ticket-source-scenario] [name="scenario"]', (_event, target) => {
   ticketSourceScenario.value = (target as FormControl).value as TicketSourceScenario;
 });
 delegate(root, 'change', '[data-settings="permission-request"] [name]', (_event, target) => {
