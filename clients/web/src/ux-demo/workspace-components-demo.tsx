@@ -167,7 +167,8 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
 }
 
 export function TerminalTicketRailDemo() {
-  const mode = workspaceMode.value === 'notifications' ? 'notifications' : 'list';
+  const mode =
+    workspaceMode.value === 'notifications' ? 'notifications' : workspaceMode.value === 'board' ? 'board' : 'list';
   return (
     <section class="terminal-ticket-rail-demo">
       <TerminalTicketRail
@@ -197,6 +198,12 @@ export function TerminalTicketRailDemo() {
         content={
           mode === 'notifications' ? (
             <NotificationCenter title="Notifications" pending={[]} history={[]} />
+          ) : mode === 'board' ? (
+            <TicketBoard
+              columns={railDemoColumns(filteredWorkspaceTickets())}
+              label="Demo project board"
+              layout="paged"
+            />
           ) : (
             <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />
           )
@@ -207,6 +214,21 @@ export function TerminalTicketRailDemo() {
       />
     </section>
   );
+}
+
+/** The rail's paged columns for the demo tickets: one status column per group, every ticket shown. */
+function railDemoColumns(tickets: readonly TicketRowProps[]) {
+  return (
+    [
+      ['not-started', 'Not Started', 'not_started'],
+      ['started', 'Started', 'started'],
+      ['completed', 'Completed', 'completed'],
+      ['verified', 'Verified', 'verified'],
+    ] as const
+  ).map(([id, title, status]) => {
+    const rows = tickets.filter((ticket) => ticket.status === status);
+    return { id, title, tickets: rows, totalCount: rows.length };
+  });
 }
 
 export function filteredWorkspaceTickets(): TicketRowProps[] {

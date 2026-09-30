@@ -204,7 +204,10 @@ and identity-less legacy entries remain conservatively blocking.
   retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the
   Columns view remains available (HS2-ZYJMDP, replacing the earlier list-only rule from
   HS2-1XCHZT): the edge-to-edge board uses TicketBoard's `paged` layout, showing one
-  near-full-width column at a time with the next column peeking in. The board scrolls
+  near-full-width column at a time with the next column peeking in. The workspace-grid ticket
+  rail offers the same paged Columns view beside List and Notifications (never Settings), built
+  from the rail's own filtered and sorted tickets without column continuations, snapping to the
+  nearest column and pushing into the rail inspector on selection like the list (HS2-656Q43). The board scrolls
   horizontally and, when a swipe, drag, or wheel scroll is released, snaps with an animated
   scroll to the nearest column start (native CSS mandatory scroll snapping; instant under
   reduced motion). Crossing the breakpoint keeps the view-mode preference and switches between

@@ -57,15 +57,16 @@ describe('WorkspaceHeader', () => {
     else expect(markup).not.toContain('view-mode-switcher__badge');
   });
 
-  it('offers only equal-width List and Notifications in the explicit rounded rail presentation', () => {
+  it('offers equal-width List, Columns, and Notifications in the explicit rounded rail presentation', () => {
     const markup = String(WorkspaceControls({ mode: 'notifications', presentation: 'rail', notificationCount: 7 }));
     expect(markup).toContain('data-shape="rounded"');
     expect(markup).toContain('data-layout="equal"');
-    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(2);
-    for (const mode of ['board', 'settings']) {
-      expect(markup).not.toContain(`data-segment-value="${mode}"`);
-      expect(markup).not.toContain(`data-view-mode="${mode}"`);
-    }
+    // The rail pages a Columns view like the phone board; Settings stays in the main workspace (HS2-656Q43).
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(3);
+    expect(markup).toContain('data-segment-value="board"');
+    expect(markup).toContain('data-view-mode="board"');
+    expect(markup).not.toContain('data-segment-value="settings"');
+    expect(markup).not.toContain('data-view-mode="settings"');
   });
 
   it('exposes an accessible selected view mode and optional search field', () => {

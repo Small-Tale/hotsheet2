@@ -102,26 +102,29 @@ function workspaceModeChoices(
     { value: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
     { value: 'settings', label: 'Settings', icon: Settings, iconName: 'settings' },
   ];
-  return modes
-    .filter(({ value }) => presentation !== 'rail' || value === 'list' || value === 'notifications')
-    .map(({ value, label, icon, iconName }) => {
-      const badge = value === 'notifications' ? count : 0;
-      return {
-        value,
-        label: `${label} view${badge ? `, ${badge} pending` : ''}`,
-        title: `${label} view`,
-        content: (
-          <span class="view-mode-switcher__content">
-            <LucideIcon icon={icon} name={iconName} />
-            {badge > 0 && (
-              <span class="view-mode-switcher__badge" aria-hidden="true">
-                {badge > 99 ? '99+' : badge}
-              </span>
-            )}
-          </span>
-        ),
-      };
-    });
+  return (
+    modes
+      // The rail offers list, columns (paged), and notifications; settings stay in the main workspace (HS2-656Q43).
+      .filter(({ value }) => presentation !== 'rail' || value !== 'settings')
+      .map(({ value, label, icon, iconName }) => {
+        const badge = value === 'notifications' ? count : 0;
+        return {
+          value,
+          label: `${label} view${badge ? `, ${badge} pending` : ''}`,
+          title: `${label} view`,
+          content: (
+            <span class="view-mode-switcher__content">
+              <LucideIcon icon={icon} name={iconName} />
+              {badge > 0 && (
+                <span class="view-mode-switcher__badge" aria-hidden="true">
+                  {badge > 99 ? '99+' : badge}
+                </span>
+              )}
+            </span>
+          ),
+        };
+      })
+  );
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
@@ -231,9 +234,7 @@ function WorkspaceOverflowControls({
 }) {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
-    ...(presentation === 'rail'
-      ? []
-      : [{ value: 'board' as const, label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' }]),
+    { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
     {
       value: 'notifications',
       label: `Show Notifications${notificationCount ? ` (${notificationCount} pending)` : ''}`,

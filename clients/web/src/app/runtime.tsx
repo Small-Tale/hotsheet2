@@ -119,6 +119,7 @@ import {
   TerminalVisibilityNameDialog,
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
+import { TicketBoard } from '../components/ticket-board';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { TicketEmptyStateProps } from '../components/ticket-empty-state';
 import { type InspectorTab, type TicketInspectorProps } from '../components/ticket-inspector';
@@ -4101,7 +4102,7 @@ export async function startHotSheetWebClient() {
   }
   function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
     const current = project(),
-      mode = viewMode.value === 'notifications' ? 'notifications' : 'list',
+      mode = viewMode.value === 'notifications' ? 'notifications' : viewMode.value === 'board' ? 'board' : 'list',
       railView = selectedView.value === 'errors' ? 'all' : selectedView.value,
       selection = selectedRows(),
       canCreate = canCreateTicketInView(railView),
@@ -4114,9 +4115,21 @@ export async function startHotSheetWebClient() {
     shown = shown.slice().sort((a, b) => compareWorkspaceTickets(a, b, activeSort.sort, activeSort.sortDirection));
     const pending = current ? pendingPermissions().filter((item) => item.projectId === current.id) : [],
       history = current ? permissionHistory().filter((item) => item.projectId === current.id) : [];
+    // The rail's columns view pages one snapped column at a time, like the phone board (HS2-656Q43);
+    // it shows every filtered ticket, so columns carry no continuation.
     const content =
       mode === 'notifications' ? (
         <NotificationCenter title="Notifications" pending={pending} history={history} />
+      ) : mode === 'board' ? (
+        <TicketBoard
+          columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
+            ...group,
+            totalCount: group.tickets.length,
+            tickets: group.tickets.map(row),
+          }))}
+          label="Project board"
+          layout="paged"
+        />
       ) : (
         <TicketList tickets={shown.map(row)} label="Project tickets" />
       );
@@ -4190,7 +4203,7 @@ export async function startHotSheetWebClient() {
         active: ready ? 'ticket' : 'root',
         direction: terminalRailDirection.value,
         title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
-        action: mode === 'list' ? ticketViewAction(railView, canCreate, 'Ticket…') : undefined,
+        action: mode === 'notifications' ? undefined : ticketViewAction(railView, canCreate, 'Ticket…'),
       },
     };
   }

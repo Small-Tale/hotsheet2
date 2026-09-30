@@ -147,7 +147,7 @@ describe('connected workspace demo state', () => {
     expect(reset.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
   });
 
-  it('projects rail notifications and returns to the list without offering Columns', () => {
+  it('projects rail notifications, the list, and a paged Columns board (HS2-656Q43)', () => {
     workspaceMode.value = 'notifications';
     const notifications = String(TerminalTicketRailDemo());
     expect(notifications).toContain(
@@ -155,14 +155,20 @@ describe('connected workspace demo state', () => {
     );
     expect(notifications).toContain('data-component="notification-center"');
     expect(notifications).not.toContain('data-component="ticket-list-row"');
-    expect(notifications).not.toContain('data-view-mode="board"');
+    expect(notifications).toContain('data-view-mode="board"');
     workspaceMode.value = 'list';
     const list = String(TerminalTicketRailDemo());
     expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"');
     expect(list.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
     expect(list).not.toContain('data-component="notification-center"');
     workspaceMode.value = 'board';
-    expect(String(TerminalTicketRailDemo())).not.toContain('data-component="ticket-board"');
+    const board = String(TerminalTicketRailDemo());
+    expect(board).toContain('data-component="ticket-board" data-layout="paged"');
+    expect(board).toContain(
+      'data-segment-value="board" data-selected="true" aria-label="Columns view" aria-pressed="true"',
+    );
+    expect(board).not.toContain('data-component="ticket-list"');
+    workspaceMode.value = 'list';
   });
 
   it('validates creation and inserts a selected canonical ticket', () => {

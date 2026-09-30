@@ -1497,7 +1497,7 @@ dropdown to finish closing before it rerenders the shell, so background discover
 the popup a user is reading (HS2-S59CRP).
 
 `TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
-content-sized project and view selectors, a rectangular full-row list/notification switch, the
+content-sized project and view selectors, a rectangular full-row list/columns/notification switch (its columns view is the paged, snapping `TicketBoard` the phone uses, HS2-656Q43), the
 same chip-based advanced search control used by the main workspace (placed last on its action row),
 ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
 The header/scroller boundary has a quiet one-pixel separator. Its launcher is the same blue pill

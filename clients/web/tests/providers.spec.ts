@@ -2741,6 +2741,72 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
+test('pages the workspace-grid rail through one snapped column at a time in its Columns view (HS2-656Q43)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const rail = page.locator('[data-component="terminal-ticket-rail"]');
+  await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
+  await rail.getByRole('button', { name: /Columns view/ }).click();
+  const board = rail.locator('[data-component="ticket-board"]'),
+    columns = board.locator('[data-component="ticket-board-column"]');
+  await expect(board).toHaveAttribute('data-layout', 'paged');
+  await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
+  await expect(rail.locator('[data-component="ticket-list"]')).toHaveCount(0);
+  await expect(rail.getByRole('button', { name: /Columns view/ })).toHaveAttribute('aria-pressed', 'true');
+  // The rail keeps its launcher on the board too.
+  await expect(rail.getByRole('button', { name: 'Ticket…' })).toBeVisible();
+  // Ticket motion hides a real card only while its ghost flies from the list; every column's cards
+  // are revealed once that settles.
+  await expect(columns.first().locator('[data-component="ticket-list-row"]').first()).toBeVisible();
+  await expect(columns.nth(1).locator('[data-component="ticket-list-row"]').first()).toBeVisible();
+  const geometry = await board.evaluate((element) => {
+    const bounds = element.getBoundingClientRect(),
+      cells = [...element.querySelectorAll('[data-component="ticket-board-column"]')].map((cell) =>
+        cell.getBoundingClientRect(),
+      );
+    return { board: bounds, first: cells[0], second: cells[1], overflow: element.scrollWidth - element.clientWidth };
+  });
+  // One column nearly fills the rail while the next peeks in; the board scrolls beyond one column.
+  expect(geometry.first.width).toBeGreaterThan(geometry.board.width * 0.85);
+  expect(geometry.first.width).toBeLessThan(geometry.board.width);
+  expect(geometry.second.left).toBeLessThan(geometry.board.right);
+  expect(geometry.overflow).toBeGreaterThan(geometry.first.width);
+  await page.screenshot({ path: '/private/tmp/hs2-656q43-rail-columns-wide.png', fullPage: true });
+  // A partial horizontal scroll settles on the nearest column start at the board's 8px scroll padding.
+  const columnInset = (index: number) =>
+    board.evaluate(
+      (element, target) =>
+        Math.round(
+          element.querySelectorAll('[data-component="ticket-board-column"]')[target].getBoundingClientRect().left -
+            element.getBoundingClientRect().left,
+        ),
+      index,
+    );
+  const scrollLeft = () => board.evaluate((element) => Math.round(element.scrollLeft));
+  await board.hover();
+  await page.mouse.wheel(Math.round(geometry.first.width * 0.7), 0);
+  await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
+  expect(await scrollLeft()).toBeGreaterThan(0);
+  await page.mouse.wheel(-Math.round(geometry.first.width * 0.8), 0);
+  await expect.poll(scrollLeft, { timeout: 5000 }).toBe(0);
+  await expect(columns.first()).toBeInViewport({ ratio: 0.95 });
+  // Selecting a card from the paged board pushes into the rail's inspector as the list does.
+  await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(rail).toHaveAttribute('data-screen', 'ticket');
+  await rail.getByRole('button', { name: 'Back to ticket list' }).click();
+  await expect(rail).toHaveAttribute('data-screen', 'root');
+  await rail.getByRole('button', { name: /List view/ }).click();
+  await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(board).toHaveCount(0);
+});
+
 test('keeps a compact ticket rail beside the terminal dashboard and pushes into the inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFakeTerminalSockets(page, true);
@@ -2760,7 +2826,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(rail.getByRole('button', { name: /List view/ })).toBeVisible();
   await expect(rail.getByRole('button', { name: /Notifications view/ })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /Columns view/ })).toBeHidden();
+  await expect(rail.getByRole('button', { name: /Columns view/ })).toBeVisible();
   await expect(rail.getByRole('button', { name: /Settings view/ })).toBeHidden();
   const railGeometry = await rail.evaluate((node) => {
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
