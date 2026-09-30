@@ -45,17 +45,21 @@ describe('TerminalTicketRail', () => {
     expect(markup).toContain('data-transition-direction="backward"');
   });
   it('keeps compact search last, animates active search onto a full row, and centers the ticket header independently', () => {
-    const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(/\.view-mode-switcher \{[^}]*grid-column:1 \/ -1/);
-    expect(css).toMatchSource(/workspace-header__utility-group \{[^}]*grid-column:2/);
+    const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
+      source = readFileSync(new URL('./terminal-ticket-rail.tsx', import.meta.url), 'utf8');
+    // The controls are the trailing zone of a cataloged Toolbar that stacks and wraps at group
+    // granularity; no app-owned grid places them (HS2-K9KWJJ).
+    expect(source).toMatch(
+      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="stack"[^>]*responsiveAt="narrow"[^>]*trailing=\{controls\}/,
+    );
+    expect(css).not.toMatch(/__controls \{/);
+    expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
+    expect(css).toMatchSource(/__controls \.view-mode-switcher \{[^}]*width:100%/);
     expect(css).toMatchSource(
-      /__controls \{[^}]*display:grid[^}]*grid-template-columns:auto auto minmax\(remify\([\d.]+px\)/,
+      /__controls \.ticket-search-field \{[^}]*width:remify\([\d.]+px\)[^}]*margin-inline-start:auto[^}]*transition:width \.25s ease/,
     );
     expect(css).toMatchSource(
-      /ticket-search-field \{[^}]*grid-column:3[^}]*grid-row:2[^}]*transition:width \.25s ease/,
-    );
-    expect(css).toMatchSource(
-      /terminal-ticket-rail__controls > \.ticket-search-field\[data-content="search"\]\[data-expanded="true"\] \{[^}]*width:100%[^}]*grid-column:1 \/ -1[^}]*grid-row:3[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
+      /__controls \.ticket-search-field\[data-content="search"\]\[data-expanded="true"\] \{[^}]*width:100%[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
     );
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
     expect(css).toMatchSource(/ticket-inspector__header > \.kui-toolbar \{[^}]*grid-template-columns:1fr auto 1fr/);
@@ -67,9 +71,8 @@ describe('TerminalTicketRail', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatchSource(/__project \{[^}]*padding-inline:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(
-      /__controls \{[^}]*padding:var\(--kui-space-2xs\) var\(--kui-space-xs\) var\(--kui-space-xs\)/,
-    );
+    // The controls Toolbar keeps Kerf's own inset; the app adds no rule on that toolbar root (HS2-K9KWJJ).
+    expect(css).not.toMatch(/__controls \{/);
     expect(css).toMatchSource(/__heading \{[^}]*padding:var\(--kui-space-xs\)/);
     expect(css).not.toContain('--kui-sunken-panel-radius');
     expect(css).toMatch(/translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/);

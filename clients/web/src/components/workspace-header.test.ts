@@ -385,13 +385,33 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__sort .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
-    expect(headerCss).toContainSource('.workspace-header__utility-group { display: none; }');
-    expect(headerCss).toContainSource('.workspace-header__overflow-group { display: inline-flex; }');
+    // The terminal rail's `--rail` groups are excluded: that toolbar wraps them onto rows instead of
+    // yielding them to the menu (HS2-K9KWJJ).
+    expect(headerCss).toContainSource(
+      '.workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }',
+    );
+    expect(headerCss).toContainSource(
+      '.workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) { display: inline-flex; }',
+    );
+    expect(headerCss).toContainSource(
+      '.workspace-header__sort-group:not(.workspace-header__sort-group--rail) { display: none; }',
+    );
+    const railMarkup = String(
+      WorkspaceControls({ mode: 'list', presentation: 'rail', sort: 'updated', sortDirection: 'descending' }),
+    );
+    for (const group of [
+      'view-mode-switcher',
+      'workspace-header__sort-group',
+      'workspace-header__utility-group',
+      'workspace-header__overflow-group',
+    ])
+      expect(railMarkup).toContain(`${group} ${group}--rail`);
+    expect(markup).not.toContain('--rail');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(416px))');
-    expect(headerCss).toContainSource('.workspace-header__sort-group { display: none; }');
+    expect(headerCss).not.toContainSource('.workspace-header__sort-group { display: none; }');
     // An expanded search hides its sibling groups through the zone that holds it, not a wrapper.
     expect(headerCss).toContainSource(
-      ":has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher, :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__sort-group, :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__utility-group { display: none; }",
+      ":has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher:not(.view-mode-switcher--rail), :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__sort-group:not(.workspace-header__sort-group--rail), :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }",
     );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');
     expect(headerCss).toContainSource(

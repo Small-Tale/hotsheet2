@@ -47,42 +47,21 @@
   font-size: var(--wa-font-size-m);
   white-space: nowrap;
 }
-/* The rail places the shared WorkspaceControls groups directly in its own grid: the view switcher
-   spans the first row; sort, selection actions, and the collapsible search share the second, and an
-   expanded search takes a full third row (HS2-EZ1N7Z). */
-.terminal-ticket-rail__controls {
-  display: grid;
-  padding: var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-xs);
-  grid-template-columns: auto auto minmax(remify(40.4px), 1fr);
-  row-gap: var(--kui-space-xs);
-}
+/* The rail's controls Toolbar stacks its trailing zone (the rail is always narrower than Kerf's
+   `narrow` breakpoint) and wraps at group granularity: the view switcher fills the first row; sort,
+   selection actions, and the collapsible search share the next, the search pushed to the trailing
+   edge; an expanded search grows to the full width and so wraps onto its own row (HS2-K9KWJJ). */
 .terminal-ticket-rail__controls .view-mode-switcher {
   width: 100%;
-  grid-column: 1 / -1;
 }
-.terminal-ticket-rail__controls .workspace-header__sort-group {
-  grid-column: 1;
-  grid-row: 2;
-}
-.terminal-ticket-rail__controls .workspace-header__utility-group {
-  grid-column: 2;
-  grid-row: 2;
-}
-.terminal-ticket-rail__controls > .ticket-search-field {
-  grid-column: 3;
-  grid-row: 2;
+.terminal-ticket-rail__controls .ticket-search-field {
   width: remify(40.4px);
-  justify-self: end;
+  margin-inline-start: auto;
   transition: width 0.25s ease;
 }
-.terminal-ticket-rail__controls > .ticket-search-field[data-content='search'][data-expanded='true'] {
+.terminal-ticket-rail__controls .ticket-search-field[data-content='search'][data-expanded='true'] {
   width: 100%;
-  grid-column: 1 / -1;
-  grid-row: 3;
   animation: terminal-ticket-rail-search-enter 0.25s ease;
-}
-.terminal-ticket-rail__controls .kui-token-search {
-  width: 100%;
 }
 .terminal-ticket-rail__heading {
   min-height: remify(60px);
@@ -195,10 +174,10 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .terminal-ticket-rail__controls > .ticket-search-field {
+  .terminal-ticket-rail__controls .ticket-search-field {
     transition: none;
   }
-  .terminal-ticket-rail__controls > .ticket-search-field[data-content='search'][data-expanded='true'] {
+  .terminal-ticket-rail__controls .ticket-search-field[data-content='search'][data-expanded='true'] {
     animation: none;
   }
 }

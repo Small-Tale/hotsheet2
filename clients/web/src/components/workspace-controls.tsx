@@ -247,85 +247,94 @@ function WorkspaceOverflowControls({
       ? []
       : [{ value: 'settings' as const, label: 'Show Settings', icon: Settings, iconName: 'settings' }]),
   ];
-  return (
-    <ToolbarControlGroup className="workspace-header__overflow-group" single appearance="borderless" nestedDropdown>
-      <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
-        <wa-button
-          slot="trigger"
-          appearance="plain"
-          aria-label="More workspace controls"
-          title="More workspace controls"
-        >
+  const menu = (
+    <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
+      <wa-button slot="trigger" appearance="plain" aria-label="More workspace controls" title="More workspace controls">
+        <LucideIcon icon={MoreHorizontal} name="ellipsis" />
+      </wa-button>
+      <wa-dropdown-item
+        class="workspace-header__overflow-utility"
+        aria-label={`Toggle Up Next: ${selectedTicketsUpNext === 'mixed' ? 'some' : selectedTicketsUpNext} selected tickets are Up Next`}
+        disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
+        data-workspace-overflow-action="toggle-selected-up-next"
+      >
+        <span slot="icon">
+          <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
+        </span>
+        Toggle Up Next
+      </wa-dropdown-item>
+      <wa-dropdown-item
+        class="workspace-header__overflow-utility"
+        disabled={ticketActionsDisabled}
+        data-workspace-overflow-action="open-selected-ticket-actions"
+      >
+        <span slot="icon">
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-        </wa-button>
-        <wa-dropdown-item
-          class="workspace-header__overflow-utility"
-          aria-label={`Toggle Up Next: ${selectedTicketsUpNext === 'mixed' ? 'some' : selectedTicketsUpNext} selected tickets are Up Next`}
-          disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
-          data-workspace-overflow-action="toggle-selected-up-next"
-        >
-          <span slot="icon">
-            <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
-          </span>
-          Toggle Up Next
-        </wa-dropdown-item>
-        <wa-dropdown-item
-          class="workspace-header__overflow-utility"
-          disabled={ticketActionsDisabled}
-          data-workspace-overflow-action="open-selected-ticket-actions"
-        >
-          <span slot="icon">
-            <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-          </span>
-          Show Selected Ticket Actions…
-        </wa-dropdown-item>
-        <wa-divider class="workspace-header__overflow-sort" />
-        {visibleSortOptions.map((option) => {
-          const direction = option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
-            icon = workspaceSortTrigger(option.value, direction);
-          return (
-            <wa-dropdown-item
-              class="workspace-header__overflow-sort"
-              type="checkbox"
-              checked={option.value === sort}
-              disabled={projectActionsDisabled}
-              data-workspace-overflow-action="set-workspace-sort"
-              data-workspace-sort={option.value}
-            >
-              <span slot="icon">
-                <LucideIcon icon={icon.icon} name={icon.iconName} />
-              </span>
-              {`Sort by ${option.label}${option.value === sort ? `, ${direction}` : ''}`}
-            </wa-dropdown-item>
-          );
-        })}
-        <wa-divider class="workspace-header__overflow-search" />
-        <wa-dropdown-item
-          class="workspace-header__overflow-search"
-          disabled={projectActionsDisabled}
-          data-workspace-overflow-action="open-workspace-search"
-        >
-          <span slot="icon">
-            <LucideIcon icon={Search} name="search" />
-          </span>
-          {searchOpen ? 'Focus Search' : 'Search Tickets'}
-        </wa-dropdown-item>
-        <wa-divider class="workspace-header__overflow-view" />
-        {modes.map((option) => (
+        </span>
+        Show Selected Ticket Actions…
+      </wa-dropdown-item>
+      <wa-divider class="workspace-header__overflow-sort" />
+      {visibleSortOptions.map((option) => {
+        const direction = option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
+          icon = workspaceSortTrigger(option.value, direction);
+        return (
           <wa-dropdown-item
-            class="workspace-header__overflow-view"
+            class="workspace-header__overflow-sort"
             type="checkbox"
-            checked={option.value === mode}
-            data-workspace-overflow-action="set-view-mode"
-            data-view-mode={option.value}
+            checked={option.value === sort}
+            disabled={projectActionsDisabled}
+            data-workspace-overflow-action="set-workspace-sort"
+            data-workspace-sort={option.value}
           >
             <span slot="icon">
-              <LucideIcon icon={option.icon} name={option.iconName} />
+              <LucideIcon icon={icon.icon} name={icon.iconName} />
             </span>
-            {option.label}
+            {`Sort by ${option.label}${option.value === sort ? `, ${direction}` : ''}`}
           </wa-dropdown-item>
-        ))}
-      </wa-dropdown>
+        );
+      })}
+      <wa-divider class="workspace-header__overflow-search" />
+      <wa-dropdown-item
+        class="workspace-header__overflow-search"
+        disabled={projectActionsDisabled}
+        data-workspace-overflow-action="open-workspace-search"
+      >
+        <span slot="icon">
+          <LucideIcon icon={Search} name="search" />
+        </span>
+        {searchOpen ? 'Focus Search' : 'Search Tickets'}
+      </wa-dropdown-item>
+      <wa-divider class="workspace-header__overflow-view" />
+      {modes.map((option) => (
+        <wa-dropdown-item
+          class="workspace-header__overflow-view"
+          type="checkbox"
+          checked={option.value === mode}
+          data-workspace-overflow-action="set-view-mode"
+          data-view-mode={option.value}
+        >
+          <span slot="icon">
+            <LucideIcon icon={option.icon} name={option.iconName} />
+          </span>
+          {option.label}
+        </wa-dropdown-item>
+      ))}
+    </wa-dropdown>
+  );
+  // Kerf's analyzer classifies only literal class names on its components, so the rail variant is
+  // spelled out rather than computed (HS2-K9KWJJ).
+  return presentation === 'rail' ? (
+    <ToolbarControlGroup
+      className="workspace-header__overflow-group workspace-header__overflow-group--rail"
+      single
+      appearance="borderless"
+      nestedDropdown
+    >
+      {menu}
+    </ToolbarControlGroup>
+  ) : (
+    <ToolbarControlGroup className="workspace-header__overflow-group" single appearance="borderless" nestedDropdown>
+      {menu}
     </ToolbarControlGroup>
   );
 }
@@ -365,38 +374,37 @@ export function WorkspaceControls({
   });
   const sortLabel = sortOptions.find((option) => option.value === sort)!.label,
     trigger = workspaceSortTrigger(sort, sortDirection);
-  return (
-    <>
-      <ToolbarControlGroup className="view-mode-switcher" shape={presentation === 'rail' ? 'rounded' : 'pill'}>
-        <SegmentedControl
-          id="workspace-view-mode"
-          label="View mode"
-          value={mode}
-          choices={workspaceModeChoices(notificationCount, presentation)}
-          action="set-view-mode"
-          appearance="toolbar"
-          shape={presentation === 'rail' ? 'rounded' : 'pill'}
-          layout={presentation === 'rail' ? 'equal' : 'content'}
-        />
-      </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__sort-group" single>
-        <Select
-          className="workspace-header__sort"
-          name="workspace-sort"
-          ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`}
-          value={sort}
-          choices={sortChoices}
-          disabled={projectActionsDisabled}
-          selectedPresentation="icon-only"
-          renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
-        />
-      </ToolbarControlGroup>
-      <ToolbarControlGroup
-        className="workspace-header__utility-group"
-        label="View actions"
-        selectedChrome="outline"
-        selectedTone="pop"
-      >
+  // The rail's groups carry a `--rail` modifier so the header's responsive overflow queries (which
+  // fire in any narrow Kerf toolbar) leave them in place; the rail's toolbar wraps them onto rows
+  // instead of yielding them to the overflow menu (HS2-K9KWJJ). Kerf's analyzer classifies only
+  // literal class names on its components, so each rail variant is spelled out.
+  const rail = presentation === 'rail',
+    viewSwitcher = (
+      <SegmentedControl
+        id="workspace-view-mode"
+        label="View mode"
+        value={mode}
+        choices={workspaceModeChoices(notificationCount, presentation)}
+        action="set-view-mode"
+        appearance="toolbar"
+        shape={rail ? 'rounded' : 'pill'}
+        layout={rail ? 'equal' : 'content'}
+      />
+    ),
+    sortSelect = (
+      <Select
+        className="workspace-header__sort"
+        name="workspace-sort"
+        ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`}
+        value={sort}
+        choices={sortChoices}
+        disabled={projectActionsDisabled}
+        selectedPresentation="icon-only"
+        renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
+      />
+    ),
+    utilityButtons = (
+      <>
         <button
           type="button"
           class="workspace-header__up-next-button"
@@ -417,7 +425,47 @@ export function WorkspaceControls({
         >
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
         </button>
-      </ToolbarControlGroup>
+      </>
+    );
+  return (
+    <>
+      {rail ? (
+        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded">
+          {viewSwitcher}
+        </ToolbarControlGroup>
+      ) : (
+        <ToolbarControlGroup className="view-mode-switcher" shape="pill">
+          {viewSwitcher}
+        </ToolbarControlGroup>
+      )}
+      {rail ? (
+        <ToolbarControlGroup className="workspace-header__sort-group workspace-header__sort-group--rail" single>
+          {sortSelect}
+        </ToolbarControlGroup>
+      ) : (
+        <ToolbarControlGroup className="workspace-header__sort-group" single>
+          {sortSelect}
+        </ToolbarControlGroup>
+      )}
+      {rail ? (
+        <ToolbarControlGroup
+          className="workspace-header__utility-group workspace-header__utility-group--rail"
+          label="View actions"
+          selectedChrome="outline"
+          selectedTone="pop"
+        >
+          {utilityButtons}
+        </ToolbarControlGroup>
+      ) : (
+        <ToolbarControlGroup
+          className="workspace-header__utility-group"
+          label="View actions"
+          selectedChrome="outline"
+          selectedTone="pop"
+        >
+          {utilityButtons}
+        </ToolbarControlGroup>
+      )}
       <TicketSearchField
         id="workspace-search"
         label="Search tickets"

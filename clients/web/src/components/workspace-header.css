@@ -129,16 +129,19 @@ wa-button.workspace-header__text-action::part(base) {
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
+/* The terminal rail composes the same groups (marked `--rail`) in a toolbar that is always narrower
+   than these breakpoints and wraps them onto rows instead of yielding them to the menu, so the
+   overflow queries skip rail groups (HS2-K9KWJJ). */
 @container kui-toolbar (max-width: remify(480px)) {
-  .workspace-header__utility-group {
+  .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
     display: none;
   }
-  .workspace-header__overflow-group {
+  .workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) {
     display: inline-flex;
   }
 }
 @container kui-toolbar (max-width: remify(416px)) {
-  .workspace-header__sort-group {
+  .workspace-header__sort-group:not(.workspace-header__sort-group--rail) {
     display: none;
   }
 }
@@ -146,9 +149,11 @@ wa-button.workspace-header__text-action::part(base) {
    search field gets the full row (sort/utility are already hidden at these widths) — HS2-0SARDD.
    The zone that holds the expanded field is the condition; there is no wrapper element. */
 @container kui-toolbar (max-width: remify(480px)) {
-  :has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher,
-  :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__sort-group,
-  :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__utility-group {
+  :has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher:not(.view-mode-switcher--rail),
+  :has(> .ticket-search-field[data-expanded='true'])
+    > .workspace-header__sort-group:not(.workspace-header__sort-group--rail),
+  :has(> .ticket-search-field[data-expanded='true'])
+    > .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
     display: none;
   }
   .ticket-search-field[data-content='search'][data-expanded='true'] {

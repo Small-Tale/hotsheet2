@@ -924,7 +924,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     controls: geometry.controlsPadding,
     heading: geometry.headingPadding,
     content: geometry.contentPadding,
-  }).toEqual({ project: '8px', controls: '4px 8px 8px', heading: '8px', content: '8px' });
+  }).toEqual({ project: '8px', controls: '8px', heading: '8px', content: '8px' });
   expect(geometry.headingBorderBottom).toBe('1px');
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
