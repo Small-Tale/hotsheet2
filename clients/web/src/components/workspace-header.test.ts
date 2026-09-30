@@ -134,7 +134,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toMatch(
       /workspace-header__utility-group[^>]*data-selected-chrome="outline"[^>]*data-selected-tone="pop"/,
     );
-    const beforeOverflow = markup.slice(0, markup.indexOf('<wa-dropdown class="workspace-header__overflow"'));
+    const beforeOverflow = markup.slice(0, markup.indexOf('data-workspace-overflow="true"'));
     expect(beforeOverflow).toMatch(/name="workspace-sort"[^>]*disabled/);
     expect(
       (
@@ -326,7 +326,7 @@ describe('WorkspaceHeader', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Demo', mode: 'list', selectedTicketCount: 1, ...guards }));
     expect(markup).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
     expect(markup).toMatch(
-      /<wa-dropdown-item[^>]*disabled[^>]*data-workspace-overflow-action="toggle-selected-up-next"/,
+      /<wa-dropdown-item[^>]*data-workspace-overflow-action="toggle-selected-up-next"[^>]*disabled/,
     );
   });
 
@@ -351,17 +351,18 @@ describe('WorkspaceHeader', () => {
         selectedTicketsUpNextEligible: true,
       }),
     );
-    expect(markup).toContain('aria-label="More workspace controls"');
-    expect(markup).toMatch(
-      /workspace-header__overflow-utility" aria-label="Toggle Up Next: all selected tickets are Up Next" data-workspace-overflow-action="toggle-selected-up-next"/,
+    expect(markup).toContain('kui-popup-menu__label">More workspace controls</span>');
+    // PopupMenu items carry the app's routing and state as data attributes (HS2-CSRJ9Y).
+    expect(markup).toContain(
+      'data-workspace-overflow-kind="utility" data-workspace-overflow-action="toggle-selected-up-next" data-workspace-overflow-state="all"',
     );
     expect(markup).toContain(
-      'workspace-header__overflow-utility" data-workspace-overflow-action="open-selected-ticket-actions"',
+      'data-workspace-overflow-kind="utility" data-workspace-overflow-action="open-selected-ticket-actions"',
     );
     expect(markup).toContain('data-workspace-overflow-action="set-workspace-sort" data-workspace-sort="priority"');
     expect(markup).not.toContain('data-workspace-sort="status"');
     expect(markup).toContain(
-      'workspace-header__overflow-search" data-workspace-overflow-action="open-workspace-search"',
+      'data-workspace-overflow-kind="search" data-workspace-overflow-action="open-workspace-search"',
     );
     expect(markup).toContain('data-view-mode="notifications"');
     expect(markup).toContain('Show Notifications (7 pending)');

@@ -1,11 +1,10 @@
 import './heading.css';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import './native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -38,7 +37,7 @@ import type { PermissionItem } from '../permission-notifications';
 import { AIContentFeedback, AIContentLabel } from './ai-content-label';
 import { MarkdownPreview } from './markdown-preview';
 import { PermissionRequestCard } from './permission-request-card';
-import { ProviderModelEffortSubmenus } from './provider-model-effort-menu';
+import { providerModelEffortEntries } from './provider-model-effort-menu';
 
 export interface AIConversationProps {
   open: boolean;
@@ -369,37 +368,29 @@ export function AIConversation({
             </span>
           )}
         </span>
-        <wa-dropdown class="ai-conversation__model-menu" placement="top-end" distance={6}>
-          <button
-            slot="trigger"
-            type="button"
-            class="ai-conversation__model-trigger"
-            aria-label="Change provider, model, and effort"
-            title="Change provider, model, and effort"
-            aria-haspopup="menu"
-          >
-            <LucideIcon icon={ChevronDown} name="chevron-down" />
-          </button>
-          <ProviderModelEffortSubmenus
-            actions={{
+        <PopupMenu
+          label="Change provider, model, and effort"
+          icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
+          caret={false}
+          placement="top-end"
+          rootAttributes={{ 'data-conversation-model-menu': 'true' }}
+          items={providerModelEffortEntries({
+            actions: {
               provider: 'select-conversation-provider',
               model: 'select-conversation-model',
               effort: 'select-conversation-effort',
               manualModel: 'open-conversation-manual-model',
-            }}
-            providers={
-              providerChangeable
-                ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
-                : undefined
-            }
-            model={
+            },
+            providers: providerChangeable
+              ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
+              : undefined,
+            model:
               canChangeModel && models.length > 0
                 ? { choices: models, currentId: activeModel?.id, currentLabel: currentModelLabel, customModel }
-                : undefined
-            }
-            effort={canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined}
-          />
-        </wa-dropdown>
+                : undefined,
+            effort: canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined,
+          })}
+        />
       </div>
     ) : null;
   const savedNotice = readOnly ? (

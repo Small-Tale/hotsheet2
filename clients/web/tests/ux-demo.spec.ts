@@ -5463,7 +5463,7 @@ test('shows the chat model/effort as a label with a popup to change them', async
   await expect(control).toBeVisible();
   await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
   await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
-  await control.locator('.ai-conversation__model-trigger').click();
+  await control.locator('[data-conversation-model-menu] [slot="trigger"]').click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeVisible();
@@ -5497,7 +5497,7 @@ test('edits custom command color and icon in the command settings editor', async
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-list.png' });
   // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
-  await verifyRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await verifyRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();

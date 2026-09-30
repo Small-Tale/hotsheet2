@@ -110,30 +110,6 @@
   background: var(--wa-color-neutral-fill-quiet);
   font-variant: all-small-caps;
 }
-.ai-conversation__model-trigger {
-  display: grid;
-  width: remify(28px);
-  height: remify(28px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.ai-conversation__model-trigger:hover {
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.ai-conversation__model-trigger:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: -2px;
-}
-.ai-conversation__model-trigger svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .ai-conversation__header-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;

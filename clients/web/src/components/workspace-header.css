@@ -19,17 +19,6 @@
   line-height: 1;
   place-items: center;
 }
-.workspace-header__overflow wa-button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
-.workspace-header__overflow > wa-button::part(base) {
-  width: remify(32px);
-  height: remify(32px);
-  min-height: remify(32px);
-  padding: 0;
-  border-radius: var(--wa-border-radius-pill);
-}
 .workspace-header__utility-group > button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -121,13 +110,6 @@ wa-button.workspace-header__text-action::part(base) {
 }
 .ticket-search-field[data-expanded='true'] ~ .workspace-header__overflow-group {
   display: none;
-}
-.workspace-header__overflow::part(menu) {
-  width: min(remify(272px), calc(100vw - 2 * var(--wa-space-s)));
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  opacity: 1;
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
 }
 /* The terminal rail composes the same groups (marked `--rail`) in a toolbar that is always narrower
    than these breakpoints and wraps them onto rows instead of yielding them to the menu, so the

@@ -1,11 +1,9 @@
 import './heading.css';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -22,7 +20,7 @@ import {
   TRANSPARENT_CUSTOMIZATION_COLOR,
 } from './customization-palette';
 import { LucideIconPicker } from './lucide-icon-picker';
-import { ProviderModelEffortSubmenus } from './provider-model-effort-menu';
+import { providerModelEffortEntries } from './provider-model-effort-menu';
 
 /** DOM id of the native "Edit command" popover dialog, opened imperatively from a row's edit action. */
 export const COMMAND_EDITOR_DIALOG_ID = 'command-editor-dialog';
@@ -88,29 +86,23 @@ function CommandRow({
         <strong>{label}</strong>
         <small>{TYPE_LABELS[kind(command)]}</small>
       </span>
-      <wa-dropdown class="command-settings-editor__row-menu" distance={4}>
-        <button
-          slot="trigger"
-          type="button"
-          class="command-settings-editor__row-menu-trigger"
-          aria-label={`Actions for ${label}`}
-          aria-haspopup="menu"
-        >
-          <LucideIcon icon={MoreHorizontal} name="more-horizontal" />
-        </button>
-        <wa-dropdown-item data-action="edit-command-setting">
-          <span slot="icon">
-            <LucideIcon icon={Pencil} name="pencil" />
-          </span>
-          Edit
-        </wa-dropdown-item>
-        <wa-dropdown-item variant="danger" data-action="delete-command-setting">
-          <span slot="icon">
-            <LucideIcon icon={Trash2} name="trash-2" />
-          </span>
-          Delete
-        </wa-dropdown-item>
-      </wa-dropdown>
+      <span class="command-settings-editor__row-menu">
+        <PopupMenu
+          label={`Actions for ${label}`}
+          icon={<LucideIcon icon={MoreHorizontal} name="more-horizontal" />}
+          caret={false}
+          placement="bottom-end"
+          items={[
+            { label: 'Edit', action: 'edit-command-setting', icon: <LucideIcon icon={Pencil} name="pencil" /> },
+            {
+              label: 'Delete',
+              action: 'delete-command-setting',
+              tone: 'danger',
+              icon: <LucideIcon icon={Trash2} name="trash-2" />,
+            },
+          ]}
+        />
+      </span>
     </li>
   );
 }
@@ -147,51 +139,55 @@ function AiCommandSelection({
       : 'Project Default';
   return (
     <div class="command-settings-editor__wide command-settings-editor__ai-selection">
-      <span>AI configuration</span>
-      <div class="command-settings-editor__ai-menu">
-        <wa-dropdown placement="bottom-start" distance={4}>
-          <button
-            slot="trigger"
-            type="button"
-            class="command-settings-editor__ai-trigger"
-            aria-label={`AI configuration: ${summary}`}
-          >
-            <LucideIcon icon={Bot} name="bot" />
-            <span>{summary}</span>
-          </button>
-          <wa-dropdown-item type="checkbox" checked={!overridden} data-action="select-command-ai-default">
-            <span slot="icon">
-              <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-            </span>
-            Project Default
-          </wa-dropdown-item>
-          {active && (
-            <>
-              <wa-divider></wa-divider>
-              <ProviderModelEffortSubmenus
-                actions={{
-                  provider: 'select-command-ai-tool',
-                  model: 'select-command-ai-model',
-                  effort: 'select-command-ai-effort',
-                  manualModel: 'open-command-manual-model',
-                }}
-                providers={{
-                  choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
-                  currentId: active.id,
-                  currentLabel: active.display_name,
-                }}
-                model={{
-                  choices: active.models.map((item) => ({ id: item.id, label: item.label })),
-                  currentId: model?.id,
-                  currentLabel: model?.label ?? (modelId || 'Provider default'),
-                  customModel,
-                }}
-                effort={{ efforts, current: effort }}
-              />
-            </>
-          )}
-        </wa-dropdown>
-      </div>
+      {/* A settings row: the field label is the toolbar's identity and the PopupMenu's group is its
+          trailing control, the cataloged composition for a menu trigger (HS2-CSRJ9Y). */}
+      <Toolbar
+        dividerSides=""
+        leading={<ToolbarText text="AI configuration" />}
+        trailing={
+          <ToolbarControlGroup single nestedDropdown>
+            <PopupMenu
+              text={summary}
+              icon={<LucideIcon icon={Bot} name="bot" />}
+              placement="bottom-start"
+              rootAttributes={{ 'data-command-ai-menu': 'true' }}
+              items={[
+                {
+                  label: 'Project Default',
+                  action: 'select-command-ai-default',
+                  checked: !overridden,
+                  icon: <LucideIcon icon={RotateCcw} name="rotate-ccw" />,
+                },
+                ...(active
+                  ? [
+                      { kind: 'divider' } as const,
+                      ...providerModelEffortEntries({
+                        actions: {
+                          provider: 'select-command-ai-tool',
+                          model: 'select-command-ai-model',
+                          effort: 'select-command-ai-effort',
+                          manualModel: 'open-command-manual-model',
+                        },
+                        providers: {
+                          choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
+                          currentId: active.id,
+                          currentLabel: active.display_name,
+                        },
+                        model: {
+                          choices: active.models.map((item) => ({ id: item.id, label: item.label })),
+                          currentId: model?.id,
+                          currentLabel: model?.label ?? (modelId || 'Provider default'),
+                          customModel,
+                        },
+                        effort: { efforts, current: effort },
+                      }),
+                    ]
+                  : []),
+              ]}
+            />
+          </ToolbarControlGroup>
+        }
+      />
       <small>Project Default follows this project's AI settings; choose an override only for this command.</small>
     </div>
   );

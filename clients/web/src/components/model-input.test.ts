@@ -9,7 +9,7 @@ describe('retired ModelInput boundary', () => {
   it('keeps model selection on the shared submenu and exact-id dialog', () => {
     expect(existsSync(new URL('./model-input.tsx', import.meta.url))).toBe(false);
     const commandEditor = readFileSync(new URL('./command-settings-editor.tsx', import.meta.url), 'utf8');
-    expect(commandEditor).toContain('ProviderModelEffortSubmenus');
+    expect(commandEditor).toContain('providerModelEffortEntries');
     expect(commandEditor).toContain('open-command-manual-model');
   });
 });

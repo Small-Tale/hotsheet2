@@ -424,10 +424,12 @@ describe('AIConversation', () => {
     expect(markup).toContain('class="ai-conversation__model-name" title="legacy model">legacy model');
     expect(markup).toContain('class="ai-conversation__model-effort" title="Effort">high');
     // Popup lets you pick a listed model, the current custom model, Other…, and an effort.
-    expect(markup).toContain('data-action="select-conversation-model" data-value="gpt"');
-    expect(markup).toContain('data-action="select-conversation-model" data-value="legacy model"');
+    expect(markup).toContain('data-value="gpt" slot="submenu" data-action="select-conversation-model" value="gpt"');
+    expect(markup).toContain(
+      'data-value="legacy model" slot="submenu" data-action="select-conversation-model" value="legacy model"',
+    );
     expect(markup).toContain('data-action="open-conversation-manual-model"');
-    expect(markup).toContain('data-action="select-conversation-effort" data-value="high"');
+    expect(markup).toContain('data-value="high" slot="submenu" data-action="select-conversation-effort" value="high"');
     expect(markup).not.toContain('data-action="stop-conversation"');
   });
   it('omits the model popup when the plugin declares no model/effort support', () => {
@@ -467,9 +469,14 @@ describe('AIConversation', () => {
     );
     // The popup renders even with no model/effort support because provider change is available.
     expect(markup).toContain('data-component="conversation-model-control"');
-    expect(markup).toContain('data-action="select-conversation-provider" data-value="claude"');
+    expect(markup).toContain(
+      'data-value="claude" slot="submenu" data-action="select-conversation-provider" value="claude"',
+    );
     // The current provider is marked selected.
-    expect(markup).toMatch(/aria-current="true" data-action="select-conversation-provider" data-value="codex"/);
+    // The current provider is a checked PopupMenu choice (HS2-CSRJ9Y).
+    expect(markup).toMatch(
+      /data-value="codex" slot="submenu" data-action="select-conversation-provider" value="codex" type="checkbox" checked/,
+    );
   });
   it('hides the provider submenu for read-only chats or a single configured provider (HS2-PRBGRB)', () => {
     expect(

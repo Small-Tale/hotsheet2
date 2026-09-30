@@ -276,7 +276,7 @@ notifications-and-links	delegateCapture	document.body	'wa-hide'	'[data-component
 search-and-composer	wireTokenSearchFields	document.body
 search-and-composer	wireTicketSearchFields	document.body
 search-and-composer	delegate	document.body	'click'	'wa-select[name="workspace-sort"] wa-option'
-search-and-composer	delegate	document.body	'wa-select'	'.workspace-header__overflow'
+search-and-composer	delegate	document.body	'wa-select'	'[data-workspace-overflow]'
 search-and-composer	delegate	document.body	'click'	'[data-action="expand-ticket-composer"]'
 search-and-composer	delegateCapture	document.body	'wa-hide'	'[data-component="quick-ticket-composer"]'
 search-and-composer	delegateCapture	document.body	'wa-after-hide'	'[data-component="quick-ticket-composer"]'

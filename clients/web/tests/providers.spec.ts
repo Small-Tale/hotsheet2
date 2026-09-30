@@ -3644,7 +3644,9 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await conversation.getByLabel('Message Codex').press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   // Change provider to Claude via the conversation popup's provider submenu.
-  await conversation.locator('[data-component="conversation-model-control"] .ai-conversation__model-trigger').click();
+  await conversation
+    .locator('[data-component="conversation-model-control"] [data-conversation-model-menu] [slot="trigger"]')
+    .click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await page.locator('[data-action="select-conversation-provider"][data-value="claude"]').dispatchEvent('click');
   // A fresh Claude chat is created, selected, and seeded with the prior transcript as one context turn.
@@ -7711,7 +7713,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const firstRow = editor.locator('.command-settings-editor__row').first();
-  await firstRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await firstRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByLabel('Button label').fill('Review');
@@ -7963,16 +7965,16 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await commandDialog.getByLabel('Type').selectOption('ai');
   await expect(commandDialog.getByLabel('Prompt')).toBeVisible();
   await commandDialog.getByLabel('Prompt').fill('Review the current changes');
-  await commandDialog.getByRole('button', { name: 'AI configuration: Project Default' }).click();
+  await commandDialog.getByRole('button', { name: 'Project Default' }).click();
   await commandDialog.locator('[data-action="select-command-ai-tool"][data-value="claude"]').dispatchEvent('click');
   await commandDialog.locator('[data-action="open-command-manual-model"]').dispatchEvent('click');
   const manualModel = page.locator('[data-component="manual-model-dialog"]');
   await expect(manualModel.locator('dialog')).toBeVisible();
   await manualModel.getByLabel('Model identifier').fill('claude-preview');
   await manualModel.getByRole('button', { name: 'Use model' }).click();
-  await expect(commandDialog.getByRole('button', { name: /AI configuration: Claude · claude-preview/ })).toBeVisible();
+  await expect(commandDialog.getByRole('button', { name: /Claude · claude-preview/ })).toBeVisible();
   await commandDialog.locator('[data-action="select-command-ai-default"]').dispatchEvent('click');
-  await expect(commandDialog.getByRole('button', { name: 'AI configuration: Project Default' })).toBeVisible();
+  await expect(commandDialog.getByRole('button', { name: 'Project Default' })).toBeVisible();
   await commandDialog.locator('[data-action="select-command-ai-tool"][data-value="claude"]').dispatchEvent('click');
   await commandDialog.locator('[data-action="select-command-ai-model"][data-value="opus"]').dispatchEvent('click');
   await commandDialog.locator('[data-action="select-command-ai-effort"][data-value="high"]').dispatchEvent('click');
@@ -7987,7 +7989,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await lintRow.dispatchEvent('drop', { dataTransfer, clientX: lintBox.x + 24, clientY: lintBox.y + 3 });
   await reviewRow.dispatchEvent('dragend', { dataTransfer });
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="delete-command-setting"]').dispatchEvent('click');
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toHaveCount(0);
   // Autosave persists the final set (Review then Lint) with no explicit Save button; identifiers are auto-generated, so assert by title/kind.
@@ -10410,8 +10412,8 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   const modelControl = host.locator('[data-component="conversation-model-control"]');
   await expect(modelControl).toBeVisible();
   await expect(modelControl.locator('.ai-conversation__model-effort')).toBeVisible();
-  await host.locator('.ai-conversation__model-trigger').click();
-  const modelSubmenu = host.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({ hasText: 'Model' });
+  await host.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  const modelSubmenu = host.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelSubmenu.hover();
   await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();
   await expect(modelControl.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
@@ -10473,8 +10475,8 @@ test('omits effort after selecting a model that does not support it', async ({ p
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');
-  await host.locator('.ai-conversation__model-trigger').click();
-  const modelSubmenu = host.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({ hasText: 'Model' });
+  await host.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  const modelSubmenu = host.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelSubmenu.hover();
   await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="haiku"]').click();
   await expect(host.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'haiku');
@@ -10643,8 +10645,8 @@ test('sends a manually entered live-conversation model literally', async ({ page
   await page.getByRole('button', { name: 'Open Codex conversation' }).click();
   const chat = page.locator('[data-component="ai-conversation"]'),
     custom = 'legacy model "chat"';
-  await chat.locator('.ai-conversation__model-trigger').click();
-  const modelSubmenu = chat.locator('.ai-conversation__model-menu > wa-dropdown-item').filter({ hasText: 'Model' });
+  await chat.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  const modelSubmenu = chat.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelSubmenu.hover();
   await modelSubmenu.locator('[data-action="open-conversation-manual-model"]').click();
   const manualDialog = page.locator('[data-component="manual-model-dialog"]');
@@ -10653,7 +10655,7 @@ test('sends a manually entered live-conversation model literally', async ({ page
   await manualDialog.getByRole('button', { name: 'Use model' }).click();
   await expect(chat.locator('.ai-conversation__model-name')).toHaveAttribute('title', custom);
   await expect(manualDialog.locator('dialog')).toBeHidden();
-  await expect(chat.locator('.ai-conversation__model-menu')).not.toHaveAttribute('open');
+  await expect(chat.locator('[data-conversation-model-menu]')).not.toHaveAttribute('open');
   const composer = chat.getByLabel('Message Codex');
   await composer.click();
   await composer.fill('Use the requested model.');
@@ -14869,10 +14871,11 @@ for (const surface of ['workspace', 'rail'] as const) {
       });
       await page.setViewportSize({ width: surface === 'workspace' ? 390 : 1024, height: 844 });
       if (surface === 'workspace') {
-        const overflow = controls.locator('.workspace-header__overflow');
+        const overflow = controls.locator('[data-workspace-overflow]');
         await overflow.getByRole('button', { name: 'More workspace controls' }).click();
         const item = overflow.locator('[data-workspace-overflow-action="toggle-selected-up-next"]');
-        await expect(item).toHaveAccessibleName('Toggle Up Next: some selected tickets are Up Next');
+        await expect(item).toHaveAccessibleName(/Toggle Up Next/);
+        await expect(item).toHaveAttribute('data-workspace-overflow-state', 'mixed');
         await expect(item.locator('.workspace-header__up-next-icon')).toHaveAttribute('data-up-next-state', 'mixed');
         await page.screenshot({
           path: `/private/tmp/hs2-wp15af-${surface}-${theme}-narrow.png`,
@@ -14942,7 +14945,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const toolbar = page.locator('.app-shell__main > .kui-toolbar'),
-    overflow = toolbar.locator('.workspace-header__overflow'),
+    overflow = toolbar.locator('[data-workspace-overflow]'),
     trigger = overflow.getByRole('button', { name: 'More workspace controls' }),
     first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]');
@@ -16059,7 +16062,7 @@ test('shares the settings category across projects but scopes command drafts to 
   await editor
     .locator('.command-settings-editor__row')
     .first()
-    .locator('.command-settings-editor__row-menu-trigger')
+    .locator('.command-settings-editor__row-menu [slot="trigger"]')
     .click();
   await editor
     .locator('.command-settings-editor__row')
@@ -16080,7 +16083,7 @@ test('shares the settings category across projects but scopes command drafts to 
   await editor
     .locator('.command-settings-editor__row')
     .first()
-    .locator('.command-settings-editor__row-menu-trigger')
+    .locator('.command-settings-editor__row-menu [slot="trigger"]')
     .click();
   await editor
     .locator('.command-settings-editor__row')
@@ -16098,7 +16101,7 @@ test('shares the settings category across projects but scopes command drafts to 
   await editor
     .locator('.command-settings-editor__row')
     .first()
-    .locator('.command-settings-editor__row-menu-trigger')
+    .locator('.command-settings-editor__row-menu [slot="trigger"]')
     .click();
   await editor
     .locator('.command-settings-editor__row')
@@ -17045,7 +17048,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByTitle('Green', { exact: true }).click();
@@ -17075,7 +17078,7 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu-trigger').click();
+  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog'),
     picker = commandDialog.locator('[data-component="lucide-icon-picker"]');
@@ -17421,7 +17424,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   const editor = page.locator('[data-component="command-settings-editor"]');
   const openEditor = async () => {
     const row = editor.locator('.command-settings-editor__row').first();
-    await row.locator('.command-settings-editor__row-menu-trigger').click();
+    await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
     await row.locator('[data-action="edit-command-setting"]').click();
   };
   const dialog = page.locator('#command-editor-dialog');

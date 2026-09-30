@@ -227,7 +227,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
     else void refreshProject({ showLoading: false });
   });
-  delegate(document.body, 'wa-select', '.workspace-header__overflow', (event) => {
+  delegate(document.body, 'wa-select', '[data-workspace-overflow]', (event) => {
     const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
       action = item.dataset.workspaceOverflowAction;
     if (action === 'toggle-selected-up-next') {

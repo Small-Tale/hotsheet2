@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import type { PopupMenuEntry, PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { Bot, Brain, Gauge, type IconNode, Pencil } from 'lucide';
 
 /** One id/label choice a submenu offers (a provider or a model). */
@@ -117,4 +118,79 @@ export function ProviderModelEffortSubmenus({ actions, providers, model, effort 
       )}
     </>
   );
+}
+
+/**
+ * The same Provider/Model/Effort submenus as typed Kerf `PopupMenu` entries, for surfaces that
+ * render a `PopupMenu` (the command editor's AI configuration menu and the in-conversation
+ * model menu, HS2-CSRJ9Y). Each submenu row keeps the delegated host-level `data-action` and
+ * `data-value` the existing click handlers read; the selected row is a checked menu choice.
+ * `ProviderModelEffortSubmenus` above remains for the pointer-positioned menus that still
+ * own a raw `wa-dropdown` (tracked in HS2-CSRJ9Y's follow-up).
+ */
+export function providerModelEffortEntries({
+  actions,
+  providers,
+  model,
+  effort,
+}: ProviderModelEffortSubmenusProps): PopupMenuEntry[] {
+  const choice = (
+    action: string,
+    value: string,
+    label: string,
+    selected: boolean,
+    icon: IconNode,
+    iconName: string,
+  ): PopupMenuItem => ({
+    label,
+    action,
+    value,
+    checked: selected,
+    icon: <LucideIcon icon={icon} name={iconName} />,
+    attributes: { 'data-value': value },
+  });
+  const entries: PopupMenuEntry[] = [];
+  if (providers && actions.provider)
+    entries.push({
+      label: 'Provider',
+      icon: <LucideIcon icon={Bot} name="bot" />,
+      details: <>{providers.currentLabel}</>,
+      submenu: providers.choices.map((item) =>
+        choice(actions.provider!, item.id, item.label, item.id === providers.currentId, Bot, 'bot'),
+      ),
+    });
+  if (model)
+    entries.push({
+      label: 'Model',
+      icon: <LucideIcon icon={Brain} name="brain" />,
+      details: <>{model.currentLabel}</>,
+      submenu: [
+        ...(model.customModel
+          ? [choice(actions.model, model.customModel, model.customModel, true, Brain, 'brain')]
+          : []),
+        ...model.choices.map((item) =>
+          choice(actions.model, item.id, item.label, item.id === model.currentId, Brain, 'brain'),
+        ),
+        // PopupMenu submenus hold items only, so the raw markup's divider before "Other…" has no
+        // counterpart here (Kerf gap recorded on HS2-CSRJ9Y).
+        {
+          label: 'Other…',
+          action: actions.manualModel,
+          value: 'other',
+          icon: <LucideIcon icon={Pencil} name="pencil" />,
+          attributes: { 'data-value': 'other' },
+        },
+      ],
+    });
+  if (effort)
+    entries.push({
+      label: 'Effort',
+      icon: <LucideIcon icon={Gauge} name="gauge" />,
+      details: effort.current ? <>{effort.current}</> : undefined,
+      disabled: !effort.efforts.length,
+      submenu: effort.efforts.map((value) =>
+        choice(actions.effort, value, value, value === effort.current, Gauge, 'gauge'),
+      ),
+    });
+  return entries;
 }

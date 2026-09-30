@@ -1,10 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './workspace-header.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -180,9 +177,9 @@ export function wireWorkspaceOverflowKeyboard(root: Document | HTMLElement): () 
     if (!['Enter', ' ', 'ArrowDown'].includes(keyboard.key)) return;
     const origin = keyboard.target;
     if (!(origin instanceof Element)) return;
-    const trigger = origin.closest<HTMLElement>('.workspace-header__overflow > [slot="trigger"]');
+    const trigger = origin.closest<HTMLElement>('[data-workspace-overflow] > [slot="trigger"]');
     if (!trigger) return;
-    const dropdown = trigger.closest<HTMLElement & { open: boolean }>('.workspace-header__overflow');
+    const dropdown = trigger.closest<HTMLElement & { open: boolean }>('[data-workspace-overflow]');
     if (!dropdown || dropdown.open) return;
     keyboard.preventDefault();
     keyboard.stopPropagation();
@@ -190,7 +187,7 @@ export function wireWorkspaceOverflowKeyboard(root: Document | HTMLElement): () 
   };
   const onAfterShow = (event: Event) => {
     const dropdown = event.target;
-    if (!(dropdown instanceof HTMLElement) || !dropdown.matches('.workspace-header__overflow')) return;
+    if (!(dropdown instanceof HTMLElement) || !dropdown.matches('[data-workspace-overflow]')) return;
     requestAnimationFrame(() => {
       const first = dropdown.querySelector<HTMLElement & { active?: boolean }>('wa-dropdown-item:not([disabled])');
       if (!first) return;
@@ -247,79 +244,74 @@ function WorkspaceOverflowControls({
       ? []
       : [{ value: 'settings' as const, label: 'Show Settings', icon: Settings, iconName: 'settings' }]),
   ];
+  const overflowIcon = (icon: IconNode, name: string) => <LucideIcon icon={icon} name={name} />;
   const menu = (
-    <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
-      <wa-button slot="trigger" appearance="plain" aria-label="More workspace controls" title="More workspace controls">
-        <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-      </wa-button>
-      <wa-dropdown-item
-        class="workspace-header__overflow-utility"
-        aria-label={`Toggle Up Next: ${selectedTicketsUpNext === 'mixed' ? 'some' : selectedTicketsUpNext} selected tickets are Up Next`}
-        disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
-        data-workspace-overflow-action="toggle-selected-up-next"
-      >
-        <span slot="icon">
-          <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
-        </span>
-        Toggle Up Next
-      </wa-dropdown-item>
-      <wa-dropdown-item
-        class="workspace-header__overflow-utility"
-        disabled={ticketActionsDisabled}
-        data-workspace-overflow-action="open-selected-ticket-actions"
-      >
-        <span slot="icon">
-          <LucideIcon icon={MoreHorizontal} name="ellipsis" />
-        </span>
-        Show Selected Ticket Actions…
-      </wa-dropdown-item>
-      <wa-divider class="workspace-header__overflow-sort" />
-      {visibleSortOptions.map((option) => {
-        const direction = option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
-          icon = workspaceSortTrigger(option.value, direction);
-        return (
-          <wa-dropdown-item
-            class="workspace-header__overflow-sort"
-            type="checkbox"
-            checked={option.value === sort}
-            disabled={projectActionsDisabled}
-            data-workspace-overflow-action="set-workspace-sort"
-            data-workspace-sort={option.value}
-          >
-            <span slot="icon">
-              <LucideIcon icon={icon.icon} name={icon.iconName} />
-            </span>
-            {`Sort by ${option.label}${option.value === sort ? `, ${direction}` : ''}`}
-          </wa-dropdown-item>
-        );
-      })}
-      <wa-divider class="workspace-header__overflow-search" />
-      <wa-dropdown-item
-        class="workspace-header__overflow-search"
-        disabled={projectActionsDisabled}
-        data-workspace-overflow-action="open-workspace-search"
-      >
-        <span slot="icon">
-          <LucideIcon icon={Search} name="search" />
-        </span>
-        {searchOpen ? 'Focus Search' : 'Search Tickets'}
-      </wa-dropdown-item>
-      <wa-divider class="workspace-header__overflow-view" />
-      {modes.map((option) => (
-        <wa-dropdown-item
-          class="workspace-header__overflow-view"
-          type="checkbox"
-          checked={option.value === mode}
-          data-workspace-overflow-action="set-view-mode"
-          data-view-mode={option.value}
-        >
-          <span slot="icon">
-            <LucideIcon icon={option.icon} name={option.iconName} />
-          </span>
-          {option.label}
-        </wa-dropdown-item>
-      ))}
-    </wa-dropdown>
+    <PopupMenu
+      label="More workspace controls"
+      icon={<LucideIcon icon={MoreHorizontal} name="ellipsis" />}
+      caret={false}
+      placement="bottom-end"
+      rootAttributes={{ 'data-workspace-overflow': 'true' }}
+      items={[
+        {
+          label: 'Toggle Up Next',
+          disabled: ticketActionsDisabled || !selectedTicketsUpNextEligible,
+          icon: <WorkspaceUpNextIcon state={selectedTicketsUpNext} />,
+          details: <>{selectedTicketsUpNext === 'mixed' ? 'Some' : selectedTicketsUpNext === 'all' ? 'All' : 'None'}</>,
+          attributes: {
+            'data-workspace-overflow-kind': 'utility',
+            'data-workspace-overflow-action': 'toggle-selected-up-next',
+            'data-workspace-overflow-state': selectedTicketsUpNext,
+          },
+        },
+        {
+          label: 'Show Selected Ticket Actions…',
+          disabled: ticketActionsDisabled,
+          icon: overflowIcon(MoreHorizontal, 'ellipsis'),
+          attributes: {
+            'data-workspace-overflow-kind': 'utility',
+            'data-workspace-overflow-action': 'open-selected-ticket-actions',
+          },
+        },
+        { kind: 'divider' },
+        ...visibleSortOptions.map((option): PopupMenuItem => {
+          const direction = option.value === sort ? sortDirection : defaultWorkspaceSortDirection(option.value),
+            icon = workspaceSortTrigger(option.value, direction);
+          return {
+            label: `Sort by ${option.label}${option.value === sort ? `, ${direction}` : ''}`,
+            checked: option.value === sort,
+            disabled: projectActionsDisabled,
+            icon: overflowIcon(icon.icon, icon.iconName),
+            attributes: {
+              'data-workspace-overflow-kind': 'sort',
+              'data-workspace-overflow-action': 'set-workspace-sort',
+              'data-workspace-sort': option.value,
+            },
+          };
+        }),
+        { kind: 'divider' },
+        {
+          label: searchOpen ? 'Focus Search' : 'Search Tickets',
+          disabled: projectActionsDisabled,
+          icon: overflowIcon(Search, 'search'),
+          attributes: {
+            'data-workspace-overflow-kind': 'search',
+            'data-workspace-overflow-action': 'open-workspace-search',
+          },
+        },
+        { kind: 'divider' },
+        ...modes.map((option): PopupMenuItem => ({
+          label: option.label,
+          checked: option.value === mode,
+          icon: overflowIcon(option.icon, option.iconName),
+          attributes: {
+            'data-workspace-overflow-kind': 'view',
+            'data-workspace-overflow-action': 'set-view-mode',
+            'data-view-mode': option.value,
+          },
+        })),
+      ]}
+    />
   );
   // Kerf's analyzer classifies only literal class names on its components, so the rail variant is
   // spelled out rather than computed (HS2-K9KWJJ).

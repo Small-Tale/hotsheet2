@@ -155,7 +155,7 @@ describe('CommandSettingsEditor', () => {
         aiDefaults: { tool: 'codex', model: 'gpt-6', effort: 'high' },
       }),
     );
-    expect(inherited).toContain('AI configuration: Project Default');
+    expect(inherited).toContain('<span>Project Default</span>');
     expect(inherited).toContain('data-action="select-command-ai-default"');
     const ai = String(
       CommandSettingsEditor({
@@ -176,7 +176,7 @@ describe('CommandSettingsEditor', () => {
       }),
     );
     expect(ai).toContain('name="prompt"');
-    expect(ai).toContain('AI configuration: Claude · Sonnet · high');
+    expect(ai).toContain('<span>Claude · Sonnet · high</span>');
     expect(ai).toContain('data-action="select-command-ai-tool"');
     expect(ai).toContain('data-action="select-command-ai-model"');
     expect(ai).toContain('data-action="select-command-ai-effort"');

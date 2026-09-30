@@ -206,27 +206,6 @@
 .command-settings-editor__row-menu {
   flex: 0 0 auto;
 }
-.command-settings-editor__row-menu-trigger {
-  display: grid;
-  width: remify(32px);
-  min-height: remify(32px);
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-normal);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.command-settings-editor__row-menu-trigger:hover {
-  border-color: var(--wa-color-neutral-border-normal);
-  background: var(--wa-color-surface-default);
-}
-.command-settings-editor__row-menu-trigger svg {
-  width: remify(18px);
-  height: remify(18px);
-}
-
 .command-settings-editor__blank {
   display: grid;
   padding: var(--kui-space-l);
@@ -326,20 +305,6 @@
   font-size: var(--wa-font-size-s);
   font-weight: 600;
   gap: var(--kui-space-2xs);
-}
-.command-settings-editor__ai-menu {
-  min-width: 0;
-}
-.command-settings-editor .command-settings-editor__ai-trigger {
-  width: 100%;
-  min-width: 0;
-  justify-content: flex-start;
-  font-weight: 400;
-}
-.command-settings-editor__ai-trigger span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 @container (max-width:remify(672px)) {
   .command-settings-editor__heading {

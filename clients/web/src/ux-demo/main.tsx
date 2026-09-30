@@ -2051,7 +2051,7 @@ delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, t
   workspaceSortDirection.value = next.direction;
   recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
 });
-delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
+delegate(root, 'wa-select', '[data-workspace-overflow]', (event) => {
   const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
   const action = item.dataset.workspaceOverflowAction;
   if (action === 'toggle-selected-up-next') {

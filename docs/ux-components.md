@@ -1718,8 +1718,22 @@ edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor
 covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
 opt-in managed `TokenSearchModel` (grammar, suggestions, evaluation) for `TokenSearchField`
 and extends `PopupMenu` for nested and context actions; Hot Sheet keeps its app-owned
-`TicketSearchField` suggestions (the `TokenSearchModel` evaluation below, `HS2-HHRYP9`) and
-`wa-dropdown` menus for now (adoption tracked in `HS2-5JXBQY` and `HS2-CSRJ9Y`). Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+`TicketSearchField` suggestions (the `TokenSearchModel` evaluation below, `HS2-HHRYP9`,
+adoption tracked in `HS2-5JXBQY`). HS2-CSRJ9Y moved every button-triggered command menu onto
+`PopupMenu`: the workspace overflow menu (`WorkspaceOverflowControls`, `data-workspace-overflow`
+root, items carrying `data-workspace-overflow-kind`/`-action`/`-state`), the command editor's
+per-row Edit/Delete menu and its AI configuration menu, and the in-conversation model menu
+(`data-conversation-model-menu`). The shared Provider/Model/Effort submenus now exist in two
+forms from one module: `providerModelEffortEntries` (typed `PopupMenuEntry[]`, checked choices,
+`data-value` attributes for the existing click handlers) for those menus, and the JSX
+`ProviderModelEffortSubmenus` still used by the pointer-positioned menus. Those context menus
+(drive options, ticket row, attachment, app tab, saved view, terminal tile) keep raw
+`wa-dropdown` markup until `HS2-2EHD8R` adopts `PopupMenu` context mode; raw `wa-select`
+pickers move to `Select` in `HS2-CWA0S6` and hand-written demo dropdowns in `HS2-W0N1KP`.
+`PopupMenu` submenus cannot hold a divider (`KF-7KR1BC`), so the Model submenu's separator
+before "Other…" is absent in the entries form. `KUI-L301` (discouraged Web Awesome elements)
+fell from 108 to 102 findings with this adoption; it is a warning-level rule without an exact
+budget, so the remaining count is tracked here rather than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
 
 ### Kerf beta.57–58 adoption
 
