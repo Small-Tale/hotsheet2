@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import type { CodeReview, RepositoryStatus } from '../api';
@@ -156,11 +157,15 @@ export function ChangeEvidenceDialogDemo() {
 export function RepositoryStatusPopoverSettings() {
   return (
     <form class="settings-form" data-settings="repository-status-popover">
-      <wa-select name="scenario" label="Repository scenario" value={repositoryDemoScenario.value}>
-        {(['clean', 'dirty', 'ahead', 'behind', 'diverged', 'conflicted', 'error'] as const).map((value) => (
-          <wa-option value={value}>{value[0].toUpperCase() + value.slice(1)}</wa-option>
-        ))}
-      </wa-select>
+      <Select
+        name="scenario"
+        label="Repository scenario"
+        value={repositoryDemoScenario.value}
+        choices={(['clean', 'dirty', 'ahead', 'behind', 'diverged', 'conflicted', 'error'] as const).map((value) => ({
+          value,
+          label: value[0].toUpperCase() + value.slice(1),
+        }))}
+      />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>

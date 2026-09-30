@@ -1,3 +1,4 @@
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
@@ -103,27 +104,34 @@ export function TicketRowSettings() {
   return (
     <form class="settings-form" data-settings="ticket-list-row">
       <wa-input name="title" label="Title" value={ticketRowSettings.title.value}></wa-input>
-      <wa-select name="status" label="Status" value={ticketRowSettings.status.value}>
-        {(['not_started', 'started', 'completed', 'verified', 'backlog'] as const).map((value) => (
-          <wa-option value={value}>{value.replace('_', ' ')}</wa-option>
-        ))}
-      </wa-select>
-      <wa-select name="priority" label="Priority" value={ticketRowSettings.priority.value}>
-        {(['low', 'default', 'high', 'urgent'] as const).map((value) => (
-          <wa-option value={value}>{value}</wa-option>
-        ))}
-      </wa-select>
+      <Select
+        name="status"
+        label="Status"
+        value={ticketRowSettings.status.value}
+        choices={['not_started', 'started', 'completed', 'verified', 'backlog'].map((value) => ({
+          value,
+          label: value.replace('_', ' '),
+        }))}
+      />
+      <Select
+        name="priority"
+        label="Priority"
+        value={ticketRowSettings.priority.value}
+        choices={(['low', 'default', 'high', 'urgent'] as const).map((value) => ({ value, label: value }))}
+      />
       <wa-input name="category" label="Category" value={ticketRowSettings.category.value}></wa-input>
-      <wa-select name="category-icon" label="Category icon" value={ticketRowSettings.categoryIcon.value}>
-        {CATEGORY_ICONS.map((option) => (
-          <wa-option value={option.value}>{option.label}</wa-option>
-        ))}
-      </wa-select>
-      <wa-select name="category-color" label="Category icon color" value={ticketRowSettings.categoryColor.value}>
-        {CATEGORY_COLORS.map((option) => (
-          <wa-option value={option.value}>{option.label}</wa-option>
-        ))}
-      </wa-select>
+      <Select
+        name="category-icon"
+        label="Category icon"
+        value={ticketRowSettings.categoryIcon.value}
+        choices={CATEGORY_ICONS.map((option) => ({ value: option.value, label: option.label }))}
+      />
+      <Select
+        name="category-color"
+        label="Category icon color"
+        value={ticketRowSettings.categoryColor.value}
+        choices={CATEGORY_COLORS.map((option): SelectChoice => ({ value: option.value, label: option.label }))}
+      />
       <wa-input name="tags" label="Tags (comma separated)" value={ticketRowSettings.tags.value}></wa-input>
       <wa-input name="agent" label="Active agent" value={ticketRowSettings.agentName.value}></wa-input>
       <wa-input name="updated" label="Updated label" value={ticketRowSettings.updatedLabel.value}></wa-input>

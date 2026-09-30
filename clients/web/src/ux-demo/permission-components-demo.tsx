@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { NotificationCenter } from '../components/notification-center';
@@ -189,30 +190,50 @@ export function PermissionRequestDemo() {
 export function PermissionRequestSettings() {
   return (
     <form class="settings-form" data-settings="permission-request">
-      <wa-select name="presentation" label="Presentation" value={permissionRequestSettings.presentation.value}>
-        <wa-option value="popup">Popup</wa-option>
-        <wa-option value="list">Notification list</wa-option>
-      </wa-select>
-      <wa-select name="variant" label="State or outcome" value={permissionRequestSettings.variant.value}>
-        <wa-option value="pending">Pending</wa-option>
-        <wa-option value="resolving">Resolving</wa-option>
-        <wa-option value="failed">Failed</wa-option>
-        <wa-option value="disconnected">Disconnected</wa-option>
-        <wa-option value="allowed">Allowed history</wa-option>
-        <wa-option value="denied">Denied history</wa-option>
-        <wa-option value="external">External decision</wa-option>
-      </wa-select>
-      <wa-select name="request" label="Request type" value={permissionRequestSettings.request.value}>
-        <wa-option value="command">Run command</wa-option>
-        <wa-option value="edit">Edit file</wa-option>
-        <wa-option value="read">Read file</wa-option>
-        <wa-option value="tool-without-details">Tool without details</wa-option>
-      </wa-select>
-      <wa-select name="automation" label="Automatic decision" value={permissionRequestSettings.automation.value}>
-        <wa-option value="none">None</wa-option>
-        <wa-option value="allow">Allow countdown</wa-option>
-        <wa-option value="deny">Deny countdown</wa-option>
-      </wa-select>
+      <Select
+        name="presentation"
+        label="Presentation"
+        value={permissionRequestSettings.presentation.value}
+        choices={[
+          { value: 'popup', label: 'Popup' },
+          { value: 'list', label: 'Notification list' },
+        ]}
+      />
+      <Select
+        name="variant"
+        label="State or outcome"
+        value={permissionRequestSettings.variant.value}
+        choices={[
+          { value: 'pending', label: 'Pending' },
+          { value: 'resolving', label: 'Resolving' },
+          { value: 'failed', label: 'Failed' },
+          { value: 'disconnected', label: 'Disconnected' },
+          { value: 'allowed', label: 'Allowed history' },
+          { value: 'denied', label: 'Denied history' },
+          { value: 'external', label: 'External decision' },
+        ]}
+      />
+      <Select
+        name="request"
+        label="Request type"
+        value={permissionRequestSettings.request.value}
+        choices={[
+          { value: 'command', label: 'Run command' },
+          { value: 'edit', label: 'Edit file' },
+          { value: 'read', label: 'Read file' },
+          { value: 'tool-without-details', label: 'Tool without details' },
+        ]}
+      />
+      <Select
+        name="automation"
+        label="Automatic decision"
+        value={permissionRequestSettings.automation.value}
+        choices={[
+          { value: 'none', label: 'None' },
+          { value: 'allow', label: 'Allow countdown' },
+          { value: 'deny', label: 'Deny countdown' },
+        ]}
+      />
       <wa-checkbox name="always-supported" checked={permissionRequestSettings.alwaysSupported.value}>
         Supports Always Allow
       </wa-checkbox>

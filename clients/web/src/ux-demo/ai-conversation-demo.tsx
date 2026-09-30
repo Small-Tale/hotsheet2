@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
@@ -181,19 +182,29 @@ export function AIConversationDemo() {
 export function AIConversationSettings() {
   return (
     <form class="settings-form" data-settings="ai-conversation">
-      <wa-select name="presentation" label="Presentation" value={aiConversationPresentation.value}>
-        <wa-option value="dialog">Dialog</wa-option>
-        <wa-option value="embedded">Embedded</wa-option>
-      </wa-select>
-      <wa-select name="scenario" label="Public state" value={aiConversationScenario.value}>
-        <wa-option value="empty">Empty</wa-option>
-        <wa-option value="streaming">Streaming</wa-option>
-        <wa-option value="permission">Permission requested</wa-option>
-        <wa-option value="completed">Completed with priced usage</wa-option>
-        <wa-option value="usage-unpriced">Completed with unpriced usage</wa-option>
-        <wa-option value="failed">Failed</wa-option>
-        <wa-option value="interrupted">Interrupted</wa-option>
-      </wa-select>
+      <Select
+        name="presentation"
+        label="Presentation"
+        value={aiConversationPresentation.value}
+        choices={[
+          { value: 'dialog', label: 'Dialog' },
+          { value: 'embedded', label: 'Embedded' },
+        ]}
+      />
+      <Select
+        name="scenario"
+        label="Public state"
+        value={aiConversationScenario.value}
+        choices={[
+          { value: 'empty', label: 'Empty' },
+          { value: 'streaming', label: 'Streaming' },
+          { value: 'permission', label: 'Permission requested' },
+          { value: 'completed', label: 'Completed with priced usage' },
+          { value: 'usage-unpriced', label: 'Completed with unpriced usage' },
+          { value: 'failed', label: 'Failed' },
+          { value: 'interrupted', label: 'Interrupted' },
+        ]}
+      />
       {aiConversationPresentation.value === 'dialog' && (
         <wa-button type="button" data-action="open-ai-conversation-demo">
           Open conversation

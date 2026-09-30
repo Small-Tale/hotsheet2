@@ -810,7 +810,7 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(chat).toHaveCount(1);
   await expect(chat).toContainText('Codex AI chat');
   await expect(chat).toContainText('Reviewing the latest workspace changes');
-  const menu = dashboard.getByRole('menu');
+  const menu = dashboard.getByRole('menu', { name: 'Terminal actions' });
   await expect(menu).toHaveCount(0);
   const first = dashboard.locator('[data-component="terminal-tile"]').first();
   await first.getByRole('button', { name: /More actions/ }).click();

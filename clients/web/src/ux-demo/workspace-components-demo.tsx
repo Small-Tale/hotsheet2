@@ -1,5 +1,6 @@
 import '../components/heading.css';
 
+import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { signal } from 'kerfjs';
@@ -284,10 +285,15 @@ function WorkspaceContent() {
       <section class="workspace-settings-preview" aria-label="Project settings">
         <h2>Project settings</h2>
         <p>Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.</p>
-        <wa-select label="Default ticket provider" value="git">
-          <wa-option value="git">Hot Sheet git</wa-option>
-          <wa-option value="github">GitHub Issues</wa-option>
-        </wa-select>
+        <Select
+          name="default-ticket-provider"
+          label="Default ticket provider"
+          value="git"
+          choices={[
+            { value: 'git', label: 'Hot Sheet git' },
+            { value: 'github', label: 'GitHub Issues' },
+          ]}
+        />
       </section>
     );
   return workspaceMode.value === 'list' ? (

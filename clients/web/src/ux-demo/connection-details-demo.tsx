@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import type { CompatibilityAssessment } from '../compatibility';
@@ -84,20 +85,19 @@ export function ConnectionDetailsDialogDemo() {
 export function ConnectionDetailsDialogSettings() {
   return (
     <form class="settings-form" data-settings="connection-details-dialog">
-      <wa-select name="scenario" label="Compatibility scenario" value={connectionDetailsScenario.value}>
-        {(
-          [
-            ['source-stale', 'Source build is stale'],
-            ['revision-mismatch', 'Detached compatible build'],
-            ['server-too-old-safe', 'Server too old, safe restart'],
-            ['server-too-old-manual', 'Server too old, manual restart'],
-            ['client-too-old', 'Client too old'],
-            ['unknown', 'Metadata unavailable'],
-          ] as const
-        ).map(([value, label]) => (
-          <wa-option value={value}>{label}</wa-option>
-        ))}
-      </wa-select>
+      <Select
+        name="scenario"
+        label="Compatibility scenario"
+        value={connectionDetailsScenario.value}
+        choices={[
+          { value: 'source-stale', label: 'Source build is stale' },
+          { value: 'revision-mismatch', label: 'Detached compatible build' },
+          { value: 'server-too-old-safe', label: 'Server too old, safe restart' },
+          { value: 'server-too-old-manual', label: 'Server too old, manual restart' },
+          { value: 'client-too-old', label: 'Client too old' },
+          { value: 'unknown', label: 'Metadata unavailable' },
+        ]}
+      />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>

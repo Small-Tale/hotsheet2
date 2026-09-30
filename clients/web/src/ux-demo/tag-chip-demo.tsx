@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
@@ -72,21 +73,30 @@ export function TagChipSettings() {
   return (
     <form class="settings-form" data-settings="tag-chip">
       <wa-input name="label" label="Label" value={tagChipSettings.label.value}></wa-input>
-      <wa-select name="variant" label="Variant" value={tagChipSettings.variant.value}>
-        {(['neutral', 'brand', 'success', 'warning', 'danger'] as const).map((value) => (
-          <wa-option value={value}>{value}</wa-option>
-        ))}
-      </wa-select>
-      <wa-select name="appearance" label="Appearance" value={tagChipSettings.appearance.value}>
-        {(['filled-outlined', 'filled', 'outlined', 'accent'] as const).map((value) => (
-          <wa-option value={value}>{value}</wa-option>
-        ))}
-      </wa-select>
-      <wa-select name="size" label="Size" value={tagChipSettings.size.value}>
-        {(['small', 'medium', 'large'] as const).map((value) => (
-          <wa-option value={value}>{value}</wa-option>
-        ))}
-      </wa-select>
+      <Select
+        name="variant"
+        label="Variant"
+        value={tagChipSettings.variant.value}
+        choices={(['neutral', 'brand', 'success', 'warning', 'danger'] as const).map((value) => ({
+          value,
+          label: value,
+        }))}
+      />
+      <Select
+        name="appearance"
+        label="Appearance"
+        value={tagChipSettings.appearance.value}
+        choices={(['filled-outlined', 'filled', 'outlined', 'accent'] as const).map((value) => ({
+          value,
+          label: value,
+        }))}
+      />
+      <Select
+        name="size"
+        label="Size"
+        value={tagChipSettings.size.value}
+        choices={(['small', 'medium', 'large'] as const).map((value) => ({ value, label: value }))}
+      />
       <wa-checkbox name="removable" checked={tagChipSettings.removable.value}>
         Removable
       </wa-checkbox>

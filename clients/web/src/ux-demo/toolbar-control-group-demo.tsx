@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -56,14 +57,12 @@ export function ToolbarControlGroupDemo() {
         <h2>Popup menu</h2>
         <Toolbar
           leading={
-            <ToolbarControlGroup single>
-              <wa-dropdown placement="bottom-start">
-                <wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets">
-                  <LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" />
-                </wa-button>
-                <wa-dropdown-item>Recently updated</wa-dropdown-item>
-                <wa-dropdown-item>Priority</wa-dropdown-item>
-              </wa-dropdown>
+            <ToolbarControlGroup single nestedDropdown>
+              <PopupMenu
+                label="Sort tickets"
+                icon={<LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" />}
+                items={[{ label: 'Recently updated' }, { label: 'Priority' }]}
+              />
             </ToolbarControlGroup>
           }
         />

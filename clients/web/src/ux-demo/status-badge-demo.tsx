@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { StatusBadge, type StatusBadgeAppearance, type TicketStatus } from '../components/status-badge';
@@ -43,15 +44,24 @@ export function StatusBadgeDemo() {
 export function StatusBadgeSettings() {
   return (
     <form class="settings-form" data-settings="status-badge">
-      <wa-select name="status" label="Status" value={statusBadgeSettings.status.value}>
-        {(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive'] as const).map((value) => (
-          <wa-option value={value}>{value.replace('_', ' ')}</wa-option>
-        ))}
-      </wa-select>
-      <wa-select name="appearance" label="Appearance" value={statusBadgeSettings.appearance.value}>
-        <wa-option value="filled">Filled</wa-option>
-        <wa-option value="plain">Plain</wa-option>
-      </wa-select>
+      <Select
+        name="status"
+        label="Status"
+        value={statusBadgeSettings.status.value}
+        choices={['not_started', 'started', 'completed', 'verified', 'backlog', 'archive'].map((value) => ({
+          value,
+          label: value.replace('_', ' '),
+        }))}
+      />
+      <Select
+        name="appearance"
+        label="Appearance"
+        value={statusBadgeSettings.appearance.value}
+        choices={[
+          { value: 'filled', label: 'Filled' },
+          { value: 'plain', label: 'Plain' },
+        ]}
+      />
       <wa-checkbox name="show-icon" checked={statusBadgeSettings.showIcon.value}>
         Show icon
       </wa-checkbox>

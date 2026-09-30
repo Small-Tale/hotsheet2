@@ -1737,9 +1737,13 @@ that anchor to Kerf's `openPopupMenuAt` once the morph has placed the element, r
 microtask and a frame. The Drive menu re-reveals after each provider/model/effort choice because
 Web Awesome closes a menu on selection while the app keeps it open; its anchor is the drive row's
 top-left corner (`placement="top-start"`). A command-editor row's right-click opens that row's
-PopupMenu in place. Raw `wa-select` pickers moved to `Select` in `HS2-CWA0S6`; hand-written demo
-dropdowns remain for `HS2-W0N1KP`, and the UX demo keeps staged context menus open through the
-same helper.
+PopupMenu in place. Raw `wa-select` pickers moved to `Select` in `HS2-CWA0S6`. HS2-W0N1KP then
+converted the UX demo stages' hand-written pickers (the catalog inspectors' scenario, presentation,
+status, appearance, variant, size, priority, and category selects, plus the ToolbarControlGroup
+demo's popup menu) to `Select` and `PopupMenu`; the demo keeps staged context menus open through
+the same helper and mirrors Web Awesome's `wa-hide` into its demo menu state in a later task, since
+its bubble-phase Escape handlers run after Web Awesome consumes the key and a selection's item click
+must finish dispatching before the menu state clears.
 `PopupMenu` submenus cannot hold a divider (`KF-7KR1BC`), so the Model submenu's separator
 before "Other…" is absent in the entries form. HS2-CWA0S6 then replaced the raw `wa-select`
 value pickers that Kerf `Select` covers: the Permissions settings' automatic-decision and delay
@@ -1748,9 +1752,13 @@ selects (`settings-workspace.tsx`) and the ticket-source setup dialog's preview-
 picker keeps raw `wa-select`/`wa-option` markup on purpose: it is a multiple select with a
 disabled choice and Select All / Deselect All action rows, which `Select` cannot express until
 `KF-F68TJS` ships. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to 102 with the
-PopupMenu adoption, to 94 with the Select adoption, and to 76 with the context-menu adoption; it
-is a warning-level rule without an exact budget, so the remaining count is tracked here rather
-than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+PopupMenu adoption, to 94 with the Select adoption, to 76 with the context-menu adoption, and to
+9 with the demo-stage conversion (HS2-W0N1KP); the nine that remain are the terminal visibility
+dialog's deliberate raw picker (`KF-F68TJS`). It is a warning-level rule without an exact budget,
+so the remaining count is tracked here rather than in the doctor script. The related warning-level
+`KUI-L401` (a module rendering `Select` or `PopupMenu` should import its `register` entry) stays
+accepted: the app registers those elements once in its entry points, because the register modules
+touch `document` at import time and would break the node-side component unit tests. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
 
 ### Kerf beta.57–58 adoption
 

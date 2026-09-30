@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import {
@@ -67,15 +68,25 @@ export function ContentTransitionDemo() {
 export function ContentTransitionSettings() {
   return (
     <form class="settings-form" data-settings="content-transition">
-      <wa-select name="transition-style" label="Transition style" value={transitionStyle.value}>
-        <wa-option value="push">Push</wa-option>
-        <wa-option value="crossfade">Crossfade</wa-option>
-        <wa-option value="none">None</wa-option>
-      </wa-select>
-      <wa-select name="transition-side" label="Visible side" value={transitionSide.value}>
-        <wa-option value="a">A</wa-option>
-        <wa-option value="b">B</wa-option>
-      </wa-select>
+      <Select
+        name="transition-style"
+        label="Transition style"
+        value={transitionStyle.value}
+        choices={[
+          { value: 'push', label: 'Push' },
+          { value: 'crossfade', label: 'Crossfade' },
+          { value: 'none', label: 'None' },
+        ]}
+      />
+      <Select
+        name="transition-side"
+        label="Visible side"
+        value={transitionSide.value}
+        choices={[
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' },
+        ]}
+      />
     </form>
   );
 }

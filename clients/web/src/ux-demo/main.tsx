@@ -1141,6 +1141,21 @@ const openStagedContextMenus = () => {
 };
 new MutationObserver(openStagedContextMenus).observe(root, { childList: true, subtree: true });
 openStagedContextMenus();
+// The app clears its menu signals through capture-phase Escape and outside-press listeners; the
+// demo's bubble-phase handlers run after Web Awesome has consumed the key, so mirror Web Awesome's
+// own close (`wa-hide` on the menu root itself, not on a closing submenu) into the demo state.
+delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
+  if (event.target !== target) return;
+  const surface = (target as HTMLElement).dataset.contextMenu;
+  // A selection hides the menu before its item click reaches the delegated handlers (microtasks flush
+  // between listeners), so clear the state in a later task, after that click has finished dispatching.
+  window.setTimeout(() => {
+    if (surface === 'ticket') contextMenu.value = undefined;
+    else if (surface === 'app-tab') tabContextMenu.value = undefined;
+    else if (surface === 'terminal') terminalDashboardContextMenu.value = undefined;
+    else if (surface === 'attachment') closeAttachmentDemoMenu();
+  }, 0);
+});
 wireTokenSearchFields(root, {
   collapsible: {
     signals: {
