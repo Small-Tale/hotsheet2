@@ -330,6 +330,8 @@ describe('UX demo catalog', () => {
         'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
       'workspace-composition-surfaces':
         'Internal typed composition boundary whose constituent production surfaces are cataloged individually.',
+      'workspace-controls':
+        'Toolbar zone content (identity, view-mode, sort, selection, search, overflow groups) of the cataloged WorkspaceHeader; declared in ai/component-composition-extension.json.',
     };
     const componentsDir = fileURLToPath(new URL('../components', import.meta.url));
     const files = readdirSync(componentsDir).filter((name) => name.endsWith('.tsx') && !name.endsWith('.test.tsx'));
@@ -355,6 +357,9 @@ describe('UX demo catalog', () => {
       );
     }
   });
+
+  // Modules that exist only as zone content of a cataloged composition (declared in the composition extension).
+  const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls']);
 
   it('keeps the app composition catalog aligned with the catalog extension, sources, and Kerf roots (HS2-N5G6JS)', () => {
     const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -395,13 +400,25 @@ describe('UX demo catalog', () => {
         componentCatalogExtension as { entries: Array<{ id: string; name: string; publicClasses: string[] }> }
       ).entries.map((entry) => [entry.id, entry]),
     );
-    expect(composition.entries.map((entry) => entry.id)).toEqual(['ticket-search-field']);
+    expect(composition.entries.map((entry) => entry.id)).toEqual([
+      'ticket-search-field',
+      'workspace-controls',
+      'workspace-identity',
+    ]);
     for (const entry of composition.entries) {
       expect(entry.key).toBe(`hotsheet-web:${entry.id}`);
       expect(entry.package).toBe('hotsheet-web');
-      const cataloged = extensionIds.get(entry.id);
-      expect(cataloged?.name, entry.id).toBe(entry.name);
-      expect(cataloged?.publicClasses, entry.id).toEqual(entry.boundaries.publicClasses);
+      // An entry is either a cataloged component of its own or a named export of a cataloged module.
+      const cataloged = extensionIds.get(entry.id),
+        moduleId = entry.source.replace(/^src\/components\//, '').replace(/\.tsx$/, '');
+      if (cataloged) {
+        expect(cataloged.name, entry.id).toBe(entry.name);
+        expect(cataloged.publicClasses, entry.id).toEqual(entry.boundaries.publicClasses);
+      } else
+        expect(
+          extensionIds.has(moduleId) || COMPOSITION_ONLY_MODULES.has(moduleId),
+          `${entry.id} must come from a cataloged module`,
+        ).toBe(true);
       expect(existsSync(`${root}${entry.source}`), entry.source).toBe(true);
       expect(readFileSync(`${root}${entry.source}`, 'utf8')).toContain(`export function ${entry.name}(`);
       for (const rootKey of entry.rendersAs ?? []) expect(kerfKeys.has(rootKey), rootKey).toBe(true);

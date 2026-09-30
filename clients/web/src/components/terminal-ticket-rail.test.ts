@@ -49,10 +49,13 @@ describe('TerminalTicketRail', () => {
     expect(css).toMatchSource(/\.view-mode-switcher \{[^}]*grid-column:1 \/ -1/);
     expect(css).toMatchSource(/workspace-header__utility-group \{[^}]*grid-column:2/);
     expect(css).toMatchSource(
+      /__controls \{[^}]*display:grid[^}]*grid-template-columns:auto auto minmax\(remify\([\d.]+px\)/,
+    );
+    expect(css).toMatchSource(
       /ticket-search-field \{[^}]*grid-column:3[^}]*grid-row:2[^}]*transition:width \.25s ease/,
     );
     expect(css).toMatchSource(
-      /ticket-search-field\[data-expanded="true"\] \{[^}]*width:100%[^}]*grid-column:1 \/ -1[^}]*grid-row:3[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
+      /terminal-ticket-rail__controls > \.ticket-search-field\[data-content="search"\]\[data-expanded="true"\] \{[^}]*width:100%[^}]*grid-column:1 \/ -1[^}]*grid-row:3[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
     );
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
     expect(css).toMatchSource(/ticket-inspector__header > \.kui-toolbar \{[^}]*grid-template-columns:1fr auto 1fr/);
@@ -65,7 +68,7 @@ describe('TerminalTicketRail', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatchSource(/__project \{[^}]*padding-inline:var\(--kui-space-xs\)/);
     expect(css).toMatchSource(
-      /__controls \{ padding:var\(--kui-space-2xs\) var\(--kui-space-xs\) var\(--kui-space-xs\)/,
+      /__controls \{[^}]*padding:var\(--kui-space-2xs\) var\(--kui-space-xs\) var\(--kui-space-xs\)/,
     );
     expect(css).toMatchSource(/__heading \{[^}]*padding:var\(--kui-space-xs\)/);
     expect(css).not.toContain('--kui-sunken-panel-radius');

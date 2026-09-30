@@ -2228,7 +2228,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
 test('omits status sorting from column view and restores it in list view', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header = page.locator('[data-component="workspace-header"]');
+  const header = page.locator('.workspace-header');
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
   await expect(sortSelect.locator('wa-option[value="status"]')).toHaveCount(1);
   await header.getByRole('button', { name: 'Columns view' }).click();
@@ -2241,7 +2241,7 @@ test('omits status sorting from column view and restores it in list view', async
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header&dev-review=false');
-  const header = page.locator('[data-component="workspace-header"]');
+  const header = page.locator('.workspace-header');
   const sort = header.locator('wa-select[name="workspace-sort"]');
   const group = header.locator('.workspace-header__sort-group');
   await header.getByRole('button', { name: 'Settings view' }).focus();
@@ -2288,7 +2288,7 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header = page.locator('[data-component="workspace-header"]');
+  const header = page.locator('.workspace-header');
   await expect(header).toContainText('Hot Sheet 2');
   await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-chrome', 'outline');
   await expect(header.locator('.workspace-header__utility-group')).toHaveAttribute('data-selected-tone', 'pop');
@@ -2540,7 +2540,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
 test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header = page.locator('[data-component="workspace-header"]');
+  const header = page.locator('.workspace-header');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await header.getByRole('searchbox', { name: 'Search tickets' }).fill('client');
   await header.getByRole('button', { name: 'Search syntax help' }).click();
@@ -2566,7 +2566,7 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
 test('centers search controls on the first line while the query wraps', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 600 });
   await page.goto('/ux-demo?component=workspace-header');
-  const header = page.locator('[data-component="workspace-header"]');
+  const header = page.locator('.workspace-header');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('searchbox', { name: 'Search tickets' }),
     group = header.locator('.ticket-search-field');
@@ -4712,15 +4712,11 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of [
-    'state-banner',
-    'workspace-identity',
-    'workspace-controls',
-    'quick-ticket-composer-launcher',
-    'ticket-list',
-    'ticket-inspector',
-  ])
+  for (const component of ['state-banner', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector'])
     await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  // The header identity and controls are Toolbar zone children, not wrapper components (HS2-EZ1N7Z).
+  await expect(shell.locator('.kui-toolbar__leading > .workspace-header__identity')).toHaveCount(1);
+  await expect(shell.locator('.kui-toolbar__trailing > .view-mode-switcher')).toHaveCount(1);
   await expect(shell.locator('.project-sidebar[data-component="pane"]')).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
@@ -4729,8 +4725,11 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     const toolbar = toolbarNode.getBoundingClientRect();
     const leading = toolbarNode.querySelector('.kui-toolbar__leading')!.getBoundingClientRect();
     const trailing = toolbarNode.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
-    const identity = toolbarNode.querySelector('[data-component="workspace-identity"]')!.getBoundingClientRect();
-    const controls = toolbarNode.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
+    const identity = toolbarNode.querySelector('.workspace-header__identity')!.getBoundingClientRect();
+    const controls = [...toolbarNode.querySelector('.kui-toolbar__trailing')!.children]
+      .filter((child) => getComputedStyle(child).display !== 'none')
+      .at(-1)!
+      .getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
     const workArea = node.querySelector('.app-shell__work-area')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
@@ -4883,7 +4882,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
   const crampedToolbar = await shell.locator('.app-shell__main > [data-component="toolbar"]').evaluate((toolbar) => {
     const toolbarRect = toolbar.getBoundingClientRect();
-    const actionsRect = toolbar.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
+    const actionsRect = toolbar.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
     return {
       toolbarLeft: toolbarRect.left,
       toolbarRight: toolbarRect.right,
@@ -4992,11 +4991,9 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(
-    shell.locator('[data-component="workspace-identity"]').getByText('Workspace grid', { exact: true }),
-  ).toBeVisible();
+  await expect(shell.locator('.workspace-header__identity').getByText('Workspace grid', { exact: true })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Workspace grid workspace' })).toBeVisible();
-  await expect(shell.locator('.workspace-header__actions')).toHaveCount(0);
+  await expect(shell.locator('.view-mode-switcher')).toHaveCount(0);
   await shell.getByRole('button', { name: 'Cross-project stats' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'stats');
   await expect(shell.getByText('Stats', { exact: true })).toBeVisible();
@@ -5005,7 +5002,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell).toHaveAttribute('data-mode', 'project');
   await expect(shell.locator('.project-sidebar')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
-  await expect(shell.locator('.workspace-header__actions')).toBeVisible();
+  await expect(shell.locator('.view-mode-switcher')).toBeVisible();
   await shell.locator('[data-component="project-summary"]').click();
   await expect(shell).toHaveAttribute('data-mode', 'stats');
   await expect(shell.getByRole('region', { name: 'Hot Sheet 2 project statistics' })).toBeVisible();

@@ -20,7 +20,8 @@ import {
 describe('WorkspaceHeader', () => {
   it('projects a compact primary heading when the project view title moves into the main toolbar', () => {
     const markup = String(WorkspaceIdentity({ projectName: 'Queue', id: 'workspace-page-title', headingLevel: 1 }));
-    expect(markup).toContain('data-component="workspace-identity"');
+    // The identity is a real ToolbarText, so a Toolbar leading zone accepts it (HS2-EZ1N7Z).
+    expect(markup).toContain('class="kui-toolbar-text workspace-header__identity" data-component="toolbar-text"');
     expect(markup).toContain('id="workspace-page-title"');
     expect(markup).toContain('data-size="large"');
     expect(markup).toContain('role="heading" aria-level="1"');
@@ -146,18 +147,19 @@ describe('WorkspaceHeader', () => {
     );
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8'),
       shellCss = readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8');
+    // No wrapper element: the search field sizes itself inside whichever Toolbar zone holds it (HS2-EZ1N7Z).
+    expect(headerCss).not.toContain('workspace-header__actions');
+    expect(headerCss).not.toContain('.kui-toolbar-control-group');
     expect(headerCss).toContainSource(
-      '.workspace-header__actions > .ticket-search-field[data-expanded="true"] { max-width:100%; align-self:flex-start; }',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__actions > .ticket-search-field.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; flex: 1 1 19rem; }',
+      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 19rem; flex: 1 1 19rem; }",
     );
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
     expect(headerCss).not.toContain('.kui-token-search {');
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
+    expect(headerCss).toContainSource('.workspace-header__overflow-group { display: none; }');
     expect(headerCss).toContainSource(
-      '.workspace-header__actions[data-search-open="true"] > .workspace-header__overflow { display: none; }',
+      ".ticket-search-field[data-expanded='true'] ~ .workspace-header__overflow-group { display: none; }",
     );
     expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
     expect(headerCss).toContainSource(
@@ -330,8 +332,9 @@ describe('WorkspaceHeader', () => {
 
   it('omits every project control for global shell modes', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Terminals', mode: 'list', controlsVisible: false }));
-    expect(markup).toContain('data-controls-visible="false"');
-    expect(markup).not.toContain('workspace-header__actions');
+    expect(markup).toMatch(/^<header class="kui-toolbar workspace-header" data-component="toolbar"/);
+    expect(markup).toContain('<div class="kui-toolbar__trailing"></div>');
+    expect(markup).not.toContain('toolbar-control-group');
     expect(markup).not.toContain('Search tickets');
   });
 
@@ -382,21 +385,20 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__sort .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
-    expect(headerCss).toContainSource(
-      '.workspace-header__actions > .workspace-header__utility-group { display: none; }',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__actions > .workspace-header__overflow { display: inline-flex; }',
-    );
+    expect(headerCss).toContainSource('.workspace-header__utility-group { display: none; }');
+    expect(headerCss).toContainSource('.workspace-header__overflow-group { display: inline-flex; }');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(416px))');
-    expect(headerCss).toContainSource('.workspace-header__actions > .workspace-header__sort-group { display: none; }');
+    expect(headerCss).toContainSource('.workspace-header__sort-group { display: none; }');
+    // An expanded search hides its sibling groups through the zone that holds it, not a wrapper.
+    expect(headerCss).toContainSource(
+      ":has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher, :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__sort-group, :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__utility-group { display: none; }",
+    );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');
     expect(headerCss).toContainSource(
-      '.workspace-header__actions > .ticket-search-field:not([data-expanded="true"]) { display: none; }',
+      ".ticket-search-field[data-content='search']:not([data-expanded='true']) { display: none; }",
     );
     expect(headerCss).toContainSource(
-      '@container kui-toolbar (max-width: remify(176px)) { .workspace-header__actions > .view-mode-switcher { display: none; } }',
+      '@container kui-toolbar (max-width: remify(176px)) { .view-mode-switcher { display: none; } }',
     );
-    expect(headerCss).not.toContain('overflow: hidden; } .workspace-header__actions');
   });
 });

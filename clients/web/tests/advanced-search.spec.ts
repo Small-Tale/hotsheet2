@@ -177,7 +177,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
           group = document.querySelector<HTMLElement>('.app-shell__main > .kui-toolbar .ticket-search-field')!;
         return {
           group: rect('.app-shell__main > .kui-toolbar .ticket-search-field'),
-          mode: rect('.app-shell__main > .kui-toolbar .workspace-header__actions > .view-mode-switcher'),
+          mode: rect('.app-shell__main > .kui-toolbar .view-mode-switcher'),
           sort: rect('.app-shell__main > .kui-toolbar .workspace-header__sort-group'),
           toolbar: rect('.app-shell__main > .kui-toolbar'),
           tabs: rect('.app-shell__main > .project-tab-bar'),

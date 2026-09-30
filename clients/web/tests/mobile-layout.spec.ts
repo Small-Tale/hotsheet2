@@ -644,7 +644,7 @@ test('mobile toolbar drops the project name, uses borderless content-fit selects
   await openDemoProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
   // 1. The project name is gone from the main toolbar (the mobile project Select carries it instead).
-  await expect(page.locator('[data-component="workspace-identity"]')).toHaveCount(0);
+  await expect(page.locator('.workspace-header__identity')).toHaveCount(0);
   // 2 & 3. The project and view selects are borderless (their combobox part has no border).
   const comboBorder = (name: string) =>
     page.locator(`wa-select[name="${name}"]`).evaluate((node) => {

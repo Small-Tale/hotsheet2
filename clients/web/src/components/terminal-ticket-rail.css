@@ -47,11 +47,12 @@
   font-size: var(--wa-font-size-m);
   white-space: nowrap;
 }
+/* The rail places the shared WorkspaceControls groups directly in its own grid: the view switcher
+   spans the first row; sort, selection actions, and the collapsible search share the second, and an
+   expanded search takes a full third row (HS2-EZ1N7Z). */
 .terminal-ticket-rail__controls {
-  padding: var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-xs);
-}
-.terminal-ticket-rail__controls .workspace-header__actions {
   display: grid;
+  padding: var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-xs);
   grid-template-columns: auto auto minmax(remify(40.4px), 1fr);
   row-gap: var(--kui-space-xs);
 }
@@ -67,14 +68,14 @@
   grid-column: 2;
   grid-row: 2;
 }
-.terminal-ticket-rail__controls .workspace-header__actions > .ticket-search-field {
+.terminal-ticket-rail__controls > .ticket-search-field {
   grid-column: 3;
   grid-row: 2;
   width: remify(40.4px);
   justify-self: end;
   transition: width 0.25s ease;
 }
-.terminal-ticket-rail__controls .workspace-header__actions > .ticket-search-field[data-expanded='true'] {
+.terminal-ticket-rail__controls > .ticket-search-field[data-content='search'][data-expanded='true'] {
   width: 100%;
   grid-column: 1 / -1;
   grid-row: 3;
@@ -194,10 +195,10 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .terminal-ticket-rail__controls .workspace-header__actions > .ticket-search-field {
+  .terminal-ticket-rail__controls > .ticket-search-field {
     transition: none;
   }
-  .terminal-ticket-rail__controls .workspace-header__actions > .ticket-search-field[data-expanded='true'] {
+  .terminal-ticket-rail__controls > .ticket-search-field[data-content='search'][data-expanded='true'] {
     animation: none;
   }
 }

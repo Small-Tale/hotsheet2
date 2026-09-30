@@ -362,7 +362,17 @@ does not introduce polling or another network request.
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
-The mode selector composes Kerf `SegmentedControl` inside `ToolbarControlGroup`, with
+`WorkspaceControls` (`clients/web/src/components/workspace-controls.tsx`) renders no wrapper
+element: it is Toolbar zone content — the view-mode, sort, and selection
+`ToolbarControlGroup`s, the `TicketSearchField`, and the narrow-width overflow menu in its
+own borderless nested-dropdown group — so the application shell's header Toolbar and the
+demo's `WorkspaceHeader` Toolbar host them as cataloged children, and the workspace-grid
+rail's own grid places the same groups (HS2-EZ1N7Z). `WorkspaceIdentity` is a real
+`ToolbarText` for the leading zone. Responsive rules key off the search field's own
+`data-expanded` state through `:has()` on whichever zone holds it, not a wrapper attribute;
+both wrappers are declared to Kerf's composition rule (`rendersAs`) in
+`clients/web/ai/component-composition-extension.json`. The mode selector composes Kerf
+`SegmentedControl` inside `ToolbarControlGroup`, with
 one accessible View mode group and native sequentially focusable buttons. Kerf owns
 selection, hover, focus, and segment geometry. Hot Sheet supplies Lucide icons, the
 content-sized notification badge (full count in the accessible label, 99+ visual cap),
@@ -1804,12 +1814,18 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
-HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, and HS2-N5G6JS is:
+HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS, and
+HS2-EZ1N7Z is:
 
 | Severity | Exact diagnostic budgets                                                |
 | -------- | ----------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 104; `KUI-L022` 65; `KUI-L201` 4 |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 102; `KUI-L022` 61; `KUI-L201` 0 |
 | review   | `KUI-L004` 79; `KUI-L006` 15; `KUI-L008` 25                             |
+
+HS2-EZ1N7Z cleared the last budgeted `KUI-L201` findings by making the workspace header's
+control groups real Toolbar zone children (the three documented FloatingToolbar edges remain
+adapted, not counted). The workspace-grid rail still places those groups in its own grid
+(`HS2-K9KWJJ` tracks composing it through a Toolbar).
 
 The profile's `catalogs` entry points the doctor at Hot Sheet's own catalog extension and
 composition extension (`clients/web/ai/component-composition-extension.json`), so an

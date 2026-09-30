@@ -2921,7 +2921,16 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
         textAlign: getComputedStyle(option).textAlign,
       }));
     return {
-      actions: bounds('.workspace-header__actions'),
+      actions: (() => {
+        // The rail grid's content box, inside its own padding (HS2-EZ1N7Z).
+        const controls = node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!,
+          rect = controls.getBoundingClientRect(),
+          style = getComputedStyle(controls);
+        return {
+          left: rect.left + Number.parseFloat(style.paddingLeft),
+          right: rect.right - Number.parseFloat(style.paddingRight),
+        };
+      })(),
       search: bounds('.ticket-search-field'),
       sort: bounds('.workspace-header__sort-group'),
       utility: bounds('.workspace-header__utility-group'),
@@ -4179,7 +4188,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
     globalChat = dashboard.locator('[data-component="workspace-chat-tile"]');
   await expect(globalChat).toContainText('demo › Codex chat');
-  await expect(page.locator('[data-component="workspace-identity"]')).toContainText('Workspace grid');
+  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace grid');
   await page.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
   for (let fit = 4; fit < 10; fit += 1)
     await dashboard.getByRole('button', { name: /Zoom out, fit more items/ }).click();
@@ -10763,7 +10772,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
     launcher = page.getByRole('button', { name: 'New ticket…' });
   await expect(title).toHaveText('Queue');
   await expect(title).toHaveAttribute('data-size', 'large');
-  await expect(mainToolbar.locator('[data-component="workspace-identity"]')).toContainText('Queue');
+  await expect(mainToolbar.locator('.workspace-header__identity')).toContainText('Queue');
   await expect(shell.locator('.app-shell__main > .app-heading')).toHaveCount(0);
   await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
   const desktopGeometry = await projectTabs.evaluate((node) => {
@@ -10785,7 +10794,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
   await page.getByRole('button', { name: 'Hide project sidebar' }).click();
 
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  await expect(page.locator('[data-component="workspace-identity"]')).toContainText('Workspace grid');
+  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace grid');
   await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
   await page.getByRole('tab', { name: 'demo' }).click();
 
@@ -14917,7 +14926,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const search = toolbar.getByRole('searchbox', { name: 'Search tickets' });
   await expect(search).toBeVisible();
   await expect(search).toBeFocused();
-  await expect(toolbar.locator('.workspace-header__actions')).toHaveAttribute('data-search-open', 'true');
+  await expect(toolbar.locator('.ticket-search-field')).toHaveAttribute('data-expanded', 'true');
   await expect(overflow).toBeHidden();
   await expect(overflow).toHaveJSProperty('open', false);
   expect(await toolbar.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);

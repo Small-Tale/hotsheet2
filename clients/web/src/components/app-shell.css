@@ -53,10 +53,6 @@
 .app-shell[data-mode='terminals'] .app-shell__main > .project-tab-bar {
   border-bottom: 1px solid var(--wa-color-surface-border);
 }
-.app-shell__main > .kui-toolbar .workspace-header {
-  min-width: 0;
-  align-items: center;
-}
 /* Mobile view switcher (the page-header Select that replaces the desktop view title): a borderless
    select sized to the selected view name, shrinking/truncating rather than stretching (HS2-0SARDD). */
 .app-shell__mobile-view {
@@ -77,9 +73,6 @@
 }
 .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) {
   height: auto;
-  align-items: start;
-}
-.app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) .workspace-header {
   align-items: start;
 }
 .app-shell__work-area {
@@ -189,9 +182,6 @@
     width: 100%;
     padding-inline: remify(12px) 0;
     justify-content: stretch;
-  }
-  .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) .workspace-header__actions {
-    width: 100%;
   }
   .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) .ticket-search-field {
     width: auto;

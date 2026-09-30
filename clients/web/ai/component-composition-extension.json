@@ -94,6 +94,148 @@
         "selection": "ai/component-catalog-extension.json",
         "composition": "docs/ux-components.md#34-search-and-filtering--feature-floor"
       }
+    },
+    {
+      "key": "hotsheet-web:workspace-controls",
+      "package": "hotsheet-web",
+      "id": "workspace-controls",
+      "name": "WorkspaceControls",
+      "kind": "composition",
+      "purpose": "Workspace view-mode, sort, selection, ticket search, and overflow control groups rendered as Toolbar zone content with no wrapper element.",
+      "publicExports": [
+        {
+          "name": "WorkspaceControls"
+        }
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["toolbar-zone"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "view mode, sort, selection, and search state",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": ["wireTokenSearchFields", "wireTicketSearchFields", "wireWorkspaceOverflowKeyboard"],
+        "obligations": [
+          "Wire the workspace search, sort, overflow, and selection actions once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "Sort, selection, and view-mode groups yield to the overflow group at narrow toolbar container widths; an expanded search takes the row."
+        ]
+      },
+      "layout": {
+        "roles": ["structure"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["Each group names its controls; the overflow trigger is named and keyboard-openable."]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "view-mode-switcher",
+          "workspace-header__sort-group",
+          "workspace-header__utility-group",
+          "workspace-header__overflow-group"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "view-mode-switcher",
+          "workspace-header__sort-group",
+          "workspace-header__utility-group",
+          "workspace-header__overflow-group"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md#23-workspaceheader--feature-floor"
+      }
+    },
+    {
+      "key": "hotsheet-web:workspace-identity",
+      "package": "hotsheet-web",
+      "id": "workspace-identity",
+      "name": "WorkspaceIdentity",
+      "kind": "component",
+      "purpose": "The project name as Toolbar leading text, hidden at the narrowest toolbar widths.",
+      "publicExports": [
+        {
+          "name": "WorkspaceIdentity"
+        }
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "rendersAs": ["@kerfjs/ui:toolbar-text"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["toolbar-zone"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "project name",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": ["Hidden below the 224px toolbar container width so an expanded search keeps the row."]
+      },
+      "layout": {
+        "roles": ["structure"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["May carry the page heading level and id when it is the page title."]
+      },
+      "boundaries": {
+        "rootClass": "workspace-header__identity",
+        "publicClasses": ["workspace-header__identity"],
+        "placeableClasses": ["workspace-header__identity"],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md#23-workspaceheader--feature-floor"
+      }
     }
   ]
 }
