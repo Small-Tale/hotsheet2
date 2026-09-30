@@ -1750,6 +1750,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
     .locator('.ticket-list-row__indicator')
     .evaluate((element) => getComputedStyle(element).backgroundColor);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('color', upNextRailColor);
+  // The active star is filled, not only outlined (HS2-KGHRHS).
+  await expect(row.locator('[data-action="toggle-row-up-next"] svg')).toHaveCSS('fill', upNextRailColor);
   await expect(row).toContainText('Claude');
   await expect(row).toContainText('1h ago');
   await expect(page.getByText('No actions yet')).toBeVisible();
