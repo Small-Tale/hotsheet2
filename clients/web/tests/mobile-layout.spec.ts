@@ -344,9 +344,19 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
       }),
     )
     .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
-  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-top', '13px');
-  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-bottom', '37px');
-  await expect(sidebarRegion.locator('.project-sidebar')).toHaveCSS('padding-left', '7px');
+  // The pane surface reaches every edge; Kerf's Pane pads its pinned header, footer, and scroller slots
+  // once (no app-level container padding on top of it, HS2-4A29RR).
+  const sidebar = sidebarRegion.locator('.project-sidebar');
+  await expect(sidebar).toHaveCSS('padding-top', '0px');
+  await expect(sidebar).toHaveCSS('padding-bottom', '0px');
+  await expect(sidebar.locator('> .kui-pane__header')).toHaveCSS('padding-top', '13px');
+  // A header holding only a Toolbar hands its inline inset to that toolbar (8px toolbar gap + 7px inset).
+  await expect(sidebar.locator('> .kui-pane__header > .kui-toolbar')).toHaveCSS('padding-left', '15px');
+  await expect(sidebar.locator('> .kui-pane__footer')).toHaveCSS('padding-bottom', '37px');
+  await expect(sidebar.locator('> .kui-pane__content')).toHaveCSS('padding-left', '7px');
+  expect(await sidebar.locator('> .kui-pane__footer').evaluate((node) => node.getBoundingClientRect().bottom)).toBe(
+    844,
+  );
   await page.screenshot({
     path: '/private/tmp/hs2-3bvwme-mobile-sidebar-full-height.png',
     fullPage: true,
@@ -365,15 +375,103 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
       }),
     )
     .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
-  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-top', '13px');
-  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-bottom', '37px');
-  await expect(inspectorRegion.locator('.ticket-inspector')).toHaveCSS('padding-right', '11px');
+  // The inspector's pinned header carries the top inset and its scroller reaches the bottom edge with
+  // the inset as padding inside the scroll (plus matching scroll padding), so the last section can be
+  // scrolled clear of the home indicator (HS2-4A29RR).
+  const inspector = inspectorRegion.locator('.ticket-inspector');
+  await expect(inspector).toHaveCSS('padding-top', '0px');
+  await expect(inspector).toHaveCSS('padding-bottom', '0px');
+  await expect(inspector).toHaveCSS('padding-right', '11px');
+  await expect(inspector.locator('.ticket-inspector__header')).toHaveCSS('padding-top', '13px');
+  await expect(inspector.locator('.ticket-inspector__content')).toHaveCSS('padding-bottom', '45px');
+  await expect(inspector.locator('.ticket-inspector__content')).toHaveCSS('scroll-padding-bottom', '37px');
+  expect(
+    await inspector.locator('.ticket-inspector__content').evaluate((node) => node.getBoundingClientRect().bottom),
+  ).toBe(844);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await page.screenshot({
     path: '/private/tmp/hs2-3bvwme-mobile-inspector-full-height.png',
     fullPage: true,
     animations: 'disabled',
   });
+});
+
+test('mobile ticket scrollers reach the screen bottom and inset their content for the home indicator (HS2-4A29RR)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page, true, 30);
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--hotsheet-safe-area-top', '47px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '34px');
+  });
+  const geometry = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((node) => {
+        const rect = node.getBoundingClientRect(),
+          style = getComputedStyle(node);
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          paddingTop: style.paddingTop,
+          paddingBottom: style.paddingBottom,
+          scrollPaddingBottom: style.scrollPaddingBottom,
+        };
+      });
+  // The top bar sits under the translucent status bar: its surface starts at the edge and its
+  // controls clear the inset (Kerf adds its own 8px gap above the control band).
+  const toolbar = page.locator('.app-shell__main > [data-component="toolbar"]').first();
+  expect(
+    await toolbar.evaluate((node) => ({
+      top: node.getBoundingClientRect().top,
+      paddingTop: getComputedStyle(node).paddingTop,
+    })),
+  ).toEqual({ top: 0, paddingTop: '55px' });
+  expect(
+    await toolbar
+      .locator('button')
+      .first()
+      .evaluate((node) => node.getBoundingClientRect().top),
+  ).toBe(57);
+  // The list scroller reaches the bottom edge with the inset inside its padding and scroll padding.
+  expect(await geometry('.app-shell__workspace')).toMatchObject({
+    bottom: 844,
+    paddingBottom: '45.2px',
+    scrollPaddingBottom: '34px',
+  });
+  await page.locator('.app-shell__workspace').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-4a29rr-mobile-list-bottom.png', animations: 'disabled' });
+  // Each board column scroller does the same.
+  await page.getByLabel('Columns view').click();
+  await expect(page.locator('.ticket-board-column__tickets').first()).toBeVisible();
+  expect(await geometry('.ticket-board-column__tickets')).toMatchObject({
+    bottom: 844,
+    paddingBottom: '50px',
+    scrollPaddingBottom: '34px',
+  });
+  // Page to the populated Started column and scroll it to its end for the capture.
+  await page
+    .locator('.ticket-board-column')
+    .nth(1)
+    .evaluate((node) => {
+      node.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'instant' });
+      const tickets = node.querySelector<HTMLElement>('.ticket-board-column__tickets')!;
+      tickets.scrollTop = tickets.scrollHeight;
+    });
+  await page.screenshot({ path: '/private/tmp/hs2-4a29rr-mobile-board-bottom.png', animations: 'disabled' });
+  // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await expect(
+    page.locator('.kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="false"]'),
+  ).toBeVisible();
+  expect(await geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
+  await page.getByLabel('List view').click();
+  expect(await geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
 });
 
 test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays without changing desktop preferences (HS2-KN79XP)', async ({

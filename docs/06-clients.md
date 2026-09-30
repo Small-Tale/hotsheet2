@@ -188,7 +188,17 @@ and identity-less legacy entries remain conservatively blocking.
   iOS Safari's larger layout viewport. Mobile project and inspector overlays paint through the
   full dynamic viewport—including over an open terminal drawer—instead of inheriting Kerf's generic
   85vh popover cap. Their white surfaces extend into device safe areas while padding interactive
-  content away from the top, side, and bottom insets (HS2-3BVWME). The terminal-drawer restore and workspace-grid zoom controls
+  content away from the top, side, and bottom insets (HS2-3BVWME). Every scroll owner that
+  reaches a screen edge still reaches it: the inset is padding _inside_ the scroller (with
+  matching scroll padding), so content scrolls under the status bar or home indicator while
+  its last item can be scrolled clear. The project sidebar is a Kerf `Pane` that does this
+  itself (header, scrolling content, footer) for the edges it lists; the ticket inspector's
+  pinned header carries the top inset and its scroller the bottom one; the mobile main column's
+  top toolbar claims the top and inline edges, and the list workspace and each board column
+  scroller carry the bottom inset whenever the terminal drawer is collapsed (an expanded drawer
+  owns that edge). The PWA declares a `black-translucent` status bar so the app always paints
+  under it and the top inset is reported consistently; the app's physical safe-area tokens feed
+  Kerf's logical `--kui-safe-area-*` tokens so both share one override point (HS2-4A29RR). The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or
   retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the

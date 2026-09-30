@@ -114,6 +114,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       element="aside"
       label="Project sidebar"
       className="project-sidebar"
+      safeAreaEdges={['block-start', 'block-end', 'inline-start']}
       header={header}
       contentClassName="project-sidebar__content"
       footerClassName="project-sidebar__footer"

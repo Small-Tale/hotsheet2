@@ -41,11 +41,26 @@ describe('application shell components', () => {
     expect(mobileSidePanelCss).toMatchSource(
       /data-presentation="overlay"\]\[data-axis="horizontal"\] \{ max-height: 100dvh;/,
     );
+    // Safe-area insets live inside the scroll owners, never on a container that would shorten them
+    // (HS2-4A29RR): the sidebar Pane owns its own; the inspector's header and scroller carry theirs.
+    expect(mobileSidePanelCss).not.toContain('.project-sidebar {');
     expect(mobileSidePanelCss).toContainSource(
-      '.project-sidebar { padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom); padding-inline-start: var(--hotsheet-safe-area-left); }',
+      '.ticket-inspector { min-height: 0; padding-inline-end: var(--hotsheet-safe-area-right); }',
     );
     expect(mobileSidePanelCss).toContainSource(
-      '.ticket-inspector { min-height: 0; padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom); padding-inline-end: var(--hotsheet-safe-area-right); }',
+      '.ticket-inspector__header { padding-top: var(--hotsheet-safe-area-top); }',
+    );
+    expect(mobileSidePanelCss).toContainSource(
+      '.ticket-inspector__content { padding-bottom: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-bottom)); scroll-padding-bottom: var(--hotsheet-safe-area-bottom); }',
+    );
+    expect(productionCss).toContainSource(
+      'html:root { --kui-safe-area-block-start: var(--hotsheet-safe-area-top); --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom); --kui-safe-area-inline-start: var(--hotsheet-safe-area-left); --kui-safe-area-inline-end: var(--hotsheet-safe-area-right); }',
+    );
+    expect(css).toMatchSource(
+      /\.app-shell\[data-mobile='true'\] \.app-shell__main:not\(:has\(> \.kui-resizable-region\[data-region-id='app-terminal-drawer'\]:not\(\[data-collapsed='true'\]\)\)\) \.app-shell__workspace:not\(\[data-presentation='edge-to-edge'\]\) \{ padding-bottom: calc\(var\(--app-shell-workspace-padding\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
+    );
+    expect(css).toMatchSource(
+      /\.ticket-board-column__tickets \{ padding-bottom: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
     );
   });
 

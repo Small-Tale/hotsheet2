@@ -1,15 +1,21 @@
 /* Kerf's generic overlay cap is intentionally 85vh. Mobile navigation panels are app-level
    surfaces instead: paint them through the complete dynamic viewport (including safe areas), then
-   inset only their interactive content away from device cutouts and the home indicator. */
+   inset only their interactive content away from device cutouts and the home indicator. The
+   scroll owners themselves reach the screen edge; the inset is padding inside them (plus matching
+   scroll padding), so the last item can always be scrolled clear of the home indicator (HS2-4A29RR).
+   The project sidebar is a Kerf Pane, which already does exactly that for its header, scrolling
+   content, and footer, so the app adds nothing there. */
 .app-shell[data-mobile='true'] > .kui-resizable-region[data-presentation='overlay'][data-axis='horizontal'] {
   max-height: 100dvh;
 }
-.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-sidebar'] .project-sidebar {
-  padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom);
-  padding-inline-start: var(--hotsheet-safe-area-left);
-}
 .app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector {
   min-height: 0;
-  padding-block: var(--hotsheet-safe-area-top) var(--hotsheet-safe-area-bottom);
   padding-inline-end: var(--hotsheet-safe-area-right);
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector__header {
+  padding-top: var(--hotsheet-safe-area-top);
+}
+.app-shell[data-mobile='true'] > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector__content {
+  padding-bottom: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-bottom));
+  scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
 }

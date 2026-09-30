@@ -129,9 +129,10 @@
   flex: none;
 }
 .app-shell__workspace {
+  --app-shell-workspace-padding: remify(16px);
   min-width: 0;
   min-height: 0;
-  padding: remify(16px);
+  padding: var(--app-shell-workspace-padding);
   overflow: auto;
   overflow-anchor: none;
   flex: 1;
@@ -163,7 +164,7 @@
 }
 @media (max-width: remify(672px)) {
   .app-shell__workspace {
-    padding: remify(11.2px);
+    --app-shell-workspace-padding: remify(11.2px);
   }
   .app-shell__composer {
     padding: remify(11.2px);
@@ -197,6 +198,23 @@
 .app-shell[data-mobile='true'] {
   position: relative;
   min-width: 0;
+}
+/* The mobile main column reaches the bottom screen edge whenever the terminal drawer is collapsed
+   or absent. Its ticket scrollers (the list workspace and each board column) keep reaching that edge
+   and carry the home-indicator inset as padding inside the scroller, with matching scroll padding,
+   so the last ticket can be scrolled clear of the unsafe area (HS2-4A29RR). An expanded drawer owns
+   the bottom edge instead, so the scrollers then keep their ordinary padding. */
+.app-shell[data-mobile='true']
+  .app-shell__main:not(:has(> .kui-resizable-region[data-region-id='app-terminal-drawer']:not([data-collapsed='true'])))
+  .app-shell__workspace:not([data-presentation='edge-to-edge']) {
+  padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-safe-area-bottom));
+  scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
+}
+.app-shell[data-mobile='true']
+  .app-shell__main:not(:has(> .kui-resizable-region[data-region-id='app-terminal-drawer']:not([data-collapsed='true'])))
+  .ticket-board-column__tickets {
+  padding-bottom: calc(var(--kui-space-m) + var(--hotsheet-safe-area-bottom));
+  scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
 }
 /* Viewport-fixed so it reliably covers the whole shell regardless of the app-shell's flex/containing
    block; .app-shell is not a stacking context (position:relative + z-index:auto), so the z-index:41

@@ -106,8 +106,12 @@ export function AppShell({
         </ResizableRegion>
       )}
       <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
+        {/* On mobile this bar sits directly under the (translucent) status bar, so it claims the top and
+            inline screen edges: its controls clear the unsafe area while its surface reaches the edge
+            (HS2-4A29RR). On desktop the shell sits inside a window, where the insets are zero. */}
         <Toolbar
           dividerSides=""
+          safeAreaEdges={mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined}
           leading={
             <>
               {mode !== 'stats' && sidebar && !sidebarVisible && (

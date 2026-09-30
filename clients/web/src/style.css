@@ -16,6 +16,15 @@
   color: var(--wa-color-text-normal);
   background: var(--wa-color-surface-lowered);
 }
+/* Kerf panes, toolbars, and regions read the device insets through these logical tokens; deriving them
+   from the app's physical tokens keeps one source of truth (and one override point in tests). Kerf's
+   foundation declares its own `:root` defaults, so this rule needs the extra specificity to win. */
+html:root {
+  --kui-safe-area-block-start: var(--hotsheet-safe-area-top);
+  --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom);
+  --kui-safe-area-inline-start: var(--hotsheet-safe-area-left);
+  --kui-safe-area-inline-end: var(--hotsheet-safe-area-right);
+}
 * {
   box-sizing: border-box;
 }
