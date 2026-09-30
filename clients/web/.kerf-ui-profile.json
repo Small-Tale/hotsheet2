@@ -155,12 +155,6 @@
       "rationale": "The mobile shell deliberately composes safe-area padding on its app-owned sidebar and inspector content inside Kerf overlay regions."
     },
     {
-      "id": "mobile-side-panel-viewport-height",
-      "rules": ["KUI-L005"],
-      "target": "src/components/mobile-side-panels.css",
-      "rationale": "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap."
-    },
-    {
       "id": "intentional-nested-inset-ai-conversation",
       "rules": ["KUI-L004"],
       "target": "src/components/ai-conversation.tsx",
@@ -471,6 +465,12 @@
       "rules": ["KUI-L008"],
       "target": "src/ux-demo/main.tsx",
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={shellClass}"
+    },
+    {
+      "id": "state-modifier-classes-sidebar-panel",
+      "rules": ["KUI-L008"],
+      "target": "src/components/sidebar-panel.tsx",
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={className}"
     }
   ]
 }

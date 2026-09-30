@@ -8,9 +8,8 @@
   min-width: 0;
   min-height: 0;
   padding: 0 0 var(--kui-space-xs);
+  /* The inspector's Pane content scrolls (HS2-RWGQWN); a panel only clips sideways overflow. */
   overflow-x: hidden;
-  overflow-y: auto;
-  flex: 1;
   align-content: start;
   gap: var(--kui-space-l);
 }

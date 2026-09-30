@@ -1,12 +1,17 @@
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import { NotificationCenter } from './notification-center';
-import { NotificationNavigation, type NotificationView } from './notification-navigation';
-import { ProjectSidebar, type ProjectSidebarProps } from './project-sidebar';
-import { type SettingsCategory, SettingsNavigation } from './settings-navigation';
+import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
+import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
+import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
+import type { SidebarPanelParts } from './sidebar-panel';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
-import { TerminalOperationsSidebar, type TerminalProjectSummary } from './terminal-operations-sidebar';
+import {
+  terminalOperationsPanel,
+  TerminalOperationsSidebar,
+  type TerminalProjectSummary,
+} from './terminal-operations-sidebar';
 import { TerminalTicketRail, type TerminalTicketRailProps } from './terminal-ticket-rail';
 import { TicketBoard } from './ticket-board';
 import { TicketList } from './ticket-list';
@@ -25,6 +30,14 @@ export function SidebarSurface(props: SidebarSurfaceProps) {
   if (props.kind === 'notifications')
     return <NotificationNavigation selected={props.selected} counts={props.counts} collapseControl />;
   return <ProjectSidebar {...props.sidebar} />;
+}
+
+/** The shell's left-rail panel for the same routing, composed by the Workbench (HS2-RWGQWN). */
+export function sidebarSurfacePanel(props: SidebarSurfaceProps): SidebarPanelParts {
+  if (props.kind === 'settings') return settingsNavigationPanel({ selected: props.selected });
+  if (props.kind === 'notifications')
+    return notificationNavigationPanel({ selected: props.selected, counts: props.counts });
+  return projectSidebarPanel(props.sidebar);
 }
 
 export type WorkspaceSurfaceProps =
@@ -86,4 +99,7 @@ export interface TerminalOperationsSurfaceProps {
 }
 export function TerminalOperationsSurface({ projects }: TerminalOperationsSurfaceProps) {
   return <TerminalOperationsSidebar projects={projects} />;
+}
+export function terminalOperationsSurfacePanel({ projects }: TerminalOperationsSurfaceProps): SidebarPanelParts {
+  return terminalOperationsPanel({ projects });
 }

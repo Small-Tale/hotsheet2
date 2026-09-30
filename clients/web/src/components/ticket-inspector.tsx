@@ -4,6 +4,7 @@ import './ticket-inspector.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Pane } from '@kerfjs/ui/pane';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -252,141 +253,151 @@ export function TicketInspector({
       data-attachment-drop-target="true"
       aria-label={`${slug} inspector`}
     >
-      <header class="ticket-inspector__header">
-        <Toolbar
-          dividerSides=""
-          // The rail centers the ticket number on the toolbar itself (Kerf beta.62 balanced tracks).
-          centerAlign={slugCentered ? 'balanced' : undefined}
-          {...(slugCentered ? { center: slugButton } : { leading: slugButton })}
-          trailing={actions}
-        />
-        {titleEditing ? (
-          <input
-            class="ticket-inspector__title-input"
-            name="ticket-title"
-            aria-label="Ticket title"
-            value={titleDraft}
-          />
-        ) : (
-          <h1
-            data-action={canUpdate ? 'edit-ticket-title' : undefined}
-            data-editable={String(canUpdate)}
-            tabIndex={canUpdate ? 0 : undefined}
-            title={canUpdate ? 'Double-click to edit title' : undefined}
-          >
-            {title}
-          </h1>
-        )}
-      </header>
-      {feedbackNeeded && (
-        <div class="ticket-inspector__feedback" role="status">
-          <span class="ticket-inspector__feedback-icon">
-            <LucideIcon icon={CircleAlert} name="circle-alert" />
-          </span>
-          <span>Needs review</span>
-        </div>
-      )}
-      {closeReason && closeReason !== 'duplicate' && (
-        <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>
-          <span>Closed as {ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}</span>
-        </div>
-      )}
-      {closeReason === 'duplicate' &&
-        (duplicateTarget ? (
-          <TicketDuplicateTarget target={duplicateTarget} />
-        ) : (
-          <div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate">
-            <LucideIcon icon={CopyX} name="copy-x" />
-            <span>Duplicate of another ticket</span>
-          </div>
-        ))}
-      <TicketDuplicateBacklinks
-        backlinks={duplicateBacklinks}
-        inaccessibleProjects={duplicateBacklinkInaccessibleProjects}
-      />
-      {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
-      {/* The app owns the strip's outer inset; Kerf's TabBar is a full-width block, so an inset must
-          come from this frame's padding rather than a margin that would overflow (HS2-7DJPSG). */}
-      <div class="ticket-inspector__tabs-frame">
-        <TabBar
-          id={`ticket-inspector-${presentation}-${slug}`}
-          label="Ticket inspector sections"
-          className="ticket-inspector__tabs"
-          activation="automatic"
-          allocation="fill"
-          presentation="inspector"
-          // The reader keeps segmented names and lets Kerf switch them to icon-only below 832px.
-          iconOnlyAt={presentation === 'reader' ? 'wide' : undefined}
-        >
-          {tabs.map((tab) => (
-            <AppTab
-              id={tab.id}
-              name={tab.label}
-              selected={activeTab === tab.id}
-              closable={false}
-              selectAction="set-inspector-tab"
-              // Sidebar and rail inspectors are too narrow for names; icon-only keeps `name` accessible.
-              presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
-              size="compact"
-              rootAttributes={{ 'data-inspector-tab': tab.id }}
-              leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
-              trailing={
-                tab.id === 'attachments' && attachments?.length ? (
-                  <span class="ticket-inspector__tab-count">
-                    <span aria-hidden="true">{attachments.length}</span>
-                    <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
-                  </span>
-                ) : undefined
-              }
+      {/* Kerf's Pane owns the fixed header chrome (toolbar, title, notices, section tabs), the scrolling
+          content, and the safe-area insets the Workbench's right rail routes to it (HS2-RWGQWN). */}
+      <Pane
+        element="div"
+        header={
+          <>
+            <div class="ticket-inspector__header">
+              <Toolbar
+                dividerSides=""
+                // The rail centers the ticket number on the toolbar itself (Kerf beta.62 balanced tracks).
+                centerAlign={slugCentered ? 'balanced' : undefined}
+                {...(slugCentered ? { center: slugButton } : { leading: slugButton })}
+                trailing={actions}
+              />
+              {titleEditing ? (
+                <input
+                  class="ticket-inspector__title-input"
+                  name="ticket-title"
+                  aria-label="Ticket title"
+                  value={titleDraft}
+                />
+              ) : (
+                <h1
+                  data-action={canUpdate ? 'edit-ticket-title' : undefined}
+                  data-editable={String(canUpdate)}
+                  tabIndex={canUpdate ? 0 : undefined}
+                  title={canUpdate ? 'Double-click to edit title' : undefined}
+                >
+                  {title}
+                </h1>
+              )}
+            </div>
+            {feedbackNeeded && (
+              <div class="ticket-inspector__feedback" role="status">
+                <span class="ticket-inspector__feedback-icon">
+                  <LucideIcon icon={CircleAlert} name="circle-alert" />
+                </span>
+                <span>Needs review</span>
+              </div>
+            )}
+            {closeReason && closeReason !== 'duplicate' && (
+              <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>
+                <span>Closed as {ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}</span>
+              </div>
+            )}
+            {closeReason === 'duplicate' &&
+              (duplicateTarget ? (
+                <TicketDuplicateTarget target={duplicateTarget} />
+              ) : (
+                <div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate">
+                  <LucideIcon icon={CopyX} name="copy-x" />
+                  <span>Duplicate of another ticket</span>
+                </div>
+              ))}
+            <TicketDuplicateBacklinks
+              backlinks={duplicateBacklinks}
+              inaccessibleProjects={duplicateBacklinkInaccessibleProjects}
             />
-          ))}
-        </TabBar>
-      </div>
-      {activeTab === 'info' && (
-        <TicketInfoPanel
-          status={status}
-          priority={priority}
-          category={category}
-          tags={tags}
-          tagSuggestions={tagSuggestions}
-          tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`}
-          canUpdate={canUpdate}
-          canEditText={canEditText}
-          canAddNotes={canAddNotes}
-          canEditNotes={canEditNotes}
-          canDeleteNotes={canDeleteNotes}
-          composingNote={composingNote}
-          composerDraft={composerDraft}
-          details={details}
-          detailsMode={detailsMode}
-          detailsDirty={detailsDirty}
-          readerPresentation={presentation === 'reader'}
-          feedbackNeeded={feedbackNeeded}
-          notes={notes}
-          editingNoteId={editingNoteId}
-          noteDraft={noteDraft}
-          inlineFeedbackReplies={inlineFeedbackReplies}
-          feedbackChoiceSelections={feedbackChoiceSelections}
-          blockedReason={blockedReason}
-          blockedReasonEditing={blockedReasonEditing}
-          blockedReasonDraft={blockedReasonDraft}
-          providerName={providerName}
-          updatedLabel={updatedLabel}
-          attachmentContext={attachmentContext}
-        />
-      )}
-      {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
-      {activeTab === 'code-review' && (
-        <TicketCodeReview
-          review={codeReview}
-          loading={codeReviewLoading}
-          message={codeReviewMessage}
-          expandedCommits={expandedCodeReviewCommits}
-        />
-      )}
-      {activeTab === 'attachments' && (
-        <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />
-      )}
+            {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
+            {/* The app owns the strip's outer inset; Kerf's TabBar is a full-width block, so an inset must
+          come from this frame's padding rather than a margin that would overflow (HS2-7DJPSG). */}
+            <div class="ticket-inspector__tabs-frame">
+              <TabBar
+                id={`ticket-inspector-${presentation}-${slug}`}
+                label="Ticket inspector sections"
+                className="ticket-inspector__tabs"
+                activation="automatic"
+                allocation="fill"
+                presentation="inspector"
+                // The reader keeps segmented names and lets Kerf switch them to icon-only below 832px.
+                iconOnlyAt={presentation === 'reader' ? 'wide' : undefined}
+              >
+                {tabs.map((tab) => (
+                  <AppTab
+                    id={tab.id}
+                    name={tab.label}
+                    selected={activeTab === tab.id}
+                    closable={false}
+                    selectAction="set-inspector-tab"
+                    // Sidebar and rail inspectors are too narrow for names; icon-only keeps `name` accessible.
+                    presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
+                    size="compact"
+                    rootAttributes={{ 'data-inspector-tab': tab.id }}
+                    leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+                    trailing={
+                      tab.id === 'attachments' && attachments?.length ? (
+                        <span class="ticket-inspector__tab-count">
+                          <span aria-hidden="true">{attachments.length}</span>
+                          <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
+                        </span>
+                      ) : undefined
+                    }
+                  />
+                ))}
+              </TabBar>
+            </div>
+          </>
+        }
+      >
+        {activeTab === 'info' && (
+          <TicketInfoPanel
+            status={status}
+            priority={priority}
+            category={category}
+            tags={tags}
+            tagSuggestions={tagSuggestions}
+            tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`}
+            canUpdate={canUpdate}
+            canEditText={canEditText}
+            canAddNotes={canAddNotes}
+            canEditNotes={canEditNotes}
+            canDeleteNotes={canDeleteNotes}
+            composingNote={composingNote}
+            composerDraft={composerDraft}
+            details={details}
+            detailsMode={detailsMode}
+            detailsDirty={detailsDirty}
+            readerPresentation={presentation === 'reader'}
+            feedbackNeeded={feedbackNeeded}
+            notes={notes}
+            editingNoteId={editingNoteId}
+            noteDraft={noteDraft}
+            inlineFeedbackReplies={inlineFeedbackReplies}
+            feedbackChoiceSelections={feedbackChoiceSelections}
+            blockedReason={blockedReason}
+            blockedReasonEditing={blockedReasonEditing}
+            blockedReasonDraft={blockedReasonDraft}
+            providerName={providerName}
+            updatedLabel={updatedLabel}
+            attachmentContext={attachmentContext}
+          />
+        )}
+        {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
+        {activeTab === 'code-review' && (
+          <TicketCodeReview
+            review={codeReview}
+            loading={codeReviewLoading}
+            message={codeReviewMessage}
+            expandedCommits={expandedCodeReviewCommits}
+          />
+        )}
+        {activeTab === 'attachments' && (
+          <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />
+        )}
+      </Pane>
     </aside>
   );
 }

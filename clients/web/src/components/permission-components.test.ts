@@ -165,7 +165,8 @@ describe('permission presentation components', () => {
     expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Notifications</h2>');
-    expect(markup).toContain('<nav aria-label="Notification views">');
+    // The Pane's scrolling content is the navigation landmark (HS2-RWGQWN).
+    expect(markup).toContain('<nav class="kui-pane__content kui-content" aria-label="Notification views">');
     expect(markup).toContain('data-component="list"');
     expect(markup).not.toContain('divider-sides');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);

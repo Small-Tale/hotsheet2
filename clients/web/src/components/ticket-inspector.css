@@ -1,6 +1,8 @@
+/* The app wrapper owns the card chrome; its only child, a Kerf Pane, fills it and owns the fixed
+   header chrome, the scrolling content, and the safe-area insets (HS2-RWGQWN). */
 .ticket-inspector {
   position: relative;
-  display: flex;
+  display: grid;
   width: min(remify(432px), 100%);
   min-width: 0;
   max-width: 100%;
@@ -9,7 +11,7 @@
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(12.8px);
   background: var(--wa-color-surface-default);
-  flex-direction: column;
+  grid-template-rows: minmax(0, 1fr);
   box-shadow: var(--wa-shadow-l);
   container-type: inline-size;
 }

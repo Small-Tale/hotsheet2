@@ -28,7 +28,7 @@ describe('Kerf application UI profile', () => {
       expect(exception.target).not.toMatch(/[?*]|\.\./);
       expect(exception.rationale).toContain('Web Awesome shadow parts');
     }
-    expect(profile.exceptions.slice(22, 24)).toEqual([
+    expect(profile.exceptions.slice(22, 23)).toEqual([
       {
         id: 'mobile-side-panel-safe-area-composition',
         rules: ['KUI-L004'],
@@ -36,18 +36,11 @@ describe('Kerf application UI profile', () => {
         rationale:
           'The mobile shell deliberately composes safe-area padding on its app-owned sidebar and inspector content inside Kerf overlay regions.',
       },
-      {
-        id: 'mobile-side-panel-viewport-height',
-        rules: ['KUI-L005'],
-        target: 'src/components/mobile-side-panels.css',
-        rationale:
-          "Hot Sheet mobile side panels are full-viewport navigation surfaces, so they intentionally override Kerf's generic 85vh overlay cap.",
-      },
     ]);
     // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
     // site; each exception is exact (one file, one rule) and its rationale names the classes or
     // expressions it covers, so a new finding elsewhere still fails the gate.
-    const reviewed = profile.exceptions.slice(24);
+    const reviewed = profile.exceptions.slice(23);
     expect(reviewed.length).toBeGreaterThan(0);
     const ids = new Set<string>(),
       targets = new Set<string>();

@@ -6,10 +6,9 @@ import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Bell, CalendarDays, Clock3, PanelLeftClose } from 'lucide';
+import { Bell, CalendarDays, Clock3 } from 'lucide';
+
+import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type NotificationView = 'pending' | 'day' | 'week';
 
@@ -23,43 +22,19 @@ export function notificationViewTitle(view: NotificationView): string {
   return views.find((item) => item.id === view)?.label ?? 'Notifications';
 }
 
-export function NotificationNavigation({
+/** The notification navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
+export function notificationNavigationPanel({
   selected,
   counts,
-  collapseControl = false,
 }: {
   selected: NotificationView;
   counts: Record<NotificationView, number>;
-  collapseControl?: boolean;
-}) {
-  const header = collapseControl ? (
-    <Toolbar
-      dividerSides=""
-      trailing={
-        <ToolbarControlGroup appearance="borderless" single>
-          <button
-            type="button"
-            data-action="toggle-project-sidebar"
-            aria-label="Hide notification sidebar"
-            title="Hide notification sidebar"
-          >
-            <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
-          </button>
-        </ToolbarControlGroup>
-      }
-    />
-  ) : undefined;
-  return (
-    <Pane
-      element="aside"
-      className="settings-navigation"
-      label="Notification views"
-      header={header}
-      contentClassName="settings-navigation__content"
-    >
+}): SidebarPanelParts {
+  const content = (
+    <div class="settings-navigation__content">
       <section>
         <ListHeader label="Notifications" />
-        <nav aria-label="Notification views">
+        <div>
           <List gap={rem(0.125)}>
             {views.map((item) => (
               <ListItem
@@ -79,8 +54,33 @@ export function NotificationNavigation({
               />
             ))}
           </List>
-        </nav>
+        </div>
       </section>
-    </Pane>
+    </div>
+  );
+  return {
+    label: 'Notification views',
+    toolbar: { label: 'Notification sidebar toolbar', dividerSides: '' },
+    toggle: { action: 'toggle-project-sidebar', name: 'notification sidebar' },
+    content,
+    pane: { contentElement: 'nav', contentLabel: 'Notification views' },
+  };
+}
+
+export function NotificationNavigation({
+  selected,
+  counts,
+  collapseControl = false,
+}: {
+  selected: NotificationView;
+  counts: Record<NotificationView, number>;
+  collapseControl?: boolean;
+}) {
+  return (
+    <SidebarPane
+      parts={notificationNavigationPanel({ selected, counts })}
+      className="settings-navigation"
+      collapseControl={collapseControl}
+    />
   );
 }

@@ -96,7 +96,17 @@ for the app's own mobile switch (`responsiveOverlayAt="never"`), popup-aware
 `restorePosition="bottom-end"` corner. The Workbench derives the panel ids
 `app-left-rail`, `app-right-rail`, and `app-bottom-drawer`; `wireWorkbench` drives and
 persists the rails' sizes, while the drawer keeps the app's own drag for its measured
-maximum and drag-past-minimum collapse. Magnified terminal mode suppresses side-panel
+maximum and drag-past-minimum collapse. The left rail is a Workbench toolbar panel
+(HS2-RWGQWN): `ProjectSidebar`, `SettingsNavigation`, `NotificationNavigation`, and
+`TerminalOperationsSidebar` each export a `…Panel()` builder returning `SidebarPanelParts`
+(`src/components/sidebar-panel.tsx`: toolbar, standard `toggle`, content, footer, Pane
+config), the shell spreads them into the rail through `workbenchSidebarPanel()`, and the
+Workbench renders the panel's toolbar with the collapse toggle and relocates that toggle into
+the workspace toolbar while the rail is collapsed; the standalone components render the same
+parts as a Kerf `Pane` through `SidebarPane` for the catalog. The right rail's inspector
+surfaces (`TicketInspector`, `TicketInspectorSkeleton`) render a Kerf `Pane` inside their app
+card, so the rail pads the card for safe areas and `mobile-side-panels.css` is gone.
+Magnified terminal mode suppresses side-panel
 separators through the typed policy, and terminal focus mode lifts the drawer through the
 public `--kui-workbench-popup-z` token instead of descendant CSS. The main column (shell
 toolbar, project tab strip, banners, page header, work area) stays app-owned as the
@@ -2039,7 +2049,10 @@ HS2-P289N2 rebuilt `AppShell` on Kerf's `Workbench`, which (rebased over HS2-PKP
 `app-shell.css` rules on `.kui-resizable-region` (panel backgrounds, the focus-mode drawer
 lift, restore-corner placement, the mobile overlay height cap, and the inspector's rail
 selectors) are gone because the Workbench owns that chrome; the remaining shell rules target
-Hot Sheet's own elements or the public `--kui-workbench-popup-z` token.
+Hot Sheet's own elements or the public `--kui-workbench-popup-z` token. HS2-RWGQWN then removed
+`mobile-side-panels.css` (the inspector's own safe-area insets) by letting the Workbench pad
+the rail around the inspector's Pane-based card, and its `KUI-L005` profile exception with it;
+the shared `SidebarPane` wrapper's forwarded `className` is a reviewed `KUI-L008` exception.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token

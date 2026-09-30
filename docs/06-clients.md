@@ -182,7 +182,16 @@ and identity-less legacy entries remain conservatively blocking.
   with the Workbench's responsive breakpoints turned off) rather than reimplemented overlay
   geometry; the Workbench owns the panels' collapse motion, separators, resize handles, width
   cap, shadow, inert collapsed content, and restore corner, and `wireWorkbench` drives and
-  persists the rails' sizes.
+  persists the rails' sizes. The left rail's surfaces (project sidebar, settings and
+  notification navigators, terminal operations) expose panel parts — a toolbar, the standard
+  collapse `toggle`, content, footer, and Pane configuration — that the Workbench composes
+  (HS2-RWGQWN): the toggle carries `aria-controls`/`aria-expanded` and names the panel it
+  shows ("Show project sidebar", "Show notification sidebar"), and the Workbench relocates it
+  to the leading edge of the workspace toolbar while the rail is collapsed, so the shell
+  composes no Show/Hide sidebar controls of its own. The ticket inspector and its loading
+  skeleton render a Kerf `Pane` (fixed header chrome, scrolling content) inside their app
+  card; the right rail pads that card for the device safe areas, so no app rule insets the
+  inspector.
   The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
   clearing, and typing in search must not pan the whole workspace, including across desktop/mobile
   resize. Embedded AI conversations also opt into flex shrink containment so their header,

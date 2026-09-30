@@ -136,9 +136,9 @@ import { SavedViewContextMenu } from '../components/view-navigation';
 import {
   GlobalWorkspaceSurface,
   ProjectTerminalDrawerSurface,
-  SidebarSurface,
+  sidebarSurfacePanel,
   type SidebarSurfaceProps,
-  TerminalOperationsSurface,
+  terminalOperationsSurfacePanel,
   type TerminalOperationsSurfaceProps,
   TerminalRailSurface,
   type TerminalRailSurfaceProps,
@@ -4405,11 +4405,9 @@ export async function startHotSheetWebClient() {
           mode={shellMode.value}
           mobile={viewportMobile.value}
           sidebar={
-            shellMode.value === 'terminals' ? (
-              <TerminalOperationsSurface {...terminalOperationsSurfaceProps()} />
-            ) : (
-              <></>
-            )
+            shellMode.value === 'terminals'
+              ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
+              : undefined
           }
           sidebarVisible={viewportMobile.value ? mobileOverlay.value.sidebar : sidebarVisible.value}
           sidebarSize={sidebarSize.value}
@@ -4522,7 +4520,7 @@ export async function startHotSheetWebClient() {
         tabs={tabs}
         mode="project"
         mobile={viewportMobile.value}
-        sidebar={<SidebarSurface {...sidebarSurfaceProps()} />}
+        sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
         sidebarVisible={viewportMobile.value ? mobileOverlay.value.sidebar : sidebarVisible.value}
         sidebarSize={sidebarSize.value}
         header={

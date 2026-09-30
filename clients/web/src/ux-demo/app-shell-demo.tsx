@@ -5,11 +5,11 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
 import { AppShell } from '../components/app-shell';
 import { type ConnectionState, ConnectionStateBanner } from '../components/connection-state-banner';
-import { ProjectSidebar } from '../components/project-sidebar';
+import { projectSidebarPanel } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { QuickTicketComposer, QuickTicketLauncher } from '../components/quick-ticket-composer';
-import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
+import { terminalOperationsPanel } from '../components/terminal-operations-sidebar';
 import { TicketBoard } from '../components/ticket-board';
 import { TicketInspector } from '../components/ticket-inspector';
 import { TicketInspectorPlaceholder } from '../components/ticket-inspector-placeholder';
@@ -275,40 +275,35 @@ export function ConnectionStateBannerDemo() {
   );
 }
 
-function ShellSidebar() {
-  return (
-    <ProjectSidebar
-      completedToday={6}
-      inProgress={3}
-      completionTrend={[3, 0, 2, 5, 4, 7, 6]}
-      branch="feature/client-shell"
-      unpushed={2}
-      uncommitted={1}
-      views={sidebarViews}
-      selectedViewId={selectedViewId.value}
-      commandGroupLabel="Project commands"
-      commands={sidebarCommands.map((command) => ({ ...command, running: command.id === runningCommandId.value }))}
-      commandGroupExpanded={commandGroupExpanded.value}
-      collapsedCommandGroups={collapsedCommandGroups.value}
-      driveRunning={driveRunning.value}
-      driveTool="codex"
-      openCount={17}
-      upNextCount={4}
-      activeCount={2}
-      collapseControl
-    />
-  );
+function shellSidebarPanel() {
+  return projectSidebarPanel({
+    completedToday: 6,
+    inProgress: 3,
+    completionTrend: [3, 0, 2, 5, 4, 7, 6],
+    branch: 'feature/client-shell',
+    unpushed: 2,
+    uncommitted: 1,
+    views: sidebarViews,
+    selectedViewId: selectedViewId.value,
+    commandGroupLabel: 'Project commands',
+    commands: sidebarCommands.map((command) => ({ ...command, running: command.id === runningCommandId.value })),
+    commandGroupExpanded: commandGroupExpanded.value,
+    collapsedCommandGroups: collapsedCommandGroups.value,
+    driveRunning: driveRunning.value,
+    driveTool: 'codex',
+    openCount: 17,
+    upNextCount: 4,
+    activeCount: 2,
+  });
 }
 
-function ShellTerminalOperations() {
-  return (
-    <TerminalOperationsSidebar
-      projects={[
-        { id: 'hotsheet', name: 'Hot Sheet 2', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
-        { id: 'website', name: 'Small Tale Website', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
-      ]}
-    />
-  );
+function shellTerminalOperationsPanel() {
+  return terminalOperationsPanel({
+    projects: [
+      { id: 'hotsheet', name: 'Hot Sheet 2', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
+      { id: 'website', name: 'Small Tale Website', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
+    ],
+  });
 }
 
 export function AppShellDemo() {
@@ -359,7 +354,7 @@ export function AppShellDemo() {
       <AppShell
         mode={shellMode.value}
         tabs={projectTabs.value}
-        sidebar={shellMode.value === 'terminals' ? <ShellTerminalOperations /> : <ShellSidebar />}
+        sidebar={shellMode.value === 'terminals' ? shellTerminalOperationsPanel() : shellSidebarPanel()}
         sidebarVisible={shellSidebarVisible.value}
         banner={banner}
         sidebarSize={shellSidebarSize.value}

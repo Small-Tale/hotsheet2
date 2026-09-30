@@ -6,20 +6,18 @@ import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import {
   ArchiveRestore,
   Bot,
   Columns3,
   Database,
   Keyboard,
-  PanelLeftClose,
   ShieldCheck,
   SlidersHorizontal,
   TerminalSquare,
 } from 'lucide';
+
+import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type SettingsCategory =
   'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'general' | 'keyboard';
@@ -53,13 +51,8 @@ export function settingsCategoryTitle(category: SettingsCategory): string {
   return category === 'keyboard' ? 'Keyboard shortcuts' : item.label;
 }
 
-export function SettingsNavigation({
-  selected,
-  collapseControl = false,
-}: {
-  selected: SettingsCategory;
-  collapseControl?: boolean;
-}) {
+/** The settings navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
+export function settingsNavigationPanel({ selected }: { selected: SettingsCategory }): SidebarPanelParts {
   const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][]) => (
     <section>
       <ListHeader label={heading} />
@@ -78,33 +71,32 @@ export function SettingsNavigation({
       </nav>
     </section>
   );
-  const header = collapseControl ? (
-    <Toolbar
-      dividerSides=""
-      trailing={
-        <ToolbarControlGroup appearance="borderless" single>
-          <button
-            type="button"
-            data-action="toggle-project-sidebar"
-            aria-label="Hide settings sidebar"
-            title="Hide settings sidebar"
-          >
-            <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
-          </button>
-        </ToolbarControlGroup>
-      }
-    />
-  ) : undefined;
+  return {
+    label: 'Settings categories',
+    toolbar: { label: 'Settings sidebar toolbar', dividerSides: '' },
+    toggle: { action: 'toggle-project-sidebar', name: 'settings sidebar' },
+    content: (
+      <div class="settings-navigation__content">
+        {renderGroup('Project Settings', projectCategories)}
+        {renderGroup('App Settings', appCategories)}
+      </div>
+    ),
+    pane: { contentElement: 'nav', contentLabel: 'Settings categories' },
+  };
+}
+
+export function SettingsNavigation({
+  selected,
+  collapseControl = false,
+}: {
+  selected: SettingsCategory;
+  collapseControl?: boolean;
+}) {
   return (
-    <Pane
-      element="aside"
+    <SidebarPane
+      parts={settingsNavigationPanel({ selected })}
       className="settings-navigation"
-      label="Settings categories"
-      header={header}
-      contentClassName="settings-navigation__content"
-    >
-      {renderGroup('Project Settings', projectCategories)}
-      {renderGroup('App Settings', appCategories)}
-    </Pane>
+      collapseControl={collapseControl}
+    />
   );
 }

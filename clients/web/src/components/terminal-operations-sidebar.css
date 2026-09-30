@@ -1,7 +1,5 @@
 .terminal-operations-sidebar__groups {
-  min-height: 0;
   padding: var(--kui-space-xs);
-  overflow: auto;
 }
 .terminal-operations-sidebar__group[data-project-id='all'] {
   padding-bottom: var(--kui-space-m);

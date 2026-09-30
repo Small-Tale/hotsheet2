@@ -346,7 +346,7 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
     .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
   // The pane surface reaches every edge; Kerf's Pane pads its pinned header, footer, and scroller slots
   // once (no app-level container padding on top of it, HS2-4A29RR).
-  const sidebar = sidebarRegion.locator('.project-sidebar');
+  const sidebar = sidebarRegion.locator('[data-component="pane"]').first();
   await expect(sidebar).toHaveCSS('padding-top', '0px');
   await expect(sidebar).toHaveCSS('padding-bottom', '0px');
   await expect(sidebar.locator('> .kui-pane__header')).toHaveCSS('padding-top', '13px');
@@ -375,19 +375,23 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
       }),
     )
     .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
-  // The inspector's pinned header carries the top inset and its scroller reaches the bottom edge with
-  // the inset as padding inside the scroll (plus matching scroll padding), so the last section can be
-  // scrolled clear of the home indicator (HS2-4A29RR).
-  const inspector = inspectorRegion.locator('.ticket-inspector');
+  // The inspector is a Kerf Pane inside its app card (HS2-RWGQWN). The card is the rail's child, so
+  // Kerf pads the rail's panel content for the device insets once (top, right, and the home
+  // indicator) and the card and its Pane carry none of their own (HS2-4A29RR).
+  const panelContent = inspectorRegion.locator('> .kui-workbench__panel-content'),
+    inspector = inspectorRegion.locator('.ticket-inspector'),
+    inspectorPane = inspector.locator('[data-component="pane"]').first();
+  await expect(panelContent).toHaveCSS('padding-top', '13px');
+  await expect(panelContent).toHaveCSS('padding-right', '11px');
+  await expect(panelContent).toHaveCSS('padding-bottom', '37px');
   await expect(inspector).toHaveCSS('padding-top', '0px');
   await expect(inspector).toHaveCSS('padding-bottom', '0px');
-  await expect(inspector).toHaveCSS('padding-right', '11px');
-  await expect(inspector.locator('.ticket-inspector__header')).toHaveCSS('padding-top', '13px');
-  await expect(inspector.locator('.ticket-inspector__content')).toHaveCSS('padding-bottom', '45px');
-  await expect(inspector.locator('.ticket-inspector__content')).toHaveCSS('scroll-padding-bottom', '37px');
+  await expect(inspector).toHaveCSS('padding-right', '0px');
+  await expect(inspectorPane.locator('> .kui-pane__header')).toHaveCSS('padding-top', '0px');
+  await expect(inspectorPane.locator('> .kui-pane__content')).toHaveCSS('padding-bottom', '0px');
   expect(
-    await inspector.locator('.ticket-inspector__content').evaluate((node) => node.getBoundingClientRect().bottom),
-  ).toBe(844);
+    await inspectorPane.locator('> .kui-pane__content').evaluate((node) => node.getBoundingClientRect().bottom),
+  ).toBe(844 - 37);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await page.screenshot({
     path: '/private/tmp/hs2-3bvwme-mobile-inspector-full-height.png',
@@ -907,7 +911,7 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBeGreaterThan(100);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
-  const sidebar = page.locator('.project-sidebar');
+  const sidebar = page.locator('#app-left-rail');
   await expect
     .poll(() =>
       sidebar.evaluate((node) => {

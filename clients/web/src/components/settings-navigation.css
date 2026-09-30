@@ -1,7 +1,6 @@
 /* Unpadded pane (kui-pane): the shell owns only card chrome; children own their inset
    (kerf ui rule 15). Shared by SettingsNavigation and NotificationNavigation. */
 .settings-navigation__content {
-  overflow: auto;
   padding-block: remify(8px);
   gap: var(--kui-space-m);
 }

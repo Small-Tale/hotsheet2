@@ -1,27 +1,27 @@
 import '@kerfjs/ui/floating-toolbar.css';
 import './app-shell.css';
-import './mobile-side-panels.css';
 
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
 import type { ResizableRegionContentOverflow, ResizableRegionSeparator } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Workbench, type WorkbenchPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { PanelBottomOpen, PanelLeftOpen, PanelRightOpen } from 'lucide';
+import { PanelBottomOpen, PanelRightOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
+import { type SidebarPanelParts, workbenchSidebarPanel } from './sidebar-panel';
 
 /** The Workbench id; Kerf derives the panel ids `app-left-rail`, `app-right-rail`, and `app-bottom-drawer`. */
 export const APP_WORKBENCH_ID = 'app';
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];
-  sidebar?: SafeHtml;
+  /** The left rail's panel parts; the Workbench composes its toolbar and collapse toggle. */
+  sidebar?: SidebarPanelParts;
   header: SafeHtml;
   headerActions?: SafeHtml;
   projectTabAction?: SafeHtml;
@@ -93,8 +93,8 @@ export function AppShell({
   const leftRail: WorkbenchPanel | undefined =
     mode !== 'stats' && sidebar
       ? {
-          content: sidebar,
-          // Rail names stay distinct from the landmarks inside them (the sidebar Pane, the inspector).
+          ...workbenchSidebarPanel(sidebar),
+          // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
           label: mode === 'terminals' ? 'Operations rail' : 'Sidebar rail',
           collapsed: !sidebarVisible,
           size: sidebarSize,
@@ -108,13 +108,9 @@ export function AppShell({
   const rightRail: WorkbenchPanel | undefined =
     mode !== 'stats' && inspector
       ? {
-          // The inspector owns its own safe-area insets (mobile-side-panels.css), so an uninset Pane
-          // makes it the rail's only child and keeps the Workbench from padding around it.
-          content: (
-            <Pane element="div" safeAreaEdges={[]}>
-              {inspector}
-            </Pane>
-          ),
+          // The inspector surfaces render a Kerf Pane, which takes the safe-area insets the rail routes
+          // to its content (HS2-RWGQWN).
+          content: inspector,
           label: mode === 'terminals' ? 'Tickets rail' : 'Inspector rail',
           collapsed: !inspectorVisible,
           size: inspectorSize,
@@ -192,24 +188,8 @@ export function AppShell({
           responsive: 'trailing-priority',
           responsiveAt: 'narrow',
           safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
-          leading: (
-            <>
-              {mode !== 'stats' && sidebar && !sidebarVisible && (
-                <ToolbarControlGroup appearance="borderless" single>
-                  <button
-                    type="button"
-                    data-action="toggle-project-sidebar"
-                    aria-controls={`${APP_WORKBENCH_ID}-left-rail`}
-                    aria-label={mode === 'terminals' ? 'Show operations sidebar' : 'Show project sidebar'}
-                    title={mode === 'terminals' ? 'Show operations sidebar' : 'Show project sidebar'}
-                  >
-                    <LucideIcon icon={PanelLeftOpen} name="panel-left-open" />
-                  </button>
-                </ToolbarControlGroup>
-              )}
-              {header}
-            </>
-          ),
+          // The collapsed left rail's toggle leads this zone; the Workbench relocates it here.
+          leading: header,
           trailing: (
             <>
               {headerActions}

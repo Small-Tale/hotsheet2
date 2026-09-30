@@ -3,13 +3,9 @@ import './terminal-operations-sidebar.css';
 
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { PanelLeftClose } from 'lucide';
 
 import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
+import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export interface TerminalProjectSummary {
   id: string;
@@ -30,35 +26,17 @@ export function aggregateTerminalProjectSummaries(projects: readonly TerminalPro
   };
 }
 
-export function TerminalOperationsSidebar({ projects }: { projects: readonly TerminalProjectSummary[] }) {
+/** The operations sidebar's panel parts for the Workbench's left rail (HS2-RWGQWN). */
+export function terminalOperationsPanel({
+  projects,
+}: {
+  projects: readonly TerminalProjectSummary[];
+}): SidebarPanelParts {
   const aggregate = projects.length > 1 ? aggregateTerminalProjectSummaries(projects) : undefined;
   const groups = aggregate ? [aggregate, ...projects] : projects;
   const chartMaximum = aggregate ? chartDomainMaximum(aggregate.trend) : undefined;
-  const header = (
-    <Toolbar
-      dividerSides=""
-      trailing={
-        <ToolbarControlGroup appearance="borderless" single>
-          <button
-            type="button"
-            data-action="toggle-project-sidebar"
-            aria-label="Hide operations sidebar"
-            title="Hide operations sidebar"
-          >
-            <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
-          </button>
-        </ToolbarControlGroup>
-      }
-    />
-  );
-  return (
-    <Pane
-      element="aside"
-      className="terminal-operations-sidebar"
-      label="Terminal operations sidebar"
-      header={header}
-      contentClassName="terminal-operations-sidebar__groups"
-    >
+  const content = (
+    <div class="terminal-operations-sidebar__groups">
       <List gap="m">
         {groups.map((group) => (
           <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
@@ -77,6 +55,23 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
           </section>
         ))}
       </List>
-    </Pane>
+    </div>
+  );
+  return {
+    label: 'Terminal operations sidebar',
+    toolbar: { label: 'Operations sidebar toolbar', dividerSides: '' },
+    toggle: { action: 'toggle-project-sidebar', name: 'operations sidebar' },
+    content,
+    pane: { contentElement: 'section', contentLabel: 'Terminal operations sidebar' },
+  };
+}
+
+export function TerminalOperationsSidebar({ projects }: { projects: readonly TerminalProjectSummary[] }) {
+  return (
+    <SidebarPane
+      parts={terminalOperationsPanel({ projects })}
+      className="terminal-operations-sidebar"
+      collapseControl
+    />
   );
 }

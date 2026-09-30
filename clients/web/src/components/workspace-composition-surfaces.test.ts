@@ -49,13 +49,14 @@ describe('workspace composition surfaces', () => {
       /function (Sidebar|Workspace|TerminalRail|GlobalWorkspace|ProjectTerminalDrawer|TerminalOperations)\(/,
     );
     for (const surface of [
-      'SidebarSurface',
       'WorkspaceSurface',
       'TerminalRailSurface',
       'GlobalWorkspaceSurface',
       'ProjectTerminalDrawerSurface',
-      'TerminalOperationsSurface',
     ])
       expect(source).toContain(`<${surface}`);
+    // The left rail takes panel parts the Workbench composes (HS2-RWGQWN).
+    for (const panel of ['sidebarSurfacePanel', 'terminalOperationsSurfacePanel'])
+      expect(source).toContain(`${panel}(`);
   });
 });

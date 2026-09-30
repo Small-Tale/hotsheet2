@@ -25,7 +25,10 @@ describe('TerminalOperationsSidebar', () => {
       single = String(TerminalOperationsSidebar({ projects: [projects[0]] }));
     expect(multiple).toContain('class="kui-pane terminal-operations-sidebar"');
     expect(multiple).toContain('data-component="pane"');
-    expect(multiple).toContain('class="kui-pane__content kui-content terminal-operations-sidebar__groups"');
+    expect(multiple).toContain(
+      '<section class="kui-pane__content kui-content" aria-label="Terminal operations sidebar">',
+    );
+    expect(multiple).toContain('<div class="terminal-operations-sidebar__groups">');
     expect(multiple).toContain('All projects');
     expect(multiple).toContain('data-chart-tone="success"');
     expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);

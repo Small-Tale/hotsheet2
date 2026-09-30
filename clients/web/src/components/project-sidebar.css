@@ -1,12 +1,13 @@
 /* Unpadded pane (kui-pane): the shell owns only card chrome; children own their
    8px inline inset. kerf ListItem/ListHeader self-inset via --kui-layout-inline-margin;
    ProjectSummary and the footer inset themselves since they are not menu rows. */
+/* Inside the Pane's scrolling content (the Pane owns scrolling and safe areas); this wrapper only
+   lays out the sidebar sections (HS2-RWGQWN). */
 .project-sidebar__content {
   display: grid;
   align-content: start;
   row-gap: var(--kui-space-m);
   padding-block: var(--kui-space-xs);
-  scrollbar-gutter: stable;
 }
 .project-sidebar__content > .project-summary {
   width: auto;

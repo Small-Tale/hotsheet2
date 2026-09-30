@@ -11,6 +11,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Pane } from '@kerfjs/ui/pane';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -88,90 +89,104 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
       aria-busy="true"
       aria-label="Loading ticket"
     >
-      <header class="ticket-inspector__header">
-        <Toolbar
-          dividerSides=""
-          center={slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />}
-          trailing={actions}
-        />
-        <div class="ticket-inspector__ph-title" aria-hidden="true">
-          <Skeleton height={rem(1.25)} />
-          <Skeleton width={pct(62)} height={rem(1.25)} />
-        </div>
-      </header>
-      <div aria-hidden="true">
-        <div class="ticket-inspector__tabs-frame">
-          <TabBar id="ticket-inspector-loading" label="Ticket inspector sections" className="ticket-inspector__tabs">
-            {TABS.map((tab) => (
-              <AppTab
-                id={tab.id}
-                name={tab.label}
-                selected={tab.id === 'info'}
-                closable={false}
-                placeholder
-                leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+      <Pane
+        element="div"
+        header={
+          <>
+            <div class="ticket-inspector__header">
+              <Toolbar
+                dividerSides=""
+                center={
+                  slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />
+                }
+                trailing={actions}
               />
-            ))}
-          </TabBar>
-        </div>
-      </div>
-      <div class="ticket-inspector__content" aria-hidden="true">
-        <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
-          <TicketCategorySelect name="inspector-category" value="" placeholder />
-          <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
-          <div class="ticket-inspector__status-field">
-            <ListHeader label="Status" />
-            <ListInsetControl>
-              <div class="ticket-inspector__status-line">
-                <TicketStatusMenu value="not_started" placeholder />
+              <div class="ticket-inspector__ph-title" aria-hidden="true">
+                <Skeleton height={rem(1.25)} />
+                <Skeleton width={pct(62)} height={rem(1.25)} />
               </div>
-            </ListInsetControl>
-          </div>
-        </section>
-        <section class="ticket-inspector__section ticket-inspector__blocked-section">
-          <ListItem
-            action="block-ticket"
-            icon={<LucideIcon icon={Plus} name="plus" />}
-            label="Block ticket"
-            tabIndex={-1}
-          />
-        </section>
-        <section class="ticket-inspector__section ticket-inspector__details-section">
-          <ListHeader label="Details" />
-          <div class="ticket-inspector__details-surface">
-            <div class="ticket-inspector__ph-lines">
-              <Skeleton lines={3} />
             </div>
-          </div>
-        </section>
-        <section class="ticket-inspector__section">
-          <ListHeader
-            label="Tags"
-            actionDisabled
-            action="add-tag"
-            actionLabel="Add tag"
-            actionIcon={<LucideIcon icon={Plus} name="plus" />}
-          />
-        </section>
-        <section class="ticket-inspector__section">
-          <ListHeader
-            label="Notes"
-            actionDisabled
-            action="add-note"
-            actionLabel="Add note"
-            actionIcon={<LucideIcon icon={Plus} name="plus" />}
-          />
-          <div class="ticket-inspector__ph-notes">
-            <PlaceholderNote kind="activity" />
-            <PlaceholderNote kind="activity" />
-            <PlaceholderNote kind="regular" card />
-          </div>
-        </section>
-        <footer class="ticket-inspector__ph-provenance">
-          <Skeleton width={rem(6)} height={rem(0.6875)} />
-          <Skeleton width={rem(4)} height={rem(0.6875)} />
-        </footer>
-      </div>
+            <div aria-hidden="true">
+              <div class="ticket-inspector__tabs-frame">
+                <TabBar
+                  id="ticket-inspector-loading"
+                  label="Ticket inspector sections"
+                  className="ticket-inspector__tabs"
+                >
+                  {TABS.map((tab) => (
+                    <AppTab
+                      id={tab.id}
+                      name={tab.label}
+                      selected={tab.id === 'info'}
+                      closable={false}
+                      placeholder
+                      leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+                    />
+                  ))}
+                </TabBar>
+              </div>
+            </div>
+          </>
+        }
+      >
+        <div class="ticket-inspector__content" aria-hidden="true">
+          <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
+            <TicketCategorySelect name="inspector-category" value="" placeholder />
+            <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
+            <div class="ticket-inspector__status-field">
+              <ListHeader label="Status" />
+              <ListInsetControl>
+                <div class="ticket-inspector__status-line">
+                  <TicketStatusMenu value="not_started" placeholder />
+                </div>
+              </ListInsetControl>
+            </div>
+          </section>
+          <section class="ticket-inspector__section ticket-inspector__blocked-section">
+            <ListItem
+              action="block-ticket"
+              icon={<LucideIcon icon={Plus} name="plus" />}
+              label="Block ticket"
+              tabIndex={-1}
+            />
+          </section>
+          <section class="ticket-inspector__section ticket-inspector__details-section">
+            <ListHeader label="Details" />
+            <div class="ticket-inspector__details-surface">
+              <div class="ticket-inspector__ph-lines">
+                <Skeleton lines={3} />
+              </div>
+            </div>
+          </section>
+          <section class="ticket-inspector__section">
+            <ListHeader
+              label="Tags"
+              actionDisabled
+              action="add-tag"
+              actionLabel="Add tag"
+              actionIcon={<LucideIcon icon={Plus} name="plus" />}
+            />
+          </section>
+          <section class="ticket-inspector__section">
+            <ListHeader
+              label="Notes"
+              actionDisabled
+              action="add-note"
+              actionLabel="Add note"
+              actionIcon={<LucideIcon icon={Plus} name="plus" />}
+            />
+            <div class="ticket-inspector__ph-notes">
+              <PlaceholderNote kind="activity" />
+              <PlaceholderNote kind="activity" />
+              <PlaceholderNote kind="regular" card />
+            </div>
+          </section>
+          <footer class="ticket-inspector__ph-provenance">
+            <Skeleton width={rem(6)} height={rem(0.6875)} />
+            <Skeleton width={rem(4)} height={rem(0.6875)} />
+          </footer>
+        </div>
+      </Pane>
     </aside>
   );
 }

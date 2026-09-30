@@ -170,7 +170,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
 
   // Settings uses a mnemonic chord instead of Safari's application-settings shortcut (⌘,).
   await page.keyboard.press('ControlOrMeta+Alt+S');
-  await expect(page.getByRole('complementary', { name: 'Settings categories' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Settings categories' })).toBeVisible();
   await page.getByRole('button', { name: 'Keyboard' }).click();
   const keyboardSettings = page.locator('[data-component="keyboard-settings"]');
   await expect(keyboardSettings.locator('li[data-shortcut-id="toggle-right-sidebar"]')).toContainText(
@@ -243,7 +243,7 @@ for (const apple of [true, false]) {
     });
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByLabel('Settings view').click();
-    await page.locator('.settings-navigation [data-item-id="keyboard"]').click();
+    await page.locator('#app-left-rail [data-item-id="keyboard"]').click();
     const screen = page.locator('[data-component="keyboard-settings"]');
     const row = (id: string) => screen.locator(`li[data-shortcut-id="${id}"]`);
     const record = async (id: string) => {
@@ -295,7 +295,7 @@ for (const apple of [true, false]) {
     await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
     await page.reload();
     await page.getByLabel('Settings view').click();
-    await page.locator('.settings-navigation [data-item-id="keyboard"]').click();
+    await page.locator('#app-left-rail [data-item-id="keyboard"]').click();
     await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃G' : 'Ctrl+G');
     await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
 

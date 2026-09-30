@@ -41,8 +41,9 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
       await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      // The navigator's Pane content is the navigation landmark; its group list sits in an app wrapper.
       const navigation = page.getByRole('navigation', { name: label, exact: true }),
-        list = navigation.locator(':scope > [data-component="list"]'),
+        list = navigation.locator('[data-component="list"]').first(),
         rows = list.getByRole('button');
       await expect(rows).toHaveCount(count);
       await expect(list).toHaveCSS('display', 'flex');
@@ -4262,7 +4263,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await page.mouse.up();
   await expect(handle).toHaveAttribute('aria-valuenow', '400');
   const scrollState = await sidebar.evaluate((node) => {
-    const content = node.querySelector('.project-sidebar__content')!;
+    const content = node.querySelector('.kui-pane__content')!;
     const drive = node.querySelector('.drive-control')!;
     return {
       contentClientHeight: content.clientHeight,
@@ -4753,7 +4754,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   // The header identity and controls are Toolbar zone children, not wrapper components (HS2-EZ1N7Z).
   await expect(shell.locator('.kui-toolbar__leading > .workspace-header__identity')).toHaveCount(1);
   await expect(shell.locator('.kui-toolbar__trailing > .view-mode-switcher')).toHaveCount(1);
-  await expect(shell.locator('.project-sidebar[data-component="pane"]')).toHaveCount(1);
+  await expect(shell.locator('#app-left-rail [data-component="pane"]')).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();
@@ -4949,7 +4950,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showSidebar.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showSidebar.click();
-  await expect(shell.locator('.project-sidebar')).toBeVisible();
+  await expect(shell.locator('#app-left-rail')).toBeVisible();
   await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'false');
   await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-separator', 'auto');
   // The Workbench rail draws its separator as its own inline-end border.
@@ -5012,8 +5013,8 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await shell.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
-  await expect(shell.locator('.project-sidebar')).toHaveCount(0);
-  await expect(shell.getByRole('complementary', { name: 'Terminal operations sidebar' })).toBeVisible();
+  await expect(shell.locator('.project-sidebar__content')).toHaveCount(0);
+  await expect(shell.getByRole('region', { name: 'Terminal operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
   await expect(shell.locator('#app-right-rail')).toHaveAttribute('aria-label', 'Tickets rail');
   await expect(shell.locator('#app-right-rail')).toBeVisible();
@@ -5028,7 +5029,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('region', { name: 'Cross-project stats workspace' })).toBeVisible();
   await shell.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
-  await expect(shell.locator('.project-sidebar')).toBeVisible();
+  await expect(shell.locator('#app-left-rail')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.view-mode-switcher')).toBeVisible();
   await shell.locator('[data-component="project-summary"]').click();

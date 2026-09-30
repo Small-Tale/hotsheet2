@@ -408,8 +408,10 @@ describe('ProjectSidebar component slice', () => {
     // (KUI-L022), so the Workbench rail sees a Pane-only child and routes safe areas to it.
     expect(markup).toContain('class="kui-pane project-sidebar"');
     expect(markup).toContain('data-component="pane"');
-    expect(markup).toContain('class="kui-pane__content kui-content project-sidebar__content"');
-    expect(markup).toContain('class="kui-pane__footer project-sidebar__footer"');
+    // The Pane owns the scrolling content and footer slots; app wrappers inside them lay out the parts.
+    expect(markup).toContain('<section class="kui-pane__content kui-content" aria-label="Project sidebar">');
+    expect(markup).toContain('<div class="project-sidebar__content">');
+    expect(markup).toContain('<footer class="kui-pane__footer"><div class="project-sidebar__footer-content">');
     const css = readFileSync(new URL('./project-sidebar.css', import.meta.url), 'utf8');
     // The pane shell owns only card chrome — no padding and no zeroed inline margin.
     const shell = css.match(/\.project-sidebar \{([^}]*)\}/)?.[1] ?? '';

@@ -21,11 +21,20 @@ import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab, projectTabActivityDash, projectTabActivitySegments } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
+import type { SidebarPanelParts } from './sidebar-panel';
+
+/** Minimal left-rail panel parts: the Workbench composes the toolbar and its collapse toggle. */
+const sidebarParts = (name: string): SidebarPanelParts => ({
+  label: name,
+  toolbar: { label: `${name} toolbar` },
+  toggle: { action: 'toggle-project-sidebar', name },
+  content: 'side' as never,
+  pane: {},
+});
 
 describe('application shell components', () => {
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    const mobileSidePanelCss = readFileSync(new URL('./mobile-side-panels.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/data-collapsed[^}]*kui-resizable-region__content/);
@@ -39,19 +48,12 @@ describe('application shell components', () => {
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
-    expect(mobileSidePanelCss).not.toContain('kui-resizable-region');
     // Safe-area insets live inside the scroll owners, never on a container that would shorten them
-    // (HS2-4A29RR): the sidebar Pane owns its own; the inspector's header and scroller carry theirs.
-    expect(mobileSidePanelCss).not.toContain('.project-sidebar {');
-    expect(mobileSidePanelCss).toContainSource(
-      '.ticket-inspector { min-height: 0; padding-inline-end: var(--hotsheet-safe-area-right); }',
-    );
-    expect(mobileSidePanelCss).toContainSource(
-      '.ticket-inspector__header { padding-top: var(--hotsheet-safe-area-top); }',
-    );
-    expect(mobileSidePanelCss).toContainSource(
-      '.ticket-inspector__content { padding-bottom: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-bottom)); scroll-padding-bottom: var(--hotsheet-safe-area-bottom); }',
-    );
+    // (HS2-4A29RR): the rails route them into the sidebar and inspector Panes (HS2-RWGQWN), so the
+    // shell carries no inspector inset rules of its own.
+    expect(css).not.toContain('.ticket-inspector__header');
+    expect(css).not.toContain('.ticket-inspector__content');
+    expect(css).not.toContain('--hotsheet-safe-area-right');
     expect(productionCss).toContainSource(
       'html:root { --kui-safe-area-block-start: var(--hotsheet-safe-area-top); --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom); --kui-safe-area-inline-start: var(--hotsheet-safe-area-left); --kui-safe-area-inline-end: var(--hotsheet-safe-area-right); }',
     );
@@ -130,14 +132,19 @@ describe('application shell components', () => {
     const withComposer = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         composer: 'compose' as never,
         workspace: 'work' as never,
       }),
     );
     const withoutComposer = String(
-      AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never }),
+      AppShell({
+        tabs: [],
+        sidebar: sidebarParts('project sidebar'),
+        header: 'head' as never,
+        workspace: 'work' as never,
+      }),
     );
     const withoutSidebar = String(
       AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, sidebarVisible: false }),
@@ -437,7 +444,7 @@ describe('application shell components', () => {
     const open = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -458,7 +465,7 @@ describe('application shell components', () => {
     const tall = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -474,7 +481,7 @@ describe('application shell components', () => {
     const collapsed = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -507,7 +514,7 @@ describe('application shell components', () => {
     const markup = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: 'inspect' as never,
@@ -525,7 +532,7 @@ describe('application shell components', () => {
       AppShell({
         tabs: [],
         mode: 'terminals',
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
         inspector: 'ticket rail' as never,
@@ -539,7 +546,7 @@ describe('application shell components', () => {
       AppShell({
         tabs: [],
         mode: 'terminals',
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
         inspector: 'ticket rail' as never,
@@ -570,7 +577,7 @@ describe('application shell components', () => {
     const markup = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         headerActions: 'actions' as never,
         projectTabAction: 'tab-action' as never,
@@ -619,7 +626,7 @@ describe('application shell components', () => {
       AppShell({
         mode: 'stats',
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: 'inspect' as never,
@@ -632,7 +639,7 @@ describe('application shell components', () => {
       AppShell({
         mode: 'terminals',
         tabs: [],
-        sidebar: 'operations' as never,
+        sidebar: sidebarParts('operations sidebar'),
         header: 'head' as never,
         workspace: 'terminals' as never,
         inspector: 'tickets' as never,
@@ -644,7 +651,7 @@ describe('application shell components', () => {
       AppShell({
         mode: 'terminals',
         tabs: [],
-        sidebar: 'operations' as never,
+        sidebar: sidebarParts('operations sidebar'),
         sidebarVisible: false,
         header: 'head' as never,
         workspace: 'terminals' as never,
@@ -654,7 +661,7 @@ describe('application shell components', () => {
     const collapsedMarkup = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         sidebarVisible: false,
         header: 'head' as never,
         workspace: 'work' as never,
@@ -669,7 +676,7 @@ describe('application shell components', () => {
     const hiddenInspectorMarkup = String(
       AppShell({
         tabs: [],
-        sidebar: 'side' as never,
+        sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: 'inspect' as never,

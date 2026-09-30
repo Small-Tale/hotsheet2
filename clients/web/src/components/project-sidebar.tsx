@@ -2,16 +2,14 @@ import '@kerfjs/ui/layout.css';
 import './project-sidebar.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { MessageSquare, PanelLeftClose } from 'lucide';
+import { MessageSquare } from 'lucide';
 
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { type AiToolDescriptor, type AiToolSelection, DriveOptionsMenu } from './drive-options-menu';
 import { ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
+import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import { ViewNavigation, type ViewNavigationItem } from './view-navigation';
 
 export interface ProjectSidebarProps {
@@ -50,28 +48,16 @@ export interface ProjectSidebarProps {
   collapseControl?: boolean;
 }
 
-export function ProjectSidebar(props: ProjectSidebarProps) {
+/**
+ * The project sidebar's panel parts (HS2-RWGQWN): the shell hands them to the Workbench's left
+ * rail, whose toolbar carries the standard collapse toggle; {@link ProjectSidebar} renders them
+ * standalone.
+ */
+export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelParts {
   const driveToolLabel =
     props.driveToolLabel ??
     props.driveTools?.find((tool) => tool.id === props.driveTool)?.display_name ??
     `${props.driveTool.slice(0, 1).toUpperCase()}${props.driveTool.slice(1)}`;
-  const header = props.collapseControl ? (
-    <Toolbar
-      dividerSides=""
-      trailing={
-        <ToolbarControlGroup appearance="borderless" single>
-          <button
-            type="button"
-            data-action="toggle-project-sidebar"
-            aria-label="Hide project sidebar"
-            title="Hide project sidebar"
-          >
-            <LucideIcon icon={PanelLeftClose} name="panel-left-close" />
-          </button>
-        </ToolbarControlGroup>
-      }
-    />
-  ) : undefined;
   // Kerf's Pane owns its footer's (safe-area) edges since beta.51, so the footer's own inset lives on
   // this inner content box rather than on the pane footer (HS2-KMDJRH).
   const footer = (
@@ -112,17 +98,8 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       </div>
     </div>
   );
-  return (
-    <Pane
-      element="aside"
-      className="project-sidebar"
-      label="Project sidebar"
-      safeAreaEdges={['block-start', 'block-end', 'inline-start']}
-      header={header}
-      contentClassName="project-sidebar__content"
-      footerClassName="project-sidebar__footer"
-      footer={footer}
-    >
+  const content = (
+    <div class="project-sidebar__content">
       <ProjectSummary
         completedToday={props.completedToday}
         inProgress={props.inProgress}
@@ -147,6 +124,28 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       ) : (
         <></>
       )}
-    </Pane>
+    </div>
+  );
+  return {
+    label: 'Project sidebar',
+    toolbar: { label: 'Project sidebar toolbar', dividerSides: '' },
+    toggle: { action: 'toggle-project-sidebar', name: 'project sidebar' },
+    content,
+    footer,
+    pane: {
+      contentElement: 'section',
+      contentLabel: 'Project sidebar',
+      safeAreaEdges: ['block-start', 'block-end', 'inline-start'],
+    },
+  };
+}
+
+export function ProjectSidebar(props: ProjectSidebarProps) {
+  return (
+    <SidebarPane
+      parts={projectSidebarPanel(props)}
+      className="project-sidebar"
+      collapseControl={props.collapseControl}
+    />
   );
 }

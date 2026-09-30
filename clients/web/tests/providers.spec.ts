@@ -2308,7 +2308,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
-    operations = page.getByRole('complementary', { name: 'Terminal operations sidebar' });
+    operations = page.getByRole('region', { name: 'Terminal operations sidebar' });
   await expect(dashboard).toBeVisible();
   const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(zoomToolbar).toHaveAttribute('data-component', 'floating-toolbar');
@@ -2362,7 +2362,8 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '2');
   await expect(operations).toBeVisible();
-  await operations.getByRole('button', { name: 'Hide operations sidebar' }).click();
+  // The collapse toggle sits in the panel's toolbar, above the content region.
+  await page.getByRole('button', { name: 'Hide operations sidebar' }).click();
   await expect(page.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show operations sidebar' }).click();
   await expect(operations).toBeVisible();
@@ -2703,7 +2704,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
     await segments.getByRole('button', { name: 'Settings view' }).click();
     await expectMode(segments, 'settings');
-    await expect(page.getByRole('complementary', { name: 'Settings categories' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Settings categories' })).toBeVisible();
     // An independent state producer resets the selected control; another native edit still works.
     await page.keyboard.press('ControlOrMeta+Shift+L');
     await expectMode(segments, 'list');
@@ -6984,7 +6985,7 @@ test('projects background AI activity without rerendering the closed conversatio
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  const drive = page.locator('.project-sidebar [data-action="toggle-drive"]');
+  const drive = page.locator('#app-left-rail [data-action="toggle-drive"]');
   await drive.click();
   await expect(page.getByRole('button', { name: 'Open Codex conversation' })).toBeEnabled();
   await expect(page.locator('[data-component="ai-conversation"][data-presentation="embedded"]')).toHaveCount(1);
@@ -7097,7 +7098,7 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const sidebar = page.locator('.project-sidebar');
+  const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await expect(sidebar.locator('[data-action="select-view"][data-item-id="backlog"]')).toHaveAttribute(
     'aria-current',
@@ -7123,7 +7124,7 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const sidebar = page.locator('.project-sidebar');
+  const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
@@ -7802,13 +7803,13 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     queue = sidebar.locator('[data-action="select-view"][data-item-id="all"]'),
     queueIcon = queue.locator('.kui-list-item__icon'),
     queueLabel = queue.locator('.kui-list-item__label'),
     viewsTitle = sidebar.locator('.view-navigation > .kui-list-header h2'),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
-    hideLayer = sidebar.locator(':scope > .kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
+    hideLayer = sidebar.locator('.kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
     chat = sidebar.getByRole('button', { name: 'Open Codex conversation' });
   const boxes = await Promise.all(
     [sidebar, queue, queueIcon, queueLabel, viewsTitle, viewActionLayer, hideLayer, chat].map((locator) =>
@@ -8273,13 +8274,13 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await selected.click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
   await page.getByLabel('Settings view').click();
-  const navigation = page.getByRole('complementary', { name: 'Settings categories' }),
+  const navigation = page.getByRole('navigation', { name: 'Settings categories' }),
     placeholder = page.locator('.ticket-inspector-placeholder'),
     placeholderToolbar = placeholder.locator(':scope > .kui-toolbar');
   await expect(navigation).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ticket sources settings' })).toBeVisible();
   await expect(page.locator('.project-settings > h2')).toHaveCount(0);
-  await expect(page.locator('.project-sidebar')).toHaveCount(0);
+  await expect(page.locator('.project-sidebar__content')).toHaveCount(0);
   await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(placeholderToolbar).not.toHaveAttribute('divider-sides');
@@ -8367,7 +8368,7 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
-  await expect(page.locator('.project-sidebar')).toBeVisible();
+  await expect(page.locator('#app-left-rail')).toBeVisible();
   const popupBounds = await popup.boundingBox();
   expect(popupBounds).not.toBeNull();
   expect(popupBounds!.x).toBeGreaterThanOrEqual(0);
@@ -8396,7 +8397,7 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.reload();
   await expect(popup).toBeVisible();
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
-  await expect(page.locator('.project-sidebar')).toBeVisible();
+  await expect(page.locator('#app-left-rail')).toBeVisible();
   expect(
     await popup.locator('.permission-request-card__identity').evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -10025,7 +10026,7 @@ test('shows reactive open and Up Next counts immediately above Drive', async ({ 
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(400);
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     summary = sidebar.locator('[data-component="project-work-summary"]'),
     drive = sidebar.locator('[data-component="drive-control"]');
   await expect(summary).toHaveText('6 open, 1 up next, 0 active');
@@ -10067,7 +10068,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     drive = sidebar.locator('[data-action="toggle-drive"]'),
     addView = sidebar.getByRole('button', { name: 'Add view' });
   await expect(addView).toBeEnabled();
@@ -10134,7 +10135,7 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
     menu = sidebar.locator('[data-component="drive-options-menu"]');
   await options.click();
@@ -10183,7 +10184,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     drive = sidebar.locator('[data-action="toggle-drive"]'),
     conversationAction = sidebar.getByRole('button', { name: 'Open Codex conversation' });
   await expect(conversationAction).toBeEnabled();
@@ -10662,7 +10663,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await expect(model.locator(`wa-option[value='${custom}']`)).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List view').click();
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
     menu = sidebar.locator('[data-component="drive-options-menu"]'),
     driveCustom = "drive legacy 'one'";
@@ -10815,7 +10816,7 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect.poll(() => baseAttempts).toBeGreaterThan(0);
-  const sidebar = page.locator('.project-sidebar'),
+  const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' });
   await options.click();
   const menu = sidebar.locator('[data-component="drive-options-menu"]');
@@ -15803,13 +15804,13 @@ test('shows and resolves cross-project permission notifications with badges and 
   await notificationsButton.click();
   await expect(notificationsButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.settings-navigation [aria-label="Notification views"]')).toBeVisible();
+  await expect(page.locator('#app-left-rail nav[aria-label="Notification views"]')).toBeVisible();
   await expect(page.locator('#workspace-page-title')).toContainText('Pending');
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(popup).toBeVisible();
   await expect(page.locator('.notification-inspector-empty')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  const navigation = page.locator('.settings-navigation [aria-label="Notification views"]');
+  const navigation = page.locator('#app-left-rail nav[aria-label="Notification views"]');
   await expect
     .poll(async () => {
       const bounds = await navigation.boundingBox();
@@ -15917,7 +15918,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
   await notifications.click();
   const center = page.locator('[data-component="notification-center"]'),
-    navigation = page.locator('.settings-navigation [aria-label="Notification views"]');
+    navigation = page.locator('#app-left-rail nav[aria-label="Notification views"]');
   await expect(center).toContainText('other pending action');
   await expect(center).not.toContainText('demo pending action');
   await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
@@ -15934,7 +15935,8 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(pendingCard.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
   await expect(pendingCard.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-notifications-phone.png' });
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  // The relocated Workbench toggle names the panel it shows (the notification navigator here).
+  await page.getByRole('button', { name: 'Show notification sidebar' }).click();
   await expect
     .poll(async () => (await navigation.boundingBox())?.x ?? Number.NEGATIVE_INFINITY)
     .toBeGreaterThanOrEqual(0);
@@ -17058,7 +17060,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   const apple = await page.evaluate(() => /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));
   const mod = apple ? 'Meta' : 'Control';
   await page.getByLabel('Settings view').click();
-  const nav = page.locator('.settings-navigation[aria-label="Settings categories"]');
+  const nav = page.locator('#app-left-rail nav[aria-label="Settings categories"]');
   await expect(nav).toContainText('Project Settings');
   await expect(nav).toContainText('App Settings');
   await nav.locator('[data-item-id="keyboard"]').click();
@@ -17135,7 +17137,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute('data-command-color', '#22c55e');
   await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
-  await page.locator('.project-sidebar').screenshot({ path: '/private/tmp/hs2-656xj2-sidebar-command-color-icon.png' });
+  await page.locator('#app-left-rail').screenshot({ path: '/private/tmp/hs2-656xj2-sidebar-command-color-icon.png' });
 });
 
 test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-5VSNV3)', async ({ page }) => {
