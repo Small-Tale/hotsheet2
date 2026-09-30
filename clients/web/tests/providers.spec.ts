@@ -15318,6 +15318,9 @@ test('drops selected tickets on another project tab to copy them there', async (
   });
   const destination = page.locator('[data-ticket-drop-project="other-checkout"]');
   await expect(destination).toHaveAttribute('data-dragging-ticket', 'true');
+  // Kerf paints the tab's drop-target state from the attribute the drag handler marks (HS2-T67Z3N).
+  await expect(destination).toHaveAttribute('data-drop-target', 'true');
+  await expect(destination).toHaveCSS('box-shadow', /0px 0px 0px 2px inset$/);
   const readsBeforeDrop = destinationReads.length;
   await destination.dispatchEvent('drop');
   await expect.poll(() => creates.length).toBe(2);

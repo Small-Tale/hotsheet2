@@ -4638,7 +4638,9 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await page.setViewportSize({ width: 760, height: 900 });
   const overflowState = await tabBar.evaluate((node) => {
     const strip = node.querySelector<HTMLElement>('.kui-tab-bar__tabs')!;
-    const selected = node.querySelector<HTMLElement>('.project-tab[data-selected="true"]')!.getBoundingClientRect();
+    const selected = node
+      .querySelector<HTMLElement>('[data-tab-kind="project"][data-selected="true"]')!
+      .getBoundingClientRect();
     const viewport = strip.getBoundingClientRect();
     strip.scrollLeft = 100;
     return {
@@ -4983,7 +4985,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
   await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
-  await expect(shell.locator('.project-tab[data-project-id="website"] [role="tab"]')).toHaveAttribute(
+  await expect(shell.locator('[data-tab-kind="project"][data-project-id="website"] [role="tab"]')).toHaveAttribute(
     'aria-selected',
     'true',
   );

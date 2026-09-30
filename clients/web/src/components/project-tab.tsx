@@ -155,7 +155,9 @@ export function ProjectTab({
       closable={closable && !pending}
       draggable={draggable && !pending}
       placeholder={pending}
-      className="project-tab"
+      // The full name stays visible (the strip scrolls instead of truncating) and Kerf paints the
+      // drop-target state the drag handler marks (beta.62 props, HS2-T67Z3N); no app class on the root.
+      nameOverflow="visible"
       selectAction="select-project-tab"
       closeAction="close-project-tab"
       closeIcon={<LucideIcon icon={X} name="x" />}

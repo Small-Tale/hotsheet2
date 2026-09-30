@@ -1,14 +1,13 @@
-.project-tab[data-dragging-ticket='true'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-normal);
-  box-shadow: inset 0 0 0 2px var(--wa-color-brand-border-normal);
-}
-.project-tab[data-disconnected='true'] {
-  color: var(--wa-color-neutral-on-quiet);
-}
-/* Kerf's attention name color defaults to warning; a project needing attention is a failure state. */
-.project-tab {
+/* Project tabs carry no app class (HS2-T67Z3N): the strip configures them through Kerf's public
+   tokens. Kerf's attention name color defaults to warning, but a project needing attention is a
+   failure state; a drag over a tab uses the brand fill (Kerf's `dropTarget` ring and color); a
+   disconnected project reads quiet. */
+.project-tab-bar {
   --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet);
+  --kui-app-tab-drop-target-background: var(--wa-color-brand-fill-normal);
+}
+[data-tab-kind='project'][data-disconnected='true'] {
+  --kui-app-tab-color: var(--wa-color-neutral-on-quiet);
 }
 .project-tab__busy {
   display: grid;

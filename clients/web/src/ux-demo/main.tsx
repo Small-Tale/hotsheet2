@@ -786,7 +786,7 @@ function demoContent(item: DemoDefinition) {
             id="project"
             name="Project tab"
             selected
-            className="project-tab"
+            nameOverflow="visible"
             rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }}
             leading={<LucideIcon icon={FolderGit2} name="folder-git-2" />}
           />

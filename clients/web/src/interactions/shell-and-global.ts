@@ -274,10 +274,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   function markDragTarget(target: HTMLElement) {
     target.dataset.draggingTicket = 'true';
     if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
+    if (target.matches('.kui-app-tab')) target.dataset.dropTarget = 'true';
   }
   function clearDragTarget(target: HTMLElement) {
     delete target.dataset.draggingTicket;
     if (target.dataset.state === 'drag-target') delete target.dataset.state;
+    delete target.dataset.dropTarget;
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;

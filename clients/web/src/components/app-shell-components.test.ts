@@ -267,11 +267,14 @@ describe('application shell components', () => {
     expect(projectTabCss).toMatchSource(
       /\.project-tab__work\[data-active="true"\]\s+\.project-tab__work-count\s*\{[^}]*color:\s*var\(--wa-color-text-normal\)/,
     );
-    // Kerf beta.60 owns the attention name color through its public token (HS2-AT4AAA).
+    // Kerf owns the attention and drop-target treatments through public tokens the strip sets
+    // (HS2-AT4AAA, HS2-T67Z3N); the tab root carries no app class or app rule.
     expect(projectTabCss).toContainSource(
-      '.project-tab { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); }',
+      '.project-tab-bar { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); --kui-app-tab-drop-target-background: var(--wa-color-brand-fill-normal); }',
     );
     expect(projectTabCss).not.toContain('[data-attention=');
+    expect(projectTabCss).not.toContain('data-dragging-ticket');
+    expect(projectTabCss).not.toMatch(/\.project-tab[\s[{]/);
     expect(projectTabCss).toContainSource('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContainSource('@media (prefers-reduced-motion:reduce)');
     expect(activeOnlyMarkup).toContain('data-segments="1"');
@@ -298,8 +301,8 @@ describe('application shell components', () => {
   it('draws tab-selection focus around the complete compound pill', () => {
     const projectCss = readFileSync(new URL('./project-tab.css', import.meta.url), 'utf8'),
       barCss = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
-    expect(String(ProjectTab({ id: 'focus', name: 'Focus', location: 'local' }))).toContain(
-      'class="kui-app-tab project-tab"',
+    expect(String(ProjectTab({ id: 'focus', name: 'Focus', location: 'local' }))).toMatch(
+      /class="kui-app-tab" data-component="app-tab"[^>]*data-name-overflow="visible"/,
     );
     expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
     expect(barCss).toMatch(
