@@ -83,36 +83,39 @@ export function ProjectTabBar({
       <div class="project-tab-bar project-tab-bar--mobile" data-component="project-tab-bar" data-mode={mode}>
         {modes}
         {choosable.length ? (
-          <Select
-            className="project-tab-bar__select"
-            name="mobile-project"
-            value={active.id}
-            ariaLabel="Project"
-            choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
-            renderSelected={(choice) => (
-              <span class="project-tab-bar__selected-project">
-                {choice.label}
-                {active.operation && (
-                  <span
-                    class="project-tab-bar__operation"
-                    aria-label={active.operation.label}
-                    title={active.operation.label}
-                  >
-                    <LucideIcon icon={ArchiveRestore} name="archive-restore" />
-                    <small>
-                      {active.operation.percent !== undefined
-                        ? `${Math.floor(active.operation.percent)}%`
-                        : active.operation.state === 'running'
-                          ? 'Working'
-                          : active.operation.state === 'succeeded'
-                            ? 'Backup'
-                            : 'Attention'}
-                    </small>
-                  </span>
-                )}
-              </span>
-            )}
-          />
+          <div class="project-tab-bar__select">
+            <Select
+              presentation="toolbar-borderless"
+              size="compact"
+              name="mobile-project"
+              value={active.id}
+              ariaLabel="Project"
+              choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
+              renderSelected={(choice) => (
+                <span class="project-tab-bar__selected-project">
+                  {choice.label}
+                  {active.operation && (
+                    <span
+                      class="project-tab-bar__operation"
+                      aria-label={active.operation.label}
+                      title={active.operation.label}
+                    >
+                      <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+                      <small>
+                        {active.operation.percent !== undefined
+                          ? `${Math.floor(active.operation.percent)}%`
+                          : active.operation.state === 'running'
+                            ? 'Working'
+                            : active.operation.state === 'succeeded'
+                              ? 'Backup'
+                              : 'Attention'}
+                      </small>
+                    </span>
+                  )}
+                </span>
+              )}
+            />
+          </div>
         ) : (
           <span class="project-tab-bar__select-empty" aria-hidden="true" />
         )}
@@ -121,22 +124,23 @@ export function ProjectTabBar({
     );
   }
   return (
-    <TabBar
-      id={PROJECT_TAB_BAR_ID}
-      label={label}
-      className="project-tab-bar"
-      // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
-      // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
-      activation="manual"
-      // Add-project stays beside the last tab; the workspace action is pushed to the far edge
-      // inside the growing trailing group (HS2-NE8JBS).
-      trailingPlacement="adjacent"
-      leading={modes}
-      trailing={actions}
-    >
-      {tabs.map((tab) => (
-        <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />
-      ))}
-    </TabBar>
+    <div class="project-tab-bar" data-component="project-tab-bar" data-mode={mode}>
+      <TabBar
+        id={PROJECT_TAB_BAR_ID}
+        label={label}
+        // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
+        // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
+        activation="manual"
+        // Add-project stays beside the last tab; the workspace action is pushed to the far edge
+        // inside the growing trailing group (HS2-NE8JBS).
+        trailingPlacement="adjacent"
+        leading={modes}
+        trailing={actions}
+      >
+        {tabs.map((tab) => (
+          <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />
+        ))}
+      </TabBar>
+    </div>
   );
 }

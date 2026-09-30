@@ -456,11 +456,7 @@ export function AIConversation({
             <strong>{tool} conversation</strong>
           </span>
           {(saveAction || stopAction) && (
-            <ToolbarControlGroup
-              label={`${tool} conversation actions`}
-              appearance="borderless"
-              className="ai-conversation__embedded-actions"
-            >
+            <ToolbarControlGroup label={`${tool} conversation actions`} appearance="borderless">
               <>
                 {saveAction}
                 {stopAction}

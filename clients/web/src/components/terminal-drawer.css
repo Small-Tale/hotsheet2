@@ -99,10 +99,13 @@
   border-bottom: 1px solid var(--wa-color-surface-border);
   user-select: none;
 }
+/* App-owned wrapper around the drawer's Kerf TabBar (HS2-VABS08): the TabBar pads by its public gap
+   token (xs); the wrapper adds the remaining inline inset so the strip keeps its m inline inset. */
 .terminal-drawer__views {
   --kui-toolbar-group-size: remify(40px);
   --kui-toolbar-gap: var(--kui-space-xs);
-  padding: var(--kui-space-xs) var(--kui-space-m);
+  display: grid;
+  padding-inline: var(--kui-space-xs);
 }
 .terminal-drawer__views .kui-tab-bar__tabs {
   /* overflow-x: auto alone computes overflow-y to auto, so the few pixels the focus-ring inset adds let the

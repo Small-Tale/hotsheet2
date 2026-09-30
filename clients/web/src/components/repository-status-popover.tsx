@@ -360,7 +360,7 @@ function RepositoryFileList({
           <ListItem
             action="select-repository-file"
             itemId={file.path}
-            className="repository-status-popover__file"
+            divider="after"
             state={change}
             pressed={selectedFiles.includes(file.path)}
             multiline
@@ -502,7 +502,7 @@ function CodeReviewFileList({
         <ListItem
           action="select-repository-file"
           itemId={file.path}
-          className="repository-status-popover__file"
+          divider="after"
           state={file.change}
           pressed={selectedFiles.includes(file.path)}
           multiline

@@ -93,41 +93,43 @@ export function Hs1MigrationDialog({
 
 export function Hs1MigrationBanner({ databasePath }: { databasePath: string }) {
   return (
-    <StateBanner
-      title="Hot Sheet 1 data is available to import"
-      detail={databasePath}
-      tone="info"
-      urgency="status"
-      className="hs1-migration-banner"
-      icon={<LucideIcon icon={Database} name="database" />}
-      action={
-        <button type="button" data-action="open-hs1-migration">
-          Import…
-        </button>
-      }
-    />
+    <div class="hs1-migration-banner">
+      <StateBanner
+        title="Hot Sheet 1 data is available to import"
+        detail={databasePath}
+        tone="info"
+        urgency="status"
+        icon={<LucideIcon icon={Database} name="database" />}
+        action={
+          <button type="button" data-action="open-hs1-migration">
+            Import…
+          </button>
+        }
+      />
+    </div>
   );
 }
 export function Hs1CleanupBanner() {
   return (
-    <StateBanner
-      title="Hot Sheet 1 import is safely backed up"
-      detail="The old local Hot Sheet 1 files can now be removed."
-      tone="success"
-      urgency="status"
-      className="hs1-cleanup-banner"
-      icon={<LucideIcon icon={Trash2} name="trash-2" />}
-      action={
-        <div class="hs1-cleanup-banner__actions">
-          <button type="button" data-action="dismiss-hs1-cleanup">
-            Dismiss
-          </button>
-          <button type="button" data-action="remove-hs1-data">
-            Delete old files…
-          </button>
-        </div>
-      }
-    />
+    <div class="hs1-cleanup-banner">
+      <StateBanner
+        title="Hot Sheet 1 import is safely backed up"
+        detail="The old local Hot Sheet 1 files can now be removed."
+        tone="success"
+        urgency="status"
+        icon={<LucideIcon icon={Trash2} name="trash-2" />}
+        action={
+          <div class="hs1-cleanup-banner__actions">
+            <button type="button" data-action="dismiss-hs1-cleanup">
+              Dismiss
+            </button>
+            <button type="button" data-action="remove-hs1-data">
+              Delete old files…
+            </button>
+          </div>
+        }
+      />
+    </div>
   );
 }
 

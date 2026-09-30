@@ -150,11 +150,7 @@
   border-radius: 0;
   box-shadow: none;
 }
-.app-shell
-  > .kui-resizable-region[data-region-id='app-inspector']
-  .ticket-inspector__tabs
-  .ticket-inspector__tab
-  .kui-app-tab__name {
+.app-shell > .kui-resizable-region[data-region-id='app-inspector'] .ticket-inspector__tabs .kui-app-tab__name {
   position: absolute;
   width: 1px;
   height: 1px;

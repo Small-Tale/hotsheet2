@@ -1,11 +1,8 @@
+/* App-owned wrapper: the heading Toolbar drops its inset through the public gap token; its texts keep
+   their own inline padding (HS2-VABS08). */
 .ticket-code-review__header {
-  height: auto;
-  min-height: remify(40.4px);
-  padding: 0;
-}
-.ticket-code-review__difftool {
-  color: var(--wa-color-neutral-on-quiet);
-  white-space: nowrap;
+  --kui-toolbar-gap: 0px;
+  display: grid;
 }
 .ticket-code-review__evidence {
   display: block;

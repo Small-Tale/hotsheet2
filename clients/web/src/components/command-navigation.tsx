@@ -116,29 +116,30 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                       (option) => option.value === color,
                     )!.label.toLowerCase();
                     return (
-                      <ListItem
-                        action="run-command"
-                        itemId={command.id}
-                        rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
-                        className="command-navigation__command"
-                        pressed={Boolean(command.running)}
-                        title={
-                          command.lastRun
-                            ? `Last run: ${command.lastRun}. Press and hold for output.`
-                            : 'Press and hold for command history.'
-                        }
-                        icon={<LucideIcon icon={icon} name={name} />}
-                        label={command.running ? `Running ${command.label}` : command.label}
-                        trailing={
-                          command.running ? (
-                            <i aria-hidden="true"></i>
-                          ) : type ? (
-                            <span class="command-navigation__type" aria-label={type.label} title={type.label}>
-                              <LucideIcon icon={type.icon} name={type.name} />
-                            </span>
-                          ) : undefined
-                        }
-                      />
+                      <div class="command-navigation__command" data-command-palette={palette}>
+                        <ListItem
+                          action="run-command"
+                          itemId={command.id}
+                          rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
+                          pressed={Boolean(command.running)}
+                          title={
+                            command.lastRun
+                              ? `Last run: ${command.lastRun}. Press and hold for output.`
+                              : 'Press and hold for command history.'
+                          }
+                          icon={<LucideIcon icon={icon} name={name} />}
+                          label={command.running ? `Running ${command.label}` : command.label}
+                          trailing={
+                            command.running ? (
+                              <i aria-hidden="true"></i>
+                            ) : type ? (
+                              <span class="command-navigation__type" aria-label={type.label} title={type.label}>
+                                <LucideIcon icon={type.icon} name={type.name} />
+                              </span>
+                            ) : undefined
+                          }
+                        />
+                      </div>
                     );
                   })}
                 </List>

@@ -55,7 +55,10 @@ describe('TerminalDrawer', () => {
   it('uses the Kerf spacing scale for the rail, content, and terminal inset', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toContain('padding: var(--kui-space-xs) var(--kui-space-m)');
+    // The drawer's TabBar pads by its public gap token; the app wrapper adds the remaining inline inset.
+    expect(css).toMatch(
+      /\.terminal-drawer__views \{[^}]*--kui-toolbar-gap: var\(--kui-space-xs\);[^}]*padding-inline: var\(--kui-space-xs\)/,
+    );
     expect(css).toContain('padding-top: var(--kui-space-xs)');
     expect(css).toMatch(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
   });

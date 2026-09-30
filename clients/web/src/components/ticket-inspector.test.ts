@@ -285,7 +285,7 @@ describe('TicketInspector', () => {
       /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/,
     );
     expect(inspectorCss).toContainSource(
-      '@container (max-width: remify(832px)) { .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
+      '@container (max-width: remify(832px)) { .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }',
     );
   });
 
@@ -300,9 +300,11 @@ describe('TicketInspector', () => {
     expect(inspectorCss).not.toMatch(/\.ticket-inspector__tabs \{[^}]*margin/);
     expect(markup).toMatch(/class="ticket-inspector__tabs-frame"><nav class="kui-tab-bar ticket-inspector__tabs"/);
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
-    expect(markup).toMatch(/ticket-inspector__tab[^>]*data-presentation="segmented"[^>]*data-size="compact"/);
+    expect(markup).toMatch(/data-inspector-tab="info"[^>]*data-presentation="segmented"[^>]*data-size="compact"/);
+    // The tabs are configured through AppTab props and the tab strip; no app class sits on the tab root.
+    expect(markup).not.toContain('ticket-inspector__tab"');
     expect(inspectorCss).toMatch(
-      /\.ticket-inspector__tab \.kui-app-tab__select \{[^}]*flex: 1;[^}]*justify-content: center/,
+      /\.ticket-inspector__tabs \.kui-app-tab__select \{[^}]*flex: 1;[^}]*justify-content: center/,
     );
     expect(panelCss).toMatch(
       /\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,

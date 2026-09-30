@@ -29,7 +29,7 @@ describe('TerminalTicketRail', () => {
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
-    expect(markup).toContain('class="kui-sunken-panel terminal-ticket-rail__content"');
+    expect(markup).toContain('<div class="terminal-ticket-rail__content"><div class="kui-sunken-panel"');
     expect(markup).toContain('data-component="sunken-panel"');
     expect(markup).toContain('data-shape="square"');
     expect(markup).toContain('data-active-side="a"');
@@ -70,21 +70,24 @@ describe('TerminalTicketRail', () => {
   it('uses the canonical compact-rail spacing while retaining control and transition geometry', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatchSource(/__project \{[^}]*padding-inline:var\(--kui-space-xs\)/);
+    // The project Toolbar keeps Kerf's own inset and height; the app adds no rule on that toolbar root.
+    expect(css).not.toMatch(/__project \{/);
     // The controls Toolbar keeps Kerf's own inset; the app adds no rule on that toolbar root (HS2-K9KWJJ).
     expect(css).not.toMatch(/__controls \{/);
-    expect(css).toMatchSource(/__heading \{[^}]*padding:var\(--kui-space-xs\)/);
+    // The heading wrapper only draws the rule; the Toolbar inside keeps Kerf's inset and height.
+    expect(css).toMatchSource(/__heading \{ display:grid;border-bottom:/);
     expect(css).not.toContain('--kui-sunken-panel-radius');
     expect(css).toMatch(/translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/);
-    expect(css).toMatchSource(/__project \{ min-height:remify\(52px\)/);
-    expect(css).toMatchSource(/__heading \{ min-height:remify\(60px\)/);
+    expect(css).not.toMatch(/__heading \{[^}]*min-height/);
   });
   it('separates the heading from the ticket scroller and preserves the shared compact launcher', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
       markup = String(
         TerminalTicketRail({ ...props, active: 'root', action: QuickTicketLauncher({ label: 'Ticket…' }) }),
       ),
-      heading = markup.match(/<header class="kui-toolbar terminal-ticket-rail__heading"[\s\S]*?<\/header>/)![0];
+      heading = markup.match(
+        /<div class="terminal-ticket-rail__heading"><header class="kui-toolbar"[\s\S]*?<\/header>/,
+      )![0];
     expect(css).toMatchSource(/__heading \{[^}]*border-bottom:1px solid var\(--wa-color-surface-border\)/);
     expect(heading).toContain('class="quick-ticket-composer__launcher"');
     expect(heading).toContain('Ticket…');
@@ -93,6 +96,7 @@ describe('TerminalTicketRail', () => {
   it('keeps the ticket collection intrinsic so the rail surface owns vertical scrolling', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/__content \{[^}]*overflow:auto[^}]*flex:1/);
-    expect(css).toMatchSource(/__content > \.ticket-list \{[^}]*flex:none/);
+    expect(css).toMatchSource(/__content > \* > \.ticket-list \{[^}]*flex:none/);
+    expect(css).toMatchSource(/__content \{[^}]*grid-template-rows:minmax\(100%, max-content\)/);
   });
 });

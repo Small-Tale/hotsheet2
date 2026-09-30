@@ -54,7 +54,7 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-grid-policy="dashboard-80x24"');
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain('data-action="preview-terminal"');
-    expect(markup).toContain('class="kui-floating-toolbar terminal-dashboard__zoom"');
+    expect(markup).toContain('<div class="terminal-dashboard__zoom"><div class="kui-floating-toolbar"');
     expect(markup).toContain(
       'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Workspace tile zoom"',
     );
@@ -223,6 +223,8 @@ describe('TerminalDashboard', () => {
       );
     expect(markup).toContain('data-action="open-terminal-visibility"');
     expect(markup).toContain('class="kui-toolbar terminal-dashboard-controls__visibility-toolbar"');
+    // The group Select is wrapped by the app; its root carries no app class (KUI-L022).
+    expect(markup).toContain('<div class="terminal-dashboard-controls__visibility-select"><wa-select');
     expect(markup).toContain('>2</span>');
     expect(markup).toContain('name="terminal-visibility-group"');
     expect(markup).toContain('class="kui-select__custom-selected"><span>Focus</span>');
@@ -248,11 +250,12 @@ describe('TerminalDashboard', () => {
     );
     expect(css).toMatchSource(/\.workspace-chat-tile\[data-preview-only="true"\] \{ cursor: pointer;/);
   });
-  it('keeps the Kerf floating zoom toolbar above the mobile safe area', () => {
-    // Kerf reads --kui-floating-toolbar-inset as an optional override, so the calc() spells out the
-    // default; without it the inset is invalid and the toolbar jumps to the top (HS2-QCSPDH).
+  it('anchors the Kerf floating zoom toolbar at the mobile safe-area corner', () => {
+    // A zero-size positioned anchor sits at the safe-area corner; the FloatingToolbar keeps its own
+    // bottom-end inset relative to it, so no app CSS touches the toolbar root (HS2-QCSPDH, HS2-VABS08).
     expect(css).toMatchSource(
-      /\.terminal-dashboard__zoom\.kui-floating-toolbar\[data-position="bottom-end"\] \{[^}]*inset-inline-end: calc\(var\(--kui-floating-toolbar-inset, var\(--kui-space-m, 1rem\)\) \+ var\(--hotsheet-safe-area-right\)\)[^}]*inset-block-end: calc\(var\(--kui-floating-toolbar-inset, var\(--kui-space-m, 1rem\)\) \+ var\(--hotsheet-safe-area-bottom\)\)/,
+      /\.terminal-dashboard__zoom \{[^}]*position: absolute;[^}]*width: 0;[^}]*height: 0;[^}]*inset-inline-end: var\(--hotsheet-safe-area-right, 0px\);[^}]*inset-block-end: var\(--hotsheet-safe-area-bottom, 0px\)/,
     );
+    expect(css).not.toContain('.terminal-dashboard__zoom.kui-floating-toolbar');
   });
 });

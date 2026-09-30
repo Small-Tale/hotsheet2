@@ -174,7 +174,6 @@ export function TerminalVisibilityDialog({
                     const visible = !hidden.has(key);
                     return (
                       <ListItem
-                        className="terminal-visibility-dialog__row"
                         action="toggle-terminal-visibility"
                         itemId={key}
                         accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}

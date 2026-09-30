@@ -24,7 +24,8 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup.match(/kui-select--placeholder/g)).toHaveLength(3);
     expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Status</h2>');
-    expect(markup).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
+    expect(markup).toContain('class="kui-list-inset-control"');
+    expect(markup).toContain('<div class="ticket-inspector__status-line">');
     // Unknown value slots (title, details, note bodies, provenance) use the native Skeleton block.
     expect(markup).toContain('kui-skeleton');
     // The collapse control still works while loading; nothing else is interactive.

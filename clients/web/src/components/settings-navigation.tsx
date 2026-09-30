@@ -96,15 +96,11 @@ export function SettingsNavigation({
     />
   ) : undefined;
   return (
-    <Pane
-      element="aside"
-      label="Settings categories"
-      className="settings-navigation"
-      header={header}
-      contentClassName="settings-navigation__content"
-    >
-      {renderGroup('Project Settings', projectCategories)}
-      {renderGroup('App Settings', appCategories)}
-    </Pane>
+    <div class="settings-navigation">
+      <Pane element="aside" label="Settings categories" header={header} contentClassName="settings-navigation__content">
+        {renderGroup('Project Settings', projectCategories)}
+        {renderGroup('App Settings', appCategories)}
+      </Pane>
+    </div>
   );
 }

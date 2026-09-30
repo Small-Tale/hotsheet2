@@ -49,9 +49,8 @@ describe('TicketCodeReview', () => {
     expect(css).not.toContain('--wa-space-');
     expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge"');
     expect(markup).toContain('role="heading" aria-level="2"');
-    expect(markup).toContain(
-      'class="kui-toolbar-text ticket-code-review__difftool" data-component="toolbar-text" data-size="small"',
-    );
+    expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
+    expect(markup).toContain('<div class="ticket-code-review__header"><header class="kui-toolbar"');
     expect(css).toMatchSource(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(

@@ -2214,7 +2214,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect.poll(dialogOpacity).toBe('1');
   await page.screenshot({ path: '/private/tmp/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Not now' }).click();
-  const banner = page.locator('.hs1-migration-banner');
+  const banner = page.locator('.hs1-migration-banner > [data-component="state-banner"]');
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(250);
   await expect(banner).toHaveAttribute('data-component', 'state-banner');
@@ -2719,7 +2719,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Workspace grid' }).click();
     const rail = page.locator('[data-component="terminal-ticket-rail"]');
     const railSegments = rail.getByRole('group', { name: 'View mode', exact: true });
-    await expectMode(railSegments, 'list', ['list', 'notifications']);
+    // The rail mirrors the shared view mode and offers Columns too (HS2-656Q43).
+    await expectMode(railSegments, 'board', ['list', 'board', 'notifications']);
     await expect(railSegments).toHaveAttribute('data-layout', 'equal');
     await expect(railSegments).toHaveAttribute('data-shape', 'rounded');
     const widths = await railSegments
@@ -2728,15 +2729,15 @@ for (const theme of ['light', 'dark'] as const) {
     expect(widths[0]).toBeCloseTo(widths[1], 0);
     expect(widths[0]).toBeGreaterThan(100);
     await railSegments.getByRole('button', { name: 'Notifications view' }).click();
-    await expectMode(railSegments, 'notifications', ['list', 'notifications']);
+    await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
     await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
     await railSegments.getByRole('button', { name: 'List view' }).click();
-    await expectMode(railSegments, 'list', ['list', 'notifications']);
+    await expectMode(railSegments, 'list', ['list', 'board', 'notifications']);
     await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
     await rail.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
     await page.setViewportSize({ width: 1024, height: 600 });
     await railSegments.getByRole('button', { name: 'Notifications view' }).click();
-    await expectMode(railSegments, 'notifications', ['list', 'notifications']);
+    await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
     await page.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-narrow.png`, animations: 'disabled' });
   });
 }
@@ -6668,25 +6669,27 @@ test('contains and centers inspector tabs while showing labels only when they fi
           inspectorBox = inspector.getBoundingClientRect(),
           inspectorStyle = getComputedStyle(inspector),
           strip = node.getBoundingClientRect(),
-          tabBoxes = Array.from(node.querySelectorAll<HTMLElement>('.ticket-inspector__tab')).map((tab) => {
-            const cell = tab.getBoundingClientRect(),
-              cellStyle = getComputedStyle(tab),
-              button = tab.querySelector<HTMLElement>('[role="tab"]')!,
-              target = button.getBoundingClientRect(),
-              content = Array.from(button.children)
-                .filter((child) => getComputedStyle(child).position !== 'absolute')
-                .map((child) => child.getBoundingClientRect()),
-              contentLeft = Math.min(...content.map((box) => box.left)),
-              contentRight = Math.max(...content.map((box) => box.right));
-            return {
-              width: cell.width,
-              targetInset: [
-                target.left - cell.left - Number.parseFloat(cellStyle.borderLeftWidth),
-                cell.right - target.right - Number.parseFloat(cellStyle.borderRightWidth),
-              ],
-              centerDelta: (contentLeft + contentRight - cell.left - cell.right) / 2,
-            };
-          });
+          tabBoxes = Array.from(node.querySelectorAll<HTMLElement>('.ticket-inspector__tabs [data-inspector-tab]')).map(
+            (tab) => {
+              const cell = tab.getBoundingClientRect(),
+                cellStyle = getComputedStyle(tab),
+                button = tab.querySelector<HTMLElement>('[role="tab"]')!,
+                target = button.getBoundingClientRect(),
+                content = Array.from(button.children)
+                  .filter((child) => getComputedStyle(child).position !== 'absolute')
+                  .map((child) => child.getBoundingClientRect()),
+                contentLeft = Math.min(...content.map((box) => box.left)),
+                contentRight = Math.max(...content.map((box) => box.right));
+              return {
+                width: cell.width,
+                targetInset: [
+                  target.left - cell.left - Number.parseFloat(cellStyle.borderLeftWidth),
+                  cell.right - target.right - Number.parseFloat(cellStyle.borderRightWidth),
+                ],
+                centerDelta: (contentLeft + contentRight - cell.left - cell.right) / 2,
+              };
+            },
+          );
         return {
           gutter: [
             strip.left - inspectorBox.left - Number.parseFloat(inspectorStyle.borderLeftWidth),
@@ -7802,7 +7805,7 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
     queueLabel = queue.locator('.kui-list-item__label'),
     viewsTitle = sidebar.locator('.view-navigation > .kui-list-header h2'),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
-    hideLayer = sidebar.locator(':scope > .kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
+    hideLayer = sidebar.locator(':scope > .kui-pane > .kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
     chat = sidebar.getByRole('button', { name: 'Open Codex conversation' });
   const boxes = await Promise.all(
     [sidebar, queue, queueIcon, queueLabel, viewsTitle, viewActionLayer, hideLayer, chat].map((locator) =>
@@ -9799,7 +9802,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
         .querySelector<HTMLElement>('.ticket-inspector__details-section .markdown-preview p')!
         .getBoundingClientRect(),
       blockIcon = node
-        .querySelector<HTMLElement>('.ticket-inspector__block-action .kui-list-item__icon')!
+        .querySelector<HTMLElement>('[data-action="edit-blocked-reason"] .kui-list-item__icon')!
         .getBoundingClientRect(),
       notesHeadingNode = node.querySelector<HTMLElement>(
         '[data-component="ticket-notes"] [data-component="list-header"] h2',
@@ -15802,13 +15805,13 @@ test('shows and resolves cross-project permission notifications with badges and 
   await notificationsButton.click();
   await expect(notificationsButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.settings-navigation[aria-label="Notification views"]')).toBeVisible();
+  await expect(page.locator('.settings-navigation > [aria-label="Notification views"]')).toBeVisible();
   await expect(page.locator('#workspace-page-title')).toContainText('Pending');
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(popup).toBeVisible();
   await expect(page.locator('.notification-inspector-empty')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  const navigation = page.locator('.settings-navigation[aria-label="Notification views"]');
+  const navigation = page.locator('.settings-navigation > [aria-label="Notification views"]');
   await expect
     .poll(async () => {
       const bounds = await navigation.boundingBox();
@@ -15916,7 +15919,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
   await notifications.click();
   const center = page.locator('[data-component="notification-center"]'),
-    navigation = page.locator('.settings-navigation[aria-label="Notification views"]');
+    navigation = page.locator('.settings-navigation > [aria-label="Notification views"]');
   await expect(center).toContainText('other pending action');
   await expect(center).not.toContainText('demo pending action');
   await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
@@ -17057,7 +17060,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   const apple = await page.evaluate(() => /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));
   const mod = apple ? 'Meta' : 'Control';
   await page.getByLabel('Settings view').click();
-  const nav = page.locator('.settings-navigation[aria-label="Settings categories"]');
+  const nav = page.locator('.settings-navigation > [aria-label="Settings categories"]');
   await expect(nav).toContainText('Project Settings');
   await expect(nav).toContainText('App Settings');
   await nav.locator('[data-item-id="keyboard"]').click();

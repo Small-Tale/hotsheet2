@@ -1,7 +1,6 @@
 import './provider-setup-form.css';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
-import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { ChevronLeft, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
@@ -188,7 +187,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
         </SunkenPanel>
       )}
       {showFields && (
-        <Grid className="provider-setup-form__grid" columns={2} gap="m">
+        <div class="provider-setup-form__grid">
           <wa-input
             class="provider-setup-form__wide"
             name="connection-name"
@@ -336,7 +335,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
             Use as the default ticket source
             <span slot="hint">New tickets will be created here.</span>
           </wa-checkbox>
-        </Grid>
+        </div>
       )}
       {error && (
         <p class="provider-setup-form__error" role="alert">

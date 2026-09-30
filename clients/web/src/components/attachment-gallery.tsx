@@ -1,5 +1,7 @@
 import './attachment-gallery.css';
 
+import { px } from '@kerfjs/ui/css-values';
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -318,50 +320,51 @@ export function AttachmentGallery({
       data-component="attachment-gallery"
       aria-label={`${video ? 'Video' : 'Image'} ${index + 1} of ${images.length}: ${image.name}`}
     >
-      <Toolbar
-        className="attachment-gallery__toolbar"
-        dividerSides=""
-        leading={<ToolbarText className="attachment-gallery__filename" text={image.name} />}
-        trailing={
-          <>
-            <ToolbarControlGroup label="Media navigation" tone="dark">
-              <GalleryButton
-                action="previous-gallery-image"
-                label={`Previous ${noun}`}
-                icon={ChevronLeft}
-                disabled={images.length < 2}
-              />
-              <span class="attachment-gallery__count">
-                {index + 1} / {images.length}
-              </span>
-              <GalleryButton
-                action="next-gallery-image"
-                label={`Next ${noun}`}
-                icon={ChevronRight}
-                disabled={images.length < 2}
-              />
-            </ToolbarControlGroup>
-            <ToolbarControlGroup label="Media actions" tone="dark">
-              <GalleryButton
-                action="toggle-gallery-markup"
-                label={markup ? 'Finish markup' : 'Annotate media'}
-                icon={Pencil}
-                disabled={!annotationEnabled}
-                className={markup ? 'attachment-gallery__pressed' : ''}
-                count={annotations.length}
-              />
-              <GalleryButton
-                action="open-gallery-attachment-menu"
-                label={`More ${noun} actions`}
-                icon={MoreHorizontal}
-              />
-            </ToolbarControlGroup>
-            <ToolbarControlGroup label="Close gallery" tone="dark" single>
-              <GalleryButton action="close-attachment-gallery" label={`Close ${noun} gallery`} icon={X} />
-            </ToolbarControlGroup>
-          </>
-        }
-      />
+      <div class="attachment-gallery__toolbar">
+        <Toolbar
+          dividerSides=""
+          leading={<ToolbarText className="attachment-gallery__filename" text={image.name} />}
+          trailing={
+            <>
+              <ToolbarControlGroup label="Media navigation" tone="dark">
+                <GalleryButton
+                  action="previous-gallery-image"
+                  label={`Previous ${noun}`}
+                  icon={ChevronLeft}
+                  disabled={images.length < 2}
+                />
+                <span class="attachment-gallery__count">
+                  {index + 1} / {images.length}
+                </span>
+                <GalleryButton
+                  action="next-gallery-image"
+                  label={`Next ${noun}`}
+                  icon={ChevronRight}
+                  disabled={images.length < 2}
+                />
+              </ToolbarControlGroup>
+              <ToolbarControlGroup label="Media actions" tone="dark">
+                <GalleryButton
+                  action="toggle-gallery-markup"
+                  label={markup ? 'Finish markup' : 'Annotate media'}
+                  icon={Pencil}
+                  disabled={!annotationEnabled}
+                  className={markup ? 'attachment-gallery__pressed' : ''}
+                  count={annotations.length}
+                />
+                <GalleryButton
+                  action="open-gallery-attachment-menu"
+                  label={`More ${noun} actions`}
+                  icon={MoreHorizontal}
+                />
+              </ToolbarControlGroup>
+              <ToolbarControlGroup label="Close gallery" tone="dark" single>
+                <GalleryButton action="close-attachment-gallery" label={`Close ${noun} gallery`} icon={X} />
+              </ToolbarControlGroup>
+            </>
+          }
+        />
+      </div>
       <div
         class="attachment-gallery__stage"
         data-gallery-zoom-stage="true"
@@ -546,11 +549,10 @@ export function AttachmentGallery({
             )}
           </div>
         )}
-        <Toolbar
-          className="attachment-gallery__footer-actions"
-          center={
-            markup && (
-              <ToolbarControlGroup className="attachment-gallery__markup" label="Media markup" tone="dark">
+        <div class="attachment-gallery__footer-actions">
+          {markup && (
+            <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
+              <ToolbarControlGroup label="Media markup" tone="dark">
                 <GalleryButton
                   action="toggle-gallery-draw"
                   label="Add rectangle"
@@ -564,10 +566,10 @@ export function AttachmentGallery({
                   disabled={!selectedAnnotation}
                 />
               </ToolbarControlGroup>
-            )
-          }
-          trailing={
-            <ToolbarControlGroup className="attachment-gallery__zoom" label="Media zoom" tone="dark">
+            </FloatingToolbar>
+          )}
+          <FloatingToolbar label="Media zoom" position="bottom-end" inset={px(0)}>
+            <ToolbarControlGroup label="Media zoom" tone="dark">
               <button
                 type="button"
                 data-action="zoom-gallery-image"
@@ -589,8 +591,8 @@ export function AttachmentGallery({
                 <LucideIcon icon={Plus} name="plus" />
               </button>
             </ToolbarControlGroup>
-          }
-        />
+          </FloatingToolbar>
+        </div>
       </footer>
       {overlay}
     </dialog>

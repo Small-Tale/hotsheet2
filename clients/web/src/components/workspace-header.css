@@ -64,45 +64,28 @@ wa-button.workspace-header__text-action::part(base) {
    combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
    out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
    control groups. */
-.workspace-header__sort::part(combobox) {
-  position: relative;
-  min-height: remify(32px);
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  outline: none;
-  background: transparent;
-  box-shadow: none;
-}
 /* Show one focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
    combobox, whose shape does not match the pill (HS2-M1DF1D). :focus-within reflects the wa-select's
    shadow-internal focus onto the group; [open] retains that ring while the listbox owns focus. The
    explicit 999px pill radius stays pill-shaped after the outline expands beyond the 44px group
    instead of retaining a 22px rounded-rectangle radius. */
 .workspace-header__sort-group:focus-within,
-.workspace-header__sort-group:has(.workspace-header__sort[open]) {
+.workspace-header__sort-group:has([open]) {
   outline: var(--wa-focus-ring);
   outline-offset: var(--wa-focus-ring-offset);
 }
-.workspace-header__sort::part(display-input) {
-  position: absolute;
-  width: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-.workspace-header__sort::part(expand-icon) {
-  position: absolute;
-  inset-inline-end: remify(3.2px);
-}
-.workspace-header__sort .kui-select__custom-selected {
+.workspace-header__sort-group .kui-select__custom-selected {
   color: var(--kui-toolbar-control-color);
 }
 /* Kerf's search group owns the collapsed size and the width transition. Expanded, the header field
-   takes the room its zone offers (HS2-W843B4); the group's chrome stays Kerf-owned. */
+   takes the room its zone offers (HS2-W843B4); the group's chrome stays Kerf-owned. The 17rem floor
+   keeps the view, sort (Kerf's icon-and-caret trigger), and utility groups on one row beside the
+   field in a 640px-wide toolbar (HS2-VABS08). */
 .ticket-search-field[data-content='search'][data-expanded='true'] {
   --kui-token-search-expanded-width: 48rem;
   max-width: 100%;
-  min-width: 19rem;
-  flex: 1 1 19rem;
+  min-width: 17rem;
+  flex: 1 1 17rem;
 }
 /* The overflow menu only appears where the container queries below yield controls to it. */
 .workspace-header__overflow-group {

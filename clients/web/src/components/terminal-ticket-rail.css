@@ -19,10 +19,6 @@
   overflow: hidden;
   flex-direction: column;
 }
-.terminal-ticket-rail__project {
-  min-height: remify(52px);
-  padding-inline: var(--kui-space-xs);
-}
 .terminal-ticket-rail__project .kui-toolbar__leading {
   min-width: 0;
 }
@@ -32,10 +28,6 @@
 .terminal-ticket-rail__project .kui-select {
   width: max-content;
   max-width: 100%;
-}
-.terminal-ticket-rail__project .kui-select::part(combobox) {
-  border: 0;
-  box-shadow: none;
 }
 /* The rail chrome clips overflow on several ancestors; inset the select focus ring so an
    overflow:hidden ancestor can never crop it (HS2-HEYASQ). */
@@ -63,26 +55,24 @@
   width: 100%;
   animation: terminal-ticket-rail-search-enter 0.25s ease;
 }
+/* App-owned wrappers around the rail's Kerf Toolbar, Select, and SunkenPanel (HS2-VABS08). */
 .terminal-ticket-rail__heading {
-  min-height: remify(60px);
-  padding: var(--kui-space-xs);
+  display: grid;
   border-bottom: 1px solid var(--wa-color-surface-border);
 }
 .terminal-ticket-rail__heading .kui-toolbar-text {
   font-size: var(--wa-font-size-l);
 }
 .terminal-ticket-rail__view {
+  display: flex;
   width: max-content;
   max-width: remify(192px);
 }
-.terminal-ticket-rail__view::part(combobox) {
+.terminal-ticket-rail__view .kui-select::part(combobox) {
   min-height: remify(36px);
   padding: 0 remify(21.6px) 0 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
 }
-.terminal-ticket-rail__view::part(expand-icon) {
+.terminal-ticket-rail__view .kui-select::part(expand-icon) {
   position: absolute;
   inset-inline-end: remify(2.4px);
 }
@@ -97,11 +87,15 @@
   padding-inline: remify(12.8px);
 }
 .terminal-ticket-rail__content {
+  display: grid;
   min-height: 0;
   overflow: auto;
   flex: 1;
+  /* The SunkenPanel fills the visible rail even when its content is short, and grows past it so this
+     wrapper, not the panel, scrolls. */
+  grid-template-rows: minmax(100%, max-content);
 }
-.terminal-ticket-rail__content > .ticket-list {
+.terminal-ticket-rail__content > * > .ticket-list {
   /* SunkenPanel is a flex column. Keep the ticket collection at its natural
      height so this application-owned surface receives the overflow instead of
      shrinking TicketList and clipping its rows (HS2-8J0378). */

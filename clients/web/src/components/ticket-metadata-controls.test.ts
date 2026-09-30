@@ -107,7 +107,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info).toContain('data-component="ticket-info-panel"');
     expect(info.match(/data-component="list-header"/g)).toHaveLength(4);
     expect(info).toContain('data-font="default" data-border="none">Status</h2>');
-    expect(info).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
+    expect(info).toContain('class="kui-list-inset-control"');
+    expect(info).toContain('<div class="ticket-inspector__status-line">');
     expect(info).toContain('name="inspector-category" label="Category"');
     expect(info).toContain('name="inspector-priority" label="Priority"');
     expect(info).toContain('data-font="default" data-border="none">Details</h2>');
@@ -118,15 +119,17 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
     expect(info).not.toContain('<h2>Blocked reason</h2>');
-    expect(info).toContain('ticket-inspector__block-action');
-    expect(info).toContain('class="kui-list-item ticket-inspector__block-action" data-component="list-item"');
+    // The block action is a plain Kerf ListItem; no app class sits on its root (KUI-L022).
+    expect(info).not.toContain('ticket-inspector__block-action');
+    expect(info).toContain('class="kui-list-item" data-component="list-item"');
     const deleted = String(
       TicketInfoPanel({ status: 'deleted', priority: 'default', category: 'issue', tags: [], details: '' }),
     );
     expect(deleted).toContain('data-status="deleted"');
     expect(deleted).toContain('data-lucide="trash-2"');
     expect(deleted).toContain('Deleted');
-    expect(deleted).toContain('class="kui-list-inset-control ticket-inspector__status-line"');
+    expect(deleted).toContain('class="kui-list-inset-control"');
+    expect(deleted).toContain('<div class="ticket-inspector__status-line">');
     expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text" data-component="text"');
     expect(info).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">0<\/span>/);

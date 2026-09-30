@@ -140,15 +140,12 @@
 .ticket-inspector__tabs-frame {
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
 }
-.ticket-inspector__tab {
-  border-radius: remify(6.4px);
-}
-.ticket-inspector__tab .kui-app-tab__select {
+.ticket-inspector__tabs .kui-app-tab__select {
   flex: 1;
   justify-content: center;
   gap: var(--kui-space-2xs);
 }
-.ticket-inspector__tab .kui-app-tab__select > svg {
+.ticket-inspector__tabs .kui-app-tab__select > svg {
   width: remify(14.4px);
   height: remify(14.4px);
 }
@@ -165,7 +162,7 @@
   font-weight: 700;
   line-height: 1;
 }
-.ticket-inspector__tab[data-selected='true'] .ticket-inspector__tab-count {
+.ticket-inspector__tabs [data-selected='true'] .ticket-inspector__tab-count {
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-normal);
 }
@@ -178,7 +175,7 @@
   white-space: nowrap;
 }
 @container (max-width: remify(832px)) {
-  .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name {
+  .ticket-inspector__tabs .kui-app-tab__name {
     position: absolute;
     width: 1px;
     height: 1px;

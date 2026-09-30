@@ -386,13 +386,14 @@ export function WorkspaceControls({
     ),
     sortSelect = (
       <Select
-        className="workspace-header__sort"
         name="workspace-sort"
         ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`}
         value={sort}
         choices={sortChoices}
         disabled={projectActionsDisabled}
         selectedPresentation="icon-only"
+        presentation="toolbar-borderless"
+        focusRingOwner="group"
         renderSelected={() => <LucideIcon icon={trigger.icon} name={trigger.iconName} />}
       />
     ),

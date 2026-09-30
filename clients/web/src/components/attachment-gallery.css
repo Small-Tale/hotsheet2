@@ -345,21 +345,12 @@
   display: block;
   width: 100%;
 }
+/* App-owned footer strip: the markup and zoom groups float from Kerf FloatingToolbars anchored to
+   this strip (centered and end positions), so the markup group stays centered on the media regardless
+   of the zoom group's width and no Kerf root carries an app rule (HS2-VABS08). */
 .attachment-gallery__footer-actions {
-  --kui-toolbar-gap: 0px;
-  --kui-toolbar-group-size: remify(40px);
-  min-height: remify(40px);
-  padding: 0;
-  grid-template-columns: 1fr auto 1fr;
-}
-.attachment-gallery__markup {
-  grid-column: 2;
-  backdrop-filter: blur(remify(12px));
-}
-.attachment-gallery__zoom {
-  grid-column: 3;
-  justify-self: end;
-  backdrop-filter: blur(remify(12px));
+  position: relative;
+  height: remify(40px);
 }
 @media (max-width: remify(640px)) {
   .attachment-gallery__filename {

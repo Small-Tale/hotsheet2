@@ -1203,7 +1203,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(dialog).toHaveJSProperty('open', true);
   // One Kerf ListItem per fixture item (Codex chat, AI, Development server); the dialog no longer
   // composes a ValueTable whose header row made the old count 4.
-  await expect(dialog.locator('.terminal-visibility-dialog__row')).toHaveCount(3);
+  await expect(dialog.locator('.terminal-visibility-dialog__rows .kui-list-item')).toHaveCount(3);
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -3116,7 +3116,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
         tabs = getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),
         tabsFrame = getComputedStyle(node.querySelector('.ticket-inspector__tabs-frame')!),
         tabRail = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),
-        tabSelect = getComputedStyle(node.querySelector('.ticket-inspector__tab .kui-app-tab__select')!);
+        tabSelect = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-app-tab__select')!);
       return {
         headerBottom: header.paddingBottom,
         titleMargin: [title.marginTop, title.marginLeft],
@@ -4724,7 +4724,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   // The header identity and controls are Toolbar zone children, not wrapper components (HS2-EZ1N7Z).
   await expect(shell.locator('.kui-toolbar__leading > .workspace-header__identity')).toHaveCount(1);
   await expect(shell.locator('.kui-toolbar__trailing > .view-mode-switcher')).toHaveCount(1);
-  await expect(shell.locator('.project-sidebar[data-component="pane"]')).toHaveCount(1);
+  await expect(shell.locator('.project-sidebar > [data-component="pane"]')).toHaveCount(1);
   await expect(shell.locator('[data-component="tab-bar"]')).toHaveCount(2);
   const shellHierarchy = await shell.evaluate((node) => {
     const shellRect = node.getBoundingClientRect();

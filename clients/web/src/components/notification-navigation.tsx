@@ -50,37 +50,33 @@ export function NotificationNavigation({
     />
   ) : undefined;
   return (
-    <Pane
-      element="aside"
-      label="Notification views"
-      className="settings-navigation"
-      header={header}
-      contentClassName="settings-navigation__content"
-    >
-      <section>
-        <ListHeader label="Notifications" />
-        <nav aria-label="Notification views">
-          <List gap={rem(0.125)}>
-            {views.map((item) => (
-              <ListItem
-                action="select-notification-view"
-                itemId={item.id}
-                selected={selected === item.id}
-                icon={<LucideIcon icon={item.icon} name={item.iconName} />}
-                label={item.label}
-                trailing={
-                  <small
-                    class="notification-navigation__count"
-                    data-attention={String(item.id === 'pending' && counts.pending > 0)}
-                  >
-                    {counts[item.id]}
-                  </small>
-                }
-              />
-            ))}
-          </List>
-        </nav>
-      </section>
-    </Pane>
+    <div class="settings-navigation">
+      <Pane element="aside" label="Notification views" header={header} contentClassName="settings-navigation__content">
+        <section>
+          <ListHeader label="Notifications" />
+          <nav aria-label="Notification views">
+            <List gap={rem(0.125)}>
+              {views.map((item) => (
+                <ListItem
+                  action="select-notification-view"
+                  itemId={item.id}
+                  selected={selected === item.id}
+                  icon={<LucideIcon icon={item.icon} name={item.iconName} />}
+                  label={item.label}
+                  trailing={
+                    <small
+                      class="notification-navigation__count"
+                      data-attention={String(item.id === 'pending' && counts.pending > 0)}
+                    >
+                      {counts[item.id]}
+                    </small>
+                  }
+                />
+              ))}
+            </List>
+          </nav>
+        </section>
+      </Pane>
+    </div>
   );
 }

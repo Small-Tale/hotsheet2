@@ -2,6 +2,7 @@
    8px inline inset. kerf ListItem/ListHeader self-inset via --kui-layout-inline-margin;
    ProjectSummary and the footer inset themselves since they are not menu rows. */
 .project-sidebar {
+  display: grid;
   width: min(remify(272px), 100%);
   min-width: 250px;
   height: 100%;
@@ -13,7 +14,7 @@
 }
 /* Flex layout so a lone collapse control aligns to the 8px gutter; kerf's Toolbar grid
    renders three cells and pushes a single trailing control ~16px in (HS2-V0ZH69). */
-.project-sidebar > .kui-pane__header > .kui-toolbar {
+.project-sidebar > .kui-pane > .kui-pane__header > .kui-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;

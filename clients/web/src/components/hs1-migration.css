@@ -47,21 +47,24 @@
   justify-content: flex-end;
   gap: var(--kui-space-xs);
 }
+/* App-owned strip around the Kerf StateBanner: it configures the banner through public tokens and
+   draws the strip's bottom rule itself; the banner's own border stays transparent (HS2-VABS08). */
 .hs1-cleanup-banner,
 .hs1-migration-banner {
   --kui-layout-inline-margin: 0;
   --kui-layout-item-gap: var(--kui-space-m);
   --kui-layout-item-padding: var(--kui-space-xs) var(--kui-space-m);
   --kui-layout-rounded-radius: 0;
-  min-height: remify(41.6px);
-  border-width: 0 0 1px;
+  --kui-state-banner-border: transparent;
+  display: grid;
+  border-bottom: 1px solid var(--hs1-banner-border);
 }
 .hs1-cleanup-banner {
-  --kui-state-banner-border: var(--wa-color-success-border-quiet);
+  --hs1-banner-border: var(--wa-color-success-border-quiet);
   --kui-state-banner-foreground: var(--wa-color-success-on-quiet);
 }
 .hs1-migration-banner {
-  --kui-state-banner-border: var(--wa-color-brand-border-quiet);
+  --hs1-banner-border: var(--wa-color-brand-border-quiet);
   --kui-state-banner-foreground: var(--wa-color-brand-on-quiet);
 }
 .hs1-cleanup-banner .kui-state-banner__copy,
@@ -77,7 +80,7 @@
   gap: var(--kui-space-xs);
 }
 @media (max-width: remify(960px)) {
-  .hs1-cleanup-banner {
+  .hs1-cleanup-banner .kui-state-banner {
     grid-template-columns: auto minmax(0, 1fr);
   }
   .hs1-cleanup-banner .kui-state-banner__copy {

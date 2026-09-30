@@ -183,71 +183,72 @@ export function TerminalDrawer({
           data-action="toggle-terminal-drawer-maximize"
           title={`Double-click to ${maximized ? 'restore' : 'maximize'} terminal drawer`}
         >
-          <TabBar
-            id={TERMINAL_DRAWER_TAB_BAR_ID}
-            label="Terminal drawer views"
-            className="terminal-drawer__views"
-            // Terminal selection replaces the controlled tab nodes and changes a live work surface.
-            // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
-            activation="manual"
-            trailingPlacement="adjacent"
-            trailing={
-              <ToolbarControlGroup
-                className="terminal-drawer__create-wrap"
-                size="compact"
-                appearance="borderless"
-                single
-                nestedDropdown
-              >
-                <PopupMenu
-                  label="New drawer item"
-                  icon={<LucideIcon icon={Plus} name="plus" />}
-                  caret={false}
-                  placement="top-start"
-                  rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
-                  items={[
-                    {
-                      label: 'Default shell',
-                      action: 'create-terminal-drawer-item',
-                      icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
-                      attributes: { 'data-item-id': 'default-shell' },
-                    },
-                    {
-                      label: 'AI shell',
-                      action: 'create-terminal-drawer-item',
-                      icon: <LucideIcon icon={Bot} name="bot" />,
-                      attributes: { 'data-item-id': 'ai-shell' },
-                    },
-                    {
-                      label: 'AI chat',
-                      action: 'create-terminal-drawer-item',
-                      icon: <LucideIcon icon={MessageSquare} name="message-square" />,
-                      attributes: { 'data-item-id': 'ai-chat' },
-                    },
-                    {
-                      label: 'Saved conversation…',
-                      action: 'open-saved-conversation',
-                      icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
-                    },
-                  ]}
-                />
-              </ToolbarControlGroup>
-            }
-            end={
-              <ToolbarControlGroup className="terminal-drawer__actions" appearance="borderless" single>
-                <button
-                  type="button"
-                  data-action="toggle-terminal-drawer"
-                  aria-label="Hide terminal drawer"
-                  title="Hide terminal drawer"
+          <div class="terminal-drawer__views">
+            <TabBar
+              id={TERMINAL_DRAWER_TAB_BAR_ID}
+              label="Terminal drawer views"
+              // Terminal selection replaces the controlled tab nodes and changes a live work surface.
+              // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
+              activation="manual"
+              trailingPlacement="adjacent"
+              trailing={
+                <ToolbarControlGroup
+                  className="terminal-drawer__create-wrap"
+                  size="compact"
+                  appearance="borderless"
+                  single
+                  nestedDropdown
                 >
-                  <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
-                </button>
-              </ToolbarControlGroup>
-            }
-          >
-            {tabs}
-          </TabBar>
+                  <PopupMenu
+                    label="New drawer item"
+                    icon={<LucideIcon icon={Plus} name="plus" />}
+                    caret={false}
+                    placement="top-start"
+                    rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
+                    items={[
+                      {
+                        label: 'Default shell',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
+                        attributes: { 'data-item-id': 'default-shell' },
+                      },
+                      {
+                        label: 'AI shell',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={Bot} name="bot" />,
+                        attributes: { 'data-item-id': 'ai-shell' },
+                      },
+                      {
+                        label: 'AI chat',
+                        action: 'create-terminal-drawer-item',
+                        icon: <LucideIcon icon={MessageSquare} name="message-square" />,
+                        attributes: { 'data-item-id': 'ai-chat' },
+                      },
+                      {
+                        label: 'Saved conversation…',
+                        action: 'open-saved-conversation',
+                        icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+                      },
+                    ]}
+                  />
+                </ToolbarControlGroup>
+              }
+              end={
+                <ToolbarControlGroup className="terminal-drawer__actions" appearance="borderless" single>
+                  <button
+                    type="button"
+                    data-action="toggle-terminal-drawer"
+                    aria-label="Hide terminal drawer"
+                    title="Hide terminal drawer"
+                  >
+                    <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
+                  </button>
+                </ToolbarControlGroup>
+              }
+            >
+              {tabs}
+            </TabBar>
+          </div>
         </header>
       )}
       <div class="terminal-drawer__content">

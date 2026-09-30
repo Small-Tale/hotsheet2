@@ -39,14 +39,16 @@ export function TerminalTicketRail({
   action,
 }: TerminalTicketRailProps) {
   const heading = views.length ? (
-    <Select
-      className="terminal-ticket-rail__view"
-      name="terminal-rail-view"
-      value={selectedViewId}
-      ariaLabel="Ticket rail view"
-      choices={views.map((view) => ({ value: view.id, label: view.label }))}
-      renderSelected={(choice) => <span>{choice.label}</span>}
-    />
+    <div class="terminal-ticket-rail__view">
+      <Select
+        presentation="toolbar-borderless"
+        name="terminal-rail-view"
+        value={selectedViewId}
+        ariaLabel="Ticket rail view"
+        choices={views.map((view) => ({ value: view.id, label: view.label }))}
+        renderSelected={(choice) => <span>{choice.label}</span>}
+      />
+    </div>
   ) : (
     <ToolbarText text={title} size="large" />
   );
@@ -58,6 +60,7 @@ export function TerminalTicketRail({
         leading={
           <ToolbarControlGroup single appearance="borderless">
             <Select
+              presentation="toolbar-borderless"
               name="terminal-rail-project"
               value={selectedProjectId}
               ariaLabel="Ticket rail project"
@@ -91,10 +94,12 @@ export function TerminalTicketRail({
         responsiveAt="narrow"
         trailing={controls}
       />
-      <Toolbar className="terminal-ticket-rail__heading" dividerSides="" leading={heading} trailing={action} />
-      <SunkenPanel className="terminal-ticket-rail__content" shape="square">
-        {content}
-      </SunkenPanel>
+      <div class="terminal-ticket-rail__heading">
+        <Toolbar dividerSides="" leading={heading} trailing={action} />
+      </div>
+      <div class="terminal-ticket-rail__content">
+        <SunkenPanel shape="square">{content}</SunkenPanel>
+      </div>
     </section>
   );
   return (

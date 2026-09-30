@@ -6,20 +6,28 @@
   display: grid;
   gap: var(--kui-space-2xs);
 }
+/* App-owned wrapper around each command's Kerf ListItem: it sizes the row and configures the row
+   through ListItem's public tokens (the item itself stays unstyled by app CSS, HS2-VABS08). */
 .command-navigation__command {
+  display: grid;
   min-height: remify(40px);
+  margin-inline: var(--kui-layout-inline-margin, var(--kui-space-xs));
+  border-radius: var(--kui-layout-rounded-radius, calc(1px + 0.6875rem));
   font-weight: 650;
 }
+/* A colored command row: the wrapper paints the resting fill behind the transparent ListItem (its
+   resting fill and border have no public token yet, KF request filed on HS2-VABS08); hover and
+   pressed use the public tokens, and the row's border tones are neutralized so the fill reads as one
+   pill in every state. */
 .command-navigation__command:not([data-command-palette='transparent']) {
+  --kui-layout-inline-margin: 0;
+  --kui-color-neutral-border-normal: transparent;
+  --kui-color-brand-border-quiet: transparent;
   --kui-list-item-color: var(--hs-command-on);
   --kui-list-item-hover-background: var(--command-color);
   --kui-list-item-selected-color: var(--hs-command-on);
   --kui-list-item-selected-background: var(--command-color);
-  border-color: transparent;
   background: var(--command-color);
-}
-.command-navigation__command:not([data-command-palette='transparent']):is(:hover, [aria-pressed='true']) {
-  border-color: transparent;
 }
 .command-navigation__command[data-command-palette='blue'] {
   --command-color: var(--hs-command-blue);

@@ -130,14 +130,15 @@ export function TerminalVisibilityControls({
               </button>
             </ToolbarControlGroup>
             <ToolbarControlGroup single>
-              <Select
-                className="terminal-dashboard-controls__visibility-select"
-                name="terminal-visibility-group"
-                ariaLabel="Terminal visibility group"
-                value={activeId}
-                choices={choices}
-                renderSelected={(choice) => <span>{choice.label}</span>}
-              />
+              <div class="terminal-dashboard-controls__visibility-select">
+                <Select
+                  name="terminal-visibility-group"
+                  ariaLabel="Terminal visibility group"
+                  value={activeId}
+                  choices={choices}
+                  renderSelected={(choice) => <span>{choice.label}</span>}
+                />
+              </div>
             </ToolbarControlGroup>
           </>
         }
@@ -535,30 +536,32 @@ export function TerminalDashboard({
           ))
         )}
       </div>
-      <FloatingToolbar label="Workspace tile zoom" position="bottom-end" className="terminal-dashboard__zoom">
-        <ToolbarControlGroup>
-          <button
-            type="button"
-            data-action="zoom-terminal-grid"
-            data-zoom-direction="out"
-            disabled={layout.fit >= layout.max}
-            aria-label={`Zoom out, fit more items ${layout.basis}`}
-            title="Zoom out"
-          >
-            <LucideIcon icon={Minus} name="minus" />
-          </button>
-          <button
-            type="button"
-            data-action="zoom-terminal-grid"
-            data-zoom-direction="in"
-            disabled={layout.fit <= 1}
-            aria-label={`Zoom in, fit fewer items ${layout.basis}`}
-            title="Zoom in"
-          >
-            <LucideIcon icon={Plus} name="plus" />
-          </button>
-        </ToolbarControlGroup>
-      </FloatingToolbar>
+      <div class="terminal-dashboard__zoom">
+        <FloatingToolbar label="Workspace tile zoom" position="bottom-end">
+          <ToolbarControlGroup>
+            <button
+              type="button"
+              data-action="zoom-terminal-grid"
+              data-zoom-direction="out"
+              disabled={layout.fit >= layout.max}
+              aria-label={`Zoom out, fit more items ${layout.basis}`}
+              title="Zoom out"
+            >
+              <LucideIcon icon={Minus} name="minus" />
+            </button>
+            <button
+              type="button"
+              data-action="zoom-terminal-grid"
+              data-zoom-direction="in"
+              disabled={layout.fit <= 1}
+              aria-label={`Zoom in, fit fewer items ${layout.basis}`}
+              title="Zoom in"
+            >
+              <LucideIcon icon={Plus} name="plus" />
+            </button>
+          </ToolbarControlGroup>
+        </FloatingToolbar>
+      </div>
       {magnified && (
         <div
           class="terminal-dashboard__magnified"

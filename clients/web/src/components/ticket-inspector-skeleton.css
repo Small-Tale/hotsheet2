@@ -7,7 +7,7 @@
 /* The chrome is shown for continuity only; nothing in it is interactive while loading. */
 .ticket-inspector--placeholder .ticket-inspector__tabs button,
 .ticket-inspector--placeholder .kui-list-header__action,
-.ticket-inspector--placeholder .ticket-inspector__block-action {
+.ticket-inspector--placeholder .ticket-inspector__blocked-section {
   pointer-events: none;
 }
 

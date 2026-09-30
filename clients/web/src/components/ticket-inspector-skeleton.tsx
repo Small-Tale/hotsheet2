@@ -121,14 +121,15 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
           <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
           <div class="ticket-inspector__status-field">
             <ListHeader label="Status" />
-            <ListInsetControl className="ticket-inspector__status-line">
-              <TicketStatusMenu value="not_started" placeholder />
+            <ListInsetControl>
+              <div class="ticket-inspector__status-line">
+                <TicketStatusMenu value="not_started" placeholder />
+              </div>
             </ListInsetControl>
           </div>
         </section>
-        <section class="ticket-inspector__section">
+        <section class="ticket-inspector__section ticket-inspector__blocked-section">
           <ListItem
-            className="ticket-inspector__block-action"
             action="block-ticket"
             icon={<LucideIcon icon={Plus} name="plus" />}
             label="Block ticket"

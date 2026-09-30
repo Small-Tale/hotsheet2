@@ -68,6 +68,13 @@
   letter-spacing: normal;
   text-transform: none;
 }
+/* App-owned responsive form grid: Kerf's Grid takes a fixed column count, so the two-column layout
+   that collapses to one column on narrow viewports lives here (Kerf request KF-RESPONSIVE-GRID). */
+.provider-setup-form__grid {
+  display: grid;
+  gap: var(--kui-space-m);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .provider-setup-form__wide {
   grid-column: 1 / -1;
 }

@@ -52,31 +52,32 @@ export function TerminalOperationsSidebar({ projects }: { projects: readonly Ter
     />
   );
   return (
-    <Pane
-      element="aside"
-      label="Terminal operations sidebar"
-      className="terminal-operations-sidebar"
-      header={header}
-      contentClassName="terminal-operations-sidebar__groups"
-    >
-      <List gap="m">
-        {groups.map((group) => (
-          <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
-            <div class="terminal-operations-sidebar__group-heading">
-              <ListHeader label={group.name} inline />
-            </div>
-            <ProjectSummary
-              completedToday={group.completedToday}
-              inProgress={group.inProgress}
-              trend={group.trend}
-              projectId={group.id}
-              chartTone={group.id === 'all' ? 'success' : 'brand'}
-              chartMaximum={chartMaximum}
-              backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
-            />
-          </section>
-        ))}
-      </List>
-    </Pane>
+    <div class="terminal-operations-sidebar">
+      <Pane
+        element="aside"
+        label="Terminal operations sidebar"
+        header={header}
+        contentClassName="terminal-operations-sidebar__groups"
+      >
+        <List gap="m">
+          {groups.map((group) => (
+            <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
+              <div class="terminal-operations-sidebar__group-heading">
+                <ListHeader label={group.name} inline />
+              </div>
+              <ProjectSummary
+                completedToday={group.completedToday}
+                inProgress={group.inProgress}
+                trend={group.trend}
+                projectId={group.id}
+                chartTone={group.id === 'all' ? 'success' : 'brand'}
+                chartMaximum={chartMaximum}
+                backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
+              />
+            </section>
+          ))}
+        </List>
+      </Pane>
+    </div>
   );
 }

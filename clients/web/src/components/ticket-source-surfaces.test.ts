@@ -226,10 +226,10 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(signedIn).toContain('Signed in to GitHub.');
-    expect(signedIn).toContain('data-component="grid"');
+    // The responsive two-column form grid is app-owned (Kerf's Grid takes a fixed column count).
+    expect(signedIn).toContain('<div class="provider-setup-form__grid">');
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
-    expect(signedIn).toContain('data-columns="2"');
     expect(signedIn).not.toContain('name="api-base"');
     const remote = String(
       TicketSourceSetupDialog({

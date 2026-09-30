@@ -321,7 +321,6 @@ export function TicketInspector({
               selected={activeTab === tab.id}
               closable={false}
               selectAction="set-inspector-tab"
-              className="ticket-inspector__tab"
               presentation="segmented"
               size="compact"
               rootAttributes={{ 'data-inspector-tab': tab.id }}

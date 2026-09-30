@@ -21,6 +21,9 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
+/* Documented KUI-L022 residual (HS2-VABS08): Kerf's Toolbar derives its inset from `--kui-toolbar-gap`,
+   so a toolbar nested in the shell header's trailing zone cannot keep an 8px gap between its groups
+   with no inset of its own. Remove this rule once Kerf separates the inset from the gap. */
 .terminal-dashboard-controls__visibility-toolbar {
   --kui-toolbar-gap: var(--wa-space-xs);
   --kui-toolbar-group-size: remify(44px);
@@ -49,11 +52,12 @@
   position: relative;
 }
 .terminal-dashboard-controls__visibility-select {
+  display: flex;
   width: max-content;
   min-width: remify(88px);
   max-width: remify(160px);
 }
-.terminal-dashboard-controls__visibility-select::part(combobox) {
+.terminal-dashboard-controls__visibility-select .kui-select::part(combobox) {
   position: relative;
   min-height: remify(32px);
   padding-inline: remify(10.4px) remify(20px);
@@ -62,7 +66,7 @@
   background: var(--wa-color-neutral-fill-normal);
   box-shadow: none;
 }
-.terminal-dashboard-controls__visibility-select::part(expand-icon) {
+.terminal-dashboard-controls__visibility-select .kui-select::part(expand-icon) {
   position: absolute;
   inset-inline-end: remify(4px);
 }
@@ -377,11 +381,15 @@
   width: remify(16px);
   height: remify(16px);
 }
-/* Kerf reads --kui-floating-toolbar-inset as an optional override (default --kui-space-m) rather than
-   defining it, so the fallback must be spelled out or the calc() is invalid and the inset drops to auto. */
-.terminal-dashboard__zoom.kui-floating-toolbar[data-position='bottom-end'] {
-  inset-inline-end: calc(var(--kui-floating-toolbar-inset, var(--kui-space-m, 1rem)) + var(--hotsheet-safe-area-right));
-  inset-block-end: calc(var(--kui-floating-toolbar-inset, var(--kui-space-m, 1rem)) + var(--hotsheet-safe-area-bottom));
+/* Zero-size positioned anchor at the safe-area corner: the Kerf FloatingToolbar keeps its own
+   bottom-end inset relative to this anchor, so it clears the device inset without app CSS on the
+   toolbar itself (HS2-VABS08). */
+.terminal-dashboard__zoom {
+  position: absolute;
+  width: 0;
+  height: 0;
+  inset-inline-end: var(--hotsheet-safe-area-right, 0px);
+  inset-block-end: var(--hotsheet-safe-area-bottom, 0px);
 }
 .terminal-dashboard__magnified {
   position: fixed;

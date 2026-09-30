@@ -56,9 +56,7 @@ export function TicketCodeReview({
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
   const heading = [
     <ToolbarText text={title} size="xlarge" headingLevel={2} />,
-    review?.difftool ? (
-      <ToolbarText text={`Opens in ${review.difftool}`} size="small" className="ticket-code-review__difftool" />
-    ) : undefined,
+    review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined,
   ];
   return (
     <div
@@ -66,7 +64,9 @@ export function TicketCodeReview({
       data-component="ticket-code-review"
     >
       <section>
-        <Toolbar className="ticket-code-review__header" dividerSides="" leading={heading} />
+        <div class="ticket-code-review__header">
+          <Toolbar dividerSides="" leading={heading} />
+        </div>
         {loading && <p role="status">{loadingMessage}</p>}
         {!loading && review && review.commits.length === 0 && (
           <div class="ticket-code-review__empty">

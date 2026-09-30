@@ -249,9 +249,14 @@ describe('ProjectSidebar component slice', () => {
       ".command-navigation__command[data-command-palette='blue'] { --command-color: var(--hs-command-blue); }",
     );
     expect(css).toContainSource(
-      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-list-item-color: var(--hs-command-on);",
+      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-layout-inline-margin: 0; --kui-color-neutral-border-normal: transparent; --kui-color-brand-border-quiet: transparent; --kui-list-item-color: var(--hs-command-on);",
     );
-    expect(css).toContainSource('border-color:transparent;background:var(--command-color)');
+    expect(css).toContainSource(
+      '--kui-list-item-selected-background:var(--command-color);background:var(--command-color)',
+    );
+    // The app wrapper, not the Kerf ListItem root, carries the command class (KUI-L022).
+    expect(markup).toContain('<div class="command-navigation__command" data-command-palette="blue"><button');
+    expect(markup).not.toContain('kui-list-item command-navigation__command');
   });
 
   it('shows half-opacity type icons for idle shell and AI commands', () => {
@@ -399,7 +404,8 @@ describe('ProjectSidebar component slice', () => {
         collapseControl: true,
       }),
     );
-    expect(markup).toContain('class="kui-pane project-sidebar"');
+    // The app shell div wraps the Kerf Pane; the Pane root carries no app class (KUI-L022).
+    expect(markup).toContain('<div class="project-sidebar"><aside class="kui-pane"');
     expect(markup).toContain('data-component="pane"');
     expect(markup).toContain('class="kui-pane__content kui-content project-sidebar__content"');
     expect(markup).toContain('class="kui-pane__footer project-sidebar__footer"');
@@ -413,8 +419,10 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.project-sidebar__footer-content \{[^}]*padding: var\(--kui-space-xs\)/);
     // The collapse toolbar aligns its lone control to the gutter with flex, not the old negative-margin hack.
-    expect(css).toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/);
-    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
+    expect(css).toMatch(
+      /\.project-sidebar > \.kui-pane > \.kui-pane__header > \.kui-toolbar \{[^}]*justify-content: flex-end/,
+    );
+    expect(css).not.toMatch(/\.project-sidebar > \.kui-pane > \.kui-pane__header > \.kui-toolbar \{[^}]*margin:/);
   });
 
   it('omits the command section when the project has no commands', () => {

@@ -1898,8 +1898,9 @@ selected typography, `KF-8SD2EP` ListItem/ListHeader geometry and per-part color
 ValueTable, ToolbarText, and app-root tokens) is completed in the Kerf store and awaits the
 next `@kerfjs/ui` release after 5.0.0-beta.59, when `HS2-PKPGGZ` replaces the corresponding
 rules. The remaining `wa-*` subjects wait on `KF-PDPAVF` (tag chip), except the cursor policy
-rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). The `KUI-L022` app classes
-on Kerf roots move onto app-owned wrapper elements in `HS2-VABS08`.
+rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). The three
+remaining `KUI-L022` app classes on Kerf roots wait on `KF-373HYM` (AppTab drop-target state),
+`KF-DTFQSC` (TabBar pinned tab), and `KF-3EZ92R` (Toolbar inset separate from gap).
 
 The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 `.kerf-ui-doctor.json`. The profile contains exact `KUI-L011` exceptions only for the
@@ -1915,10 +1916,10 @@ error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
 HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, and HS2-2EHD8R is:
 
-| Severity | Exact diagnostic budgets                                               |
-| -------- | ---------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 83; `KUI-L022` 33; `KUI-L201` 0 |
-| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                               |
+| Severity | Exact diagnostic budgets                                              |
+| -------- | --------------------------------------------------------------------- |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 83; `KUI-L022` 3; `KUI-L201` 0 |
+| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                              |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
@@ -1960,10 +1961,27 @@ keeps `font-size` on the Web Awesome scale. Layout-only classes (dialog bodies, 
 lists, toolbar placement, value tables, the notes empty inset, the status menu trigger)
 moved onto app-owned wrapper elements; Web Awesome shadow parts are now addressed through
 the wrapper's child element (`.ticket-status-menu > wa-select::part(combobox)`). Every
-remaining `KUI-L022` finding restyles a Kerf root's own contract (Toolbar, Select, AppTab,
-TabBar, Pane, ListItem, StateBanner, SunkenPanel, Grid, ToolbarText, ListInsetControl,
-FloatingToolbar) and is covered by the same upstream requests listed above; `HS2-PKPGGZ`
-adopts them when they ship.
+remaining `KUI-L022` finding restyled a Kerf root's own contract.
+
+HS2-VABS08 then reduced `KUI-L022` from 33 to 3. The Pane shells (`.project-sidebar`,
+`.settings-navigation`, `.terminal-operations-sidebar`), the project tab strip, the drawer's
+tab strip, the rail heading/content/view, the attachment gallery toolbar and footer, the HS1
+banners, the provider connections card, the command rows, and the code-review header are
+app-owned wrapper elements (`display: grid` shells that the Kerf component fills) which
+configure the component only through cataloged public tokens (`--kui-toolbar-gap`,
+`--kui-layout-*`, `--kui-state-banner-*`, `--kui-list-item-*`). Props replaced the rest:
+`Select` `presentation="toolbar-borderless"` and `focusRingOwner="group"` (workspace sort,
+rail project and view, mobile project switcher), `ListItem` `divider="after"` (repository
+files), and `data-state`-keyed public tokens (visibility rows). The gallery footer is an
+app-owned balanced grid whose cells each host a gap-less Kerf Toolbar around one control group,
+the zoom FloatingToolbar hangs off a zero-size safe-area anchor, and the provider setup form
+uses an app-owned responsive grid (`KF-18Z9DC` requests a responsive Kerf `Grid`). The filled
+command rows paint their fill on the wrapper and neutralize the row border tones through the
+scoped semantic tokens until `KF-0PKY5K` catalogs the ListItem fill/border tokens. The three
+residual findings are documented in their stylesheets and gated on `KF-373HYM`, `KF-DTFQSC`,
+and `KF-3EZ92R`. The workspace sort trigger now shows Kerf's icon-and-caret pill (the icon-only
+Select contract) rather than the app's former 44px circle; `KF-3DX5BX` requests a caret option,
+and the expanded search field's floor is 17rem so the header row still fits.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token

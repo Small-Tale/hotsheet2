@@ -65,12 +65,16 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('data-action="next-gallery-image"');
     expect(markup).toContain('src="/b.svg"');
     expect(markup).toContain('data-action="open-gallery-attachment-menu"');
-    expect(markup).toContain('class="kui-toolbar attachment-gallery__footer-actions"');
-    expect(markup).toContain('class="kui-toolbar-control-group attachment-gallery__zoom"');
+    // The footer is an app-owned balanced grid; each cell hosts its own Kerf Toolbar around one control
+    // group, so no Kerf root carries an app class (KUI-L022).
+    expect(markup).toContain(
+      '<div class="attachment-gallery__footer-actions"><div class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end"',
+    );
+    expect(markup).toContain('<div class="attachment-gallery__toolbar"><header class="kui-toolbar"');
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
     expect(markup.match(/data-tone="dark"/g)).toHaveLength(4);
     const markupMode = String(AttachmentGallery({ images, activeUrl: '/b.svg', markup: true }));
-    expect(markupMode).toContain('class="kui-toolbar-control-group attachment-gallery__markup"');
+    expect(markupMode).toContain('data-position="bottom" role="toolbar" aria-label="Media markup"');
     expect(markupMode.match(/data-component="toolbar-control-group"/g)).toHaveLength(5);
   });
   it('cycles previous and next from canonical URLs and aliases', () => {

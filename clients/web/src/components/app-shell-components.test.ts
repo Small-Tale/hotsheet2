@@ -129,7 +129,7 @@ describe('application shell components', () => {
   it('keeps inspector-sidebar tabs icon-only independently of the reader width', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     expect(css).toContainSource(
-      '.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector__tabs .ticket-inspector__tab .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }',
+      '.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector__tabs .kui-app-tab__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }',
     );
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
@@ -316,7 +316,10 @@ describe('application shell components', () => {
     // stable bar id, the modes are its leading slot and add-project its trailing slot.
     expect(markup).toContain('data-component="tab-bar"');
     expect(markup).toContain('data-tab-bar-id="projects"');
-    expect(markup).toContain('class="kui-tab-bar project-tab-bar"');
+    // The app strip wraps Kerf's TabBar; the TabBar root carries no app class (KUI-L022).
+    expect(markup).toContain(
+      '<div class="project-tab-bar" data-component="project-tab-bar" data-mode="project"><nav class="kui-tab-bar"',
+    );
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
     expect(markup).toContain('data-action="choose-project"');

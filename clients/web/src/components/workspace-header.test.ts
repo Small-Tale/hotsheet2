@@ -152,7 +152,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('workspace-header__actions');
     expect(headerCss).not.toContain('.kui-toolbar-control-group');
     expect(headerCss).toContainSource(
-      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 19rem; flex: 1 1 19rem; }",
+      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 17rem; flex: 1 1 17rem; }",
     );
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
     expect(headerCss).not.toContain('.kui-token-search {');
@@ -374,17 +374,20 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('KF-Y3YZBE');
     // The single sort group owns the pill; the Select combobox stays transparent so it does not
     // draw a second, shorter pill that pokes out of the group's rounding (HS2-W3VD53).
-    expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*background: transparent/);
+    // Kerf's borderless toolbar presentation keeps the combobox transparent inside the pill group.
+    expect(headerCss).not.toContain('.workspace-header__sort::part(');
     // The focus ring is a single pill on the group (following its radius), not a mismatched ring on
     // the smaller inner combobox (HS2-M1DF1D).
     expect(headerCss).toMatch(/\.workspace-header__sort-group \{[^}]*border-radius: var\(--wa-border-radius-pill\)/);
     expect(headerCss).toContainSource(
-      '.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has(.workspace-header__sort[open]) { outline: var(--wa-focus-ring)',
+      '.workspace-header__sort-group:focus-within, .workspace-header__sort-group:has([open]) { outline: var(--wa-focus-ring)',
     );
-    expect(headerCss).toMatch(/\.workspace-header__sort::part\(combobox\) \{[^}]*outline: none/);
-    expect(markup).toMatch(/workspace-header__sort[^>]*data-selected-presentation="icon-only"/);
+    // The Select hands its focus ring to the group (`focusRingOwner="group"`).
+    expect(markup).toMatch(
+      /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
+    );
     expect(headerCss).toContainSource(
-      '.workspace-header__sort .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
+      '.workspace-header__sort-group .kui-select__custom-selected { color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
     // The terminal rail's `--rail` groups are excluded: that toolbar wraps them onto rows instead of

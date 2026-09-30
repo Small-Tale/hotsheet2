@@ -51,8 +51,9 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
-.ai-conversation__embedded-header .ai-conversation__embedded-actions {
-  margin-left: auto;
+/* The title grows so the trailing Kerf control group sits at the end without app CSS on it. */
+.ai-conversation__embedded-header > span {
+  flex: 1 1 auto;
 }
 .ai-conversation__embedded-header svg {
   width: remify(16px);

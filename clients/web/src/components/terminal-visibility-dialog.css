@@ -61,8 +61,8 @@
 .terminal-visibility-dialog__rows {
   display: grid;
 }
-.terminal-visibility-dialog__row[data-state='hidden'] {
-  color: var(--wa-color-neutral-on-quiet);
+.terminal-visibility-dialog__rows [data-state='hidden'] {
+  --kui-list-item-color: var(--wa-color-neutral-on-quiet);
 }
 .terminal-visibility-dialog__row-state {
   color: var(--wa-color-neutral-on-quiet);

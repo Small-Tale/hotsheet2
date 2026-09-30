@@ -93,15 +93,17 @@ export function TicketInfoPanel({
         <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
         <div class="ticket-inspector__status-field">
           <ListHeader label="Status" />
-          <ListInsetControl className="ticket-inspector__status-line">
-            <>
-              {status === 'deleted' ? (
-                <StatusBadge status="deleted" />
-              ) : (
-                <TicketStatusMenu value={status} disabled={!canUpdate} />
-              )}
-              {blockedReason && <BlockedBadge />}
-            </>
+          <ListInsetControl>
+            <div class="ticket-inspector__status-line">
+              <>
+                {status === 'deleted' ? (
+                  <StatusBadge status="deleted" />
+                ) : (
+                  <TicketStatusMenu value={status} disabled={!canUpdate} />
+                )}
+                {blockedReason && <BlockedBadge />}
+              </>
+            </div>
           </ListInsetControl>
         </div>
       </section>
@@ -130,12 +132,7 @@ export function TicketInfoPanel({
             </div>
           </>
         ) : canEditText ? (
-          <ListItem
-            className="ticket-inspector__block-action"
-            action="edit-blocked-reason"
-            icon={<LucideIcon icon={Plus} name="plus" />}
-            label="Block ticket"
-          />
+          <ListItem action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" />
         ) : undefined}
       </section>
       <section class="ticket-inspector__section ticket-inspector__details-section">

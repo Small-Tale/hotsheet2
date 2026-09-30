@@ -41,30 +41,32 @@ export function TicketSourcesSettings({
           </div>
         ))}
         {providerConnections.length > 0 && (
-          <List className="ticket-provider-settings__connections">
-            {providerConnections.map((connection) => (
-              <ListItem
-                action="edit-provider-connection"
-                itemId={connection.id}
-                multiline
-                accessibleLabel={`Edit ${connection.name ?? connection.id}`}
-                icon={<LucideIcon icon={Cable} name="cable" />}
-                trailing={<LucideIcon icon={ChevronRight} name="chevron-right" />}
-                label={
-                  <span class="ticket-provider-settings__connection-copy">
-                    <strong>
-                      {connection.name ?? connection.id}
-                      {connection.default && <small>Default</small>}
-                      {connection.disabled && <small data-state="disabled">Disabled</small>}
-                    </strong>
-                    <small>
-                      {providerName(connection.provider as ExternalProviderKind)} · {connection.locator}
-                    </small>
-                  </span>
-                }
-              />
-            ))}
-          </List>
+          <div class="ticket-provider-settings__connections">
+            <List>
+              {providerConnections.map((connection) => (
+                <ListItem
+                  action="edit-provider-connection"
+                  itemId={connection.id}
+                  multiline
+                  accessibleLabel={`Edit ${connection.name ?? connection.id}`}
+                  icon={<LucideIcon icon={Cable} name="cable" />}
+                  trailing={<LucideIcon icon={ChevronRight} name="chevron-right" />}
+                  label={
+                    <span class="ticket-provider-settings__connection-copy">
+                      <strong>
+                        {connection.name ?? connection.id}
+                        {connection.default && <small>Default</small>}
+                        {connection.disabled && <small data-state="disabled">Disabled</small>}
+                      </strong>
+                      <small>
+                        {providerName(connection.provider as ExternalProviderKind)} · {connection.locator}
+                      </small>
+                    </span>
+                  }
+                />
+              ))}
+            </List>
+          </div>
         )}
       </section>
       {error && !setupOpen && (

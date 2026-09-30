@@ -218,9 +218,12 @@
   display: grid;
   grid-column: 1 / -1;
 }
+/* Inner flex row inside the Kerf ListInsetControl so the status menu and badges wrap (HS2-VABS08). */
 .ticket-inspector__status-line {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--kui-space-xs);
 }
 .ticket-inspector__tags {
   display: flex;

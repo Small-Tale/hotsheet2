@@ -48,19 +48,14 @@
   padding: var(--kui-space-l);
   overflow: auto;
 }
+/* Square, divided file rows configured through ListItem's public tokens and `divider` (HS2-VABS08). */
 .repository-status-popover__files {
+  --kui-layout-rounded-radius: 0;
+  --kui-list-item-selected-color: var(--wa-color-brand-on-quiet);
+  --kui-list-item-selected-background: var(--wa-color-brand-fill-quiet);
   display: grid;
   min-width: 0;
   align-content: start;
-}
-.repository-status-popover__file {
-  min-height: remify(44px);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: 0;
-}
-.repository-status-popover__file[aria-pressed='true'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
 }
 .repository-status-popover__file-status {
   display: grid;

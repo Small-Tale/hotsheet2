@@ -16,7 +16,13 @@ describe('HS1 migration presentation', () => {
       /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-layout-item-gap:var\(--kui-space-m\)[^}]*--kui-layout-item-padding:var\(--kui-space-xs\) var\(--kui-space-m\)/,
     );
     expect(css).toMatchSource(/\.kui-state-banner__copy[^}]*gap:var\(--kui-space-2xs\)/);
-    expect(css).not.toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*display:grid/);
+    // The app strip wraps the Kerf StateBanner (KUI-L022): it owns the bottom rule and the grid
+    // that stretches the banner; the banner root carries no app class.
+    expect(css).toMatchSource(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*display:grid/);
+    expect(css).toMatchSource(
+      /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-state-banner-border:transparent/,
+    );
+    expect(css).not.toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*border-width/);
     expect(css).toMatchSource(
       /\.hs1-migration-dialog \.kui-value-table__row code \{[^}]*font-size:var\(--wa-font-size-xs\)/,
     );
@@ -64,7 +70,7 @@ describe('HS1 migration presentation', () => {
   it('keeps a dismissed import available from a polite informational StateBanner', () => {
     const markup = String(Hs1MigrationBanner({ databasePath: '/work/demo/.hotsheet/db' }));
     expect(markup).toContain('data-component="state-banner"');
-    expect(markup).toContain('class="kui-state-banner hs1-migration-banner"');
+    expect(markup).toContain('<div class="hs1-migration-banner"><section class="kui-state-banner"');
     expect(markup).toContain('data-tone="info"');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('aria-live="polite"');
@@ -74,7 +80,7 @@ describe('HS1 migration presentation', () => {
   it('offers cleanup or dismissal from one StateBanner action slot', () => {
     const markup = String(Hs1CleanupBanner());
     expect(markup).toContain('data-component="state-banner"');
-    expect(markup).toContain('class="kui-state-banner hs1-cleanup-banner"');
+    expect(markup).toContain('<div class="hs1-cleanup-banner"><section class="kui-state-banner"');
     expect(markup).toContain('data-tone="success"');
     expect(markup).toContain('safely backed up');
     expect(markup).toContain('class="kui-state-banner__action"><div class="hs1-cleanup-banner__actions"');
