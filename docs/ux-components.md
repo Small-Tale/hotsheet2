@@ -1916,9 +1916,11 @@ selected typography, `KF-8SD2EP` ListItem/ListHeader geometry and per-part color
 ValueTable, ToolbarText, and app-root tokens) is completed in the Kerf store and awaits the
 next `@kerfjs/ui` release after 5.0.0-beta.59, when `HS2-PKPGGZ` replaces the corresponding
 rules. The remaining `wa-*` subjects wait on `KF-PDPAVF` (tag chip), except the cursor policy
-rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). The three
-remaining `KUI-L022` app classes on Kerf roots wait on `KF-373HYM` (AppTab drop-target state),
-`KF-DTFQSC` (TabBar pinned tab), and `KF-3EZ92R` (Toolbar inset separate from gap).
+rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). The two
+remaining `KUI-L022` app classes on Kerf roots wait on `KF-373HYM` (AppTab drop-target state) and
+`KF-DTFQSC` (TabBar pinned tab); HS2-3J2PX3 retired the third by moving the terminal dashboard's
+visibility Toolbar configuration onto its app wrapper through Kerf beta.62's `--kui-toolbar-inset`
+token (`KF-3EZ92R`).
 
 The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 `.kerf-ui-doctor.json`. The profile contains exact `KUI-L011` exceptions only for the
@@ -1936,7 +1938,7 @@ HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402A
 
 | Severity | Exact diagnostic budgets                                             |
 | -------- | -------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 3; `KUI-L022` 3; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 3; `KUI-L022` 2; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                             |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the

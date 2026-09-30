@@ -4857,7 +4857,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
     codex = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
     manage = page.getByRole('button', { name: 'Manage workspace visibility' }),
     selector = page.locator('wa-select[name="terminal-visibility-group"]');
-  const visibilityToolbar = page.locator('.terminal-dashboard-controls__visibility-toolbar');
+  const visibilityToolbar = page.locator('.terminal-dashboard-controls__visibility-group');
   await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });

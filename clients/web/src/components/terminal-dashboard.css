@@ -16,21 +16,17 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
+/* App-owned wrapper around the nested Kerf Toolbar: the toolbar keeps its 8px zone gap with no inset of
+   its own (Kerf beta.62 `--kui-toolbar-inset`, HS2-3J2PX3) and its 44px control band; the wrapper owns
+   the controls' minimum width. */
 .terminal-dashboard-controls__visibility-group {
+  --kui-toolbar-gap: var(--wa-space-xs);
+  --kui-toolbar-inset: 0px;
+  --kui-toolbar-group-size: remify(44px);
   display: flex;
+  min-width: remify(208px);
   align-items: center;
   gap: var(--wa-space-xs);
-}
-/* Documented KUI-L022 residual (HS2-VABS08): Kerf's Toolbar derives its inset from `--kui-toolbar-gap`,
-   so a toolbar nested in the shell header's trailing zone cannot keep an 8px gap between its groups
-   with no inset of its own. Remove this rule once Kerf separates the inset from the gap. */
-.terminal-dashboard-controls__visibility-toolbar {
-  --kui-toolbar-gap: var(--wa-space-xs);
-  --kui-toolbar-group-size: remify(44px);
-  width: max-content;
-  min-width: remify(208px);
-  min-height: remify(44px);
-  padding: 0;
 }
 .terminal-dashboard-controls__count {
   position: absolute;

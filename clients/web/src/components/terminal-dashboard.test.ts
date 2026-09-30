@@ -222,7 +222,11 @@ describe('TerminalDashboard', () => {
         TerminalDashboardControls({ hiddenCount: 2, visibilityGroups, activeVisibilityGroupId: 'focus' }),
       );
     expect(markup).toContain('data-action="open-terminal-visibility"');
-    expect(markup).toContain('class="kui-toolbar terminal-dashboard-controls__visibility-toolbar"');
+    // The nested Toolbar carries no app class; its wrapper configures it through public tokens (HS2-3J2PX3).
+    expect(markup).toContain(
+      '<div class="terminal-dashboard-controls__visibility-group" data-visibility-scope="dashboard"><header class="kui-toolbar"',
+    );
+    expect(markup).not.toContain('visibility-toolbar');
     // The group Select is wrapped by the app; its root carries no app class (KUI-L022).
     expect(markup).toContain('<div class="terminal-dashboard-controls__visibility-select"><wa-select');
     expect(markup).toContain('>2</span>');
