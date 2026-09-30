@@ -424,7 +424,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   // only, since terminal visibility is dashboard-scoped; Open switches the drawer to that terminal
   // (HS2-V2CCN6).
   await drawer.getByRole('button', { name: 'More actions for nano' }).click();
-  const drawerMenu = drawer.getByRole('menu');
+  const drawerMenu = drawer.getByRole('menu', { name: 'Terminal actions' });
   await expect(drawerMenu).toBeVisible();
   await expect(drawerMenu.locator('wa-dropdown-item')).toHaveCount(1);
   await expect(drawerMenu.getByText('Hide Terminal')).toHaveCount(0);

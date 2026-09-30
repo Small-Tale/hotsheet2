@@ -1,6 +1,3 @@
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
-
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { PopupMenuEntry, PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { Bot, Brain, Gauge, type IconNode, Pencil } from 'lucide';
@@ -11,13 +8,11 @@ export interface ProviderModelEffortChoice {
   label: string;
 }
 
-/** The Provider/Model/Effort submenu group, shared by every surface that lets a user pick
- * an AI provider, model, and optional effort (the Drive options popup and the in-conversation
- * model/effort popup, and the command-editor field). The caller owns
- * the enclosing `<wa-dropdown>` (its trigger, placement, and any leading rows such as Drive's
- * "Default" reset), and each submenu is included only when its data is supplied — so a surface
- * shows exactly the choices it supports. Selections are reported as delegated host-level
- * `click`s carrying `data-action`/`data-value`, matching the existing handlers. */
+/** The Provider/Model/Effort submenu group, shared by every surface that lets a user pick an AI
+ * provider, model, and optional effort (the Drive options menu, the in-conversation model menu, and
+ * the command editor's AI configuration menu). Each submenu is included only when its data is
+ * supplied, so a surface shows exactly the choices it supports; selections are reported as delegated
+ * host-level `click`s carrying `data-action`/`data-value`, matching the existing handlers. */
 export interface ProviderModelEffortSubmenusProps {
   /** Host-level actions each submenu stamps onto its rows. */
   actions: { provider?: string; model: string; effort: string; manualModel: string };
@@ -37,96 +32,10 @@ export interface ProviderModelEffortSubmenusProps {
   effort?: { efforts: readonly string[]; current?: string };
 }
 
-/** One selectable submenu row. Exported for surfaces that compose extra rows in the same style. */
-export function providerModelEffortChoice(
-  action: string,
-  value: string,
-  label: string,
-  selected: boolean,
-  icon: IconNode,
-  iconName: string,
-) {
-  return (
-    <wa-dropdown-item
-      slot="submenu"
-      aria-current={selected ? 'true' : 'false'}
-      data-action={action}
-      data-value={value}
-      value={value}
-    >
-      <span slot="icon">
-        <LucideIcon icon={icon} name={iconName} />
-      </span>
-      {label}
-    </wa-dropdown-item>
-  );
-}
-
-export function ProviderModelEffortSubmenus({ actions, providers, model, effort }: ProviderModelEffortSubmenusProps) {
-  return (
-    <>
-      {providers && actions.provider && (
-        <wa-dropdown-item>
-          <span slot="icon">
-            <LucideIcon icon={Bot} name="bot" />
-          </span>
-          Provider<span slot="details">{providers.currentLabel}</span>
-          {providers.choices.map((choice) =>
-            providerModelEffortChoice(
-              actions.provider!,
-              choice.id,
-              choice.label,
-              choice.id === providers.currentId,
-              Bot,
-              'bot',
-            ),
-          )}
-        </wa-dropdown-item>
-      )}
-      {model && (
-        <wa-dropdown-item>
-          <span slot="icon">
-            <LucideIcon icon={Brain} name="brain" />
-          </span>
-          Model<span slot="details">{model.currentLabel}</span>
-          {model.customModel &&
-            providerModelEffortChoice(actions.model, model.customModel, model.customModel, true, Brain, 'brain')}
-          {model.choices.map((choice) =>
-            providerModelEffortChoice(
-              actions.model,
-              choice.id,
-              choice.label,
-              choice.id === model.currentId,
-              Brain,
-              'brain',
-            ),
-          )}
-          <wa-divider slot="submenu"></wa-divider>
-          {providerModelEffortChoice(actions.manualModel, 'other', 'Other…', false, Pencil, 'pencil')}
-        </wa-dropdown-item>
-      )}
-      {effort && (
-        <wa-dropdown-item disabled={!effort.efforts.length}>
-          <span slot="icon">
-            <LucideIcon icon={Gauge} name="gauge" />
-          </span>
-          Effort<span slot="details">{effort.current}</span>
-          {effort.efforts.map((value) =>
-            providerModelEffortChoice(actions.effort, value, value, value === effort.current, Gauge, 'gauge'),
-          )}
-        </wa-dropdown-item>
-      )}
-    </>
-  );
-}
-
 /**
- * The same Provider/Model/Effort submenus as typed Kerf `PopupMenu` entries, for surfaces that
- * render a `PopupMenu` (the command editor's AI configuration menu and the in-conversation
- * model menu, HS2-CSRJ9Y). Each submenu row keeps the delegated host-level `data-action` and
- * `data-value` the existing click handlers read; the selected row is a checked menu choice.
- * `ProviderModelEffortSubmenus` above remains for the pointer-positioned menus that still
- * own a raw `wa-dropdown` (tracked in HS2-CSRJ9Y's follow-up).
+ * The Provider/Model/Effort submenus as typed Kerf `PopupMenu` entries (HS2-CSRJ9Y, HS2-2EHD8R).
+ * Each submenu row keeps the delegated host-level `data-action` and `data-value` the existing click
+ * handlers read; the selected row is a checked menu choice.
  */
 export function providerModelEffortEntries({
   actions,

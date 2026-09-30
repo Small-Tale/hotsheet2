@@ -1,9 +1,9 @@
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './view-navigation.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import {
   Archive,
   Clock3,
@@ -18,6 +18,8 @@ import {
   ShieldAlert,
   Trash2,
 } from 'lucide';
+
+import { contextPopupMenuAnchor } from '../context-menu-position';
 
 export interface ViewNavigationItem {
   id: string;
@@ -144,20 +146,28 @@ export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuSt
       role="menu"
       aria-label={`${label} view actions`}
       data-saved-view-id={id}
-      style={`left:${x}px;top:${y}px`}
+      {...contextPopupMenuAnchor(x, y)}
     >
-      <wa-dropdown-item data-action="edit-saved-view" data-item-id={id}>
-        <span slot="icon">
-          <LucideIcon icon={Pencil} name="pencil" />
-        </span>
-        Edit view…
-      </wa-dropdown-item>
-      <wa-dropdown-item data-action="delete-saved-view" data-item-id={id} variant="danger">
-        <span slot="icon">
-          <LucideIcon icon={Trash2} name="trash-2" />
-        </span>
-        Delete view…
-      </wa-dropdown-item>
+      <PopupMenu
+        context
+        label={`${label} view actions`}
+        rootAttributes={{ 'data-context-menu': 'saved-view' }}
+        items={[
+          {
+            label: 'Edit view…',
+            action: 'edit-saved-view',
+            icon: <LucideIcon icon={Pencil} name="pencil" />,
+            attributes: { 'data-item-id': id },
+          },
+          {
+            label: 'Delete view…',
+            action: 'delete-saved-view',
+            tone: 'danger',
+            icon: <LucideIcon icon={Trash2} name="trash-2" />,
+            attributes: { 'data-item-id': id },
+          },
+        ]}
+      />
     </div>
   );
 }

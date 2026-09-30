@@ -12,17 +12,22 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await expect(provider).toBeVisible();
   await expect(provider.locator(':scope > [data-lucide="chevron-right"]')).toHaveCount(0);
   expect(await provider.evaluate((node) => node.shadowRoot?.querySelectorAll('[part="submenu-icon"]').length)).toBe(1);
+  // A context-mode PopupMenu: the stage opened it at its anchor and the popup sits above the anchor.
+  await expect(menu.locator('[data-context-menu="drive-options"]')).toHaveAttribute('open', '');
   expect(
-    await menu.evaluate(
-      (node) => node.parentElement!.getBoundingClientRect().top - node.getBoundingClientRect().bottom,
-    ),
-  ).toBeCloseTo(8, 0);
+    await menu.evaluate((node) => {
+      const anchor = node.getBoundingClientRect(),
+        popup = node.querySelector('wa-dropdown')!.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
+      return anchor.top - popup.bottom;
+    }),
+  ).toBeGreaterThanOrEqual(0);
 
   await model.hover();
   const modelChoices = model.locator(':scope > wa-dropdown-item[slot="submenu"]');
   await expect(modelChoices.first()).toBeVisible();
-  await expect(modelChoices.first()).toHaveAttribute('aria-current', 'true');
-  await expect(model.locator(':scope > wa-divider[slot="submenu"]')).toHaveCSS('margin-block-start', '4px');
+  // The current model is a checked PopupMenu choice; submenus hold no divider (KF-7KR1BC).
+  await expect(modelChoices.first()).toHaveAttribute('checked', '');
+  await expect(model.locator(':scope > wa-divider[slot="submenu"]')).toHaveCount(0);
   await modelChoices.first().evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
@@ -38,8 +43,8 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   const effortChoices = effort.locator(':scope > wa-dropdown-item[slot="submenu"]');
   await expect(effortChoices).toHaveCount(3);
   await expect(effort.locator(':scope > wa-dropdown-item[slot="submenu"][data-value="high"]')).toHaveAttribute(
-    'aria-current',
-    'true',
+    'checked',
+    '',
   );
   await effortChoices.first().evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));

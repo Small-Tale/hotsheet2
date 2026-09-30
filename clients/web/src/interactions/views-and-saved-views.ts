@@ -1,8 +1,8 @@
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
-import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -102,6 +102,10 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
         height: 96,
       }),
     };
+  });
+  effect(() => {
+    // Partial dependencies in the handler-transition tests may omit this signal.
+    if ((savedViewMenu as typeof savedViewMenu | undefined)?.value) revealContextPopupMenu('saved-view');
   });
   delegate(document.body, 'contextmenu', '[data-saved-view-id]', (event, target) => {
     event.preventDefault();

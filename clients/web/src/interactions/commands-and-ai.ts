@@ -1,4 +1,4 @@
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 
 import {
   type AiToolDefaults,
@@ -17,6 +17,7 @@ import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
@@ -33,6 +34,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly commandGroupsCollapsed: Signal<Record<string, string[]>>;
   readonly toggleSidebarDrive: () => Promise<void>;
   readonly driveOptionsOpen: Signal<boolean>;
+  readonly driveOptionsAnchor: Signal<{ x: number; y: number } | undefined>;
   readonly aiTools: Signal<AiToolDescriptor[]>;
   readonly aiSettingsLoading: Signal<boolean>;
   readonly refreshAiConfiguration: (current?: Project, refresh?: boolean) => Promise<void>;
@@ -140,6 +142,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     commandGroupsCollapsed,
     toggleSidebarDrive,
     driveOptionsOpen,
+    driveOptionsAnchor,
     aiTools,
     aiSettingsLoading,
     refreshAiConfiguration,
@@ -244,25 +247,39 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   delegate(document.body, 'click', '[data-action="toggle-drive"]', () => {
     void toggleSidebarDrive();
   });
-  delegate(document.body, 'click', '[data-action="toggle-drive-options"]', (event) => {
+  delegate(document.body, 'click', '[data-action="toggle-drive-options"]', (event, target) => {
     event.stopPropagation();
     const opening = !driveOptionsOpen.value;
+    if (opening) {
+      // The menu opens above the drive row from its top-left corner (HS2-2EHD8R).
+      const row = target.closest('.project-sidebar__drive-row')?.getBoundingClientRect();
+      if (row) driveOptionsAnchor.value = { x: row.left, y: row.top };
+    }
     driveOptionsOpen.value = opening;
     if (opening && !aiTools.value.length && !aiSettingsLoading.value) void refreshAiConfiguration(undefined, true);
   });
+  effect(() => {
+    // Partial dependencies in the handler-transition tests may omit this signal.
+    if ((driveOptionsOpen as typeof driveOptionsOpen | undefined)?.value) revealContextPopupMenu('drive-options');
+  });
+  // Web Awesome closes a menu when a choice is picked; the Drive menu stays open across provider,
+  // model, and effort picks, so each choice re-reveals the re-rendered menu (HS2-2EHD8R).
   delegate(document.body, 'click', '[data-action="select-drive-default"]', () => {
     const current = project();
     if (!current) return;
     driveOverridesByProject.value = { ...driveOverridesByProject.value, [current.id]: {} };
+    revealContextPopupMenu('drive-options');
   });
   delegate(document.body, 'click', '[data-action="select-drive-tool"]', (_event, target) => {
     const current = project(),
       tool = data(target).value;
     if (!current || !tool) return;
     driveOverridesByProject.value = { ...driveOverridesByProject.value, [current.id]: normalizedAiSelection({ tool }) };
+    revealContextPopupMenu('drive-options');
   });
   delegate(document.body, 'click', '[data-action="select-drive-model"]', (_event, target) => {
     selectDriveModel(data(target).value ?? '');
+    revealContextPopupMenu('drive-options');
   });
   delegate(document.body, 'click', '[data-action="open-drive-manual-model"]', () => {
     openManualModel('drive');
@@ -275,6 +292,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       ...driveOverridesByProject.value,
       [current.id]: { ...effectiveDriveSelection(current.id), effort },
     };
+    revealContextPopupMenu('drive-options');
   });
   document.addEventListener(
     'pointerdown',
@@ -513,10 +531,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     if (id) openCommandEditor(id);
   });
   delegate(document.body, 'contextmenu', '.command-settings-editor__row', (event, target) => {
-    const menu = target.querySelector<HTMLElement & { show?(): void }>('.command-settings-editor__row-menu');
+    // Right-click opens the row's PopupMenu (a wa-dropdown root) in place of a separate context menu.
+    const menu = target.querySelector<HTMLElement & { open: boolean }>(
+      '.command-settings-editor__row-menu [data-component="popup-menu"]',
+    );
     if (!menu) return;
     event.preventDefault();
-    menu.show?.();
+    menu.open = true;
   });
   delegate(document.body, 'click', '.command-settings-editor__row', (event, target) => {
     if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))

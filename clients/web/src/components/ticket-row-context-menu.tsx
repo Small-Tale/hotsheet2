@@ -1,9 +1,7 @@
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu, type PopupMenuEntry, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import {
   Archive,
   ArchiveRestore,
@@ -24,6 +22,7 @@ import {
   XCircle,
 } from 'lucide';
 
+import { contextPopupMenuAnchor } from '../context-menu-position';
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
 import type { TicketStatus } from './status-badge';
 import { getPriorityPresentation, type TicketPriority } from './ticket-row';
@@ -74,28 +73,25 @@ export const CLOSE_TICKET_CONTEXT_ACTION = {
   iconName: 'x-circle',
 } as const;
 
-function ContextItem({
-  item,
+function contextEntry(
+  item: { action: string; label?: string; icon: IconNode; iconName: string; danger?: boolean },
   disabled = false,
-  disabledTitle,
-}: {
-  item: { action: string; label?: string; icon: IconNode; iconName: string; danger?: boolean };
-  disabled?: boolean;
-  disabledTitle?: string;
-}) {
-  return (
-    <wa-dropdown-item
-      data-context-action={item.action}
-      variant={item.danger ? 'danger' : undefined}
-      disabled={disabled}
-      title={disabled ? (disabledTitle ?? 'One or more selected ticket providers do not support updates.') : undefined}
-    >
-      <span slot="icon" class="ticket-context-menu__icon">
+  disabledTitle?: string,
+): PopupMenuItem {
+  return {
+    label: item.label ?? item.action,
+    tone: item.danger ? 'danger' : 'default',
+    disabled,
+    disabledReason: disabled
+      ? (disabledTitle ?? 'One or more selected ticket providers do not support updates.')
+      : undefined,
+    icon: (
+      <span class="ticket-context-menu__icon">
         <LucideIcon icon={item.icon} name={item.iconName} />
       </span>
-      {item.label ?? item.action}
-    </wa-dropdown-item>
-  );
+    ),
+    attributes: { 'data-context-action': item.action },
+  };
 }
 
 const PRIORITIES: readonly { value: TicketPriority; label: string }[] = [
@@ -104,7 +100,7 @@ const PRIORITIES: readonly { value: TicketPriority; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'low', label: 'Low' },
 ];
-function MetadataSubmenu({
+function metadataSubmenu({
   field,
   label,
   icon,
@@ -127,42 +123,31 @@ function MetadataSubmenu({
   }[];
   selected?: string;
   disabled?: boolean;
-}) {
-  return (
-    <wa-dropdown-item
-      disabled={disabled}
-      title={disabled ? 'One or more selected ticket providers do not support updates.' : undefined}
-    >
-      <span slot="icon" class="ticket-context-menu__icon">
+}): PopupMenuItem {
+  return {
+    label,
+    disabled,
+    disabledReason: disabled ? 'One or more selected ticket providers do not support updates.' : undefined,
+    icon: (
+      <span class="ticket-context-menu__icon">
         <LucideIcon icon={icon} name={iconName} />
       </span>
-      {label}
-      {choices.map((choice) => (
-        <>
-          {choice.separatorBefore && <wa-divider slot="submenu"></wa-divider>}
-          <wa-dropdown-item
-            slot="submenu"
-            type="checkbox"
-            checked={choice.value === selected}
-            data-context-field={field}
-            data-context-value={choice.value}
-            value={choice.value}
-          >
-            {choice.icon && choice.iconName ? (
-              <span
-                slot="icon"
-                class="ticket-context-menu__icon"
-                style={choice.color ? `color:${choice.color}` : undefined}
-              >
-                <LucideIcon icon={choice.icon} name={choice.iconName} />
-              </span>
-            ) : null}
-            {choice.label}
-          </wa-dropdown-item>
-        </>
-      ))}
-    </wa-dropdown-item>
-  );
+    ),
+    // PopupMenu submenus hold items only, so a choice's `separatorBefore` has no counterpart here
+    // (Kerf gap KF-7KR1BC).
+    submenu: choices.map((choice) => ({
+      label: choice.label,
+      value: choice.value,
+      checked: choice.value === selected,
+      icon:
+        choice.icon && choice.iconName ? (
+          <span class="ticket-context-menu__icon" style={choice.color ? `color:${choice.color}` : undefined}>
+            <LucideIcon icon={choice.icon} name={choice.iconName} />
+          </span>
+        ) : undefined,
+      attributes: { 'data-context-field': field, 'data-context-value': choice.value },
+    })),
+  };
 }
 
 export interface TicketRowContextMenuProps {
@@ -217,87 +202,62 @@ export function TicketRowContextMenu({
     const option = getPriorityPresentation(choice.value);
     return { ...choice, icon: option.icon, iconName: option.name, color: option.color };
   });
+  const entries: PopupMenuEntry[] = [];
+  if (allInTrash) entries.push(contextEntry(RESTORE_TICKET_CONTEXT_ACTION, !canBulkUpdate), { kind: 'divider' });
+  if (reopenAction) entries.push(contextEntry(REOPEN_TICKET_CONTEXT_ACTION, !canBulkUpdate), { kind: 'divider' });
+  if (verifyAction || notWorkingAction) {
+    if (verifyAction) entries.push(contextEntry(COMPLETED_TICKET_CONTEXT_ACTIONS[0]));
+    if (notWorkingAction) entries.push(contextEntry(COMPLETED_TICKET_CONTEXT_ACTIONS[1]));
+    entries.push({ kind: 'divider' });
+  }
+  // "Open ticket" opens a single ticket, so hide it when several are selected (HS2-XRENF2).
+  if (selectionCount <= 1) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[0]), { kind: 'divider' });
+  entries.push(
+    metadataSubmenu({
+      field: 'category',
+      label: 'Change category',
+      icon: Shapes,
+      iconName: 'shapes',
+      choices: DEFAULT_TICKET_CATEGORIES,
+      selected: category,
+      disabled: !canBulkUpdate,
+    }),
+    metadataSubmenu({
+      field: 'priority',
+      label: 'Change priority',
+      icon: Gauge,
+      iconName: 'gauge',
+      choices: priorityChoices,
+      selected: priority,
+      disabled: !canBulkUpdate,
+    }),
+    metadataSubmenu({
+      field: 'status',
+      label: 'Change status',
+      icon: CircleDot,
+      iconName: 'circle-dot',
+      choices: TICKET_STATUS_CHOICES,
+      selected: status,
+      disabled: !canBulkUpdate,
+    }),
+  );
+  if (upNextEligible && !hideUpNext) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[4], !canBulkUpdate));
+  entries.push({ kind: 'divider' });
+  if (closeAction) entries.push(contextEntry(CLOSE_TICKET_CONTEXT_ACTION), { kind: 'divider' });
+  for (const item of TICKET_CONTEXT_ACTIONS.slice(5)) {
+    const alreadyThere =
+      (item.action === 'Move to Backlog' && allInBacklog) || (item.action === 'Archive ticket' && allInArchive);
+    entries.push(
+      contextEntry(
+        item,
+        alreadyThere || (!canBulkUpdate && item.action !== 'Duplicate ticket'),
+        alreadyThere ? `Every selected ticket is already in ${allInBacklog ? 'Backlog' : 'Archive'}.` : undefined,
+      ),
+    );
+  }
   return (
-    <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
-      <wa-dropdown open placement="bottom-start" distance={0}>
-        <span slot="trigger" class="ticket-context-menu__anchor" aria-hidden="true"></span>
-        {allInTrash && (
-          <>
-            <ContextItem item={RESTORE_TICKET_CONTEXT_ACTION} disabled={!canBulkUpdate} />
-            <wa-divider></wa-divider>
-          </>
-        )}
-        {reopenAction && (
-          <>
-            <ContextItem item={REOPEN_TICKET_CONTEXT_ACTION} disabled={!canBulkUpdate} />
-            <wa-divider></wa-divider>
-          </>
-        )}
-        {(verifyAction || notWorkingAction) && (
-          <>
-            {verifyAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[0]} />}
-            {notWorkingAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[1]} />}
-            <wa-divider></wa-divider>
-          </>
-        )}
-        {/* "Open ticket" opens a single ticket, so hide it when several are selected (HS2-XRENF2). */}
-        {selectionCount <= 1 && (
-          <>
-            <ContextItem item={TICKET_CONTEXT_ACTIONS[0]} />
-            <wa-divider></wa-divider>
-          </>
-        )}
-        <MetadataSubmenu
-          field="category"
-          label="Change category"
-          icon={Shapes}
-          iconName="shapes"
-          choices={DEFAULT_TICKET_CATEGORIES}
-          selected={category}
-          disabled={!canBulkUpdate}
-        />
-        <MetadataSubmenu
-          field="priority"
-          label="Change priority"
-          icon={Gauge}
-          iconName="gauge"
-          choices={priorityChoices}
-          selected={priority}
-          disabled={!canBulkUpdate}
-        />
-        <MetadataSubmenu
-          field="status"
-          label="Change status"
-          icon={CircleDot}
-          iconName="circle-dot"
-          choices={TICKET_STATUS_CHOICES}
-          selected={status}
-          disabled={!canBulkUpdate}
-        />
-        {upNextEligible && !hideUpNext && <ContextItem item={TICKET_CONTEXT_ACTIONS[4]} disabled={!canBulkUpdate} />}
-        <wa-divider></wa-divider>
-        {closeAction && (
-          <>
-            <ContextItem item={CLOSE_TICKET_CONTEXT_ACTION} />
-            <wa-divider></wa-divider>
-          </>
-        )}
-        {TICKET_CONTEXT_ACTIONS.slice(5).map((item) => {
-          const alreadyThere =
-            (item.action === 'Move to Backlog' && allInBacklog) || (item.action === 'Archive ticket' && allInArchive);
-          return (
-            <ContextItem
-              item={item}
-              disabled={alreadyThere || (!canBulkUpdate && item.action !== 'Duplicate ticket')}
-              disabledTitle={
-                alreadyThere
-                  ? `Every selected ticket is already in ${allInBacklog ? 'Backlog' : 'Archive'}.`
-                  : undefined
-              }
-            />
-          );
-        })}
-      </wa-dropdown>
+    <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" {...contextPopupMenuAnchor(x, y)}>
+      <PopupMenu context label="Ticket actions" rootAttributes={{ 'data-context-menu': 'ticket' }} items={entries} />
     </div>
   );
 }

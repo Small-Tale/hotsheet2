@@ -4,11 +4,13 @@ import './terminal-dashboard.css';
 
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ALargeSmall, Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus, X } from 'lucide';
 
+import { contextPopupMenuAnchor } from '../context-menu-position';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
@@ -580,25 +582,37 @@ export function TerminalDashboard({
           class="terminal-dashboard__context-menu"
           data-component="terminal-context-menu"
           role="menu"
-          style={`left:${contextMenu.x}px;top:${contextMenu.y}px`}
+          aria-label="Terminal actions"
+          {...contextPopupMenuAnchor(contextMenu.x, contextMenu.y)}
           data-terminal-key={contextMenu.key}
         >
-          {contextMenuActions.includes('open') && (
-            <wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}>
-              <span slot="icon">
-                <LucideIcon icon={ExternalLink} name="external-link" />
-              </span>
-              Open
-            </wa-dropdown-item>
-          )}
-          {contextMenuActions.includes('hide') && (
-            <wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}>
-              <span slot="icon">
-                <LucideIcon icon={EyeOff} name="eye-off" />
-              </span>
-              Hide Terminal
-            </wa-dropdown-item>
-          )}
+          <PopupMenu
+            context
+            label="Terminal actions"
+            rootAttributes={{ 'data-context-menu': 'terminal' }}
+            items={[
+              ...(contextMenuActions.includes('open')
+                ? [
+                    {
+                      label: 'Open',
+                      action: 'open-terminal-project',
+                      icon: <LucideIcon icon={ExternalLink} name="external-link" />,
+                      attributes: { 'data-item-id': contextMenu.key },
+                    },
+                  ]
+                : []),
+              ...(contextMenuActions.includes('hide')
+                ? [
+                    {
+                      label: 'Hide Terminal',
+                      action: 'hide-dashboard-terminal',
+                      icon: <LucideIcon icon={EyeOff} name="eye-off" />,
+                      attributes: { 'data-item-id': contextMenu.key },
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       )}
     </section>

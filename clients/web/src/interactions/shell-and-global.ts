@@ -3,7 +3,7 @@ import {
   type ResizableRegionEdge,
   resizeRegionFromPointer,
 } from '@kerfjs/ui/resizable-region';
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import {
@@ -18,6 +18,7 @@ import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import { revealContextPopupMenu } from '../context-menu-position';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import {
   closeMobileOverlay,
@@ -508,6 +509,19 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     },
     { capture: true },
   );
+  // Each pointer-positioned menu renders a context-mode Kerf PopupMenu from its signal; open it once
+  // it is in the DOM. The signal stays the source of truth for dismissal below (HS2-2EHD8R).
+  for (const [surface, menu] of [
+    ['ticket', ticketContextMenu],
+    ['app-tab', appTabContextMenu],
+    ['terminal', terminalContextMenu],
+    ['attachment', attachmentMenu],
+  ] as const)
+    effect(() => {
+      // The handler-transition tests wire this module with partial dependencies, so the signal may be absent.
+      const state = (menu as typeof menu | undefined)?.value;
+      if (state) revealContextPopupMenu(surface);
+    });
   document.addEventListener(
     'pointerdown',
     (event) => {

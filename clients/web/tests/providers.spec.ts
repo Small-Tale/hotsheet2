@@ -3317,7 +3317,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await codexTile.click({ button: 'right' });
   // The drawer grid offers the tile menu with Open only: terminal visibility (Hide) is scoped to
   // the workspace dashboard (HS2-V2CCN6).
-  const drawerTileMenu = drawer.getByRole('menu');
+  const drawerTileMenu = drawer.getByRole('menu', { name: 'Terminal actions' });
   await expect(drawerTileMenu).toBeVisible();
   await expect(drawerTileMenu.getByText('Open')).toBeVisible();
   await expect(drawerTileMenu.getByText('Hide Terminal')).toHaveCount(0);
@@ -9035,7 +9035,8 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
   const choices = menu.locator('[data-context-field="status"]');
   await expect(choices).toHaveCount(6);
-  await expect(menu.locator('wa-divider[slot="submenu"]')).toHaveCount(1);
+  // A PopupMenu submenu holds no divider before Backlog (Kerf gap KF-7KR1BC).
+  await expect(menu.locator('wa-divider[slot="submenu"]')).toHaveCount(0);
   await choices.filter({ hasText: 'Archive' }).click();
   await expect.poll(() => patches.some((patch) => patch.status === 'archive')).toBe(true);
   await page.getByRole('button', { name: /Archive/ }).click();
@@ -10086,12 +10087,12 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
   await effort.locator('[data-action="select-drive-effort"][data-value="high"]').click();
   await expect(effort).toBeVisible();
   await expect(sidebar.locator('[data-action="select-drive-model"][data-value="fable"]')).toHaveAttribute(
-    'aria-current',
-    'true',
+    'checked',
+    '',
   );
   await expect(sidebar.locator('[data-action="select-drive-effort"][data-value="high"]')).toHaveAttribute(
-    'aria-current',
-    'true',
+    'checked',
+    '',
   );
   await page.screenshot({ path: '/private/tmp/hs2-s010qf-drive-options-open-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -10613,7 +10614,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await options.click();
   const selectedCustom = modelMenu.locator(`[data-action="select-drive-model"][data-value="${driveCustom}"]`);
   await modelMenu.hover();
-  await expect(selectedCustom).toHaveAttribute('aria-current', 'true');
+  await expect(selectedCustom).toHaveAttribute('checked', '');
   await page.waitForTimeout(250);
   await page.screenshot({ path: '/private/tmp/hs2-p28pv9-drive-selected-manual-model-wide.png', fullPage: true });
   await selectedCustom.click();
@@ -12020,7 +12021,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await reader.locator('.markdown-preview__attachment-image').click();
   await expect(gallery).toBeVisible();
   await gallery.getByRole('button', { name: 'More image actions' }).click();
-  await expect(page.getByRole('menu')).toBeVisible();
+  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
@@ -12032,7 +12033,11 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   );
   attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  const menuBounds = (await attachmentMenu.boundingBox())!;
+  // The wrapper is a 1px anchor; Web Awesome's popup panel is what must stay inside the viewport.
+  const menuBounds = await attachmentMenu.evaluate((node) => {
+    const rect = node.querySelector('wa-dropdown')!.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
   expect(menuBounds.x).toBeGreaterThanOrEqual(8);
   expect(menuBounds.y).toBeGreaterThanOrEqual(8);
   expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(1272);

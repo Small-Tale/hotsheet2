@@ -64,21 +64,25 @@ describe('TicketRowContextMenu', () => {
   it('renders checked metadata submenus with stable bulk mutation contracts', () => {
     const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
     for (const field of ['category', 'priority', 'status']) expect(markup).toContain(`data-context-field="${field}"`);
+    // PopupMenu submenu choices: the app's routing attributes lead, then Kerf's own (HS2-2EHD8R).
     expect(markup).toContain(
-      'slot="submenu" type="checkbox" checked data-context-field="category" data-context-value="bug"',
+      'data-context-field="category" data-context-value="bug" slot="submenu" value="bug" type="checkbox" checked',
     );
     expect(markup).toContain(
-      'slot="submenu" type="checkbox" checked data-context-field="priority" data-context-value="high"',
+      'data-context-field="priority" data-context-value="high" slot="submenu" value="high" type="checkbox" checked',
     );
     expect(markup).toContain(
-      'slot="submenu" type="checkbox" checked data-context-field="status" data-context-value="started"',
+      'data-context-field="status" data-context-value="started" slot="submenu" value="started" type="checkbox" checked',
     );
     expect(markup).toContain('data-lucide="sparkles"');
     expect(markup).toContain('data-lucide="chevrons-up"');
     expect(markup).toContain('data-lucide="badge-check"');
+    // A submenu cannot hold the status separator before Backlog (Kerf gap KF-7KR1BC).
     expect(markup).toContain(
-      '<wa-divider slot="submenu"></wa-divider><wa-dropdown-item slot="submenu" type="checkbox" data-context-field="status" data-context-value="backlog"',
+      'data-context-field="status" data-context-value="backlog" slot="submenu" value="backlog" type="checkbox"',
     );
+    expect(markup).not.toContain('<wa-divider slot="submenu">');
+    expect(markup).toContain('data-context-menu="ticket"');
     expect(markup).toContain('data-context-field="status" data-context-value="archive"');
   });
 

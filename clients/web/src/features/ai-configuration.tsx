@@ -51,6 +51,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     aiSettingsLoading = signal(false),
     aiSettingsMessage = signal(''),
     driveOptionsOpen = signal(false),
+    driveOptionsAnchor = signal<{ x: number; y: number } | undefined>(undefined),
     driveOverridesByProject = signal<Record<string, Partial<AiToolDefaults>>>({}),
     manualModelDialog = signal<ManualModelDialogState | undefined>(undefined);
   let manualModelDialogShown = false;
@@ -398,6 +399,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     aiSettingsLoading,
     aiSettingsMessage,
     driveOptionsOpen,
+    driveOptionsAnchor,
     driveOverridesByProject,
     manualModelDialog,
     aiToolLabel,

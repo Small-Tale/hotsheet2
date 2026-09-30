@@ -241,11 +241,14 @@ export function DriveControlDemo() {
 export function DriveOptionsMenuDemo() {
   return (
     <DemoFrame>
-      <div style="position:relative;margin-top:14rem">
+      {/* The stage anchors the context-mode menu below a 14rem spacer; the demo wiring opens it. */}
+      <div style="position:relative;margin-top:14rem;height:1px">
         <DriveOptionsMenu
           tools={demoAiTools}
           selection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
           defaultSelection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
+          x={320}
+          y={360}
         />
       </div>
     </DemoFrame>

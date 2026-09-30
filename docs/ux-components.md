@@ -1726,10 +1726,20 @@ per-row Edit/Delete menu and its AI configuration menu, and the in-conversation 
 (`data-conversation-model-menu`). The shared Provider/Model/Effort submenus now exist in two
 forms from one module: `providerModelEffortEntries` (typed `PopupMenuEntry[]`, checked choices,
 `data-value` attributes for the existing click handlers) for those menus, and the JSX
-`ProviderModelEffortSubmenus` still used by the pointer-positioned menus. Those context menus
-(drive options, ticket row, attachment, app tab, saved view, terminal tile) keep raw
-`wa-dropdown` markup until `HS2-2EHD8R` adopts `PopupMenu` context mode; raw `wa-select`
-pickers move to `Select` in `HS2-CWA0S6` and hand-written demo dropdowns in `HS2-W0N1KP`.
+`ProviderModelEffortSubmenus` still used by the pointer-positioned menus. HS2-2EHD8R then moved
+those pointer-positioned menus (drive options, ticket row, attachment, app tab, saved view,
+terminal tile) onto `PopupMenu` context mode and retired the JSX submenus, so every command menu
+is a `PopupMenu`. Each menu still renders from its app signal (the signal owns dismissal, and the
+menu exists only while it is set); its app-owned wrapper keeps the `role="menu"` name tests and
+the capture-phase dismissal use and records the pointer as `data-context-anchor-x`/`-y`; one
+`effect` per signal (`revealContextPopupMenu` in `clients/web/src/context-menu-position.ts`) hands
+that anchor to Kerf's `openPopupMenuAt` once the morph has placed the element, retrying through a
+microtask and a frame. The Drive menu re-reveals after each provider/model/effort choice because
+Web Awesome closes a menu on selection while the app keeps it open; its anchor is the drive row's
+top-left corner (`placement="top-start"`). A command-editor row's right-click opens that row's
+PopupMenu in place. Raw `wa-select` pickers moved to `Select` in `HS2-CWA0S6`; hand-written demo
+dropdowns remain for `HS2-W0N1KP`, and the UX demo keeps staged context menus open through the
+same helper.
 `PopupMenu` submenus cannot hold a divider (`KF-7KR1BC`), so the Model submenu's separator
 before "Other…" is absent in the entries form. HS2-CWA0S6 then replaced the raw `wa-select`
 value pickers that Kerf `Select` covers: the Permissions settings' automatic-decision and delay
@@ -1738,8 +1748,9 @@ selects (`settings-workspace.tsx`) and the ticket-source setup dialog's preview-
 picker keeps raw `wa-select`/`wa-option` markup on purpose: it is a multiple select with a
 disabled choice and Select All / Deselect All action rows, which `Select` cannot express until
 `KF-F68TJS` ships. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to 102 with the
-PopupMenu adoption and to 94 with the Select adoption; it is a warning-level rule without an
-exact budget, so the remaining count is tracked here rather than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+PopupMenu adoption, to 94 with the Select adoption, and to 76 with the context-menu adoption; it
+is a warning-level rule without an exact budget, so the remaining count is tracked here rather
+than in the doctor script. Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
 
 ### Kerf beta.57–58 adoption
 
@@ -1878,8 +1889,8 @@ selected typography, `KF-8SD2EP` ListItem/ListHeader geometry and per-part color
 `KF-FT9R9M` ResizableRegion/FloatingToolbar placement, `KF-GC3RKN` TokenSearchField, Text,
 ValueTable, ToolbarText, and app-root tokens) is completed in the Kerf store and awaits the
 next `@kerfjs/ui` release after 5.0.0-beta.59, when `HS2-PKPGGZ` replaces the corresponding
-rules. The `wa-*` subjects wait on `HS2-2EHD8R` (drive-options submenu) and `KF-PDPAVF`
-(tag chip), except the cursor policy rules, which are deliberate. The `KUI-L022` app classes
+rules. The remaining `wa-*` subjects wait on `KF-PDPAVF` (tag chip), except the cursor policy
+rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). The `KUI-L022` app classes
 on Kerf roots move onto app-owned wrapper elements in `HS2-VABS08`.
 
 The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
@@ -1894,11 +1905,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, and HS2-402AXQ is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, and HS2-2EHD8R is:
 
 | Severity | Exact diagnostic budgets                                               |
 | -------- | ---------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 86; `KUI-L022` 33; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 83; `KUI-L022` 33; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                               |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
@@ -1910,7 +1921,8 @@ subject is still a raw Web Awesome element are deliberate: `cursor-semantics.css
 cursor policy through documented Web Awesome parts (`wa-dropdown-item` and friends) as
 CLAUDE.md requires; `tag-chip.css` keeps `wa-tag`'s compact geometry, 16px remove button, and
 disabled state until Kerf ships a removable chip primitive (`KF-PDPAVF`); and `drive-options-menu.css`
-styles the raw submenu items that `HS2-2EHD8R` replaces with `PopupMenu` context mode.
+styled the raw submenu items until `HS2-2EHD8R` replaced that menu with `PopupMenu` context mode
+(83).
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers

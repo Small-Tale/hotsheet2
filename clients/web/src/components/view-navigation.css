@@ -85,21 +85,8 @@
 .saved-view-context-menu {
   position: fixed;
   z-index: 1001;
-  display: grid;
-  width: remify(192px);
-  padding: var(--kui-space-2xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.saved-view-context-menu [slot='icon'] {
-  display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.saved-view-context-menu svg {
-  width: remify(16px);
-  height: remify(16px);
+  width: 1px;
+  height: 1px;
 }
 .view-navigation .menu-item--errors {
   color: var(--wa-color-danger-on-quiet);

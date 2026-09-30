@@ -25,13 +25,20 @@ describe('DriveOptionsMenu', () => {
       }),
     );
     expect(markup).toContain('aria-label="Drive provider, model, and effort options"');
-    expect(markup).toContain('type="checkbox" data-action="select-drive-default"');
-    expect(markup).toContain('data-action="select-drive-tool" data-value="claude"');
-    expect(markup).toContain('data-action="select-drive-model" data-value="gpt-5.6"');
-    expect(markup).toContain('data-action="select-drive-model" data-value="legacy model"');
+    expect(markup).toContain('data-action="select-drive-default" type="checkbox"');
+    expect(markup).toContain(
+      'data-value="claude" slot="submenu" data-action="select-drive-tool" value="claude" type="checkbox"',
+    );
+    expect(markup).toContain(
+      'data-value="gpt-5.6" slot="submenu" data-action="select-drive-model" value="gpt-5.6" type="checkbox"',
+    );
+    expect(markup).toContain(
+      'data-value="legacy model" slot="submenu" data-action="select-drive-model" value="legacy model" type="checkbox" checked',
+    );
     expect(markup).toContain('data-action="open-drive-manual-model"');
     expect(markup).not.toContain('name="drive-model"');
-    expect(markup.match(/aria-current="true"/g)).toHaveLength(2);
+    // The current provider and the ephemeral custom model are checked PopupMenu choices (HS2-2EHD8R).
+    expect(markup.match(/type="checkbox" checked/g)).toHaveLength(2);
   });
   it('keeps Other available while disabling effort when a plugin exposes no models', () => {
     const markup = String(
@@ -62,18 +69,18 @@ describe('DriveOptionsMenu', () => {
         defaultSelection: { tool: 'claude', model: 'opus' },
       }),
     );
-    expect(markup).not.toContain('data-lucide="chevron-right"');
+    expect(markup).toContain('data-context-menu="drive-options"');
     expect(markup.match(/data-lucide="bot"/g)).toHaveLength(3);
     expect(markup.match(/data-lucide="brain"/g)).toHaveLength(2);
     expect(markup.match(/data-lucide="gauge"/g)).toHaveLength(3);
-    expect(markup.match(/slot="submenu" type="checkbox"/g)).toBeNull();
+    expect(
+      markup.match(/slot="submenu" data-action="select-drive-[a-z]+" value="[^"]+" type="checkbox"/g)?.length,
+    ).toBeGreaterThan(0);
     const css = readFileSync(new URL('./drive-options-menu.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toContainSource('bottom:calc(100% + var(--kui-space-xs))');
-    expect(css).toContainSource('wa-divider[slot="submenu"] { margin-block:var(--kui-space-2xs); }');
-    expect(css).toContainSource(
-      'wa-dropdown-item[slot="submenu"] { min-width:remify(208px); padding-inline:remify(12px); }',
-    );
-    expect(css).toContainSource('wa-dropdown-item[slot="submenu"][aria-current="true"]');
+    // Kerf's PopupMenu owns the popup and row geometry; the app styles only its anchor wrapper.
+    expect(css).not.toContain('wa-dropdown-item');
+    expect(css).not.toContain('wa-divider');
+    expect(css).toContainSource('.drive-options-menu { position:fixed; z-index:80; width:1px; height:1px; }');
   });
 });

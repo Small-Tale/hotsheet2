@@ -1,9 +1,10 @@
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './project-tab-context-menu.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { ArrowLeft, ArrowRight, CircleX, type IconNode, Pencil, Trash2, X } from 'lucide';
+
+import { contextPopupMenuAnchor } from '../context-menu-position';
 
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
 export function AppTabContextMenu({
@@ -37,34 +38,32 @@ export function AppTabContextMenu({
           ? { 'data-terminal-id': id }
           : { 'data-chat-id': id },
     label = kind === 'project' ? 'Project' : kind === 'terminal' ? 'Terminal' : 'AI chat';
+  const action = kind === 'project' ? 'project-tab-context-action' : 'terminal-tab-context-action';
   return (
     <div
       class="project-tab-context-menu app-tab-context-menu"
       role="menu"
       aria-label={`${label} tab actions`}
-      style={`left:${x}px;top:${y}px`}
+      {...contextPopupMenuAnchor(x, y)}
       data-tab-kind={kind}
       data-tab-id={id}
       {...legacyId}
     >
-      {actions.map((item) => (
-        <>
-          {item.id === 'close-all' && <wa-divider></wa-divider>}
-          <wa-dropdown-item
-            data-action={kind === 'project' ? 'project-tab-context-action' : 'terminal-tab-context-action'}
-            data-tab-action={item.id}
-            data-tab-kind={kind}
-            data-tab-id={id}
-            {...legacyId}
-            variant={item.danger ? 'danger' : undefined}
-          >
-            <span slot="icon">
-              <LucideIcon icon={item.icon} name={item.iconName} />
-            </span>
-            {item.label}
-          </wa-dropdown-item>
-        </>
-      ))}
+      <PopupMenu
+        context
+        label={`${label} tab actions`}
+        rootAttributes={{ 'data-context-menu': 'app-tab' }}
+        items={actions.flatMap((item): PopupMenuEntry[] => [
+          ...(item.id === 'close-all' ? [{ kind: 'divider' } as const] : []),
+          {
+            label: item.label,
+            action,
+            tone: item.danger ? 'danger' : 'default',
+            icon: <LucideIcon icon={item.icon} name={item.iconName} />,
+            attributes: { 'data-tab-action': item.id, 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId },
+          },
+        ])}
+      />
     </div>
   );
 }

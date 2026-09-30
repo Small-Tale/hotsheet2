@@ -64,6 +64,7 @@ import { TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
+import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-menu-position';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
@@ -1132,6 +1133,14 @@ const applyCatalogTheme = () => {
 applyCatalogTheme();
 mount(root, withControlledOpen(root, DemoApp));
 wireProjectDialogDemo(root);
+// Demo stages render context-mode PopupMenus statically; keep every one open so the catalog shows
+// the menu itself (the app opens them from its own signals, HS2-2EHD8R).
+const openStagedContextMenus = () => {
+  for (const menu of root.querySelectorAll<ContextPopupMenuElement>('[data-context-menu]'))
+    if (!menu.open) openContextPopupMenu(menu);
+};
+new MutationObserver(openStagedContextMenus).observe(root, { childList: true, subtree: true });
+openStagedContextMenus();
 wireTokenSearchFields(root, {
   collapsible: {
     signals: {

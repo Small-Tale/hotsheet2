@@ -36,6 +36,7 @@ export interface ProjectSidebarProps {
   driveDisabled?: boolean;
   driveDisabledReason?: string;
   driveOptionsOpen?: boolean;
+  driveOptionsAnchor?: { x: number; y: number };
   driveTools?: readonly AiToolDescriptor[];
   driveToolsLoading?: boolean;
   driveToolsError?: string;
@@ -93,6 +94,8 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             defaultSelection={props.driveDefaultSelection ?? { tool: props.driveTool }}
             loading={props.driveToolsLoading}
             error={props.driveToolsError}
+            x={props.driveOptionsAnchor?.x}
+            y={props.driveOptionsAnchor?.y}
           />
         )}
         <button
