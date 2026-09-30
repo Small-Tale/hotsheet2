@@ -1654,6 +1654,9 @@ and identity-less legacy entries remain conservatively blocking.
   materially plausible.
 - **Platforms:** macOS primary; Linux/Windows via the same Tauri pipeline as HS1
   (best-effort, community-tested).
+  Kerf UI components are configured, never styled by application CSS; when Kerf lacks a
+  prop, token, or component, it is added to Kerf rather than overridden (HS2-AD9WRF, see
+  [`docs/ux-components.md`](ux-components.md) "Kerf UI doctor baseline").
 
 ## 6.4 Native SwiftUI client (macOS + iOS)
 

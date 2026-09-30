@@ -1855,6 +1855,27 @@ rather than reusable Kerf component configuration (HS2-S3BXC0).
 
 ### Kerf UI doctor baseline
 
+**Policy (HS2-AD9WRF, maintainer, 2026-09-30).** Styling a Kerf UI component with application
+CSS is a bug. Kerf components are configured through their props, variants, and public
+`--kui-*` tokens; application stylesheets never take a `.kui-*` class, a Kerf-rendered part,
+or an app class placed on a Kerf root as their subject. When Kerf lacks the prop, token, or
+component the app needs, the fix belongs in Kerf (a `KF-*` ticket, adopted when it ships),
+not in an override. Application-owned components keep CSS for their own markup, including
+native HTML and raw Web Awesome elements, and surfaces compose Kerf components before
+implementing custom ones. The `KUI-L019` and `KUI-L022` budgets below are the tracked
+residual of that policy and only ever decrease.
+
+The residual is gated on Kerf releases rather than on app work: every Kerf API request
+from HS2-G5K1V0 (`KF-XNRXCK` Toolbar zone layout, `KF-9K8PTV` Select trigger width and
+selected typography, `KF-8SD2EP` ListItem/ListHeader geometry and per-part color,
+`KF-E47GAW` AppTab/TabBar names and strip geometry, `KF-96T4HM` StateBanner layout,
+`KF-FT9R9M` ResizableRegion/FloatingToolbar placement, `KF-GC3RKN` TokenSearchField, Text,
+ValueTable, ToolbarText, and app-root tokens) is completed in the Kerf store and awaits the
+next `@kerfjs/ui` release after 5.0.0-beta.59, when `HS2-PKPGGZ` replaces the corresponding
+rules. The `wa-*` subjects wait on `HS2-2EHD8R` (drive-options submenu) and `KF-PDPAVF`
+(tag chip), except the cursor policy rules, which are deliberate. The `KUI-L022` app classes
+on Kerf roots move onto app-owned wrapper elements in `HS2-VABS08`.
+
 The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 `.kerf-ui-doctor.json`. The profile contains exact `KUI-L011` exceptions only for the
 22 stylesheets that customize documented Web Awesome shadow parts; the analyzer still

@@ -120,6 +120,16 @@ Keep production component styles colocated with their component modules and impo
 from those modules; demos may provide stage/shell styles but must not own or duplicate
 the production component CSS being validated.
 
+**Styling a Kerf UI component with application CSS is a bug** (HS2-AD9WRF). Kerf components
+are configured: through their documented props, variants, and public `--kui-*` theme tokens,
+never through selectors that target `.kui-*` classes, Kerf-rendered parts, or the Kerf root
+an app class happens to sit on. When no prop or token expresses what the app needs, add the
+prop, token, or a new component to Kerf (file a `KF-*` ticket in the Kerf store and adopt it
+when it ships) instead of overriding the component; until then the finding stays counted in
+the Kerf UI doctor budgets, which only ever decrease. Application-owned components may carry
+CSS for their own markup (native HTML and raw Web Awesome elements), and every surface should
+compose Kerf components before implementing a custom one.
+
 Treat reusable visual presentations as explicit component API variants, not
 consumer-specific descendant CSS overrides. A component's UX demo must expose every
 supported public variant and state that consumers rely on, including appearance and
