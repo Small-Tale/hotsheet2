@@ -17,6 +17,16 @@ export function nextActiveTicketExpiry(tickets: ClaimState[], now = Date.now()):
   return expiries.length ? Math.min(...expiries) : undefined;
 }
 
+/** Longest delay `setTimeout` honors; larger values wrap to 0 and fire immediately. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/** Delay until a claim expiry check should wake, clamped so a far-future lease (beyond ~24.8 days) cannot wrap
+ * `setTimeout` to an immediate wake-up and spin a tight refresh loop (HS2-43Z35K). A clamped wake-up must
+ * re-check the expiry before treating the lease as expired. */
+export function claimExpiryWakeDelay(nextExpiry: number, now = Date.now()): number {
+  return Math.min(Math.max(1, nextExpiry - now + 25), MAX_TIMER_DELAY_MS);
+}
+
 export function projectTabTicketState(
   tickets: readonly TicketRow[],
   now = Date.now(),

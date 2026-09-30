@@ -15266,8 +15266,10 @@ test('switches already-open projects from cache within one frame and rejects sta
     return route.fulfill({ status: 201, json: project });
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  let ticketReads = 0;
   await page.route(/\/tickets(?:\?.*)?$/, (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
+    ticketReads += 1;
     const path = new URL(route.request().url()).pathname,
       other = path.includes('/other-checkout/'),
       rows = other ? [otherRow, otherQueuedRow] : [row, notStartedRow];
@@ -15285,6 +15287,10 @@ test('switches already-open projects from cache within one frame and rejects sta
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
   await page.getByLabel('Columns view').click();
   await page.waitForTimeout(500);
+  // The far-future lease must not spin the claim-expiry timer into a refresh loop (HS2-43Z35K).
+  const settledReads = ticketReads;
+  await page.waitForTimeout(400);
+  expect(ticketReads).toBe(settledReads);
   await page.evaluate(() => {
     const state = window as typeof window & { __projectSwitchTicketGhosts?: string[] };
     state.__projectSwitchTicketGhosts = [];

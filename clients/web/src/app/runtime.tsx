@@ -10,6 +10,7 @@ import { ChevronLeft, Trash2 } from 'lucide';
 
 import {
   applyKnownActiveTicketExpiries,
+  claimExpiryWakeDelay,
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
   projectTabTicketState,
@@ -2127,8 +2128,13 @@ export async function startHotSheetWebClient() {
       claimLeaseExpiryTimer = window.setTimeout(
         () => {
           claimLeaseExpiryTimer = undefined;
-          const expiredAt = Date.now(),
-            adjusted = { ...ticketCountsByProject.value };
+          const expiredAt = Date.now();
+          // A clamped wake-up (far-future lease) arrives before anything expired: reschedule without refreshing.
+          if (expiredAt < next) {
+            scheduleClaimLeaseExpiry();
+            return;
+          }
+          const adjusted = { ...ticketCountsByProject.value };
           for (const current of expiringProjects) {
             if (!Object.hasOwn(adjusted, current.id)) continue;
             adjusted[current.id] = applyKnownActiveTicketExpiries(
@@ -2144,7 +2150,7 @@ export async function startHotSheetWebClient() {
             scheduleClaimLeaseExpiry,
           );
         },
-        Math.max(1, next - now + 25),
+        claimExpiryWakeDelay(next, now),
       );
     }
   }

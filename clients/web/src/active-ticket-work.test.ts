@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyKnownActiveTicketExpiries,
+  claimExpiryWakeDelay,
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
   projectTabTicketState,
@@ -42,6 +43,12 @@ describe('active ticket work', () => {
         now,
       ),
     ).toBe(Date.parse('2026-09-02T12:05:00Z'));
+  });
+
+  it('clamps the expiry wake-up delay so a far-future lease cannot wrap setTimeout into a tight loop', () => {
+    expect(claimExpiryWakeDelay(now + 5_000, now)).toBe(5_025);
+    expect(claimExpiryWakeDelay(now - 5_000, now)).toBe(1);
+    expect(claimExpiryWakeDelay(Date.parse('2099-09-11T12:00:00Z'), now)).toBe(2_147_483_647);
   });
 
   it('derives tab counts from one cached ticket pass using workflow-correct Up Next and live-claim semantics', () => {

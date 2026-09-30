@@ -1688,7 +1688,10 @@ view layer is new work.
   project is not selected; the indicator never waits for a tab activation to become current.
   Because lease expiry is a passage of time rather than a server mutation, the client also
   decrements the known aggregate at the expiry boundary and immediately requests an authoritative
-  background snapshot (HS2-MV7S1Y). A
+  background snapshot (HS2-MV7S1Y). The wake-up delay is clamped to the longest delay `setTimeout`
+  honors (about 24.8 days): a lease further out would otherwise wrap the timer to an immediate
+  wake-up and spin a tight refresh loop, so a clamped wake-up re-checks the expiry and
+  reschedules without refreshing (HS2-43Z35K). A
   closeable local tab's empty trailing reserve subtracts
   the selector gap already present beside the label, keeping that label geometrically
   centered in the complete pill rather than balancing the close control twice.

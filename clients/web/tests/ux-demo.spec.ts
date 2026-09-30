@@ -176,7 +176,11 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  await catalog.getByRole('button', { name: /AppTab/ }).click();
+  // ProjectTabBar renders two self-bordered specimens; the AppTab demo composes its tabs inside a TabBar
+  // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
+  await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
+  await expect(page).toHaveURL('/ux-demo?component=project-tabs');
+  await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   const borders = page.locator('.kui-catalog__geometry-border'),
     bounds = page.locator('.kui-catalog__geometry-bound');
   await expect(borders).toHaveCount(2);
@@ -199,7 +203,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(
     page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-border, .kui-catalog__geometry-margin'),
   ).toHaveCount(0);
-  await catalog.getByRole('button', { name: /AppTab/ }).click();
+  await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
+  await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
   await expect(borders).toHaveCount(2);
   await expect(bounds).toHaveCount(0);

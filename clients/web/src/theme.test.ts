@@ -85,6 +85,7 @@ describe('shared client theme', () => {
     const required = [
       '--hs-terminal-background',
       '--hs-terminal-foreground',
+      '--hs-terminal-control-border',
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
       '--hs-ticket-state-up-next-on',

@@ -31,7 +31,7 @@
   box-sizing: border-box;
   align-items: center;
   gap: remify(4px);
-  border: 1px solid var(--kui-toolbar-control-dark-border, #353536);
+  border: 1px solid var(--hs-terminal-control-border);
   border-radius: var(--wa-border-radius-pill);
   color: var(--hs-terminal-foreground);
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent);
