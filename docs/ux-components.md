@@ -785,6 +785,25 @@ dialog body in flow instead of being clipped by it or spilling past its panel. T
 `@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
 Toolbar zone accepts it as the group it renders.
 
+**Managed `TokenSearchModel` evaluation (HS2-HHRYP9, Kerf 5.0.0-beta.59).** Kerf's opt-in
+`createTokenSearchModel` expresses the whole ticket search grammar: `tag`, `is`, `has`, and
+`attachment` are plain rules with `parse`/`label`; the twelve lifecycle date filters are
+hyphenated rule names (`created-after`, `updated-before`, …) whose `parse` is
+`parseSearchDate`; quoted values, boolean words, and parentheses behave exactly as the
+app's own `consumeSearchTokens` (one separator survives per consumed token), and a `tag`
+rule's `suggest` can serve the tag completion, with `choose` committing the chip. That fit
+is pinned in `clients/web/src/ticket-search-model-evaluation.test.ts`. Adoption is
+deferred because the beta.59 model API has three gaps that a faithful migration needs:
+`suggest(input)` cannot see the committed tokens, so it cannot exclude tags already
+filtering the query (`KF-YBJ27D`); `choose` accepts only a current suggestion, so the
+date helper cannot commit its computed token for the active prefix (`KF-K3EJM5`); and only
+`clear()` bumps `editorRevision`, so applying a saved view or restoring a session has no
+model action that rebuilds the DOM-owned editor text (`KF-ER975X`). Working around them
+would mean double ownership of the search state (the model's `state` beside the app's
+persisted `searchQuery`/`searchTokens` signals) across three surfaces. `HS2-5JXBQY`
+migrates the tag suggestions (and the date helper's commit) onto the model once those
+APIs ship; the syntax help stays app-owned either way.
+
 With the published Kerf dependency, Select All followed by Backspace or
 Delete removes both text and tokens while keeping the empty workspace editor open
 and focused for immediate typing. Mixed text/token and token-only queries support
@@ -1699,8 +1718,8 @@ edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor
 covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
 opt-in managed `TokenSearchModel` (grammar, suggestions, evaluation) for `TokenSearchField`
 and extends `PopupMenu` for nested and context actions; Hot Sheet keeps its app-owned
-`TicketSearchField` suggestions and `wa-dropdown` menus for now (adoption tracked in
-`HS2-HHRYP9` and `HS2-CSRJ9Y`). Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
+`TicketSearchField` suggestions (the `TokenSearchModel` evaluation below, `HS2-HHRYP9`) and
+`wa-dropdown` menus for now (adoption tracked in `HS2-5JXBQY` and `HS2-CSRJ9Y`). Beta.59 also sizes a compact PopupMenu trigger from its ToolbarControlGroup's `size="compact"` prop, so the terminal drawer's create menu uses that prop instead of an app `::part(base)` rule; the last budgeted `KUI-L011` finding is gone (`KUI-L011` 1→0) and every other budget is unchanged.
 
 ### Kerf beta.57–58 adoption
 
