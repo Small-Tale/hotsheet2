@@ -318,6 +318,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 | retained-permission-hook-restart | docs/05-ai-tool-plugins.md | A retained interactive Codex or Claude permission hook discovers the current project server after a restart and uses its new URL and secret (HS2-39S586). | `crates/hotsheet-cli/src/external_launch.rs # retained_hook_discovers_replaced_server_route` | `crates/hotsheet-cli/tests/cli.rs # retained_permission_hook_uses_restarted_server_route` | — | double-covered |
 
+| floating-toolbar-control-group-catalog | docs/ux-components.md | The local beta.58 doctor adapter recognizes only a direct Kerf FloatingToolbar parent for a Kerf ToolbarControlGroup, retaining all other composition findings until upstream fixes the catalog (HS2-M78D5A). | `clients/web/scripts/check-kerf-ui-doctor.test.mjs # direct parent accepted, other parent retained` | `clients/web/tests/providers.spec.ts # uses Kerf floating toolbars for workspace zoom and collapsed drawer restore`; `clients/web/tests/ux-demo.spec.ts # floating toolbar` | `HS2-M78D5A # production and catalog browser captures` | double-covered |
+
 <!-- coverage-matrix:end -->
 
 ## Coverage report layers

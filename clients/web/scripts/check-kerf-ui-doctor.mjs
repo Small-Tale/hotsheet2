@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 export const KERF_UI_DOCTOR_BUDGET = {
   error: {
@@ -15,7 +16,7 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L101': 0,
     'KUI-L102': 0,
     'KUI-L103': 0,
-    'KUI-L201': 7,
+    'KUI-L201': 4,
     'KUI-L202': 0,
     'KUI-L203': 0,
   },
@@ -26,6 +27,76 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L017': 0,
   },
 };
+
+function importedNames(source, subpath, exportedName) {
+  const names = new Set();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.moduleSpecifier.text !== subpath) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements)
+      if ((element.propertyName?.text ?? element.name.text) === exportedName) names.add(element.name.text);
+  }
+  return names;
+}
+
+function isFloatingToolbarChild(source, line, column) {
+  const groupNames = importedNames(source, '@kerfjs/ui/toolbar-control-group', 'ToolbarControlGroup');
+  const floatingNames = importedNames(source, '@kerfjs/ui/floating-toolbar', 'FloatingToolbar');
+  if (!groupNames.size || !floatingNames.size) return false;
+  const position = source.getPositionOfLineAndCharacter(line - 1, column - 1);
+  let opening;
+  const visit = (node) => {
+    if (node.getStart(source) > position || node.end <= position) return;
+    if (ts.isJsxOpeningElement(node)) opening = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (!opening || !groupNames.has(opening.tagName.getText(source))) return false;
+  const parent = opening.parent?.parent;
+  return Boolean(parent && ts.isJsxElement(parent) && floatingNames.has(parent.openingElement.tagName.getText(source)));
+}
+
+/** Kerf beta.58 documents ToolbarControlGroup as FloatingToolbar children, but its
+ * composition catalog lists only Toolbar as a parent. Apply that exact missing parent
+ * edge locally until the upstream catalog includes it; every other L201 remains gated. */
+export function adaptFloatingToolbarComposition(report, workspace) {
+  const kerfVersion = JSON.parse(
+    readFileSync(resolve(workspace, 'node_modules/@kerfjs/ui/package.json'), 'utf8'),
+  ).version;
+  if (kerfVersion !== '5.0.0-beta.58') return { ...report, floatingToolbarAdapted: 0 };
+  const sources = new Map();
+  let adapted = 0;
+  const diagnostics = report.diagnostics.filter((diagnostic) => {
+    const { file, line, column } = diagnostic.location ?? {};
+    if (
+      diagnostic.id !== 'KUI-L201' ||
+      diagnostic.stage !== 'eslint' ||
+      diagnostic.severity !== 'error' ||
+      !diagnostic.message?.includes('`@kerfjs/ui:toolbar-control-group` requires one of these cataloged parents') ||
+      !file?.startsWith('src/') ||
+      file.split('/').includes('..') ||
+      !Number.isInteger(line) ||
+      !Number.isInteger(column)
+    )
+      return true;
+    let source = sources.get(file);
+    if (!source) {
+      const text = readFileSync(resolve(workspace, file), 'utf8');
+      source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      sources.set(file, source);
+    }
+    if (!isFloatingToolbarChild(source, line, column)) return true;
+    adapted += 1;
+    return false;
+  });
+  return {
+    ...report,
+    diagnostics,
+    summary: { ...report.summary, errors: report.summary.errors - adapted },
+    floatingToolbarAdapted: adapted,
+  };
+}
 
 function countsFor(diagnostics, severity) {
   const counts = {};
@@ -83,9 +154,10 @@ function run() {
     if (result.error) throw result.error;
     if (result.status !== 0 && result.status !== 1)
       throw new Error(result.stderr.trim() || `Kerf UI doctor exited ${result.status}.`);
-    const summary = assertKerfUiDoctorBaseline(JSON.parse(readFileSync(output, 'utf8')));
+    const report = adaptFloatingToolbarComposition(JSON.parse(readFileSync(output, 'utf8')), workspace);
+    const summary = assertKerfUiDoctorBaseline(report);
     console.log(
-      `Kerf UI doctor baseline accepted: ${summary.errors} errors, ${summary.review} review findings, ${summary.warnings} warnings, ${summary.suppressed} suppressed; browser evaluation skipped.`,
+      `Kerf UI doctor baseline accepted: ${summary.errors} errors, ${summary.review} review findings, ${summary.warnings} warnings, ${summary.suppressed} suppressed; ${report.floatingToolbarAdapted} documented FloatingToolbar parent findings adapted; browser evaluation skipped.`,
     );
   } finally {
     rmSync(temporary, { recursive: true, force: true });

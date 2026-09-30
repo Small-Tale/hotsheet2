@@ -1,6 +1,14 @@
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { assertKerfUiDoctorBaseline, KERF_UI_DOCTOR_BUDGET } from './check-kerf-ui-doctor.mjs';
+import {
+  adaptFloatingToolbarComposition,
+  assertKerfUiDoctorBaseline,
+  KERF_UI_DOCTOR_BUDGET,
+} from './check-kerf-ui-doctor.mjs';
 
 function report(overrides = {}) {
   const diagnostics = Object.entries(KERF_UI_DOCTOR_BUDGET).flatMap(([severity, limits]) =>
@@ -23,6 +31,44 @@ function report(overrides = {}) {
 }
 
 describe('Kerf UI doctor baseline', () => {
+  it('adapts only a cataloged group directly inside the documented floating toolbar', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'hs-floating-toolbar-'));
+    try {
+      mkdirSync(join(workspace, 'src'));
+      mkdirSync(join(workspace, 'node_modules/@kerfjs/ui'), { recursive: true });
+      writeFileSync(join(workspace, 'node_modules/@kerfjs/ui/package.json'), '{"version":"5.0.0-beta.58"}');
+      const lines = [
+        "import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';",
+        "import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';",
+        'export function Example() {',
+        '  return <section><FloatingToolbar label="Tools">',
+        '    <ToolbarControlGroup><button /></ToolbarControlGroup>',
+        '  </FloatingToolbar><div>',
+        '    <ToolbarControlGroup><button /></ToolbarControlGroup>',
+        '  </div></section>;',
+        '}',
+      ];
+      writeFileSync(join(workspace, 'src/example.tsx'), lines.join('\n'));
+      const diagnostic = (line) => ({
+        id: 'KUI-L201',
+        severity: 'error',
+        stage: 'eslint',
+        message: '`@kerfjs/ui:toolbar-control-group` requires one of these cataloged parents: @kerfjs/ui:toolbar.',
+        location: { file: 'src/example.tsx', line, column: lines[line - 1].indexOf('<ToolbarControlGroup') + 1 },
+      });
+      const raw = report({ diagnostics: [diagnostic(5), diagnostic(7)], summary: { errors: 2 } });
+      const adapted = adaptFloatingToolbarComposition(raw, workspace);
+      expect(adapted.diagnostics).toEqual([diagnostic(7)]);
+      expect(adapted.summary.errors).toBe(1);
+      expect(adapted.floatingToolbarAdapted).toBe(1);
+      expect(raw.diagnostics).toHaveLength(2);
+      writeFileSync(join(workspace, 'node_modules/@kerfjs/ui/package.json'), '{"version":"5.0.0-beta.59"}');
+      expect(adaptFloatingToolbarComposition(raw, workspace).diagnostics).toHaveLength(2);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   it('accepts the classified error and review budget with browser evaluation disabled', () => {
     expect(assertKerfUiDoctorBaseline(report())).toEqual({
       errors: 199,
