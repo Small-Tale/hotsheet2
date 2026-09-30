@@ -21,7 +21,7 @@
   min-width: 0;
   font-weight: var(--wa-font-weight-normal);
 }
-.saved-view-dialog__query-field .kui-token-search__editor {
+.saved-view-dialog__query-toolbar .kui-token-search__editor {
   min-width: 0;
 }
 .saved-view-dialog__query > small {

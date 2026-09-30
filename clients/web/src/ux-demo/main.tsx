@@ -28,6 +28,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
@@ -68,6 +69,8 @@ import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { toTokenSearchToken } from '../inline-search';
+import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import {
   consumeTerminalModifiers,
@@ -290,6 +293,20 @@ import {
   zoomGalleryDemo,
 } from './ticket-metadata-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
+import {
+  applyDemoDate,
+  clearDemoQuery,
+  editDemoQuery,
+  editDemoToken,
+  removeDemoToken,
+  resetTicketSearchDemo,
+  selectDemoTag,
+  ticketSearchDemoCollapsibleOpen,
+  ticketSearchDemoCollapsibleQuery,
+  ticketSearchDemoField,
+  TicketSearchFieldDemo,
+  toggleDemoHelp,
+} from './ticket-search-field-demo';
 import { ToolbarControlGroupDemo, toolbarGroupDemoMode } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
@@ -436,6 +453,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
   if (item.id === 'ticket-inspector-skeleton') return <TicketInspectorSkeletonDemo />;
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
+  if (item.id === 'ticket-search-field') return <TicketSearchFieldDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;
   if (item.id === 'floating-toolbar')
@@ -1115,9 +1133,52 @@ applyCatalogTheme();
 mount(root, withControlledOpen(root, DemoApp));
 wireProjectDialogDemo(root);
 wireTokenSearchFields(root, {
-  collapsible: { signals: { 'workspace-search': workspaceSearchOpen } },
+  collapsible: {
+    signals: {
+      'workspace-search': workspaceSearchOpen,
+      'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+    },
+  },
   onEdit: ({ id, editor }) => {
+    const demo = ticketSearchDemoField(id);
     if (id === 'workspace-search') workspaceSearchQuery.value = editor.textContent;
+    else if (id === 'ticket-search-demo-collapsible') ticketSearchDemoCollapsibleQuery.value = editor.textContent;
+    else if (demo) editDemoQuery(id, readTokenSearchField(editor, demo.tokens.value.map(toTokenSearchToken)).query);
+  },
+  onSubmit: ({ id, editor }) => {
+    const demo = ticketSearchDemoField(id);
+    if (demo) editDemoQuery(id, readTokenSearchField(editor, demo.tokens.value.map(toTokenSearchToken)).query, true);
+  },
+  keyboard: {
+    onRemoveToken: ({ id, value }) => {
+      removeDemoToken(id, value);
+    },
+  },
+});
+// The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS).
+wireTicketSearchFields(root, {
+  selectTag: selectDemoTag,
+  applyDate: applyDemoDate,
+  toggleHelp: (id) => {
+    if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
+    else toggleDemoHelp(id);
+  },
+  clear: (id) => {
+    if (id === 'workspace-search') {
+      workspaceSearchQuery.value = '';
+      workspaceSearchHelpOpen.value = false;
+      queueMicrotask(() => {
+        focusWorkspaceSearch(root);
+      });
+    } else if (id === 'ticket-search-demo-collapsible') ticketSearchDemoCollapsibleQuery.value = '';
+    else clearDemoQuery(id);
+  },
+  removeToken: removeDemoToken,
+  editToken: (id, event, target) => {
+    if (!ticketSearchDemoField(id)) return;
+    event.preventDefault();
+    const raw = (target as HTMLElement).dataset.tokenValue;
+    if (raw) editDemoToken(id, raw);
   },
 });
 wireCatalog(root, {
@@ -1204,6 +1265,7 @@ function selectDemo(id: string, push = true): void {
   contextMenu.value = undefined;
   terminalDashboardContextMenu.value = undefined;
   if (id === 'command-run-dialog') showCommandRunDialogDemo();
+  if (id !== 'ticket-search-field') resetTicketSearchDemo();
   if (push) {
     const url = new URL(location.href);
     url.pathname = '/ux-demo';
@@ -1978,21 +2040,6 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   recordCollectionEvent(
     `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
   );
-});
-delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
-  workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
-});
-delegate(root, 'mousedown', '[data-action="clear-workspace-search"]', (event) => {
-  event.preventDefault();
-});
-delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
-  workspaceSearchQuery.value = '';
-  workspaceSearchHelpOpen.value = false;
-  const input = root.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
-  if (input) input.textContent = '';
-  queueMicrotask(() => {
-    focusWorkspaceSearch(root);
-  });
 });
 delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
   const next = nextWorkspaceSort(

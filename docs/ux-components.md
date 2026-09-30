@@ -744,8 +744,36 @@ gating (reported by the helper's `onEdit` callback), the suggestions/date/help p
 persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode
 and adopts that signal, so Kerf owns its canonical magnifier trigger, reveal/focus transfer,
 empty-field blur collapse, and Escape collapse while the app's responsive header continues
-to read the same state. The same component backs both the workspace toolbar search and the
-saved-view dialog's non-collapsible query field.
+to read the same state.
+
+Every ticket-search surface composes the app-owned **`TicketSearchField`**
+(`clients/web/src/components/ticket-search-field.tsx`, HS2-N5G6JS): Kerf's grouped
+`TokenSearchField` inside a `content="search"` `ToolbarControlGroup`, plus the Hot Sheet
+helper surfaces that used to live only in the workspace header — in-place `tag:`
+completion derived from the `tags` prop, the lifecycle date/time helper derived from the
+query's trailing filter, and the syntax-help button and popover. The workspace toolbar,
+the workspace-grid ticket rail, and the saved-view dialog's non-collapsible query field
+all render this one component, so the helpers cannot drift apart or be forgotten on a
+new surface. Its rendered group carries the static root class `ticket-search-field`;
+consumers size and place it through their own context selectors (for example
+`.workspace-header__actions > .ticket-search-field`) rather than by passing a class,
+because only literal classes are classifiable by the Kerf analyzer. Every action it
+renders uses one generic name (`edit-ticket-search-token`, `remove-ticket-search-token`,
+`clear-ticket-search`, `toggle-ticket-search-help`, `select-ticket-search-tag`,
+`apply-ticket-search-date`); the shared `wireTicketSearchFields` helper
+(`clients/web/src/interactions/ticket-search-field.ts`) resolves the owning field through
+its `data-token-search-id` and routes each callback by that id, so the application registers
+it once for the workspace search and the saved-view query, and the UX demo registers the
+same helper against demo state. Enter inside the date helper applies the date instead of
+submitting an enclosing form. The surfaces have two placements: `surfaces="floating"`
+(default) hangs them below the group as popovers, with the component overriding Kerf's
+search-group clipping while expanded; `surfaces="external"` renders none inside the group,
+and the consumer places the exported `TicketSearchSurfaces` for the same `id` in its own
+stacked layout — the saved-view dialog does this so the help and suggestions sit inside the
+dialog body in flow instead of being clipped by it or spilling past its panel. The wrapper is declared to Kerf's composition rule through
+`clients/web/ai/component-composition-extension.json` (`rendersAs`
+`@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
+Toolbar zone accepts it as the group it renders.
 
 With the published Kerf dependency, Select All followed by Backspace or
 Delete removes both text and tokens while keeping the empty workspace editor open
@@ -798,8 +826,13 @@ with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
   Its concise placeholder remains
   ordinary search guidance while a help button
   exposes the complete syntax.
+- `TicketSearchField` — **built, demo built**: the shared query editor described above. Its
+  catalog demo shows the standalone (dialog-style) field with tag completion, the date
+  helper, syntax help, chip commit/edit/remove, and clear; the external-surfaces dialog
+  layout; a collapsible toolbar field; and the disabled state (HS2-N5G6JS).
 - Search suggestions — **built**: typing `tag:` offers readable matching project tags
-  in place, while lifecycle prefixes expose a native date and optional-time helper.
+  in place, while lifecycle prefixes expose a native date and optional-time helper — in
+  the workspace header, the workspace-grid rail, and the saved-view dialog alike.
 - Active filters and removable chips — **built** into the toolbar search; chips
   remain inline without internal truncation, expose labeled edit/remove actions, and return to
   text at the same caret position for editing by button or double-click.
@@ -1771,12 +1804,20 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 `npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
-HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, and HS2-M78D5A is:
+HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, and HS2-N5G6JS is:
 
 | Severity | Exact diagnostic budgets                                                |
 | -------- | ----------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 104; `KUI-L022` 66; `KUI-L201` 4 |
-| review   | `KUI-L004` 82; `KUI-L006` 15; `KUI-L008` 25                             |
+| error    | `KUI-L001` 2; `KUI-L011` 1; `KUI-L019` 104; `KUI-L022` 65; `KUI-L201` 4 |
+| review   | `KUI-L004` 79; `KUI-L006` 15; `KUI-L008` 25                             |
+
+The profile's `catalogs` entry points the doctor at Hot Sheet's own catalog extension and
+composition extension (`clients/web/ai/component-composition-extension.json`), so an
+app-owned wrapper that renders a cataloged Kerf root (`rendersAs`) is checked as that root
+inside Toolbar zones and parent checks instead of counting as an unknown element. The
+wrapper's own `parents` stay `any`: the rendered root already carries the listed-parent
+requirement, and listing it on the wrapper too makes the rule report the same placement
+twice (HS2-N5G6JS).
 
 HS2-FEDDPX removed tests of Kerf's private List/Grid variables and uncataloged tokens,
 gave count labels application-owned classes, switched the List demo to a standard gap,

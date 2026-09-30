@@ -2766,7 +2766,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
       mode = modeElement.getBoundingClientRect(),
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
-      search = node.querySelector('.workspace-header__search-group')!.getBoundingClientRect(),
+      search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
       project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       hide = node.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
@@ -2814,7 +2814,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   });
   await expect(viewSelect).toHaveJSProperty('value', 'all');
   await rail.getByRole('button', { name: 'Search tickets' }).click();
-  const expandedSearch = rail.locator('.workspace-header__search-group'),
+  const expandedSearch = rail.locator('.ticket-search-field'),
     searchInput = rail.getByRole('searchbox', { name: 'Search tickets' });
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
   await expect.poll(() => expandedSearch.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(80);
@@ -2908,25 +2908,24 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expandedSearch.evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });
+  await page.screenshot({ path: '/private/tmp/hs2-n5g6js-workspace-grid-rail-suggestions.png' });
   const activeSearchGeometry = await rail.evaluate((node) => {
     const bounds = (selector: string) => {
         const rect = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
         return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width };
       },
-      options = [...node.querySelectorAll<HTMLElement>('.workspace-header__search-suggestions button')].map(
-        (option) => ({
-          left: option.getBoundingClientRect().left,
-          right: option.getBoundingClientRect().right,
-          width: option.getBoundingClientRect().width,
-          textAlign: getComputedStyle(option).textAlign,
-        }),
-      );
+      options = [...node.querySelectorAll<HTMLElement>('.ticket-search-field__suggestions button')].map((option) => ({
+        left: option.getBoundingClientRect().left,
+        right: option.getBoundingClientRect().right,
+        width: option.getBoundingClientRect().width,
+        textAlign: getComputedStyle(option).textAlign,
+      }));
     return {
       actions: bounds('.workspace-header__actions'),
-      search: bounds('.workspace-header__search-group'),
+      search: bounds('.ticket-search-field'),
       sort: bounds('.workspace-header__sort-group'),
       utility: bounds('.workspace-header__utility-group'),
-      suggestions: bounds('.workspace-header__search-suggestions'),
+      suggestions: bounds('.ticket-search-field__suggestions'),
       options,
     };
   });
@@ -12779,7 +12778,7 @@ test('keeps managed workspace search open and focused through repeated controlle
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const field = page.locator('[data-token-search-id="workspace-search"]'),
     editor = page.getByRole('searchbox', { name: 'Search tickets' }),
-    group = page.locator('.workspace-header__search-group').filter({ has: field });
+    group = page.locator('.ticket-search-field').filter({ has: field });
   for (const [width, name] of [
     [1280, 'wide'],
     [390, 'mobile'],
@@ -13239,7 +13238,7 @@ for (const width of [1440, 390]) {
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       query = page.getByRole('searchbox', { name: 'Search tickets' }),
       chip = query.locator('[data-component="token-search-token"]'),
-      group = page.locator('.workspace-header__search-group').filter({
+      group = page.locator('.ticket-search-field').filter({
         has: page.locator('[data-token-search-id="workspace-search"]'),
       });
     await trigger.click();
@@ -14907,7 +14906,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await toolbar.evaluate((node) => {
     node.style.width = '13rem';
   });
-  await expect(toolbar.locator('.workspace-header__search-group')).toBeHidden();
+  await expect(toolbar.locator('.ticket-search-field')).toBeHidden();
   await expect(toolbar.locator('.workspace-header__identity')).toBeHidden();
   await trigger.click();
   await expect(overflow).toHaveJSProperty('open', true);

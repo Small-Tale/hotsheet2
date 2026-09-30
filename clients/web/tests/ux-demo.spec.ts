@@ -876,7 +876,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
       mode = modeElement.getBoundingClientRect(),
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
-      search = node.querySelector('.workspace-header__search-group')!.getBoundingClientRect(),
+      search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
       project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__project')!),
@@ -1057,7 +1057,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
   const rail = page.locator('[data-component="terminal-ticket-rail"]');
-  const group = rail.locator('.workspace-header__search-group');
+  const group = rail.locator('.ticket-search-field');
   const search = rail.getByRole('searchbox', { name: 'Search tickets' });
   const rows = rail.locator('[data-component="ticket-list-row"]');
   const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
@@ -2319,7 +2319,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(header.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('listbox', { name: 'Workspace board' })).toBeVisible();
   const closedHeaderHeight = await header.evaluate((node) => node.getBoundingClientRect().height);
-  const searchGroup = header.locator('.workspace-header__search-group');
+  const searchGroup = header.locator('.ticket-search-field');
   const collapsedWidth = await searchGroup.evaluate((node) => node.getBoundingClientRect().width);
   const collapsedHeight = await searchGroup.evaluate((node) => node.getBoundingClientRect().height);
   expect(collapsedWidth).toBeCloseTo(collapsedHeight, 0);
@@ -2344,7 +2344,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
     page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
   ).toHaveCount(1);
   // The X clear button empties the search and restores every row (HS2-Z7KP1Q).
-  const clearSearch = header.locator('[data-action="clear-workspace-search"]');
+  const clearSearch = header.locator('[data-action="clear-ticket-search"]');
   await expect(clearSearch).toBeVisible();
   await clearSearch.click();
   await expect(search).toHaveText('');
@@ -2569,7 +2569,7 @@ test('centers search controls on the first line while the query wraps', async ({
   const header = page.locator('[data-component="workspace-header"]');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('searchbox', { name: 'Search tickets' }),
-    group = header.locator('.workspace-header__search-group');
+    group = header.locator('.ticket-search-field');
   await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(300);
   const geometry = async () =>
     group.evaluate((node) => {
@@ -2592,7 +2592,7 @@ test('centers search controls on the first line while the query wraps', async ({
         search: box('.kui-token-search__editor'),
         icon: box('.kui-token-search__leading'),
         clear: node.querySelector('.kui-token-search__clear') ? box('.kui-token-search__clear') : undefined,
-        help: box('.workspace-header__search-help-button'),
+        help: box('.ticket-search-field__help-button'),
       };
     });
   const centered = async (expectedGroupCenter: boolean) => {
@@ -5774,4 +5774,138 @@ test('ticket source connection rows hover flush with their card edge (HS2-KZP94T
     expect(hovered.background).not.toBe('rgba(0, 0, 0, 0)');
     await expect(rows.nth(1)).toHaveCSS('border-top-width', '1px');
   }
+});
+
+test('completes tags, applies dates, and explains syntax in the TicketSearchField demo (HS2-N5G6JS)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await page.goto('/ux-demo?component=ticket-search-field');
+  const demo = page.getByRole('region', { name: 'TicketSearchField demo' });
+  const fields = demo.locator('.ticket-search-field');
+  await expect(fields).toHaveCount(4);
+  expect(await fields.evaluateAll((nodes) => nodes.every((node) => node.closest('[data-component="toolbar"]')))).toBe(
+    true,
+  );
+  const query = demo.getByRole('searchbox', { name: 'Search query', exact: true }).first();
+  await query.fill('parser tag:');
+  const suggestions = demo.getByRole('listbox', { name: 'Matching tags' });
+  await expect(suggestions.getByRole('option')).toHaveText([
+    'tag:client',
+    'tag:docs',
+    'tag:"needs design"',
+    'tag:parser',
+    'tag:server',
+    'tag:ui',
+  ]);
+  await query.fill('parser tag:NE');
+  await expect(suggestions.getByRole('option')).toHaveText(['tag:"needs design"']);
+  await suggestions.getByRole('option', { name: 'tag:"needs design"' }).click();
+  const chips = demo.locator('[data-component="token-search-token"]');
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:"needs design"');
+  await expect(chips.first()).toContainText('tag:needs design');
+  await expect(suggestions).toHaveCount(0);
+  await expect(demo.locator('.component-stage__event')).toHaveText('Added tag:"needs design"');
+  // Chip edit returns the raw filter to text; remove drops it.
+  await chips.first().getByRole('button', { name: 'Edit tag needs design' }).click();
+  await expect(chips).toHaveCount(0);
+  await expect(query).toContainText('tag:"needs design"');
+  await demo.getByRole('button', { name: 'Clear search query' }).first().click();
+  await expect(query).toHaveText('');
+  // A trailing lifecycle filter opens the date helper; Apply commits the chip.
+  await query.fill('updated-after:');
+  const helper = demo.getByRole('group', { name: 'Date and time helper' });
+  await helper.getByLabel('Date').fill('2026-09-01');
+  await helper.getByLabel('Time (optional)').fill('11:05');
+  await helper.getByRole('button', { name: 'Apply' }).click();
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).toHaveAttribute('data-token-value', 'updated-after:2026-09-01T11:05');
+  await expect(helper).toHaveCount(0);
+  await chips
+    .first()
+    .getByRole('button', { name: /^Remove/ })
+    .click();
+  await expect(chips).toHaveCount(0);
+  // Syntax help toggles from the field's trailing button.
+  const helpButton = demo.getByRole('button', { name: 'Search syntax help' }).first();
+  await helpButton.click();
+  const help = fields.first().getByRole('dialog', { name: 'Search syntax' });
+  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(helpButton).toHaveAttribute('aria-expanded', 'true');
+  // The floating popover escapes Kerf's clipped search group and overlays the sections below.
+  const overlays = await help.evaluate((node) => {
+    const box = node.getBoundingClientRect(),
+      next = node.closest('.ticket-search-field-demo > div')!.nextElementSibling!.getBoundingClientRect();
+    return box.height > 200 && box.bottom > next.top && getComputedStyle(node).position === 'absolute';
+  });
+  expect(overlays).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-n5g6js-ticket-search-field-demo-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 600, height: 760 });
+  await help.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-n5g6js-ticket-search-field-demo-narrow.png', fullPage: true });
+  await helpButton.click();
+  await expect(help).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  // The external variant renders its surfaces in flow below the toolbar, inside the consumer's layout.
+  const externalSection = demo.locator('.ticket-search-field-demo__external'),
+    externalQuery = externalSection.getByRole('searchbox', { name: 'Dialog search query' }),
+    externalSurfaces = externalSection.locator('.ticket-search-surfaces');
+  await expect(fields.nth(1).locator('.ticket-search-surfaces')).toHaveCount(0);
+  await externalQuery.fill('tag:d');
+  await expect(externalSurfaces.getByRole('option')).toHaveText(['tag:docs']);
+  expect(
+    await externalSurfaces.evaluate((node) => {
+      const listbox = node.querySelector<HTMLElement>('[role="listbox"]')!,
+        field = node.parentElement!.querySelector<HTMLElement>('.ticket-search-field')!;
+      return {
+        position: getComputedStyle(listbox).position,
+        belowField: listbox.getBoundingClientRect().top >= field.getBoundingClientRect().bottom,
+        sameWidth: Math.abs(listbox.getBoundingClientRect().width - node.getBoundingClientRect().width) < 2,
+      };
+    }),
+  ).toEqual({ position: 'static', belowField: true, sameWidth: true });
+  await externalSurfaces.getByRole('option', { name: 'tag:docs' }).click();
+  await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveAttribute(
+    'data-token-value',
+    'tag:docs',
+  );
+  await expect(externalSurfaces.getByRole('option')).toHaveCount(0);
+  await externalSection.getByRole('button', { name: 'Search syntax help' }).click();
+  const externalHelp = externalSurfaces.getByRole('dialog', { name: 'Search syntax' });
+  await expect(externalHelp).toBeVisible();
+  expect(await externalHelp.evaluate((node) => getComputedStyle(node).position)).toBe('static');
+  await page.screenshot({ path: '/private/tmp/hs2-n5g6js-ticket-search-field-demo-external.png', fullPage: true });
+  await externalSection.getByRole('button', { name: 'Search syntax help' }).click();
+  await expect(externalHelp).toHaveCount(0);
+  await externalSection.getByRole('button', { name: 'Clear dialog search query' }).click();
+  await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveCount(0);
+  // The collapsible variant opens from its magnifier and collapses again on Escape.
+  const collapsible = fields.nth(2);
+  await expect(collapsible).toHaveAttribute('data-expanded', 'false');
+  await demo.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(collapsible).toHaveAttribute('data-expanded', 'true');
+  const collapsibleQuery = demo.getByRole('searchbox', { name: 'Search tickets' });
+  await collapsibleQuery.fill('tag:s');
+  await expect(collapsible.getByRole('listbox', { name: 'Matching tags' }).getByRole('option')).toHaveText([
+    'tag:server',
+  ]);
+  await collapsible.getByRole('button', { name: 'Clear search' }).click();
+  await expect(collapsibleQuery).toHaveText('');
+  await collapsibleQuery.press('Escape');
+  await expect(collapsible).toHaveAttribute('data-expanded', 'false');
+  // The disabled variant keeps its chrome but refuses input.
+  await expect(demo.getByRole('searchbox', { name: 'Search query', exact: true }).nth(1)).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await expect(fields.nth(3)).toHaveAttribute('data-expanded', 'true');
 });

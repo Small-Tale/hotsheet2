@@ -17,11 +17,35 @@ describe('SavedViewDialog', () => {
       SavedViewDialog({
         open: true,
         name: 'Needs docs',
-        query: ' AND NOT status:completed',
+        query: ' AND NOT status:completed tag:d',
         queryTokens: [tokenFromRaw('tag:docs')!],
+        tags: ['design', 'docs', 'server'],
+        helpOpen: true,
       }),
     );
     expect(markup).toContain('data-component="saved-view-dialog"');
+    // The shared TicketSearchField brings tag completion and syntax help into the dialog (HS2-N5G6JS).
+    expect(markup).toContain('class="kui-toolbar-control-group ticket-search-field"');
+    expect(markup).not.toContain('workspace-header__search-group');
+    expect(markup).not.toContain('saved-view-dialog__query-field');
+    expect(markup).toContain('aria-label="Search syntax help"');
+    expect(markup).toContain('aria-label="Search syntax"');
+    // The dialog places the surfaces itself, below the query toolbar, so nothing floats inside the clipped body.
+    const groupStart = markup.indexOf('class="kui-toolbar-control-group ticket-search-field"'),
+      centerEnd = markup.indexOf('class="kui-toolbar__trailing"', groupStart),
+      surfacesStart = markup.indexOf('class="ticket-search-surfaces"');
+    expect(groupStart).toBeGreaterThan(0);
+    expect(markup.slice(groupStart, centerEnd)).not.toContain('ticket-search-surfaces');
+    expect(markup.slice(groupStart, centerEnd)).not.toContain('aria-label="Search syntax"');
+    expect(surfacesStart).toBeGreaterThan(centerEnd);
+    expect(markup).toMatch(
+      /<\/header><div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
+    );
+    expect(markup).toContain('data-action="select-ticket-search-tag" data-tag="design"');
+    expect(markup).not.toContain('data-tag="docs"');
+    expect(markup).not.toContain('data-tag="server"');
+    expect(markup).toContain('data-action="clear-ticket-search"');
+    expect(markup).toContain('aria-label="Clear search query"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
     expect(markup).toContain('class="kui-toolbar saved-view-dialog__query-toolbar"');
@@ -61,7 +85,7 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('label="Edit View"');
     expect(markup).toContain('Change the shared view name or search query.');
     expect(markup).toContain('name="saved-view-query"');
-    expect(markup).toContain('data-action="edit-saved-view-query-token"');
+    expect(markup).toContain('data-action="edit-ticket-search-token"');
   });
 
   it('retains one native name autofocus target through opening, edits, busy, close, rename, and reset', () => {

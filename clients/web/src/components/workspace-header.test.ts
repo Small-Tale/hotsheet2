@@ -75,8 +75,7 @@ describe('WorkspaceHeader', () => {
         searchOpen: true,
         searchQuery: 'NOT  AND tag:cl',
         searchTokens: [{ kind: 'tag', value: 'server', raw: 'tag:server', label: 'tag:server', offset: 4 }],
-        searchTagSuggestions: ['client'],
-        searchDatePrefix: 'created-after',
+        searchTags: ['client', 'server'],
         searchHelpOpen: true,
         sort: 'priority',
         sortDirection: 'descending',
@@ -99,17 +98,25 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('aria-label="Edit tag server"');
     expect(markup).toContain('>tag:server</button>');
     expect(markup).toContain('aria-label="Remove tag server"');
-    expect(markup).toContain('data-action="select-workspace-search-tag" data-tag="client"');
+    expect(markup).toContain('data-action="select-ticket-search-tag" data-tag="client"');
+    expect(markup).not.toContain('data-tag="server"');
+    expect(markup).toContain('data-action="edit-ticket-search-token"');
+    expect(markup).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
     expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
     expect(markup).not.toContain('<input type="checkbox"');
-    expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
+    expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="true"/);
     expect(markup).toContain('data-collapsible="true" data-expanded="true"');
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
-    expect(markup).toContain('aria-label="Date and time helper"');
+    expect(markup).not.toContain('aria-label="Date and time helper"');
+    expect(
+      String(
+        WorkspaceControls({ mode: 'list', searchOpen: true, searchQuery: 'created-after:', searchTags: ['client'] }),
+      ),
+    ).toContain('aria-label="Date and time helper"');
     expect(markup).toContain('aria-label="Search syntax"');
     expect(markup).toContain('<dt>Tags</dt>');
     expect(markup).toContain('<dt>Content</dt>');
@@ -122,7 +129,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('updated-after:2026-09-01T11:05');
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
-    expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
+    expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('ticket-search-field'));
     expect(markup).toMatch(
       /workspace-header__utility-group[^>]*data-selected-chrome="outline"[^>]*data-selected-tone="pop"/,
     );
@@ -140,20 +147,15 @@ describe('WorkspaceHeader', () => {
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8'),
       shellCss = readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8');
     expect(headerCss).toContainSource(
-      '.workspace-header__search-group[data-expanded="true"] { max-width:100%; height:auto; overflow:visible; align-self:flex-start; }',
+      '.workspace-header__actions > .ticket-search-field[data-expanded="true"] { max-width:100%; align-self:flex-start; }',
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__actions > .workspace-header__search-group.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; flex: 1 1 19rem; }',
+      '.workspace-header__actions > .ticket-search-field.kui-toolbar-control-group[data-expanded="true"] { --kui-token-search-expanded-width: 48rem; min-width: 19rem; flex: 1 1 19rem; }',
     );
-    expect(headerCss).toContainSource(
-      '.workspace-header__search-group .kui-token-search { --kui-token-search-background: var(--wa-color-surface-default); --kui-token-search-border: var(--wa-color-neutral-border-normal); --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet); }',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(remify(416px),100%);align-items:stretch;flex-direction:column;text-align:left}',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;',
-    );
+    // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
+    expect(headerCss).not.toContain('.kui-token-search {');
+    expect(headerCss).not.toContain('search-suggestions');
+    expect(headerCss).not.toContain('search-help');
     expect(headerCss).toContainSource(
       '.workspace-header__actions[data-search-open="true"] > .workspace-header__overflow { display: none; }',
     );
@@ -162,7 +164,7 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__text-action-label { display: inline-flex; align-items: center;',
     );
     expect(shellCss).toContainSource(
-      '.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }',
+      '.app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded="true"]) { height:auto; align-items:start; }',
     );
   });
 
@@ -243,12 +245,11 @@ describe('WorkspaceHeader', () => {
         projectName: 'Hot Sheet 2',
         mode: 'list',
         notificationCount: 7,
-        searchTagSuggestions: ['client'],
-        searchDatePrefix: 'created-after',
+        searchTags: ['client', 'server'],
         searchHelpOpen: true,
       }),
     );
-    expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="false"/);
+    expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="false"/);
     expect(markup).toContain('data-component="token-search-field" data-token-search-id="workspace-search"');
     expect(markup).toContain('data-collapsible="true" data-expanded="false"');
     expect(markup).toContain(
@@ -310,7 +311,7 @@ describe('WorkspaceHeader', () => {
     expect(markup.match(/workspace-header__up-next-fill/g) ?? []).toHaveLength(state === 'mixed' ? 2 : 0);
     const utility = markup.slice(
       markup.indexOf('workspace-header__utility-group'),
-      markup.indexOf('workspace-header__search-group'),
+      markup.indexOf('ticket-search-field'),
     );
     expect(utility).not.toContain('wa-button');
     expect(utility.match(/<button /g)).toHaveLength(2);
@@ -391,7 +392,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContainSource('.workspace-header__actions > .workspace-header__sort-group { display: none; }');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');
     expect(headerCss).toContainSource(
-      '.workspace-header__actions > .workspace-header__search-group:not([data-expanded="true"]) { display: none; }',
+      '.workspace-header__actions > .ticket-search-field:not([data-expanded="true"]) { display: none; }',
     );
     expect(headerCss).toContainSource(
       '@container kui-toolbar (max-width: remify(176px)) { .workspace-header__actions > .view-mode-switcher { display: none; } }',

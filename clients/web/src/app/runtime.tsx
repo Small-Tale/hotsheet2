@@ -177,15 +177,14 @@ import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import {
-  activeDatePrefix,
-  activeTagPrefix,
+  ACTIVE_TAG_PATTERN,
   consumeSearchTokens,
   effectiveSearch,
   fromTokenSearchTokens,
   type InlineSearchToken,
   orderedSearchText,
   sameInlineSearchState,
-  tokenFromRaw,
+  tagSearchToken,
   tokenQuery,
   toTokenSearchToken,
 } from '../inline-search';
@@ -1033,6 +1032,7 @@ export async function startHotSheetWebClient() {
     savedViewName,
     savedViewQuery,
     savedViewQueryTokens,
+    savedViewHelpOpen,
     savedViewBusy,
     savedViewError,
     savedViewMenu,
@@ -1043,6 +1043,8 @@ export async function startHotSheetWebClient() {
     openSavedViewRename,
     closeSavedViewDialog,
     updateSavedViewQuery,
+    replaceActiveSavedViewQueryToken,
+    addSavedViewQueryTag,
     focusSavedViewQuery,
     removeSavedViewQueryToken,
     editSavedViewQueryToken,
@@ -1058,6 +1060,7 @@ export async function startHotSheetWebClient() {
     selectedView,
     searchQuery,
     searchTokens,
+    availableSearchTags,
     selectTicketView,
     showToast,
   });
@@ -2360,21 +2363,18 @@ export async function startHotSheetWebClient() {
       }
     }
   }
+  // Every TicketSearchField derives its own `tag:` suggestions from this sorted, canonical-case
+  // tag list; it is recomputed only when the ticket collection changes (HS2-N5G6JS).
+  let availableSearchTagsSource: WireTicketRow[] | undefined,
+    availableSearchTagsValue: string[] = [];
   function availableSearchTags() {
-    return [...new Set(tickets.value.flatMap((ticket) => ticket.tags))].sort((a, b) => a.localeCompare(b));
-  }
-  function searchTagSuggestions() {
-    const active = activeTagPrefix(searchQuery.value);
-    if (active === undefined) return [];
-    const prefix = active.toLowerCase();
-    return availableSearchTags()
-      .filter(
-        (tag) =>
-          !searchTokens.value.some(
-            (token) => token.kind === 'tag' && token.value.toLowerCase() === tag.toLowerCase(),
-          ) && tag.toLowerCase().startsWith(prefix),
-      )
-      .slice(0, 8);
+    if (availableSearchTagsSource !== tickets.value) {
+      availableSearchTagsSource = tickets.value;
+      availableSearchTagsValue = [...new Set(tickets.value.flatMap((ticket) => ticket.tags))].sort((a, b) =>
+        a.localeCompare(b),
+      );
+    }
+    return availableSearchTagsValue;
   }
   function addWorkspaceSearchToken(token: InlineSearchToken, offset = searchQuery.value.length) {
     workspaceSearchEditingToken = false;
@@ -2397,9 +2397,8 @@ export async function startHotSheetWebClient() {
     });
   }
   function addWorkspaceSearchTag(tag: string) {
-    const canonical = availableSearchTags().find((value) => value.toLowerCase() === tag.toLowerCase()) ?? tag,
-      token = tokenFromRaw(`tag:${/\s/.test(canonical) ? `"${canonical}"` : canonical}`);
-    if (token) replaceActiveWorkspaceSearchToken(/(?:^|\s)(tag:(?:"[^"]*|[^\s]*))$/i, token);
+    const token = tagSearchToken(tag, availableSearchTags());
+    if (token) replaceActiveWorkspaceSearchToken(ACTIVE_TAG_PATTERN, token);
     focusWorkspaceSearch();
   }
   function readInlineSearchField(editor: HTMLElement, current: readonly InlineSearchToken[]) {
@@ -4146,8 +4145,7 @@ export async function startHotSheetWebClient() {
             searchOpen={searchOpen.value}
             searchQuery={searchQuery.value}
             searchTokens={searchTokens.value}
-            searchTagSuggestions={searchTagSuggestions()}
-            searchDatePrefix={activeDatePrefix(searchQuery.value)}
+            searchTags={availableSearchTags()}
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}
             sortDirection={sortDirection.value}
@@ -4497,8 +4495,7 @@ export async function startHotSheetWebClient() {
             searchOpen={searchOpen.value}
             searchQuery={searchQuery.value}
             searchTokens={searchTokens.value}
-            searchTagSuggestions={searchTagSuggestions()}
-            searchDatePrefix={activeDatePrefix(searchQuery.value)}
+            searchTags={availableSearchTags()}
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}
             sortDirection={sortDirection.value}
@@ -4697,6 +4694,8 @@ export async function startHotSheetWebClient() {
           name={savedViewName.value}
           query={savedViewQuery.value}
           queryTokens={savedViewQueryTokens.value}
+          tags={availableSearchTags()}
+          helpOpen={savedViewHelpOpen.value}
           busy={savedViewBusy.value}
           error={savedViewError.value}
           session={savedViewDialogSession.value}
@@ -4938,6 +4937,7 @@ export async function startHotSheetWebClient() {
     notWorkingFiles, submitNotWorking, closeNotWorking, notWorkingSubmitting, keyboardShortcutOverrides, appleShortcutPlatform, isEditableEvent, openSavedViewDialog,
     savedViewMenu, openSavedViewRename, openSavedViewDelete, savedViewName, savedViewError, readInlineSearchField, savedViewQueryTokens, updateSavedViewQuery,
     focusSavedViewQuery, removeSavedViewQueryToken, editSavedViewQueryToken, savedViewQuery, saveSavedView, closeSavedViewDialog, savedViewBusy, deleteSavedView,
+    savedViewHelpOpen, replaceActiveSavedViewQueryToken, addSavedViewQueryTag,
     closeSavedViewDelete, savedViewDeleteBusy, commandGroupExpanded, persistWorkspacePreferences, commandGroupsCollapsed, toggleSidebarDrive, driveOptionsOpen, aiTools,
     aiSettingsLoading, refreshAiConfiguration, driveOverridesByProject, normalizedAiSelection, selectDriveModel, openManualModel, effectiveDriveSelection, openSidebarConversation,
     conversationOpen, openConversationExport, pickConversationMessage, copyConversationSelection, clearConversationSelection, conversationExportDialog, finishConversationExport, updateConversationExportDraft,

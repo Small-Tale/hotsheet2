@@ -49,10 +49,10 @@ describe('TerminalTicketRail', () => {
     expect(css).toMatchSource(/\.view-mode-switcher \{[^}]*grid-column:1 \/ -1/);
     expect(css).toMatchSource(/workspace-header__utility-group \{[^}]*grid-column:2/);
     expect(css).toMatchSource(
-      /workspace-header__search-group \{[^}]*grid-column:3[^}]*grid-row:2[^}]*transition:width \.25s ease/,
+      /ticket-search-field \{[^}]*grid-column:3[^}]*grid-row:2[^}]*transition:width \.25s ease/,
     );
     expect(css).toMatchSource(
-      /workspace-header__search-group\[data-expanded="true"\] \{[^}]*width:100%[^}]*grid-column:1 \/ -1[^}]*grid-row:3[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
+      /ticket-search-field\[data-expanded="true"\] \{[^}]*width:100%[^}]*grid-column:1 \/ -1[^}]*grid-row:3[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
     );
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
     expect(css).toMatchSource(/ticket-inspector__header > \.kui-toolbar \{[^}]*grid-template-columns:1fr auto 1fr/);

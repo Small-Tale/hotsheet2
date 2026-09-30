@@ -1,15 +1,12 @@
 import './saved-view-dialog.css';
-import './workspace-header.css';
-import '@kerfjs/ui/token-search-field.css';
 
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
-import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 
-import { type InlineSearchToken, orderedSearchText, toTokenSearchToken } from '../inline-search';
+import { type InlineSearchToken, orderedSearchText } from '../inline-search';
+import { TicketSearchField, TicketSearchSurfaces } from './ticket-search-field';
 
 export interface SavedViewDialogProps {
   open: boolean;
@@ -17,6 +14,10 @@ export interface SavedViewDialogProps {
   name: string;
   query: string;
   queryTokens?: readonly InlineSearchToken[];
+  /** Every project tag, for the query field's in-place `tag:` completion. */
+  tags?: readonly string[];
+  /** Whether the query field's syntax help popover is open. */
+  helpOpen?: boolean;
   busy?: boolean;
   error?: string;
   /**
@@ -32,6 +33,8 @@ export function SavedViewDialog({
   name,
   query,
   queryTokens = [],
+  tags = [],
+  helpOpen = false,
   busy = false,
   error = '',
   session = 0,
@@ -72,27 +75,25 @@ export function SavedViewDialog({
               className="saved-view-dialog__query-toolbar"
               centerAlign="stretch"
               center={
-                <ToolbarControlGroup
-                  className="workspace-header__search-group saved-view-dialog__query-field"
-                  expanded
-                  content="search"
-                  focusRing="halo"
-                >
-                  <TokenSearchField
-                    presentation="toolbar-group"
-                    id="saved-view-query"
-                    label="Search query"
-                    query={query}
-                    tokens={queryTokens.map(toTokenSearchToken)}
-                    placeholder="Search tickets"
-                    disabled={busy}
-                    editAction="edit-saved-view-query-token"
-                    removeAction="remove-saved-view-query-token"
-                    clearAction="clear-saved-view-query"
-                    clearLabel="Clear search query"
-                  />
-                </ToolbarControlGroup>
+                <TicketSearchField
+                  id="saved-view-query"
+                  label="Search query"
+                  query={query}
+                  tokens={queryTokens}
+                  disabled={busy}
+                  tags={tags}
+                  helpOpen={helpOpen}
+                  clearLabel="Clear search query"
+                  surfaces="external"
+                />
               }
+            />
+            <TicketSearchSurfaces
+              id="saved-view-query"
+              query={query}
+              tokens={queryTokens}
+              tags={tags}
+              helpOpen={helpOpen}
             />
             <input type="hidden" name="saved-view-query" value={queryValue} />
             <small>Use the same words, fields, operators, and filter chips as ticket search.</small>

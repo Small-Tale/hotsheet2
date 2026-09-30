@@ -2,7 +2,13 @@ import { batch, type Signal, signal } from 'kerfjs';
 
 import { Api, type CustomView } from '../api';
 import type { SavedViewContextMenuState } from '../components/view-navigation';
-import { consumeSearchTokens, type InlineSearchToken, orderedSearchText } from '../inline-search';
+import {
+  ACTIVE_TAG_PATTERN,
+  consumeSearchTokens,
+  type InlineSearchToken,
+  orderedSearchText,
+  tagSearchToken,
+} from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { data } from '../interactions/dom';
 import type { Control, Project } from '../interactions/types';
@@ -17,6 +23,8 @@ export interface SavedViewsControllerDependencies {
   readonly selectedView: Signal<TicketView>;
   readonly searchQuery: Signal<string>;
   readonly searchTokens: Signal<InlineSearchToken[]>;
+  /** Every project tag, canonical casing, for the query field's tag completion. */
+  readonly availableSearchTags: () => readonly string[];
   readonly selectTicketView: (view: TicketView) => void;
   readonly showToast: (message: string) => void;
 }
@@ -31,6 +39,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
       selectedView,
       searchQuery,
       searchTokens,
+      availableSearchTags,
       selectTicketView,
       showToast,
     } = dependencies,
@@ -41,6 +50,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewName = signal(''),
     savedViewQuery = signal(''),
     savedViewQueryTokens = signal<InlineSearchToken[]>([]),
+    savedViewHelpOpen = signal(false),
     savedViewBusy = signal(false),
     savedViewError = signal(''),
     savedViewMenu = signal<SavedViewContextMenuState | undefined>(undefined),
@@ -58,6 +68,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     const parsed = consumeSearchTokens(value, true);
     savedViewQuery.value = parsed.text;
     savedViewQueryTokens.value = parsed.tokens;
+    savedViewHelpOpen.value = false;
   }
   function openSavedViewDialog() {
     const selected = customViewFor(selectedView.value),
@@ -91,6 +102,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewDialogOpen.value = false;
     savedViewTargetId.value = undefined;
     savedViewError.value = '';
+    savedViewHelpOpen.value = false;
   }
   function updateSavedViewQuery(
     value: string,
@@ -114,6 +126,31 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewQueryTokens.value = next;
     savedViewError.value = '';
     return parsed.tokens.length > 0;
+  }
+  function addSavedViewQueryToken(token: InlineSearchToken, offset = savedViewQuery.value.length) {
+    if (!savedViewQueryTokens.value.some((value) => value.kind === token.kind && value.value === token.value))
+      savedViewQueryTokens.value = [...savedViewQueryTokens.value, { ...token, offset }];
+    savedViewHelpOpen.value = false;
+    savedViewError.value = '';
+  }
+  /** Replace the trailing uncommitted filter text matched by `pattern` with a chip at that position. */
+  function replaceActiveSavedViewQueryToken(pattern: RegExp, token: InlineSearchToken) {
+    const match = savedViewQuery.value.match(pattern);
+    if (!match) {
+      addSavedViewQueryToken(token);
+      return;
+    }
+    const raw = match[1],
+      start = match.index! + match[0].lastIndexOf(raw);
+    batch(() => {
+      savedViewQuery.value = savedViewQuery.value.slice(0, start) + savedViewQuery.value.slice(start + raw.length);
+      addSavedViewQueryToken(token, start);
+    });
+  }
+  function addSavedViewQueryTag(tag: string) {
+    const token = tagSearchToken(tag, availableSearchTags());
+    if (token) replaceActiveSavedViewQueryToken(ACTIVE_TAG_PATTERN, token);
+    focusSavedViewQuery();
   }
   function focusSavedViewQuery(offset?: number) {
     restoreInlineSearchCaret(document, '[data-token-search-editor="saved-view-query"]', offset);
@@ -241,6 +278,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewName,
     savedViewQuery,
     savedViewQueryTokens,
+    savedViewHelpOpen,
     savedViewBusy,
     savedViewError,
     savedViewMenu,
@@ -251,6 +289,8 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     openSavedViewRename,
     closeSavedViewDialog,
     updateSavedViewQuery,
+    replaceActiveSavedViewQueryToken,
+    addSavedViewQueryTag,
     focusSavedViewQuery,
     removeSavedViewQueryToken,
     editSavedViewQueryToken,

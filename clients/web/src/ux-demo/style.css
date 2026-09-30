@@ -357,6 +357,33 @@ body[data-resizing-project-sidebar='true'] {
   border-radius: remify(13.6px);
   background: var(--wa-color-surface-lowered);
 }
+.ticket-search-field-demo {
+  display: grid;
+  width: min(remify(832px), 100%);
+  margin: auto;
+  padding: clamp(remify(24px), 4vw, remify(48px));
+  gap: remify(32px);
+}
+.ticket-search-field-demo h2 {
+  margin: 0 0 remify(10.4px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.ticket-search-field-demo__toolbar {
+  overflow: visible;
+}
+.ticket-search-field-demo__external {
+  display: grid;
+  gap: var(--wa-space-2xs);
+}
+.ticket-search-field-demo__external > h2,
+.ticket-search-field-demo__external > .component-stage__hint {
+  margin-bottom: 0;
+}
+.ticket-search-field-demo__collapsible-toolbar .ticket-search-field[data-expanded='true'] {
+  --kui-token-search-expanded-width: 32rem;
+  flex: 1 1 19rem;
+}
 .toolbar-control-group-demo h2 {
   margin: 0 0 remify(10.4px);
   color: var(--wa-color-neutral-on-quiet);

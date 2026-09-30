@@ -1431,6 +1431,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "ticket-search-field",
+      "name": "TicketSearchField",
+      "kind": "component",
+      "purpose": "Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.",
+      "useWhen": [
+        "Hot Sheet needs ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSearchField behavior."
+      ],
+      "publicClasses": [
+        "ticket-search-field"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "pending-attachment-picker",
       "name": "PendingAttachmentPicker",
       "kind": "component",

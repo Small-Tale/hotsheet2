@@ -12,7 +12,7 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L017': 0,
     'KUI-L019': 104,
     'KUI-L020': 0,
-    'KUI-L022': 66,
+    'KUI-L022': 65,
     'KUI-L101': 0,
     'KUI-L102': 0,
     'KUI-L103': 0,
@@ -21,7 +21,7 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L203': 0,
   },
   review: {
-    'KUI-L004': 82,
+    'KUI-L004': 79,
     'KUI-L006': 15,
     'KUI-L008': 25,
     'KUI-L017': 0,

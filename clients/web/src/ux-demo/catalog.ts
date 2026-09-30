@@ -130,7 +130,15 @@ export const demoCatalog: DemoCategory[] = [
         'Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.',
         'feature-floor',
         true,
-        ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board', 'notification-center'],
+        [
+          'toolbar-text',
+          'toolbar-control-group',
+          'ticket-search-field',
+          'page-header',
+          'ticket-list',
+          'ticket-board',
+          'notification-center',
+        ],
       ),
       demo(
         'page-header',
@@ -393,6 +401,7 @@ export const demoCatalog: DemoCategory[] = [
             'Create or edit a saved ticket view with a full-width responsive query editor.',
             'feature-floor',
             true,
+            ['ticket-search-field'],
           ),
           demo(
             'ticket-link-choice-dialog',
@@ -655,6 +664,14 @@ export const demoCatalog: DemoCategory[] = [
         'Vertically aligned large, default, and small toolbar identity text.',
         'feature-floor',
         true,
+      ),
+      demo(
+        'ticket-search-field',
+        'TicketSearchField',
+        'Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.',
+        'feature-floor',
+        true,
+        ['toolbar-control-group'],
       ),
       demo(
         'dialog-header',

@@ -160,7 +160,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
       .toBeGreaterThan(120);
     await expect
       .poll(async () =>
-        dialog.locator('.saved-view-dialog__query-field').evaluate((element) => {
+        dialog.locator('.ticket-search-field').evaluate((element) => {
           const parent = element.parentElement!;
           return Math.abs(element.getBoundingClientRect().width - parent.getBoundingClientRect().width);
         }),
@@ -452,4 +452,78 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
     });
     await frames.dispose();
   }
+});
+
+test('offers tag completion, the date helper, and syntax help inside the saved-view dialog (HS2-N5G6JS)', async ({
+  page,
+}) => {
+  const views = await mockSavedViews(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add view' }).click();
+  const dialog = page.locator('[data-component="saved-view-dialog"]');
+  const query = dialog.getByRole('searchbox', { name: 'Search query' });
+  await dialog.getByRole('textbox', { name: 'View name' }).fill('Recent docs');
+  // The same in-place tag completion as the workspace search, fed by the project's tags.
+  await query.fill('tag:');
+  const suggestions = dialog.getByRole('listbox', { name: 'Matching tags' });
+  await expect(suggestions.getByRole('option')).toHaveText(['tag:client', 'tag:docs']);
+  await suggestions.getByRole('option', { name: 'tag:docs' }).click();
+  const chips = dialog.locator('[data-component="token-search-token"]');
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:docs');
+  await expect(suggestions).toHaveCount(0);
+  await expect(query).toBeFocused();
+  await expect(dialog.locator('input[name="saved-view-query"]')).toHaveValue('tag:docs');
+  // Syntax help opens over the dialog and closes again from the same button.
+  await dialog.getByRole('button', { name: 'Search syntax help' }).click();
+  const help = dialog.getByRole('dialog', { name: 'Search syntax' });
+  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  // The dialog places the surfaces in flow, so the help is fully inside the dialog panel, not clipped by it.
+  await expect(help).toBeVisible();
+  expect(
+    await help.evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        surfaces = node.closest('.ticket-search-surfaces')!,
+        host = node.closest('wa-dialog')!,
+        panel = (host.shadowRoot?.querySelector('[part~="dialog"]') ?? host).getBoundingClientRect();
+      return {
+        position: getComputedStyle(node).position,
+        external: !surfaces.closest('.ticket-search-field'),
+        inside:
+          box.top >= panel.top &&
+          box.bottom <= panel.bottom + 1 &&
+          box.left >= panel.left &&
+          box.right <= panel.right + 1,
+        tall: box.height > 300,
+      };
+    }),
+  ).toEqual({ position: 'static', external: true, inside: true, tall: true });
+  await page.screenshot({
+    path: '/private/tmp/hs2-n5g6js-saved-view-help-wide.png',
+    clip: { x: 380, y: 60, width: 680, height: 840 },
+  });
+  await dialog.getByRole('button', { name: 'Search syntax help' }).click();
+  await expect(help).toHaveCount(0);
+  // Enter inside the date helper applies the date instead of submitting the form.
+  await query.click();
+  await page.keyboard.press('End');
+  await query.pressSequentially(' updated-after:');
+  const helper = dialog.getByRole('group', { name: 'Date and time helper' });
+  await helper.getByLabel('Date').fill('2026-09-01');
+  await helper.getByLabel('Date').press('Enter');
+  await expect(dialog).toHaveAttribute('data-controlled-open', 'true');
+  await expect(chips).toHaveCount(2);
+  await expect(chips.nth(1)).toHaveAttribute('data-token-value', 'updated-after:2026-09-01');
+  await expect(helper).toHaveCount(0);
+  expect(views()).toEqual([]);
+  await page.screenshot({
+    path: '/private/tmp/hs2-n5g6js-saved-view-chips-wide.png',
+    clip: { x: 430, y: 175, width: 580, height: 420 },
+  });
+  await dialog.getByRole('button', { name: 'Create View' }).click();
+  await expect(page.getByRole('button', { name: 'Recent docs', exact: true })).toHaveAttribute('aria-current', 'page');
+  expect(views()).toEqual([{ id: 'recent-docs', name: 'Recent docs', query: 'tag:docs updated-after:2026-09-01' }]);
 });

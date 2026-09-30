@@ -34,9 +34,6 @@ export interface ViewAndSavedViewInteractionsDependencies {
     commitToken?: boolean,
   ) => boolean;
   readonly focusSavedViewQuery: (offset?: number) => void;
-  readonly removeSavedViewQueryToken: (raw: string) => boolean;
-  readonly editSavedViewQueryToken: (event: Event, target: Element) => void;
-  readonly savedViewQuery: Signal<string>;
   readonly saveSavedView: (form: HTMLFormElement) => Promise<void>;
   readonly closeSavedViewDialog: () => void;
   readonly savedViewBusy: Signal<boolean>;
@@ -63,9 +60,6 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     savedViewQueryTokens,
     updateSavedViewQuery,
     focusSavedViewQuery,
-    removeSavedViewQueryToken,
-    editSavedViewQueryToken,
-    savedViewQuery,
     saveSavedView,
     closeSavedViewDialog,
     savedViewBusy,
@@ -147,28 +141,6 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
         (typeof input.data === 'string' && /\s$/.test(input.data)) ||
         (input.inputType === 'insertFromPaste' && /\s$/.test(state.text));
     if (updateSavedViewQuery(state.text, false, state.tokens, commitsToken)) focusSavedViewQuery();
-  });
-  delegate(document.body, 'mousedown', '[data-action="clear-saved-view-query"]', (event) => {
-    event.preventDefault();
-  });
-  delegate(document.body, 'click', '[data-action="remove-saved-view-query-token"]', (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw) removeSavedViewQueryToken(raw);
-  });
-  delegate(document.body, 'click', '[data-action="edit-saved-view-query-token"]', editSavedViewQueryToken);
-  delegate(
-    document.body,
-    'dblclick',
-    '[data-token-search-editor="saved-view-query"] [data-component="token-search-token"]',
-    editSavedViewQueryToken,
-  );
-  delegate(document.body, 'click', '[data-action="clear-saved-view-query"]', () => {
-    const editor = document.querySelector<HTMLElement>('[data-token-search-editor="saved-view-query"]');
-    if (editor) editor.textContent = '';
-    savedViewQuery.value = '';
-    savedViewQueryTokens.value = [];
-    savedViewError.value = '';
-    focusSavedViewQuery(0);
   });
   delegate(document.body, 'submit', '[data-action="save-saved-view"]', (event, target) => {
     event.preventDefault();

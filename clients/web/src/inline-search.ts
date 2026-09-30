@@ -295,10 +295,47 @@ export function activeTagPrefix(input: string): string | undefined {
   return match[1] || match[2] || '';
 }
 
-export function activeDatePrefix(input: string): `${SearchDateField}-${SearchDateDirection}` | undefined {
+export type SearchDatePrefix = `${SearchDateField}-${SearchDateDirection}`;
+
+export function activeDatePrefix(input: string): SearchDatePrefix | undefined {
   const match = input.match(/(?:^|\s)((?:created|completed|started|verified|archived|updated)-(?:before|after)):.*$/i);
   if (!match) return undefined;
-  return match[1].toLowerCase() as `${SearchDateField}-${SearchDateDirection}`;
+  return match[1].toLowerCase() as SearchDatePrefix;
+}
+
+/** The trailing, uncommitted `tag:` filter text a chosen tag suggestion replaces. */
+export const ACTIVE_TAG_PATTERN = /(?:^|\s)(tag:(?:"[^"]*|[^\s]*))$/i;
+
+/** The trailing, uncommitted lifecycle date filter a date helper replaces. */
+export function activeDatePattern(prefix: SearchDatePrefix): RegExp {
+  return new RegExp(`(?:^|\\s)(${prefix}:[^\\s]*)$`, 'i');
+}
+
+/**
+ * Readable project tags matching the query's trailing `tag:` prefix, excluding tags already
+ * committed as chips, in caller order, capped at eight. Empty when no tag filter is being typed.
+ */
+export function ticketSearchTagSuggestions(
+  query: string,
+  tokens: readonly InlineSearchToken[],
+  tags: readonly string[],
+): string[] {
+  const active = activeTagPrefix(query);
+  if (active === undefined) return [];
+  const prefix = active.toLowerCase();
+  return tags
+    .filter(
+      (tag) =>
+        !tokens.some((token) => token.kind === 'tag' && token.value.toLowerCase() === tag.toLowerCase()) &&
+        tag.toLowerCase().startsWith(prefix),
+    )
+    .slice(0, 8);
+}
+
+/** The canonical `tag:` chip for a chosen suggestion, quoting tags that contain whitespace. */
+export function tagSearchToken(tag: string, tags: readonly string[] = []): InlineSearchToken | undefined {
+  const canonical = tags.find((value) => value.toLowerCase() === tag.toLowerCase()) ?? tag;
+  return tokenFromRaw(`tag:${/\s/.test(canonical) ? `"${canonical}"` : canonical}`);
 }
 
 /** Split the editable text around the committed, atomic tokens that live inside it. */

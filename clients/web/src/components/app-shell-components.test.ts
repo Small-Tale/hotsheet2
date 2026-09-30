@@ -71,17 +71,15 @@ describe('application shell components', () => {
   it('gives an expanded narrow search its own row below the project identity', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(
-      /@media \(max-width: remify\(768px\)\) \{[\s\S]*toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: remify\(6\.4px\);/,
+      /@media \(max-width: remify\(768px\)\) \{[\s\S]*toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: remify\(6\.4px\);/,
     );
     expect(css).toMatchSource(
-      /toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: remify\(8px\) 0;/,
+      /toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: remify\(8px\) 0;/,
     );
     expect(css).toMatchSource(
-      /toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: remify\(12px\) 0; justify-content: stretch;/,
+      /toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: remify\(12px\) 0; justify-content: stretch;/,
     );
-    expect(css).toMatchSource(
-      /\.workspace-header__search-group \{ width: auto; min-width: remify\(176px\); flex: 1 1 auto;/,
-    );
+    expect(css).toMatchSource(/\.ticket-search-field \{ width: auto; min-width: remify\(176px\); flex: 1 1 auto;/);
   });
 
   it('separates the terminal header from its lowered dashboard surface', () => {

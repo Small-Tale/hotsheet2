@@ -1,4 +1,3 @@
-import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { batch, delegate, delegateCapture, type Signal } from 'kerfjs';
 
@@ -10,12 +9,13 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
-import { dateTokenFromInput, type InlineSearchToken } from '../inline-search';
+import { activeDatePattern, type InlineSearchToken } from '../inline-search';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
 import { deleteDraftFiles } from '../workspace-session';
 import { data } from './dom';
+import { wireTicketSearchFields } from './ticket-search-field';
 import { type Control, type PendingEvidence, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -44,9 +44,15 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly removeWorkspaceSearchToken: (raw: string) => boolean;
   readonly removeSavedViewQueryToken: (raw: string) => boolean;
   readonly addWorkspaceSearchTag: (tag: string) => void;
+  readonly addSavedViewQueryTag: (tag: string) => void;
   readonly editWorkspaceSearchToken: (event: Event, target: Element) => void;
+  readonly editSavedViewQueryToken: (event: Event, target: Element) => void;
   readonly searchHelpOpen: Signal<boolean>;
+  readonly savedViewHelpOpen: Signal<boolean>;
+  readonly savedViewQuery: Signal<string>;
+  readonly savedViewError: Signal<string>;
   readonly replaceActiveWorkspaceSearchToken: (pattern: RegExp, token: InlineSearchToken) => void;
+  readonly replaceActiveSavedViewQueryToken: (pattern: RegExp, token: InlineSearchToken) => void;
   readonly focusWorkspaceSearch: (offset?: number) => void;
   workspaceSearchEditingToken: boolean;
   readonly searchQuery: Signal<string>;
@@ -95,9 +101,15 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     removeWorkspaceSearchToken,
     removeSavedViewQueryToken,
     addWorkspaceSearchTag,
+    addSavedViewQueryTag,
     editWorkspaceSearchToken,
+    editSavedViewQueryToken,
     searchHelpOpen,
+    savedViewHelpOpen,
+    savedViewQuery,
+    savedViewError,
     replaceActiveWorkspaceSearchToken,
+    replaceActiveSavedViewQueryToken,
     focusWorkspaceSearch,
     searchQuery,
     searchTokens,
@@ -158,65 +170,53 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       },
     },
   });
-  delegate(document.body, 'keydown', '[data-token-search-editor="workspace-search"]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      editor = target as HTMLElement;
-    if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
-      event.preventDefault();
-      placeTokenSearchCaret(editor, 0);
-    }
-  });
-  delegate(document.body, 'mousedown', '[data-action="select-workspace-search-tag"]', (event) => {
-    event.preventDefault();
-  });
-  delegateCapture(document.body, 'pointerdown', '[data-action="select-workspace-search-tag"]', (event) => {
-    event.preventDefault();
-  });
-  delegate(document.body, 'click', '[data-action="select-workspace-search-tag"]', (_event, target) => {
-    addWorkspaceSearchTag(data(target).tag!);
-  });
-  delegate(document.body, 'click', '[data-action="remove-workspace-search-token"]', (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw) removeWorkspaceSearchToken(raw);
-  });
-  delegate(document.body, 'click', '[data-action="edit-workspace-search-token"]', editWorkspaceSearchToken);
-  delegate(
-    document.body,
-    'click',
-    '[data-token-search-editor="workspace-search"] [data-component="token-search-token"]',
-    (event, target) => {
-      if ((event as MouseEvent).detail === 2) editWorkspaceSearchToken(event, target);
+  // One registration serves every TicketSearchField (workspace header, workspace-grid rail,
+  // saved-view dialog); each callback routes by the owning field id (HS2-N5G6JS).
+  wireTicketSearchFields(document.body, {
+    selectTag: (id, tag) => {
+      if (id === 'workspace-search') addWorkspaceSearchTag(tag);
+      else if (id === 'saved-view-query') addSavedViewQueryTag(tag);
     },
-  );
-  delegate(
-    document.body,
-    'dblclick',
-    '[data-token-search-editor="workspace-search"] [data-component="token-search-token"]',
-    editWorkspaceSearchToken,
-  );
-  delegate(document.body, 'click', '[data-action="toggle-workspace-search-help"]', () => {
-    searchHelpOpen.value = !searchHelpOpen.value;
-  });
-  delegate(document.body, 'click', '[data-action="apply-workspace-search-date"]', (_event, target) => {
-    const date = document.querySelector<HTMLInputElement>('[name="workspace-search-date"]')?.value;
-    if (!date) return;
-    const time = document.querySelector<HTMLInputElement>('[name="workspace-search-time"]')?.value ?? '',
-      prefix = data(target).datePrefix as Parameters<typeof dateTokenFromInput>[0],
-      token = dateTokenFromInput(prefix, date, time, navigator.language);
-    if (!token) return;
-    replaceActiveWorkspaceSearchToken(new RegExp(`(?:^|\\s)(${prefix}:[^\\s]*)$`, 'i'), token);
-    focusWorkspaceSearch();
-  });
-  delegate(document.body, 'click', '[data-action="clear-workspace-search"]', () => {
-    dependencies.workspaceSearchEditingToken = false;
-    const editor = document.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
-    if (editor) editor.textContent = '';
-    batch(() => {
-      searchQuery.value = '';
-      searchTokens.value = [];
-      searchHelpOpen.value = false;
-    });
-    scheduleTicketSearch();
+    applyDate: (id, prefix, token) => {
+      if (id === 'workspace-search') {
+        replaceActiveWorkspaceSearchToken(activeDatePattern(prefix), token);
+        focusWorkspaceSearch();
+      } else if (id === 'saved-view-query') {
+        replaceActiveSavedViewQueryToken(activeDatePattern(prefix), token);
+        focusSavedViewQuery();
+      }
+    },
+    toggleHelp: (id) => {
+      if (id === 'workspace-search') searchHelpOpen.value = !searchHelpOpen.value;
+      else if (id === 'saved-view-query') savedViewHelpOpen.value = !savedViewHelpOpen.value;
+    },
+    clear: (id) => {
+      if (id === 'workspace-search') {
+        dependencies.workspaceSearchEditingToken = false;
+        batch(() => {
+          searchQuery.value = '';
+          searchTokens.value = [];
+          searchHelpOpen.value = false;
+        });
+        scheduleTicketSearch();
+      } else if (id === 'saved-view-query') {
+        batch(() => {
+          savedViewQuery.value = '';
+          savedViewQueryTokens.value = [];
+          savedViewError.value = '';
+          savedViewHelpOpen.value = false;
+        });
+        focusSavedViewQuery(0);
+      }
+    },
+    removeToken: (id, raw) => {
+      if (id === 'workspace-search') removeWorkspaceSearchToken(raw);
+      else if (id === 'saved-view-query') removeSavedViewQueryToken(raw);
+    },
+    editToken: (id, event, target) => {
+      if (id === 'workspace-search') editWorkspaceSearchToken(event, target);
+      else if (id === 'saved-view-query') editSavedViewQueryToken(event, target);
+    },
   });
   delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
     const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);

@@ -1856,7 +1856,10 @@ labels. The rail uses 8px within its project/header/content groups, a 4px top in
 connected control cluster, and an 8px search-row transition offset; its toolbar, selector,
 button, and transition dimensions remain explicit geometry (HS2-4Y6SM9). This is the same
 advanced search surface and state as the main workspace, including chips,
-tag completion, attachment/presence filters, relative or local dates, and syntax help. A
+tag completion, attachment/presence filters, relative or local dates, and syntax help: the
+rail, the workspace header, and the saved-view dialog's query field all render the one
+shared `TicketSearchField` component, so tag completion, the date helper, and syntax help
+are available wherever tickets are searched (HS2-N5G6JS). A
 well-formed structured value becomes a chip only after an explicit impossible continuation
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
 Whitespace used only to commit a trailing chip is consumed with the token, so the caret is

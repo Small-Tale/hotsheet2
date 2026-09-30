@@ -3,12 +3,10 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './workspace-header.css';
-import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
-import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
@@ -18,7 +16,6 @@ import {
   ArrowUpAZ,
   ArrowUpNarrowWide,
   Bell,
-  CircleHelp,
   ClockArrowDown,
   ClockArrowUp,
   Columns3,
@@ -31,7 +28,8 @@ import {
   Star,
 } from 'lucide';
 
-import { type InlineSearchToken, toTokenSearchToken } from '../inline-search';
+import { type InlineSearchToken } from '../inline-search';
+import { TicketSearchField } from './ticket-search-field';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
@@ -59,8 +57,8 @@ export interface WorkspaceHeaderProps {
   searchOpen?: boolean;
   searchQuery?: string;
   searchTokens?: readonly InlineSearchToken[];
-  searchTagSuggestions?: readonly string[];
-  searchDatePrefix?: string;
+  /** Every project tag; the field derives in-place `tag:` suggestions from them. */
+  searchTags?: readonly string[];
   searchHelpOpen?: boolean;
   sort?: WorkspaceSort;
   sortDirection?: WorkspaceSortDirection;
@@ -316,20 +314,13 @@ function WorkspaceOverflowControls({
   );
 }
 
-const localSearchDateExample = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(new Date(2026, 8, 1));
-const localSearchDateTimeExample = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'short',
-  timeStyle: 'short',
-}).format(new Date(2026, 8, 1, 11, 5));
-
 export function WorkspaceControls({
   mode,
   presentation = 'toolbar',
   searchOpen = false,
   searchQuery = '',
   searchTokens = [],
-  searchTagSuggestions = [],
-  searchDatePrefix,
+  searchTags = [],
   searchHelpOpen = false,
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
@@ -404,151 +395,18 @@ export function WorkspaceControls({
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
         </button>
       </ToolbarControlGroup>
-      <ToolbarControlGroup
-        className="workspace-header__search-group"
+      <TicketSearchField
+        id="workspace-search"
+        label="Search tickets"
+        query={searchQuery}
+        tokens={searchTokens}
+        disabled={projectActionsDisabled}
+        autofocus
+        collapsible
         expanded={searchOpen}
-        single
-        content="search"
-        focusRing="halo"
-      >
-        <TokenSearchField
-          presentation="toolbar-group"
-          id="workspace-search"
-          label="Search tickets"
-          query={searchQuery}
-          tokens={searchTokens.map(toTokenSearchToken)}
-          placeholder="Search tickets"
-          disabled={projectActionsDisabled}
-          autofocus
-          collapsible
-          expanded={searchOpen}
-          editAction="edit-workspace-search-token"
-          removeAction="remove-workspace-search-token"
-          clearAction="clear-workspace-search"
-          clearLabel="Clear search"
-          trailing={
-            <button
-              type="button"
-              class="workspace-header__search-help-button"
-              data-action="toggle-workspace-search-help"
-              aria-label="Search syntax help"
-              aria-expanded={String(searchHelpOpen)}
-              title="Search syntax help"
-              data-token-search-keep-open
-            >
-              <LucideIcon icon={CircleHelp} name="circle-help" />
-            </button>
-          }
-        />
-        {searchOpen && searchTagSuggestions.length > 0 ? (
-          <div
-            class="workspace-header__search-suggestions"
-            role="listbox"
-            aria-label="Matching tags"
-            data-token-search-keep-open
-          >
-            {searchTagSuggestions.map((tag) => (
-              <button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>
-                tag:{tag.includes(' ') ? `"${tag}"` : tag}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <></>
-        )}
-        {searchOpen && searchDatePrefix ? (
-          <div
-            class="workspace-header__search-date"
-            role="group"
-            aria-label="Date and time helper"
-            data-token-search-keep-open
-          >
-            <label>
-              Date
-              <input name="workspace-search-date" type="date" />
-            </label>
-            <label>
-              Time (optional)
-              <input name="workspace-search-time" type="time" />
-            </label>
-            <button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>
-              Apply
-            </button>
-          </div>
-        ) : (
-          <></>
-        )}
-        {searchOpen && searchHelpOpen ? (
-          <aside
-            class="workspace-header__search-help"
-            role="dialog"
-            aria-label="Search syntax"
-            data-token-search-keep-open
-          >
-            <header>
-              <strong>Search syntax</strong>
-              <p>Type words, then add any filters you need.</p>
-            </header>
-            <dl>
-              <div>
-                <dt>Tags</dt>
-                <dd>
-                  <code>tag:client</code>
-                  <code>tag:&quot;needs design&quot;</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Content</dt>
-                <dd>
-                  <code>has:attachment</code>
-                  <code>has:media-annotation</code>
-                  <code>has:commit</code>
-                  <code>attachment:*.png</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Workflow</dt>
-                <dd>
-                  <code>is:up-next</code>
-                  <code>is:active</code>
-                  <code>is:open</code>
-                  <code>is:closed</code>
-                  <code>is:duplicate</code>
-                  <code>is:not-started</code>
-                  <code>is:started</code>
-                  <code>is:completed</code>
-                  <code>is:verified</code>
-                  <code>is:backlog</code>
-                  <code>is:archived</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Dates</dt>
-                <dd>
-                  <code>updated-after:4h ago</code>
-                  <code>{`created-after:${localSearchDateExample}`}</code>
-                  <code>{`completed-before:${localSearchDateTimeExample}`}</code>
-                  <code>updated-after:2026-09-01T11:05</code>
-                </dd>
-              </div>
-            </dl>
-            <div class="workspace-header__search-help-notes">
-              <p>
-                <strong>Combine filters</strong> with case-insensitive <code>AND</code>, <code>OR</code>,{' '}
-                <code>NOT</code>, and parentheses.
-              </p>
-              <code>(client OR server) AND NOT is:archived</code>
-              <p>NOT binds before AND, and AND before OR.</p>
-              <p>
-                <strong>Date fields:</strong> created, completed, started, verified, archived, and updated. Add{' '}
-                <code>-before</code> or <code>-after</code>; local, relative, and ISO 8601 dates work.
-              </p>
-            </div>
-          </aside>
-        ) : (
-          <></>
-        )}
-      </ToolbarControlGroup>
+        tags={searchTags}
+        helpOpen={searchHelpOpen}
+      />
       <WorkspaceOverflowControls
         mode={mode}
         projectActionsDisabled={projectActionsDisabled}
@@ -573,8 +431,7 @@ export function WorkspaceHeader({
   searchOpen = false,
   searchQuery = '',
   searchTokens = [],
-  searchTagSuggestions = [],
-  searchDatePrefix,
+  searchTags = [],
   searchHelpOpen = false,
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
@@ -595,8 +452,7 @@ export function WorkspaceHeader({
           searchOpen={searchOpen}
           searchQuery={searchQuery}
           searchTokens={searchTokens}
-          searchTagSuggestions={searchTagSuggestions}
-          searchDatePrefix={searchDatePrefix}
+          searchTags={searchTags}
           searchHelpOpen={searchHelpOpen}
           sort={sort}
           sortDirection={sortDirection}

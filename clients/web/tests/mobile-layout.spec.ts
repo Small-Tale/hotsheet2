@@ -741,7 +741,7 @@ for (const initialWidth of [390, 1280]) {
     const shell = page.locator('[data-component="app-shell"]'),
       editor = page.getByRole('searchbox', { name: 'Search tickets' }),
       field = page.locator('[data-token-search-id="workspace-search"]'),
-      group = page.locator('.workspace-header__search-group').filter({ has: field });
+      group = page.locator('.ticket-search-field').filter({ has: field });
     const expectContained = async (mobile: boolean) => {
       await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
       await expect
@@ -856,7 +856,7 @@ for (const initialWidth of [390, 1280]) {
         'click',
         (event) => {
           clearing =
-            event.target instanceof Element && Boolean(event.target.closest('[data-action="clear-workspace-search"]'));
+            event.target instanceof Element && Boolean(event.target.closest('[data-action="clear-ticket-search"]'));
         },
         true,
       );

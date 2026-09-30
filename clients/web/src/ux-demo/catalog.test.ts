@@ -1,8 +1,9 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 import { createDevApp } from '../dev-server';
 import {
   demoCatalog,
@@ -109,6 +110,7 @@ describe('UX demo catalog', () => {
       'list-header',
       'toolbar-control-group',
       'toolbar-text',
+      'ticket-search-field',
       'dialog-header',
       'value-table',
       'pending-attachment-picker',
@@ -133,6 +135,7 @@ describe('UX demo catalog', () => {
     expect(findDemo('workspace-header')?.uses).toEqual([
       'toolbar-text',
       'toolbar-control-group',
+      'ticket-search-field',
       'page-header',
       'ticket-list',
       'ticket-board',
@@ -146,6 +149,7 @@ describe('UX demo catalog', () => {
       'terminal-key-bar',
       'toolbar',
       'floating-toolbar',
+      'ticket-search-field',
       'dialog-header',
     ]);
     expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
@@ -349,6 +353,59 @@ describe('UX demo catalog', () => {
       expect(catalogIds.has(base), `exempt component ${base} is now cataloged by id — remove the exemption`).toBe(
         false,
       );
+    }
+  });
+
+  it('keeps the app composition catalog aligned with the catalog extension, sources, and Kerf roots (HS2-N5G6JS)', () => {
+    const root = fileURLToPath(new URL('../../', import.meta.url));
+    const composition = JSON.parse(readFileSync(`${root}ai/component-composition-extension.json`, 'utf8')) as {
+      package: string;
+      compatibility: { componentCatalog: string; identity: string };
+      entries: Array<{
+        key: string;
+        package: string;
+        id: string;
+        name: string;
+        source: string;
+        rendersAs?: string[];
+        boundaries: { rootClass: string | null; publicClasses: string[]; placeableClasses?: string[] };
+      }>;
+    };
+    const kerf = JSON.parse(readFileSync(`${root}node_modules/@kerfjs/ui/ai/component-composition.json`, 'utf8')) as {
+      entries: Array<{ key: string }>;
+    };
+    const kerfKeys = new Set(kerf.entries.map((entry) => entry.key));
+    const profile = JSON.parse(readFileSync(`${root}.kerf-ui-profile.json`, 'utf8')) as {
+      catalogs?: Array<{ package: string; selection?: { path: string }; composition: { path: string } }>;
+    };
+    expect(composition.package).toBe('hotsheet-web');
+    expect(composition.compatibility).toEqual({
+      componentCatalog: './component-catalog-extension.json',
+      identity: 'package:id',
+    });
+    expect(profile.catalogs).toEqual([
+      {
+        package: 'hotsheet-web',
+        selection: { path: 'ai/component-catalog-extension.json', schemaVersion: 1 },
+        composition: { path: 'ai/component-composition-extension.json', schemaVersion: 1 },
+      },
+    ]);
+    const extensionIds = new Map(
+      (
+        componentCatalogExtension as { entries: Array<{ id: string; name: string; publicClasses: string[] }> }
+      ).entries.map((entry) => [entry.id, entry]),
+    );
+    expect(composition.entries.map((entry) => entry.id)).toEqual(['ticket-search-field']);
+    for (const entry of composition.entries) {
+      expect(entry.key).toBe(`hotsheet-web:${entry.id}`);
+      expect(entry.package).toBe('hotsheet-web');
+      const cataloged = extensionIds.get(entry.id);
+      expect(cataloged?.name, entry.id).toBe(entry.name);
+      expect(cataloged?.publicClasses, entry.id).toEqual(entry.boundaries.publicClasses);
+      expect(existsSync(`${root}${entry.source}`), entry.source).toBe(true);
+      expect(readFileSync(`${root}${entry.source}`, 'utf8')).toContain(`export function ${entry.name}(`);
+      for (const rootKey of entry.rendersAs ?? []) expect(kerfKeys.has(rootKey), rootKey).toBe(true);
+      if (entry.boundaries.rootClass) expect(entry.boundaries.publicClasses).toContain(entry.boundaries.rootClass);
     }
   });
 
