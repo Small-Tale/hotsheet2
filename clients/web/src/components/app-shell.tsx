@@ -111,6 +111,10 @@ export function AppShell({
             (HS2-4A29RR). On desktop the shell sits inside a window, where the insets are zero. */}
         <Toolbar
           dividerSides=""
+          // An expanded search takes a full second row below the identity once the toolbar is narrow
+          // (Kerf beta.60 trailing priority); wide toolbars reserve a bounded trailing track for it.
+          responsive="trailing-priority"
+          responsiveAt="narrow"
           safeAreaEdges={mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined}
           leading={
             <>

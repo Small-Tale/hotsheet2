@@ -6,8 +6,9 @@
 .project-tab[data-disconnected='true'] {
   color: var(--wa-color-neutral-on-quiet);
 }
-.project-tab[data-attention='true'] .kui-app-tab__name {
-  color: var(--wa-color-danger-on-quiet);
+/* Kerf's attention name color defaults to warning; a project needing attention is a failure state. */
+.project-tab {
+  --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet);
 }
 .project-tab .kui-app-tab__name {
   overflow: visible;

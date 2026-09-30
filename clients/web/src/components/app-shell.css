@@ -62,10 +62,6 @@
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 1px;
 }
-.app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) {
-  height: auto;
-  align-items: start;
-}
 .app-shell__work-area {
   position: relative;
   display: flex;
@@ -155,26 +151,6 @@
   }
   .app-shell__composer {
     padding: remify(11.2px);
-  }
-}
-@media (max-width: remify(768px)) {
-  .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: remify(6.4px);
-  }
-  .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) > .kui-toolbar__leading {
-    padding-inline: remify(8px) 0;
-  }
-  .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) > .kui-toolbar__trailing {
-    grid-column: 1;
-    width: 100%;
-    padding-inline: remify(12px) 0;
-    justify-content: stretch;
-  }
-  .app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded='true']) .ticket-search-field {
-    width: auto;
-    min-width: remify(176px);
-    flex: 1 1 auto;
   }
 }
 .app-shell__work-area[data-has-composer='true'] > .app-shell__workspace {

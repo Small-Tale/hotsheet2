@@ -151,6 +151,7 @@ export function ProjectTab({
       id={id}
       name={name}
       selected={selected}
+      attention={attention}
       closable={closable && !pending}
       draggable={draggable && !pending}
       placeholder={pending}
@@ -184,7 +185,6 @@ export function ProjectTab({
         'data-location': location,
         'data-busy': String(busy),
         'data-disconnected': String(disconnected),
-        'data-attention': String(attention),
         'data-restore-failure': String(restoreFailure),
         // Kerf's AppTab owns `data-pending` (its named-pending state); the project's opening state is app-owned.
         'data-project-pending': String(pending),

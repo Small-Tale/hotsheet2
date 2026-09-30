@@ -107,7 +107,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
-    expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
+    expect(markup).toContain(
+      'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><svg data-lucide="arrow-down-wide-narrow"',
+    );
     expect(markup).not.toContain('<input type="checkbox"');
     expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="true"/);
     expect(markup).toContain('data-collapsible="true" data-expanded="true"');
@@ -166,9 +168,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContainSource(
       '.workspace-header__text-action-label { display: inline-flex; align-items: center;',
     );
-    expect(shellCss).toContainSource(
-      '.app-shell__main > .kui-toolbar:has(.ticket-search-field[data-expanded="true"]) { height:auto; align-items:start; }',
-    );
+    expect(shellCss).not.toContain('.kui-toolbar:has(.ticket-search-field');
   });
 
   it.each([

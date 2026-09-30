@@ -83,18 +83,14 @@ describe('application shell components', () => {
     );
   });
 
-  it('gives an expanded narrow search its own row below the project identity', () => {
+  it('gives an expanded narrow search its own row through Kerf trailing priority', () => {
+    // Kerf beta.60 owns the stacked layout (HS2-AT4AAA): no app rule restyles the toolbar zones.
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(
-      /@media \(max-width: remify\(768px\)\) \{[\s\S]*toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: remify\(6\.4px\);/,
-    );
-    expect(css).toMatchSource(
-      /toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: remify\(8px\) 0;/,
-    );
-    expect(css).toMatchSource(
-      /toolbar:has\(\.ticket-search-field\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: remify\(12px\) 0; justify-content: stretch;/,
-    );
-    expect(css).toMatchSource(/\.ticket-search-field \{ width: auto; min-width: remify\(176px\); flex: 1 1 auto;/);
+    expect(css).not.toContain('.kui-toolbar:has(.ticket-search-field');
+    expect(css).not.toContain('.kui-toolbar__leading');
+    expect(css).not.toContain('.kui-toolbar__trailing');
+    const markup = String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never }));
+    expect(markup).toContain('data-responsive="trailing-priority" data-responsive-at="narrow"');
   });
 
   it('separates the terminal header from its lowered dashboard surface', () => {
@@ -267,9 +263,11 @@ describe('application shell components', () => {
     expect(projectTabCss).toMatchSource(
       /\.project-tab__work\[data-active="true"\]\s+\.project-tab__work-count\s*\{[^}]*color:\s*var\(--wa-color-text-normal\)/,
     );
+    // Kerf beta.60 owns the attention name color through its public token (HS2-AT4AAA).
     expect(projectTabCss).toContainSource(
-      '[data-attention="true"] .kui-app-tab__name { color: var(--wa-color-danger-on-quiet); }',
+      '.project-tab { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); }',
     );
+    expect(projectTabCss).not.toContain('[data-attention=');
     expect(projectTabCss).toContainSource('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContainSource('@media (prefers-reduced-motion:reduce)');
     expect(activeOnlyMarkup).toContain('data-segments="1"');
@@ -487,7 +485,7 @@ describe('application shell components', () => {
     expect(collapsed).toContain('data-position="bottom-end"');
     expect(collapsed).toContain('class="kui-floating-toolbar app-shell__terminal-drawer-restore"');
     expect(collapsed).toContain(
-      'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Terminal drawer controls"',
+      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Terminal drawer controls"',
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
     expect(collapsed).toContain('data-tone="default"');

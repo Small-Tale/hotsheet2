@@ -6936,9 +6936,9 @@ test('keeps a persistently failed project remembered without obscuring a success
   available = true;
   await failure.getByRole('button', { name: 'Retry project' }).click();
   await expect(failure).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'older-server' }).locator('xpath=..')).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: 'older-server' }).locator('xpath=..')).not.toHaveAttribute(
     'data-attention',
-    'false',
+    'true',
   );
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
 });
@@ -7805,7 +7805,7 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
     queueLabel = queue.locator('.kui-list-item__label'),
     viewsTitle = sidebar.locator('.view-navigation > .kui-list-header h2'),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
-    hideLayer = sidebar.locator(':scope > .kui-pane > .kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
+    hideLayer = sidebar.locator(':scope > .kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
     chat = sidebar.getByRole('button', { name: 'Open Codex conversation' });
   const boxes = await Promise.all(
     [sidebar, queue, queueIcon, queueLabel, viewsTitle, viewActionLayer, hideLayer, chat].map((locator) =>
@@ -15805,13 +15805,13 @@ test('shows and resolves cross-project permission notifications with badges and 
   await notificationsButton.click();
   await expect(notificationsButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.settings-navigation > [aria-label="Notification views"]')).toBeVisible();
+  await expect(page.locator('.settings-navigation [aria-label="Notification views"]')).toBeVisible();
   await expect(page.locator('#workspace-page-title')).toContainText('Pending');
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(popup).toBeVisible();
   await expect(page.locator('.notification-inspector-empty')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  const navigation = page.locator('.settings-navigation > [aria-label="Notification views"]');
+  const navigation = page.locator('.settings-navigation [aria-label="Notification views"]');
   await expect
     .poll(async () => {
       const bounds = await navigation.boundingBox();
@@ -15919,7 +15919,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
   await notifications.click();
   const center = page.locator('[data-component="notification-center"]'),
-    navigation = page.locator('.settings-navigation > [aria-label="Notification views"]');
+    navigation = page.locator('.settings-navigation [aria-label="Notification views"]');
   await expect(center).toContainText('other pending action');
   await expect(center).not.toContainText('demo pending action');
   await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
@@ -17060,7 +17060,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   const apple = await page.evaluate(() => /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));
   const mod = apple ? 'Meta' : 'Control';
   await page.getByLabel('Settings view').click();
-  const nav = page.locator('.settings-navigation > [aria-label="Settings categories"]');
+  const nav = page.locator('.settings-navigation[aria-label="Settings categories"]');
   await expect(nav).toContainText('Project Settings');
   await expect(nav).toContainText('App Settings');
   await nav.locator('[data-item-id="keyboard"]').click();

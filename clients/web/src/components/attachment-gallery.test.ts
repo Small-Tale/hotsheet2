@@ -75,7 +75,9 @@ describe('AttachmentGallery', () => {
     // The header groups are dark-toned; the floating footer groups take the FloatingToolbar's dark scheme.
     expect(markup.match(/data-tone="dark"/g)).toHaveLength(3);
     const markupMode = String(AttachmentGallery({ images, activeUrl: '/b.svg', markup: true }));
-    expect(markupMode).toContain('data-position="bottom" role="toolbar" aria-label="Media markup"');
+    expect(markupMode).toContain(
+      'data-position="bottom" data-placement="floating" role="toolbar" aria-label="Media markup"',
+    );
     expect(markupMode.match(/data-component="toolbar-control-group"/g)).toHaveLength(5);
   });
   it('cycles previous and next from canonical URLs and aliases', () => {

@@ -90,7 +90,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('kui-select kui-select--custom-selected kui-select--label-hidden"');
     expect(status).toContain('name="inspector-status"');
     expect(status).toMatch(
-      /<span[^>]*slot="start" class="kui-select__custom-selected"><span class="status-badge status-badge--completed/,
+      /<span[^>]*slot="start" class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><span class="status-badge status-badge--completed/,
     );
     expect(status).toMatch(/<wa-option value="verified"><span[^>]*slot="start" class="kui-select__icon"/);
     // Kerf 5.0.0-beta.56 renders Web Awesome's reflected divider defaults (separator role).

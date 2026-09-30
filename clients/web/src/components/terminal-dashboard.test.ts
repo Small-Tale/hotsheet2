@@ -56,7 +56,7 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="preview-terminal"');
     expect(markup).toContain('<div class="terminal-dashboard__zoom"><div class="kui-floating-toolbar"');
     expect(markup).toContain(
-      'data-component="floating-toolbar" data-position="bottom-end" role="toolbar" aria-label="Workspace tile zoom"',
+      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Workspace tile zoom"',
     );
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-tone="default"');
@@ -227,7 +227,9 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('<div class="terminal-dashboard-controls__visibility-select"><wa-select');
     expect(markup).toContain('>2</span>');
     expect(markup).toContain('name="terminal-visibility-group"');
-    expect(markup).toContain('class="kui-select__custom-selected"><span>Focus</span>');
+    expect(markup).toContain(
+      'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><span>Focus</span>',
+    );
     expect(markup).toContain('<wa-option value="focus"');
     expect(markup).not.toContain('kui-select--fit-menu');
     expect(markup).not.toContain('name="terminal-grouping"');

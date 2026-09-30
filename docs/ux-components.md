@@ -1914,11 +1914,11 @@ URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 accepts debt reduction but fails for a new diagnostic id or any increase in an existing
 error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
 HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, and HS2-2EHD8R is:
+HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, and HS2-AT4AAA is:
 
 | Severity | Exact diagnostic budgets                                              |
 | -------- | --------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 83; `KUI-L022` 3; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 78; `KUI-L022` 3; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                              |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
@@ -1931,7 +1931,14 @@ cursor policy through documented Web Awesome parts (`wa-dropdown-item` and frien
 CLAUDE.md requires; `tag-chip.css` keeps `wa-tag`'s compact geometry, 16px remove button, and
 disabled state until Kerf ships a removable chip primitive (`KF-PDPAVF`); and `drive-options-menu.css`
 styled the raw submenu items until `HS2-2EHD8R` replaced that menu with `PopupMenu` context mode
-(83).
+(83). HS2-AT4AAA upgraded `@kerfjs/ui` to 5.0.0-beta.60, which ships the seven requested
+API groups below, and adopted the first two: the workspace header Toolbar takes
+`responsive="trailing-priority"` (an expanded search moves to a full second row under the
+identity once the toolbar is narrower than Kerf's `narrow` breakpoint, so the app's stacked
+grid rules are gone) and `ProjectTab` passes Kerf's `attention` prop, tinting the name through
+the public `--kui-app-tab-attention-color` token (78). `HS2-PKPGGZ` adopts the rest. The
+FloatingToolbar parent gap (`HS2-10KEHN`) persists in beta.60, so the doctor adapter accepts
+that version too.
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers
