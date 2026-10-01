@@ -122,6 +122,42 @@ fn hs(dir: &Path) -> Command {
     cmd
 }
 
+/// Read one complete HTTP/1.1 request (headers plus a `Content-Length` body) from a fake
+/// server's accepted connection.
+///
+/// `ureq` writes the request prelude and the body in separate `write` calls, so a single
+/// `read` can return only the headers under load (HS2-AR3X0E). Asserting on that partial
+/// request panics the fake-server thread, and closing a socket with unread body bytes
+/// resets the client's connection; both made device sign-in tests flaky.
+fn read_http_request(stream: &mut std::net::TcpStream) -> String {
+    use std::io::Read;
+    let mut buf = [0; 4096];
+    let mut request = Vec::new();
+    loop {
+        if let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+                .unwrap_or(0);
+            if request.len() >= header_end + 4 + content_length {
+                return String::from_utf8_lossy(&request).into_owned();
+            }
+        }
+        let n = stream.read(&mut buf).unwrap();
+        assert!(
+            n > 0,
+            "client closed before sending a complete request: {}",
+            String::from_utf8_lossy(&request)
+        );
+        request.extend_from_slice(&buf[..n]);
+    }
+}
+
 /// Create a ticket and return its slug (parsed from `Created <slug> (<path>)`).
 fn new_ticket(dir: &Path, title: &str) -> String {
     let out = hs(dir).args(["new", "--title", title]).assert().success();
@@ -1979,7 +2015,7 @@ fn launch_noninteractive_source_errors_are_actionable_and_never_guess() {
 
 #[test]
 fn people_seed_github_uses_public_emails_and_reports_private_ones() {
-    use std::io::{Read, Write};
+    use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path()).arg("init").assert().success();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1987,9 +2023,7 @@ fn people_seed_github_uses_public_emails_and_reports_private_ones() {
     let server = std::thread::spawn(move || {
         for _ in 0..3 {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut buf = [0; 2048];
-            let n = stream.read(&mut buf).unwrap();
-            let request = String::from_utf8_lossy(&buf[..n]);
+            let request = read_http_request(&mut stream);
             let body = if request.contains("/collaborators") {
                 r#"[{"login":"dana"},{"login":"private"}]"#
             } else if request.contains("/users/dana") {
@@ -2022,7 +2056,7 @@ fn people_seed_github_uses_public_emails_and_reports_private_ones() {
 
 #[test]
 fn provider_new_uses_direct_github_api_without_writing_git_ticket() {
-    use std::io::{Read, Write};
+    use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
     hs(dir.path()).arg("init").assert().success();
@@ -2037,31 +2071,7 @@ fn provider_new_uses_direct_github_api_without_writing_git_ticket() {
     .unwrap();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        let mut buf = [0; 4096];
-        let mut request_bytes = Vec::new();
-        loop {
-            let n = stream.read(&mut buf).unwrap();
-            request_bytes.extend_from_slice(&buf[..n]);
-            let Some(header_end) = request_bytes
-                .windows(4)
-                .position(|window| window == b"\r\n\r\n")
-            else {
-                continue;
-            };
-            let headers = String::from_utf8_lossy(&request_bytes[..header_end]);
-            let content_length = headers
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse::<usize>().unwrap())
-                })
-                .unwrap_or(0);
-            if request_bytes.len() >= header_end + 4 + content_length {
-                break;
-            }
-        }
-        let request = String::from_utf8_lossy(&request_bytes);
+        let request = read_http_request(&mut stream);
         assert!(request.starts_with("POST /repos/acme/repo/issues "));
         assert!(request.contains("Authorization: Bearer fixture-token"));
         let body = r#"{"number":31,"title":"remote from cli","body":"","state":"open","state_reason":null,"html_url":"https://github.test/acme/repo/issues/31","created_at":"2026-08-26T00:00:00Z","updated_at":"2026-08-26T00:00:00Z","closed_at":null,"labels":[],"assignees":[],"pull_request":null}"#;
@@ -4708,16 +4718,14 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
 
 #[test]
 fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write() {
-    use std::io::{Read, Write};
+    use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let server = std::thread::spawn(move || {
         for index in 0..2 {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut buf = [0; 4096];
-            let n = stream.read(&mut buf).unwrap();
-            let request = String::from_utf8_lossy(&buf[..n]);
+            let request = read_http_request(&mut stream);
             assert!(request.contains("IvTest12345678"));
             let body = if index == 0 {
                 assert!(request.starts_with("POST /login/device/code "));
@@ -4748,7 +4756,7 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
 
 #[test]
 fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
-    use std::io::{Read, Write};
+    use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path()).arg("init").assert().success();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -4758,9 +4766,7 @@ fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
     )).unwrap();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        let mut buf = [0; 4096];
-        let n = stream.read(&mut buf).unwrap();
-        let request = String::from_utf8_lossy(&buf[..n]);
+        let request = read_http_request(&mut stream);
         assert!(
             request.starts_with("GET /repos/acme/repo/issues?"),
             "{request}"
