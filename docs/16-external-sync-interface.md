@@ -309,6 +309,17 @@ detail read pays one history request, or a few when the history spans several pa
 That history is capped at 50 pages of 100 entries. Jira may add one status-catalogue
 request.
 
+Comments are paged the same way (HS2-9GS5TS), on detail reads and on the `add_note`
+idempotency check:
+
+- **GitHub:** `per_page=100&page=N` until a short page.
+- **GitLab:** `x-next-page`.
+- **Jira:** `startAt` up to `total`, or until a short page when `total` is absent.
+
+A ticket with more than 100 comments therefore costs one extra request per additional 100
+comments, capped at 50 pages. In exchange, its newest notes, scores, and retry markers are
+never dropped.
+
 The reopen bound is covered by fake-transport tests on every provider. Opt-in live tests
 also exist in the creds-gated live tier (HS2-7D9BPK), but they have not run yet because
 they need live credentials:

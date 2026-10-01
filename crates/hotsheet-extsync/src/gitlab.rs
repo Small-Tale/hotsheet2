@@ -185,13 +185,31 @@ impl GitLabProvider {
         Ok(reopens)
     }
 
+    /// Every issue note (HS2-9GS5TS), following `x-next-page` so notes past the first 100 —
+    /// the newest scored note or an `add_note` idempotency marker — are never dropped.
     fn notes(&self, native_id: &str) -> Result<Vec<GitLabNote>, ProviderError> {
-        let response = self.request(
-            "GET",
-            &self.endpoint(&format!("issues/{native_id}/notes?per_page=100")),
-            None,
-        )?;
-        self.json(response)
+        let mut notes = Vec::new();
+        let mut page = String::from("1");
+        for _ in 0..MAX_HISTORY_PAGES {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issues/{native_id}/notes?per_page=100&page={page}"
+                )),
+                None,
+            )?;
+            let next = response
+                .headers
+                .get("x-next-page")
+                .filter(|value| !value.is_empty())
+                .cloned();
+            notes.extend(self.json::<Vec<GitLabNote>>(response)?);
+            match next {
+                Some(next) => page = next,
+                None => break,
+            }
+        }
+        Ok(notes)
     }
 
     /// Reject filters the native page API cannot evaluate (shared by paged reads).
@@ -1400,6 +1418,99 @@ mod tests {
         assert_eq!(requests.len(), 8);
     }
 
+    fn plain_notes(from: u64, count: u64) -> Vec<Value> {
+        (from..from + count)
+            .map(|id| json!({"id": id, "body": format!("note {id}"), "created_at": "2026-08-26T00:00:00.000Z"}))
+            .collect()
+    }
+
+    fn paged(body: Value, next: Option<&str>) -> HttpResponse {
+        let mut page = response(200, body);
+        if let Some(next) = next {
+            page.headers.insert("x-next-page".into(), next.into());
+        }
+        page
+    }
+
+    /// HS2-9GS5TS: notes past the first 100 are read by following `x-next-page`, so the newest
+    /// scored note still sets `latest_confidence`; an empty `x-next-page` ends the list.
+    #[test]
+    fn detail_read_follows_note_pages_to_the_newest_scored_note() {
+        let mut closed = issue(7, "closed");
+        closed["state"] = json!("closed");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, closed),
+                    paged(json!(plain_notes(1, 100)), Some("2")),
+                    paged(
+                        json!([scored_note(101, 75, "2026-08-26T05:00:00.000Z")]),
+                        Some(""),
+                    ),
+                    response(200, json!([])),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let ticket = provider(fake.clone()).get("7").unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        assert_eq!(ticket.latest_confidence, Some(75));
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests[1]
+                .1
+                .ends_with("/issues/7/notes?per_page=100&page=1")
+        );
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issues/7/notes?per_page=100&page=2")
+        );
+        assert_eq!(requests.len(), 4);
+    }
+
+    /// The `add_note` retry finds its idempotency marker on the second page and posts nothing.
+    #[test]
+    fn add_note_retry_finds_its_marker_past_the_first_note_page() {
+        let note_id = hotsheet_model::Ulid::new();
+        let marker = json!({
+            "id": 101,
+            "body": format!("Done.\n\n{}", note_trailer::note_marker(note_id)),
+            "created_at": "2026-08-26T05:00:00.000Z"
+        });
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    paged(json!(plain_notes(1, 100)), Some("2")),
+                    paged(json!([marker.clone()]), None),
+                    response(200, issue(7, "retried")),
+                    paged(json!(plain_notes(1, 100)), Some("2")),
+                    paged(json!([marker]), None),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let ticket = provider(fake.clone())
+            .add_note(
+                "7",
+                MutationContext {
+                    now: Timestamp::new("2026-08-27T00:00:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                "Done.".into(),
+            )
+            .unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests.iter().all(|request| request.0 == "GET"),
+            "no duplicate POST"
+        );
+        assert_eq!(requests.len(), 5);
+    }
     #[test]
     fn unscored_or_open_issues_skip_the_state_event_request() {
         let mut closed = issue(7, "closed");

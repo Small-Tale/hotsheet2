@@ -273,13 +273,28 @@ impl GitHubProvider {
         self.json(response)
     }
 
+    /// Every issue comment, oldest first (HS2-9GS5TS). Comments page in ascending order, so a
+    /// single request would drop the newest ones past the first 100 — including the latest
+    /// scored note and an `add_note` idempotency marker. A short page ends the list.
     fn comments(&self, native_id: &str) -> Result<Vec<GitHubComment>, ProviderError> {
-        let response = self.request(
-            "GET",
-            &self.endpoint(&format!("issues/{native_id}/comments?per_page=100")),
-            None,
-        )?;
-        self.json(response)
+        const PAGE: usize = 100;
+        let mut comments = Vec::new();
+        for page in 1..=MAX_HISTORY_PAGES {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issues/{native_id}/comments?per_page={PAGE}&page={page}"
+                )),
+                None,
+            )?;
+            let batch: Vec<GitHubComment> = self.json(response)?;
+            let len = batch.len();
+            comments.extend(batch);
+            if len < PAGE {
+                break;
+            }
+        }
+        Ok(comments)
     }
 
     /// Every `reopened` issue event, oldest first (HS2-N3RMTV). Issue events page in
@@ -1529,6 +1544,104 @@ mod tests {
         assert_eq!(requests.len(), 8);
     }
 
+    fn plain_comments(from: u64, count: u64) -> Vec<Value> {
+        (from..from + count)
+            .map(|id| json!({"id": id, "body": format!("note {id}"), "created_at": "2026-08-26T00:00:00Z"}))
+            .collect()
+    }
+
+    fn note_ctx(id: hotsheet_model::Ulid) -> MutationContext {
+        MutationContext {
+            now: Timestamp::new("2026-08-27T00:00:00Z"),
+            generated_id: id,
+        }
+    }
+
+    /// HS2-9GS5TS: comments past the first 100 (the newest, in ascending order) are read, so
+    /// the latest scored note still sets `latest_confidence`.
+    #[test]
+    fn detail_read_follows_comment_pages_to_the_newest_scored_note() {
+        let transport = FakeTransport::with(vec![
+            response(200, closed_issue(42, "completed", &[])),
+            response(200, json!(plain_comments(1, 100))),
+            response(
+                200,
+                json!([scored_comment(101, 90, "2026-08-26T05:00:00Z")]),
+            ),
+            response(200, json!([])),
+        ]);
+        let ticket = provider(transport.clone()).get("42").unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        assert_eq!(ticket.notes[100].confidence, Some(90));
+        assert_eq!(ticket.latest_confidence, Some(90));
+        let requests = transport.requests.lock().unwrap();
+        assert!(
+            requests[1]
+                .1
+                .ends_with("/issues/42/comments?per_page=100&page=1")
+        );
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issues/42/comments?per_page=100&page=2")
+        );
+        assert!(
+            requests[3]
+                .1
+                .ends_with("/issues/42/events?per_page=100&page=1")
+        );
+        assert_eq!(requests.len(), 4);
+    }
+
+    /// Page boundaries: exactly one full page needs one empty follow-up; a short page ends it.
+    #[test]
+    fn comment_paging_stops_at_a_short_or_empty_page() {
+        let transport = FakeTransport::with(vec![
+            response(200, issue(42, "full page", "details")),
+            response(200, json!(plain_comments(1, 100))),
+            response(200, json!([])),
+            response(200, issue(42, "short page", "details")),
+            response(200, json!(plain_comments(1, 99))),
+        ]);
+        let github = provider(transport.clone());
+        assert_eq!(github.get("42").unwrap().notes.len(), 100);
+        assert_eq!(github.get("42").unwrap().notes.len(), 99);
+        let requests = transport.requests.lock().unwrap();
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issues/42/comments?per_page=100&page=2")
+        );
+        assert_eq!(requests.len(), 5);
+    }
+
+    /// The `add_note` retry finds its idempotency marker on the second page and posts nothing.
+    #[test]
+    fn add_note_retry_finds_its_marker_past_the_first_comment_page() {
+        let note_id = hotsheet_model::Ulid::new();
+        let marker = json!({
+            "id": 101,
+            "body": format!("Done.\n\n{}", note_trailer::note_marker(note_id)),
+            "created_at": "2026-08-26T05:00:00Z"
+        });
+        let transport = FakeTransport::with(vec![
+            response(200, json!(plain_comments(1, 100))),
+            response(200, json!([marker.clone()])),
+            response(200, issue(42, "retried", "details")),
+            response(200, json!(plain_comments(1, 100))),
+            response(200, json!([marker])),
+        ]);
+        let ticket = provider(transport.clone())
+            .add_note("42", note_ctx(note_id), NoteKind::Regular, "Done.".into())
+            .unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        let requests = transport.requests.lock().unwrap();
+        assert!(
+            requests.iter().all(|request| request.0 == "GET"),
+            "no duplicate POST"
+        );
+        assert_eq!(requests.len(), 5);
+    }
     /// An open issue, or a closed one without a scored comment, never pays for history.
     #[test]
     fn unscored_or_open_issues_skip_the_history_request() {

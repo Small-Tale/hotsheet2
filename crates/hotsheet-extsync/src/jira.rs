@@ -188,13 +188,33 @@ impl JiraProvider {
             .collect())
     }
 
+    /// Every issue comment (HS2-9GS5TS), paging by `startAt` until `total` is reached, so
+    /// comments past the first 100 — the newest scored note or an `add_note` idempotency
+    /// marker — are never dropped. Without `total`, a short page ends the list.
     fn comments(&self, key: &str) -> Result<Vec<JiraComment>, ProviderError> {
-        let response = self.request(
-            "GET",
-            &self.endpoint(&format!("issue/{key}/comment?maxResults=100")),
-            None,
-        )?;
-        Ok(self.json::<JiraComments>(response)?.comments)
+        const PAGE: usize = 100;
+        let mut comments = Vec::new();
+        for _ in 0..MAX_HISTORY_PAGES {
+            let start_at = comments.len();
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issue/{key}/comment?startAt={start_at}&maxResults={PAGE}"
+                )),
+                None,
+            )?;
+            let page: JiraComments = self.json(response)?;
+            let len = page.comments.len();
+            comments.extend(page.comments);
+            let done = match page.total {
+                Some(total) => comments.len() >= total,
+                None => len < PAGE,
+            };
+            if done || len == 0 {
+                break;
+            }
+        }
+        Ok(comments)
     }
 
     /// Reject filters the native page API cannot evaluate (shared by paged reads).
@@ -835,6 +855,9 @@ const MAX_HISTORY_PAGES: usize = 50;
 #[derive(Debug, Deserialize)]
 struct JiraComments {
     comments: Vec<JiraComment>,
+    /// Total comments on the issue; absent from minimal responses.
+    #[serde(default)]
+    total: Option<usize>,
 }
 #[derive(Debug, Clone, Deserialize)]
 struct JiraComment {
@@ -1436,6 +1459,126 @@ mod tests {
         assert_eq!(requests.len(), 10);
     }
 
+    fn plain_comments(from: u64, count: u64) -> Vec<Value> {
+        (from..from + count)
+            .map(|id| json!({"id": id.to_string(), "body": text_to_adf(&format!("note {id}")), "created": "2026-08-26T00:00:00.000+0000"}))
+            .collect()
+    }
+
+    /// HS2-9GS5TS: comments past the first 100 are read by paging `startAt` up to `total`, so
+    /// the newest scored comment still sets `latest_confidence`.
+    #[test]
+    fn detail_read_pages_comments_by_start_at_up_to_total() {
+        let mut done = issue("ENG-9", "done");
+        done["fields"]["status"]["statusCategory"]["key"] = json!("done");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, done),
+                    response(
+                        200,
+                        json!({"startAt":0,"maxResults":100,"total":101,"comments":plain_comments(1, 100)}),
+                    ),
+                    response(
+                        200,
+                        json!({"startAt":100,"maxResults":100,"total":101,"comments":[
+                            scored_comment("101", 88, "2026-08-26T05:00:00.000+0000")
+                        ]}),
+                    ),
+                    response(200, json!({"values":[],"isLast":true})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let ticket = provider(fake.clone()).get("ENG-9").unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        assert_eq!(ticket.latest_confidence, Some(88));
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests[1]
+                .1
+                .ends_with("/issue/ENG-9/comment?startAt=0&maxResults=100")
+        );
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issue/ENG-9/comment?startAt=100&maxResults=100")
+        );
+        assert_eq!(requests.len(), 4);
+    }
+
+    /// Page boundaries: `total` exactly 100 needs no second request; without `total`, a full
+    /// page asks once more and an empty page ends the list.
+    #[test]
+    fn comment_paging_stops_at_total_or_an_empty_page() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, issue("ENG-9", "exact")),
+                    response(200, json!({"total":100,"comments":plain_comments(1, 100)})),
+                    response(200, issue("ENG-9", "no total")),
+                    response(200, json!({"comments":plain_comments(1, 100)})),
+                    response(200, json!({"comments":[]})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert_eq!(jira.get("ENG-9").unwrap().notes.len(), 100);
+        assert_eq!(jira.get("ENG-9").unwrap().notes.len(), 100);
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests[4]
+                .1
+                .ends_with("/issue/ENG-9/comment?startAt=100&maxResults=100")
+        );
+        assert_eq!(requests.len(), 5);
+    }
+
+    /// The `add_note` retry finds its idempotency marker on the second page and posts nothing.
+    #[test]
+    fn add_note_retry_finds_its_marker_past_the_first_comment_page() {
+        let note_id = hotsheet_model::Ulid::new();
+        let marker = json!({
+            "id": "101",
+            "body": text_to_adf(&format!("Done.\n\n{}", note_trailer::note_marker(note_id))),
+            "created": "2026-08-26T05:00:00.000+0000"
+        });
+        let first = || response(200, json!({"total":101,"comments":plain_comments(1, 100)}));
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    first(),
+                    response(200, json!({"total":101,"comments":[marker.clone()]})),
+                    response(200, issue("ENG-9", "retried")),
+                    first(),
+                    response(200, json!({"total":101,"comments":[marker]})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let ticket = provider(fake.clone())
+            .add_note(
+                "ENG-9",
+                MutationContext {
+                    now: Timestamp::new("2026-08-27T00:00:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                "Done.".into(),
+            )
+            .unwrap();
+        assert_eq!(ticket.notes.len(), 101);
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests.iter().all(|request| request.0 == "GET"),
+            "no duplicate POST"
+        );
+        assert_eq!(requests.len(), 5);
+    }
     #[test]
     fn unscored_or_open_issues_skip_the_changelog_request() {
         let mut done = issue("ENG-9", "done");

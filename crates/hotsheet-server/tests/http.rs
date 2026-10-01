@@ -14483,3 +14483,49 @@ async fn stopping_wakes_every_waiter_and_stays_resolved() {
     st.release_instances();
     st.release_instances();
 }
+
+/// HS2-9GS5TS: a provider detail read through the real route follows GitHub comment pages,
+/// so the newest scored comment past the first 100 still sets `latest_confidence`.
+#[tokio::test]
+async fn github_provider_detail_route_reads_comments_past_the_first_page() {
+    let (_dir, st) = state();
+    let mut closed = github_issue(42, "long discussion");
+    closed["state"] = serde_json::json!("closed");
+    closed["state_reason"] = serde_json::json!("completed");
+    let first_page = (1..=100)
+        .map(|id| serde_json::json!({"id": id, "body": format!("note {id}"), "created_at": "2026-08-26T00:00:00Z"}))
+        .collect::<Vec<_>>();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, closed),
+                github_response(200, serde_json::json!(first_page)),
+                github_response(
+                    200,
+                    serde_json::json!([{
+                        "id": 101,
+                        "body": "Shipped.\n\nConfidence: 90%\n\n<!-- hotsheet-note-id:01ARZ3NDEKTSV4RRFFQ69G5FAV -->",
+                        "created_at": "2026-08-26T05:00:00Z"
+                    }]),
+                ),
+                github_response(200, serde_json::json!([])),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let response = app(st.with_ticket_provider(Arc::new(provider)))
+        .oneshot(authed("GET", "/providers/github-main/tickets/42", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let ticket = body_json(response).await;
+    assert_eq!(ticket["notes"].as_array().unwrap().len(), 101);
+    assert_eq!(ticket["notes"][100]["confidence"], 90);
+    assert_eq!(ticket["latest_confidence"], 90);
+    assert!(transport.responses.lock().unwrap().is_empty());
+}
