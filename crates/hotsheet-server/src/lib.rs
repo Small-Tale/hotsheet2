@@ -3132,6 +3132,25 @@ fn do_provider_update(
             format!("provider connection '{connection_id}' does not support note confidence"),
         ));
     }
+    let status = opt_parse(req.status.as_deref())?;
+    let actor = parse_actor(req.actor.as_ref())?;
+    if actor
+        .as_ref()
+        .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
+        && status == Some(Status::Completed)
+    {
+        let current = provider.get(id).map_err(provider_transfer_error)?;
+        let scores_now = match &req.note_id {
+            Some(_) => matches!(confidence_change, Some(Some(_))),
+            None => req.note.is_some() && note_confidence.is_some(),
+        };
+        hotsheet_ticketing::actor::check_completion(
+            actor.as_ref(),
+            &current.slug,
+            hotsheet_ticketing::actor::completes(current.status, status),
+            scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
+        )?;
+    }
     let timestamp = now();
     let note = req.note.clone();
     let note_id = req.note_id.clone();
@@ -3147,7 +3166,7 @@ fn do_provider_update(
                 details: req.details,
                 category: req.category,
                 priority: opt_parse(req.priority.as_deref())?,
-                status: opt_parse(req.status.as_deref())?,
+                status,
                 tags: req.tags,
                 up_next: req.up_next,
                 blocked_by: req.blocked_by,
@@ -3322,15 +3341,26 @@ async fn close_provider_ticket(
         }
         None => None,
     };
-    provider_for(&state, &connection_id)?
-        .close(
-            &id,
-            now(),
-            opt_parse(Some(&req.reason))?.expect("required close reason"),
-            duplicate_of,
-        )
-        .map(Json)
-        .map_err(provider_transfer_error)
+    let provider = provider_for(&state, &connection_id)?;
+    let reason: CloseReason = opt_parse(Some(&req.reason))?.expect("required close reason");
+    let actor = parse_actor(req.actor.as_ref())?;
+    if actor
+        .as_ref()
+        .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
+    {
+        let current = provider.get(&id).map_err(provider_transfer_error)?;
+        hotsheet_ticketing::actor::check_completion(
+            actor.as_ref(),
+            &current.slug,
+            hotsheet_ticketing::actor::close_completes(current.status, reason),
+            hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
+        )?;
+    }
+    let closed = provider
+        .close(&id, now(), reason, duplicate_of)
+        .map_err(provider_transfer_error)?;
+    reindex_hosted_provider_write(&state, &connection_id, &id);
+    Ok(Json(closed))
 }
 
 async fn assign_provider_ticket(
@@ -6311,6 +6341,20 @@ fn do_update(
         blocked_by,
         blocked_reason: req.blocked_reason,
     };
+    // Role-specific rules run before any write (HS2-RD4M29).
+    let scores_now = match edit_note_id {
+        Some(_) => matches!(confidence_change, Some(Some(_))),
+        None => {
+            note_text.as_deref().is_some_and(|text| !text.is_empty())
+                && confidence_change.flatten().is_some()
+        }
+    };
+    hotsheet_ticketing::actor::check_completion(
+        parse_actor(req.actor.as_ref())?.as_ref(),
+        &ticket.slug,
+        hotsheet_ticketing::actor::completes(ticket.status, patch.status),
+        scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
     let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
     // An edit may change only the confidence (HS2-CY4CWC); empty text is never written.
@@ -6448,6 +6492,12 @@ fn do_close(
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
+    hotsheet_ticketing::actor::check_completion(
+        parse_actor(req.actor.as_ref())?.as_ref(),
+        &ticket.slug,
+        hotsheet_ticketing::actor::close_completes(ticket.status, reason),
+        hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
     let dup = match req.duplicate_of {
         Some(DuplicateOfReq::Legacy(reference)) => {
             let target = ops::resolve(&entry.store, &reference)?
@@ -8011,10 +8061,13 @@ fn terminal_launch(
     let mut env = terminal_permission_route_env(state, req);
     env.push(("HOTSHEET_AGENT".to_string(), tool.to_string()));
     // The session's worker id: its claims are released when the terminal exits (HS2-1VAW1C).
-    env.push((
-        hotsheet_aitools::WORKER_ID_ENV.to_string(),
-        hotsheet_aitools::session_worker_id(tool, terminal_id),
-    ));
+    let worker_id = hotsheet_aitools::session_worker_id(tool, terminal_id);
+    // An AI terminal session's CLI/MCP mutations act as `ai` (HS2-RD4M29).
+    env.extend(
+        hotsheet_aitools::ai_session_actor_env(&worker_id)
+            .map(|(key, value)| (key.to_string(), value)),
+    );
+    env.push((hotsheet_aitools::WORKER_ID_ENV.to_string(), worker_id));
     let args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())
         .unwrap_or_default();
@@ -10022,6 +10075,10 @@ struct UpdateReq {
     /// (HS2-CY4CWC). Kept as raw JSON so a malformed value gets an explicit 400.
     #[serde(default, deserialize_with = "deserialize_nullable_patch")]
     note_confidence: Option<Option<serde_json::Value>>,
+    /// Who is acting (HS2-RD4M29): `{"role":"human|ai|system","id":"..."}`. Absent is
+    /// unspecified, never assumed AI.
+    #[serde(default)]
+    actor: Option<ActorReq>,
 }
 
 impl UpdateReq {
@@ -10094,6 +10151,9 @@ struct BatchError {
 struct CloseReq {
     reason: String,
     duplicate_of: Option<DuplicateOfReq>,
+    /// Who is closing (HS2-RD4M29); an `ai` completed-close needs a scored cycle.
+    #[serde(default)]
+    actor: Option<ActorReq>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -10176,6 +10236,8 @@ fn initial_status(value: Option<&str>) -> Result<Status, ApiError> {
 pub struct ApiError {
     status: StatusCode,
     message: String,
+    /// Stable machine-readable code for errors an automated caller should branch on.
+    code: Option<&'static str>,
 }
 
 impl ApiError {
@@ -10183,6 +10245,7 @@ impl ApiError {
         Self {
             status,
             message: message.into(),
+            code: None,
         }
     }
     fn not_found(id: &str) -> Self {
@@ -10192,12 +10255,45 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (
-            self.status,
-            Json(serde_json::json!({ "error": self.message })),
-        )
-            .into_response()
+        let mut body = serde_json::json!({ "error": self.message });
+        if let Some(code) = self.code {
+            body["code"] = serde_json::Value::from(code);
+        }
+        (self.status, Json(body)).into_response()
     }
+}
+
+/// A role-specific rule refused the mutation before any write (HS2-RD4M29): 422 with the
+/// rule's stable `code` and its actor-tailored message.
+impl From<hotsheet_ticketing::actor::RuleViolation> for ApiError {
+    fn from(violation: hotsheet_ticketing::actor::RuleViolation) -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            message: violation.message,
+            code: Some(violation.code),
+        }
+    }
+}
+
+/// The optional `actor` object every mutating request body may carry (HS2-RD4M29).
+#[derive(Debug, Clone, Deserialize)]
+struct ActorReq {
+    /// Defaulted so a missing role reads as an explicit 400, like an unknown one.
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    id: Option<String>,
+}
+
+fn parse_actor(
+    actor: Option<&ActorReq>,
+) -> Result<Option<hotsheet_ticketing::actor::MutationActor>, ApiError> {
+    actor
+        .map(|actor| {
+            hotsheet_ticketing::actor::MutationActor::parse(&actor.role, actor.id.clone())
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, format!("actor: {error}")))
+        })
+        .transpose()
 }
 
 impl From<StoreError> for ApiError {

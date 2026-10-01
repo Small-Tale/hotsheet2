@@ -297,6 +297,10 @@ impl ClientDriveManager {
         request
             .env
             .push(format!("{}={worker_id}", hotsheet_aitools::WORKER_ID_ENV));
+        // The drive is an AI session: its CLI/MCP mutations act as `ai` (HS2-RD4M29).
+        for (key, value) in hotsheet_aitools::ai_session_actor_env(&worker_id) {
+            request.env.push(format!("{key}={value}"));
+        }
         let model = request.model.clone();
         let effort = request.effort.clone();
         let source = request.source_id.clone();
@@ -964,7 +968,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             backend.envs.lock().unwrap().as_slice(),
-            [vec!["HOTSHEET_WORKER_ID=fake-connection-1".to_string()]]
+            // The drive is an AI session, so it also acts as `ai` (HS2-RD4M29).
+            [vec![
+                "HOTSHEET_WORKER_ID=fake-connection-1".to_string(),
+                "HOTSHEET_ACTOR_ROLE=ai".to_string(),
+                "HOTSHEET_ACTOR_ID=fake-connection-1".to_string(),
+            ]]
         );
         // Attaching again reuses the drive, and its worker id, without preparing again.
         manager

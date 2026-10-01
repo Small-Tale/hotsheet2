@@ -118,7 +118,12 @@ fn hs(dir: &Path) -> Command {
         path
     });
     let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
-    cmd.env("HOTSHEET_HOME", home).arg("-C").arg(dir);
+    // An ambient actor role (HS2-RD4M29) must not change unrelated tests' behavior.
+    cmd.env("HOTSHEET_HOME", home)
+        .env_remove("HOTSHEET_ACTOR_ROLE")
+        .env_remove("HOTSHEET_ACTOR_ID")
+        .arg("-C")
+        .arg(dir);
     cmd
 }
 
@@ -1905,7 +1910,7 @@ fn launch_releases_the_claims_its_session_left_behind() {
     std::fs::write(
         &agent,
         format!(
-            "#!/bin/sh\n'{}' -C '{}' claim {} --worker \"$HOTSHEET_WORKER_ID\" >/dev/null || exit 9\nprintf '%s\\n' \"$HOTSHEET_WORKER_ID\"\nexit 3\n",
+            "#!/bin/sh\n'{}' -C '{}' claim {} --worker \"$HOTSHEET_WORKER_ID\" >/dev/null || exit 9\nprintf '%s\\n' \"$HOTSHEET_WORKER_ID\"\nprintf '%s:%s\\n' \"$HOTSHEET_ACTOR_ROLE\" \"$HOTSHEET_ACTOR_ID\" >&2\nexit 3\n",
             cli.display(),
             store_arg,
             left.slug
@@ -1970,6 +1975,8 @@ command = "hotsheet-cli permission-hook"
     let worker = String::from_utf8(output.stdout).unwrap().trim().to_string();
     assert!(worker.starts_with("fake-"), "worker id {worker:?}");
     let stderr = String::from_utf8(output.stderr).unwrap();
+    // HS2-RD4M29: the launched AI session acts as `ai` under its worker id.
+    assert!(stderr.contains(&format!("ai:{worker}\n")), "{stderr}");
     assert!(
         stderr.contains(&format!("Released claims left by fake: {}", left.slug)),
         "{stderr}"
@@ -5050,4 +5057,199 @@ fn provider_disable_blocks_provider_access_until_enabled() {
         .success()
         .stdout(predicate::str::contains("(disabled)").not());
     run(&["provider-disable", "missing"]).assert().failure();
+}
+
+/// HS2-RD4M29: an `ai` actor (flag or `HOTSHEET_ACTOR_ROLE`) cannot complete a ticket
+/// without a confidence score; humans, `system`, and unspecified callers are never held to
+/// it. The refusal is AI-actionable and writes nothing.
+#[test]
+fn ai_actor_completion_requires_a_confidence_score() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let status = |slug: &str| {
+        hotsheet_ticketing::ops::resolve(&store, slug)
+            .unwrap()
+            .unwrap()
+            .status
+    };
+    let slug = new_ticket(p, "AI work");
+    for args in [
+        vec!["--actor-role", "ai", "edit", &slug, "--status", "completed"],
+        vec![
+            "edit",
+            &slug,
+            "--status",
+            "completed",
+            "--note",
+            "done",
+            "--actor-role",
+            "ai",
+        ],
+        vec![
+            "close",
+            &slug,
+            "--reason",
+            "completed",
+            "--actor-role",
+            "ai",
+            "--actor-id",
+            "codex-1",
+        ],
+    ] {
+        hs(p)
+            .args(&args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "confidence_required: an AI actor cannot complete",
+            ))
+            .stderr(predicate::str::contains("--note-confidence <0-100>"))
+            .stderr(predicate::str::contains("Nothing was changed"));
+        assert_eq!(
+            status(&slug),
+            hotsheet_model::Status::NotStarted,
+            "{args:?}"
+        );
+    }
+    // The environment declares the role once for a whole AI session.
+    hs(p)
+        .env("HOTSHEET_ACTOR_ROLE", "ai")
+        .args(["edit", &slug, "--status", "completed"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("confidence_required"));
+    // Non-completing AI edits, and a not-planned close, are unaffected.
+    hs(p)
+        .args([
+            "--actor-role",
+            "ai",
+            "edit",
+            &slug,
+            "--status",
+            "started",
+            "--note",
+            "working",
+        ])
+        .assert()
+        .success();
+    // Scoring in the same call satisfies the rule.
+    hs(p)
+        .args(["--actor-role", "ai", "edit", &slug, "--status", "completed"])
+        .args(["--note", "## Confidence\n80", "--note-confidence", "80"])
+        .assert()
+        .success();
+    assert_eq!(status(&slug), hotsheet_model::Status::Completed);
+
+    // A score recorded earlier in the same cycle also satisfies it...
+    let scored_first = new_ticket(p, "Scored first");
+    hs(p)
+        .args([
+            "--actor-role",
+            "ai",
+            "edit",
+            &scored_first,
+            "--note",
+            "## Confidence\n70",
+        ])
+        .args(["--note-confidence", "70"])
+        .assert()
+        .success();
+    hs(p)
+        .args([
+            "--actor-role",
+            "ai",
+            "close",
+            &scored_first,
+            "--reason",
+            "completed",
+        ])
+        .assert()
+        .success();
+    // ...but a reopen starts a new cycle that needs a new score.
+    hs(p)
+        .args(["edit", &scored_first, "--status", "started"])
+        .assert()
+        .success();
+    hs(p)
+        .args([
+            "--actor-role",
+            "ai",
+            "edit",
+            &scored_first,
+            "--status",
+            "completed",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("confidence_required"));
+
+    // Humans, system actors, and unspecified callers never need a score.
+    for role in [Some("human"), Some("system"), None] {
+        let human = new_ticket(p, "Human work");
+        let mut cmd = hs(p);
+        if let Some(role) = role {
+            cmd.args(["--actor-role", role]);
+        }
+        cmd.args(["edit", &human, "--status", "completed"])
+            .assert()
+            .success();
+        assert_eq!(
+            status(&human),
+            hotsheet_model::Status::Completed,
+            "{role:?}"
+        );
+    }
+    let other = new_ticket(p, "Not planned");
+    hs(p)
+        .args([
+            "--actor-role",
+            "ai",
+            "close",
+            &other,
+            "--reason",
+            "not_planned",
+        ])
+        .assert()
+        .success();
+
+    // Invalid actor input fails explicitly.
+    hs(p)
+        .args(["--actor-role", "robot", "ls"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("expected human, ai, or system"));
+    hs(p)
+        .args(["--actor-id", "codex-1", "ls"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--actor-id requires --actor-role"));
+
+    // The provider-native edit path applies the same rule.
+    let connection = hotsheet_ticketing::provider::git_connection_id(&store);
+    let native = hotsheet_ticketing::ops::resolve(&store, &new_ticket(p, "Provider AI work"))
+        .unwrap()
+        .unwrap()
+        .id
+        .to_string();
+    hs(p)
+        .args(["--actor-role", "ai", "provider-edit", &connection, &native])
+        .args(["--status", "completed"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("confidence_required"));
+    hs(p)
+        .args(["--actor-role", "ai", "provider-edit", &connection, &native])
+        .args([
+            "--status",
+            "completed",
+            "--note",
+            "## Confidence\n90",
+            "--note-confidence",
+            "90",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"latest_confidence\": 90"));
 }

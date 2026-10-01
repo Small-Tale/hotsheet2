@@ -28,8 +28,40 @@ struct Cli {
     /// Store directory (defaults to the current directory).
     #[arg(short = 'C', long = "path", global = true, default_value = ".")]
     path: PathBuf,
+    /// Who is acting: human | ai | system (HS2-RD4M29); falls back to
+    /// `HOTSHEET_ACTOR_ROLE`. Unset means unspecified, never assumed AI. An `ai` actor must
+    /// score a completion (`--note-confidence`).
+    #[arg(long, global = true, value_name = "ROLE")]
+    actor_role: Option<String>,
+    /// Stable id of the acting worker, account, or tool (with --actor-role); falls back to
+    /// `HOTSHEET_ACTOR_ID`.
+    #[arg(long, global = true, value_name = "ID")]
+    actor_id: Option<String>,
     #[command(subcommand)]
     command: Cmd,
+}
+
+impl Cli {
+    /// The acting role, if one was given (flag or `HOTSHEET_ACTOR_ROLE`).
+    fn actor(&self) -> Result<Option<hotsheet_ticketing::actor::MutationActor>> {
+        let env = |name: &str| std::env::var(name).ok();
+        let role = self
+            .actor_role
+            .clone()
+            .or_else(|| env("HOTSHEET_ACTOR_ROLE"));
+        let id = self.actor_id.clone().or_else(|| env("HOTSHEET_ACTOR_ID"));
+        match role.as_deref().map(str::trim) {
+            None | Some("") => {
+                if id.as_deref().is_some_and(|id| !id.trim().is_empty()) {
+                    bail!("--actor-id requires --actor-role (human, ai, or system)");
+                }
+                Ok(None)
+            }
+            Some(role) => hotsheet_ticketing::actor::MutationActor::parse(role, id)
+                .map(Some)
+                .map_err(anyhow::Error::msg),
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -980,6 +1012,7 @@ fn main() -> Result<()> {
                 ..
             }
     );
+    let actor = cli.actor()?;
     let result = match cli.command {
         Cmd::Init {
             prefix,
@@ -1154,6 +1187,7 @@ fn main() -> Result<()> {
                 edit_note.as_ref(),
             )?;
             cmd_provider_edit(
+                actor.as_ref(),
                 &cli.path,
                 &connection,
                 &id,
@@ -1243,6 +1277,7 @@ fn main() -> Result<()> {
                 edit_note.as_ref(),
             )?;
             cmd_edit(
+                actor.as_ref(),
                 &cli.path,
                 &id,
                 title,
@@ -1268,7 +1303,7 @@ fn main() -> Result<()> {
             id,
             reason,
             duplicate_of,
-        } => cmd_close(&cli.path, &id, &reason, duplicate_of),
+        } => cmd_close(actor.as_ref(), &cli.path, &id, &reason, duplicate_of),
         Cmd::Restore { id } => cmd_restore(&cli.path, &id),
         Cmd::PurgeTrash { older_than_days } => cmd_purge_trash(&cli.path, &cwd, older_than_days),
         Cmd::Setup {
@@ -2350,6 +2385,7 @@ struct ProviderEditInput {
 }
 
 fn cmd_provider_edit(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &Path,
     connection: &str,
     id: &str,
@@ -2359,6 +2395,22 @@ fn cmd_provider_edit(
     if input.edit_note.is_some() && !provider.supports_note_edit() {
         bail!("provider connection '{connection}' does not support note editing");
     }
+    let status = input.status.as_deref().map(parse_status_str).transpose()?;
+    if actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
+        && status == Some(hotsheet_model::Status::Completed)
+    {
+        let current = provider.get(id)?;
+        let scores_now = match &input.edit_note {
+            Some(_) => matches!(input.note_confidence, Some(Some(_))),
+            None => input.note.is_some() && input.note_confidence.flatten().is_some(),
+        };
+        hotsheet_ticketing::actor::check_completion(
+            actor,
+            &current.slug,
+            hotsheet_ticketing::actor::completes(current.status, status),
+            scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
+        )?;
+    }
     let now = now_ts();
     let mut ticket = provider.update(
         id,
@@ -2367,7 +2419,7 @@ fn cmd_provider_edit(
             expected_token: input.expected_token,
             title: input.title,
             details: input.details,
-            status: input.status.as_deref().map(parse_status_str).transpose()?,
+            status,
             ..Default::default()
         },
     )?;
@@ -3109,7 +3161,9 @@ fn cmd_launch(
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
         .env("HOTSHEET_PROJECT", permission_project)
-        .env("HOTSHEET_WORKER_ID", &worker);
+        .env("HOTSHEET_WORKER_ID", &worker)
+        // The launched tool is an AI session: its mutations act as `ai` (HS2-RD4M29).
+        .envs(hotsheet_aitools::ai_session_actor_env(&worker));
     let mut child = command
         .spawn()
         .with_context(|| format!("launching {}", program.display()))?;
@@ -3991,6 +4045,7 @@ fn cmd_attachment_actor(
 
 #[allow(clippy::too_many_arguments)]
 fn cmd_edit(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &PathBuf,
     id: &str,
     title: Option<String>,
@@ -4059,8 +4114,19 @@ fn cmd_edit(
             blocked_reason.map(Some)
         },
     };
-    let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
+    // Role-specific rules run before any write (HS2-RD4M29).
     let note = note.filter(|t| !t.is_empty());
+    let scores_now = match &edit_note {
+        Some(_) => matches!(note_confidence, Some(Some(_))),
+        None => note.is_some() && note_confidence.flatten().is_some(),
+    };
+    hotsheet_ticketing::actor::check_completion(
+        actor,
+        &ticket.slug,
+        hotsheet_ticketing::actor::completes(ticket.status, patch.status),
+        scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
+    let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     let warnings = note
         .as_deref()
         .map(|text| ops::attachment_reference_warnings(&store, &updated, text))
@@ -4260,10 +4326,22 @@ fn validate_note_modifiers(
     }
 }
 
-fn cmd_close(path: &PathBuf, id: &str, reason: &str, duplicate_of: Option<String>) -> Result<()> {
+fn cmd_close(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    path: &PathBuf,
+    id: &str,
+    reason: &str,
+    duplicate_of: Option<String>,
+) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
     let reason_enum = parse_close_reason(reason)?;
+    hotsheet_ticketing::actor::check_completion(
+        actor,
+        &ticket.slug,
+        hotsheet_ticketing::actor::close_completes(ticket.status, reason_enum),
+        hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
     let dup = match duplicate_of {
         Some(d) => Some(resolve(&store, &d)?.id.to_string()),
         None => None,

@@ -78,6 +78,28 @@ fn initialize_result() -> Value {
 }
 
 fn tools_list() -> Value {
+    let mut tools = base_tools_list();
+    for tool in tools["tools"].as_array_mut().into_iter().flatten() {
+        let mutating = tool["name"]
+            .as_str()
+            .is_some_and(|name| MUTATING_TOOLS.contains(&name));
+        if let (true, Some(properties)) =
+            (mutating, tool["inputSchema"]["properties"].as_object_mut())
+        {
+            properties.insert(
+                "actor_role".into(),
+                json!({ "type": "string", "enum": ["human", "ai", "system"], "description": "who is acting; AI agents pass \"ai\" (or set HOTSHEET_ACTOR_ROLE for the shim). An ai completion must include note_confidence or it is rejected with confidence_required" }),
+            );
+            properties.insert(
+                "actor_id".into(),
+                json!({ "type": "string", "description": "stable id of the acting worker/session (for example your HOTSHEET_WORKER_ID)" }),
+            );
+        }
+    }
+    tools
+}
+
+fn base_tools_list() -> Value {
     let str_prop = |desc: &str| json!({ "type": "string", "description": desc });
     json!({ "tools": [
         {
@@ -333,7 +355,96 @@ fn render_result(value: &Value) -> String {
     }
 }
 
+/// Tools that change state; each accepts `actor_role` / `actor_id` (HS2-RD4M29).
+const MUTATING_TOOLS: &[&str] = &[
+    "hotsheet_create",
+    "hotsheet_update",
+    "hotsheet_close",
+    "hotsheet_restore",
+    "hotsheet_assign",
+    "hotsheet_batch",
+    "hotsheet_announce",
+    "hotsheet_claim",
+    "hotsheet_claim_next",
+    "hotsheet_release",
+    "hotsheet_renew",
+    "hotsheet_copy",
+    "hotsheet_move",
+    "hotsheet_provider_copy",
+    "hotsheet_provider_move",
+];
+
+/// The acting role for a mutating tool call: the `actor_role` / `actor_id` arguments, else
+/// the shim's `HOTSHEET_ACTOR_ROLE` / `HOTSHEET_ACTOR_ID` environment (so an AI client's MCP
+/// config can declare it once). Absent stays unspecified, never assumed AI.
+fn call_actor(args: &Value) -> Result<Option<Value>, String> {
+    let arg = |key: &str| {
+        args.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    let env = |key: &str| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let role = arg("actor_role").or_else(|| env("HOTSHEET_ACTOR_ROLE"));
+    let id = arg("actor_id").or_else(|| env("HOTSHEET_ACTOR_ID"));
+    let Some(role) = role else {
+        return if id.is_some() {
+            Err("actor_id requires actor_role (human, ai, or system)".into())
+        } else {
+            Ok(None)
+        };
+    };
+    let actor = hotsheet_ticketing::actor::MutationActor::parse(&role, id)?;
+    serde_json::to_value(actor)
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+/// Adds the call's `actor` to every mutating request body the tool sends.
+struct ActorBackend<'a> {
+    inner: &'a dyn Backend,
+    actor: Value,
+}
+
+impl Backend for ActorBackend<'_> {
+    fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+        self.inner.get(path, query)
+    }
+    fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+        let mut body = body.clone();
+        if let Some(object) = body.as_object_mut() {
+            object.entry("actor").or_insert_with(|| self.actor.clone());
+        }
+        self.inner.send(method, path, &body)
+    }
+}
+
 fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
+    if MUTATING_TOOLS.contains(&name) {
+        let actor = call_actor(args)?;
+        let args = without_many(args, &["actor_role", "actor_id"]);
+        if let Some(actor) = actor {
+            return dispatch_tool(
+                name,
+                &args,
+                &ActorBackend {
+                    inner: backend,
+                    actor,
+                },
+            );
+        }
+        return dispatch_tool(name, &args, backend);
+    }
+    dispatch_tool(name, args, backend)
+}
+
+fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
         "hotsheet_providers" => backend.get("/providers", &[]).map_err(be_msg),
         "hotsheet_query" => backend
@@ -1142,6 +1253,13 @@ mod core_backend {
                     let t = self.resolve(close_id(path).unwrap())?;
                     let reason = opt_enum(body, "reason")?
                         .ok_or_else(|| bad_request("reason is required"))?;
+                    hotsheet_ticketing::actor::check_completion(
+                        body_actor(body)?.as_ref(),
+                        &t.slug,
+                        hotsheet_ticketing::actor::close_completes(t.status, reason),
+                        hotsheet_ticketing::actor::scored_in_current_cycle(&t),
+                    )
+                    .map_err(rule_err)?;
                     let dup = match body
                         .get("duplicate_of")
                         .and_then(Value::as_str)
@@ -1256,6 +1374,18 @@ mod core_backend {
                             }
                         },
                     };
+                    // Role-specific rules run before any write (HS2-RD4M29).
+                    let scores_now = match edit_note_id {
+                        Some(_) => matches!(confidence_change, Some(Some(_))),
+                        None => note_text.is_some() && confidence_change.flatten().is_some(),
+                    };
+                    hotsheet_ticketing::actor::check_completion(
+                        body_actor(body)?.as_ref(),
+                        &t.slug,
+                        hotsheet_ticketing::actor::completes(t.status, patch.status),
+                        scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&t),
+                    )
+                    .map_err(rule_err)?;
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
                     let latest = match edit_note_id {
@@ -1809,6 +1939,31 @@ mod core_backend {
         BackendError {
             status: Some(404),
             message: format!("no ticket matching '{id}'"),
+        }
+    }
+
+    /// The optional `actor` object of a mutating body, with the server's contract.
+    fn body_actor(
+        body: &Value,
+    ) -> Result<Option<hotsheet_ticketing::actor::MutationActor>, BackendError> {
+        let Some(actor) = body.get("actor").filter(|value| !value.is_null()) else {
+            return Ok(None);
+        };
+        let role = actor
+            .get("role")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad_request("actor: role is required (human, ai, or system)"))?;
+        let id = actor.get("id").and_then(Value::as_str).map(str::to_owned);
+        hotsheet_ticketing::actor::MutationActor::parse(role, id)
+            .map(Some)
+            .map_err(|error| bad_request(format!("actor: {error}")))
+    }
+
+    /// A role rule refusal maps to the server's 422 so both backends read the same.
+    fn rule_err(violation: hotsheet_ticketing::actor::RuleViolation) -> BackendError {
+        BackendError {
+            status: Some(422),
+            message: violation.message,
         }
     }
 
@@ -3200,6 +3355,80 @@ mod tests {
             update["inputSchema"]["properties"]["note_confidence"]["maximum"],
             100
         );
+    }
+
+    /// HS2-RD4M29: mutating tools accept `actor_role`/`actor_id`; an `ai` completion without
+    /// a score is refused (update and close) with the AI-actionable message, while humans
+    /// and unspecified callers are unaffected.
+    #[test]
+    fn ai_actor_completion_requires_a_score_through_mcp() {
+        let (_d, backend) = core();
+        let id = call(&backend, "hotsheet_create", json!({ "title": "AI work" }))["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for (tool, args) in [
+            (
+                "hotsheet_update",
+                json!({ "id": id, "status": "completed", "actor_role": "ai", "actor_id": "codex-1" }),
+            ),
+            (
+                "hotsheet_close",
+                json!({ "id": id, "reason": "completed", "actor_role": "ai" }),
+            ),
+        ] {
+            let refused = call(&backend, tool, args);
+            let message = refused["error"].as_str().unwrap();
+            assert!(
+                message.contains("error 422: confidence_required"),
+                "{message}"
+            );
+            assert!(message.contains("note_confidence"), "{message}");
+        }
+        assert_eq!(
+            call(&backend, "hotsheet_get", json!({ "id": id }))["status"],
+            "not_started"
+        );
+        let completed = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "status": "completed", "note": "## Confidence\n70", "note_confidence": 70, "actor_role": "ai" }),
+        );
+        assert_eq!(completed["latest_confidence"], 70);
+        for actor in [json!({ "actor_role": "human" }), json!({})] {
+            let other = call(&backend, "hotsheet_create", json!({ "title": "Human" }))["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let mut args = json!({ "id": other, "status": "completed" });
+            args.as_object_mut()
+                .unwrap()
+                .extend(actor.as_object().unwrap().clone());
+            assert_eq!(
+                call(&backend, "hotsheet_update", args)["status"],
+                "completed"
+            );
+        }
+        let invalid = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "title": "x", "actor_role": "robot" }),
+        );
+        assert!(
+            invalid["error"]
+                .as_str()
+                .unwrap()
+                .contains("expected human, ai, or system")
+        );
+        // Every mutating tool advertises the actor arguments; read tools do not.
+        let tools = handle_message(&req("tools/list", json!({})), &backend).unwrap();
+        for tool in tools["result"]["tools"].as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            let has = tool["inputSchema"]["properties"]
+                .get("actor_role")
+                .is_some();
+            assert_eq!(has, MUTATING_TOOLS.contains(&name), "{name}");
+        }
     }
 
     #[test]

@@ -1101,16 +1101,19 @@ pub fn add_note_with_metadata(
 /// completing note that a surface appended just before flipping the status, while an
 /// old score never survives a reopen unless the next completion reports a new one.
 pub fn latest_confidence(ticket: &Ticket) -> Option<Confidence> {
-    if !matches!(ticket.status, Status::Completed | Status::Verified) {
+    latest_confidence_of_notes(ticket.status, &ticket.notes)
+}
+
+/// [`latest_confidence`] over a status and note list, for callers holding a wire ticket.
+pub fn latest_confidence_of_notes(status: Status, notes: &[Note]) -> Option<Confidence> {
+    if !matches!(status, Status::Completed | Status::Verified) {
         return None;
     }
-    let reopened = ticket
-        .notes
+    let reopened = notes
         .iter()
         .filter(|note| note_reopens_ticket(note))
         .max_by(|a, b| chronological_note_cmp(a, b));
-    ticket
-        .notes
+    notes
         .iter()
         .filter(|note| note.confidence.is_some())
         .filter(|note| {

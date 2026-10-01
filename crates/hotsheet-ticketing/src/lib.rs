@@ -10,6 +10,7 @@ use hotsheet_model::Ulid;
 
 pub mod activity;
 pub mod activity_distillation;
+pub mod actor;
 pub mod analytics;
 pub mod annotation_activity;
 pub mod checkout_order;

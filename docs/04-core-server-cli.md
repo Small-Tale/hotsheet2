@@ -535,7 +535,12 @@ append value; 409 when the provider's `note_confidence` capability is off). With
 an absent `note_confidence` leaves the score unchanged, an integer replaces it, and JSON
 `null` clears it; on an append, `null` simply means "no score". Correcting a score does not
 rewrite the note's `## Confidence` prose, so an author fixing a mistyped score should edit
-both in the same call. Full ticket
+both in the same call.
+Every command accepts the global `--actor-role human|ai|system` and `--actor-id <id>`
+(falling back to `HOTSHEET_ACTOR_ROLE` / `HOTSHEET_ACTOR_ID`). Server mutating request
+bodies accept `"actor": {"role": "...", "id": "..."}`; an invalid role is a 400. An
+`ai` actor completing a ticket without a score in the current cycle is refused before any
+write, with 422 and `{"code": "confidence_required"}` (`docs/05` §5, HS2-RD4M29). Full ticket
 responses carry each note's `confidence` and the derived `latest_confidence` (`docs/02`
 §2.6); both are omitted when absent, so older clients see an unchanged shape. `show`
 prints the stored `confidence: NN` marker token.

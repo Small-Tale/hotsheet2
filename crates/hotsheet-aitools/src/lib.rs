@@ -70,6 +70,23 @@ mod tests;
 /// The environment variable carrying a launched AI session's worker id (HS2-1VAW1C).
 pub const WORKER_ID_ENV: &str = "HOTSHEET_WORKER_ID";
 
+/// The acting role every Hot Sheet surface reads when a caller does not pass one
+/// (HS2-RD4M29). Launchers set it to `ai` for the AI sessions they start, so the CLI and the
+/// MCP shim identify those sessions' mutations as AI without per-call flags.
+pub const ACTOR_ROLE_ENV: &str = "HOTSHEET_ACTOR_ROLE";
+
+/// The acting id paired with [`ACTOR_ROLE_ENV`]; launchers set it to the session worker id.
+pub const ACTOR_ID_ENV: &str = "HOTSHEET_ACTOR_ID";
+
+/// The actor environment for an AI session a launcher starts (HS2-RD4M29).
+#[must_use]
+pub fn ai_session_actor_env(worker_id: &str) -> [(&'static str, String); 2] {
+    [
+        (ACTOR_ROLE_ENV, "ai".to_owned()),
+        (ACTOR_ID_ENV, worker_id.to_owned()),
+    ]
+}
+
 /// The worker id a launcher assigns an AI session: `<tool>-<session>`. The bundled
 /// instructions tell the AI to claim with it, and the launcher releases every claim it holds
 /// when the session ends.

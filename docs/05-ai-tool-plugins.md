@@ -217,8 +217,34 @@ and known gaps deferred to follow-ups. The same integer is passed as structured 
 assumptions; 40-69 partially verified or an ambiguous ask; below 40 largely unverified, with
 the gaps named. A bare number without the factor lines is non-compliant. Self-reported
 confidence is weakly calibrated, so the factor lines — not the number — are the primary
-value; enforcement is prompt-level in this phase (hard enforcement, list filters, and
-calibration reporting are HS2-RD4M29; external-provider trailers are HS2-5YNASC).
+value. External providers carry the score as a comment trailer (HS2-5YNASC).
+
+**Actor role and the AI completion rule (HS2-RD4M29).** Every mutating surface accepts an
+optional actor: CLI `--actor-role human|ai|system --actor-id <id>` (or the
+`HOTSHEET_ACTOR_ROLE` / `HOTSHEET_ACTOR_ID` environment), MCP `actor_role` / `actor_id` on
+every mutating tool (or the same environment in the shim), and an `actor:
+{"role","id"}` object on server request bodies. A missing actor is _unspecified_, never
+assumed AI, so older callers are unaffected.
+
+Every AI session that Hot Sheet launches (`hotsheet-cli launch`, AI terminals, and client
+drives) receives `HOTSHEET_ACTOR_ROLE=ai` and `HOTSHEET_ACTOR_ID=<worker id>`. Its CLI and
+MCP mutations therefore act as `ai` automatically. This is the one deliberate behavior
+change for existing callers: those sessions are AI by construction, so they now follow
+the rule the bundled instructions already required.
+
+Rules are role-specific, and their feedback is written for the reader:
+
+- **AI completion rule:** an `ai` actor that moves a ticket to `completed` (edit, batch,
+  close as `completed`, or a provider route) must record a confidence score, either in
+  the same request or earlier in the current completion cycle.
+- **Refusal:** otherwise the write is refused before anything changes. The server and MCP
+  answer 422 with the stable code `confidence_required`; the CLI exits non-zero with the
+  same text. The message is machine-actionable: it gives the exact retry for each surface,
+  the `## Confidence` section shape, and the rubric bands, so one retry succeeds.
+- **Humans:** human and `system` actors are never required to score.
+
+The bundled instruction blocks tell an AI to identify itself as the `ai` actor. Further
+role-specific rules and human-tailored feedback are follow-up work.
 
 Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
 instructions.md`) carries a compact, **project-neutral** default policy so a brand-new

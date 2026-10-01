@@ -8791,6 +8791,150 @@ async fn update_records_note_confidence_and_derives_latest_confidence() {
     );
 }
 
+/// HS2-RD4M29: an `ai` actor completion without a score is refused with 422 and the stable
+/// `confidence_required` code on the legacy, batch, close, and provider routes; humans and
+/// unspecified callers are never held to it.
+#[tokio::test]
+async fn ai_actor_completion_without_a_score_is_refused_on_every_route() {
+    let (_d, st) = state();
+    let app = app(st);
+    let send = |method: &'static str, path: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            app.oneshot(authed(method, &path, Some(&body.to_string())))
+                .await
+                .unwrap()
+        }
+    };
+    let create = |title: &'static str| {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed(
+                    "POST",
+                    "/tickets",
+                    Some(&serde_json::json!({ "title": title }).to_string()),
+                ))
+                .await
+                .unwrap(),
+            )
+            .await["id"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        }
+    };
+    let ai = serde_json::json!({"role":"ai","id":"codex-1"});
+    let id = create("AI work").await;
+    let refused = send(
+        "PATCH",
+        format!("/tickets/{id}"),
+        serde_json::json!({"status":"completed","note":"done","actor":ai}),
+    )
+    .await;
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = body_json(refused).await;
+    assert_eq!(body["code"], "confidence_required");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("\"note_confidence\":<0-100>")
+    );
+    let unchanged = body_json(
+        app.clone()
+            .oneshot(authed("GET", &format!("/tickets/{id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(unchanged["status"], "not_started", "nothing written");
+    assert!(unchanged["notes"].as_array().unwrap().is_empty());
+
+    // Batch and close refuse the same way; a provider-route completion too.
+    let batch = send(
+        "POST",
+        "/batch".into(),
+        serde_json::json!({"ids":[id],"status":"completed","actor":ai}),
+    )
+    .await;
+    let batch_body = body_json(batch).await.to_string();
+    assert!(batch_body.contains("confidence_required"), "{batch_body}");
+    let close = send(
+        "POST",
+        format!("/tickets/{id}/close"),
+        serde_json::json!({"reason":"completed","actor":ai}),
+    )
+    .await;
+    assert_eq!(close.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap().to_string();
+    let provider_refused = send(
+        "PATCH",
+        format!("/providers/{connection}/tickets/{id}"),
+        serde_json::json!({"status":"completed","actor":ai}),
+    )
+    .await;
+    assert_eq!(provider_refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let provider_close = send(
+        "POST",
+        format!("/providers/{connection}/tickets/{id}/close"),
+        serde_json::json!({"reason":"completed","actor":ai}),
+    )
+    .await;
+    assert_eq!(provider_close.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Scoring in the same request satisfies the rule.
+    let completed = send(
+        "PATCH",
+        format!("/tickets/{id}"),
+        serde_json::json!({"status":"completed","note":"## Confidence\n75","note_confidence":75,"actor":ai}),
+    )
+    .await;
+    assert_eq!(completed.status(), StatusCode::OK);
+    assert_eq!(body_json(completed).await["latest_confidence"], 75);
+
+    // Humans and unspecified callers never need a score; a not-planned close is no completion.
+    for actor in [serde_json::json!({"role":"human"}), serde_json::Value::Null] {
+        let human = create("Human work").await;
+        let response = send(
+            "PATCH",
+            format!("/tickets/{human}"),
+            serde_json::json!({"status":"completed","actor":actor}),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK, "{actor}");
+    }
+    let not_planned = create("Not planned").await;
+    let response = send(
+        "POST",
+        format!("/tickets/{not_planned}/close"),
+        serde_json::json!({"reason":"not_planned","actor":ai}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Invalid actor input is a 400, not a silent unspecified actor.
+    for actor in [
+        serde_json::json!({"role":"robot"}),
+        serde_json::json!({"id":"codex-1"}),
+    ] {
+        let response = send(
+            "PATCH",
+            format!("/tickets/{not_planned}"),
+            serde_json::json!({"title":"x","actor":actor}),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{actor}");
+    }
+}
+
 #[tokio::test]
 async fn update_can_append_edit_and_preserve_repeated_activity() {
     let (_d, st) = state();
@@ -10220,7 +10364,7 @@ command = "hotsheet-mcp"
 args = ["--path", "{store}"]
 [launch]
 program = "/bin/sh"
-args = ["-c", "printf 'worker:%s:end' \"$HOTSHEET_WORKER_ID\"; sleep 2"]
+args = ["-c", "printf 'worker:%s:end actor:%s:%s:end' \"$HOTSHEET_WORKER_ID\" \"$HOTSHEET_ACTOR_ROLE\" \"$HOTSHEET_ACTOR_ID\"; sleep 2"]
 "#,
     )
     .unwrap();
@@ -10250,12 +10394,17 @@ args = ["-c", "printf 'worker:%s:end' \"$HOTSHEET_WORKER_ID\"; sleep 2"]
             .as_str()
             .unwrap_or_default()
             .to_string();
-        if output.contains("worker:") {
+        if output.contains("actor:") {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
     assert!(output.contains(&format!("worker:{worker}:end")), "{output}");
+    // HS2-RD4M29: the AI session acts as `ai` under its worker id.
+    assert!(
+        output.contains(&format!("actor:ai:{worker}:end")),
+        "{output}"
+    );
 
     // The session claims a ticket (as the AI would, with its worker id) and never releases it.
     ops::claim(
