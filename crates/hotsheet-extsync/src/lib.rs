@@ -8,6 +8,7 @@ pub mod github_credential;
 pub mod github_device;
 pub mod gitlab;
 pub mod jira;
+pub mod note_trailer;
 
 pub use github::{
     GitHubConfig, GitHubProvider, GitHubTransport, GitHubWebhook, HttpResponse,

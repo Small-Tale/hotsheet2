@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
+use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
@@ -11,6 +12,8 @@ use hotsheet_ticketing::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+use crate::note_trailer;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
@@ -291,6 +294,22 @@ impl GitHubProvider {
             .and_then(parse_priority)
             .unwrap_or_default();
         let status = issue_status(&issue.state, &labels);
+        let notes = comments
+            .into_iter()
+            .map(|comment| {
+                let (text, confidence) = note_trailer::parse_comment(&comment.body);
+                ApiNote {
+                    id: comment.id.to_string(),
+                    kind: NoteKind::Regular,
+                    created_at: comment.created_at.clone(),
+                    edited_at: comment.updated_at.unwrap_or(comment.created_at),
+                    summary: None,
+                    confidence,
+                    text,
+                }
+            })
+            .collect::<Vec<_>>();
+        let latest_confidence = note_trailer::latest_confidence(status, &notes);
         let close_reason = if issue.state == "closed" {
             Some(
                 close_reason_from_labels(&labels).unwrap_or(match issue.state_reason.as_deref() {
@@ -353,19 +372,8 @@ impl GitHubProvider {
             assignees: issue.assignees.into_iter().map(|user| user.login).collect(),
             review_requests: vec![],
             schema: 1,
-            notes: comments
-                .into_iter()
-                .map(|comment| ApiNote {
-                    id: comment.id.to_string(),
-                    kind: NoteKind::Regular,
-                    created_at: comment.created_at.clone(),
-                    edited_at: comment.updated_at.unwrap_or(comment.created_at),
-                    summary: None,
-                    confidence: None,
-                    text: strip_note_marker(comment.body),
-                })
-                .collect(),
-            latest_confidence: None,
+            notes,
+            latest_confidence,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -785,10 +793,22 @@ impl TicketProvider for GitHubProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _kind: NoteKind,
+        kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
-        let marker = format!("<!-- hotsheet-note-id:{} -->", ctx.generated_id);
+        self.add_note_with_metadata(native_id, ctx, kind, NoteMetadataInput::default(), text)
+    }
+
+    /// The confidence rides on a `Confidence: NN%` comment trailer (HS2-5YNASC).
+    fn add_note_with_metadata(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        _kind: NoteKind,
+        metadata: NoteMetadataInput,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        let marker = note_trailer::note_marker(ctx.generated_id);
         if self
             .comments(native_id)?
             .iter()
@@ -796,10 +816,11 @@ impl TicketProvider for GitHubProvider {
         {
             return self.get(native_id);
         }
+        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
         self.request(
             "POST",
             &self.endpoint(&format!("issues/{native_id}/comments")),
-            Some(&json!({"body":format!("{text}\n\n{marker}")})),
+            Some(&json!({ "body": body })),
         )?;
         self.get(native_id)
     }
@@ -945,7 +966,7 @@ fn github_capabilities() -> ProviderCapabilities {
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
-        note_confidence: false,
+        note_confidence: true,
         offline_mutation: false,
         history: true,
         watch: true,
@@ -1161,13 +1182,6 @@ fn strip_transfer_markers(body: String) -> String {
         .to_string()
 }
 
-fn strip_note_marker(body: String) -> String {
-    body.split("\n\n<!-- hotsheet-note-id:")
-        .next()
-        .unwrap_or(&body)
-        .to_string()
-}
-
 /// GitHub records only `completed` or `not_planned`; every Hot Sheet reason that means
 /// "no change was made" (not planned, duplicate, obsolete, works as designed) closes as
 /// `not_planned`.
@@ -1319,6 +1333,58 @@ mod tests {
                 .iter()
                 .any(|(name, value)| name == "Authorization" && value == "Bearer test-token")
         );
+    }
+
+    /// HS2-5YNASC: a scored note is written with a `Confidence: NN%` trailer and read back
+    /// into `confidence`; a human comment ending in the same words is never a score.
+    #[test]
+    fn note_confidence_round_trips_through_a_comment_trailer() {
+        let note_id = hotsheet_model::Ulid::new();
+        let written = note_trailer::compose_comment(
+            "## Result\nDone.",
+            Some(hotsheet_model::Confidence::new(82).unwrap()),
+            note_id,
+        );
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(201, json!({"id": 91})),
+            response(200, closed_issue(42, "completed", &[])),
+            response(
+                200,
+                json!([
+                    {"id":91,"body":written,"created_at":"2026-08-26T00:02:00Z"},
+                    {"id":92,"body":"Agreed.\n\nConfidence: 99%","created_at":"2026-08-26T00:03:00Z"}
+                ]),
+            ),
+        ]);
+        let github = provider(transport.clone());
+        assert!(github.supports_note_confidence());
+        let ticket = github
+            .add_note_with_metadata(
+                "42",
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:02:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
+                },
+                "## Result\nDone.".into(),
+            )
+            .unwrap();
+        let requests = transport.requests.lock().unwrap();
+        assert_eq!(requests[1].0, "POST");
+        assert_eq!(
+            requests[1].3.as_ref().unwrap()["body"],
+            format!("## Result\nDone.\n\nConfidence: 82%\n\n<!-- hotsheet-note-id:{note_id} -->")
+        );
+        assert_eq!(ticket.notes[0].text, "## Result\nDone.");
+        assert_eq!(ticket.notes[0].confidence, Some(82));
+        assert_eq!(ticket.notes[1].text, "Agreed.\n\nConfidence: 99%");
+        assert_eq!(ticket.notes[1].confidence, None);
+        assert_eq!(ticket.latest_confidence, Some(82));
     }
 
     fn closed_issue(number: u64, state_reason: &str, labels: &[&str]) -> Value {
@@ -1910,17 +1976,25 @@ mod tests {
             .unwrap();
         let read = provider.get(&created.native_id).unwrap();
         assert_eq!(read.native_id, created.native_id);
-        provider
-            .add_note(
+        // HS2-5YNASC: the confidence trailer round-trips through real GitHub comments.
+        let commented = provider
+            .add_note_with_metadata(
                 &created.native_id,
                 MutationContext {
                     now: Timestamp::new("2026-08-26T00:01:00Z"),
                     generated_id: hotsheet_model::Ulid::new(),
                 },
                 NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
+                },
                 "Hot Sheet live comment validation".into(),
             )
             .unwrap();
+        let note = commented.notes.last().unwrap();
+        assert_eq!(note.text, "Hot Sheet live comment validation");
+        assert_eq!(note.confidence, Some(77));
         let closed = provider
             .close(
                 &created.native_id,

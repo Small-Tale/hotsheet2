@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
+use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
@@ -10,6 +11,8 @@ use hotsheet_ticketing::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+use crate::note_trailer;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
@@ -240,6 +243,23 @@ impl GitLabProvider {
         };
         let body = issue.description.unwrap_or_default();
         let native_id = issue.iid.to_string();
+        let notes = notes
+            .into_iter()
+            .filter(|note| !note.system)
+            .map(|note| {
+                let (text, confidence) = note_trailer::parse_comment(&note.body);
+                ApiNote {
+                    id: note.id.to_string(),
+                    kind: NoteKind::Regular,
+                    created_at: note.created_at.clone(),
+                    edited_at: note.updated_at.unwrap_or(note.created_at),
+                    summary: None,
+                    confidence,
+                    text,
+                }
+            })
+            .collect::<Vec<_>>();
+        let latest_confidence = note_trailer::latest_confidence(status, &notes);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
@@ -293,20 +313,8 @@ impl GitLabProvider {
                 .collect(),
             review_requests: vec![],
             schema: 1,
-            notes: notes
-                .into_iter()
-                .filter(|note| !note.system)
-                .map(|note| ApiNote {
-                    id: note.id.to_string(),
-                    kind: NoteKind::Regular,
-                    created_at: note.created_at.clone(),
-                    edited_at: note.updated_at.unwrap_or(note.created_at),
-                    summary: None,
-                    confidence: None,
-                    text: strip_note(&note.body),
-                })
-                .collect(),
-            latest_confidence: None,
+            notes,
+            latest_confidence,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -605,10 +613,22 @@ impl TicketProvider for GitLabProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _: NoteKind,
+        kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
-        let note_marker = format!("<!-- hotsheet-note-id:{} -->", ctx.generated_id);
+        self.add_note_with_metadata(native_id, ctx, kind, NoteMetadataInput::default(), text)
+    }
+
+    /// The confidence rides on a `Confidence: NN%` comment trailer (HS2-5YNASC).
+    fn add_note_with_metadata(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        _: NoteKind,
+        metadata: NoteMetadataInput,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        let note_marker = note_trailer::note_marker(ctx.generated_id);
         if self
             .notes(native_id)?
             .iter()
@@ -616,10 +636,11 @@ impl TicketProvider for GitLabProvider {
         {
             return self.get(native_id);
         }
+        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
         self.request(
             "POST",
             &self.endpoint(&format!("issues/{native_id}/notes")),
-            Some(&json!({"body":format!("{text}\n\n{note_marker}")})),
+            Some(&json!({ "body": body })),
         )?;
         self.get(native_id)
     }
@@ -723,7 +744,7 @@ fn capabilities() -> ProviderCapabilities {
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
-        note_confidence: false,
+        note_confidence: true,
         offline_mutation: false,
         history: true,
         watch: true,
@@ -844,20 +865,13 @@ fn transfer_suffix(body: &Option<String>) -> Option<String> {
             .nth(1)?
     ))
 }
-fn strip_note(body: &str) -> String {
-    body.split("\n\n<!-- hotsheet-note-id:")
-        .next()
-        .unwrap_or(body)
-        .into()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
-    type RecordedRequest = (String, String, Vec<(String, String)>);
+    type RecordedRequest = (String, String, Vec<(String, String)>, Option<Value>);
 
     #[derive(Default)]
     struct Fake {
@@ -870,7 +884,7 @@ mod tests {
             method: &str,
             url: &str,
             headers: &[(&str, String)],
-            _: Option<&Value>,
+            body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
             self.requests.lock().unwrap().push((
                 method.into(),
@@ -879,6 +893,7 @@ mod tests {
                     .iter()
                     .map(|(k, v)| ((*k).into(), v.clone()))
                     .collect(),
+                body.cloned(),
             ));
             self.responses
                 .lock()
@@ -908,6 +923,72 @@ mod tests {
             },
             fake,
         )
+    }
+
+    /// HS2-5YNASC: a scored note is written as a `Confidence: NN%` trailer, read back into
+    /// `confidence`, and a retry with the same note id does not post twice.
+    #[test]
+    fn note_confidence_round_trips_through_a_note_trailer() {
+        let note_id = hotsheet_model::Ulid::new();
+        let score = hotsheet_model::Confidence::new(64).unwrap();
+        let written = note_trailer::compose_comment("Re-verified.", Some(score), note_id);
+        let mut closed = issue(7, "closed");
+        closed["state"] = json!("closed");
+        let notes = json!([
+            {"id":5,"body":written,"created_at":"2026-08-26T00:02:00Z"},
+            {"id":6,"body":"closed\n\nConfidence: 10%","created_at":"2026-08-26T00:03:00Z","system":true}
+        ]);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!([])),
+                    response(201, json!({"id":5})),
+                    response(200, closed.clone()),
+                    response(200, notes.clone()),
+                    // The retry finds its marker and only re-reads the issue.
+                    response(200, notes.clone()),
+                    response(200, closed),
+                    response(200, notes),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let gitlab = provider(fake.clone());
+        assert!(gitlab.supports_note_confidence());
+        let add = || {
+            gitlab
+                .add_note_with_metadata(
+                    "7",
+                    MutationContext {
+                        now: Timestamp::new("2026-08-26T00:02:00Z"),
+                        generated_id: note_id,
+                    },
+                    NoteKind::Regular,
+                    NoteMetadataInput {
+                        summary: None,
+                        confidence: Some(score),
+                    },
+                    "Re-verified.".into(),
+                )
+                .unwrap()
+        };
+        let ticket = add();
+        assert_eq!(ticket.notes.len(), 1, "system notes stay hidden");
+        assert_eq!(ticket.notes[0].text, "Re-verified.");
+        assert_eq!(ticket.notes[0].confidence, Some(64));
+        assert_eq!(ticket.latest_confidence, Some(64));
+        assert_eq!(add().notes[0].confidence, Some(64));
+        let requests = fake.requests.lock().unwrap();
+        let posts = requests
+            .iter()
+            .filter(|request| request.0 == "POST")
+            .collect::<Vec<_>>();
+        assert_eq!(posts.len(), 1);
+        assert_eq!(
+            posts[0].3.as_ref().unwrap()["body"],
+            format!("Re-verified.\n\nConfidence: 64%\n\n<!-- hotsheet-note-id:{note_id} -->")
+        );
     }
 
     #[test]

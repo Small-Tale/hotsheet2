@@ -326,9 +326,11 @@ should the fix also cover the dashboard dedicated view?
     before the completion flip in the same cycle counts; an old score never survives a
     reopen. The wire ticket exposes it as `latest_confidence`; the per-note value stays
     in Notes as history. A note edit may set, keep, or clear the score
-    (HS2-CY4CWC); the derived value follows automatically. Providers without note
-    metadata report the `note_confidence` capability as unsupported and reject a score
-    (on append or edit) explicitly.
+    (HS2-CY4CWC); the derived value follows automatically. GitHub Issues, GitLab, and
+    Jira carry the score as a strict `Confidence: NN%` comment trailer (HS2-5YNASC,
+    [16-external-sync-interface.md](16-external-sync-interface.md)). Any provider that
+    cannot carry it reports the `note_confidence` capability as unsupported and rejects a
+    score (on append or edit) explicitly.
     The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
     get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store

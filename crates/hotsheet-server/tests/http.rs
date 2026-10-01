@@ -11191,6 +11191,76 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
     );
 }
 
+/// HS2-5YNASC: the provider route writes a scored note to GitHub as a `Confidence: NN%`
+/// comment trailer and reads it back as the note's and ticket's confidence.
+#[tokio::test]
+async fn github_provider_route_carries_note_confidence_through_a_comment_trailer() {
+    let (_dir, st) = state();
+    let mut closed = github_issue(42, "scored remotely");
+    closed["state"] = serde_json::json!("closed");
+    closed["state_reason"] = serde_json::json!("completed");
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, closed.clone()),
+                github_response(200, closed.clone()),
+                github_response(200, serde_json::json!([])),
+                github_response(201, serde_json::json!({"id": 7})),
+                github_response(200, closed),
+                github_response(
+                    200,
+                    serde_json::json!([{
+                        "id": 7,
+                        "body": "Shipped.\n\nConfidence: 84%\n\n<!-- hotsheet-note-id:01ARZ3NDEKTSV4RRFFQ69G5FAV -->",
+                        "created_at": "2026-08-26T00:02:00Z"
+                    }]),
+                ),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let github = providers
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["connection_id"] == "github-main")
+        .unwrap();
+    assert_eq!(github["capabilities"]["note_confidence"], true);
+
+    let response = app
+        .oneshot(authed(
+            "PATCH",
+            "/providers/github-main/tickets/42",
+            Some(r#"{"note":"Shipped.","note_confidence":84}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let ticket = body_json(response).await;
+    assert_eq!(ticket["notes"][0]["text"], "Shipped.");
+    assert_eq!(ticket["notes"][0]["confidence"], 84);
+    assert_eq!(ticket["latest_confidence"], 84);
+    let requests = transport.requests.lock().unwrap();
+    let comment = requests.last().unwrap()["body"].as_str().unwrap();
+    assert!(
+        comment.starts_with("Shipped.\n\nConfidence: 84%\n\n<!-- hotsheet-note-id:"),
+        "{comment}"
+    );
+}
+
 #[tokio::test]
 async fn checkout_detail_fetches_each_provider_ticket_once_including_source_aliases() {
     let (_dir, st) = state();

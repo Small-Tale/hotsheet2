@@ -277,6 +277,26 @@ resolve it, while the host coordinator serializes same-process attempts.
 The opt-in live contract was validated against `Small-Tale/hotsheet2` with a
 repository-scoped OS-keychain credential: create, read, comment, and close all passed.
 
+**Note metadata on external trackers (HS2-5YNASC).** Tracker comments have no metadata
+fields, so a Hot Sheet-authored comment is the note text, an optional
+`Confidence: NN%` trailer paragraph, and the hidden `<!-- hotsheet-note-id:<ulid> -->`
+idempotency marker (shared code: `hotsheet-extsync/src/note_trailer.rs`). On read, the
+trailer becomes the note's `confidence` only when the comment carries that marker and the
+trailer is the final paragraph before it, after non-empty text, matching exactly
+`Confidence: <integer 0-100>%`. Ordinary human comments, prose on the same line,
+out-of-range or non-integer values, and earlier paragraphs never become a score. Jira
+writes the trailer as its own ADF paragraph. These providers derive `latest_confidence`
+for a completed or verified ticket from the newest scored comment, because comments
+alone carry no reopen history. The git provider instead bounds the score by the current
+completion cycle.
+
+| Note capability                | git                      | GitHub Issues                       | GitLab        | Jira               |
+| ------------------------------ | ------------------------ | ----------------------------------- | ------------- | ------------------ |
+| `note_confidence` (append)     | yes                      | yes, comment trailer                | yes, trailer  | yes, ADF paragraph |
+| Note edit (text or confidence) | yes                      | no (`note_edit` capability off)     | no            | no                 |
+| Activity `summary`             | yes                      | no (falls back to the comment body) | no            | no                 |
+| `latest_confidence` derivation | current completion cycle | newest scored comment               | newest scored | newest scored      |
+
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**
 opens a small GitHub window and copies the one-time code to the clipboard within the same

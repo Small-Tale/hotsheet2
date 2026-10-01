@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
+use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
@@ -10,6 +11,8 @@ use hotsheet_ticketing::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+use crate::note_trailer;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
@@ -230,6 +233,23 @@ impl JiraProvider {
             .and_then(|value| parse_priority(&value.name))
             .unwrap_or_default();
         let url = format!("{}/browse/{}", self.config.base_url, issue.key);
+        let notes = comments
+            .into_iter()
+            .map(|comment| {
+                let (text, confidence) =
+                    note_trailer::parse_comment(&adf_to_text(Some(&comment.body)));
+                ApiNote {
+                    id: comment.id,
+                    kind: NoteKind::Regular,
+                    created_at: comment.created.clone(),
+                    edited_at: comment.updated.unwrap_or(comment.created),
+                    summary: None,
+                    confidence,
+                    text,
+                }
+            })
+            .collect::<Vec<_>>();
+        let latest_confidence = note_trailer::latest_confidence(status, &notes);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: issue.key.clone(),
@@ -276,19 +296,8 @@ impl JiraProvider {
                 .collect(),
             review_requests: vec![],
             schema: 1,
-            notes: comments
-                .into_iter()
-                .map(|comment| ApiNote {
-                    id: comment.id,
-                    kind: NoteKind::Regular,
-                    created_at: comment.created.clone(),
-                    edited_at: comment.updated.unwrap_or(comment.created),
-                    summary: None,
-                    confidence: None,
-                    text: strip_note(&adf_to_text(Some(&comment.body))),
-                })
-                .collect(),
-            latest_confidence: None,
+            notes,
+            latest_confidence,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -598,10 +607,22 @@ impl TicketProvider for JiraProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _: NoteKind,
+        kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
-        let note_marker = format!("<!-- hotsheet-note-id:{} -->", ctx.generated_id);
+        self.add_note_with_metadata(native_id, ctx, kind, NoteMetadataInput::default(), text)
+    }
+
+    /// The confidence rides on a `Confidence: NN%` comment paragraph (HS2-5YNASC).
+    fn add_note_with_metadata(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        _: NoteKind,
+        metadata: NoteMetadataInput,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        let note_marker = note_trailer::note_marker(ctx.generated_id);
         if self
             .comments(native_id)?
             .iter()
@@ -609,10 +630,11 @@ impl TicketProvider for JiraProvider {
         {
             return self.get(native_id);
         }
+        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
         self.request(
             "POST",
             &self.endpoint(&format!("issue/{native_id}/comment")),
-            Some(&json!({"body":text_to_adf(&format!("{text}\n\n{note_marker}"))})),
+            Some(&json!({ "body": text_to_adf(&body) })),
         )?;
         self.get(native_id)
     }
@@ -750,7 +772,7 @@ fn capabilities() -> ProviderCapabilities {
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
-        note_confidence: false,
+        note_confidence: true,
         offline_mutation: false,
         history: true,
         watch: true,
@@ -865,12 +887,6 @@ fn transfer_suffix(body: &str) -> Option<String> {
         body.split("\n\n<!-- hotsheet-transfer ").nth(1)?
     ))
 }
-fn strip_note(body: &str) -> String {
-    body.split("\n\n<!-- hotsheet-note-id:")
-        .next()
-        .unwrap_or(body)
-        .into()
-}
 fn base64(value: &str) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let bytes = value.as_bytes();
@@ -954,6 +970,63 @@ mod tests {
             },
             fake,
         )
+    }
+
+    /// HS2-5YNASC: the trailer survives Jira's ADF paragraph round trip, and an ordinary
+    /// comment ending in the same words is never parsed as a score.
+    #[test]
+    fn note_confidence_round_trips_through_an_adf_comment_paragraph() {
+        let note_id = hotsheet_model::Ulid::new();
+        let score = hotsheet_model::Confidence::new(91).unwrap();
+        let written = text_to_adf(&note_trailer::compose_comment(
+            "## Result\nShipped.",
+            Some(score),
+            note_id,
+        ));
+        let mut done = issue("ENG-9", "done");
+        done["fields"]["status"]["statusCategory"]["key"] = json!("done");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"comments":[]})),
+                    response(201, json!({"id":"70"})),
+                    response(200, done),
+                    response(
+                        200,
+                        json!({"comments":[
+                            {"id":"70","body":written,"created":"2026-08-26T00:02:00Z"},
+                            {"id":"71","body":text_to_adf("Thanks.\n\nConfidence: 50%"),"created":"2026-08-26T00:03:00Z"}
+                        ]}),
+                    ),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert!(jira.supports_note_confidence());
+        let ticket = jira
+            .add_note_with_metadata(
+                "ENG-9",
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:02:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(score),
+                },
+                "## Result\nShipped.".into(),
+            )
+            .unwrap();
+        let requests = fake.requests.lock().unwrap();
+        assert_eq!(requests[1].0, "POST");
+        assert_eq!(requests[1].3.as_ref().unwrap()["body"], written);
+        assert_eq!(ticket.notes[0].text, "## Result\nShipped.");
+        assert_eq!(ticket.notes[0].confidence, Some(91));
+        assert_eq!(ticket.notes[1].confidence, None);
+        assert_eq!(ticket.latest_confidence, Some(91));
     }
 
     #[test]

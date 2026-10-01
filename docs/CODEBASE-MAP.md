@@ -157,6 +157,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
+      src/note_trailer.rs      #   shared comment encoding for external trackers: note-id marker + strict `Confidence: NN%` trailer write/parse, latest_confidence for comment-only providers (HS2-5YNASC)
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
       src/lib.rs             #   re-exports; SCHEMA_VERSION
       src/enums.rs           #   Priority/Status/CloseReason/NoteKind/ReviewKind
