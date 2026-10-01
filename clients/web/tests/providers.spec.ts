@@ -2517,6 +2517,32 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await tileMenu.getByText('Hide Terminal').click();
   const manageVisibility = page.getByRole('button', { name: 'Manage workspace visibility' });
   await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
+  // The hidden-count badge keeps readable text on its loud warning fill in both themes (HS2-8VBFP1).
+  const countBadge = page.locator('.terminal-dashboard-controls__count'),
+    badgeContrast = () =>
+      countBadge.evaluate((node) => {
+        const channels = (value: string) =>
+            value
+              .match(/[\d.]+/g)!
+              .slice(0, 3)
+              .map(Number),
+          luminance = (value: string) => {
+            const [r, g, b] = channels(value).map((channel) => {
+              const c = channel / 255;
+              return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            });
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          },
+          style = getComputedStyle(node),
+          [light, dark] = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
+        return (light + 0.05) / (dark + 0.05);
+      });
+  expect(await badgeContrast()).toBeGreaterThanOrEqual(4.5);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect.poll(badgeContrast).toBeGreaterThanOrEqual(4.5);
+  await manageVisibility.screenshot({ path: test.info().outputPath('hidden-count-badge-dark.png') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await manageVisibility.screenshot({ path: test.info().outputPath('hidden-count-badge-light.png') });
   await manageVisibility.click();
   const visibilityDialog = page.locator('[data-terminal-visibility-dialog]');
   await visibilityDialog.getByRole('button', { name: 'Show Codex Main' }).click();

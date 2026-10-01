@@ -37,7 +37,8 @@
   height: remify(16px);
   padding: 0 remify(3.2px);
   border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-warning-on-normal);
+  /* Loud fills pair with their on-loud text token; on-normal turns light in dark mode (HS2-8VBFP1). */
+  color: var(--wa-color-warning-on-loud);
   background: var(--wa-color-warning-fill-loud);
   font-size: var(--wa-font-size-3xs);
   font-weight: 700;
