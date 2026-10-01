@@ -1692,6 +1692,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_corrupt_tickets),
         )
         .route(
+            "/checkouts/{reference}/confidence-report",
+            get(checkout_confidence_report),
+        )
+        .route(
             "/checkouts/{reference}/corrupt-tickets/repair",
             post(create_corrupt_ticket_repair),
         )
@@ -1857,6 +1861,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
+        .route("/confidence-report", get(confidence_report))
         .route("/commands", get(list_commands).put(save_commands))
         .route(
             "/command-groups",
@@ -5813,6 +5818,38 @@ async fn ticket_flow_summary(
     let tickets = ops::query(&state.store, &TicketQuery::default())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(hotsheet_ticketing::analytics::ticket_flow(&tickets)))
+}
+
+/// `GET /confidence-report`: completion-confidence calibration for the default store
+/// (HS2-Q1WCCY), the same report as `hotsheet-cli confidence-report --json`.
+async fn confidence_report(
+    State(state): State<AppState>,
+) -> Result<Json<hotsheet_ticketing::calibration::CalibrationReport>, ApiError> {
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || {
+        let tickets = store.list_tickets_resilient()?.tickets;
+        Ok(Json(hotsheet_ticketing::calibration::calibration(&tickets)))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// `GET /checkouts/{reference}/confidence-report`: calibration across every git store the
+/// checkout links (HS2-Q1WCCY). External trackers are not included; their reopen history
+/// lives in native events.
+async fn checkout_confidence_report(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_ticketing::calibration::CalibrationReport>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let mut tickets = Vec::new();
+        for (_, entry) in checkout_entries(&state, &reference)? {
+            tickets.extend(entry.store.list_tickets_resilient()?.tickets);
+        }
+        Ok(Json(hotsheet_ticketing::calibration::calibration(&tickets)))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 async fn usage_metrics_summary(

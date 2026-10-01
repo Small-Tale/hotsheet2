@@ -1091,6 +1091,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact
     sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
+  - `ConfidenceCalibration` — **built** (`components/confidence-calibration.tsx`,
+    HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
+    recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error
+    states.
   - `ConfidenceBadge` — **built** (`components/confidence-badge.tsx`, HS2-A0Q6G6): the
     banded AI completion confidence. The `compact` pill is used on note cards and ticket
     list/board summaries; `labeled` is used in the inspector/reader header. Its own

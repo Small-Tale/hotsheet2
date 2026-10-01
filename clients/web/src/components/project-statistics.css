@@ -1,0 +1,15 @@
+/* Per-project statistics surface (HS2-Q1WCCY): a scrollable page around its report sections. */
+.project-statistics {
+  display: grid;
+  align-content: start;
+  gap: var(--kui-space-l);
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  padding: var(--kui-space-l);
+  overflow: auto;
+}
+.project-statistics h1 {
+  margin: 0;
+  font-size: var(--wa-font-size-xl);
+}

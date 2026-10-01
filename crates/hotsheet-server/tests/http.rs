@@ -14529,3 +14529,72 @@ async fn github_provider_detail_route_reads_comments_past_the_first_page() {
     assert_eq!(ticket["latest_confidence"], 90);
     assert!(transport.responses.lock().unwrap().is_empty());
 }
+
+/// HS2-Q1WCCY: `GET /confidence-report` serves the calibration report: each completion's
+/// reported score against what happened next, per rubric band.
+#[tokio::test]
+async fn confidence_report_route_serves_per_band_calibration() {
+    let (_d, st) = state();
+    let app = app(st);
+    let empty = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/confidence-report", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(empty["completions"], 0);
+    assert_eq!(empty["bands"].as_array().unwrap().len(), 5);
+    let id = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Calibrate"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    for body in [
+        serde_json::json!({"status":"completed","note":"## Confidence\n92","note_confidence":92}),
+        serde_json::json!({"status":"started"}),
+        serde_json::json!({"status":"completed","note":"## Confidence\n55","note_confidence":55}),
+        serde_json::json!({"status":"verified"}),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(&body.to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{body}");
+    }
+    let report = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/confidence-report", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(report["completions"], 2);
+    assert_eq!(report["scored"], 2);
+    let band = |name: &str| {
+        report["bands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|band| band["band"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(band("verified")["reopened"], 1);
+    assert_eq!(band("verified")["reopen_rate"], 1.0);
+    assert_eq!(band("partial")["verified"], 1);
+    assert_eq!(band("partial")["reopen_rate"], 0.0);
+    assert_eq!(report["events"][0]["outcome"], "reopened");
+    assert_eq!(report["events"][1]["outcome"], "verified");
+    assert_eq!(report["events"][1]["confidence"], 55);
+}

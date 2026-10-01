@@ -1,0 +1,125 @@
+/* Completion-confidence calibration (HS2-Q1WCCY): app-owned native table and list markup. */
+.confidence-calibration {
+  display: grid;
+  gap: var(--kui-space-l);
+  width: 100%;
+  max-width: remify(960px);
+  min-width: 0;
+}
+.confidence-calibration__header {
+  display: grid;
+  gap: var(--kui-space-xs);
+}
+.confidence-calibration__header h2 {
+  margin: 0;
+  font-size: var(--wa-font-size-l);
+}
+.confidence-calibration__header p {
+  margin: 0;
+  color: var(--wa-color-text-quiet);
+}
+.confidence-calibration__table-scroll {
+  overflow-x: auto;
+}
+.confidence-calibration__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.confidence-calibration__caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.confidence-calibration__table th,
+.confidence-calibration__table td {
+  padding: var(--kui-space-xs) var(--kui-space-s);
+  border-bottom: 1px solid var(--wa-color-surface-border);
+  text-align: right;
+  white-space: nowrap;
+}
+.confidence-calibration__table thead th {
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+.confidence-calibration__table th[scope='row'],
+.confidence-calibration__table thead th:first-child {
+  text-align: left;
+}
+.confidence-calibration__table th[scope='row'] {
+  font-weight: var(--wa-font-weight-normal);
+}
+.confidence-calibration__band,
+.confidence-calibration__range {
+  display: block;
+}
+.confidence-calibration__band {
+  font-weight: var(--wa-font-weight-semibold);
+}
+.confidence-calibration__band[data-band='verified'] {
+  color: var(--wa-color-success-on-quiet);
+}
+.confidence-calibration__band[data-band='assumed'] {
+  color: var(--wa-color-brand-on-quiet);
+}
+.confidence-calibration__band[data-band='partial'] {
+  color: var(--wa-color-warning-on-quiet);
+}
+.confidence-calibration__band[data-band='unverified'] {
+  color: var(--wa-color-danger-on-quiet);
+}
+.confidence-calibration__range {
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.confidence-calibration__rate {
+  min-width: remify(128px);
+}
+.confidence-calibration__rate wa-progress-bar {
+  --track-height: remify(4px);
+  margin-top: var(--kui-space-2xs);
+}
+.confidence-calibration__recent {
+  display: grid;
+  gap: var(--kui-space-s);
+}
+.confidence-calibration__recent h3 {
+  margin: 0;
+  font-size: var(--wa-font-size-m);
+}
+.confidence-calibration__recent ul {
+  display: grid;
+  gap: var(--kui-space-xs);
+  margin: 0;
+  padding: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+.confidence-calibration__recent li {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--kui-space-s);
+  min-width: 0;
+}
+.confidence-calibration__slug {
+  font-family: var(--wa-font-family-code);
+  font-size: var(--wa-font-size-s);
+}
+.confidence-calibration__unscored,
+.confidence-calibration__outcome {
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-s);
+}
+.confidence-calibration__outcome[data-outcome='reopened'] {
+  color: var(--wa-color-danger-on-quiet);
+}
+.confidence-calibration__outcome[data-outcome='verified'] {
+  color: var(--wa-color-success-on-quiet);
+}

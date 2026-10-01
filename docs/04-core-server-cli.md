@@ -478,6 +478,7 @@ hotsheet new "Fix dashboard flicker" --category bug --priority high --up-next
 hotsheet ls --up-next --status started
 hotsheet ls --max-confidence 69 --sort confidence   # low-confidence completions first (HS2-RD4M29)
 hotsheet confidence-report [--json]        # reported confidence vs. later reopen/verified outcomes per band
+                                           # (also GET /confidence-report, /checkouts/{ref}/confidence-report, MCP hotsheet_confidence_report)
 hotsheet search "flicker"                 # FTS via the local index
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at

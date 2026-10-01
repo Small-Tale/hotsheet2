@@ -780,6 +780,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "confidence-calibration",
+      "name": "ConfidenceCalibration",
+      "kind": "component",
+      "purpose": "A project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions.",
+      "useWhen": [
+        "Hot Sheet needs a project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConfidenceCalibration behavior."
+      ],
+      "publicClasses": [
+        "confidence-calibration"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "tag-chip",
       "name": "TagChip",
       "kind": "component",

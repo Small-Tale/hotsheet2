@@ -12089,9 +12089,10 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await summary.click();
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toHaveAttribute('data-mode', 'stats');
-  await expect(page.getByRole('region', { name: 'demo project statistics' })).toContainText(
-    'Detailed ticket-flow and usage charts are coming',
-  );
+  // The per-project statistics view hosts the completion-confidence calibration (HS2-Q1WCCY).
+  await expect(
+    page.getByRole('region', { name: 'demo project statistics' }).locator('[data-component="confidence-calibration"]'),
+  ).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-y51ehn-project-stats-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
@@ -19009,6 +19010,74 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     await ai.scrollIntoViewIfNeeded();
     await expect(ai.locator('footer [data-component="ai-content-label"]')).toBeVisible();
     await inspector.screenshot({ path: '/private/tmp/claude/hs2-32qdz3-authorship-narrow.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
+test('shows the project confidence calibration from the real server (HS2-Q1WCCY)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const create = (title: string) => server.request<FullTicket>('/tickets', 'POST', { title, category: 'task' });
+    const patch = (id: string, body: Record<string, unknown>) =>
+      server.request<FullTicket>(`/tickets/${id}`, 'PATCH', body);
+    // A 95 that was reopened, then a 60 that was verified; and one unscored pending completion.
+    const cycled = await create('Overconfident then verified');
+    await patch(cycled.id, { status: 'completed', note: '## Confidence\n95', note_confidence: 95 });
+    await patch(cycled.id, { status: 'started' });
+    await patch(cycled.id, { status: 'completed', note: '## Confidence\n60', note_confidence: 60 });
+    await patch(cycled.id, { status: 'verified' });
+    const unscored = await create('Unscored completion');
+    await patch(unscored.id, { status: 'completed' });
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-component="project-summary"]').first().click();
+    const panel = page.locator('[data-component="confidence-calibration"]');
+    await expect(panel).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+    await expect(panel).toContainText('3 completions, 2 scored');
+    const row = (band: string) => panel.locator(`tbody tr[data-band="${band}"]`);
+    await expect(row('verified').locator('td')).toHaveText(['1', '0', '1', '0', '100%', '95.0']);
+    await expect(row('partial').locator('td')).toHaveText(['1', '1', '0', '0', '0%', '60.0']);
+    await expect(row('unscored').locator('td')).toHaveText(['1', '0', '0', '1', '—', '—']);
+    await expect(row('verified').locator('wa-progress-bar')).toHaveJSProperty('value', 100);
+    await expect(row('unscored').locator('wa-progress-bar')).toHaveCount(0);
+    const recent = panel.locator('.confidence-calibration__recent li');
+    await expect(recent).toHaveCount(3);
+    await expect(recent.first()).toContainText(unscored.slug);
+    await expect(recent.first()).toContainText('Awaiting outcome');
+    await page.screenshot({ path: '/private/tmp/claude/hs2-q1wccy-calibration-wide.png' });
+    // Narrow: the table scrolls inside its own container rather than widening the page.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
+    await expect(panel).toBeVisible();
+    const pageOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(pageOverflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: '/private/tmp/claude/hs2-q1wccy-calibration-narrow.png' });
   } finally {
     await server.stop();
   }

@@ -86,6 +86,33 @@ export interface Note {
   actor?: NoteActor;
   text: string;
 }
+/** What happened after one completion (HS2-Q1WCCY). */
+export type CalibrationOutcome = 'verified' | 'reopened' | 'pending';
+/** One completion event of the calibration report: the server's `Completion` shape. */
+export interface CalibrationEvent {
+  slug: string;
+  completed_at: string;
+  confidence?: number;
+  outcome: CalibrationOutcome;
+}
+/** Totals for one rubric band (or `unscored`); optional rates are omitted until known. */
+export interface CalibrationBand {
+  band: 'verified' | 'assumed' | 'partial' | 'unverified' | 'unscored';
+  range: string;
+  completions: number;
+  verified: number;
+  reopened: number;
+  pending: number;
+  reopen_rate?: number;
+  mean_confidence?: number;
+}
+/** `GET /checkouts/{id}/confidence-report` (HS2-Q1WCCY). */
+export interface CalibrationReport {
+  completions: number;
+  scored: number;
+  bands: CalibrationBand[];
+  events: CalibrationEvent[];
+}
 /** A note's recorded author: the acting role and an optional stable id (HS2-32QDZ3). */
 export interface NoteActor {
   role: 'human' | 'ai' | 'system' | 'unknown';
@@ -720,6 +747,9 @@ export class Api {
     } while (cursor !== undefined);
     return rows;
   };
+  /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
+  checkoutConfidenceReport = (checkout: string) =>
+    this.request<CalibrationReport>(`/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
   checkoutCorruptTickets = (checkout: string) =>
     this.request<CorruptTicket[]>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   createCorruptTicketRepair = (checkout: string, path: string) =>

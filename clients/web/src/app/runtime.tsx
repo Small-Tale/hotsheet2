@@ -74,6 +74,7 @@ import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-stat
 import { AppError } from '../components/app-error';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
+import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
@@ -417,7 +418,27 @@ export async function startHotSheetWebClient() {
   } = repositoryController;
   const ticketScrollMemory = new TicketScrollMemory();
   const shellMode = signal<ProjectTabBarMode>('project'),
-    statsProjectId = signal<string | undefined>(undefined);
+    statsProjectId = signal<string | undefined>(undefined),
+    // Per-project completion-confidence calibration shown in the stats view (HS2-Q1WCCY).
+    confidenceReportByProject = signal<Record<string, ConfidenceCalibrationState>>({});
+  /** Load a project's calibration report, keeping the last report visible while refreshing. */
+  async function loadConfidenceReport(target: Project) {
+    const previous = confidenceReportByProject.peek()[target.id] as ConfidenceCalibrationState | undefined;
+    if (previous?.status !== 'ready')
+      confidenceReportByProject.value = { ...confidenceReportByProject.peek(), [target.id]: { status: 'loading' } };
+    let next: ConfidenceCalibrationState;
+    try {
+      next = { status: 'ready', report: await new Api(target.apiPath).checkoutConfidenceReport(target.id) };
+    } catch (error) {
+      next = { status: 'error', message: error instanceof Error ? error.message : String(error) };
+    }
+    confidenceReportByProject.value = { ...confidenceReportByProject.peek(), [target.id]: next };
+  }
+  effect(() => {
+    if (shellMode.value !== 'stats' || !statsProjectId.value) return;
+    const target = projects.peek().find((item) => item.id === statsProjectId.value);
+    if (target) void loadConfidenceReport(target);
+  });
   const terminalRailScreen = signal<'root' | 'ticket'>('root'),
     terminalRailDirection = signal<'forward' | 'backward'>('forward');
   const terminalGroups = signal<TerminalDashboardGroup[]>([]),
@@ -3473,6 +3494,9 @@ export async function startHotSheetWebClient() {
             } finally {
               backgroundProjectRefresh = false;
             }
+            // Ticket changes can complete, reopen, or verify: keep an open calibration current.
+            if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
+              await loadConfidenceReport(current);
           },
           onEvents: async (response) => {
             const acceptedTurns = new Set(turnStreamEvents(response));
@@ -4263,6 +4287,7 @@ export async function startHotSheetWebClient() {
       project,
       shellMode,
       statsProjectId,
+      confidenceReportByProject,
       canGiveFeedback: () => Boolean(selectedTicket.value && canAddNotes()),
       terminals: {
         terminalGroups,

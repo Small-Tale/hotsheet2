@@ -1580,6 +1580,38 @@ test('keeps feedback rectangle input within its frame budget in the UX demo', as
   await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-ux-demo-narrow.png', fullPage: true });
 });
 
+test('round-trips ConfidenceCalibration states through reset and a post-reset edit (HS2-Q1WCCY)', async ({ page }) => {
+  await page.goto('/ux-demo?component=confidence-calibration');
+  const panel = page.locator('.component-stage [data-component="confidence-calibration"]');
+  await expect(panel).toHaveAttribute('data-state', 'ready');
+  await expect(panel).toContainText('7 completions, 5 scored');
+  await expect(panel.locator('tbody tr')).toHaveCount(5);
+  await expect(panel.locator('tbody tr[data-band="assumed"] td').nth(4)).toHaveText('50%');
+  await expect(panel.locator('tbody tr[data-band="partial"] wa-progress-bar')).toHaveCount(0);
+  await expect(panel.locator('.confidence-calibration__recent li')).toHaveCount(7);
+  await page.locator('[data-action="toggle-settings"]').click();
+  const inspector = page.getByRole('complementary', { name: 'ConfidenceCalibration settings' });
+  const state = inspector.locator('wa-select[name="state"]');
+  const set = (value: string) =>
+    state.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  await set('empty');
+  await expect(panel).toHaveAttribute('data-state', 'empty');
+  await expect(panel).toContainText('No completions yet');
+  await set('loading');
+  await expect(panel).toHaveAttribute('data-state', 'loading');
+  await set('error');
+  await expect(panel).toHaveAttribute('data-state', 'error');
+  await expect(panel).toContainText('Confidence calibration is unavailable');
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(state).toHaveJSProperty('value', 'ready');
+  await expect(panel).toHaveAttribute('data-state', 'ready');
+  await set('empty');
+  await expect(panel).toHaveAttribute('data-state', 'empty');
+});
+
 test('round-trips ConfidenceBadge appearance and band controls through reset and a post-reset edit (HS2-A0Q6G6)', async ({
   page,
 }) => {

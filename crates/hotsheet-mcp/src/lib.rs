@@ -108,6 +108,13 @@ fn base_tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "hotsheet_confidence_report",
+            "description": "Completion-confidence calibration: compare the confidence reported at each completion with what happened next (reopened vs. verified), per rubric band (verified 90-100, assumed 70-89, partial 40-69, unverified 0-39, unscored), with reopen rate over resolved completions and mean score, plus every completion event. Read-only.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("optional checkout id/alias/path; aggregates its git stores")
+            } }
+        },
+        {
             "name": "hotsheet_query",
             "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
@@ -447,6 +454,21 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
         "hotsheet_providers" => backend.get("/providers", &[]).map_err(be_msg),
+        "hotsheet_confidence_report" => {
+            if args
+                .get("connection")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+            {
+                return Err(
+                    "confidence report covers git ticket stores; pass checkout, not connection"
+                        .into(),
+                );
+            }
+            backend
+                .get(&checkout_route(args, "/confidence-report"), &[])
+                .map_err(be_msg)
+        }
         "hotsheet_query" => backend
             .get(&checkout_route(args, "/tickets"), &query_pairs(args))
             .map_err(be_msg),
@@ -1036,6 +1058,30 @@ mod core_backend {
                     .list()
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
+            }
+            // Completion-confidence calibration (HS2-Q1WCCY): the server's report shape.
+            if path == "/confidence-report" {
+                let tickets = self
+                    .store
+                    .list_tickets_resilient()
+                    .map_err(store_err)?
+                    .tickets;
+                return Ok(to_value(&hotsheet_ticketing::calibration::calibration(
+                    &tickets,
+                )));
+            }
+            if let Some(checkout) = path
+                .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/confidence-report"))
+            {
+                let (_, stores) = self.checkout_context(checkout)?;
+                let mut tickets = Vec::new();
+                for store in stores {
+                    tickets.extend(store.list_tickets_resilient().map_err(store_err)?.tickets);
+                }
+                return Ok(to_value(&hotsheet_ticketing::calibration::calibration(
+                    &tickets,
+                )));
             }
             if let Some(reference) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = reference.split_once("/tickets") {
@@ -3449,6 +3495,39 @@ mod tests {
                 .is_some();
             assert_eq!(has, MUTATING_TOOLS.contains(&name), "{name}");
         }
+    }
+
+    /// HS2-Q1WCCY: `hotsheet_confidence_report` serves the calibration report serverless.
+    #[test]
+    fn confidence_report_tool_reports_per_band_outcomes() {
+        let (_d, backend) = core();
+        let id = call(&backend, "hotsheet_create", json!({ "title": "Calibrate" }))["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for args in [
+            json!({ "id": id, "status": "completed", "note": "## Confidence\n30", "note_confidence": 30 }),
+            json!({ "id": id, "status": "started" }),
+        ] {
+            call(&backend, "hotsheet_update", args);
+        }
+        let report = call(&backend, "hotsheet_confidence_report", json!({}));
+        assert_eq!(report["completions"], 1);
+        let unverified = report["bands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|band| band["band"] == "unverified")
+            .unwrap()
+            .clone();
+        assert_eq!(unverified["reopened"], 1);
+        assert_eq!(unverified["mean_confidence"], 30.0);
+        let refused = call(
+            &backend,
+            "hotsheet_confidence_report",
+            json!({ "connection": "github-main" }),
+        );
+        assert!(refused["error"].as_str().unwrap().contains("pass checkout"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ import {
 } from '../ai-conversation';
 import { type ToolConnection } from '../api';
 import { AIConversation } from '../components/ai-conversation';
+import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { AIConversationSurface } from '../components/reader-overlay-surfaces';
 import { type MobileMagnifiedTerminal, type TerminalDashboardGroup } from '../components/terminal-dashboard';
@@ -25,6 +26,8 @@ export interface TerminalPresentationDependencies {
   project: () => Project | undefined;
   shellMode: Signal<ProjectTabBarMode>;
   statsProjectId: Signal<string | undefined>;
+  /** Calibration report state per project for the stats view (HS2-Q1WCCY). */
+  confidenceReportByProject: Signal<Record<string, ConfidenceCalibrationState>>;
   canGiveFeedback: () => boolean;
   terminals: {
     terminalGroups: Signal<TerminalDashboardGroup[]>;
@@ -66,7 +69,7 @@ export interface TerminalPresentationDependencies {
 }
 /** Project terminal/chat surfaces from live feature owners during the root render. */
 export function createTerminalPresentation(dependencies: TerminalPresentationDependencies) {
-  const { projects, project, shellMode, statsProjectId, canGiveFeedback } = dependencies;
+  const { projects, project, shellMode, statsProjectId, confidenceReportByProject, canGiveFeedback } = dependencies;
   const {
     terminalGroups,
     drawerTabOrder,
@@ -141,7 +144,11 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       };
     }
     const statsProject = projects.value.find((item) => item.id === statsProjectId.value);
-    return { kind: 'stats', projectName: statsProject?.name };
+    return {
+      kind: 'stats',
+      projectName: statsProject?.name,
+      calibration: statsProject ? confidenceReportByProject.value[statsProject.id] : undefined,
+    };
   }
 
   function projectTerminalDrawerProps(): TerminalDrawerProps | undefined {

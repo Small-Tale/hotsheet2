@@ -949,6 +949,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     project: state.project,
     shellMode,
     statsProjectId: signal<string | undefined>('b'),
+    confidenceReportByProject: signal({}),
     canGiveFeedback: () => false,
     ai: state.ai,
     permissions,

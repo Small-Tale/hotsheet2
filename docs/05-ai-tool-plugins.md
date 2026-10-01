@@ -266,6 +266,11 @@ ticket's own history (`hotsheet-ticketing/src/calibration.rs`):
   counts, the reopen rate over resolved completions, and the mean score.
 - **Reading it:** a well-calibrated rubric reopens less as the band rises, so these numbers
   are the evidence for tuning the anchors. The JSON lists every event for drill-down.
+- **Other surfaces (HS2-Q1WCCY):** the same report is served by `GET /confidence-report`
+  (default store), by `GET /checkouts/{reference}/confidence-report` (every git store the
+  checkout links), and by the read-only MCP tool `hotsheet_confidence_report` (optional
+  `checkout`), with or without a server. The web shows it in a project's statistics view;
+  external trackers are excluded because their reopen history lives in native events.
 
 Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
 instructions.md`) carries a compact, **project-neutral** default policy so a brand-new

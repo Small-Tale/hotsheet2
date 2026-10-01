@@ -132,6 +132,12 @@ import {
   resetConfidenceBadgeDemo,
 } from './confidence-badge-demo';
 import {
+  ConfidenceCalibrationDemo,
+  ConfidenceCalibrationSettings,
+  confidenceCalibrationSettings,
+  resetConfidenceCalibrationDemo,
+} from './confidence-calibration-demo';
+import {
   ConnectionDetailsDialogDemo,
   ConnectionDetailsDialogSettings,
   connectionDetailsScenario,
@@ -503,6 +509,7 @@ const commandRunDialogDemoRun: CommandRun = {
 function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'confidence-badge') return <ConfidenceBadgeDemo />;
+  if (item.id === 'confidence-calibration') return <ConfidenceCalibrationDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
   if (item.id === 'ticket-row') return <TicketRowDemo />;
   if (item.id === 'ticket-list') return <TicketListDemo />;
@@ -1092,6 +1099,7 @@ function DemoApp() {
     selected.id === 'tag-chip' ||
     selected.id === 'status-badge' ||
     selected.id === 'confidence-badge' ||
+    selected.id === 'confidence-calibration' ||
     selected.id === 'ticket-row' ||
     selected.id === 'repository-status-popover' ||
     selected.id === 'connection-details-dialog' ||
@@ -1166,6 +1174,8 @@ function DemoApp() {
             <StatusBadgeSettings />
           ) : selected.id === 'confidence-badge' ? (
             <ConfidenceBadgeSettings />
+          ) : selected.id === 'confidence-calibration' ? (
+            <ConfidenceCalibrationSettings />
           ) : selected.id === 'ticket-row' ? (
             <TicketRowSettings />
           ) : selected.id === 'repository-status-popover' ? (
@@ -1976,6 +1986,7 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
   if (selectedId.value === 'confidence-badge') resetConfidenceBadgeDemo(root);
+  if (selectedId.value === 'confidence-calibration') resetConfidenceCalibrationDemo(root);
   if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
   if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
   if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
@@ -2118,6 +2129,10 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
     statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
   if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
   if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
+});
+delegate(root, 'change', '[data-settings="confidence-calibration"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'state') confidenceCalibrationSettings.state.value = control.value;
 });
 delegate(root, 'change', '[data-settings="confidence-badge"] [name]', (_event, target) => {
   const control = target as FormControl;

@@ -72,6 +72,7 @@ describe('UX demo catalog', () => {
       'ticket-status-menu',
       'status-badge',
       'confidence-badge',
+      'confidence-calibration',
       'tag-chip',
       'ticket-reader',
       'markdown-editor',

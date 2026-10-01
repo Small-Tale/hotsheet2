@@ -1,5 +1,8 @@
+import './project-statistics.css';
+
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
 import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
@@ -68,15 +71,20 @@ export function TerminalRailSurface({ rail }: TerminalRailSurfaceProps) {
 }
 
 export type GlobalWorkspaceSurfaceProps =
-  { kind: 'terminals'; dashboard: TerminalDashboardProps } | { kind: 'stats'; projectName?: string };
+  | { kind: 'terminals'; dashboard: TerminalDashboardProps }
+  | { kind: 'stats'; projectName?: string; calibration?: ConfidenceCalibrationState };
 
 export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
   if (props.kind === 'terminals') return <TerminalDashboard {...props.dashboard} />;
   if (props.projectName)
     return (
-      <section class="app-empty" aria-label={`${props.projectName} project statistics`}>
+      <section
+        class="project-statistics"
+        data-component="project-statistics"
+        aria-label={`${props.projectName} project statistics`}
+      >
         <h1>{props.projectName} project statistics</h1>
-        <p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p>
+        <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
       </section>
     );
   return (
