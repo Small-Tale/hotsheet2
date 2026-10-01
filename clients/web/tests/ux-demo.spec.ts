@@ -4523,14 +4523,22 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     expect(row.icon).toBeCloseTo(alignedRows[0].icon, 0);
     expect(row.label).toBeCloseTo(alignedRows[0].label, 0);
   }
+  // A colored command keeps its own fill and text color on hover: Kerf beta.64 ListItems inherit
+  // the tone tokens the app-owned wrapper declares (KF-XD6YH1, HS2-C3SPM6).
   const command = sidebar.getByRole('button', { name: 'Verify project' });
-  const commandColors = await command.evaluate((node) => ({
-    color: getComputedStyle(node).color,
-    background: getComputedStyle(node).backgroundColor,
-  }));
+  const commandColors = await command.evaluate((node) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--command-color)';
+    node.closest('.command-navigation__command')!.append(probe);
+    const fill = getComputedStyle(probe).color;
+    probe.remove();
+    return { color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor, fill };
+  });
+  expect(commandColors.background).toBe(commandColors.fill);
   await command.hover();
   await expect(command).toHaveCSS('color', commandColors.color);
-  await expect(command).toHaveCSS('background-color', commandColors.background);
+  await expect(command).toHaveCSS('background-color', commandColors.fill);
+  await page.screenshot({ path: test.info().outputPath('project-sidebar-command-hover.png') });
   await sidebar.getByRole('button', { name: /Backlog/ }).click();
   await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
   await command.click();

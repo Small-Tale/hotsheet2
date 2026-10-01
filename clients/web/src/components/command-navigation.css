@@ -15,9 +15,10 @@
   border-radius: var(--kui-layout-rounded-radius, calc(1px + 0.6875rem));
   font-weight: 650;
 }
-/* A colored command row paints its own fill through Kerf beta.62's public ListItem tone tokens
+/* A colored command row paints its own fill through Kerf's public ListItem tone tokens
    (KF-0PKY5K, HS2-Z5YQWT): resting, hover, and pressed all use the command color with transparent
-   borders so the row reads as one pill in every state; the wrapper paints nothing. */
+   borders so the row reads as one pill in every state; the wrapper paints nothing. The ListItem
+   inherits these tokens from this wrapper since Kerf beta.64 (KF-XD6YH1, HS2-C3SPM6). */
 .command-navigation__command:not([data-command-palette='transparent']) {
   --kui-layout-inline-margin: 0;
   --kui-list-item-background: var(--command-color);
