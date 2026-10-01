@@ -117,7 +117,7 @@ fn remove_with_sidecars(path: &Path) -> std::io::Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    for suffix in ["-wal", "-shm", "-journal"] {
+    for suffix in ["-wal", "-shm", "-journal", crate::OPEN_LOCK_SUFFIX] {
         let _ = std::fs::remove_file(sidecar(path, suffix));
     }
     Ok(())

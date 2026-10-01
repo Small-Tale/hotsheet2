@@ -103,6 +103,14 @@ each connection waits up to 30 s on a busy lock, the schema check and creation r
 `BEGIN IMMEDIATE` transaction so a concurrent opener re-reads the version the winner committed,
 and only genuine corruption (`SQLITE_CORRUPT`/`SQLITE_NOTADB`) deletes and rebuilds the file — a
 lock or race error never discards an index another process is using (HS2-SY8T90).
+Opening, initializing, and any corruption delete-and-recreate of one file additionally run
+under an exclusive OS advisory lock (`flock`) on a never-deleted `<index>-open.lock` sidecar:
+switching a fresh file to WAL can fail with an immediate `SQLITE_BUSY`, and a reader can see
+another creator's half-written header as "not a database", which SQLite's own locking does not
+cover. Reconcile runs in one `BEGIN IMMEDIATE` transaction, because each ticket's upsert is several
+statements (row upsert, then delete and reinsert of its tags, assignees, and reviews) that
+concurrent reconcilers must not interleave; the later one then finds current hashes and has
+nothing to do. Pruning an older generation also removes its open-lock sidecar (HS2-0ATCY8).
 
 ## 3.3 Index schema (sketch)
 

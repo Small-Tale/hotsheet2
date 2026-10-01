@@ -241,12 +241,18 @@ impl Index {
 
     /// Open (or create) a file-backed index. A schema-version mismatch drops + rebuilds.
     pub fn open(db_path: &Path, store_id: impl Into<String>) -> Result<Self, IndexError> {
+        let _open_lock = OpenLock::acquire(db_path)?;
+        Self::open_locked(db_path, store_id.into())
+    }
+
+    /// [`Index::open`] while the caller holds the file's [`OpenLock`].
+    fn open_locked(db_path: &Path, store_id: String) -> Result<Self, IndexError> {
         let conn = Connection::open(db_path)?;
         // The server, the CLI, and the app's setup refresh open the same file at once;
         // wait for a concurrent writer instead of failing with SQLITE_BUSY (HS2-SY8T90).
         conn.busy_timeout(INDEX_BUSY_TIMEOUT)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
-        Self::init(conn, store_id.into())
+        Self::init(conn, store_id)
     }
 
     /// Open a file-backed index for a store and reconcile it against the current
@@ -261,7 +267,11 @@ impl Index {
             .unwrap_or_else(|_| store.root().to_path_buf())
             .display()
             .to_string();
-        let index = match Self::open(db_path, store_id.clone()) {
+        // Hold the open lock across the corruption check and any delete-and-recreate, so a
+        // half-initialized fresh file another opener is still creating is never mistaken
+        // for corruption and deleted under it (HS2-0ATCY8).
+        let open_lock = OpenLock::acquire(db_path)?;
+        let index = match Self::open_locked(db_path, store_id.clone()) {
             Ok(index) => index,
             // Only genuine corruption is disposable. Any other failure (a busy lock, a
             // concurrent opener) must not delete a file another process is using.
@@ -269,10 +279,11 @@ impl Index {
                 let _ = std::fs::remove_file(db_path);
                 let _ = std::fs::remove_file(sidecar(db_path, "-wal"));
                 let _ = std::fs::remove_file(sidecar(db_path, "-shm"));
-                Self::open(db_path, store_id)?
+                Self::open_locked(db_path, store_id)?
             }
             Err(error) => return Err(error),
         };
+        drop(open_lock);
         index.reconcile(store)?;
         Ok(index)
     }
@@ -599,6 +610,21 @@ impl Index {
     /// `(upserted, deleted)`. Cheaper than a full rebuild on a warm index — this is
     /// what makes "restore from disk on launch" fast (`docs/03` §3.4).
     pub fn reconcile(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+        // One IMMEDIATE write transaction: each ticket's upsert is several statements (row
+        // upsert, then delete + reinsert of its tags/assignees/reviews), so two openers
+        // reconciling the same file must not interleave them. The later reconciler waits
+        // on the busy timeout, then sees the winner's hashes and has nothing left to do
+        // (HS2-0ATCY8).
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let result = self.reconcile_in_transaction(store)?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
+    fn reconcile_in_transaction(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
         // Once an index has a Git baseline, reconcile the union of the committed HEAD
         // delta, current worktree delta, and the previous worktree delta. The last set is
         // essential when a dirty file is reverted or removed: it must be refreshed even
@@ -1142,6 +1168,44 @@ fn parse_ticket(path: &Path, bytes: &[u8]) -> Result<Ticket, IndexError> {
 }
 
 /// A SQLite WAL/SHM sidecar path (`<db>-wal`), for cleanup on a corrupt reopen.
+/// Suffix of the never-deleted sidecar whose advisory lock serializes opening one index
+/// file across threads and processes (HS2-0ATCY8).
+pub(crate) const OPEN_LOCK_SUFFIX: &str = "-open.lock";
+
+/// An exclusive OS advisory lock (`flock`) held while a process opens, initializes, or
+/// recreates an index file. SQLite's own locking cannot cover these steps: switching a
+/// fresh file to WAL can fail with an immediate `SQLITE_BUSY`, and a reader can see
+/// another creator's half-written header as "not a database". The kernel releases the
+/// lock if the holder dies. Other platforms rely on SQLite's locking alone.
+struct OpenLock {
+    _file: std::fs::File,
+}
+
+impl OpenLock {
+    fn acquire(db_path: &Path) -> Result<Self, IndexError> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(sidecar(db_path, OPEN_LOCK_SUFFIX))?;
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            loop {
+                // SAFETY: `file` owns a valid open descriptor for the whole call.
+                if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+                    break;
+                }
+                let error = std::io::Error::last_os_error();
+                if error.kind() != std::io::ErrorKind::Interrupted {
+                    return Err(error.into());
+                }
+            }
+        }
+        Ok(Self { _file: file })
+    }
+}
+
 fn sidecar(db_path: &Path, suffix: &str) -> PathBuf {
     let mut name = db_path.as_os_str().to_owned();
     name.push(suffix);
