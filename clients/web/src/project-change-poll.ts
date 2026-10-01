@@ -21,11 +21,21 @@ export interface ProjectChangePollOptions {
   beforeRefresh?(): Promise<void>;
   shouldRefresh?(response: PollResponse): boolean;
   onEvents?(response: PollResponse): Promise<void>;
+  /**
+   * Continuity was (re)established without a replayable gap: the first handshake, a fresh
+   * handshake after an outage, or an overflowed replay. Event-driven state that is not
+   * ticket rows (pending permissions, drive connections) reconciles here instead of on a
+   * timer (HS2-NKCXW4). Never called for a failed request, so an error cannot loop it.
+   */
+  onResync?(reason: ProjectChangeResync): Promise<void> | void;
   onError?(reason: unknown): void;
   retryMs?: number;
   maxRetryMs?: number;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }
+
+/** Why a change stream asked its owner to reconcile event-driven state. */
+export type ProjectChangeResync = 'initial' | 'reconnect' | 'overflow';
 
 export interface ProjectChangeStreamOptions extends Omit<ProjectChangePollOptions, 'client'> {
   client: Pick<Api, 'pollEvents'> & Partial<Pick<Api, 'changeWebSocketUrl'>>;
@@ -53,6 +63,14 @@ const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void>
   });
 
 const wasAborted = (signal: AbortSignal): boolean => signal.aborted;
+
+const resync = async (options: ProjectChangePollOptions, reason: ProjectChangeResync) => {
+  try {
+    await options.onResync?.(reason);
+  } catch (error) {
+    options.onError?.(error);
+  }
+};
 
 /** Start one replay-safe long-poll loop. The returned function aborts it permanently. */
 export function startProjectChangePoll(options: ProjectChangePollOptions): () => void {
@@ -86,6 +104,9 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
       retryDelay = retryMs;
       const handshake = cursor === undefined;
       cursor = response.cursor;
+      if (handshake) await resync(options, reconnecting ? 'reconnect' : 'initial');
+      else if (response.overflow) await resync(options, 'overflow');
+      if (wasAborted(controller.signal)) return;
       if (!handshake && response.events.length && options.onEvents)
         await options.onEvents(response).catch((reason: unknown) => {
           options.onError?.(reason);
@@ -160,6 +181,8 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
       retryDelay = retryMs;
     const consume = async (response: PollResponse, forceRefresh = false) => {
       if (wasAborted(controller.signal)) return;
+      if (response.overflow) await resync(options, 'overflow');
+      if (wasAborted(controller.signal)) return;
       if (response.events.length && options.onEvents)
         await options.onEvents(response).catch((reason: unknown) => {
           options.onError?.(reason);
@@ -186,6 +209,8 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
           const handshake = await poll(undefined);
           if (wasAborted(controller.signal)) return;
           cursor = handshake.cursor;
+          await resync(options, reconnecting ? 'reconnect' : 'initial');
+          if (wasAborted(controller.signal)) return;
           if (reconnecting) await consume(handshake, true);
           reconnecting = false;
           retryDelay = retryMs;

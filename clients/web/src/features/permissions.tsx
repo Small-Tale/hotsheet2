@@ -54,7 +54,6 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRefreshRequested = false,
     permissionResolutionEpoch = 0,
     permissionTimerInterval: number | undefined,
-    permissionRefreshInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined,
     allowingImmediately = false;
   const pendingPermissions = () => permissionInbox.pending();
@@ -133,11 +132,15 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
   }
 
+  /**
+   * Start the local countdown and reconcile once. Later changes arrive only through the
+   * project change stream (`permission_asked` / `permission_resolved`) and its resync hook
+   * after a reconnect or overflow; there is no network polling timer (HS2-NKCXW4). The
+   * 1 s interval below only re-renders the local countdown and never touches the network.
+   */
   function startPermissionUpdates() {
     if (permissionTimerInterval === undefined)
       permissionTimerInterval = window.setInterval(updatePermissionTimer, 1_000);
-    if (permissionRefreshInterval === undefined)
-      permissionRefreshInterval = window.setInterval(() => void refreshPermissions(), 10_000);
     void refreshPermissions();
   }
 

@@ -1853,10 +1853,17 @@ The local Allow/Deny path has the same immediate behavior: it optimistically rem
 request and records the presumed decision before awaiting transport. Only a communication
 failure rolls that history back and restores the popup with an inline error, so network
 latency never invites repeated clicks.
-Permission state also reconciles every ten seconds so a missed event cannot leave a stale
-popup on screen. If one project's permission endpoint is unavailable, its unverified
-prompt disappears without recording a decision; other projects still reconcile, and a
-live request returns when that endpoint recovers (HS2-4M6H99). The main segmented control
+There is no permission polling timer (HS2-NKCXW4). Besides those events, permission state
+reconciles only when a project's change stream (re)establishes continuity: its first
+handshake, a fresh handshake after an outage, or an overflowed replay. A missed event is
+therefore repaired by the reconnect that follows the outage that hid it, while an idle
+workspace issues no permission or connection requests at all. Failed stream requests,
+including authentication or protocol errors, back off without triggering a reconciliation,
+so they cannot turn into a request loop. A reconnect after an outage also refreshes the
+project's drive connections. If one project's permission endpoint is unavailable, its
+unverified prompt disappears without recording a decision; other projects still reconcile,
+and a live request returns at that project's next reconnect or permission event
+(HS2-4M6H99). The main segmented control
 reflects only the selected project's pending count, while every project tab keeps its own badge; a non-modal
 popup can still surface an urgent request even when another project is selected. When a
 phone-width project sidebar is open, the permission popup stays above the sidebar, fits

@@ -371,3 +371,98 @@ describe('project change WebSocket stream', () => {
     expect(Math.max(...delays)).toBeLessThanOrEqual(2_000);
   });
 });
+
+describe('project change resync (HS2-NKCXW4)', () => {
+  it('resyncs on the first handshake, after an outage, and on overflow — never per failure', async () => {
+    const pending = deferred<PollResponse>();
+    const pollEvents = vi
+      .fn()
+      .mockResolvedValueOnce(response(1))
+      .mockResolvedValueOnce(response(2, 'permission_asked'))
+      .mockRejectedValueOnce(Object.assign(new Error('401'), { status: 401 }))
+      .mockRejectedValueOnce(Object.assign(new Error('401'), { status: 401 }))
+      .mockResolvedValueOnce(response(5))
+      .mockResolvedValueOnce(response(9, undefined, true))
+      .mockReturnValueOnce(pending.promise);
+    const onResync = vi.fn().mockResolvedValue(undefined),
+      onEvents = vi.fn().mockResolvedValue(undefined),
+      wait = vi.fn().mockResolvedValue(undefined);
+    const stop = startProjectChangePoll({
+      client: { pollEvents },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      onEvents,
+      onResync,
+      wait,
+    });
+    await vi.waitFor(() => {
+      expect(pollEvents).toHaveBeenCalledTimes(7);
+    });
+    expect(onResync.mock.calls.map((call) => call[0])).toEqual(['initial', 'reconnect', 'overflow']);
+    // An ordinary replayed event is delivered, not turned into a resync.
+    expect(onEvents).toHaveBeenCalledWith(response(2, 'permission_asked'));
+    // Consecutive auth failures back off instead of looping.
+    expect(wait.mock.calls.map((call) => call[0])).toEqual([500, 1_000]);
+    stop();
+    pending.resolve(response(9));
+  });
+
+  it('keeps streaming when a resync handler fails, and stops resyncing after stop', async () => {
+    const pending = deferred<PollResponse>();
+    const pollEvents = vi.fn().mockResolvedValueOnce(response(1)).mockReturnValueOnce(pending.promise);
+    const onError = vi.fn(),
+      onResync = vi.fn().mockRejectedValue(new Error('permissions offline'));
+    const stop = startProjectChangePoll({
+      client: { pollEvents },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      onResync,
+      onError,
+    });
+    await vi.waitFor(() => {
+      expect(pollEvents).toHaveBeenCalledTimes(2);
+    });
+    expect(onError).toHaveBeenCalledWith(new Error('permissions offline'));
+    stop();
+    pending.resolve(response(2, undefined, true));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(onResync).toHaveBeenCalledTimes(1);
+  });
+
+  it('resyncs a WebSocket stream on its handshake and on a fresh handshake after a lost replay', async () => {
+    const pollEvents = vi
+      .fn()
+      .mockResolvedValueOnce(response(4))
+      .mockResolvedValueOnce(response(4))
+      .mockRejectedValueOnce(new Error('server restarting'))
+      .mockResolvedValueOnce(response(1))
+      .mockResolvedValue(response(1));
+    const onResync = vi.fn().mockResolvedValue(undefined),
+      wait = vi.fn().mockResolvedValue(undefined),
+      sockets: FakeSocket[] = [];
+    const stop = startProjectChangeStream({
+      client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      onResync,
+      wait,
+      openWebSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.open();
+        });
+        return socket as unknown as WebSocket;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(pollEvents).toHaveBeenCalledTimes(2);
+    });
+    expect(onResync.mock.calls.map((call) => call[0])).toEqual(['initial']);
+    // An idle open socket does not resync or poll again.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(pollEvents).toHaveBeenCalledTimes(2);
+    sockets[0].close();
+    await vi.waitFor(() => {
+      expect(onResync.mock.calls.map((call) => call[0])).toEqual(['initial', 'reconnect']);
+    });
+    stop();
+  });
+});

@@ -89,7 +89,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
-    src/project-change-poll.ts # Replay-safe per-open-project long poll; ticket invalidation, overflow/reconnect recovery, and abortable lifecycle
+    src/project-change-poll.ts # Replay-safe per-open-project long poll; ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
     src/local-ticket-changes.ts # Counted exact acknowledgements that consume only the stream echo already projected by a local ticket mutation
     src/pending-created-tickets.ts # Retains just-created rows so a background refresh whose eventually-consistent index has not indexed them yet cannot drop them, releasing each once a fetched page contains it or a TTL elapses (HS2-Y5PDHW)
     src/server-busy.ts       #   Global "server busy" state from the in-flight authenticated-request count (idle long-polls excluded), with a short idle linger; plus the viewport-fill bar-count math

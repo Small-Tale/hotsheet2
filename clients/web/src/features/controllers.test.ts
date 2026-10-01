@@ -311,10 +311,10 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.projectPermissionHistory('b')).toHaveLength(1);
   });
 
-  it('repairs a missed permission event on the next scheduled reconciliation', async () => {
+  it('reconciles once on start and makes no permission requests while idle (HS2-NKCXW4)', async () => {
     vi.stubGlobal('window', { setInterval });
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
-    let pending = [{ id: 1, connection: 'c', tool: 'Bash', action: 'old' }];
+    const pending = [{ id: 1, connection: 'c', tool: 'Bash', action: 'old' }];
     fetchMock.mockImplementation(async (input) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       return json(url.endsWith('/permissions') ? pending : []);
@@ -322,10 +322,15 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.startPermissionUpdates();
     await vi.advanceTimersByTimeAsync(0);
     expect(owner.pendingPermissions()).toHaveLength(1);
-    pending = [];
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(owner.pendingPermissions()).toEqual([]);
-    expect(owner.projectPermissionHistory('a')).toHaveLength(1);
+    const afterStart = fetchMock.mock.calls.length;
+    expect(afterStart).toBe(2); // GET /permissions + GET /connections, once
+    // Ten idle minutes: the 1 s countdown ticks locally but nothing reaches the network.
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(fetchMock.mock.calls.length).toBe(afterStart);
+    // A second start (another project restoring) does not add a timer either.
+    owner.startPermissionUpdates();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(fetchMock.mock.calls.length).toBe(afterStart + 2);
   });
 
   it('reconciles again when a resolution arrives during an older permission fetch', async () => {

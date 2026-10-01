@@ -3457,6 +3457,15 @@ export async function startHotSheetWebClient() {
               ...response,
               events: localTicketChangeAcknowledgements.unacknowledged(current.id, response.events),
             }),
+          // Event-driven state reconciles when the stream (re)establishes continuity rather than
+          // on a polling timer (HS2-NKCXW4): permissions on every resync, drive connections only
+          // after an outage or overflow (opening the project already loaded them).
+          onResync: async (reason) => {
+            await Promise.all([
+              refreshPermissions(),
+              ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
+            ]);
+          },
           refresh: async () => {
             backgroundProjectRefresh = true;
             try {

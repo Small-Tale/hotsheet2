@@ -19395,3 +19395,130 @@ test('paints magnified terminals above every surface from the workspace grid and
   await expect(menuItem).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
 });
+
+test('reconciles permissions from the change stream with no polling timer, backing off on auth errors (HS2-NKCXW4)', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockProject(page);
+  let pending: Array<{ id: number; connection: string; tool: string; action: string; project?: string }> = [];
+  const permissionGets: string[] = [],
+    handshakes: number[] = [];
+  await page.route('**/permissions', (route) => {
+    permissionGets.push(route.request().url());
+    return route.fulfill({ json: pending });
+  });
+  const polls: Array<import('@playwright/test').Route> = [];
+  let cursor = 0,
+    authFailing = false;
+  await page.route('**/ws/poll*', (route) => {
+    const since = new URL(route.request().url()).searchParams.get('since');
+    if (since === null) {
+      handshakes.push(Date.now());
+      if (authFailing) return route.fulfill({ status: 401, json: { error: 'missing or invalid secret' } });
+      return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    }
+    if (authFailing) return route.fulfill({ status: 401, json: { error: 'missing or invalid secret' } });
+    polls.push(route);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await expect.poll(() => permissionGets.length).toBeGreaterThan(0);
+
+  // Idle: ten minutes of app time issue no permission request at all.
+  const idleBaseline = permissionGets.length;
+  await page.clock.runFor(600_000);
+  expect(permissionGets.length).toBe(idleBaseline);
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+
+  // A permission event is the trigger: exactly one reconciliation shows the popup.
+  pending = [{ id: 31, connection: 'codex-session', tool: 'Bash', action: 'cargo test', project: '/work/demo' }];
+  cursor += 1;
+  await polls.shift()!.fulfill({
+    json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '31', slug: 'Bash' }], overflow: false },
+  });
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toBeVisible();
+  expect(permissionGets.length).toBe(idleBaseline + 1);
+
+  // Outage with a protocol/auth error: the stream backs off; it never spins and never
+  // turns failures into permission requests.
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  authFailing = true;
+  const beforeOutage = permissionGets.length;
+  await polls.shift()!.fulfill({ status: 401, json: { error: 'missing or invalid secret' } });
+  handshakes.length = 0;
+  await page.clock.runFor(60_000);
+  expect(handshakes.length).toBeGreaterThan(0);
+  expect(handshakes.length).toBeLessThanOrEqual(10);
+  expect(permissionGets.length).toBe(beforeOutage);
+
+  // Recovery: the fresh handshake resyncs, so a resolution missed during the outage is repaired.
+  pending = [];
+  authFailing = false;
+  await page.clock.runFor(60_000);
+  await expect(popup).toHaveCount(0);
+  expect(permissionGets.length).toBeGreaterThan(beforeOutage);
+});
+
+test('surfaces a real server permission request through the live stream with no polling (HS2-NKCXW4)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.clock.install();
+    await mockProject(page);
+    const forwarded: string[] = [];
+    // Only project discovery is a fixture; the change stream and permission routes are the
+    // real server's, reached through the paths the project bridge forwards them to.
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(ws\/poll|permissions|connections)(\/\d+)?(\?.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        forwarded.push(`${route.request().method()} ${path}`);
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 0,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      },
+    );
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+    const permissionGets = () => forwarded.filter((entry) => entry === 'GET /permissions').length;
+    await expect.poll(permissionGets).toBeGreaterThan(0);
+    const idleBaseline = permissionGets();
+    await page.clock.runFor(600_000);
+    expect(permissionGets()).toBe(idleBaseline);
+
+    // A hook asks the real server; it blocks until answered, and the server's event wakes the app.
+    const ask = fetch(`${server.url}/permissions/ask`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+      body: JSON.stringify({ project: '/work/demo', connection: 'real-hook', tool: 'Bash', action: 'cargo test' }),
+    }).then((response) => response.json() as Promise<{ decision: string }>);
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toBeVisible();
+    await expect(popup).toContainText('cargo test');
+    await popup.getByRole('button', { name: 'Deny' }).click();
+    expect(await ask).toEqual({ decision: 'deny' });
+    await expect(popup).toHaveCount(0);
+    // Event-driven: the ask and its resolution cost a bounded number of reconciliations.
+    expect(permissionGets() - idleBaseline).toBeLessThanOrEqual(3);
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
+});
