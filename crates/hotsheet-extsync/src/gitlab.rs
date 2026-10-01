@@ -1311,6 +1311,7 @@ mod tests {
         let score = |value: u64| NoteMetadataInput {
             summary: None,
             confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),
+            actor: None,
         };
         let set_status = |status| {
             std::thread::sleep(std::time::Duration::from_millis(1100));

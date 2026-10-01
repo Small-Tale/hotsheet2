@@ -2323,6 +2323,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),
+                    actor: None,
                 },
                 "Hot Sheet live re-completion validation".into(),
             )
