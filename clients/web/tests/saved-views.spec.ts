@@ -306,9 +306,8 @@ test('scopes the search bar to a selected shared view without populating it (HS2
 test('keeps immediate saved-view query replacement focused when opening frames resume (HS2-N7XTP4)', async ({
   page,
 }) => {
-  // Kerf's model-managed field places the caret back into the editor one frame after a chip commits,
-  // even when focus has since moved to the name field (KF-DNVMQE); re-enable once that ships.
-  test.fixme(true, 'KF-DNVMQE: wireTokenSearchFields deferred caret placement steals focus after a chip commit');
+  // Kerf places the caret back into the editor one frame after a chip commits; since beta.64 that
+  // deferred placement yields when focus has moved to the name field (KF-DNVMQE, HS2-TNE7V7).
   await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/?dev-review=false');
