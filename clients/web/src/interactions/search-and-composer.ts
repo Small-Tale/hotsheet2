@@ -1,3 +1,4 @@
+import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
@@ -13,6 +14,7 @@ import {
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
+import { createPressDeferredCollapse } from '../press-deferred-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -168,9 +170,32 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // submit, and, through the registered models, parsing, chips, suggestions, chip edit/removal,
   // and clear (HS2-5JXBQY). Hot Sheet adopts its persisted workspace signal and retains the
   // caller-owned date/help surfaces.
+  // Kerf collapses an empty search on focusout, i.e. at mousedown; the collapse removes the search
+  // row and shifts the project tabs and tickets under the pointer, so the press's click missed what
+  // the user pressed (HS2-YVBGW3, KF-64W0RN). Keep the field open while a press is in flight and
+  // collapse it once that press's click has been dispatched.
+  const workspaceSearchField = () =>
+      document.querySelector<HTMLElement>(
+        '[data-component="token-search-field"][data-token-search-id="workspace-search"][data-collapsible="true"]',
+      ),
+    searchPress = createPressDeferredCollapse({
+      doc: document,
+      ownsFocus: () => Boolean(workspaceSearchField()?.contains(document.activeElement)),
+      shouldCollapse: () => {
+        const field = workspaceSearchField(),
+          editor = field?.querySelector<HTMLElement>('[data-token-search-editor]');
+        if (!searchOpen.value || !field || !editor || field.dataset.disabled === 'true') return false;
+        if (document.activeElement?.closest('[data-token-search-keep-open]')) return false;
+        const value = readTokenSearchField(editor);
+        return value.query.length === 0 && value.tokens.length === 0;
+      },
+      collapse: () => {
+        searchOpen.value = false;
+      },
+    });
   const tokenSearchFields = wireTokenSearchFields(document.body, {
     models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
-    collapsible: { signals: { 'workspace-search': searchOpen } },
+    collapsible: { signals: { 'workspace-search': searchOpen }, keepOpenOn: () => searchPress.pressing() },
     keyboard: {
       onRemoveToken: ({ id, value }) => {
         const before = keyboardRemovalState?.id === id ? keyboardRemovalState.tokens : [];

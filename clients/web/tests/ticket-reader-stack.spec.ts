@@ -460,13 +460,21 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   details = 'First line\nSecond line\nAppended elsewhere';
   token = 'remote-append';
   await editor.fill('First line, edited in the reader\nSecond line');
+  // Text edits save when focus leaves the editor, never while typing (HS2-RE1PS6).
+  await editor.blur();
   await expect.poll(() => details).toBe('First line, edited in the reader\nSecond line\nAppended elsewhere');
-  await expect(editor).toHaveValue('First line, edited in the reader\nSecond line\nAppended elsewhere');
+  // Leaving the editor closes it; the rendered details show the merged text.
+  const rendered = reader.locator('[data-action="edit-markdown"]');
+  await expect(rendered).toContainText('First line, edited in the reader');
+  await expect(rendered).toContainText('Appended elsewhere');
   await expect(page.locator('.app-error')).toHaveCount(0);
+  await rendered.dblclick();
+  await expect(editor).toHaveValue('First line, edited in the reader\nSecond line\nAppended elsewhere');
   // A genuine overlap keeps the draft and says so instead of silently replacing it.
   details = 'First line, rewritten elsewhere\nSecond line\nAppended elsewhere';
   token = 'remote-overlap';
   await editor.fill('First line, rewritten here\nSecond line\nAppended elsewhere');
+  await editor.blur();
   await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
   await expect(editor).toHaveValue('First line, rewritten here\nSecond line\nAppended elsewhere');
 });

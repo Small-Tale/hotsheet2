@@ -905,6 +905,7 @@ export async function startHotSheetWebClient() {
     project: () => project(),
     rememberedProjectRoots: () => currentRememberedProjectRoots(),
     activateOpenProject,
+    projectSelectionGeneration: () => projectSelectionGeneration,
     loadPermissionAutomation,
     setPermissionAutomation: (projectId, automation) => {
       permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [projectId]: automation };
@@ -991,6 +992,7 @@ export async function startHotSheetWebClient() {
     openRemoteProjectDialog,
     openRemoteCheckout,
   } = projectLifecycleController;
+  let projectSelectionGeneration = 0;
   let projectActivationGeneration = 0,
     projectRefreshGeneration = 0,
     ticketCollectionGeneration = 0,
@@ -1705,6 +1707,7 @@ export async function startHotSheetWebClient() {
   // Switch the active project tab (shared by the desktop project tab click and the mobile project Select —
   // HS2-4C5RM7). `next` is a tab id: a project id, or a restore-failure tab id.
   function selectProjectTab(next: string) {
+    projectSelectionGeneration += 1;
     exitMobileTerminalFocus();
     setShellMode('project');
     const failure = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === next);

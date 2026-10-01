@@ -89,7 +89,7 @@ test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', a
     await expect(lists).toHaveCount(3);
     await expect(lists.nth(0)).toHaveCSS('gap', '0px');
     await expect(lists.nth(1)).toHaveCSS('gap', '8px');
-    await expect(scroller).toHaveCSS('gap', '12px');
+    await expect(scroller).toHaveCSS('gap', '16px');
     await expect(scroller).toHaveAttribute('divider-sides', 'trbl');
     await expect(scroller).toHaveCSS('overflow-y', 'auto');
     const geometry = await scroller.evaluate((node) => {
@@ -368,7 +368,8 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
 
   await page.goto('/ux-demo?component=keyboard-settings&dev-review=false');
   const keyboard = page.locator('[data-component="keyboard-settings"]');
-  await expect(keyboard.locator(':scope > [data-component="list"]')).toHaveCount(1);
+  // HS2-57MAAH moved the layout class onto an app-owned wrapper around the Kerf List root.
+  await expect(keyboard.locator(':scope > .keyboard-settings > [data-component="list"]')).toHaveCount(1);
   await expect(keyboard.locator('li[data-shortcut-id] [data-component="row"]').first()).toBeVisible();
 
   await page.goto('/ux-demo?component=provider-setup-form&dev-review=false');

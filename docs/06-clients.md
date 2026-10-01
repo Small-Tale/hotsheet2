@@ -699,7 +699,9 @@ and identity-less legacy entries remain conservatively blocking.
   project once it registers, because Kerf's Select has no disabled choices. Still-opening roots
   stay in the remembered set if it is saved mid-restore (HS2-X74D4B, HS2-2BEJXD). Otherwise failed opens
   receive one bounded parallel retry and successful projects are registered serially in remembered
-  order before one project is activated. Only the remembered active project loads its ticket list,
+  order before one project is activated. A project opened from Add project activates when its
+  open completes unless the user explicitly selected a project tab while it was opening; that
+  choice wins (HS2-YVBGW3). Only the remembered active project loads its ticket list,
   commands, views, and workspace session before the shell is revealed. Other project tabs
   load those resources when selected (including selection after closing the active tab).
   If the remembered active root remains unavailable, its error tab stays selected; if no
@@ -875,7 +877,10 @@ and identity-less legacy entries remain conservatively blocking.
   settled results and counts without issuing another request. The workspace's Kerf-managed
   collapsible search adopts the project-persisted open signal: its canonical magnifier moves
   focus into the editor, and an empty blur or Escape collapses it without app-owned focusout
-  bookkeeping; populated searches and marked suggestion/date/help surfaces remain open.
+  bookkeeping; populated searches and marked suggestion/date/help surfaces remain open. A
+  pointer press that blurs the empty search collapses it only after that press's click, so the
+  collapsing row cannot shift the project tabs or tickets out from under the pointer and swallow
+  the click (HS2-YVBGW3, pending Kerf KF-64W0RN).
   Select All followed by Backspace or Delete clears ordinary text and filter chips
   without collapsing the focused editor, including repeated empty/refill sequences
   on narrow screens. Focus may still leave normally: a deliberate keyboard handoff

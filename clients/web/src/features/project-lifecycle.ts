@@ -17,6 +17,7 @@ import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '..
 import { type MigrationJob } from '../migration-progress';
 import { type ProjectTicketSources, projectTicketSources } from '../new-ticket-source';
 import type { PermissionAutomation } from '../permission-notifications';
+import { openedProjectYieldsToSelection } from '../project-activation';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
 import { insertTabByRank, replaceTabInPlace } from '../tab-order';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
@@ -42,6 +43,8 @@ export interface ProjectLifecycleDependencies {
   project: () => Project | undefined;
   rememberedProjectRoots: () => string[];
   activateOpenProject: (projectId: string) => ProjectActivation | undefined;
+  /** Bumped on every explicit project-tab selection, so an in-flight open can yield to it (HS2-YVBGW3). */
+  projectSelectionGeneration?: () => number;
   loadPermissionAutomation: (projectId: string) => PermissionAutomation;
   setPermissionAutomation: (projectId: string, automation: PermissionAutomation) => void;
   startPermissionUpdates: () => void;
@@ -276,6 +279,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     loading.value = true;
     unhealthyServerRecovery.value = undefined;
     if (reportError) error.value = '';
+    const selectionAtStart = dependencies.projectSelectionGeneration?.();
     try {
       const opened = await openProjectFetch(root, ticketStore);
       if (!opened.ok) {
@@ -287,7 +291,18 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         localStorage.setItem('hotsheet.open-projects', JSON.stringify(dependencies.rememberedProjectRoots()));
       dependencies.startPermissionUpdates();
       dependencies.syncProjectChangeStreams();
-      await activateOpenedProject(opened.project);
+      // The opened tab is visible while the open finishes; if the user picked a tab meanwhile, that
+      // explicit choice wins instead of being overridden when the open completes (HS2-YVBGW3).
+      if (
+        openedProjectYieldsToSelection(
+          selectionAtStart,
+          dependencies.projectSelectionGeneration?.(),
+          dependencies.project()?.id,
+          opened.project.id,
+        )
+      )
+        presentOpenedProjectSetup(opened.project);
+      else await activateOpenedProject(opened.project);
       return true;
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
