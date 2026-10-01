@@ -1769,12 +1769,14 @@ before "Other…" is absent in the entries form. HS2-CWA0S6 then replaced the ra
 value pickers that Kerf `Select` covers: the Permissions settings' automatic-decision and delay
 selects (`settings-workspace.tsx`) and the ticket-source setup dialog's preview-state picker
 (`ticket-source-setup-dialog.tsx`, demo only). The terminal visibility dialog's "Item types"
-picker keeps raw `wa-select`/`wa-option` markup on purpose: it is a multiple select with a
-disabled choice and Select All / Deselect All action rows, which `Select` cannot express until
-`KF-F68TJS` ships. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to 102 with the
-PopupMenu adoption, to 94 with the Select adoption, to 76 with the context-menu adoption, and to
-9 with the demo-stage conversion (HS2-W0N1KP); the nine that remain are the terminal visibility
-dialog's deliberate raw picker (`KF-F68TJS`). It is a warning-level rule without an exact budget,
+picker kept raw `wa-select`/`wa-option` markup until `KF-F68TJS` shipped disabled choices and
+bulk actions in beta.62; HS2-8ZC1YB then moved it onto a controlled multiple `Select` with
+`disabledReason`, `selectAllLabel`, and `clearLabel`, deleting the app's morph-skip island and
+its MutationObserver value sync. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to
+102 with the PopupMenu adoption, to 94 with the Select adoption, to 76 with the context-menu
+adoption, to 9 with the demo-stage conversion (HS2-W0N1KP), and to 2 with the picker adoption;
+the two that remain are the visibility dialog's group context menu `wa-dropdown-item`s
+(`HS2-84751P`). It is a warning-level rule without an exact budget,
 so the remaining count is tracked here rather than in the doctor script. The related warning-level
 `KUI-L401` (a module rendering `Select` or `PopupMenu` should import its `register` entry) stays
 accepted: the app registers those elements once in its entry points, because the register modules

@@ -4778,9 +4778,8 @@ for (const theme of ['light', 'dark'] as const) {
     const dialog = page.locator('[data-terminal-visibility-dialog]');
     const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
     const rows = dialog.locator('[data-action="toggle-terminal-visibility"]');
-    await expect(types).toHaveClass('terminal-visibility-dialog__type-select');
-    await expect(types.locator('.terminal-visibility-dialog__type-icon')).toHaveCount(6);
-    await expect(types.locator('.kui-select__icon')).toHaveCount(0);
+    await expect(types).toHaveAttribute('data-component', 'select');
+    await expect(types.locator('.kui-select__icon')).toHaveCount(4);
     await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
     await expect(rows).toHaveCount(3);
     await dialog
@@ -4788,7 +4787,9 @@ for (const theme of ['light', 'dark'] as const) {
       .screenshot({ path: `/private/tmp/hs2-se3rvm-dialog-${theme}-after.png`, animations: 'disabled' });
     await types.locator('[part~="expand-icon"]').click();
     const choose = async (value: string, selected: string[], count: number) => {
-      await types.locator(`wa-option[value="${value}"]`).click();
+      if (value === 'select-all' || value === 'deselect-all')
+        await types.locator(`button[data-select-action="${value === 'select-all' ? 'all' : 'clear'}"]`).click();
+      else await types.locator(`wa-option[value="${value}"]`).click();
       await expect(types).toHaveJSProperty('open', true);
       await expect
         .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
@@ -4798,6 +4799,12 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(types.locator(`wa-option[value="${kind}"]`)).toHaveJSProperty('selected', selected.includes(kind));
     };
     await expect(types.locator('wa-option[value="browser"]')).toHaveJSProperty('disabled', true);
+    await expect(types.locator('wa-option[value="browser"]')).toHaveAttribute(
+      'title',
+      'Web browser tiles are not available yet.',
+    );
+    await expect(types.getByRole('button', { name: 'Select all' })).toBeVisible();
+    await expect(types.getByRole('button', { name: 'Clear' })).toBeVisible();
     await choose('deselect-all', [], 0);
     await expect(dialog.getByText('No workspace items match the selected types.')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Hide listed' })).toBeDisabled();

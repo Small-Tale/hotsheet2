@@ -1217,7 +1217,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
   await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
   await types.click();
-  await types.locator('wa-option[value="deselect-all"]').click();
+  await types.locator('button[data-select-action="clear"]').click();
   await expect(types).toHaveJSProperty('open', true);
   await expect(types).toHaveJSProperty('value', []);
   await types.locator('wa-option[value="chat"]').click();
@@ -1239,7 +1239,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(1);
   await types.locator('[part~="expand-icon"]').click();
   await expect(types).toHaveJSProperty('open', true);
-  await types.locator('wa-option[value="select-all"]').click();
+  await types.locator('button[data-select-action="all"]').click();
   await expect
     .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
     .toEqual(['ai', 'chat', 'shell']);

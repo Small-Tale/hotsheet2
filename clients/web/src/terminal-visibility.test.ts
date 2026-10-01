@@ -103,10 +103,11 @@ describe('workspace visibility type filtering', () => {
       group.items.map((item) => item.key),
     );
 
-  it('normalizes special actions, duplicates and unsupported future types', () => {
+  it('normalizes duplicates, unsupported future types, and stale bulk-action sentinels', () => {
     expect(terminalVisibilityTypes(['ai', 'ai', 'browser', 'unknown'])).toEqual(['ai']);
-    expect(terminalVisibilityTypes(['ai', 'deselect-all'])).toEqual([]);
-    expect(terminalVisibilityTypes(['select-all'])).toEqual(TERMINAL_VISIBILITY_TYPES);
+    expect(terminalVisibilityTypes(['ai', 'deselect-all'])).toEqual(['ai']);
+    expect(terminalVisibilityTypes(['select-all'])).toEqual([]);
+    expect(terminalVisibilityTypes([...TERMINAL_VISIBILITY_TYPES])).toEqual(TERMINAL_VISIBILITY_TYPES);
     expect(terminalVisibilityTypes([])).toEqual([]);
   });
 
@@ -130,7 +131,7 @@ describe('workspace visibility type filtering', () => {
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['chat']), true);
     expect(state.groups[1].hiddenKeys).toEqual(['one:shell']);
     expect(state.groups[0].hiddenKeys).toEqual([]);
-    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['select-all']), true);
+    state = setAllTerminalsVisibleInGroup(state, 'focus', keys(TERMINAL_VISIBILITY_TYPES), true);
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['ai']), false);
     expect(state.groups[1].hiddenKeys).toEqual(['one:agent']);
   });

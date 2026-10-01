@@ -1346,9 +1346,9 @@
       "id": "terminal-visibility-dialog",
       "name": "TerminalVisibilityDialog",
       "kind": "component",
-      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a native multi-select type filter.",
+      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
       "useWhen": [
-        "Hot Sheet needs named visibility groups, persistent shell/AI/chat visibility, and a native multi-select type filter."
+        "Hot Sheet needs named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalVisibilityDialog behavior."

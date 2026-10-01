@@ -570,7 +570,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-visibility-dialog',
         'TerminalVisibilityDialog',
-        'Named visibility groups, persistent shell/AI/chat visibility, and a native multi-select type filter.',
+        'Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.',
         'feature-floor',
         true,
         ['list-item'],

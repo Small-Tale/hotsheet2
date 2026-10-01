@@ -24,7 +24,7 @@ const groups = [
   },
 ];
 describe('TerminalVisibilityDialog', () => {
-  it('renders a native multi-select with special actions and no matching empty project headers', () => {
+  it('renders a Kerf multiple Select with bulk actions and no matching empty project headers', () => {
     const markup = String(
       TerminalVisibilityDialog({
         open: true,
@@ -34,15 +34,16 @@ describe('TerminalVisibilityDialog', () => {
         types: [],
       }),
     );
-    expect(markup).toContain('data-terminal-type-filter');
-    expect(markup).toContain('class="terminal-visibility-dialog__type-select"');
-    expect(markup).toContain('class="terminal-visibility-dialog__type-icon"');
-    expect(markup).not.toContain('kui-select');
-    expect(markup).toContain('data-selected-types=""');
+    expect(markup).toContain('data-component="select"');
+    expect(markup).toContain('name="terminal-visibility-types"');
+    expect(markup).toContain('placeholder="No types selected"');
+    expect(markup).not.toContain('terminal-visibility-dialog__type-icon');
     expect(markup).toContain('multiple');
-    expect(markup).toContain('value="select-all"');
-    expect(markup).toContain('value="deselect-all"');
-    expect(markup).toContain('value="browser" disabled');
+    expect(markup).toMatch(/<wa-option value="shell"(?! selected)/);
+    expect(markup).toContain('data-select-action="all"');
+    expect(markup).toContain('data-select-action="clear"');
+    expect(markup).toContain('value="browser" disabled title="Web browser tiles are not available yet."');
+    expect(markup).toContain('class="kui-select__icon"');
     expect(markup).toContain('No workspace items match the selected types.');
     expect(markup).not.toContain('data-component="list-header"');
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');

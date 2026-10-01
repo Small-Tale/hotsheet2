@@ -161,8 +161,6 @@ export type TerminalVisibilityType = 'shell' | 'ai' | 'chat';
 export const TERMINAL_VISIBILITY_TYPES: readonly TerminalVisibilityType[] = ['shell', 'ai', 'chat'];
 
 export function terminalVisibilityTypes(value: readonly string[]): TerminalVisibilityType[] {
-  if (value.includes('select-all')) return [...TERMINAL_VISIBILITY_TYPES];
-  if (value.includes('deselect-all')) return [];
   return TERMINAL_VISIBILITY_TYPES.filter((kind) => value.includes(kind));
 }
 

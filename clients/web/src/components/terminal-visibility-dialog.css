@@ -121,8 +121,3 @@
   /* A grid item stretches to the filter's width without styling the Web Awesome host. */
   justify-items: stretch;
 }
-.terminal-visibility-dialog__type-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}

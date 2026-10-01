@@ -1,15 +1,14 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@awesome.me/webawesome/dist/components/option/option.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './terminal-visibility-dialog.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { CheckCheck, Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2, X } from 'lucide';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
@@ -28,6 +27,21 @@ export interface TerminalVisibilityDialogProps {
   types?: readonly TerminalVisibilityType[];
   contextMenu?: { id: string; x: number; y: number };
 }
+
+/** Browser tiles are a separate (unshipped) kind, so the choice stays visible but unavailable. */
+export const TERMINAL_VISIBILITY_TYPE_CHOICES: readonly SelectChoice<TerminalVisibilityType | 'browser'>[] = [
+  { value: 'shell', label: 'Shell Terminals', icon: Terminal, iconName: 'terminal' },
+  { value: 'ai', label: 'AI Terminals', icon: Sparkles, iconName: 'sparkles' },
+  { value: 'chat', label: 'AI Chat', icon: MessageSquare, iconName: 'message-square' },
+  {
+    value: 'browser',
+    label: 'Web Browsers',
+    icon: Globe,
+    iconName: 'globe',
+    disabled: true,
+    disabledReason: 'Web browser tiles are not available yet.',
+  },
+];
 
 export interface TerminalVisibilityNamePrompt {
   mode: 'add' | 'rename';
@@ -111,55 +125,17 @@ export function TerminalVisibilityDialog({
             </button>
           </div>
         </div>
-        <div class="terminal-visibility-dialog__filter" data-selected-types={types.join(',')}>
-          <wa-select
-            class="terminal-visibility-dialog__type-select"
-            data-terminal-type-filter
-            data-morph-skip
+        <div class="terminal-visibility-dialog__filter">
+          <Select
             name="terminal-visibility-types"
             label="Item types"
-            placeholder="No types selected"
+            placeholderText="No types selected"
             multiple
-            max-options-visible={3}
-          >
-            <wa-option value="shell">
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={Terminal} name="terminal" />
-              </span>
-              Shell Terminals
-            </wa-option>
-            <wa-option value="ai">
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={Sparkles} name="sparkles" />
-              </span>
-              AI Terminals
-            </wa-option>
-            <wa-option value="chat">
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={MessageSquare} name="message-square" />
-              </span>
-              AI Chat
-            </wa-option>
-            <wa-option value="browser" disabled>
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={Globe} name="globe" />
-              </span>
-              Web Browsers
-            </wa-option>
-            <wa-divider></wa-divider>
-            <wa-option value="select-all">
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={CheckCheck} name="check-check" />
-              </span>
-              Select All
-            </wa-option>
-            <wa-option value="deselect-all">
-              <span slot="start" class="terminal-visibility-dialog__type-icon">
-                <LucideIcon icon={X} name="x" />
-              </span>
-              Deselect All
-            </wa-option>
-          </wa-select>
+            value={types}
+            choices={TERMINAL_VISIBILITY_TYPE_CHOICES}
+            selectAllLabel="Select all"
+            clearLabel="Clear"
+          />
         </div>
         <div class="terminal-visibility-dialog__body">
           {visibleGroups.length === 0 ? (

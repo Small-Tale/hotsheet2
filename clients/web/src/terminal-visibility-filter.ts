@@ -5,38 +5,18 @@ import { type TerminalVisibilityType, terminalVisibilityTypes } from './terminal
 interface TypeSelect extends HTMLElement {
   value: string | string[] | null;
 }
-const selector = 'wa-select[data-terminal-type-filter]';
+const selector = 'wa-select[name="terminal-visibility-types"]';
 
-/** Bind a controlled array to the native multi-select island without morphing its open menu. */
+/**
+ * Report the controlled Kerf multiple Select's value changes, including its Select all / Clear
+ * footer actions, which Kerf's register module turns into ordinary `change` events.
+ */
 export function wireTerminalVisibilityTypeFilter(
   root: HTMLElement,
   onChange: (types: TerminalVisibilityType[]) => void,
 ): () => void {
-  const sync = () => {
-    for (const select of root.querySelectorAll<TypeSelect>(selector)) {
-      const types = terminalVisibilityTypes(
-        (select.closest<HTMLElement>('[data-selected-types]')?.dataset.selectedTypes ?? '').split(','),
-      );
-      if (JSON.stringify(select.value) !== JSON.stringify(types)) select.value = types;
-    }
-  };
-  const stop = delegate(root, 'change', selector, (_event, target) => {
+  return delegate(root, 'change', selector, (_event, target) => {
     const select = target as TypeSelect;
-    const types = terminalVisibilityTypes(Array.isArray(select.value) ? select.value : []);
-    select.value = types;
-    onChange(types);
+    onChange(terminalVisibilityTypes(Array.isArray(select.value) ? select.value : []));
   });
-  const observer = new MutationObserver(sync);
-  observer.observe(root, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-selected-types'],
-  });
-  void customElements.whenDefined('wa-select').then(sync);
-  sync();
-  return () => {
-    observer.disconnect();
-    stop();
-  };
 }
