@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -43,7 +43,7 @@ CREATE TABLE tickets (
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
   has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
-  claimed_by      TEXT, claim_lease_expires_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  claimed_by      TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
   file_path       TEXT NOT NULL,
   content_hash    TEXT NOT NULL,
   UNIQUE(store_id, id)
@@ -391,8 +391,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -403,7 +403,7 @@ impl Index {
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
-             legacy_number=excluded.legacy_number",
+             legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -414,7 +414,7 @@ impl Index {
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
                 file_path, content_hash, feedback_needed,
                 t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) as i64,
-                t.legacy_number,
+                t.legacy_number, ts(&t.claim_eta_at),
             ],
         )?;
 
@@ -998,7 +998,7 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed,t.legacy_number \
+             t.feedback_needed,t.legacy_number,t.claim_eta_at \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1032,6 +1032,7 @@ impl Index {
                     duplicate_of: r.get(17)?,
                     claimed_by: r.get(18)?,
                     claim_lease_expires_at: r.get(19)?,
+                    claim_eta_at: r.get(24)?,
                     worker_label: r.get(20)?,
                     legacy_number: r.get(23)?,
                     claim_count: r.get::<_, i64>(21)? as u32,

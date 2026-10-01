@@ -46,6 +46,8 @@ pub enum OpError {
     EmptyNotWorkingReport,
     #[error("only a ticket in Trash can be restored (found {0:?})")]
     NotInTrash(Status),
+    #[error("invalid ETA: {0}")]
+    InvalidEta(String),
 }
 
 // ---- query -----------------------------------------------------------------------
@@ -703,6 +705,7 @@ fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
 fn clear_claim_fields(ticket: &mut Ticket) {
     ticket.claimed_by = None;
     ticket.claim_lease_expires_at = None;
+    ticket.claim_eta_at = None;
     ticket.worker_label = None;
 }
 
@@ -737,6 +740,11 @@ pub(crate) fn append_claim_event(
         worker: worker.to_string(),
         at: at.clone(),
         lease_expires_at,
+        // A claim or renewal records the holder's estimate as of that moment (HS2-DQQ0AX).
+        eta_at: match kind {
+            ClaimEventKind::Claim | ClaimEventKind::Renew => ticket.claim_eta_at.clone(),
+            ClaimEventKind::Release => None,
+        },
         worker_label,
     });
 }
@@ -1660,6 +1668,93 @@ pub fn claim_next(
     worker: &str,
     label: Option<String>,
 ) -> Result<Option<Ticket>, StoreError> {
+    claim_next_with_eta(store, now, lease_expires, worker, label, None)
+}
+
+/// The longest estimate a worker may give: anything further out is not a working estimate.
+pub const MAX_CLAIM_ETA_DAYS: i64 = 14;
+
+/// Check a worker's estimated completion time (HS2-DQQ0AX): a valid timestamp after `now` and
+/// at most [`MAX_CLAIM_ETA_DAYS`] ahead.
+pub fn validate_claim_eta(now: &Timestamp, eta: &Timestamp) -> Result<(), OpError> {
+    let (Some(now_at), Some(eta_at)) = (now.instant(), eta.instant()) else {
+        return Err(OpError::InvalidEta(format!(
+            "'{}' is not an RFC 3339 timestamp",
+            eta.as_str()
+        )));
+    };
+    if eta_at <= now_at {
+        return Err(OpError::InvalidEta(format!(
+            "'{}' is not in the future",
+            eta.as_str()
+        )));
+    }
+    if eta_at - now_at > time::Duration::days(MAX_CLAIM_ETA_DAYS) {
+        return Err(OpError::InvalidEta(format!(
+            "'{}' is more than {MAX_CLAIM_ETA_DAYS} days away",
+            eta.as_str()
+        )));
+    }
+    Ok(())
+}
+
+/// Parse a worker's ETA (HS2-DQQ0AX) given as an RFC 3339 timestamp or as a duration from
+/// `now` such as `45m`, `2h`, `1h30m`, or `1d` (units `d`, `h`, `m`, `s`), then validate it
+/// with [`validate_claim_eta`].
+pub fn parse_claim_eta(now: &Timestamp, raw: &str) -> Result<Timestamp, OpError> {
+    let raw = raw.trim();
+    let eta = if raw.contains('T') {
+        Timestamp::new(raw)
+    } else {
+        let invalid = || {
+            OpError::InvalidEta(format!(
+                "'{raw}' is neither an RFC 3339 timestamp nor a duration such as 45m, 2h, or 1h30m"
+            ))
+        };
+        let now_at = now.instant().ok_or_else(invalid)?;
+        let (mut total, mut digits) = (time::Duration::ZERO, String::new());
+        for character in raw.chars() {
+            if character.is_ascii_digit() {
+                digits.push(character);
+                continue;
+            }
+            let amount: i64 = digits.parse().map_err(|_| invalid())?;
+            digits.clear();
+            total += match character.to_ascii_lowercase() {
+                'd' => time::Duration::days(amount),
+                'h' => time::Duration::hours(amount),
+                'm' => time::Duration::minutes(amount),
+                's' => time::Duration::seconds(amount),
+                _ => return Err(invalid()),
+            };
+        }
+        if !digits.is_empty() || total == time::Duration::ZERO {
+            return Err(invalid());
+        }
+        Timestamp::from_datetime(now_at + total)
+    };
+    validate_claim_eta(now, &eta)?;
+    Ok(eta)
+}
+
+/// Whether the live claim's ETA has passed at `now`, so the holder should re-estimate.
+pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
+    t.claimed_by.is_some()
+        && t.claim_eta_at
+            .as_ref()
+            .and_then(|eta| eta.chronological_cmp(now))
+            .is_some_and(|order| order != Ordering::Greater)
+}
+
+/// [`claim_next`] that also records the worker's estimated completion time (HS2-DQQ0AX).
+pub fn claim_next_with_eta(
+    store: &FsStore,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+    eta: Option<Timestamp>,
+) -> Result<Option<Ticket>, StoreError> {
     let tickets = store.list_tickets()?;
     let done: HashSet<Ulid> = tickets
         .iter()
@@ -1683,6 +1778,7 @@ pub fn claim_next(
     };
     t.claimed_by = Some(worker.to_string());
     t.claim_lease_expires_at = Some(lease_expires);
+    t.claim_eta_at = eta;
     t.worker_label = label;
     t.claim_count += 1;
     let lease_expires_at = t.claim_lease_expires_at.clone();
@@ -1712,7 +1808,21 @@ pub fn claim(
     worker: &str,
     label: Option<String>,
 ) -> Result<Ticket, OpError> {
-    let mut t = prepare_claim(store, id, now, lease_expires, worker, label)?;
+    claim_with_eta(store, id, now, lease_expires, worker, label, None)
+}
+
+/// [`claim`] that also records the worker's estimated completion time (HS2-DQQ0AX). A new
+/// acquisition replaces any estimate; a live holder's retry keeps it unless `eta` is given.
+pub fn claim_with_eta(
+    store: &FsStore,
+    id: &Ulid,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+    eta: Option<Timestamp>,
+) -> Result<Ticket, OpError> {
+    let mut t = prepare_claim(store, id, now, lease_expires, worker, label, eta)?;
     start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -1747,6 +1857,7 @@ fn prepare_claim(
     lease_expires: Timestamp,
     worker: &str,
     label: Option<String>,
+    eta: Option<Timestamp>,
 ) -> Result<Ticket, OpError> {
     let tickets = store.list_tickets()?;
     let mut t = tickets
@@ -1784,19 +1895,27 @@ fn prepare_claim(
                 worker: worker.to_string(),
             });
         }
-        if t.claim_lease_expires_at
+        let extends = t
+            .claim_lease_expires_at
             .as_ref()
             .and_then(|current| current.chronological_cmp(&lease_expires))
-            == Some(Ordering::Less)
-        {
-            t.claim_lease_expires_at = Some(lease_expires.clone());
+            == Some(Ordering::Less);
+        let re_estimates = eta.is_some() && eta != t.claim_eta_at;
+        if let Some(eta) = eta {
+            t.claim_eta_at = Some(eta);
+        }
+        if extends || re_estimates {
+            if extends {
+                t.claim_lease_expires_at = Some(lease_expires.clone());
+            }
+            let lease_expires = t.claim_lease_expires_at.clone();
             let worker_label = label.clone().or_else(|| t.worker_label.clone());
             append_claim_event(
                 &mut t,
                 ClaimEventKind::Renew,
                 worker,
                 now,
-                Some(lease_expires),
+                lease_expires,
                 worker_label,
             );
         }
@@ -1806,6 +1925,7 @@ fn prepare_claim(
     } else {
         t.claimed_by = Some(worker.to_string());
         t.claim_lease_expires_at = Some(lease_expires);
+        t.claim_eta_at = eta;
         t.worker_label = label;
         t.claim_count += 1;
         let lease_expires_at = t.claim_lease_expires_at.clone();
@@ -1876,6 +1996,19 @@ pub fn renew(
     lease_expires: Timestamp,
     worker: &str,
 ) -> Result<Ticket, OpError> {
+    renew_with_eta(store, id, now, lease_expires, worker, None)
+}
+
+/// [`renew`] that can also replace the worker's estimated completion time (HS2-DQQ0AX).
+/// Without `eta` the current estimate is kept.
+pub fn renew_with_eta(
+    store: &FsStore,
+    id: &Ulid,
+    now: Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    eta: Option<Timestamp>,
+) -> Result<Ticket, OpError> {
     let mut t = store.read_ticket(id)?;
     match &t.claimed_by {
         Some(holder) if holder == worker => {}
@@ -1889,6 +2022,9 @@ pub fn renew(
         None => return Err(OpError::NotClaimed(t.slug.clone())),
     }
     t.claim_lease_expires_at = Some(lease_expires.clone());
+    if let Some(eta) = eta {
+        t.claim_eta_at = Some(eta);
+    }
     let label = t.worker_label.clone();
     append_claim_event(
         &mut t,
@@ -3991,6 +4127,191 @@ mod tests {
         assert!(released.claimed_by.is_none());
         assert_eq!(released.claim_history[2].kind, ClaimEventKind::Release);
         assert!(released.claim_history[2].lease_expires_at.is_none());
+    }
+
+    /// A claim's ETA (HS2-DQQ0AX) walks the claim lifecycle: set on claim, kept by a plain renew
+    /// or holder retry, replaced on re-estimate, reported expired once passed, cleared on
+    /// release and completion, and recorded per event in the append-only history.
+    #[test]
+    fn claim_eta_follows_the_claim_lifecycle() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FD0").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "estimated work".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let lease = ts("2026-08-19T02:00:00Z");
+
+        // Claim with an estimate.
+        let claimed = claim_with_eta(
+            &store,
+            &id,
+            &ts("2026-08-19T00:10:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+            Some(ts("2026-08-19T00:40:00Z")),
+        )
+        .unwrap();
+        assert_eq!(claimed.claim_eta_at, Some(ts("2026-08-19T00:40:00Z")));
+        assert_eq!(
+            claimed.claim_history[0].eta_at,
+            Some(ts("2026-08-19T00:40:00Z"))
+        );
+        assert!(!claim_eta_expired(&claimed, &ts("2026-08-19T00:39:59Z")));
+        assert!(claim_eta_expired(&claimed, &ts("2026-08-19T00:40:00Z")));
+
+        // A plain renew and an estimate-free holder retry keep it.
+        let renewed = renew(&store, &id, ts("2026-08-19T00:20:00Z"), lease.clone(), "w1").unwrap();
+        assert_eq!(renewed.claim_eta_at, Some(ts("2026-08-19T00:40:00Z")));
+        assert_eq!(
+            renewed.claim_history.last().unwrap().eta_at,
+            Some(ts("2026-08-19T00:40:00Z"))
+        );
+        let retried = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:21:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(retried.claim_eta_at, Some(ts("2026-08-19T00:40:00Z")));
+        assert_eq!(retried.claim_history.len(), renewed.claim_history.len());
+
+        // Past the estimate, renewing with a new one replaces it; a holder retry can too, and
+        // records the re-estimate even though the lease is unchanged.
+        let late = ts("2026-08-19T00:45:00Z");
+        assert!(claim_eta_expired(&retried, &late));
+        let re_estimated = renew_with_eta(
+            &store,
+            &id,
+            late.clone(),
+            lease.clone(),
+            "w1",
+            Some(ts("2026-08-19T01:00:00Z")),
+        )
+        .unwrap();
+        assert!(!claim_eta_expired(&re_estimated, &late));
+        let retried = claim_with_eta(
+            &store,
+            &id,
+            &ts("2026-08-19T00:46:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+            Some(ts("2026-08-19T01:10:00Z")),
+        )
+        .unwrap();
+        assert_eq!(retried.claim_eta_at, Some(ts("2026-08-19T01:10:00Z")));
+        assert_eq!(
+            retried
+                .claim_history
+                .iter()
+                .map(|event| event.eta_at.as_ref().map(Timestamp::as_str))
+                .collect::<Vec<_>>(),
+            vec![
+                Some("2026-08-19T00:40:00Z"),
+                Some("2026-08-19T00:40:00Z"),
+                Some("2026-08-19T01:00:00Z"),
+                Some("2026-08-19T01:10:00Z"),
+            ]
+        );
+
+        // Release clears it; a new claim without an estimate has none (no stale carry-over).
+        let released = release(&store, &id, ts("2026-08-19T00:50:00Z"), "w1", false).unwrap();
+        assert!(released.claim_eta_at.is_none());
+        assert!(released.claim_history.last().unwrap().eta_at.is_none());
+        assert!(!claim_eta_expired(&released, &ts("2026-08-19T03:00:00Z")));
+        let reclaimed = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:55:00Z"),
+            lease.clone(),
+            "w2",
+            None,
+        )
+        .unwrap();
+        assert!(reclaimed.claim_eta_at.is_none());
+
+        // An expired lease taken over by another worker replaces the old holder's estimate.
+        let taken = claim_with_eta(
+            &store,
+            &id,
+            &ts("2026-08-19T02:30:00Z"),
+            ts("2026-08-19T03:00:00Z"),
+            "w3",
+            None,
+            Some(ts("2026-08-19T02:50:00Z")),
+        )
+        .unwrap();
+        assert_eq!(taken.claimed_by.as_deref(), Some("w3"));
+        assert_eq!(taken.claim_eta_at, Some(ts("2026-08-19T02:50:00Z")));
+
+        // Completion ends the claim and its estimate.
+        let completed = update(
+            &store,
+            &id,
+            ts("2026-08-19T02:40:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(completed.claim_eta_at.is_none());
+    }
+
+    #[test]
+    fn claim_eta_parsing_accepts_durations_and_timestamps_within_bounds() {
+        let now = ts("2026-08-19T00:00:00Z");
+        for (raw, expected) in [
+            ("45m", "2026-08-19T00:45:00Z"),
+            ("2h", "2026-08-19T02:00:00Z"),
+            ("1h30m", "2026-08-19T01:30:00Z"),
+            ("1d", "2026-08-20T00:00:00Z"),
+            ("90s", "2026-08-19T00:01:30Z"),
+            (" 2H ", "2026-08-19T02:00:00Z"),
+        ] {
+            let parsed = parse_claim_eta(&now, raw).unwrap();
+            assert_eq!(
+                parsed.chronological_cmp(&ts(expected)),
+                Some(Ordering::Equal),
+                "{raw}"
+            );
+        }
+        assert_eq!(
+            parse_claim_eta(&now, "2026-08-19T03:00:00Z").unwrap(),
+            ts("2026-08-19T03:00:00Z")
+        );
+        for raw in [
+            "",
+            "soon",
+            "45",
+            "m",
+            "0m",
+            "45x",
+            "2026-08-18T23:00:00Z",
+            "2026-08-19T00:00:00Z",
+            "15d",
+            "2026-09-30T00:00:00Z",
+            "2026-08-19Tgarbage",
+        ] {
+            assert!(
+                matches!(parse_claim_eta(&now, raw), Err(OpError::InvalidEta(_))),
+                "{raw:?} should be rejected"
+            );
+        }
+        assert!(parse_claim_eta(&now, "14d").is_ok());
     }
 
     /// A launcher releases its session's claims when the session exits (HS2-1VAW1C): only

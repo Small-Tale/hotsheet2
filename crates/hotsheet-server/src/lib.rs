@@ -6545,7 +6545,12 @@ async fn claim_next_ticket(
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
     let worker = req.worker.unwrap_or_else(|| "worker".into());
-    let claimed = ops::claim_next(&entry.store, &now, lease, &worker, req.label)?;
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let claimed = ops::claim_next_with_eta(&entry.store, &now, lease, &worker, req.label, eta)?;
     if let Some(t) = &claimed {
         state.changed_in(&entry, "claimed", t);
     }
@@ -6568,7 +6573,20 @@ async fn claim_ticket(
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
     let worker = req.worker.unwrap_or_else(|| "worker".into());
-    let claimed = ops::claim(&entry.store, &ticket.id, &now, lease, &worker, req.label)?;
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let claimed = ops::claim_with_eta(
+        &entry.store,
+        &ticket.id,
+        &now,
+        lease,
+        &worker,
+        req.label,
+        eta,
+    )?;
     state.changed_in(&entry, "claimed", &claimed);
     Ok(Json(api_ticket(&entry, &claimed)?))
 }
@@ -6604,7 +6622,12 @@ async fn renew_ticket(
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
     let worker = req.worker.unwrap_or_else(|| "worker".into());
-    let renewed = ops::renew(&entry.store, &ticket.id, now, lease, &worker)?;
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let renewed = ops::renew_with_eta(&entry.store, &ticket.id, now, lease, &worker, eta)?;
     state.changed_in(&entry, "renewed", &renewed);
     Ok(Json(api_ticket(&entry, &renewed)?))
 }
@@ -9811,6 +9834,8 @@ struct ClaimReq {
     worker: Option<String>,
     label: Option<String>,
     lease_minutes: Option<i64>,
+    /// Estimated completion time: a duration such as `45m` or an RFC 3339 timestamp (HS2-DQQ0AX).
+    eta: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -9823,6 +9848,8 @@ struct ReleaseReq {
 struct RenewReq {
     worker: Option<String>,
     lease_minutes: Option<i64>,
+    /// A new estimated completion time; omitted keeps the current one (HS2-DQQ0AX).
+    eta: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -9927,9 +9954,8 @@ impl From<OpError> for ApiError {
             | OpError::NotInTrash(_)) => ApiError::new(StatusCode::CONFLICT, other.to_string()),
             other @ (OpError::DuplicateNeedsTarget
             | OpError::SelfBlock(_)
-            | OpError::EmptyNotWorkingReport) => {
-                ApiError::new(StatusCode::BAD_REQUEST, other.to_string())
-            }
+            | OpError::EmptyNotWorkingReport
+            | OpError::InvalidEta(_)) => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
             other @ OpError::UnknownTicket(_) => {
                 ApiError::new(StatusCode::NOT_FOUND, other.to_string())
             }

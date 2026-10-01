@@ -280,6 +280,7 @@ impl GitLabProvider {
             moved_at: None,
             claimed_by: None,
             claim_lease_expires_at: None,
+            claim_eta_at: None,
             worker_label: None,
             legacy_number: None,
             claim_count: 0,

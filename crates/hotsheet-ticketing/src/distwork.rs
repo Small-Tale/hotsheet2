@@ -132,6 +132,7 @@ fn record_local_claim(
     let mut t = store.read_ticket(id).map_err(store_err)?;
     t.claimed_by = Some(worker.to_string());
     t.claim_lease_expires_at = Some(expires.clone());
+    t.claim_eta_at = None;
     t.claim_count += 1;
     ops::append_claim_event(
         &mut t,

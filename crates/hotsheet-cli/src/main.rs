@@ -561,6 +561,10 @@ enum Cmd {
         /// Lease length in minutes.
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
+        /// Estimated completion time for a non-trivial ticket: a duration from now (`45m`,
+        /// `2h`, `1h30m`) or an RFC 3339 timestamp (HS2-DQQ0AX).
+        #[arg(long)]
+        eta: Option<String>,
     },
     /// Claim one exact open, unblocked ticket by slug or ULID (local lease).
     Claim {
@@ -577,6 +581,10 @@ enum Cmd {
         /// Compatibility flag; exact claims now always start Not Started tickets.
         #[arg(long)]
         start: bool,
+        /// Estimated completion time for a non-trivial ticket: a duration from now (`45m`,
+        /// `2h`, `1h30m`) or an RFC 3339 timestamp (HS2-DQQ0AX).
+        #[arg(long)]
+        eta: Option<String>,
     },
     /// Release a claim (only the holding worker, unless --force), or with `--all` every claim
     /// the worker holds.
@@ -598,6 +606,10 @@ enum Cmd {
         worker: String,
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
+        /// A new estimated completion time, replacing the current one (HS2-DQQ0AX). Without it the
+        /// estimate is kept, and renew warns once it has passed.
+        #[arg(long)]
+        eta: Option<String>,
     },
     /// Drive a real AI tool for this project (the headless "play"): launch/inject a turn
     /// and stream it. Applies HS2-103 launch safety. No server or client required.
@@ -1345,14 +1357,24 @@ fn main() -> Result<()> {
             worker,
             label,
             lease_minutes,
-        } => cmd_claim_next(&cli.path, &worker, label, lease_minutes),
+            eta,
+        } => cmd_claim_next(&cli.path, &worker, label, lease_minutes, eta.as_deref()),
         Cmd::Claim {
             id,
             worker,
             label,
             lease_minutes,
             start,
-        } => cmd_claim(&cli.path, &id, &worker, label, lease_minutes, start),
+            eta,
+        } => cmd_claim(
+            &cli.path,
+            &id,
+            &worker,
+            label,
+            lease_minutes,
+            start,
+            eta.as_deref(),
+        ),
         Cmd::Release {
             id,
             worker,
@@ -1366,7 +1388,8 @@ fn main() -> Result<()> {
             id,
             worker,
             lease_minutes,
-        } => cmd_renew(&cli.path, &id, &worker, lease_minutes),
+            eta,
+        } => cmd_renew(&cli.path, &id, &worker, lease_minutes, eta.as_deref()),
         Cmd::Trigger {
             tool,
             prompt,
@@ -3676,20 +3699,32 @@ fn git_merge_file(ours: &str, base: &str, theirs: &str) -> Result<(String, bool)
     ))
 }
 
+/// The suffix that reports a claim's ETA, if it has one.
+fn eta_suffix(ticket: &hotsheet_model::Ticket) -> String {
+    ticket
+        .claim_eta_at
+        .as_ref()
+        .map(|eta| format!(", ETA {}", eta.as_str()))
+        .unwrap_or_default()
+}
+
 fn cmd_claim_next(
     path: &PathBuf,
     worker: &str,
     label: Option<String>,
     lease_minutes: i64,
+    eta: Option<&str>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let now_dt = OffsetDateTime::now_utc();
     let now = Timestamp::from_datetime(now_dt);
     let lease = lease_until(now_dt, lease_minutes);
-    match ops::claim_next(&store, &now, lease, worker, label)? {
+    let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
+    match ops::claim_next_with_eta(&store, &now, lease, worker, label, eta)? {
         Some(ticket) => println!(
-            "Claimed {} for {worker} (lease {lease_minutes}m)",
-            ticket.slug
+            "Claimed {} for {worker} (lease {lease_minutes}m{})",
+            ticket.slug,
+            eta_suffix(&ticket)
         ),
         None => println!("No claimable tickets."),
     }
@@ -3703,6 +3738,7 @@ fn cmd_claim(
     label: Option<String>,
     lease_minutes: i64,
     start: bool,
+    eta: Option<&str>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
@@ -3710,10 +3746,12 @@ fn cmd_claim(
     let now = Timestamp::from_datetime(now_dt);
     let lease = lease_until(now_dt, lease_minutes);
     let _ = start;
-    let claimed = ops::claim(&store, &ticket.id, &now, lease, worker, label)?;
+    let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
+    let claimed = ops::claim_with_eta(&store, &ticket.id, &now, lease, worker, label, eta)?;
     println!(
-        "Claimed {} for {worker} (lease {lease_minutes}m)",
-        claimed.slug
+        "Claimed {} for {worker} (lease {lease_minutes}m{})",
+        claimed.slug,
+        eta_suffix(&claimed)
     );
     Ok(())
 }
@@ -3738,12 +3776,29 @@ fn cmd_release_worker(path: &PathBuf, worker: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_renew(path: &PathBuf, id: &str, worker: &str, lease_minutes: i64) -> Result<()> {
+fn cmd_renew(
+    path: &PathBuf,
+    id: &str,
+    worker: &str,
+    lease_minutes: i64,
+    eta: Option<&str>,
+) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
-    let lease = lease_until(OffsetDateTime::now_utc(), lease_minutes);
-    let renewed = ops::renew(&store, &ticket.id, now_ts(), lease, worker)?;
-    println!("Renewed {} (lease {lease_minutes}m)", renewed.slug);
+    let now_dt = OffsetDateTime::now_utc();
+    let now = Timestamp::from_datetime(now_dt);
+    let lease = lease_until(now_dt, lease_minutes);
+    let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
+    let renewed = ops::renew_with_eta(&store, &ticket.id, now.clone(), lease, worker, eta)?;
+    println!(
+        "Renewed {} (lease {lease_minutes}m{})",
+        renewed.slug,
+        eta_suffix(&renewed)
+    );
+    // Prompt a re-estimate at the natural renewal touchpoint (HS2-DQQ0AX).
+    if ops::claim_eta_expired(&renewed, &now) {
+        println!("ETA passed; pass --eta with a new estimate.");
+    }
     Ok(())
 }
 

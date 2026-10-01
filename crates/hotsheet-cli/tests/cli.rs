@@ -407,6 +407,7 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
     // The installed workflow asks for preliminary thoughts on non-trivial tickets (HS2-C4X2MD).
     assert!(String::from_utf8_lossy(&instructions).contains("## Preliminary thoughts"));
+    assert!(String::from_utf8_lossy(&instructions).contains("**Estimate non-trivial work.**"));
     assert_eq!(skill, include_bytes!("../../../plugins/codex/SKILL.md"));
     assert_eq!(
         std::fs::read_to_string(&custom_skill).unwrap(),
@@ -854,11 +855,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 54 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 55 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 55 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 56 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -897,11 +898,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 53 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 54 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 54 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 55 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -2921,6 +2922,78 @@ fn exact_claim_accepts_slug_and_ulid_and_starts_without_changing_retry_count() {
             })
         }))
         .stdout(predicate::str::contains("worker_label: Codex"));
+}
+
+/// The headless ETA flow (HS2-DQQ0AX): claim with an estimate, keep it on a plain renew,
+/// warn once it has passed, re-estimate on renew, reject nonsense, and clear on release.
+#[test]
+fn claim_eta_is_recorded_kept_reestimated_and_cleared_headlessly() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "estimated ticket");
+    let eta_line = |p: &std::path::Path| {
+        let shown = hs(p).args(["show", &slug]).output().unwrap();
+        String::from_utf8(shown.stdout)
+            .unwrap()
+            .lines()
+            .find_map(|line| line.strip_prefix("claim_eta_at: ").map(str::to_owned))
+    };
+
+    hs(p)
+        .args(["claim", &slug, "--worker", "agent-1", "--eta", "soon"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid ETA"));
+    hs(p)
+        .args(["claim", &slug, "--worker", "agent-1", "--eta", "2s"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(", ETA "));
+    let first = eta_line(p).expect("claim records the ETA");
+
+    // A plain renew keeps the estimate; once it has passed, renew asks for a new one.
+    std::thread::sleep(std::time::Duration::from_millis(2500));
+    hs(p)
+        .args(["renew", &slug, "--worker", "agent-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "ETA passed; pass --eta with a new estimate.",
+        ));
+    assert_eq!(eta_line(p).as_deref(), Some(first.as_str()));
+
+    // Re-estimating replaces it and the warning stops.
+    hs(p)
+        .args(["renew", &slug, "--worker", "agent-1", "--eta", "1h30m"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(", ETA "))
+        .stdout(predicate::str::contains("ETA passed").not());
+    let second = eta_line(p).expect("renew records the new ETA");
+    assert_ne!(second, first);
+    hs(p)
+        .args(["renew", &slug, "--worker", "agent-1", "--eta", "30d"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("more than 14 days away"));
+    assert_eq!(eta_line(p).as_deref(), Some(second.as_str()));
+
+    // Release clears it; claim-next can set one too.
+    hs(p)
+        .args(["release", &slug, "--worker", "agent-1"])
+        .assert()
+        .success();
+    assert_eq!(eta_line(p), None);
+    hs(p)
+        .args(["claim-next", "--worker", "agent-2", "--eta", "45m"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "Claimed {slug} for agent-2"
+        )))
+        .stdout(predicate::str::contains(", ETA "));
+    assert!(eta_line(p).is_some());
 }
 
 #[test]

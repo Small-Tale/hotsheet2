@@ -123,6 +123,12 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.claim_lease_expires_at,
         ours_wins,
     );
+    m.claim_eta_at = pick3(
+        &base.claim_eta_at,
+        &ours.claim_eta_at,
+        &theirs.claim_eta_at,
+        ours_wins,
+    );
     m.worker_label = pick3(
         &base.worker_label,
         &ours.worker_label,
@@ -447,6 +453,7 @@ mod tests {
     #[test]
     fn concurrent_claim_events_union_by_id_in_time_order() {
         let event = |id: &str, worker: &str, at: &str| ClaimEvent {
+            eta_at: None,
             id: ulid(id),
             kind: ClaimEventKind::Claim,
             worker: worker.into(),

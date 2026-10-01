@@ -12257,7 +12257,7 @@ async fn claim_next_release_renew_over_http() {
         .oneshot(authed(
             "POST",
             "/claim-next",
-            Some(r#"{"worker":"w1","lease_minutes":15}"#),
+            Some(r#"{"worker":"w1","lease_minutes":15,"eta":"45m"}"#),
         ))
         .await
         .unwrap();
@@ -12266,6 +12266,8 @@ async fn claim_next_release_renew_over_http() {
     assert_eq!(claimed["slug"], slug);
     assert_eq!(claimed["claimed_by"], "w1");
     assert!(claimed["claim_lease_expires_at"].as_str().is_some());
+    // The claim's ETA (HS2-DQQ0AX) rides the ticket and the list row.
+    assert!(claimed["claim_eta_at"].as_str().is_some(), "{claimed}");
     let rows = body_json(
         app.clone()
             .oneshot(authed("GET", "/tickets", None))
@@ -12283,8 +12285,9 @@ async fn claim_next_release_renew_over_http() {
         claimed_row["claim_lease_expires_at"],
         claimed["claim_lease_expires_at"]
     );
+    assert_eq!(claimed_row["claim_eta_at"], claimed["claim_eta_at"]);
 
-    // Renew (holder).
+    // Renew (holder): a plain renew keeps the ETA; a nonsense one is a 400 that changes nothing.
     let resp = app
         .clone()
         .oneshot(authed(
@@ -12295,6 +12298,38 @@ async fn claim_next_release_renew_over_http() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(resp).await["claim_eta_at"],
+        claimed["claim_eta_at"]
+    );
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/renew"),
+            Some(r#"{"worker":"w1","eta":"2001-01-01T00:00:00Z"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(resp).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("invalid ETA")
+    );
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/renew"),
+            Some(r#"{"worker":"w1","eta":"2h"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let re_estimated = body_json(resp).await;
+    assert_ne!(re_estimated["claim_eta_at"], claimed["claim_eta_at"]);
 
     // A non-holder release without force → 4xx (wrong worker).
     let resp = app
@@ -12318,7 +12353,13 @@ async fn claim_next_release_renew_over_http() {
         ))
         .await
         .unwrap();
-    assert!(body_json(resp).await["claimed_by"].is_null());
+    let released = body_json(resp).await;
+    assert!(released["claimed_by"].is_null());
+    assert!(
+        released
+            .get("claim_eta_at")
+            .is_none_or(serde_json::Value::is_null)
+    );
 
     // Nothing claimable now (it's claimable again but let's assert null when queue drained):
     // claim it again then complete, then claim-next returns null.

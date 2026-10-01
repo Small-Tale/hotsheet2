@@ -155,6 +155,8 @@ export interface TicketRow {
   blocked_reason?: string;
   claimed_by?: string;
   claim_lease_expires_at?: string;
+  /** The live claim holder's estimated completion time (HS2-DQQ0AX). */
+  claim_eta_at?: string;
   worker_label?: string;
   legacy_number?: string;
   claim_count: number;
@@ -174,6 +176,8 @@ export interface ClaimEvent {
   worker: string;
   at: string;
   lease_expires_at?: string;
+  /** The holder's estimate as of this claim or renewal (HS2-DQQ0AX). */
+  eta_at?: string;
   worker_label?: string;
 }
 export interface CheckoutTicketQuery {

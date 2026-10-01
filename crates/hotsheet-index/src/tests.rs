@@ -1310,12 +1310,13 @@ fn assignee_facet_and_claimed_filters() {
         vec![],
     )
     .unwrap();
-    ops::claim_next(
+    ops::claim_next_with_eta(
         &store,
         &now,
         Timestamp::new("2026-08-22T01:00:00Z"),
         "worker-a",
         None,
+        Some(Timestamp::new("2026-08-22T00:45:00Z")),
     )
     .unwrap();
     ix.reconcile(&store).unwrap();
@@ -1356,6 +1357,11 @@ fn assignee_facet_and_claimed_filters() {
     assert_eq!(
         claimed[0].claim_lease_expires_at.as_deref(),
         Some("2026-08-22T01:00:00Z")
+    );
+    // The index carries the live claim's ETA to list rows (HS2-DQQ0AX).
+    assert_eq!(
+        claimed[0].claim_eta_at.as_deref(),
+        Some("2026-08-22T00:45:00Z")
     );
     let unclaimed = ix
         .query(&TicketQuery {

@@ -42,6 +42,7 @@ const KNOWN_KEYS: &[&str] = &[
     "duplicate_of",
     "claimed_by",
     "claim_lease_expires_at",
+    "claim_eta_at",
     "worker_label",
     "claim_count",
     "claim_history",
@@ -718,6 +719,7 @@ mod tests {
         t.blocked_reason = Some("waiting on the theme refactor".into());
         t.claimed_by = Some("worker-1".into());
         t.claim_lease_expires_at = Some("2026-08-20T09:30:00Z".into());
+        t.claim_eta_at = Some("2026-08-20T09:10:00Z".into());
         t.worker_label = Some("worktree-2".into());
         t.claim_count = 2;
         t.claim_history = vec![crate::ClaimEvent {
@@ -726,6 +728,7 @@ mod tests {
             worker: "worker-1".into(),
             at: "2026-08-20T08:30:00Z".into(),
             lease_expires_at: Some("2026-08-20T09:30:00Z".into()),
+            eta_at: Some("2026-08-20T09:10:00Z".into()),
             worker_label: Some("worktree-2".into()),
         }];
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));

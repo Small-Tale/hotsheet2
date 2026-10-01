@@ -225,6 +225,9 @@ pub struct ClaimEvent {
     pub at: Timestamp,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lease_expires_at: Option<Timestamp>,
+    /// The worker's estimated completion time as of this claim or renewal (HS2-DQQ0AX).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eta_at: Option<Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_label: Option<String>,
 }
@@ -280,6 +283,10 @@ pub struct Ticket {
     pub claimed_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_lease_expires_at: Option<Timestamp>,
+    /// The live claim holder's estimated completion time (HS2-DQQ0AX). Meaningful only while
+    /// the claim is live; cleared with the claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_eta_at: Option<Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_label: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]

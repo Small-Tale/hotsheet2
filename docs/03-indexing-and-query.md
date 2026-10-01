@@ -106,7 +106,7 @@ CREATE TABLE tickets (
   up_next       INTEGER NOT NULL DEFAULT 0,
   tags_json     TEXT NOT NULL DEFAULT '[]',
   created_at    TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
-  claimed_by    TEXT, claim_lease_expires_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  claimed_by    TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
   -- provenance for incremental reindex:
   file_path     TEXT NOT NULL,
   git_blob_oid  TEXT,                 -- content hash for change detection (§3.4)

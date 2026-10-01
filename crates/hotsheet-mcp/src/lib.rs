@@ -221,7 +221,8 @@ fn tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
                 "label": str_prop("human-readable worker label"),
-                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" }
+                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" },
+                "eta": str_prop("estimated completion time for a non-trivial ticket: a duration from now (45m, 2h, 1h30m) or an RFC 3339 timestamp")
             }, "required": ["id"] }
         },
         {
@@ -230,7 +231,8 @@ fn tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": {
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
                 "label": str_prop("human-readable worker label"),
-                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" }
+                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" },
+                "eta": str_prop("estimated completion time for a non-trivial ticket: a duration from now (45m, 2h, 1h30m) or an RFC 3339 timestamp")
             } }
         },
         {
@@ -244,11 +246,12 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_renew",
-            "description": "Renew a claim's lease (must be the holding worker).",
+            "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "worker": str_prop("the holding worker (default: worker)"),
-                "lease_minutes": { "type": "integer", "description": "new lease length in minutes (default 30)" }
+                "lease_minutes": { "type": "integer", "description": "new lease length in minutes (default 30)" },
+                "eta": str_prop("new estimated completion time: a duration from now (45m, 2h) or an RFC 3339 timestamp; omit to keep the current one")
             }, "required": ["id"] }
         },
         {
@@ -427,13 +430,28 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
         }
         "hotsheet_renew" => {
             let id = arg_str(args, "id")?;
-            backend
+            let mut renewed = backend
                 .send(
                     "POST",
                     &format!("/tickets/{id}/renew"),
                     &without(args, "id"),
                 )
-                .map_err(be_msg)
+                .map_err(be_msg)?;
+            // Prompt a re-estimate at the renewal touchpoint once the ETA has passed (HS2-DQQ0AX).
+            // The serverless backend reports it against its own clock; a server response is
+            // judged here against the wall clock the server also uses.
+            if let Some(object) = renewed.as_object_mut()
+                && !object.contains_key("eta_expired")
+            {
+                let now = hotsheet_model::Timestamp::from_datetime(time::OffsetDateTime::now_utc());
+                let expired = object
+                    .get("claim_eta_at")
+                    .and_then(Value::as_str)
+                    .and_then(|eta| hotsheet_model::Timestamp::new(eta).chronological_cmp(&now))
+                    .is_some_and(|order| order != std::cmp::Ordering::Greater);
+                object.insert("eta_expired".into(), Value::Bool(expired));
+            }
+            Ok(renewed)
         }
         // Cross-store copy / move (HS2-60 / HS2-S4H2AM): `to` + `confirm` ride the body
         // (a serverless `to` is a store path with slashes, so it can't go in the URL).
@@ -1306,8 +1324,10 @@ mod core_backend {
                     let lease = now.plus_minutes(lease_minutes(body));
                     let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
                     let label = str_field(body, "label");
-                    let claimed = ops::claim_next(&self.store, &now, lease, &worker, label)
-                        .map_err(store_err)?;
+                    let eta = claim_eta(body, &now)?;
+                    let claimed =
+                        ops::claim_next_with_eta(&self.store, &now, lease, &worker, label, eta)
+                            .map_err(store_err)?;
                     Ok(match claimed {
                         Some(t) => self.api(&t)?,
                         None => Value::Null,
@@ -1319,8 +1339,10 @@ mod core_backend {
                     let lease = now.plus_minutes(lease_minutes(body));
                     let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
                     let label = str_field(body, "label");
-                    let claimed = ops::claim(&self.store, &t.id, &now, lease, &worker, label)
-                        .map_err(op_err)?;
+                    let eta = claim_eta(body, &now)?;
+                    let claimed =
+                        ops::claim_with_eta(&self.store, &t.id, &now, lease, &worker, label, eta)
+                            .map_err(op_err)?;
                     self.api(&claimed)
                 }
                 "POST"
@@ -1403,9 +1425,18 @@ mod core_backend {
                     let now = (self.now)();
                     let lease = now.plus_minutes(lease_minutes(body));
                     let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+                    let eta = claim_eta(body, &now)?;
                     let renewed =
-                        ops::renew(&self.store, &t.id, now, lease, &worker).map_err(op_err)?;
-                    self.api(&renewed)
+                        ops::renew_with_eta(&self.store, &t.id, now.clone(), lease, &worker, eta)
+                            .map_err(op_err)?;
+                    let mut result = self.api(&renewed)?;
+                    if let Some(object) = result.as_object_mut() {
+                        object.insert(
+                            "eta_expired".into(),
+                            Value::Bool(ops::claim_eta_expired(&renewed, &now)),
+                        );
+                    }
+                    Ok(result)
                 }
                 // Cross-store copy (HS2-60 / HS2-S4H2AM): serverless, `to` is the
                 // destination store's path. New ULID + `copied_from`; source untouched.
@@ -1767,10 +1798,19 @@ mod core_backend {
         }
     }
 
+    /// The optional `eta` of a claim or renew body, parsed and validated (HS2-DQQ0AX).
+    fn claim_eta(body: &Value, now: &Timestamp) -> Result<Option<Timestamp>, BackendError> {
+        str_field(body, "eta")
+            .map(|raw| ops::parse_claim_eta(now, &raw))
+            .transpose()
+            .map_err(op_err)
+    }
+
     fn op_err(e: OpError) -> BackendError {
         match e {
             OpError::Store(s) => store_err(s),
-            e @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_)) => {
+            e
+            @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_) | OpError::InvalidEta(_)) => {
                 bad_request(e.to_string())
             }
             e @ OpError::UnknownTicket(_) => not_found(&e.to_string()),
@@ -2415,6 +2455,7 @@ mod tests {
 
     // ---- CoreBackend: the whole loop, serverless, straight to disk ----------------
 
+    use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{FsStore, StoreMetadata, ops};
 
     /// A CoreBackend over a fresh temp store (real ops, no server).
@@ -2422,6 +2463,51 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, CoreBackend::new(store))
+    }
+
+    /// A renew reports `eta_expired` against the backend's own clock (HS2-DQQ0AX): false
+    /// before the estimate, true once it has passed, false again after re-estimating.
+    #[test]
+    fn corebackend_renew_reports_an_expired_eta_by_its_clock() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let clock = std::rc::Rc::new(std::cell::RefCell::new(Timestamp::new(
+            "2026-08-19T00:00:00Z",
+        )));
+        let reading = clock.clone();
+        let backend =
+            CoreBackend::new(store).with_mint(move || reading.borrow().clone(), Ulid::new);
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "estimate me" }),
+        );
+        let slug = created["slug"].as_str().unwrap().to_string();
+        let claimed = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": slug, "worker": "agent-1", "lease_minutes": 120, "eta": "30m" }),
+        );
+        assert_eq!(claimed["claim_eta_at"], "2026-08-19T00:30:00Z");
+        let renew = |eta: Option<&str>| {
+            let mut args = json!({ "id": slug, "worker": "agent-1", "lease_minutes": 120 });
+            if let Some(eta) = eta {
+                args["eta"] = eta.into();
+            }
+            call(&backend, "hotsheet_renew", args)
+        };
+        *clock.borrow_mut() = Timestamp::new("2026-08-19T00:20:00Z");
+        assert_eq!(renew(None)["eta_expired"], false);
+        *clock.borrow_mut() = Timestamp::new("2026-08-19T00:31:00Z");
+        let late = renew(None);
+        assert_eq!(late["eta_expired"], true);
+        assert_eq!(
+            late["claim_eta_at"], "2026-08-19T00:30:00Z",
+            "kept until re-estimated"
+        );
+        let re_estimated = renew(Some("15m"));
+        assert_eq!(re_estimated["eta_expired"], false);
+        assert_eq!(re_estimated["claim_eta_at"], "2026-08-19T00:46:00Z");
     }
 
     #[test]
@@ -3184,6 +3270,26 @@ mod tests {
             json!({ "id": slug, "worker": "agent-1", "lease_minutes": 60 }),
         );
         assert_eq!(renewed["claimed_by"], "agent-1");
+        assert_eq!(
+            renewed["eta_expired"], false,
+            "no estimate, nothing expired"
+        );
+
+        // ETA (HS2-DQQ0AX): renew records an estimate, rejects nonsense, and reports a passed
+        // estimate so the agent re-estimates.
+        let estimated = call(
+            &backend,
+            "hotsheet_renew",
+            json!({ "id": slug, "worker": "agent-1", "eta": "1h" }),
+        );
+        assert!(estimated["claim_eta_at"].as_str().is_some(), "{estimated}");
+        assert_eq!(estimated["eta_expired"], false);
+        let rejected = call(
+            &backend,
+            "hotsheet_renew",
+            json!({ "id": slug, "worker": "agent-1", "eta": "whenever" }),
+        );
+        assert!(rejected["error"].as_str().unwrap().contains("invalid ETA"));
 
         // A wrong worker can't release without force → tool error.
         let denied = call(

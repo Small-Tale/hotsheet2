@@ -1,4 +1,4 @@
-<!-- hotsheet-instructions-version: 53 -->
+<!-- hotsheet-instructions-version: 54 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -29,6 +29,9 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
   session ends. Otherwise choose one stable id for the session.
 - `hotsheet-cli renew <slug> --worker <your-id>` during long work; `hotsheet-cli release <slug>
   --worker <your-id>` whenever you stop working it (see below).
+- **Estimate non-trivial work.** When you claim a ticket that is not trivially simple, add
+  `--eta <duration>` (for example `--eta 45m`; MCP `eta`) with your honest estimate of when
+  you will finish. If `renew` reports that the ETA has passed, renew again with a new `--eta`.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.

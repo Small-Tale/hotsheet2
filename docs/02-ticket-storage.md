@@ -500,7 +500,7 @@ edits a given ticket at a time; the write chokepoint rejects a write to a ticket
 another actor holds a live lease on. So two _simultaneous_ edits to one ticket are
 already the exception. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.
 Moving a ticket to any terminal status automatically clears `claimed_by`,
-`claim_lease_expires_at`, and `worker_label`, so completion cannot continue advertising
+`claim_lease_expires_at`, `claim_eta_at`, and `worker_label`, so completion cannot continue advertising
 active work. Reopening a legacy terminal ticket clears stale claim metadata as well.
 
 **3 — A semantic git merge driver makes same-ticket merges automatic.** When two
@@ -678,7 +678,7 @@ maps to exactly one tier:
 | `assignees` · `review_requests` · `external`                                                                                                                     | A (shared)               | committed frontmatter                                                                                                                                  |
 | `attachments`                                                                                                                                                    | A (shared)               | committed `attachments/<ulid>/`                                                                                                                        |
 | `created_at` · `updated_at` · `completed_at` · `verified_at` · close/move fields (`closed_at` · `close_reason` · `duplicate_of` · `moved_to_store` · `moved_at`) | A (shared)               | committed frontmatter                                                                                                                                  |
-| `claimed_by` · `claim_lease_expires_at` · `worker_label`                                                                                                         | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges                                                                                     |
+| `claimed_by` · `claim_lease_expires_at` · `claim_eta_at` · `worker_label`                                                                                        | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges                                                                                     |
 | `claim_count` · `claim_history`                                                                                                                                  | A (shared, durable)      | committed frontmatter — append-only lifecycle telemetry survives release, expiry, handoff, and repeated claims                                         |
 | **read state** (`last_read_at` / unread)                                                                                                                         | **B (local)**            | `local/reads.json` (gitignored), keyed by ULID                                                                                                         |
 | **feedback drafts** (notes of kind `feedback_draft`)                                                                                                             | **B (local)**            | dropped from the committed file today; overlay persistence is HS2-AWTHJE                                                                               |

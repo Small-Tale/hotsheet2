@@ -550,6 +550,21 @@ deadline; a `release` ends it at that event's time, while an absent release ends
 last claim/renew `lease_expires_at`. A later claim starts a distinct interval, so expiry,
 handoff, and repeated acquisitions remain exactly derivable without a background expiry job.
 
+**Claim ETA (HS2-DQQ0AX).** A worker may attach its estimated completion time to the live
+claim: `claim`, `claim-next`, and `renew` accept `--eta` (CLI), `eta` (MCP and the
+`/claim-next`, `/tickets/{id}/claim`, and `/tickets/{id}/renew` bodies) as a duration from
+now (`45m`, `2h`, `1h30m`, `1d`) or an RFC 3339 timestamp. One shared parser
+(`ops::parse_claim_eta`) requires a future time at most 14 days away; anything else fails
+explicitly (HTTP 400, CLI error, MCP tool error). The ticket carries the current
+`claim_eta_at`, and each claim or renew event records `eta_at`, so estimate accuracy stays
+derivable from `claim_history`. A new acquisition replaces any earlier estimate, a plain
+renew or same-worker retry keeps it, `--eta` on renew re-estimates, and release, expiry
+takeover, or a terminal status clears it with the claim. Renewal is the re-estimate prompt:
+once the ETA has passed, CLI `renew` prints `ETA passed; pass --eta with a new estimate.` and
+MCP `hotsheet_renew` returns `eta_expired: true`. The bundled instructions ask agents to
+pass an ETA when claiming non-trivial work. Claims are git-store coordination, so the ETA
+lives only on git-provider tickets. Showing ETA progress in the clients is `HS2-XQMDQB`.
+
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 
 A **host-side permission bridge**: "ask the user, get a decision," with each

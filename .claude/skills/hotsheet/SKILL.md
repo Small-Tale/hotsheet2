@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 54 -->
+<!-- hotsheet-skill-version: 55 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -30,9 +30,12 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    with the atomic CLI form
    `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N]`,
    which acquires the claim and changes Not Started to Started in one durable write.
-   Do not issue separate claim and status commands. Renew
+   Do not issue separate claim and status commands. For a ticket that is not trivially
+   simple, add `--eta <duration>` (for example `--eta 45m`; MCP `eta`) with an honest
+   estimate of when you will finish. Renew
    before the lease expires and before lengthy work with `hotsheet_renew` or
-   `hotsheet-cli renew`. Release with `hotsheet_release` or `hotsheet-cli release` the
+   `hotsheet-cli renew`; when renew reports that the ETA has passed, renew with a new
+   `--eta`. Release with `hotsheet_release` or `hotsheet-cli release` the
    moment you stop working the ticket for any reason: completion, handoff, error, feedback,
    switching to another ticket, deciding to defer it, or ending your turn. A claim left
    behind falsely signals live work and blocks others until it expires; releasing never
