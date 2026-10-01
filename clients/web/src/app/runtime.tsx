@@ -207,13 +207,7 @@ import type {
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
-import {
-  automaticInputFocusAllowed,
-  isMobileViewport,
-  MOBILE_OVERLAYS_CLOSED,
-  type MobileOverlayState,
-  revealInspectorForCreatedTicket,
-} from '../mobile-layout';
+import { automaticInputFocusAllowed, isMobileViewport } from '../mobile-layout';
 import {
   loadMobileTerminalColumns,
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
@@ -2077,27 +2071,49 @@ export async function startHotSheetWebClient() {
       if (run === projectSessionRestoreRun) restoringProjectSession = false;
     }
   }
+  // Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the sidebar and inspector
+  // overlay the single main column instead of taking horizontal space. Each rail's `collapsed` signal
+  // is the one state the Workbench renders and `wireWorkbench` drives (HS2-Y1B1Y1): on a phone both
+  // start collapsed and Kerf keeps the overlays exclusive, closes them on Escape or an outside press,
+  // traps Tab inside the open one, and returns focus to its opener; the persisted desktop
+  // sidebar/inspector preferences are untouched by that ephemeral state and come back with the
+  // side-by-side layout.
+  const viewportMobile = signal(isMobileViewport(window.innerWidth)),
+    sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
+    inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
   function setInspectorVisible(visible: boolean) {
+    inspectorCollapsed.value = !visible;
+    if (viewportMobile.value) return;
     inspectorVisible.value = visible;
     persistWorkspacePreferences();
   }
   function setSidebarVisible(visible: boolean) {
+    sidebarCollapsed.value = !visible;
+    if (viewportMobile.value) return;
     sidebarVisible.value = visible;
     persistWorkspacePreferences();
   }
-  // Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the sidebar and inspector
-  // overlay the single main column instead of taking horizontal space; only one can be open at a time
-  // and both start closed. This ephemeral overlay state is tracked separately from the persisted
-  // desktop sidebar/inspector preferences; the transitions live in ./mobile-layout for unit coverage.
-  const viewportMobile = signal(isMobileViewport(window.innerWidth)),
-    mobileOverlay = signal<MobileOverlayState>(MOBILE_OVERLAYS_CLOSED);
+  /** Show the inspector for a ticket the user tapped or just created: on a phone the overlay opens (Kerf
+   * closes the sidebar); larger layouts keep the inspector the user chose (HS2-N7RPFP, HS2-QFW2A7). */
+  function revealInspectorOverlay() {
+    if (viewportMobile.value) inspectorCollapsed.value = false;
+  }
   window.addEventListener('resize', () => {
     const mobile = isMobileViewport(window.innerWidth);
     if (mobile !== viewportMobile.value) {
       viewportMobile.value = mobile;
-      if (!mobile) {
-        mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
+      if (mobile) {
+        sidebarCollapsed.value = true;
+        inspectorCollapsed.value = true;
+      } else {
         exitMobileTerminalFocus();
+        // Restore the desktop preferences once the rails render inline again: while a rail still
+        // presents as an overlay, Kerf's exclusive-overlay rule would close the other one.
+        requestAnimationFrame(() => {
+          if (viewportMobile.value) return;
+          sidebarCollapsed.value = !sidebarVisible.value;
+          inspectorCollapsed.value = !inspectorVisible.value;
+        });
       }
     }
     if (mobile) {
@@ -3499,7 +3515,7 @@ export async function startHotSheetWebClient() {
       }
   }
   // prettier-ignore
-  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: () => { mobileOverlay.value = revealInspectorForCreatedTicket(viewportMobile.value, mobileOverlay.value); }, activeTicketSurface, draftScope, ago, });
+  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, });
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {
@@ -4426,7 +4442,7 @@ export async function startHotSheetWebClient() {
               ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
               : undefined
           }
-          sidebarVisible={viewportMobile.value ? mobileOverlay.value.sidebar : sidebarVisible.value}
+          sidebarVisible={!sidebarCollapsed.value}
           sidebarSize={sidebarSize.value}
           header={<WorkspaceIdentity projectName={shellMode.value === 'terminals' ? 'Workspace grid' : 'Stats'} />}
           headerActions={
@@ -4444,7 +4460,7 @@ export async function startHotSheetWebClient() {
           inspector={
             shellMode.value === 'terminals' ? <TerminalRailSurface {...terminalRailSurfaceProps()} /> : undefined
           }
-          inspectorVisible={viewportMobile.value ? mobileOverlay.value.inspector : inspectorVisible.value}
+          inspectorVisible={!inspectorCollapsed.value}
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
           overlay={viewportMobile.value ? undefined : popup}
@@ -4538,7 +4554,7 @@ export async function startHotSheetWebClient() {
         mode="project"
         mobile={viewportMobile.value}
         sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
-        sidebarVisible={viewportMobile.value ? mobileOverlay.value.sidebar : sidebarVisible.value}
+        sidebarVisible={!sidebarCollapsed.value}
         sidebarSize={sidebarSize.value}
         header={
           viewportMobile.value ? (
@@ -4640,7 +4656,7 @@ export async function startHotSheetWebClient() {
             <InspectorPlaceholder selectionCount={selectedTicketSlugs.value.length} />
           )
         }
-        inspectorVisible={viewportMobile.value ? mobileOverlay.value.inspector : inspectorVisible.value}
+        inspectorVisible={!inspectorCollapsed.value}
         inspectorSize={inspectorSize.value}
         overlay={
           <>
@@ -4855,13 +4871,19 @@ export async function startHotSheetWebClient() {
     );
   }
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
-  // Kerf drives the shell rails' resizing and persistence (HS2-P289N2); the terminal drawer keeps the
-  // app's own drag for its measured maximum and drag-past-minimum collapse.
+  // Kerf drives the shell rails' resizing and persistence (HS2-P289N2) and, through their `collapsed`
+  // signals, the phone overlays' exclusivity, Escape/outside-press dismissal, focus trap, and focus
+  // return (HS2-Y1B1Y1); the terminal drawer keeps the app's own drag for its measured maximum and
+  // drag-past-minimum collapse.
   wireWorkbench(appRoot, {
     id: APP_WORKBENCH_ID,
     panels: {
-      leftRail: { size: sidebarSize, storageKey: 'hotsheet.layout.app-left-rail.size' },
-      rightRail: { size: inspectorSize, storageKey: 'hotsheet.layout.app-right-rail.size' },
+      leftRail: { size: sidebarSize, storageKey: 'hotsheet.layout.app-left-rail.size', collapsed: sidebarCollapsed },
+      rightRail: {
+        size: inspectorSize,
+        storageKey: 'hotsheet.layout.app-right-rail.size',
+        collapsed: inspectorCollapsed,
+      },
     },
   });
 
@@ -5001,7 +5023,7 @@ export async function startHotSheetWebClient() {
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
-    closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, mobileOverlay,
+    closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,
     selectedRows, executeBulkTicketAction, tickets, openNotWorking, openTicketClose, copySelection, pasteSelection, openBulkTicketDialog,
     restoreTrashedTickets, bulkTicketDialog, openEmptyTrash, emptyTrash, setTicketCloseReason, searchTicketCloseTargets, ticketCloseDialog, submitTicketClose,

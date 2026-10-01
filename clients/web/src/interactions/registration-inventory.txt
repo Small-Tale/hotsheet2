@@ -400,7 +400,6 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="open-code-rev
 shell-and-global	delegate	document.body	'click'	'[data-action="close-ticket-inspector"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="open-ticket-inspector"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="toggle-project-sidebar"]'
-shell-and-global	delegate	document.body	'click'	'[data-action="dismiss-mobile-overlays"]'
 shell-and-global	delegate	document.body	'pointerdown'	'[data-kui-resize-handle]'
 shell-and-global	delegate	document.body	'keydown'	'[data-kui-resize-handle]'
 shell-and-global	window.addEventListener	'pointermove'

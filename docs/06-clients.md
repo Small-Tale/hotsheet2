@@ -172,17 +172,24 @@ and identity-less legacy entries remain conservatively blocking.
   it the client switches to a single-column mobile layout: the app-shell drops its min-width
   and both panels become absolute overlays that slide in over the main column instead of
   taking horizontal space. Only one overlay is open at a time (opening one closes the other),
-  both start closed, and a viewport-fixed click-away scrim dismisses whichever is open —
-  standard mobile-drawer behavior. Crossing the breakpoint back to desktop restores the
-  side-by-side layout and clears the ephemeral mobile-open state. The breakpoint is applied
-  from JavaScript (a `data-mobile` attribute) so the layout switch and the overlay behavior
-  stay in sync (HS2-ZK51WP). AppShell is Kerf's `Workbench` (HS2-P289N2): the sidebar is its
-  left rail, the inspector or ticket rail its right rail, and the terminal drawer its bottom
-  drawer, and the mobile switch is each rail's `presentation` (`overlay` below the breakpoint,
-  with the Workbench's responsive breakpoints turned off) rather than reimplemented overlay
-  geometry; the Workbench owns the panels' collapse motion, separators, resize handles, width
-  cap, shadow, inert collapsed content, and restore corner, and `wireWorkbench` drives and
-  persists the rails' sizes. The left rail's surfaces (project sidebar, settings and
+  both start closed, and tapping away, pressing Escape, or the overlay's own Hide control
+  dismisses whichever is open — standard mobile-drawer behavior. Crossing the breakpoint back
+  to desktop restores the side-by-side layout from the persisted desktop preferences, which
+  the ephemeral mobile-open state never changes. The breakpoint is applied from JavaScript (a
+  `data-mobile` attribute) so the layout switch and the overlay behavior stay in sync
+  (HS2-ZK51WP). AppShell is Kerf's `Workbench` (HS2-P289N2): the sidebar is its left rail, the
+  inspector or ticket rail its right rail, and the terminal drawer its bottom drawer, and the
+  mobile switch is each rail's `presentation` (`overlay` below the breakpoint, with the
+  Workbench's responsive breakpoints turned off, because Kerf's `responsiveOverlayAt` only
+  knows its 704px/448px container breakpoints) rather than reimplemented overlay geometry; the
+  Workbench owns the panels' collapse motion, separators, resize handles, width cap, shadow,
+  inert collapsed content, and restore corner, and `wireWorkbench` drives and persists the
+  rails' sizes. Each rail's Workbench `collapsed` signal is the one overlay state, and
+  `wireWorkbench` drives it (HS2-Y1B1Y1): overlays are exclusive, an open overlay takes focus
+  and keeps Tab inside it, Escape or a press outside closes it, and focus returns to the control
+  that opened it. Kerf's Workbench overlays carry no backdrop, so the shell keeps a passive
+  backdrop that dims the column and keeps the tap from reaching the control beneath it; Kerf
+  reads that tap as the outside press. The left rail's surfaces (project sidebar, settings and
   notification navigators, terminal operations) expose panel parts — a toolbar, the standard
   collapse `toggle`, content, footer, and Pane configuration — that the Workbench composes
   (HS2-RWGQWN): the toggle carries `aria-controls`/`aria-expanded` and names the panel it
@@ -235,8 +242,8 @@ and identity-less legacy entries remain conservatively blocking.
   reduced motion). Crossing the breakpoint keeps the view-mode preference and switches between
   the paged and side-by-side grid layouts, restarting at the leading column. Because there is no persistent
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
-  overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tap-away on
-  the scrim returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
+  overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tapping
+  away returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
   Creating a ticket likewise opens the overlay on the new ticket with its details editor focused,
   as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The
   left/right sidebar keyboard shortcuts use the same mutually exclusive mobile overlays without

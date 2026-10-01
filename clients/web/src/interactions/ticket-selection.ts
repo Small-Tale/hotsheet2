@@ -7,7 +7,7 @@ import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets } from '
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
-import { type MobileOverlayState, openMobileOverlay, shouldAutoOpenInspectorOnTap } from '../mobile-layout';
+import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
 import { ticketBoardGroups } from '../ticket-board-layout';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { duplicateTargetKey } from '../ticket-close';
@@ -19,7 +19,8 @@ import { type Control, type NotWorkingTarget, type PendingEvidence } from './typ
 /** Live application bindings used by this handler group. */
 export interface TicketSelectionInteractionsDependencies {
   readonly viewportMobile: Signal<boolean>;
-  readonly mobileOverlay: Signal<MobileOverlayState>;
+  /** Open the inspector overlay on a phone (Kerf closes the sidebar); a no-op on larger layouts. */
+  readonly revealInspectorOverlay: () => void;
   readonly selectTickets: (
     slug: string,
     intent?: { range?: boolean; toggle?: boolean },
@@ -77,7 +78,7 @@ export interface TicketSelectionInteractionsDependencies {
 export function wireTicketSelectionInteractions(dependencies: TicketSelectionInteractionsDependencies) {
   const {
     viewportMobile,
-    mobileOverlay,
+    revealInspectorOverlay,
     selectTickets,
     selectionOrder,
     selectedTicketSlugs,
@@ -139,7 +140,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         ctrlKey: pointer.ctrlKey,
       })
     )
-      mobileOverlay.value = openMobileOverlay('inspector');
+      revealInspectorOverlay();
     void selectTickets(
       data(target).ticketSlug!,
       { range: pointer.shiftKey, toggle: pointer.metaKey || pointer.ctrlKey },

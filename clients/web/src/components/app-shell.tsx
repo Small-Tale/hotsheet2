@@ -59,8 +59,12 @@ export interface AppShellProps {
  * left rail, the ticket inspector or rail is the right rail, and the terminal drawer is the bottom
  * drawer, each collapsible and resizable through Kerf's own panel contract. The main column (shell
  * toolbar, project tab strip, banners, page header, and the ticket work area) stays app-owned. The
- * app keeps its own mobile presentation: side panels overlay the column when `mobile` is set and the
- * shell's click-away scrim dismisses them, so the Workbench's responsive overlay breakpoints stay off.
+ * app keeps its own mobile breakpoint (1024px of viewport, wider than the Workbench's 704px/448px
+ * container breakpoints), so side panels present as overlays when `mobile` is set and the Workbench's
+ * responsive breakpoints stay off; `wireWorkbench` owns the overlays' exclusivity, Escape and
+ * outside-press dismissal, focus trap, and focus return through the rails' `collapsed` signals
+ * (HS2-Y1B1Y1). The shell's backdrop only dims the column and swallows the tap, which Kerf reads as an
+ * outside press.
  */
 export function AppShell({
   tabs,
@@ -240,11 +244,11 @@ export function AppShell({
                 {workspace}
               </section>
             </div>
-            {/* Inside the Workbench's stacking context, so it paints under its overlay rails (z 41) and
-            over everything else in the main column. */}
-            {mobile && (sidebarVisible || inspectorVisible) && (
-              <div class="app-shell__scrim" data-action="dismiss-mobile-overlays" aria-hidden="true" />
-            )}
+            {/* Passive backdrop inside the Workbench's stacking context, so it paints under its overlay
+            rails (z 41) and over everything else in the main column; Kerf's Workbench overlays have no
+            backdrop of their own, so this dims the column and keeps a tap from reaching the control
+            beneath it while `wireWorkbench` treats that tap as the outside press that closes the rail. */}
+            {mobile && (sidebarVisible || inspectorVisible) && <div class="app-shell__scrim" aria-hidden="true" />}
           </main>
         }
       />

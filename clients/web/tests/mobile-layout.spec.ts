@@ -1247,3 +1247,56 @@ test('phone terminal drawer keeps the home-indicator inset below every content v
   await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
 });
+
+test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus returns to the opener, and the desktop preference survives (HS2-Y1B1Y1)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page);
+  const sidebar = page.locator('#app-left-rail'),
+    inspector = page.locator('#app-right-rail'),
+    scrim = page.locator('.app-shell__scrim'),
+    showSidebar = page.getByRole('button', { name: 'Show project sidebar' });
+  // The passive backdrop carries no app action; the outside press is Kerf's.
+  await expect(scrim).toHaveCount(0);
+  await showSidebar.click();
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await expect(scrim).toBeVisible();
+  await expect(scrim).not.toHaveAttribute('data-action', /.+/);
+  // An open overlay takes focus; Tab cycles inside it rather than reaching the covered column.
+  await expect.poll(() => sidebar.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  for (let step = 0; step < 40; step += 1) {
+    await page.keyboard.press('Tab');
+    expect(await sidebar.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  }
+  // Escape closes it and focus returns to the control that opened it.
+  await page.keyboard.press('Escape');
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+  await expect(scrim).toHaveCount(0);
+  await expect(showSidebar).toBeFocused();
+  // Opening the inspector while the sidebar is open closes the sidebar (Kerf's exclusive overlays).
+  await showSidebar.click();
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('phone-inspector-overlay.png'), animations: 'disabled' });
+  // Hiding the overlay inspector from its own control never touches the persisted desktop preference.
+  await inspector.getByRole('button', { name: 'Hide inspector' }).click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await expect(inspector).toHaveAttribute('data-presentation', 'inline');
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          JSON.parse(localStorage.getItem('hotsheet.layout.workspace-preferences.v1') ?? '{}') as {
+            inspectorVisible?: boolean;
+          }
+        ).inspectorVisible,
+    ),
+  ).not.toBe(false);
+});

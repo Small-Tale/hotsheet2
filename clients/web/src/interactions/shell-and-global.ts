@@ -14,14 +14,6 @@ import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
-import {
-  closeMobileOverlay,
-  MOBILE_OVERLAYS_CLOSED,
-  type MobileOverlayState,
-  openMobileOverlay,
-  toggleMobileInspector,
-  toggleMobileSidebar,
-} from '../mobile-layout';
 import { cycleTabId } from '../tab-cycle';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
@@ -33,7 +25,9 @@ import { type AttachmentMenu, type Project } from './types';
 /** Live application bindings used by this handler group. */
 export interface ShellAndGlobalInteractionsDependencies {
   readonly viewportMobile: Signal<boolean>;
-  readonly mobileOverlay: Signal<MobileOverlayState>;
+  /** The rails' Workbench `collapsed` signals, driven by `wireWorkbench` on a phone (HS2-Y1B1Y1). */
+  readonly sidebarCollapsed: Signal<boolean>;
+  readonly inspectorCollapsed: Signal<boolean>;
   readonly setInspectorVisible: (visible: boolean) => void;
   readonly setSidebarVisible: (visible: boolean) => void;
   readonly sidebarVisible: Signal<boolean>;
@@ -111,11 +105,10 @@ export interface ShellAndGlobalInteractionsDependencies {
 /** Register this group only when the application wiring owner invokes it. */
 export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInteractionsDependencies) {
   const {
-    viewportMobile,
-    mobileOverlay,
+    sidebarCollapsed,
+    inspectorCollapsed,
     setInspectorVisible,
     setSidebarVisible,
-    sidebarVisible,
     appRegionSize,
     setTerminalDrawerVisible,
     setAppRegionSize,
@@ -136,7 +129,6 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     appleShortcutPlatform,
     searchOpen,
     focusWorkspaceSearch,
-    inspectorVisible,
     terminalDrawerVisible,
     switchWorkspaceView,
     setShellMode,
@@ -167,19 +159,13 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     schedulePointerDetailsFinish,
   } = dependencies;
   delegate(document.body, 'click', '[data-action="close-ticket-inspector"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = closeMobileOverlay(mobileOverlay.value, 'inspector');
-    else setInspectorVisible(false);
+    setInspectorVisible(false);
   });
   delegate(document.body, 'click', '[data-action="open-ticket-inspector"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = openMobileOverlay('inspector');
-    else setInspectorVisible(true);
+    setInspectorVisible(true);
   });
   delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
-    if (viewportMobile.value) mobileOverlay.value = toggleMobileSidebar(mobileOverlay.value);
-    else setSidebarVisible(!sidebarVisible.value);
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-mobile-overlays"]', () => {
-    mobileOverlay.value = MOBILE_OVERLAYS_CLOSED;
+    setSidebarVisible(sidebarCollapsed.value);
   });
   delegate(document.body, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
     const handle = target as HTMLElement,
@@ -404,14 +390,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       }
       if (matchesShortcut('toggle-left-sidebar', event, overrides, appleShortcutPlatform)) {
         event.preventDefault();
-        if (viewportMobile.value) mobileOverlay.value = toggleMobileSidebar(mobileOverlay.value);
-        else setSidebarVisible(!sidebarVisible.value);
+        setSidebarVisible(sidebarCollapsed.value);
         return;
       }
       if (matchesShortcut('toggle-right-sidebar', event, overrides, appleShortcutPlatform)) {
         event.preventDefault();
-        if (viewportMobile.value) mobileOverlay.value = toggleMobileInspector(mobileOverlay.value);
-        else setInspectorVisible(!inspectorVisible.value);
+        setInspectorVisible(inspectorCollapsed.value);
         return;
       }
       if (matchesShortcut('toggle-bottom-drawer', event, overrides, appleShortcutPlatform)) {

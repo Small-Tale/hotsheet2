@@ -1,10 +1,10 @@
-/** Mobile single-column layout state (HS2-ZK51WP).
+/** Mobile single-column layout rules (HS2-ZK51WP).
  *
  * Below the desktop size floor the project sidebar and ticket inspector stop taking horizontal
- * space and overlay the single main column instead. Only one overlay is ever open at a time and a
- * click-away scrim dismisses whichever is open. These pure helpers own the breakpoint and the
- * mutually-exclusive open/close transitions so the rule is unit-testable and the app shell just
- * projects the resulting state. */
+ * space and overlay the single main column instead. The overlay state itself is each Workbench
+ * rail's `collapsed` signal, which Kerf's `wireWorkbench` keeps exclusive and dismisses on Escape or
+ * an outside press (HS2-Y1B1Y1); these pure helpers own the breakpoint and the tap policies around it
+ * so they stay unit-testable. */
 
 /** Viewport width (px) at and above which the desktop side-by-side layout is used. Matches the old
  * app-shell `min-width` floor so there is no broken sub-floor desktop dead zone. */
@@ -22,44 +22,6 @@ export function isMobileViewport(width: number): boolean {
  */
 export function automaticInputFocusAllowed(width: number): boolean {
   return !isMobileViewport(width);
-}
-
-/** Which overlay panels are currently open in the mobile layout. At most one is ever `true`. */
-export interface MobileOverlayState {
-  sidebar: boolean;
-  inspector: boolean;
-}
-
-/** Both overlays closed — the default single-column state. */
-export const MOBILE_OVERLAYS_CLOSED: MobileOverlayState = { sidebar: false, inspector: false };
-
-/** Open exactly one overlay, closing the other (one-at-a-time). */
-export function openMobileOverlay(which: keyof MobileOverlayState): MobileOverlayState {
-  return { sidebar: which === 'sidebar', inspector: which === 'inspector' };
-}
-
-/**
- * Show the inspector for a ticket the user just created. On mobile it is a closed overlay, so it opens
- * (closing the sidebar); larger layouts keep the inspector the user chose (HS2-QFW2A7).
- */
-export function revealInspectorForCreatedTicket(mobile: boolean, state: MobileOverlayState): MobileOverlayState {
-  return mobile ? openMobileOverlay('inspector') : state;
-}
-
-/** Toggle the sidebar overlay: open it (closing the inspector) if closed, otherwise close it. */
-export function toggleMobileSidebar(state: MobileOverlayState): MobileOverlayState {
-  return state.sidebar ? MOBILE_OVERLAYS_CLOSED : openMobileOverlay('sidebar');
-}
-
-/** Toggle the inspector overlay: open it (closing the sidebar) if closed, otherwise close it. */
-export function toggleMobileInspector(state: MobileOverlayState): MobileOverlayState {
-  return state.inspector ? MOBILE_OVERLAYS_CLOSED : openMobileOverlay('inspector');
-}
-
-/** Close a single overlay, leaving the other untouched (it is already closed under the
- * one-at-a-time rule, but this keeps the close path independent of that invariant). */
-export function closeMobileOverlay(state: MobileOverlayState, which: keyof MobileOverlayState): MobileOverlayState {
-  return { ...state, [which]: false };
 }
 
 /** Whether tapping a ticket row should auto-open the inspector overlay (HS2-N7RPFP). Only on mobile,
