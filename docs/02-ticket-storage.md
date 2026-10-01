@@ -163,6 +163,11 @@ final characters come from the random component and distribute tickets across th
 
 ### 2.3.1 Corruption resilience — one bad file never hides the store
 
+Writers never create a transiently corrupt file in the first place: a ticket rewrite is
+staged as a hidden non-`.md` sibling and renamed over the ticket, so a concurrent reader
+(another CLI process, the server's watcher or reconcile) sees the old or the new
+complete file, never an empty or partial one (HS2-P2178F).
+
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
 healthy ticket **plus** a separate report of the files that failed to parse

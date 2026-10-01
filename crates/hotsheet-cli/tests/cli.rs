@@ -189,24 +189,38 @@ fn concurrent_edits_retry_external_git_locks_without_losing_history() {
                 })
             })
             .collect();
+        // HS2-P2178F: each writer's lock-retry budget is bounded (about 4.4 s of backoff,
+        // `retry_autocommit`), and it starts the moment that writer's edit lands. Holding
+        // the external lock until *every* worker has written made the test depend on
+        // process-start skew: under a loaded suite one CLI process can start several
+        // seconds after the others, exhausting the earliest writer's budget (reproduced by
+        // delaying one worker 7 s: "autocommit failed ... index.lock: File exists"). Hold
+        // the lock only until all writes land or HOLD after the first one, so the external
+        // lock outlives no writer's budget however skewed the starts are.
+        const HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
         let store = hotsheet_ticketing::FsStore::open(root).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let no_write_deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let mut first_write = None;
         loop {
-            if store
+            let written = store
                 .list_tickets()
                 .unwrap()
                 .iter()
-                .all(|ticket| ticket.title.starts_with("After "))
-            {
-                break;
+                .filter(|ticket| ticket.title.starts_with("After "))
+                .count();
+            if written > 0 {
+                let first = *first_write.get_or_insert_with(std::time::Instant::now);
+                if written == slugs.len() || first.elapsed() >= HOLD {
+                    break;
+                }
             }
             assert!(
-                std::time::Instant::now() < deadline,
-                "ticket writes never finished"
+                std::time::Instant::now() < no_write_deadline,
+                "no ticket write landed while the external lock was held"
             );
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        // The durable edits precede commit retries; no writer removes another
+        // At least one durable edit preceded its commit retries; no writer removes another
         // process's lock. Only this test, its owner, releases it.
         assert_eq!(
             std::fs::read_to_string(&lock).unwrap(),
@@ -217,6 +231,15 @@ fn concurrent_edits_retry_external_git_locks_without_losing_history() {
             worker.join().unwrap();
         }
     });
+    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+    assert!(
+        store
+            .list_tickets()
+            .unwrap()
+            .iter()
+            .all(|ticket| ticket.title.starts_with("After ")),
+        "every edit is durable once its writer exits"
+    );
     let status = std::process::Command::new("git")
         .arg("-C")
         .arg(root)

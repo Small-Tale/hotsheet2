@@ -414,10 +414,12 @@ impl FsStore {
                 source,
             })?;
         }
-        fs::write(&path, to_file_string(&normalized)).map_err(|source| StoreError::IoAt {
-            operation: "writing ticket",
-            path: path.clone(),
-            source,
+        write_file_atomically(&path, to_file_string(&normalized).as_bytes()).map_err(|source| {
+            StoreError::IoAt {
+                operation: "writing ticket",
+                path: path.clone(),
+                source,
+            }
         })?;
         Ok(path)
     }
@@ -1361,6 +1363,29 @@ fn frontmatter_value(text: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Replace `path` with `bytes` so a concurrent reader sees either the old or the new
+/// complete file, never an empty or partial one (HS2-P2178F). `fs::write` truncates
+/// first, so another process (a CLI `ls`, the server's watcher/reconcile) could parse
+/// a ticket mid-write and report it corrupt. The staged sibling is a dot-file with a
+/// non-`.md` extension, so enumeration never mistakes a leftover for a ticket.
+fn write_file_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("atomic write target has no file name"))?
+        .to_string_lossy();
+    let staged = path.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let result = fs::write(&staged, bytes).and_then(|()| fs::rename(&staged, path));
+    if result.is_err() {
+        let _ = fs::remove_file(&staged);
+    }
+    result
+}
+
 // ---- git helpers (shell-based; the store IS a git repo, docs/02 §2.3) --------------
 
 /// Replay the complete local transaction after lock contention. Another writer may
@@ -1544,6 +1569,56 @@ mod tests {
             "2026-08-19T00:00:00Z",
             "2026-08-19T00:00:00Z",
         )
+    }
+
+    /// HS2-P2178F: a ticket rewrite is atomic for concurrent readers. `fs::write`
+    /// truncates first, so a reader racing a rewrite parsed an empty file
+    /// (`MissingFrontmatter`); that aborted the CLI lock-retry E2E mid-poll. The reader
+    /// here alternates with rewrites of very different sizes and must always parse.
+    #[test]
+    fn concurrent_readers_never_observe_a_partial_ticket_rewrite() {
+        let (_dir, store) = temp_store();
+        let id = Ulid::new();
+        let path = store.write_ticket(&sample(id)).unwrap();
+        let done = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            let reader = scope.spawn(|| {
+                let mut reads = 0usize;
+                while !done.load(std::sync::atomic::Ordering::Acquire) {
+                    let ticket = store.read_ticket(&id).unwrap();
+                    assert!(
+                        ticket.title.starts_with("A ticket") || ticket.title.starts_with("Long")
+                    );
+                    reads += 1;
+                }
+                reads
+            });
+            for round in 0..300 {
+                let mut ticket = sample(id);
+                if round % 2 == 0 {
+                    ticket.title = format!("Long {}", "x".repeat(64 * 1024));
+                }
+                store.write_ticket(&ticket).unwrap();
+            }
+            done.store(true, std::sync::atomic::Ordering::Release);
+            assert!(reader.join().unwrap() > 0);
+        });
+        // Staged siblings never linger and are never enumerated as tickets.
+        let leftovers: Vec<_> = fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .filter(|name| name.to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        fs::write(
+            path.with_file_name(format!(
+                ".{}.1.2.tmp",
+                path.file_name().unwrap().to_string_lossy()
+            )),
+            "---\npartial",
+        )
+        .unwrap();
+        assert_eq!(store.list_tickets().unwrap().len(), 1);
     }
 
     #[test]
