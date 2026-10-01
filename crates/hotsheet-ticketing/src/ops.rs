@@ -2106,13 +2106,18 @@ pub fn release(
 /// Release every claim `worker` holds in `store`, returning the released tickets. This is the
 /// safety net for a session that ends without releasing its claims (HS2-1VAW1C): a launcher
 /// gives the session a worker id and releases that id's claims when the session exits.
+///
+/// The scan is resilient (HS2-JRPA23): one unreadable ticket — corrupt on disk, or caught
+/// mid-write by another process — must not abort the release of every other claim. Such a
+/// ticket is skipped; its own claim, if any, still ends at lease expiry.
 pub fn release_worker(
     store: &FsStore,
     now: Timestamp,
     worker: &str,
 ) -> Result<Vec<Ticket>, OpError> {
     let held: Vec<Ulid> = store
-        .list_tickets()?
+        .list_tickets_resilient()?
+        .tickets
         .into_iter()
         .filter(|ticket| ticket.claimed_by.as_deref() == Some(worker))
         .map(|ticket| ticket.id)
@@ -4573,6 +4578,60 @@ mod tests {
         );
         // An unknown worker releases nothing.
         assert!(release_worker(&store, now, "nobody").unwrap().is_empty());
+    }
+
+    /// HS2-JRPA23 regression: another ticket that cannot be parsed (a corrupt file, or one
+    /// caught mid-write by a concurrent non-atomic writer) used to fail the whole scan, so a
+    /// session that ended at the same moment as another kept its claims until lease expiry.
+    #[test]
+    fn release_worker_skips_an_unreadable_ticket_and_releases_the_rest() {
+        let (_d, store) = store();
+        let held = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FD0").unwrap();
+        let broken = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FD1").unwrap();
+        for (id, title) in [(held, "held"), (broken, "mid-write")] {
+            create(
+                &store,
+                id,
+                "HS",
+                ts("2026-08-19T00:00:00Z"),
+                NewTicket {
+                    title: title.into(),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let now = ts("2026-08-19T00:10:00Z");
+        claim(
+            &store,
+            &held,
+            &now,
+            ts("2026-08-19T00:40:00Z"),
+            "claude-t1",
+            None,
+        )
+        .unwrap();
+        // What a reader saw while a truncating writer was mid-write: an empty ticket file.
+        let text = broken.to_string();
+        let broken_path = store
+            .root()
+            .join("tickets")
+            .join(&text[text.len() - 2..])
+            .join(format!("{text}.md"));
+        assert!(broken_path.is_file(), "{}", broken_path.display());
+        std::fs::write(&broken_path, "").unwrap();
+        assert!(store.list_tickets().is_err(), "the strict scan fails here");
+
+        let released = release_worker(&store, now, "claude-t1").unwrap();
+        assert_eq!(
+            released
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            ["held"]
+        );
+        assert!(store.read_ticket(&held).unwrap().claimed_by.is_none());
     }
 
     #[test]

@@ -289,7 +289,10 @@ pins that guidance.
 (HS2-1VAW1C). A launcher that starts an AI session gives it a worker id,
 `<tool>-<session>`, in `HOTSHEET_WORKER_ID`. The blocks and skills tell the AI to claim with
 that id whenever it is set. When the session ends, the launcher releases every claim the id
-still holds, leaving other workers' claims and every ticket's status alone:
+still holds, leaving other workers' claims and every ticket's status alone. The release
+scans the store resiliently: an unreadable ticket elsewhere, whether corrupt or caught
+mid-write by another process, is skipped rather than aborting every other release
+(HS2-JRPA23):
 
 - **Connect terminals:** a server `connect` terminal uses its terminal id as the session. When
   the terminal exits or is deleted, the server releases the id's claims in every hosted
