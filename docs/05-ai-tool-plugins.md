@@ -836,9 +836,15 @@ effort validation; an unlisted model may use an effort value already declared by
 In the web client's Settings, Drive, and command-editor menus, `Other…` opens a focused exact-id dialog instead of
 permanently occupying the main layout with a second model field. The selected custom id appears as
 an ephemeral choice and is removed as soon as a catalog model is selected.
-Machine-local defaults still validate the installed provider and are stored through
-`GET`/`PUT /ai-settings` (or `hotsheet-cli ai-settings get|set`) in the global Hot Sheet 2
-settings file.
+AI defaults are **per project** (HS2-SW5S13): `GET`/`PUT /checkouts/{reference}/ai-settings`
+(the web client's Project Settings → AI tools panel, routed there by the project bridge) and
+`hotsheet-cli ai-settings get|set` store a project's choice under `ai.defaults` in its
+machine-local `<project>/.hotsheet2/settings.local.json`, because the installed providers and
+models differ per machine. A project without its own choice inherits the machine-wide fallback,
+still served by the unscoped `GET`/`PUT /ai-settings` and `hotsheet-cli ai-settings get|set
+--global` from the global Hot Sheet 2 settings file, and then the discovered default tool. Every
+saved value is validated against the installed providers; one that names an uninstalled tool is
+ignored on read.
 
 The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
 Codex app-server supplies its current paginated `model/list` catalog at runtime.

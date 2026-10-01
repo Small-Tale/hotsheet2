@@ -1047,7 +1047,9 @@ and identity-less legacy entries remain conservatively blocking.
   its empty placeholder as a warm projection.
 
   Drive is a production control, not demo-only state. Its split-button label reflects the
-  machine-local default provider discovered from drivable plugin manifests. The arrow opens
+  project's default provider (Project Settings → AI tools, stored per project on this machine,
+  HS2-SW5S13; a project without a choice inherits the machine-wide fallback), validated against
+  the drivable plugin manifests. The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
   Project activation starts catalog discovery without blocking the rest of project startup, and the
   server prewarms the catalog in a background task at start so the first client typically finds it

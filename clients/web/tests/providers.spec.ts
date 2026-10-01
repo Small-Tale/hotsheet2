@@ -10539,7 +10539,12 @@ test('omits effort after selecting a model that does not support it', async ({ p
     tool = settings.locator('wa-select[name="ai-default-tool"]');
   await tool.click();
   await tool.locator('wa-option[value="claude"]').click();
-  await expect(settings).toContainText('Saved locally.');
+  await expect(settings).toContainText('Saved for this project on this machine.');
+  await page.screenshot({ path: test.info().outputPath('ai-tools-project-saved-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: test.info().outputPath('ai-tools-project-saved-narrow.png') });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List view').click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -10626,7 +10631,7 @@ test('configures plugin-discovered machine-local AI defaults and exposes Claude 
   for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
     await expect(effort.locator(`wa-option[value="${level}"]`)).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-r9bss0-claude-fable-effort.png', fullPage: true });
-  await expect(settings).toContainText('Saved locally.');
+  await expect(settings).toContainText('Saved for this project on this machine.');
 });
 
 test('chooses Other for a literal manual model and forgets it after a catalog selection', async ({ page }) => {

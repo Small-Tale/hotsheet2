@@ -26,7 +26,7 @@ describe('AiToolSettings', () => {
     expect(markup).toContain('<wa-option value="gpt"');
     expect(markup).toContain('data-other-model-value="__hotsheet_other_model__"');
     expect(markup).toContain('Other…');
-    expect(markup).toContain('machine-local defaults');
+    expect(markup).toContain("this project's defaults");
   });
   it('explains the empty detected-plugin state', () => {
     expect(String(AiToolSettings({ tools: [], selection: {} }))).toContain('No AI tools detected');

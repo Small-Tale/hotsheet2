@@ -380,7 +380,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       if (cachedConfiguration) aiConfigurationByProject.set(current.id, { ...cachedConfiguration, defaults: saved });
       if (project()?.id !== current.id) return;
       aiDefaults.value = saved;
-      aiSettingsMessage.value = 'Saved locally.';
+      aiSettingsMessage.value = 'Saved for this project on this machine.';
     } catch (reason) {
       if (project()?.id === current.id)
         aiSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);

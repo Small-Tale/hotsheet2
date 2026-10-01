@@ -429,6 +429,140 @@ session_options = ["model", "effort"]
     );
 }
 
+/// HS2-SW5S13: AI tool defaults are per project. A project's choice lives in its machine-local
+/// settings, another project keeps its own, and a project without a choice inherits the
+/// machine-wide value.
+#[tokio::test]
+async fn ai_tool_defaults_are_stored_per_project() {
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("ci-fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(
+        fixture.join("instructions.md"),
+        "CI fixture instructions.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        r#"
+id = "ci-fixture"
+display_name = "CI Fixture"
+product_name = "CI Fixture"
+tier = "cli-agent"
+[detection]
+binaries = ["rustc"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "spawn"
+program = "rustc"
+content = "arg"
+models = [
+  { id = "fixture-model", label = "Fixture Model", effort_levels = ["low", "high"] },
+  { id = "other-model", label = "Other Model", effort_levels = ["low"] },
+]
+default_model = "fixture-model"
+default_effort = "low"
+session_options = ["model", "effort"]
+"#,
+    )
+    .unwrap();
+    let (_dir, state) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(state
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    let mut checkouts = Vec::new();
+    for name in ["alpha", "beta"] {
+        let root = workspace.path().join(name);
+        std::fs::create_dir(&root).unwrap();
+        let opened = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({ "root": root }).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::CREATED);
+        checkouts.push((
+            root,
+            body_json(opened).await["checkout"]["id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        ));
+    }
+    let get = |id: &str| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{id}/ai-settings");
+        async move { body_json(router.oneshot(authed("GET", &uri, None)).await.unwrap()).await }
+    };
+    let (alpha_root, alpha) = &checkouts[0];
+    let (_, beta) = &checkouts[1];
+    let saved = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{alpha}/ai-settings"),
+            Some(r#"{"tool":"ci-fixture","model":"other-model","effort":"low"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(get(alpha).await["model"], "other-model");
+    // The choice is machine-local project settings, not the committed shared file.
+    let local = std::fs::read_to_string(alpha_root.join(".hotsheet2/settings.local.json")).unwrap();
+    assert!(local.contains("other-model"), "{local}");
+    assert!(
+        !std::fs::read_to_string(alpha_root.join(".hotsheet2/settings.json"))
+            .unwrap_or_default()
+            .contains("other-model")
+    );
+    // Another project is untouched and inherits the machine-wide value when one is saved.
+    assert_ne!(get(beta).await["model"], "other-model");
+    let global = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/ai-settings",
+            Some(r#"{"tool":"ci-fixture","model":"fixture-model","effort":"high"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(global.status(), StatusCode::OK);
+    assert_eq!(
+        get(beta).await,
+        serde_json::json!({"tool":"ci-fixture","model":"fixture-model","effort":"high"})
+    );
+    assert_eq!(get(alpha).await["model"], "other-model");
+    // An uninstalled tool is rejected for a project exactly as for the machine-wide value.
+    let invalid = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{beta}/ai-settings"),
+            Some(r#"{"tool":"definitely-not-installed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let missing = router
+        .oneshot(authed("GET", "/checkouts/nope/ai-settings", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_ai_tool_discovery_stays_coherent_off_the_async_runtime() {
     // AI-tool discovery launches blocking `--version`/`models` subprocesses under a single

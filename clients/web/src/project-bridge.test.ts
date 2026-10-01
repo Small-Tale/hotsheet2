@@ -164,6 +164,9 @@ describe('authenticatedServerUrl', () => {
 describe('projectScopedServerPath', () => {
   it('scopes project settings independently of ticket sources and leaves host APIs alone', () => {
     expect(projectScopedServerPath('project one', '/commands')).toBe('/checkouts/project%20one/commands');
+    // AI tool defaults belong to the project (HS2-SW5S13); the tool inventory stays machine-wide.
+    expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/checkouts/project%20one/ai-settings');
+    expect(projectScopedServerPath('project one', '/ai-tools?refresh=true')).toBe('/ai-tools?refresh=true');
     expect(projectScopedServerPath('project one', '/commands/review/run?confirm=true')).toBe(
       '/checkouts/project%20one/commands/review/run?confirm=true',
     );
@@ -177,7 +180,6 @@ describe('projectScopedServerPath', () => {
     expect(projectScopedServerPath('project one', '/terminal-settings')).toBe(
       '/checkouts/project%20one/terminal-settings',
     );
-    expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/ai-settings');
     // A project's explicit close and its change stream carry the checkout (HS2-ARJ9J1).
     expect(projectScopedServerPath('project one', '/close?client=tab-1')).toBe(
       '/checkouts/project%20one/close?client=tab-1',

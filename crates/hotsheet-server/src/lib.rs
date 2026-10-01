@@ -1478,6 +1478,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_custom_views).put(save_checkout_custom_views),
         )
         .route(
+            "/checkouts/{reference}/ai-settings",
+            get(get_checkout_ai_settings).put(put_checkout_ai_settings),
+        )
+        .route(
             "/checkouts/{reference}/terminal-settings",
             get(get_checkout_terminal_settings).put(put_checkout_terminal_settings),
         )
@@ -6807,43 +6811,113 @@ async fn list_ai_tools(
     Json(discovered_ai_tools_off_runtime(&state, query.refresh).await)
 }
 
-async fn effective_ai_settings(
-    state: &AppState,
-) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
-    let tools = discovered_ai_tools_off_runtime(state, false).await;
-    let saved = Settings::new(state.store.root())
-        .get("ai.defaults", hotsheet_ticketing::Scope::Global)
+/// The settings key holding the default Drive tool, model, and effort.
+const AI_DEFAULTS_SETTING: &str = "ai.defaults";
+
+/// A saved AI default from one settings scope, kept only while it still names an installed tool.
+fn saved_ai_defaults(
+    settings: &Settings,
+    scope: hotsheet_ticketing::Scope,
+    tools: &[hotsheet_plugins::AiToolDescriptor],
+) -> Result<Option<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    Ok(settings
+        .get(AI_DEFAULTS_SETTING, scope)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
         .and_then(|value| serde_json::from_value(value).ok())
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(&tools, defaults).is_ok());
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
+}
+
+/// The effective AI defaults: the project's own choice (machine-local project settings, HS2-SW5S13),
+/// else the legacy machine-wide value, else the discovered default tool.
+async fn effective_ai_settings(
+    state: &AppState,
+    project: Option<&Settings>,
+) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
+    let tools = discovered_ai_tools_off_runtime(state, false).await;
+    let project_defaults = match project {
+        Some(settings) => saved_ai_defaults(settings, hotsheet_ticketing::Scope::Local, &tools)?,
+        None => None,
+    };
+    let saved = match project_defaults {
+        Some(defaults) => Some(defaults),
+        None => saved_ai_defaults(
+            &Settings::new(state.store.root()),
+            hotsheet_ticketing::Scope::Global,
+            &tools,
+        )?,
+    };
     saved
         .or_else(|| hotsheet_plugins::default_ai_settings(&tools))
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no drivable AI tools are installed"))
 }
 
+/// Validate and store AI defaults in one settings scope.
+async fn save_ai_settings(
+    state: &AppState,
+    settings: &Settings,
+    scope: hotsheet_ticketing::Scope,
+    defaults: &hotsheet_plugins::AiToolDefaults,
+) -> Result<(), ApiError> {
+    hotsheet_plugins::validate_ai_defaults(
+        &discovered_ai_tools_off_runtime(state, false).await,
+        defaults,
+    )
+    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    settings
+        .set(
+            AI_DEFAULTS_SETTING,
+            serde_json::to_value(defaults)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            scope,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// A project's AI defaults (HS2-SW5S13): stored in the checkout's machine-local settings because the
+/// installed tools and models differ per machine; a project without a choice inherits the
+/// machine-wide value.
+async fn get_checkout_ai_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    Ok(Json(effective_ai_settings(&state, Some(&settings)).await?))
+}
+
+async fn put_checkout_ai_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
+) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    save_ai_settings(
+        &state,
+        &settings,
+        hotsheet_ticketing::Scope::Local,
+        &defaults,
+    )
+    .await?;
+    Ok(Json(defaults))
+}
+
+/// The machine-wide AI defaults: the fallback for projects without their own choice.
 async fn get_ai_settings(
     State(state): State<AppState>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    Ok(Json(effective_ai_settings(&state).await?))
+    Ok(Json(effective_ai_settings(&state, None).await?))
 }
 
 async fn put_ai_settings(
     State(state): State<AppState>,
     Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    hotsheet_plugins::validate_ai_defaults(
-        &discovered_ai_tools_off_runtime(&state, false).await,
+    save_ai_settings(
+        &state,
+        &Settings::new(state.store.root()),
+        hotsheet_ticketing::Scope::Global,
         &defaults,
     )
-    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
-    Settings::new(state.store.root())
-        .set(
-            "ai.defaults",
-            serde_json::to_value(&defaults)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-            hotsheet_ticketing::Scope::Global,
-        )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    .await?;
     Ok(Json(defaults))
 }
 

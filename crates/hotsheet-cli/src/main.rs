@@ -345,7 +345,7 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Read or update the machine-local default AI tool/model/effort.
+    /// Read or update the project's default AI tool/model/effort (HS2-SW5S13).
     AiSettings {
         #[command(subcommand)]
         cmd: AiSettingsCmd,
@@ -741,10 +741,15 @@ enum SettingsCmd {
 
 #[derive(Subcommand)]
 enum AiSettingsCmd {
+    /// Print the effective defaults: this project's, else the machine-wide fallback.
     Get {
         #[arg(long)]
         json: bool,
+        /// Read only the machine-wide fallback.
+        #[arg(long)]
+        global: bool,
     },
+    /// Save this project's defaults (machine-local project settings), or the machine-wide fallback.
     Set {
         #[arg(long)]
         tool: String,
@@ -752,6 +757,9 @@ enum AiSettingsCmd {
         model: Option<String>,
         #[arg(long)]
         effort: Option<String>,
+        /// Save the machine-wide fallback used by projects without their own choice.
+        #[arg(long)]
+        global: bool,
     },
 }
 
@@ -1213,7 +1221,7 @@ fn main() -> Result<()> {
         } => cmd_setup(&cli.path, tool, detect, refresh, project),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::AiTools { json } => cmd_ai_tools(json),
-        Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, cmd),
+        Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(cmd),
@@ -4328,12 +4336,43 @@ fn discovered_ai_tools() -> Vec<hotsheet_plugins::AiToolDescriptor> {
     )
 }
 
-fn effective_ai_defaults(store: &Path) -> Result<hotsheet_plugins::AiToolDefaults> {
-    let tools = discovered_ai_tools();
-    let saved = hotsheet_ticketing::Settings::new(store)
-        .get("ai.defaults", hotsheet_ticketing::Scope::Global)?
+/// A saved AI default from one scope, kept only while it still names an installed tool.
+fn saved_ai_defaults(
+    settings: &hotsheet_ticketing::Settings,
+    scope: hotsheet_ticketing::Scope,
+    tools: &[hotsheet_plugins::AiToolDescriptor],
+) -> Result<Option<hotsheet_plugins::AiToolDefaults>> {
+    Ok(settings
+        .get("ai.defaults", scope)?
         .and_then(|value| serde_json::from_value(value).ok())
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(&tools, defaults).is_ok());
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
+}
+
+/// The effective AI defaults: this project's machine-local choice (HS2-SW5S13), else the
+/// machine-wide fallback, else the discovered default tool. `global` reads only the fallback.
+fn effective_ai_defaults(
+    store: &Path,
+    cwd: &Path,
+    global: bool,
+) -> Result<hotsheet_plugins::AiToolDefaults> {
+    let tools = discovered_ai_tools();
+    let project = if global {
+        None
+    } else {
+        saved_ai_defaults(
+            &settings_for_cli(store, cwd),
+            hotsheet_ticketing::Scope::Local,
+            &tools,
+        )?
+    };
+    let saved = match project {
+        Some(defaults) => Some(defaults),
+        None => saved_ai_defaults(
+            &hotsheet_ticketing::Settings::new(store),
+            hotsheet_ticketing::Scope::Global,
+            &tools,
+        )?,
+    };
     saved
         .or_else(|| hotsheet_plugins::default_ai_settings(&tools))
         .ok_or_else(|| anyhow::anyhow!("no drivable AI tools are installed"))
@@ -4351,10 +4390,10 @@ fn cmd_ai_tools(json: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_ai_settings(store: &Path, cmd: AiSettingsCmd) -> Result<()> {
+fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> Result<()> {
     match cmd {
-        AiSettingsCmd::Get { json } => {
-            let defaults = effective_ai_defaults(store)?;
+        AiSettingsCmd::Get { json, global } => {
+            let defaults = effective_ai_defaults(store, cwd, global)?;
             if json {
                 println!("{}", serde_json::to_string(&defaults)?);
             } else {
@@ -4371,6 +4410,7 @@ fn cmd_ai_settings(store: &Path, cmd: AiSettingsCmd) -> Result<()> {
             tool,
             model,
             effort,
+            global,
         } => {
             let defaults = hotsheet_plugins::AiToolDefaults {
                 tool,
@@ -4379,11 +4419,18 @@ fn cmd_ai_settings(store: &Path, cmd: AiSettingsCmd) -> Result<()> {
             };
             hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(), &defaults)
                 .map_err(anyhow::Error::msg)?;
-            hotsheet_ticketing::Settings::new(store).set(
-                "ai.defaults",
-                serde_json::to_value(&defaults)?,
-                hotsheet_ticketing::Scope::Global,
-            )?;
+            let (settings, scope) = if global {
+                (
+                    hotsheet_ticketing::Settings::new(store),
+                    hotsheet_ticketing::Scope::Global,
+                )
+            } else {
+                (
+                    settings_for_cli(store, cwd),
+                    hotsheet_ticketing::Scope::Local,
+                )
+            };
+            settings.set("ai.defaults", serde_json::to_value(&defaults)?, scope)?;
             println!("{}", serde_json::to_string(&defaults)?);
         }
     }

@@ -975,7 +975,49 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
         defaults,
         serde_json::json!({"tool":"codex","model":"legacy model \"beta\"","effort":"high"})
     );
+    // HS2-SW5S13: the plain `set` is this project's choice, so nothing machine-wide was written.
+    assert!(!home.join("settings.json").is_file());
+    let read_json = |args: &[&str]| -> serde_json::Value {
+        let output = hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .env("PATH", &bin)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+    // With no machine-wide fallback saved, `--global` reports the discovered default tool.
+    assert_eq!(
+        read_json(&["ai-settings", "get", "--json", "--global"])["tool"],
+        "codex"
+    );
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &bin)
+        .args([
+            "ai-settings",
+            "set",
+            "--global",
+            "--tool",
+            "codex",
+            "--model",
+            "legacy model \"beta\"",
+            "--effort",
+            "low",
+        ])
+        .assert()
+        .success();
     assert!(home.join("settings.json").is_file());
+    assert_eq!(
+        read_json(&["ai-settings", "get", "--json", "--global"]),
+        serde_json::json!({"tool":"codex","model":"legacy model \"beta\"","effort":"low"})
+    );
+    // The project's own choice still wins over the machine-wide fallback.
+    assert_eq!(
+        read_json(&["ai-settings", "get", "--json"])["effort"],
+        "high"
+    );
 }
 
 #[test]

@@ -1077,6 +1077,8 @@ export function projectScopedServerPath(projectId: string, path: string): string
       pathname === '/command-runs' ||
       pathname === '/views' ||
       pathname === '/terminal-settings' ||
+      // AI tool defaults are per project (HS2-SW5S13).
+      pathname === '/ai-settings' ||
       /^\/commands\/[^/]+\/run$/.test(pathname) ||
       /^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
   // The server learns which projects are open from which checkout each change stream serves

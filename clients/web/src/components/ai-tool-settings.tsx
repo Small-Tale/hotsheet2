@@ -57,7 +57,7 @@ export function AiToolSettings({
       data-other-model-value={otherModelValue}
       aria-busy={String(loading)}
     >
-      <p>Choose the machine-local defaults used by Drive, AI shells, and AI chat.</p>
+      <p>Choose this project's defaults for Drive, AI shells, and AI chat on this machine.</p>
       <div class="ai-tool-settings__grid">
         <Select
           name="ai-default-tool"
