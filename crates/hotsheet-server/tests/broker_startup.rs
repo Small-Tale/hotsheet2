@@ -29,7 +29,10 @@ impl TestServer {
             // Keep unrelated locally installed AI tools out of startup discovery;
             // this regression exercises broker transport, not provider CLIs.
             .env("PATH", "/usr/bin:/bin")
-            .stdin(Stdio::null())
+            // Piped and held by the fixture: the server stops if this test process dies
+            // without running its teardown (HS2-VQ8ZWT).
+            .arg("--exit-on-stdin-eof")
+            .stdin(Stdio::piped())
             .stdout(output.try_clone().unwrap())
             .stderr(output)
             // Own the server and its detached child as a test-only process group. Drop

@@ -375,6 +375,21 @@ arrives. On every path it first releases each hosted store's instance file and
 index-writer lock explicitly, so a stuck connection can no longer leave a dead URL
 registered. After a clean drain, a watchdog thread also bounds any leftover blocking
 background work, such as AI catalog discovery.
+
+**Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
+such as a test harness or the scale-stress script, passes the hidden
+`--exit-on-stdin-eof` flag and keeps a **pipe** on the server's stdin. When the owner
+dies for any reason, even SIGKILL, the kernel closes that pipe. A blocking reader
+thread sees EOF and begins the same bounded stop described above. No polling is
+involved.
+
+The flag is safe even when the dead owner also held the server's stdout and stderr:
+shutdown diagnostics never panic on a broken pipe, and the reader begins stopping
+before it logs anything.
+
+Detached client launches never pass this flag, because they must outlive their
+client. Stdin on `/dev/null` would read EOF immediately, so the flag requires a held
+pipe.
 `hotsheet-cli serve` resolves the sibling `hotsheet-server` first, falls back to PATH,
 requires its version to match the CLI, and forwards foreground/stop arguments with
 clear missing-binary and mismatch diagnostics. Detached broker terminal hosting is the

@@ -39,11 +39,14 @@ export async function realTicketServer() {
     await rm(directory, { recursive: true, force: true });
     throw error;
   }
-  const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--no-terminal-broker'], {
-    cwd: root,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // `--exit-on-stdin-eof` + a held stdin pipe: if this runner dies without reaching `stop()`
+  // (SIGKILL, hard timeout, crash), the kernel closes the pipe and the server stops itself
+  // instead of lingering as an orphan (HS2-VQ8ZWT).
+  const child = spawn(
+    binary,
+    ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--no-terminal-broker', '--exit-on-stdin-eof'],
+    { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] },
+  );
   let output = '';
   const stop = async () => {
     if (child.pid && child.exitCode === null && child.signalCode === null) {
@@ -94,7 +97,17 @@ export async function realTicketServer() {
       return response.json() as Promise<T>;
     };
     const checkout = await request<{ id: string }>('/checkouts', 'POST', { root, stores: [store] });
-    return { url, secret, checkoutId: checkout.id, root, store, request, stop };
+    return {
+      url,
+      secret,
+      checkoutId: checkout.id,
+      root,
+      store,
+      pid: child.pid,
+      home: env.HOTSHEET_HOME,
+      request,
+      stop,
+    };
   } catch (error) {
     await stop();
     throw error;

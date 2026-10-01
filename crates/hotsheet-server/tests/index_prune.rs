@@ -82,7 +82,10 @@ fn server_start_prunes_idle_older_generation_indexes_and_keeps_held_ones() {
             .args(["--bind", "127.0.0.1:0", "--secret", "prune-test"])
             .env("HOTSHEET_HOME", home.path())
             .env("PATH", "/usr/bin:/bin")
-            .stdin(Stdio::null())
+            // Piped and held by the fixture: the server stops if this test process dies
+            // without running its teardown (HS2-VQ8ZWT).
+            .arg("--exit-on-stdin-eof")
+            .stdin(Stdio::piped())
             .stdout(output.try_clone().unwrap())
             .stderr(output)
             .process_group(0)

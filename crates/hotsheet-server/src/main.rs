@@ -87,6 +87,14 @@ struct Cli {
     /// milliseconds (HS2-W1KJR4). Hidden: tests shorten or lengthen it.
     #[arg(long, hide = true, default_value_t = DEFAULT_SHUTDOWN_DRAIN_MS)]
     shutdown_drain_ms: u64,
+
+    /// Stop gracefully when stdin reaches EOF (HS2-VQ8ZWT). For test harnesses and other
+    /// supervisors that own this process: they keep a **pipe** on stdin, so when they die
+    /// for any reason (even SIGKILL) the kernel closes it and the server cannot outlive
+    /// them. Never set for detached launches, which must outlive their client; and never
+    /// with stdin on `/dev/null`, which reads EOF at once.
+    #[arg(long, hide = true)]
+    exit_on_stdin_eof: bool,
 }
 
 /// Default bounded drain for a graceful stop (HS2-W1KJR4).
@@ -313,6 +321,9 @@ async fn main() -> Result<()> {
     // Install stop-signal handling before any instance file exists, so a stop that lands
     // during startup still runs the cleanup below instead of the default kill (HS2-W1KJR4).
     let force = spawn_signal_listener(state.clone());
+    if cli.exit_on_stdin_eof {
+        stop_on_stdin_eof(state.clone());
+    }
 
     // Register a discovery instance file for EVERY hosted store (the primary + any from
     // stores.json), all pointing at this one machine server — the topology-A reconciliation
@@ -362,7 +373,9 @@ async fn main() -> Result<()> {
             result
         }
         DrainOutcome::Forced(reason) => {
-            eprintln!("shutdown: {reason}; forcing exit with connections still open");
+            shutdown_log(&format!(
+                "shutdown: {reason}; forcing exit with connections still open"
+            ));
             std::process::exit(0);
         }
     }
@@ -405,7 +418,7 @@ async fn drain_on_shutdown(
 fn exit_after(after: std::time::Duration) {
     std::thread::spawn(move || {
         std::thread::sleep(after);
-        eprintln!("shutdown: background work outlived the drain; exiting");
+        shutdown_log("shutdown: background work outlived the drain; exiting");
         std::process::exit(0);
     });
 }
@@ -426,6 +439,34 @@ fn spawn_signal_listener(state: AppState) -> tokio::sync::mpsc::Receiver<()> {
         let _ = force_tx.send(()).await;
     });
     force_rx
+}
+
+/// Begin the bounded shutdown once stdin closes: the owning process exited (HS2-VQ8ZWT).
+/// Input is discarded; only EOF (or a read error) matters. A blocking thread, not a timer.
+fn stop_on_stdin_eof(state: AppState) {
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut stdin = std::io::stdin().lock();
+        let mut buf = [0_u8; 1024];
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(0) => break,
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        // Stop first: the owner that died usually held our stdout/stderr pipes too.
+        state.begin_stopping();
+        shutdown_log("shutdown: stdin closed (owner exited); stopping");
+    });
+}
+
+/// Best-effort shutdown diagnostic. Unlike `eprintln!`, never panics when stderr is a pipe
+/// whose reader is gone, which is exactly the situation an owner-death stop runs in.
+fn shutdown_log(message: &str) {
+    use std::io::Write;
+    let _ = writeln!(std::io::stderr(), "{message}");
 }
 
 /// Repeatable SIGTERM / SIGINT stream.
@@ -533,6 +574,23 @@ mod tests {
             Cli::try_parse_from(["hotsheet-server", "-C", "store", "--no-terminal-broker"])
                 .unwrap();
         assert!(!terminal_broker_enabled(disabled.no_terminal_broker));
+    }
+
+    #[test]
+    fn owner_watchdog_and_drain_are_hidden_opt_ins_with_safe_defaults() {
+        // HS2-VQ8ZWT / HS2-W1KJR4: a detached launch never watches stdin; the drain is bounded.
+        let default = Cli::try_parse_from(["hotsheet-server", "-C", "store"]).unwrap();
+        assert!(!default.exit_on_stdin_eof);
+        assert_eq!(default.shutdown_drain_ms, DEFAULT_SHUTDOWN_DRAIN_MS);
+        let owned = Cli::try_parse_from([
+            "hotsheet-server",
+            "--exit-on-stdin-eof",
+            "--shutdown-drain-ms",
+            "250",
+        ])
+        .unwrap();
+        assert!(owned.exit_on_stdin_eof);
+        assert_eq!(owned.shutdown_drain_ms, 250);
     }
 
     #[test]

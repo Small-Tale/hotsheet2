@@ -25,13 +25,27 @@ struct Server {
 
 impl Server {
     fn start(drain_ms: u64) -> Self {
+        Self::start_with(drain_ms, true, Stdio::piped(), None)
+    }
+
+    /// `watch_stdin` opts into `--exit-on-stdin-eof`; `stdin` is what the server reads.
+    /// `output` replaces the log file for stdout + stderr (to model a dead owner's pipes).
+    fn start_with(
+        drain_ms: u64,
+        watch_stdin: bool,
+        stdin: Stdio,
+        output: Option<(Stdio, Stdio)>,
+    ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
         let home = fixture.path().join("home");
         fs::create_dir(&home).unwrap();
         let store = fixture.path().join("store");
         FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
         let log = fixture.path().join("server.log");
-        let output = fs::File::create(&log).unwrap();
+        let (stdout, stderr) = output.unwrap_or_else(|| {
+            let file = fs::File::create(&log).unwrap();
+            (file.try_clone().unwrap().into(), file.into())
+        });
         let child = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
             .arg("-C")
             .arg(&store)
@@ -41,9 +55,12 @@ impl Server {
             .env("HOTSHEET_HOME", &home)
             // Keep locally installed AI tools out of startup catalog discovery.
             .env("PATH", "/usr/bin:/bin")
-            .stdin(Stdio::null())
-            .stdout(output.try_clone().unwrap())
-            .stderr(output)
+            // Piped and held by the fixture: the server stops if this test process dies
+            // without running its teardown (HS2-VQ8ZWT).
+            .args(watch_stdin.then_some("--exit-on-stdin-eof"))
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr)
             .process_group(0)
             .spawn()
             .unwrap();
@@ -303,4 +320,92 @@ fn stopping_server_stops_accepting_connections() {
         TcpStream::connect_timeout(&address.parse().unwrap(), Duration::from_secs(1)).is_err(),
         "a draining server must not accept new connections"
     );
+}
+
+#[test]
+fn closing_stdin_stops_an_opted_in_server() {
+    // HS2-VQ8ZWT: the owner's pipe closing is the signal; the bounded drain then runs.
+    let mut server = Server::start(60_000);
+    server.ready();
+    drop(server.child.stdin.take());
+    let status = server.exits_within(Duration::from_secs(5));
+    assert!(status.success(), "unclean exit {status}: {}", server.log());
+    assert!(server.log().contains("stdin closed"), "{}", server.log());
+    server.assert_registration_released();
+}
+
+#[test]
+fn a_sigkilled_owner_cannot_leave_its_server_running() {
+    // The owner here is a stand-in process holding the only write end of the server's
+    // stdin, like a test runner. SIGKILL skips every teardown path; the kernel still closes
+    // the pipe, so the server stops on its own.
+    let mut owner = Command::new("sleep")
+        .arg("300")
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let pipe = owner.stdout.take().unwrap();
+    let mut server = Server::start_with(60_000, true, Stdio::from(pipe), None);
+    server.ready();
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        server.child.try_wait().unwrap().is_none(),
+        "{}",
+        server.log()
+    );
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    let status = server.exits_within(Duration::from_secs(5));
+    assert!(status.success(), "unclean exit {status}: {}", server.log());
+    server.assert_registration_released();
+}
+
+#[test]
+fn stdin_eof_is_ignored_without_the_opt_in() {
+    // Detached launches must outlive their client: EOF alone never stops them.
+    let mut server = Server::start_with(60_000, false, Stdio::null(), None);
+    server.ready();
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(
+        server.child.try_wait().unwrap().is_none(),
+        "{}",
+        server.log()
+    );
+    assert!(!server.log().contains("stdin closed"));
+    server.sigterm();
+    assert!(server.exits_within(Duration::from_secs(5)).success());
+    server.assert_registration_released();
+}
+
+#[test]
+fn owner_death_stops_the_server_even_when_its_output_pipes_died_too() {
+    // Regression (HS2-VQ8ZWT): a real runner also owns the server's stdout/stderr pipes.
+    // Once it dies, writing a shutdown diagnostic must not panic the watchdog before it
+    // begins stopping (the first web E2E caught exactly that).
+    let mut owner = Command::new("sleep")
+        .arg("300")
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let pipe = owner.stdout.take().unwrap();
+    let mut sink = Command::new("cat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let sink_in = sink.stdin.take().unwrap();
+    let err_in = std::os::fd::AsFd::as_fd(&sink_in)
+        .try_clone_to_owned()
+        .unwrap();
+    let output = (Stdio::from(sink_in), Stdio::from(err_in));
+    let mut server = Server::start_with(60_000, true, Stdio::from(pipe), Some(output));
+    server.ready();
+    // The owner dies: its stdin write end and the output reader both go away.
+    sink.kill().unwrap();
+    sink.wait().unwrap();
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    let status = server.exits_within(Duration::from_secs(5));
+    assert!(status.success(), "unclean exit {status}");
+    server.assert_registration_released();
 }

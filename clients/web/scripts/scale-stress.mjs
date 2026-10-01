@@ -379,11 +379,12 @@ async function fetchMeasured(url, secret, path, init = {}) {
 async function startMeasuredServer(env, store, indexPath, timeoutMs) {
   const secret = `scale-${Date.now()}`;
   const started = performance.now();
-  const child = spawn(server, ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--index', indexPath], {
-    cwd: repoRoot,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // A held stdin pipe + `--exit-on-stdin-eof`: an interrupted run cannot orphan the server (HS2-VQ8ZWT).
+  const child = spawn(
+    server,
+    ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--index', indexPath, '--exit-on-stdin-eof'],
+    { cwd: repoRoot, env, stdio: ['pipe', 'pipe', 'pipe'] },
+  );
   let stdout = '',
     stderr = '',
     peakRssKb = 0,
