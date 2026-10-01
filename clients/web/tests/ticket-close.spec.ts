@@ -240,6 +240,8 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
     .toEqual({
       reason: 'duplicate',
       duplicate_of: { project_id: 'target-project', connection_id: 'git-target', native_id: 'canonical' },
+      // The web client identifies itself as the human actor on closes (HS2-XF81CJ, HS2-62G365).
+      actor: { role: 'human' },
     });
   const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
     outcome = inspector.locator('[data-component="ticket-duplicate-target"]');
