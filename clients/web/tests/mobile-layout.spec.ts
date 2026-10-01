@@ -443,6 +443,10 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
       .first()
       .evaluate((node) => node.getBoundingClientRect().top),
   ).toBe(57);
+  // The server-busy wave and its label hang from the bottom of the translucent status bar, not
+  // under it, so iOS never blurs them (HS2-KWBEC7).
+  for (const component of ['server-busy-bars', 'server-busy-message'])
+    await expect(page.locator(`[data-component="${component}"]`)).toHaveCSS('top', '47px');
   // The list scroller reaches the bottom edge with the inset inside its padding and scroll padding.
   expect(await geometry('.app-shell__workspace')).toMatchObject({
     bottom: 844,

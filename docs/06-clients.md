@@ -229,12 +229,12 @@ and identity-less legacy entries remain conservatively blocking.
   pinned header carries the top inset and its scroller the bottom one; the mobile main column's
   top toolbar claims the top and inline edges, and the list workspace and each board column
   scroller carry the bottom inset whenever the terminal drawer is collapsed (an expanded drawer
-  owns that edge). The PWA declares the `default` status-bar style: iOS 26+ deprecated
-  `black-translucent`, under which the status bar blurred whatever the top toolbar and its
-  loading indicator painted beneath it, so the status bar now stays opaque (tinted by
-  `theme-color`) and sharp above the toolbar (HS2-7W39YD). Every top-edge surface still pads by
-  `env(safe-area-inset-top)` through the safe-area tokens, so whatever inset the platform reports
-  is honored; the app's physical safe-area tokens feed Kerf's logical `--kui-safe-area-*` tokens
+  owns that edge). The PWA declares the `black-translucent` status-bar style (HS2-KWBEC7): under
+  `default` (tried in HS2-7W39YD), installed iOS 26+ web apps still draw under the status bar but
+  report a zero top inset and a viewport one status bar short, which hid the whole top toolbar
+  behind the status bar. Every top-edge surface pads by `env(safe-area-inset-top)` through the
+  safe-area tokens, and the decorative server-busy strip and its label hang from that inset
+  rather than the screen edge, so nothing the app paints sits blurred under the status bar; the app's physical safe-area tokens feed Kerf's logical `--kui-safe-area-*` tokens
   so both share one override point (HS2-4A29RR). The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or

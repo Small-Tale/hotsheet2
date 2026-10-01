@@ -1,8 +1,9 @@
-/* Decorative server-busy indicator: a full-width 4px strip of yellow bars pinned to the very
-   top of the app. It never allocates layout space and never intercepts input (HS2-MW1V3M). */
+/* Decorative server-busy indicator: a full-width 4px strip of yellow bars pinned to the top of
+   the app's safe area — just below a translucent status bar, so iOS never blurs it (HS2-KWBEC7).
+   It never allocates layout space and never intercepts input (HS2-MW1V3M). */
 .server-busy-bars {
   position: fixed;
-  inset: 0 0 auto 0;
+  inset: var(--hotsheet-safe-area-top) 0 auto 0;
   z-index: 2147483000;
   display: flex;
   align-items: flex-start;
@@ -51,8 +52,8 @@
    star-yellow background and rounded bottom corners; scales in/out vertically like the bars. */
 .server-busy-message {
   position: fixed;
-  /* Overlaps the 4px wave bars at the very top, per the design (HS2-2G1Y8X). */
-  inset: 0 auto auto 50%;
+  /* Overlaps the 4px wave bars at the top of the safe area, per the design (HS2-2G1Y8X). */
+  inset: var(--hotsheet-safe-area-top) auto auto 50%;
   z-index: 2147483000;
   padding: remify(1.6px) remify(9.6px);
   border-radius: 0 0 remify(6.4px) remify(6.4px);
