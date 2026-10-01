@@ -681,6 +681,56 @@ async fn prewarming_the_catalog_coexists_with_a_concurrent_first_client() {
     );
 }
 
+#[test]
+fn a_hanging_catalog_scan_never_holds_the_runtime_open() {
+    // HS2-NPBZJ9: dropping a Tokio runtime waits for every `spawn_blocking` task, so a
+    // startup warmup (or an abandoned `/ai-tools` request) stuck in a tool probe used to keep
+    // a stopping server alive. Discovery now runs on a detached thread: the runtime that
+    // started it drops promptly while the injected scan is still blocked.
+    use std::time::Duration;
+    let (_dir, state) = state();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel::<()>();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let entered_tx = std::sync::Mutex::new(entered_tx);
+    let release_rx = std::sync::Mutex::new(release_rx);
+    let state = state.with_ai_tool_discovery(Duration::from_secs(3600), move |_, _, _, _| {
+        let _ = entered_tx.lock().unwrap().send(());
+        // Bounded so a failed run never leaves the thread parked forever.
+        let _ = release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(30));
+        Vec::new()
+    });
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        state.prewarm_ai_catalog();
+        // An `/ai-tools` request abandoned mid-scan (its client went away) must not pin
+        // the runtime either.
+        let abandoned = tokio::time::timeout(
+            Duration::from_millis(200),
+            app(state.clone()).oneshot(authed("GET", "/ai-tools", None)),
+        )
+        .await;
+        assert!(abandoned.is_err(), "the hanging scan answered");
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the warmup never started its scan");
+    let dropping = std::time::Instant::now();
+    drop(runtime);
+    assert!(
+        dropping.elapsed() < Duration::from_secs(2),
+        "dropping the runtime waited {:?} on the hanging scan",
+        dropping.elapsed()
+    );
+    let _ = release_tx.send(());
+}
+
 /// Write the `ci-fixture` drivable plugin (detected through `rustc`) into `dir`.
 fn write_memo_fixture_plugin(dir: &std::path::Path) {
     let fixture = dir.join("ci-fixture");

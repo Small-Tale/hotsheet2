@@ -374,7 +374,10 @@ for tests). The process force-exits when that deadline passes or a **second** st
 arrives. On every path it first releases each hosted store's instance file and
 index-writer lock explicitly, so a stuck connection can no longer leave a dead URL
 registered. After a clean drain, a watchdog thread also bounds any leftover blocking
-background work, such as AI catalog discovery.
+background work. AI-tool discovery (the startup catalog warmup and `GET /ai-tools`) runs its
+tool probes on a detached thread rather than Tokio's blocking pool, because a dropping runtime
+waits for every blocking task: a stop that lands while an installed tool's `--version` or
+model probe hangs exits promptly instead of waiting out the drain (HS2-NPBZJ9).
 
 **Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
 such as a test harness or the scale-stress script, passes the hidden

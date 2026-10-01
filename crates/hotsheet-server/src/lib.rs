@@ -808,8 +808,9 @@ impl AppState {
 
     /// Warm the AI model catalog in the background at server start so the **first** client
     /// doesn't pay cold discovery on its startup path (HS2-MYDN7C follow-up to HS2-10R4VV).
-    /// Discovery is blocking subprocess work, so it runs on the blocking pool
-    /// (`discovered_ai_tools_off_runtime`) and never delays binding/serving; a failure just
+    /// Discovery is blocking subprocess work, so it runs on a detached thread
+    /// (`discovered_ai_tools_off_runtime`) that never delays binding, serving, or a stop
+    /// (HS2-NPBZJ9); a failure just
     /// leaves the cache cold for the first on-demand discovery to fill. Call once, after the
     /// runtime is up and this process has decided it is the serving instance.
     pub fn prewarm_ai_catalog(&self) {
@@ -7268,18 +7269,27 @@ async fn discovered_ai_tools_off_runtime(
     let config = state.ai_tool_discovery.clone();
     let plugin_dirs = state.plugin_dirs.clone();
     let root = state.store.root().to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        discover_ai_tools_memoized(
-            &catalogs,
-            &generation,
-            &config,
-            &plugin_dirs,
-            &root,
-            refresh,
-        )
-    })
-    .await
-    .unwrap_or_default()
+    // A detached thread, not the blocking pool (HS2-NPBZJ9): the scan runs installed tools'
+    // `--version`/catalog subprocesses with no deadline of their own, and the runtime waits
+    // for every `spawn_blocking` task when it drops. A probe that hangs past a stop (or past
+    // its abandoned request) must not hold the process; its result is only a cache fill.
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let spawned = std::thread::Builder::new()
+        .name("ai-tool-discovery".into())
+        .spawn(move || {
+            let _ = sender.send(discover_ai_tools_memoized(
+                &catalogs,
+                &generation,
+                &config,
+                &plugin_dirs,
+                &root,
+                refresh,
+            ));
+        });
+    if spawned.is_err() {
+        return Vec::new();
+    }
+    receiver.await.unwrap_or_default()
 }
 
 #[derive(Default, Deserialize)]

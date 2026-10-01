@@ -36,7 +36,40 @@ impl Server {
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
     ) -> Self {
+        Self::start_inner(drain_ms, watch_stdin, stdin, output, false)
+    }
+
+    /// Start with a drivable AI tool on `PATH` whose every invocation hangs, so the
+    /// startup AI catalog warmup is still running when the stop arrives (HS2-NPBZJ9).
+    fn start_with_slow_discovery(drain_ms: u64) -> Self {
+        Self::start_inner(drain_ms, true, Stdio::piped(), None, true)
+    }
+
+    fn start_inner(
+        drain_ms: u64,
+        watch_stdin: bool,
+        stdin: Stdio,
+        output: Option<(Stdio, Stdio)>,
+        slow_discovery: bool,
+    ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
+        // Keep locally installed AI tools out of startup catalog discovery; a slow-discovery
+        // fixture adds only its own hanging `opencode` (a drivable plugin's detection binary).
+        let path = if slow_discovery {
+            let tools = fixture.path().join("tools");
+            fs::create_dir(&tools).unwrap();
+            let tool = tools.join("opencode");
+            fs::write(
+                &tool,
+                "#!/bin/sh\necho started >> \"$0.calls\"\nexec sleep 30\n",
+            )
+            .unwrap();
+            fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+                .unwrap();
+            format!("{}:/usr/bin:/bin", tools.display())
+        } else {
+            "/usr/bin:/bin".to_string()
+        };
         let home = fixture.path().join("home");
         fs::create_dir(&home).unwrap();
         let store = fixture.path().join("store");
@@ -53,8 +86,7 @@ impl Server {
             .args(["--no-terminal-broker", "--shutdown-drain-ms"])
             .arg(drain_ms.to_string())
             .env("HOTSHEET_HOME", &home)
-            // Keep locally installed AI tools out of startup catalog discovery.
-            .env("PATH", "/usr/bin:/bin")
+            .env("PATH", path)
             // Piped and held by the fixture: the server stops if this test process dies
             // without running its teardown (HS2-VQ8ZWT).
             .args(watch_stdin.then_some("--exit-on-stdin-eof"))
@@ -72,6 +104,11 @@ impl Server {
             lock: home.join("instances").join(format!("{project}.lock")),
             _fixture: fixture,
         }
+    }
+
+    /// The hanging tool's invocation record, written when discovery starts probing it.
+    fn slow_tool_calls(&self) -> PathBuf {
+        self._fixture.path().join("tools").join("opencode.calls")
     }
 
     fn log(&self) -> String {
@@ -407,5 +444,39 @@ fn owner_death_stops_the_server_even_when_its_output_pipes_died_too() {
     owner.wait().unwrap();
     let status = server.exits_within(Duration::from_secs(5));
     assert!(status.success(), "unclean exit {status}");
+    server.assert_registration_released();
+}
+
+#[test]
+fn stop_is_prompt_while_startup_ai_catalog_discovery_hangs() {
+    // HS2-NPBZJ9: the startup catalog warmup runs blocking tool probes (`<tool> --version`)
+    // with no deadline of their own. A stop that lands while one hangs must not wait for it:
+    // nothing is left to drain, so the process exits promptly and releases its registration
+    // instead of sitting out the drain deadline (or, before HS2-W1KJR4, forever).
+    let mut server = Server::start_with_slow_discovery(5_000);
+    server.ready();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !server.slow_tool_calls().exists() {
+        assert!(
+            Instant::now() < deadline,
+            "discovery never probed the slow tool: {}",
+            server.log()
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let stopped = Instant::now();
+    server.sigterm();
+    let status = server.exits_within(Duration::from_secs(4));
+    assert!(
+        status.success(),
+        "unclean exit {status:?}: {}",
+        server.log()
+    );
+    assert!(
+        stopped.elapsed() < Duration::from_secs(2),
+        "stop waited {:?} on the hanging discovery: {}",
+        stopped.elapsed(),
+        server.log()
+    );
     server.assert_registration_released();
 }
