@@ -3232,18 +3232,31 @@ fn edit_records_note_confidence_on_completion() {
         ),
         (
             vec!["--note-confidence", "82"],
-            "require --note or --note-file",
+            "requires --note or --note-file when appending",
+        ),
+        (vec!["--clear-note-confidence"], "--edit-note"),
+        (
+            vec!["--edit-note", "01ARZ3NDEKTSV4RRFFQ69G5FAV"],
+            "--edit-note requires --note, --note-file, --note-confidence, or",
         ),
         (
             vec![
-                "--note",
-                "x",
+                "--note-confidence",
+                "82",
+                "--clear-note-confidence",
+                "--edit-note",
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            ],
+            "cannot be used with",
+        ),
+        (
+            vec![
                 "--note-confidence",
                 "82",
                 "--edit-note",
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             ],
-            "cannot be used with",
+            "was not found",
         ),
     ] {
         hs(p)
@@ -3283,6 +3296,71 @@ fn edit_records_note_confidence_on_completion() {
         Some(82)
     );
 
+    // HS2-CY4CWC: correct the score without resending the text, keep it across a
+    // text-only edit, then clear it; the derived latest score follows every step.
+    let scored_id = scored.id.to_string();
+    let scored_text = scored.text.clone();
+    let latest =
+        || hotsheet_ticketing::ops::latest_confidence(&read()).map(hotsheet_model::Confidence::get);
+    let scored_note = || {
+        read()
+            .notes
+            .into_iter()
+            .find(|note| note.id.to_string() == scored_id)
+            .unwrap()
+    };
+    hs(p)
+        .args(["edit", &slug, "--edit-note", &scored_id])
+        .args(["--note-confidence", "71"])
+        .assert()
+        .success();
+    assert_eq!(
+        scored_note()
+            .confidence
+            .map(hotsheet_model::Confidence::get),
+        Some(71)
+    );
+    assert_eq!(scored_note().text, scored_text, "text untouched");
+    assert_eq!(latest(), Some(71));
+    hs(p)
+        .args(["edit", &slug, "--edit-note", &scored_id])
+        .args(["--note-confidence", "101"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("integer from 0 to 100"));
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &scored_id,
+            "--note",
+            "Reworded.",
+        ])
+        .assert()
+        .success();
+    assert_eq!(scored_note().text, "Reworded.");
+    assert_eq!(latest(), Some(71), "a text-only edit keeps the score");
+    hs(p)
+        .args(["edit", &slug, "--edit-note", &scored_id])
+        .arg("--clear-note-confidence")
+        .assert()
+        .success();
+    assert_eq!(scored_note().confidence, None);
+    assert_eq!(latest(), None);
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(" confidence: ").not());
+    hs(p)
+        .args(["edit", &slug, "--edit-note", &scored_id, "--note-file"])
+        .arg(&note_file)
+        .args(["--note-confidence", "82"])
+        .assert()
+        .success();
+    assert_eq!(latest(), Some(82), "a cleared score can be set again");
+
     // Reopen and re-complete without a score: the old score no longer applies.
     hs(p)
         .args(["edit", &slug, "--status", "started"])
@@ -3311,6 +3389,25 @@ fn edit_records_note_confidence_on_completion() {
         .success()
         .stdout(predicate::str::contains("\"latest_confidence\": 64"))
         .stdout(predicate::str::contains("\"confidence\": 64"));
+    let provider_note = read()
+        .notes
+        .into_iter()
+        .find(|note| note.confidence.map(hotsheet_model::Confidence::get) == Some(64))
+        .unwrap()
+        .id
+        .to_string();
+    hs(p)
+        .args(["provider-edit", &connection, &native_id])
+        .args(["--edit-note", &provider_note, "--note-confidence", "58"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"latest_confidence\": 58"));
+    hs(p)
+        .args(["provider-edit", &connection, &native_id])
+        .args(["--edit-note", &provider_note, "--clear-note-confidence"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("latest_confidence").not());
 }
 
 #[test]

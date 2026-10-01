@@ -8534,12 +8534,65 @@ async fn update_records_note_confidence_and_derives_latest_confidence() {
         .find(|note| note["confidence"] == 82)
         .unwrap();
     assert!(scored["text"].as_str().unwrap().contains("## Confidence"));
-    let editing = patch(
-        path.clone(),
-        serde_json::json!({"note":"x","note_id":scored["id"],"note_confidence":82}),
+    // HS2-CY4CWC: an edit corrects (text optional), validates, keeps on a text-only
+    // edit, and clears with null; the derived score follows each step.
+    let note_id = scored["id"].clone();
+    let scored_text = scored["text"].clone();
+    let find_note = |ticket: &serde_json::Value| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == note_id)
+            .unwrap()
+            .clone()
+    };
+    let corrected = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note_id":note_id,"note_confidence":61}),
+        )
+        .await,
     )
     .await;
-    assert_eq!(editing.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(find_note(&corrected)["confidence"], 61);
+    assert_eq!(find_note(&corrected)["text"], scored_text);
+    assert_eq!(corrected["latest_confidence"], 61);
+    let invalid = patch(
+        path.clone(),
+        serde_json::json!({"note_id":note_id,"note_confidence":101}),
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let reworded = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note_id":note_id,"note":"Reworded"}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(find_note(&reworded)["text"], "Reworded");
+    assert_eq!(find_note(&reworded)["confidence"], 61);
+    let cleared = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note_id":note_id,"note_confidence":null}),
+        )
+        .await,
+    )
+    .await;
+    assert!(find_note(&cleared).get("confidence").is_none());
+    assert!(cleared.get("latest_confidence").is_none());
+    let restored = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note_id":note_id,"note":"## Confidence\n82","note_confidence":82}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(restored["latest_confidence"], 82);
     // Unscored notes omit the field entirely (backward-compatible wire shape).
     assert!(
         completed["notes"]
@@ -8569,13 +8622,48 @@ async fn update_records_note_confidence_and_derives_latest_confidence() {
     assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
     let rescored = body_json(
         patch(
-            provider_path,
+            provider_path.clone(),
             serde_json::json!({"note":"re-verified","note_confidence":0}),
         )
         .await,
     )
     .await;
     assert_eq!(rescored["latest_confidence"], 0);
+    let zero_note = rescored["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["confidence"] == 0)
+        .unwrap()["id"]
+        .clone();
+    let provider_corrected = body_json(
+        patch(
+            provider_path.clone(),
+            serde_json::json!({"note_id":zero_note,"note_confidence":40}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(provider_corrected["latest_confidence"], 40);
+    let provider_cleared = body_json(
+        patch(
+            provider_path.clone(),
+            serde_json::json!({"note_id":zero_note,"note_confidence":null}),
+        )
+        .await,
+    )
+    .await;
+    // Clearing the newest score falls back to the cycle's earlier scored note.
+    assert_eq!(provider_cleared["latest_confidence"], 82);
+    let provider_restored = body_json(
+        patch(
+            provider_path,
+            serde_json::json!({"note_id":zero_note,"note_confidence":0}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(provider_restored["latest_confidence"], 0);
 
     // Reopening clears the derived value; the per-note history stays.
     let reopened = body_json(patch(path, serde_json::json!({"status":"started"})).await).await;

@@ -3065,8 +3065,12 @@ fn do_provider_update(
             "note_summary requires a non-empty note",
         ));
     }
-    let note_confidence = req.note_confidence(req.note_id.is_some())?;
-    if note_confidence.is_some() && !provider.supports_note_confidence() {
+    let confidence_change = req.note_confidence_change(req.note_id.is_some())?;
+    // An append's null means "no score"; only an edit can clear one (HS2-CY4CWC).
+    let note_confidence = confidence_change.flatten();
+    if (note_confidence.is_some() || (req.note_id.is_some() && confidence_change.is_some()))
+        && !provider.supports_note_confidence()
+    {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             format!("provider connection '{connection_id}' does not support note confidence"),
@@ -3095,24 +3099,39 @@ fn do_provider_update(
             },
         )
         .map_err(provider_transfer_error)?;
-    if let Some(note) = note {
-        ticket = match note_id {
-            Some(note_id) => provider.edit_note(id, &note_id, timestamp, note),
-            None => provider.add_note_with_metadata(
-                id,
-                MutationContext {
-                    now: timestamp,
-                    generated_id: Ulid::new(),
-                },
-                note_kind,
-                ops::NoteMetadataInput {
-                    summary: note_summary,
-                    confidence: note_confidence,
-                },
-                note,
-            ),
+    let edit = ops::NoteEditInput {
+        text: note,
+        confidence: confidence_change,
+    };
+    match (note_id, edit) {
+        (Some(note_id), edit) if !edit.is_empty() => {
+            ticket = provider
+                .edit_note_with_metadata(id, &note_id, timestamp, edit)
+                .map_err(provider_transfer_error)?;
         }
-        .map_err(provider_transfer_error)?;
+        (
+            None,
+            ops::NoteEditInput {
+                text: Some(note), ..
+            },
+        ) => {
+            ticket = provider
+                .add_note_with_metadata(
+                    id,
+                    MutationContext {
+                        now: timestamp,
+                        generated_id: Ulid::new(),
+                    },
+                    note_kind,
+                    ops::NoteMetadataInput {
+                        summary: note_summary,
+                        confidence: note_confidence,
+                    },
+                    note,
+                )
+                .map_err(provider_transfer_error)?;
+        }
+        _ => {}
     }
     Ok(ticket)
 }
@@ -6195,7 +6214,7 @@ fn do_update(
             "note_summary requires a non-empty note",
         ));
     }
-    let note_confidence = req.note_confidence(edit_note_id.is_some())?;
+    let confidence_change = req.note_confidence_change(edit_note_id.is_some())?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
         Some(needles) => Some(ops::resolve_blockers(
@@ -6218,10 +6237,22 @@ fn do_update(
     };
     let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
-    let latest = match req.note.filter(|t| !t.is_empty()) {
-        Some(text) => match edit_note_id {
-            Some(note_id) => ops::edit_note(&entry.store, &ticket.id, &note_id, now(), text)?,
-            None => ops::add_note_with_metadata(
+    // An edit may change only the confidence (HS2-CY4CWC); empty text is never written.
+    let note_text_edit = req.note.filter(|t| !t.is_empty());
+    let latest = match edit_note_id {
+        Some(note_id) => {
+            let edit = ops::NoteEditInput {
+                text: note_text_edit,
+                confidence: confidence_change,
+            };
+            if edit.is_empty() {
+                updated
+            } else {
+                ops::edit_note_with_metadata(&entry.store, &ticket.id, &note_id, now(), edit)?
+            }
+        }
+        None => match note_text_edit {
+            Some(text) => ops::add_note_with_metadata(
                 &entry.store,
                 &ticket.id,
                 Ulid::new(),
@@ -6229,12 +6260,12 @@ fn do_update(
                 req.note_kind.unwrap_or(NoteKind::Regular),
                 ops::NoteMetadataInput {
                     summary: req.note_summary,
-                    confidence: note_confidence,
+                    confidence: confidence_change.flatten(),
                 },
                 text,
             )?,
+            None => updated,
         },
-        None => updated,
     };
     state.changed_in(entry, "updated", &latest);
     let mut response = api_ticket(entry, &latest)?;
@@ -9862,24 +9893,29 @@ struct UpdateReq {
     /// Optional concise plain-text headline used by timeline presentations.
     note_summary: Option<String>,
     /// Optional AI completion confidence (integer 0-100) on the appended note
-    /// (HS2-DWTJ43). Kept as raw JSON so a malformed value gets an explicit 400.
-    note_confidence: Option<serde_json::Value>,
+    /// (HS2-DWTJ43), or on the note named by `note_id`, where JSON null clears it
+    /// (HS2-CY4CWC). Kept as raw JSON so a malformed value gets an explicit 400.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    note_confidence: Option<Option<serde_json::Value>>,
 }
 
 impl UpdateReq {
-    /// Validate the optional note confidence: only when appending a non-empty note,
-    /// and only as a JSON integer from 0 to 100.
-    fn note_confidence(&self, editing_note: bool) -> Result<Option<Confidence>, ApiError> {
+    /// Validate the optional note confidence as a JSON integer from 0 to 100.
+    ///
+    /// Appending: a score needs a non-empty note, and null means "no score".
+    /// Editing (`note_id`): absent leaves the score unchanged, an integer replaces it,
+    /// and null clears it; the note text may be omitted.
+    fn note_confidence_change(
+        &self,
+        editing_note: bool,
+    ) -> Result<Option<Option<Confidence>>, ApiError> {
         let Some(value) = self.note_confidence.as_ref() else {
             return Ok(None);
         };
-        if editing_note {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "note_confidence is only valid when appending a note",
-            ));
-        }
-        if self.note.as_deref().is_none_or(str::is_empty) {
+        let Some(value) = value else {
+            return Ok(editing_note.then_some(None));
+        };
+        if !editing_note && self.note.as_deref().is_none_or(str::is_empty) {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "note_confidence requires a non-empty note",
@@ -9889,7 +9925,7 @@ impl UpdateReq {
             .as_u64()
             .ok_or_else(|| ConfidenceError(value.to_string()))
             .and_then(Confidence::new)
-            .map(Some)
+            .map(|confidence| Some(Some(confidence)))
             .map_err(|error| {
                 ApiError::new(StatusCode::BAD_REQUEST, format!("note_confidence: {error}"))
             })

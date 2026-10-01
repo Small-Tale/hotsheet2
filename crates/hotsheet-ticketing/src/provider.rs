@@ -906,6 +906,27 @@ pub trait TicketProvider: Send + Sync {
             capability: "note_edit",
         })
     }
+    /// Edit a note's text and/or completion confidence (HS2-CY4CWC). A confidence change
+    /// fails explicitly unless the provider overrides this to carry it; a text-only edit
+    /// delegates to [`TicketProvider::edit_note`].
+    fn edit_note_with_metadata(
+        &self,
+        native_id: &str,
+        note_id: &str,
+        now: Timestamp,
+        edit: ops::NoteEditInput,
+    ) -> Result<ApiTicket, ProviderError> {
+        if edit.confidence.is_some() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "note_confidence",
+            });
+        }
+        match edit.text {
+            Some(text) => self.edit_note(native_id, note_id, now, text),
+            None => self.get(native_id),
+        }
+    }
     fn delete_note(
         &self,
         _native_id: &str,
@@ -1350,12 +1371,36 @@ impl TicketProvider for GitProvider {
         now: Timestamp,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
+        self.edit_note_with_metadata(
+            native_id,
+            note_id,
+            now,
+            ops::NoteEditInput {
+                text: Some(text),
+                confidence: None,
+            },
+        )
+    }
+
+    fn edit_note_with_metadata(
+        &self,
+        native_id: &str,
+        note_id: &str,
+        now: Timestamp,
+        edit: ops::NoteEditInput,
+    ) -> Result<ApiTicket, ProviderError> {
+        if edit.confidence.is_some() && !self.supports_note_confidence() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "note_confidence",
+            });
+        }
         let ticket = self.ticket(native_id)?;
         let note_id = Ulid::from_string(note_id).map_err(|_| ProviderError::InvalidNativeId {
             provider: "git",
             id: note_id.into(),
         })?;
-        let updated = ops::edit_note(&self.store, &ticket.id, &note_id, now, text)?;
+        let updated = ops::edit_note_with_metadata(&self.store, &ticket.id, &note_id, now, edit)?;
         Ok(ApiTicket::from_provider(
             &updated,
             &self.connection_id,
@@ -2755,6 +2800,59 @@ mod tests {
                 "unscored".into(),
             )
             .unwrap();
+
+        // HS2-CY4CWC: editing a score follows the same capability gate, and a capable
+        // provider sets, keeps across a text edit, and clears it.
+        let unscored_id = plain.get(&plain_id.to_string()).unwrap().notes[0]
+            .id
+            .clone();
+        let edit_error = plain
+            .edit_note_with_metadata(
+                &plain_id.to_string(),
+                &unscored_id,
+                Timestamp::new("2026-08-26T03:03:00Z"),
+                crate::ops::NoteEditInput {
+                    text: None,
+                    confidence: Some(Some(Confidence::new(10).unwrap())),
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(
+            edit_error,
+            ProviderError::Unsupported {
+                capability: "note_confidence",
+                ..
+            }
+        ));
+        let scored_note = scored.notes.last().unwrap().id.clone();
+        let edit = |confidence, text: Option<&str>| {
+            source
+                .edit_note_with_metadata(
+                    &source_id.to_string(),
+                    &scored_note,
+                    Timestamp::new("2026-08-26T03:04:00Z"),
+                    crate::ops::NoteEditInput {
+                        text: text.map(str::to_owned),
+                        confidence,
+                    },
+                )
+                .unwrap()
+                .notes
+                .last()
+                .unwrap()
+                .clone()
+        };
+        let corrected = edit(Some(Some(Confidence::new(55).unwrap())), None);
+        assert_eq!(corrected.confidence, Some(55));
+        assert_eq!(corrected.text, "## Confidence\n73");
+        let reworded = edit(None, Some("## Confidence\n55"));
+        assert_eq!(reworded.confidence, Some(55));
+        assert_eq!(reworded.text, "## Confidence\n55");
+        assert_eq!(edit(Some(None), None).confidence, None);
+        assert_eq!(
+            edit(Some(Some(Confidence::new(73).unwrap())), None).confidence,
+            Some(73)
+        );
 
         // Transfers carry the score to a capable destination and refuse an incapable one.
         let capable_dir = tempfile::tempdir().unwrap();

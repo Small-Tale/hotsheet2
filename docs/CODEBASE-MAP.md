@@ -166,7 +166,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps + summary_hex/confidence note tokens; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign/add_note_with_metadata/latest_confidence — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
+      src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign/add_note_with_metadata/edit_note_with_metadata (set/keep/clear confidence, HS2-CY4CWC)/latest_confidence — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
       src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll

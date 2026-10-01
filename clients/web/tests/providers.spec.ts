@@ -18597,6 +18597,102 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
   }
 });
 
+test('reflects a corrected or cleared note confidence from the real server (HS2-CY4CWC)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Correct the completion confidence',
+      category: 'feature',
+    });
+    const patch = (body: Record<string, unknown>) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', body);
+    await patch({ status: 'started' });
+    const completed = await patch({
+      status: 'completed',
+      note: '## Result\nShipped.\n\n## Confidence\n48',
+      note_confidence: 48,
+    });
+    const scored = completed.notes.find((note) => note.confidence === 48)!;
+    await mockProject(page);
+    // Only project discovery is a fixture; ticket reads and note edits are the real server's.
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+      header = inspector.locator('.ticket-inspector__confidence'),
+      card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
+      badge = card.locator('[data-component="confidence-badge"]');
+    const openTicket = async () => {
+      await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    };
+    await openTicket();
+    await expect(header).toHaveAttribute('data-confidence', '48');
+    await expect(badge).toHaveText('48%');
+
+    // A human text edit through the real note editor keeps the AI-reported score.
+    await card.locator('.note-card__body p').first().dblclick();
+    const editor = card.getByRole('textbox', { name: 'Note body' });
+    await editor.fill('## Result\nShipped and documented.\n\n## Confidence\n48');
+    await editor.blur();
+    await expect
+      .poll(async () => {
+        const ticket = await server.request<FullTicket>(`/tickets/${created.id}`);
+        return ticket.notes.find((note) => note.id === scored.id)?.text;
+      })
+      .toContain('Shipped and documented.');
+    const afterHumanEdit = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(afterHumanEdit.notes.find((note) => note.id === scored.id)?.confidence).toBe(48);
+    await expect(badge).toHaveText('48%');
+
+    // An agent corrects the score on the existing note: card badge, band, and header follow.
+    await patch({ note_id: scored.id, note_confidence: 72 });
+    await page.reload();
+    await openTicket();
+    await expect(header).toHaveAttribute('data-confidence', '72', { timeout: 15_000 });
+    await expect(badge).toHaveText('72%');
+    await expect(badge).toHaveAttribute('data-band', 'assumed');
+    await expect(badge).toHaveAccessibleName('Confidence 72 percent');
+    await expect(card).toContainText('Shipped and documented.');
+    await card.scrollIntoViewIfNeeded();
+    await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-corrected-wide.png' });
+
+    // Clearing the score removes the badge and the derived header, leaving the note intact.
+    await patch({ note_id: scored.id, note_confidence: null });
+    await page.reload();
+    await openTicket();
+    await expect(card).toContainText('Shipped and documented.', { timeout: 15_000 });
+    await expect(badge).toHaveCount(0);
+    await expect(card).not.toHaveAttribute('data-confidence');
+    await expect(header).toHaveCount(0);
+    await page.setViewportSize({ width: 1024, height: 700 });
+    await card.scrollIntoViewIfNeeded();
+    await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-cleared-narrow.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
 test('loads board columns independently from the real server (HS2-HNZZHC)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

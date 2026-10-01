@@ -502,12 +502,18 @@ code or fenced backtick code is rejected with guidance to use `--note-file`. Int
 literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
 form also accepts intentional literal sequences without needing the override.
 `--note-confidence <0-100>` (HS2-DWTJ43) records the author's completion confidence on the
-**appended** note; like `--note-summary` it requires `--note`/`--note-file` and conflicts
-with `--edit-note`. Anything but a plain integer from 0 to 100 is rejected before any write.
-`provider-edit` accepts the same flag. The server's `PATCH /tickets/{id}`, checkout and
+**appended** note, where it requires `--note`/`--note-file`. Anything but a plain integer
+from 0 to 100 is rejected before any write. With `--edit-note <note-ulid>` (HS2-CY4CWC) it
+instead corrects that note's score, and `--clear-note-confidence` removes it. The note text
+is then optional: a confidence-only edit keeps the text, and a text-only edit keeps the
+score. `provider-edit` accepts the same flags. The server's `PATCH /tickets/{id}`, checkout and
 provider ticket routes, and MCP `hotsheet_update` take the equivalent `note_confidence`
-JSON integer with identical validation (400 for a non-integer, out-of-range, orphan, or
-note-edit value; 409 when the provider's `note_confidence` capability is off). Full ticket
+JSON integer with identical validation (400 for a non-integer, out-of-range, or orphan
+append value; 409 when the provider's `note_confidence` capability is off). With `note_id`,
+an absent `note_confidence` leaves the score unchanged, an integer replaces it, and JSON
+`null` clears it; on an append, `null` simply means "no score". Correcting a score does not
+rewrite the note's `## Confidence` prose, so an author fixing a mistyped score should edit
+both in the same call. Full ticket
 responses carry each note's `confidence` and the derived `latest_confidence` (`docs/02`
 §2.6); both are omitted when absent, so older clients see an unchanged shape. `show`
 prints the stored `confidence: NN` marker token.

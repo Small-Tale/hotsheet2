@@ -207,9 +207,13 @@ enum Cmd {
         /// Concise plain-text timeline headline for an activity/status note.
         #[arg(long, conflicts_with = "edit_note")]
         note_summary: Option<String>,
-        /// AI completion confidence (integer 0-100) recorded on the appended note.
-        #[arg(long, value_name = "0-100", conflicts_with = "edit_note", value_parser = parse_confidence_arg)]
+        /// AI completion confidence (integer 0-100) recorded on the appended note, or the
+        /// corrected score of the note named by --edit-note (note text then optional).
+        #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
         note_confidence: Option<Confidence>,
+        /// Remove the completion confidence from the note named by --edit-note.
+        #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
+        clear_note_confidence: bool,
     },
     /// Close a provider-native ticket.
     ProviderClose {
@@ -303,9 +307,13 @@ enum Cmd {
         /// Concise plain-text timeline headline for an activity/status note.
         #[arg(long, conflicts_with = "edit_note")]
         note_summary: Option<String>,
-        /// AI completion confidence (integer 0-100) recorded on the appended note.
-        #[arg(long, value_name = "0-100", conflicts_with = "edit_note", value_parser = parse_confidence_arg)]
+        /// AI completion confidence (integer 0-100) recorded on the appended note, or the
+        /// corrected score of the note named by --edit-note (note text then optional).
+        #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
         note_confidence: Option<Confidence>,
+        /// Remove the completion confidence from the note named by --edit-note.
+        #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
+        clear_note_confidence: bool,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -1126,9 +1134,11 @@ fn main() -> Result<()> {
             note_kind,
             note_summary,
             note_confidence,
+            clear_note_confidence,
             edit_note,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
+            let note_confidence = confidence_change(note_confidence, clear_note_confidence);
             validate_note_modifiers(
                 &note,
                 note_kind.as_ref(),
@@ -1213,9 +1223,11 @@ fn main() -> Result<()> {
             note_kind,
             note_summary,
             note_confidence,
+            clear_note_confidence,
             edit_note,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
+            let note_confidence = confidence_change(note_confidence, clear_note_confidence);
             validate_note_modifiers(
                 &note,
                 note_kind.as_ref(),
@@ -2320,7 +2332,7 @@ struct ProviderEditInput {
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
-    note_confidence: Option<Confidence>,
+    note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 }
 
@@ -2346,23 +2358,28 @@ fn cmd_provider_edit(
             ..Default::default()
         },
     )?;
-    if let Some(note) = input.note {
-        ticket = match input.edit_note {
-            Some(note_id) => provider.edit_note(id, &note_id, now, note),
-            None => provider.add_note_with_metadata(
-                id,
-                MutationContext {
-                    now,
-                    generated_id: Ulid::new(),
-                },
-                input.note_kind,
-                ops::NoteMetadataInput {
-                    summary: input.note_summary,
-                    confidence: input.note_confidence,
-                },
-                note,
-            ),
-        }?;
+    if let Some(note_id) = input.edit_note {
+        let edit = ops::NoteEditInput {
+            text: input.note,
+            confidence: input.note_confidence,
+        };
+        if !edit.is_empty() {
+            ticket = provider.edit_note_with_metadata(id, &note_id, now, edit)?;
+        }
+    } else if let Some(note) = input.note {
+        ticket = provider.add_note_with_metadata(
+            id,
+            MutationContext {
+                now,
+                generated_id: Ulid::new(),
+            },
+            input.note_kind,
+            ops::NoteMetadataInput {
+                summary: input.note_summary,
+                confidence: input.note_confidence.flatten(),
+            },
+            note,
+        )?;
     }
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
@@ -3978,7 +3995,7 @@ fn cmd_edit(
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
-    note_confidence: Option<Confidence>,
+    note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
@@ -4030,27 +4047,35 @@ fn cmd_edit(
         },
     };
     let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
-    if let Some(text) = note.filter(|t| !t.is_empty()) {
-        let warnings = ops::attachment_reference_warnings(&store, &updated, &text);
-        if let Some(note_id) = edit_note {
-            updated = ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
-        } else {
-            updated = ops::add_note_with_metadata(
-                &store,
-                &ticket.id,
-                Ulid::new(),
-                now_ts(),
-                note_kind,
-                ops::NoteMetadataInput {
-                    summary: note_summary,
-                    confidence: note_confidence,
-                },
-                text,
-            )?;
+    let note = note.filter(|t| !t.is_empty());
+    let warnings = note
+        .as_deref()
+        .map(|text| ops::attachment_reference_warnings(&store, &updated, text))
+        .unwrap_or_default();
+    if let Some(note_id) = edit_note {
+        let edit = ops::NoteEditInput {
+            text: note,
+            confidence: note_confidence,
+        };
+        if !edit.is_empty() {
+            updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;
         }
-        for warning in warnings {
-            eprintln!("warning: {warning}");
-        }
+    } else if let Some(text) = note {
+        updated = ops::add_note_with_metadata(
+            &store,
+            &ticket.id,
+            Ulid::new(),
+            now_ts(),
+            note_kind,
+            ops::NoteMetadataInput {
+                summary: note_summary,
+                confidence: note_confidence.flatten(),
+            },
+            text,
+        )?;
+    }
+    for warning in warnings {
+        eprintln!("warning: {warning}");
     }
     println!("Updated {}", updated.slug);
     Ok(())
@@ -4184,25 +4209,42 @@ fn parse_confidence_arg(value: &str) -> Result<Confidence, String> {
         .map_err(|error| error.to_string())
 }
 
+/// `--note-confidence` / `--clear-note-confidence` as a change: `Some(Some(score))` sets,
+/// `Some(None)` clears (edits only), `None` leaves the score alone (HS2-CY4CWC).
+fn confidence_change(
+    note_confidence: Option<Confidence>,
+    clear_note_confidence: bool,
+) -> Option<Option<Confidence>> {
+    if clear_note_confidence {
+        Some(None)
+    } else {
+        note_confidence.map(Some)
+    }
+}
+
 fn validate_note_modifiers(
     note: &Option<String>,
     note_kind: Option<&String>,
     note_summary: Option<&String>,
-    note_confidence: Option<Confidence>,
+    note_confidence: Option<Option<Confidence>>,
     edit_note: Option<&String>,
 ) -> Result<()> {
-    if note.is_none()
-        && (note_kind.is_some()
-            || note_summary.is_some()
-            || note_confidence.is_some()
-            || edit_note.is_some())
-    {
-        bail!(
-            "--note-kind, --note-summary, --note-confidence, and --edit-note require --note or \
-             --note-file"
-        );
+    if note.is_some() {
+        return Ok(());
     }
-    Ok(())
+    if note_kind.is_some() || note_summary.is_some() {
+        bail!("--note-kind and --note-summary require --note or --note-file");
+    }
+    match (edit_note.is_some(), note_confidence.is_some()) {
+        (true, false) => bail!(
+            "--edit-note requires --note, --note-file, --note-confidence, or \
+             --clear-note-confidence"
+        ),
+        (false, true) => {
+            bail!("--note-confidence requires --note or --note-file when appending a note")
+        }
+        _ => Ok(()),
+    }
 }
 
 fn cmd_close(path: &PathBuf, id: &str, reason: &str, duplicate_of: Option<String>) -> Result<()> {

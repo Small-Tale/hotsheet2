@@ -2691,7 +2691,13 @@ Every scored note keeps its badge, so earlier completions remain visible as hist
 header, beside the other header status banners; it disappears as soon as the ticket is
 reopened, and re-completing without a new score does not bring the old one back. Clients
 display the server's derivation rather than re-deriving it, and copy/paste carries a
-note's score with the note.
+note's score with the note. Editing a note's text in the client keeps its score (the
+client never sends `note_confidence` on a text edit). The score is the completing AI's
+self-report, so the web client deliberately offers **no human control** to set, correct,
+or clear it (HS2-CY4CWC); agents and authors correct a mistyped score through CLI
+`--edit-note --note-confidence`/`--clear-note-confidence`, the server `note_id` +
+`note_confidence` PATCH, or MCP `hotsheet_update`, and the card badge and header follow
+the next ticket read.
 
 **Feedback needed is needs review.** These are one user-facing concept, not competing
 ticket states. A `feedback_needed` note, a description containing the case-sensitive

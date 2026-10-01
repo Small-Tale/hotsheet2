@@ -1127,8 +1127,48 @@ pub fn edit_note(
     now: Timestamp,
     text: String,
 ) -> Result<Ticket, StoreError> {
+    edit_note_with_metadata(
+        store,
+        ticket_id,
+        note_id,
+        now,
+        NoteEditInput {
+            text: Some(text),
+            confidence: None,
+        },
+    )
+}
+
+/// What an edit changes on an existing note (HS2-CY4CWC). Each absent field is left
+/// unchanged, so correcting or clearing a confidence score does not resend the text.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NoteEditInput {
+    /// Replacement Markdown text.
+    pub text: Option<String>,
+    /// `Some(Some(score))` sets the completion confidence; `Some(None)` clears it.
+    pub confidence: Option<Option<Confidence>>,
+}
+
+impl NoteEditInput {
+    /// Whether the edit changes nothing.
+    pub fn is_empty(&self) -> bool {
+        self.text.is_none() && self.confidence.is_none()
+    }
+}
+
+/// Edit an existing note's text and/or completion confidence without changing its
+/// creation time. `latest_confidence` is derived at read time, so it follows the edit.
+pub fn edit_note_with_metadata(
+    store: &FsStore,
+    ticket_id: &Ulid,
+    note_id: &Ulid,
+    now: Timestamp,
+    edit: NoteEditInput,
+) -> Result<Ticket, StoreError> {
     let mut ticket = store.read_ticket(ticket_id)?;
-    let text = canonicalize_attachment_id_references(store, &ticket, &text);
+    let text = edit
+        .text
+        .map(|text| canonicalize_attachment_id_references(store, &ticket, &text));
     let note = ticket
         .notes
         .iter_mut()
@@ -1139,7 +1179,12 @@ pub fn edit_note(
                 format!("note {note_id}"),
             ))
         })?;
-    note.text = text;
+    if let Some(text) = text {
+        note.text = text;
+    }
+    if let Some(confidence) = edit.confidence {
+        note.confidence = confidence;
+    }
     note.edited_at = now.clone();
     ticket.updated_at = now;
     store.write_ticket_committing(&ticket)?;

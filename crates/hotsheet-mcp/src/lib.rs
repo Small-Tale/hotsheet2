@@ -150,7 +150,7 @@ fn tools_list() -> Value {
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
                 "note_summary": str_prop("optional concise plain-text timeline headline"),
-                "note_confidence": { "type": "integer", "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note" },
+                "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
@@ -1216,7 +1216,7 @@ mod core_backend {
                     {
                         return Err(bad_request("note_summary requires a non-empty note"));
                     }
-                    let note_confidence = note_confidence_field(body, edit_note_id.is_some())?;
+                    let confidence_change = note_confidence_change(body, edit_note_id.is_some())?;
                     let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
                     let note_text = str_field(body, "note").filter(|text| !text.is_empty());
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
@@ -1254,13 +1254,27 @@ mod core_backend {
                     };
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
-                    let latest = match note_text.clone() {
-                        Some(text) => match edit_note_id {
-                            Some(note_id) => {
-                                ops::edit_note(&self.store, &t.id, &note_id, (self.now)(), text)
-                                    .map_err(store_err)?
+                    let latest = match edit_note_id {
+                        Some(note_id) => {
+                            let edit = ops::NoteEditInput {
+                                text: note_text.clone(),
+                                confidence: confidence_change,
+                            };
+                            if edit.is_empty() {
+                                updated
+                            } else {
+                                ops::edit_note_with_metadata(
+                                    &self.store,
+                                    &t.id,
+                                    &note_id,
+                                    (self.now)(),
+                                    edit,
+                                )
+                                .map_err(store_err)?
                             }
-                            None => ops::add_note_with_metadata(
+                        }
+                        None => match note_text.clone() {
+                            Some(text) => ops::add_note_with_metadata(
                                 &self.store,
                                 &t.id,
                                 (self.mint)(),
@@ -1268,13 +1282,13 @@ mod core_backend {
                                 new_note_kind,
                                 ops::NoteMetadataInput {
                                     summary: str_field(body, "note_summary"),
-                                    confidence: note_confidence,
+                                    confidence: confidence_change.flatten(),
                                 },
                                 text,
                             )
                             .map_err(store_err)?,
+                            None => updated,
                         },
-                        None => updated,
                     };
                     let mut response = self.api(&latest)?;
                     if let Some(text) = note_text {
@@ -1737,28 +1751,28 @@ mod core_backend {
         }
     }
 
-    /// Validate `note_confidence` with the server's exact contract (HS2-DWTJ43): only
-    /// when appending a non-empty note, and only as a JSON integer from 0 to 100.
-    fn note_confidence_field(
+    /// Validate `note_confidence` with the server's exact contract (HS2-DWTJ43,
+    /// HS2-CY4CWC): a JSON integer from 0 to 100. Appending needs a non-empty note and
+    /// treats null as "no score"; editing (`note_id`) treats absent as unchanged and null
+    /// as clear, and the note text may be omitted.
+    fn note_confidence_change(
         body: &Value,
         editing_note: bool,
-    ) -> Result<Option<hotsheet_model::Confidence>, BackendError> {
-        let Some(value) = body.get("note_confidence").filter(|value| !value.is_null()) else {
+    ) -> Result<Option<Option<hotsheet_model::Confidence>>, BackendError> {
+        let Some(value) = body.get("note_confidence") else {
             return Ok(None);
         };
-        if editing_note {
-            return Err(bad_request(
-                "note_confidence is only valid when appending a note",
-            ));
+        if value.is_null() {
+            return Ok(editing_note.then_some(None));
         }
-        if str_field(body, "note").is_none_or(|note| note.is_empty()) {
+        if !editing_note && str_field(body, "note").is_none_or(|note| note.is_empty()) {
             return Err(bad_request("note_confidence requires a non-empty note"));
         }
         value
             .as_u64()
             .ok_or_else(|| hotsheet_model::ConfidenceError(value.to_string()))
             .and_then(hotsheet_model::Confidence::new)
-            .map(Some)
+            .map(|confidence| Some(Some(confidence)))
             .map_err(|error| bad_request(format!("note_confidence: {error}")))
     }
 
@@ -3071,17 +3085,71 @@ mod tests {
             .iter()
             .find(|note| note["confidence"] == 90)
             .unwrap();
-        let editing = call(
+        // HS2-CY4CWC: an edit corrects the score with or without new text, rejects an
+        // invalid score, and clears it with null; absent keeps it.
+        let note_id = scored["id"].clone();
+        let scored_note = |ticket: &Value| {
+            ticket["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|note| note["id"] == note_id)
+                .unwrap()
+                .clone()
+        };
+        let edited = call(
             &backend,
             "hotsheet_update",
-            json!({ "id": id, "note_id": scored["id"], "note": "y", "note_confidence": 5 }),
+            json!({ "id": id, "note_id": note_id, "note": "y", "note_confidence": 5 }),
+        );
+        assert_eq!(scored_note(&edited)["confidence"], 5);
+        assert_eq!(scored_note(&edited)["text"], "y");
+        assert_eq!(edited["latest_confidence"], 5);
+        let invalid = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note_confidence": 101 }),
         );
         assert!(
-            editing["error"]
+            invalid["error"]
                 .as_str()
                 .unwrap()
-                .contains("only valid when appending")
+                .contains("integer from 0 to 100")
         );
+        let corrected = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note_confidence": 77 }),
+        );
+        assert_eq!(scored_note(&corrected)["confidence"], 77);
+        assert_eq!(scored_note(&corrected)["text"], "y");
+        let text_only = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note": "z" }),
+        );
+        assert_eq!(scored_note(&text_only)["confidence"], 77);
+        let cleared = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note_confidence": null }),
+        );
+        assert!(scored_note(&cleared).get("confidence").is_none());
+        assert!(cleared.get("latest_confidence").is_none());
+        // Appending with null still means "no score" for older callers.
+        let appended = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note": "plain", "note_confidence": null }),
+        );
+        let newest = appended["notes"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(newest["text"], "plain");
+        assert!(newest.get("confidence").is_none());
         let tools = handle_message(&req("tools/list", json!({})), &backend).unwrap();
         let update = tools["result"]["tools"]
             .as_array()

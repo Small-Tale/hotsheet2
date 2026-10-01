@@ -325,8 +325,10 @@ should the fix also cover the dashboard dedicated view?
     transition into Not Started/Started, or a Not Working report). A score written just
     before the completion flip in the same cycle counts; an old score never survives a
     reopen. The wire ticket exposes it as `latest_confidence`; the per-note value stays
-    in Notes as history. Providers without note metadata report the
-    `note_confidence` capability as unsupported and reject a score explicitly.
+    in Notes as history. A note edit may set, keep, or clear the score
+    (HS2-CY4CWC); the derived value follows automatically. Providers without note
+    metadata report the `note_confidence` capability as unsupported and reject a score
+    (on append or edit) explicitly.
     The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
     get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store
