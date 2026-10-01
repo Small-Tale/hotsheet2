@@ -64,7 +64,7 @@ describe('Kerf UI doctor baseline', () => {
       expect(raw.diagnostics).toHaveLength(2);
       writeFileSync(join(workspace, 'node_modules/@kerfjs/ui/package.json'), '{"version":"5.0.0-beta.59"}');
       expect(adaptFloatingToolbarComposition(raw, workspace).diagnostics).toHaveLength(1);
-      writeFileSync(join(workspace, 'node_modules/@kerfjs/ui/package.json'), '{"version":"5.0.0-beta.60"}');
+      writeFileSync(join(workspace, 'node_modules/@kerfjs/ui/package.json'), '{"version":"5.0.0-beta.57"}');
       expect(adaptFloatingToolbarComposition(raw, workspace).diagnostics).toHaveLength(2);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
