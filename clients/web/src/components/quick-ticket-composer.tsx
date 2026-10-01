@@ -5,6 +5,7 @@ import '@awesome.me/webawesome/dist/components/option/option.js';
 import './quick-ticket-composer.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Select } from '@kerfjs/ui/select';
 import { Paperclip, Plus, Star, Trash2, Upload } from 'lucide';
 
 import { TicketCategorySelect } from './ticket-category-select';
@@ -16,6 +17,13 @@ export interface QuickTicketComposerProps {
   category?: string;
   upNext?: boolean;
   providerName?: string;
+  /**
+   * Writable ticket sources the new ticket can target. With two or more the footer offers a
+   * source Select instead of the plain "Creating in" text (HS2-NZMJBJ).
+   */
+  sources?: readonly { value: string; label: string }[];
+  /** The selected source's connection id. */
+  source?: string;
   canCreate?: boolean;
   attachments?: readonly { id: string; name: string }[];
   attachmentsEnabled?: boolean;
@@ -82,6 +90,8 @@ export function QuickTicketComposer({
   category = 'task',
   upNext = false,
   providerName = 'Hot Sheet',
+  sources = [],
+  source,
   canCreate = true,
   attachments = [],
   attachmentsEnabled = true,
@@ -200,8 +210,23 @@ export function QuickTicketComposer({
             )}
           </section>
           <div class="quick-ticket-composer__footer">
-            <span>Creating in {providerName}</span>
-            <div>
+            {sources.length > 1 ? (
+              <div class="quick-ticket-composer__source">
+                <span aria-hidden="true">Creating in</span>
+                <Select
+                  name="new-ticket-source"
+                  ariaLabel="Ticket source"
+                  value={source ?? sources[0].value}
+                  choices={sources}
+                  size="compact"
+                  triggerWidth="fit-content"
+                  disabled={submitting}
+                />
+              </div>
+            ) : (
+              <span>Creating in {providerName}</span>
+            )}
+            <div class="quick-ticket-composer__actions">
               <wa-button
                 type="button"
                 appearance="plain"

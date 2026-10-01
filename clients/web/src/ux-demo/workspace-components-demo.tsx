@@ -64,6 +64,18 @@ export const composerTitle = signal('');
 export const composerDetails = signal('');
 export const composerCategory = signal('task');
 export const composerUpNext = signal(false);
+/** Writable ticket sources the demo composer can target (HS2-NZMJBJ). */
+export const composerSources = [
+  { value: 'git-local', label: 'Hot Sheet git' },
+  { value: 'github-issues', label: 'GitHub issues' },
+] as const;
+/** Whether the demo project has several writable sources (the Select) or one (plain text). */
+export const composerMultipleSources = signal(true);
+/** The demo's in-memory "most recently used" source, which the next composer preselects. */
+export const composerSource = signal<string>(composerSources[0].value);
+/** The source picked in the open composer; creating remembers it, cancelling forgets it. */
+export const composerSourcePick = signal<string | undefined>(undefined);
+export const demoComposerTarget = () => composerSourcePick.value ?? composerSource.value;
 export const inspectorOpen = signal(true);
 export const inspectorTab = signal<InspectorTab>('info');
 export const inspectorCategory = signal('feature');
@@ -300,7 +312,12 @@ export function createDemoTicket(): boolean {
   composerTitle.value = '';
   composerDetails.value = '';
   composerUpNext.value = false;
-  collectionEvent.value = `${slug} created`;
+  const source = composerMultipleSources.value
+    ? composerSources.find((item) => item.value === demoComposerTarget())!
+    : composerSources[0];
+  composerSource.value = source.value;
+  composerSourcePick.value = undefined;
+  collectionEvent.value = `${slug} created in ${source.label}`;
   return true;
 }
 
@@ -393,6 +410,22 @@ export function PageHeaderDemo() {
   );
 }
 
+export function QuickTicketComposerSettings() {
+  return (
+    <form class="settings-form" data-settings="quick-ticket-composer">
+      <Select
+        name="composer-source-count"
+        label="Writable ticket sources"
+        value={composerMultipleSources.value ? 'several' : 'one'}
+        choices={[
+          { value: 'one', label: 'One (plain text)' },
+          { value: 'several', label: 'Several (source Select)' },
+        ]}
+      />
+    </form>
+  );
+}
+
 export function QuickTicketComposerDemo() {
   return (
     <section class="workspace-component-demo" aria-label="QuickTicketComposer demo">
@@ -403,7 +436,9 @@ export function QuickTicketComposerDemo() {
         details={composerDetails.value}
         category={composerCategory.value}
         upNext={composerUpNext.value}
-        providerName="Hot Sheet git"
+        providerName={composerSources[0].label}
+        sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
+        source={composerMultipleSources.value ? demoComposerTarget() : composerSources[0].value}
       />
       <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
       <p class="component-stage__event" aria-live="polite">

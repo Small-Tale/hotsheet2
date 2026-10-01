@@ -7183,6 +7183,166 @@ test('remembers the last ticket category after cancelling and refreshing', async
   ).toHaveJSProperty('value', 'investigation');
 });
 
+test('creates a ticket in a chosen writable source and preselects it next time in memory only (HS2-NZMJBJ)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const capabilities = (create: boolean) => ({
+    create,
+    update: true,
+    close: true,
+    notes: true,
+    note_edit: true,
+    note_delete: true,
+    attachments: create,
+    assignment: true,
+    review_requests: true,
+    dependencies: true,
+    up_next: true,
+    close_reasons: true,
+    claims: true,
+    atomic_batch: true,
+    not_working_report: true,
+    offline_mutation: true,
+    history: true,
+    watch: true,
+    provider_idempotency: true,
+    query_fields: [],
+  });
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'HS2 git tickets',
+          locator: '/tickets',
+          default: true,
+          capabilities: capabilities(true),
+        },
+        {
+          connection_id: 'github-acme',
+          provider: 'github',
+          display_name: 'GitHub issues',
+          locator: 'acme/widgets',
+          default: false,
+          capabilities: capabilities(true),
+        },
+        {
+          connection_id: 'jira-ro',
+          provider: 'jira',
+          display_name: 'Read-only Jira',
+          locator: 'https://jira.test',
+          default: false,
+          capabilities: capabilities(false),
+        },
+      ],
+    }),
+  );
+  const creates: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
+      creates.push(url.search);
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    dialog = page.getByRole('dialog', { name: 'Create ticket' }),
+    source = dialog.locator('wa-select[name="new-ticket-source"]');
+  await launcher.click();
+  // Only the writable sources are offered, and the default source starts selected.
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(source).toHaveAccessibleName('Ticket source');
+  await expect(source.locator('wa-option')).toHaveText(['HS2 git tickets', 'GitHub issues']);
+  await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in');
+  expect(
+    await source.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor),
+  ).toBe('pointer');
+  await dialog.locator('form').screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-wide.png' });
+  const shown = source.evaluate(
+    (node) =>
+      new Promise<void>((resolve) => {
+        node.addEventListener(
+          'wa-after-show',
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
+      }),
+  );
+  await source.click();
+  await shown;
+  await expect(source).toHaveJSProperty('open', true);
+  await page.screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-open.png' });
+  await source.locator('wa-option[value="github-acme"]').click();
+  await expect(source).toHaveJSProperty('value', 'github-acme');
+  await expect(source).toHaveJSProperty('open', false);
+  await expect
+    .poll(() =>
+      source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
+    )
+    .toBe('GitHub issues');
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to GitHub');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates).toEqual(['?source=github-acme']);
+  // The most recently used source is preselected when the composer reopens.
+  await launcher.click();
+  await expect(source).toHaveJSProperty('value', 'github-acme');
+  await expect
+    .poll(() =>
+      source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
+    )
+    .toBe('GitHub issues');
+  // Picking a source and cancelling does not count as using it.
+  await source.click();
+  await source.locator('wa-option[value="git-local"]').click();
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await launcher.click();
+  await expect(source).toHaveJSProperty('value', 'github-acme');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(source).toBeVisible();
+  await dialog.locator('form').screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  // The remembered source is in memory only: a reload falls back to the default source.
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+  await launcher.click();
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to git');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates).toEqual(['?source=github-acme', '?source=git-local']);
+});
+
+test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {
+  await mockProject(page);
+  const creates: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
+      creates.push(url.search);
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create ticket' });
+  await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet git');
+  await expect(dialog.locator('wa-select[name="new-ticket-source"]')).toHaveCount(0);
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Default routing');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates).toEqual(['']);
+});
+
 test('keeps production ticket creation inside the Web Awesome modal lifecycle', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

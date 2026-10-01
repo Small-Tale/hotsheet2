@@ -31,6 +31,12 @@ import { data } from '../interactions/dom';
 import type { Control, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from '../new-ticket-attachments';
+import {
+  type ProjectTicketSources,
+  rememberNewTicketSource,
+  type TicketSourceChoice,
+  writableTicketSources,
+} from '../new-ticket-source';
 import { submitNotWorkingReport } from '../not-working-workflow';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import {
@@ -168,6 +174,10 @@ export interface TicketWorkflowDependencies {
   composerDetails: Signal<string>;
   composerCategory: Signal<string>;
   composerUpNext: Signal<boolean>;
+  /** The source picked in the open composer, if any (HS2-NZMJBJ). */
+  composerSource: Signal<string | undefined>;
+  /** The source each project last created a ticket in, in memory only (HS2-NZMJBJ). */
+  lastTicketSourceByProject: Signal<Record<string, string>>;
   composerAttachments: Signal<PendingEvidence[]>;
   composerAttachmentMessage: Signal<string>;
   composerAttachmentError: Signal<boolean>;
@@ -182,7 +192,9 @@ export interface TicketWorkflowDependencies {
   pendingCreatedTickets: PendingCreatedTickets;
   project: () => Project | undefined;
   api: () => Api;
-  defaultProvider: () => { name: string; capabilities: Capabilities } | undefined;
+  defaultProvider: () => ProjectTicketSources | undefined;
+  /** The source a new ticket targets: the composer pick, last-used, or default source. */
+  newTicketSource: () => TicketSourceChoice | undefined;
   capabilitiesFor: (connectionId: string) => Capabilities | undefined;
   canUseAttachments: () => boolean;
   canStageNewTicketAttachments: () => boolean;
@@ -286,6 +298,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerSource,
+    lastTicketSourceByProject,
     composerAttachments,
     composerAttachmentMessage,
     composerAttachmentError,
@@ -301,6 +315,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     project,
     api,
     defaultProvider,
+    newTicketSource,
     capabilitiesFor,
     canUseAttachments,
     canStageNewTicketAttachments,
@@ -1758,6 +1773,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerTitle.value = '';
     composerDetails.value = '';
     composerUpNext.value = false;
+    composerSource.value = undefined;
     composerAttachments.value = [];
     composerAttachmentMessage.value = '';
     composerAttachmentError.value = false;
@@ -1770,7 +1786,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       screening = Symbol();
     openTicketComposer();
     if (!origin || !canStageNewTicketAttachments()) {
-      composerAttachmentMessage.value = 'The default ticket provider cannot create tickets with attachments.';
+      composerAttachmentMessage.value = 'The selected ticket source cannot create tickets with attachments.';
       composerAttachmentError.value = true;
       return;
     }
@@ -1799,14 +1815,17 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   async function submitNewTicket() {
     const origin = project(),
-      provider = defaultProvider(),
+      target = newTicketSource(),
+      // Name the target explicitly only when the project offers a choice; a single writable source
+      // keeps the checkout's own default routing (HS2-NZMJBJ).
+      source = target && writableTicketSources(defaultProvider()).length > 1 ? target.connectionId : undefined,
       title = composerTitle.value.trim();
     if (
       !origin ||
       !title ||
       composerScreening.value ||
       composerSubmitting.value ||
-      !(provider?.capabilities.create ?? true)
+      !(target?.capabilities.create ?? true)
     )
       return;
     const client = new Api(origin.apiPath),
@@ -1823,12 +1842,22 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       const result = await createTicketWithAttachments(
         files,
         async () => {
-          const created = await client.createCheckoutTicket(origin.id, {
-            title,
-            details: composerDetails.value,
-            category: composerCategory.value,
-            ...placement,
-          });
+          const created = await client.createCheckoutTicket(
+            origin.id,
+            {
+              title,
+              details: composerDetails.value,
+              category: composerCategory.value,
+              ...placement,
+            },
+            source,
+          );
+          if (source)
+            lastTicketSourceByProject.value = rememberNewTicketSource(
+              lastTicketSourceByProject.value,
+              origin.id,
+              source,
+            );
           localTicketChangeAcknowledgements.acknowledge(origin.id, {
             store: created.connection_id,
             id: created.id,

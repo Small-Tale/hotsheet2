@@ -1590,6 +1590,16 @@ and identity-less legacy entries remain conservatively blocking.
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
+  The footer names the ticket source the new ticket is created in. When the project has two
+  or more sources that can create tickets, that text becomes a compact source Select
+  ("Creating in [source]") listing only the writable sources; read-only sources are never
+  offered. It preselects the source this project most recently created a ticket in, else
+  the default source. The remembered source is per project and in memory only — never
+  persisted, so a reload, a new session, or another device starts at the default — and a
+  pick that is cancelled is not remembered. The create request names the chosen source with
+  `?source=<connection-id>`, and attachment staging follows that source's capabilities. A
+  project with a single writable source keeps the plain "Creating in" label and the
+  checkout's default routing (HS2-NZMJBJ).
   Its chosen height is a device-local preference. The live textarea is morph-protected so a
   controlled-value rerender cannot replace the browser-resized element, while
   cancellation/reopening and later new-ticket sessions restore the persisted height.

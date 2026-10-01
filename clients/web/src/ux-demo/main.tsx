@@ -316,6 +316,8 @@ import {
   composerCategory,
   composerDetails,
   composerExpanded,
+  composerMultipleSources,
+  composerSourcePick,
   composerTitle,
   composerUpNext,
   createDemoTicket,
@@ -332,6 +334,7 @@ import {
   inspectorTitleEditing,
   PageHeaderDemo,
   QuickTicketComposerDemo,
+  QuickTicketComposerSettings,
   resetWorkspaceDemoNotifications,
   resolveWorkspaceDemoPermission,
   TerminalTicketRailDemo,
@@ -1025,7 +1028,8 @@ function DemoApp() {
     selected.id === 'connection-details-dialog' ||
     selected.id === 'content-transition' ||
     selected.id === 'permission-request' ||
-    selected.id === 'ai-conversation';
+    selected.id === 'ai-conversation' ||
+    selected.id === 'quick-ticket-composer';
   const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
     modified = demoModified.value[selected.id];
   return (
@@ -1102,6 +1106,8 @@ function DemoApp() {
             <PermissionRequestSettings />
           ) : selected.id === 'ai-conversation' ? (
             <AIConversationSettings />
+          ) : selected.id === 'quick-ticket-composer' ? (
+            <QuickTicketComposerSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -2133,6 +2139,7 @@ delegateCapture(root, 'wa-after-hide', '[data-component="quick-ticket-composer"]
   composerTitle.value = '';
   composerDetails.value = '';
   composerUpNext.value = false;
+  composerSourcePick.value = undefined;
   recordCollectionEvent('Ticket creation cancelled');
 });
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => {
@@ -2143,6 +2150,12 @@ delegate(root, 'input', '[name="new-ticket-details"]', (_event, target) => {
 });
 delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => {
   composerCategory.value = (target as FormControl).value;
+});
+delegate(root, 'change', '[name="new-ticket-source"]', (_event, target) => {
+  composerSourcePick.value = (target as FormControl).value;
+});
+delegate(root, 'change', '[data-settings="quick-ticket-composer"] [name="composer-source-count"]', (_event, target) => {
+  composerMultipleSources.value = (target as FormControl).value === 'several';
 });
 delegate(root, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
   composerUpNext.value = !composerUpNext.value;

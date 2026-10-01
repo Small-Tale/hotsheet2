@@ -614,6 +614,9 @@ always retain native clipboard behavior.
   the shared colored/iconic picker in both its selected and menu presentations;
   the star sends explicit Up Next placement and takes precedence over Backlog-view creation;
   created mock tickets derive their category icon/color from that same choice model.
+  The provider destination is plain "Creating in" text for one writable source and a compact
+  Kerf source `Select` for several (HS2-NZMJBJ); the demo settings switch between the two
+  variants, and the demo remembers the last source it created in, preselecting it next time.
   Textual Cancel intentionally has no redundant icon. Production and catalog keep one
   controlled Web Awesome dialog host mounted, call `show()` while the live launcher owns
   focus, and let native modality confine Tab/Shift-Tab, order nested-control Escape, inert

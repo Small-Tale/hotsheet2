@@ -53,6 +53,7 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly composerDetails: Signal<string>;
   readonly composerCategory: Signal<string>;
   readonly composerUpNext: Signal<boolean>;
+  readonly composerSource: Signal<string | undefined>;
   readonly addNewTicketFiles: (files: FileList | File[]) => Promise<void>;
   readonly draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   readonly composerAttachments: Signal<PendingEvidence[]>;
@@ -97,6 +98,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerSource,
     addNewTicketFiles,
     draftScope,
     composerAttachments,
@@ -241,6 +243,10 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     composerCategory.value = (target as Control).value;
     saveLastTicketCategory(localStorage, composerCategory.value);
     scheduleProjectSessionPersistence();
+  });
+  delegate(document.body, 'change', '[name="new-ticket-source"]', (_event, target) => {
+    // In-memory only: the pick lasts while the composer is open; creating remembers it (HS2-NZMJBJ).
+    composerSource.value = (target as Control).value || undefined;
   });
   delegate(document.body, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
     composerUpNext.value = !composerUpNext.value;

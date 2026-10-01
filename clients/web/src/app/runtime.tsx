@@ -213,6 +213,7 @@ import {
   mobileVirtualKeyboardVisible,
   transitionMobileTerminalFocus,
 } from '../mobile-terminal-focus';
+import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-notifications';
 import { priorityFromWire } from '../priority-wire';
@@ -638,6 +639,10 @@ export async function startHotSheetWebClient() {
     composerDetails = signal(''),
     composerCategory = signal(lastUsedTicketCategory),
     composerUpNext = signal(false),
+    // The new ticket's target source while the composer is open, and the last source a ticket was
+    // created in per project — in memory only, never persisted (HS2-NZMJBJ).
+    composerSource = signal<string | undefined>(undefined),
+    lastTicketSourceByProject = signal<Record<string, string>>({}),
     inspectorTab = signal<InspectorTab>('info'),
     readerTab = signal<InspectorTab>('info'),
     sidebarVisible = signal(storedWorkspacePreferences.sidebarVisible),
@@ -730,7 +735,7 @@ export async function startHotSheetWebClient() {
     noteDraftBase = '',
     readerNoteDraftBase = '';
   const providerCapabilities = signal<Record<string, Capabilities>>({});
-  const defaultProviders = signal<Record<string, { name: string; capabilities: Capabilities } | undefined>>({});
+  const defaultProviders = signal<Record<string, ProjectTicketSources | undefined>>({});
   const hideVerifiedByProject = signal<Record<string, boolean>>({});
   const {
     commandDefinitions,
@@ -1018,8 +1023,13 @@ export async function startHotSheetWebClient() {
   const canUseAttachments = () => selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.attachments ?? true) : false;
   const capabilitiesFor = (connectionId: string) => providerCapabilities.value[connectionId];
   const defaultProvider = () => defaultProviders.value[selectedProjectId.value];
+  const newTicketSource = () =>
+    resolveNewTicketSource(
+      defaultProvider(),
+      composerSource.value ?? lastTicketSourceByProject.value[selectedProjectId.value],
+    );
   const canStageNewTicketAttachments = () => {
-    const capabilities = defaultProvider()?.capabilities;
+    const capabilities = newTicketSource()?.capabilities;
     return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
   };
   const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
@@ -3423,7 +3433,7 @@ export async function startHotSheetWebClient() {
       }
   }
   // prettier-ignore
-  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, });
+  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditing, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, lastTicketSourceByProject, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, newTicketSource, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, });
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {
@@ -4642,6 +4652,7 @@ export async function startHotSheetWebClient() {
     });
     const target = notWorkingTarget.value,
       provider = defaultProvider(),
+      composerTarget = newTicketSource(),
       visibilityScope = terminalVisibilityDialogScope.value,
       migration = hs1MigrationProject.value,
       deleteTargetId = savedViewDeleteTargetId.value,
@@ -4734,8 +4745,13 @@ export async function startHotSheetWebClient() {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
-          providerName={provider?.name ?? 'Hot Sheet git'}
-          canCreate={provider?.capabilities.create ?? true}
+          providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet git'}
+          sources={writableTicketSources(provider).map((source) => ({
+            value: source.connectionId,
+            label: source.name,
+          }))}
+          source={composerTarget?.connectionId}
+          canCreate={composerTarget?.capabilities.create ?? provider?.capabilities.create ?? true}
           attachments={composerAttachments.value}
           attachmentsEnabled={canStageNewTicketAttachments()}
           attachmentMessage={composerAttachmentMessage.value}
@@ -4948,7 +4964,7 @@ export async function startHotSheetWebClient() {
     resolvePermission, selectedProjectId, hideVerifiedByProject, selectLinkedTicket, ticketLinkChoice, openTicketLinkMatch, cancelTicketLinkChoice, searchOpen,
     workspaceSearchModel, workspaceSearchTokenOffset, searchHelpOpen,
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,
-    composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, addNewTicketFiles, composerAttachments,
+    composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, addNewTicketFiles, composerAttachments,
     composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, refreshProject,
     galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,

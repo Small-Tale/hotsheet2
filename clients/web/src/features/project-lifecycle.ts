@@ -8,16 +8,14 @@ import { type ExternalProviderKind, type GithubAuthState, providerName } from '.
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
+import { type ProjectTicketSources, projectTicketSources } from '../new-ticket-source';
 import type { PermissionAutomation } from '../permission-notifications';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
 import { insertTabByRank, replaceTabInPlace } from '../tab-order';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
 import { dismissHs1CleanupPrompt, hs1MigrationPromptDismissed, saveActiveProjectRoot } from '../workspace-session';
 
-interface DefaultProvider {
-  name: string;
-  capabilities: Capabilities;
-}
+type DefaultProvider = ProjectTicketSources;
 
 interface ProjectActivation {
   project: Project;
@@ -124,12 +122,11 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [job.root]: '' };
       projects.value = projects.value.map((item) => (item.root === target.root ? { ...item, ...current } : item));
       if (job.kind === 'import') {
-        const descriptors = await new Api(target.apiPath).providers(),
-          selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+        const descriptors = await new Api(target.apiPath).providers();
         if (migrationJobsByRoot.value[job.root]?.attempt !== job.attempt) return;
         defaultProviders.value = {
           ...defaultProviders.value,
-          [target.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+          [target.id]: projectTicketSources(descriptors),
         };
         providerCapabilities.value = {
           ...providerCapabilities.value,
@@ -183,10 +180,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       [value.id]: localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`) === 'true',
     };
     dependencies.setPermissionAutomation(value.id, dependencies.loadPermissionAutomation(value.id));
-    const selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
     defaultProviders.value = {
       ...defaultProviders.value,
-      [value.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+      [value.id]: projectTicketSources(descriptors),
     };
     providerCapabilities.value = {
       ...providerCapabilities.value,
@@ -425,11 +421,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       createdGitTicketStore.value = result.ticketStore;
       ticketSourceSetupNavigation.value = 'push';
       requestAnimationFrame(() => document.querySelector<HTMLElement>('[name="ticket-store-remote"]')?.focus());
-      const descriptors = await client.providers(),
-        selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+      const descriptors = await client.providers();
       defaultProviders.value = {
         ...defaultProviders.value,
-        [target.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+        [target.id]: projectTicketSources(descriptors),
       };
       providerCapabilities.value = {
         ...providerCapabilities.value,
@@ -579,11 +574,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
 
   async function reloadProviderDescriptors(client: Api, current: Project) {
     providerConnections.value = await client.connections();
-    const descriptors = await client.providers(),
-      selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
+    const descriptors = await client.providers();
     defaultProviders.value = {
       ...defaultProviders.value,
-      [current.id]: selected ? { name: selected.display_name, capabilities: selected.capabilities } : undefined,
+      [current.id]: projectTicketSources(descriptors),
     };
     providerCapabilities.value = {
       ...providerCapabilities.value,

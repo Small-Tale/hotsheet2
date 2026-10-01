@@ -282,6 +282,7 @@ search-and-composer	delegateCapture	document.body	'wa-after-hide'	'[data-compone
 search-and-composer	delegate	document.body	'input'	'[name="new-ticket-title"]'
 search-and-composer	delegate	document.body	'input'	'[name="new-ticket-details"]'
 search-and-composer	delegate	document.body	'change'	'[name="new-ticket-category"]'
+search-and-composer	delegate	document.body	'change'	'[name="new-ticket-source"]'
 search-and-composer	delegate	document.body	'click'	'[data-action="toggle-new-ticket-up-next"]'
 search-and-composer	delegate	document.body	'change'	'input[name="new-ticket-attachments"]'
 search-and-composer	delegate	document.body	'click'	'[data-action="remove-new-ticket-attachment"]'

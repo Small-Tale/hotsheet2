@@ -238,11 +238,18 @@
   flex-wrap: wrap;
   gap: var(--kui-space-m);
 }
-.quick-ticket-composer__footer > span {
+.quick-ticket-composer__footer > span,
+.quick-ticket-composer__source > span {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
-.quick-ticket-composer__footer > div {
+.quick-ticket-composer__source {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--kui-space-xs);
+}
+.quick-ticket-composer__actions {
   display: flex;
   margin-left: auto;
   gap: var(--kui-space-xs);

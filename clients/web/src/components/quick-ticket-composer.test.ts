@@ -136,6 +136,47 @@ describe('QuickTicketComposer', () => {
     expect(markup).toContain('proof.png could not be read');
   });
 
+  it('offers a ticket source Select only when several sources can create tickets (HS2-NZMJBJ)', () => {
+    const single = String(
+      QuickTicketComposer({
+        expanded: true,
+        providerName: 'HS2 git tickets',
+        sources: [{ value: 'git-a', label: 'HS2 git tickets' }],
+        source: 'git-a',
+      }),
+    );
+    expect(single).toContain('<span>Creating in HS2 git tickets</span>');
+    expect(single).not.toContain('name="new-ticket-source"');
+    const multiple = String(
+      QuickTicketComposer({
+        expanded: true,
+        providerName: 'GitHub issues',
+        sources: [
+          { value: 'git-a', label: 'HS2 git tickets' },
+          { value: 'github-b', label: 'GitHub issues' },
+        ],
+        source: 'github-b',
+      }),
+    );
+    expect(multiple).toMatch(/class="quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/);
+    expect(multiple).toContain('aria-label="Ticket source"');
+    expect(multiple).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="github-b"/);
+    expect(multiple).toContain('HS2 git tickets');
+    expect(multiple).not.toContain('<span>Creating in GitHub issues</span>');
+    const submitting = String(
+      QuickTicketComposer({
+        expanded: true,
+        submitting: true,
+        sources: [
+          { value: 'git-a', label: 'HS2 git tickets' },
+          { value: 'github-b', label: 'GitHub issues' },
+        ],
+      }),
+    );
+    expect(submitting).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="git-a"/);
+    expect(submitting).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*disabled/);
+  });
+
   it('blocks creation while attachment screening is still busy', () => {
     const markup = String(QuickTicketComposer({ expanded: true, busy: true }));
     expect(markup).toContain('Create ticket');

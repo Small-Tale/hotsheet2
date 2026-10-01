@@ -5063,6 +5063,20 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     .await;
     let slug = created["slug"].as_str().unwrap();
     let qualified_id = created["qualified_id"].as_str().unwrap();
+    // The web composer names its chosen target with `?source=<connection-id>` (HS2-NZMJBJ).
+    let sourced = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/combo/tickets?source={store_id}"),
+                Some(r#"{"title":"Sourced"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(sourced["connection_id"], store_id);
+    assert!(sourced["slug"].as_str().unwrap().starts_with("EX-"));
     let listed = body_json(
         app.clone()
             .oneshot(authed("GET", "/checkouts/combo/tickets", None))

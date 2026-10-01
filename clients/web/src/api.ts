@@ -722,11 +722,16 @@ export class Api {
       up_next?: boolean;
       tags?: string[];
     },
+    /** Target ticket source (connection id); omitted to use the checkout's default source. */
+    source?: string,
   ) =>
-    this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`, {
-      method: 'POST',
-      body: JSON.stringify(prioritiesToWire(value)),
-    });
+    this.request<FullTicket>(
+      `/checkouts/${encodeURIComponent(checkout)}/tickets${source ? `?source=${encodeURIComponent(source)}` : ''}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(prioritiesToWire(value)),
+      },
+    );
   updateCheckoutTicket = (checkout: string, id: string, value: Record<string, unknown>) =>
     this.request<FullTicket & { store: string }>(
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,

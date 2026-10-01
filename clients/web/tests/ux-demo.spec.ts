@@ -2923,7 +2923,8 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
         headerLabel = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments header label')!),
         drop = getComputedStyle(node.querySelector('.quick-ticket-composer__drop')!),
         footer = getComputedStyle(node.querySelector('.quick-ticket-composer__footer')!),
-        actions = getComputedStyle(node.querySelector('.quick-ticket-composer__footer > div')!);
+        actions = getComputedStyle(node.querySelector('.quick-ticket-composer__actions')!),
+        source = getComputedStyle(node.querySelector('.quick-ticket-composer__source')!);
       return {
         padding: style.paddingTop,
         regionGap: style.gap,
@@ -2936,6 +2937,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
         dropGap: drop.gap,
         footerGap: footer.gap,
         actionGap: actions.gap,
+        sourceGap: source.gap,
       };
     }),
   ).toEqual({
@@ -2950,6 +2952,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
     dropGap: '8px',
     footerGap: '16px',
     actionGap: '8px',
+    sourceGap: '8px',
   });
   await form.screenshot({ path: '/private/tmp/hs2-4y6sm9-quick-ticket-composer-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
@@ -2968,7 +2971,41 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
       .first()
       .getByRole('button', { name: 'Remove from Up Next' }),
   ).toBeVisible();
-  await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
+  await expect(page.getByText(/HS2-DEMO\d created in Hot Sheet git/)).toBeVisible();
+  // HS2-NZMJBJ: several writable sources show a source Select; the last-used one is preselected.
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  const source = form.locator('wa-select[name="new-ticket-source"]');
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await source.click();
+  await source.locator('wa-option[value="github-issues"]').click();
+  await expect(source).toHaveJSProperty('value', 'github-issues');
+  await form.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to GitHub');
+  await form.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(page.getByText(/HS2-DEMO\d created in GitHub issues/)).toBeVisible();
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  await expect(source).toHaveJSProperty('value', 'github-issues');
+  await page.getByRole('button', { name: /Cancel/ }).click();
+  await expect(source).toHaveCount(0);
+  // The demo settings switch to the single-source variant, which keeps the plain label.
+  await page.locator('[data-action="toggle-settings"][aria-expanded="false"]').click();
+  const sourceCount = page.locator('[data-settings="quick-ticket-composer"] wa-select[name="composer-source-count"]');
+  await expect(sourceCount).toHaveJSProperty('value', 'several');
+  await sourceCount.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'one';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(sourceCount).toHaveJSProperty('value', 'one');
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  await expect(form.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet git');
+  await expect(source).toHaveCount(0);
+  await page.getByRole('button', { name: /Cancel/ }).click();
+  await sourceCount.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'several';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  await expect(source).toHaveJSProperty('value', 'github-issues');
+  await page.getByRole('button', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
   const cancel = page.getByRole('button', { name: /Cancel/ });
