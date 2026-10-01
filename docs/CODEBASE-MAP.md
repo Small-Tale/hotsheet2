@@ -115,7 +115,6 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
     src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)
     src/copy-text.ts         # Click-time text copy with an in-gesture selection fallback when Safari refuses the Clipboard API (HS2-1A2BQR)
-    src/popup-submenu-repair.ts # Repairs Web Awesome dropdown submenus left flagged open over a hidden submenu by a close/open race (HS2-GV7A43, KF-A388BJ)
     src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations

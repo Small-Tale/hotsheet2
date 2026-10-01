@@ -14,7 +14,6 @@ import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
-import { repairDropdownSubmenus } from '../popup-submenu-repair';
 import { cycleTabId } from '../tab-cycle';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
@@ -583,8 +582,4 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   delegate(document.body, 'click', '*', completePointerDetailsFinish);
   delegateCapture(document.body, 'pointerup', '*', schedulePointerDetailsFinish);
   delegateCapture(document.body, 'pointercancel', '*', schedulePointerDetailsFinish);
-  // Undo Web Awesome's submenu close/open race before any dropdown shows (HS2-GV7A43).
-  delegateCapture(document.body, 'wa-show', 'wa-dropdown', (event, target) => {
-    if (event.target === target) repairDropdownSubmenus(target as HTMLElement);
-  });
 }

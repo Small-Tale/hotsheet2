@@ -2163,10 +2163,9 @@ viewport as the drawer and window resize, and supplies native menu keyboard navi
 (HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection
 working even while Web Awesome's previous hide animation is finishing (HS2-1PM38K).
 The AI shell submenu reopens by hover and ArrowRight after any close, including an Escape close
-followed by an immediate reopen and a breakpoint resize while it is open (HS2-GV7A43). Web
-Awesome 3.12 can leave a submenu item flagged open over a hidden submenu when a reopen races the
-previous hide animation, so `popup-submenu-repair.ts` resets that stale flag whenever any dropdown
-shows and re-opens a submenu whose late hide lands after a reopen (upstream `KF-A388BJ`).
+followed by an immediate reopen and a breakpoint resize while it is open (HS2-GV7A43). Kerf's
+PopupMenu owns that recovery since 5.0.0-beta.64 (`KF-A388BJ`), so the client carries no submenu
+race workaround (HS2-ZKMCVW).
 The rail and terminal inset
 use Kerf's canonical 8 px within-group rhythm, and the tab-strip focus gutter and icon-label clusters
 use 4 px (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
