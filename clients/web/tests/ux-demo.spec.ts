@@ -5829,8 +5829,9 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   );
   const query = demo.getByRole('searchbox', { name: 'Search query', exact: true }).first();
   await query.fill('parser tag:');
-  const suggestions = demo.getByRole('listbox', { name: 'Matching tags' });
-  await expect(suggestions.getByRole('option')).toHaveText([
+  // Kerf's model renders the in-place tag completion inside the field (HS2-5JXBQY).
+  const suggestions = fields.first().locator('.kui-token-search__suggestions');
+  await expect(suggestions.getByRole('button')).toHaveText([
     'tag:client',
     'tag:docs',
     'tag:"needs design"',
@@ -5839,8 +5840,8 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     'tag:ui',
   ]);
   await query.fill('parser tag:NE');
-  await expect(suggestions.getByRole('option')).toHaveText(['tag:"needs design"']);
-  await suggestions.getByRole('option', { name: 'tag:"needs design"' }).click();
+  await expect(suggestions.getByRole('button')).toHaveText(['tag:"needs design"']);
+  await suggestions.getByRole('button', { name: 'tag:"needs design"' }).click();
   const chips = demo.locator('[data-component="token-search-token"]');
   await expect(chips).toHaveCount(1);
   await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:"needs design"');
@@ -5848,7 +5849,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(suggestions).toHaveCount(0);
   await expect(demo.locator('.component-stage__event')).toHaveText('Added tag:"needs design"');
   // Chip edit returns the raw filter to text; remove drops it.
-  await chips.first().getByRole('button', { name: 'Edit tag needs design' }).click();
+  await chips.first().getByRole('button', { name: 'Edit tag:needs design' }).click();
   await expect(chips).toHaveCount(0);
   await expect(query).toContainText('tag:"needs design"');
   await demo.getByRole('button', { name: 'Clear search query' }).first().click();
@@ -5901,24 +5902,28 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     externalSurfaces = externalSection.locator('.ticket-search-surfaces');
   await expect(fields.nth(1).locator('.ticket-search-surfaces')).toHaveCount(0);
   await externalQuery.fill('tag:d');
-  await expect(externalSurfaces.getByRole('option')).toHaveText(['tag:docs']);
+  // Kerf's tag completion stays in flow inside the field itself, even with external helper surfaces.
+  const externalSuggestions = fields.nth(1).locator('.kui-token-search__suggestions');
+  await expect(externalSuggestions.getByRole('button')).toHaveText(['tag:docs']);
   expect(
-    await externalSurfaces.evaluate((node) => {
-      const listbox = node.querySelector<HTMLElement>('[role="listbox"]')!,
-        field = node.parentElement!.querySelector<HTMLElement>('.ticket-search-field')!;
+    await externalSuggestions.evaluate((node) => {
+      const field = node.closest<HTMLElement>('.ticket-search-field')!;
       return {
-        position: getComputedStyle(listbox).position,
-        belowField: listbox.getBoundingClientRect().top >= field.getBoundingClientRect().bottom,
-        sameWidth: Math.abs(listbox.getBoundingClientRect().width - node.getBoundingClientRect().width) < 2,
+        position: getComputedStyle(node).position,
+        insideField: field.contains(node),
+        belowEditor:
+          node.getBoundingClientRect().top >=
+          field.querySelector<HTMLElement>('[data-token-search-editor]')!.getBoundingClientRect().bottom - 1,
       };
     }),
-  ).toEqual({ position: 'static', belowField: true, sameWidth: true });
-  await externalSurfaces.getByRole('option', { name: 'tag:docs' }).click();
+  ).toEqual({ position: 'static', insideField: true, belowEditor: true });
+  await expect(externalSurfaces.locator('.kui-token-search__suggestions')).toHaveCount(0);
+  await externalSuggestions.getByRole('button', { name: 'tag:docs' }).click();
   await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveAttribute(
     'data-token-value',
     'tag:docs',
   );
-  await expect(externalSurfaces.getByRole('option')).toHaveCount(0);
+  await expect(externalSuggestions.getByRole('button')).toHaveCount(0);
   await externalSection.getByRole('button', { name: 'Search syntax help' }).click();
   const externalHelp = externalSurfaces.getByRole('dialog', { name: 'Search syntax' });
   await expect(externalHelp).toBeVisible();
@@ -5935,9 +5940,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(collapsible).toHaveAttribute('data-expanded', 'true');
   const collapsibleQuery = demo.getByRole('searchbox', { name: 'Search tickets' });
   await collapsibleQuery.fill('tag:s');
-  await expect(collapsible.getByRole('listbox', { name: 'Matching tags' }).getByRole('option')).toHaveText([
-    'tag:server',
-  ]);
+  await expect(collapsible.locator('.kui-token-search__suggestions').getByRole('button')).toHaveText(['tag:server']);
   await collapsible.getByRole('button', { name: 'Clear search' }).click();
   await expect(collapsibleQuery).toHaveText('');
   await collapsibleQuery.press('Escape');

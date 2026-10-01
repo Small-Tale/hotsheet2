@@ -2,8 +2,16 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { tokenFromRaw } from '../inline-search';
+import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 import { SavedViewDeleteDialog, SavedViewDialog } from './saved-view-dialog';
+
+/** A Kerf-managed query model: `text` committed through the app parser, `typing` left as trailing text. */
+function queryModel(text = '', typing = '', tags: readonly string[] = ['design', 'docs', 'server']) {
+  const model = createTicketSearchModel({ tags: () => tags });
+  if (text) replaceTicketSearch(model, text);
+  if (typing) model.edit({ query: `${model.state.value.query}${typing}`, tokens: model.state.value.tokens });
+  return model;
+}
 
 describe('SavedViewDialog', () => {
   it('owns the full query width independently of the collapsed workspace toolbar', () => {
@@ -17,9 +25,7 @@ describe('SavedViewDialog', () => {
       SavedViewDialog({
         open: true,
         name: 'Needs docs',
-        query: ' AND NOT status:completed tag:d',
-        queryTokens: [tokenFromRaw('tag:docs')!],
-        tags: ['design', 'docs', 'server'],
+        searchModel: queryModel('tag:docs', ' AND NOT status:completed tag:d'),
         helpOpen: true,
       }),
     );
@@ -41,9 +47,10 @@ describe('SavedViewDialog', () => {
     expect(markup).toMatch(
       /<\/header><\/div><div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
     );
-    expect(markup).toContain('data-action="select-ticket-search-tag" data-tag="design"');
-    expect(markup).not.toContain('data-tag="docs"');
-    expect(markup).not.toContain('data-tag="server"');
+    // Kerf's in-flow tag completion excludes the committed chip (HS2-5JXBQY).
+    expect(markup).toContain('data-token-search-suggestion="tag:design"');
+    expect(markup).not.toContain('data-token-search-suggestion="tag:docs"');
+    expect(markup).not.toContain('data-token-search-suggestion="tag:server"');
     expect(markup).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('aria-label="Clear search query"');
     expect(markup).toContain('name="saved-view-name"');
@@ -64,7 +71,13 @@ describe('SavedViewDialog', () => {
 
   it('keeps validation feedback in the dialog and locks controls while saving', () => {
     const markup = String(
-      SavedViewDialog({ open: true, name: '', query: '', busy: true, error: 'That name is already in use.' }),
+      SavedViewDialog({
+        open: true,
+        name: '',
+        searchModel: queryModel(),
+        busy: true,
+        error: 'That name is already in use.',
+      }),
     );
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('That name is already in use.');
@@ -78,8 +91,7 @@ describe('SavedViewDialog', () => {
         open: true,
         mode: 'rename',
         name: 'Needs docs',
-        query: '',
-        queryTokens: [tokenFromRaw('tag:docs')!],
+        searchModel: queryModel('tag:docs'),
       }),
     );
     expect(markup).toContain('label="Edit View"');
@@ -90,15 +102,15 @@ describe('SavedViewDialog', () => {
 
   it('retains one native name autofocus target through opening, edits, busy, close, rename, and reset', () => {
     for (const state of [
-      { open: false, name: '', query: '' },
-      { open: true, name: '', query: '' },
-      { open: true, name: '', query: 'before after', queryTokens: [tokenFromRaw('is:active')!] },
-      { open: true, name: 'Draft', query: 'before after', busy: true },
-      { open: true, name: 'Draft', query: 'before after', error: 'Try another name.' },
-      { open: false, name: 'Draft', query: 'before after' },
-      { open: true, mode: 'rename' as const, name: 'Shared view', query: 'tag:docs' },
-      { open: false, name: '', query: '' },
-      { open: true, name: '', query: '' },
+      { open: false, name: '', searchModel: queryModel() },
+      { open: true, name: '', searchModel: queryModel() },
+      { open: true, name: '', searchModel: queryModel('before is:active after') },
+      { open: true, name: 'Draft', searchModel: queryModel('before after'), busy: true },
+      { open: true, name: 'Draft', searchModel: queryModel('before after'), error: 'Try another name.' },
+      { open: false, name: 'Draft', searchModel: queryModel('before after') },
+      { open: true, mode: 'rename' as const, name: 'Shared view', searchModel: queryModel('tag:docs') },
+      { open: false, name: '', searchModel: queryModel() },
+      { open: true, name: '', searchModel: queryModel() },
     ]) {
       const markup = String(SavedViewDialog(state));
       expect(markup.match(/autofocus/g)).toHaveLength(1);

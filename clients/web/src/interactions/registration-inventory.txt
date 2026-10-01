@@ -161,7 +161,6 @@ views-and-saved-views	delegate	document.body	'contextmenu'	'[data-saved-view-id]
 views-and-saved-views	delegate	document.body	'click'	'[data-action="edit-saved-view"]'
 views-and-saved-views	delegate	document.body	'click'	'[data-action="delete-saved-view"]'
 views-and-saved-views	delegate	document.body	'input'	'[name="saved-view-name"]'
-views-and-saved-views	delegate	document.body	'input'	'[data-token-search-editor="saved-view-query"]'
 views-and-saved-views	delegate	document.body	'submit'	'[data-action="save-saved-view"]'
 views-and-saved-views	delegate	document.body	'click'	'[data-action="cancel-saved-view"]'
 views-and-saved-views	delegate	document.body	'wa-hide'	'[data-component="saved-view-dialog"]'
@@ -273,8 +272,8 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="open-linke
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-ticket-link-match"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'
 notifications-and-links	delegateCapture	document.body	'wa-hide'	'[data-component="ticket-link-choice-dialog"]'
-search-and-composer	wireTokenSearchFields	document.body
 search-and-composer	wireTicketSearchFields	document.body
+search-and-composer	wireTokenSearchFields	document.body
 search-and-composer	delegate	document.body	'click'	'wa-select[name="workspace-sort"] wa-option'
 search-and-composer	delegate	document.body	'wa-select'	'[data-workspace-overflow]'
 search-and-composer	delegate	document.body	'click'	'[data-action="expand-ticket-composer"]'

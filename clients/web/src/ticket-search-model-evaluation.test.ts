@@ -99,7 +99,7 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
           ? {
               ...rule,
               // KF-YBJ27D: `suggest` now receives the committed tokens, so a tag that is already a
-              // chip is excluded exactly as `ticketSearchTagSuggestions` excludes it.
+              // chip is excluded exactly as the app's former suggestion helper excludes it.
               suggest: (input: string, state: TokenSearchState) =>
                 tags
                   .filter((tag) => tag.toLowerCase().startsWith(input.toLowerCase()))

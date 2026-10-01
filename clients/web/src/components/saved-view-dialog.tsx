@@ -3,19 +3,19 @@ import './saved-view-dialog.css';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
+import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 
-import { type InlineSearchToken, orderedSearchText } from '../inline-search';
+import { orderedSearchText } from '../inline-search';
+import { inlineSearchTokens } from '../ticket-search-model';
 import { TicketSearchField, TicketSearchSurfaces } from './ticket-search-field';
 
 export interface SavedViewDialogProps {
   open: boolean;
   mode?: 'create' | 'rename';
   name: string;
-  query: string;
-  queryTokens?: readonly InlineSearchToken[];
-  /** Every project tag, for the query field's in-place `tag:` completion. */
-  tags?: readonly string[];
+  /** The Kerf-managed query model: text, chips, and in-place `tag:` completion (HS2-5JXBQY). */
+  searchModel: TokenSearchModel;
   /** Whether the query field's syntax help popover is open. */
   helpOpen?: boolean;
   busy?: boolean;
@@ -31,9 +31,7 @@ export function SavedViewDialog({
   open,
   mode = 'create',
   name,
-  query,
-  queryTokens = [],
-  tags = [],
+  searchModel,
   helpOpen = false,
   busy = false,
   error = '',
@@ -41,7 +39,8 @@ export function SavedViewDialog({
 }: SavedViewDialogProps) {
   const rename = mode === 'rename',
     title = rename ? 'Edit View' : 'Create View',
-    queryValue = orderedSearchText(query, queryTokens, () => true);
+    state = searchModel.state.value,
+    queryValue = orderedSearchText(state.query, inlineSearchTokens(state), () => true);
   return (
     <wa-dialog
       class="saved-view-dialog"
@@ -78,10 +77,8 @@ export function SavedViewDialog({
                   <TicketSearchField
                     id="saved-view-query"
                     label="Search query"
-                    query={query}
-                    tokens={queryTokens}
+                    model={searchModel}
                     disabled={busy}
-                    tags={tags}
                     helpOpen={helpOpen}
                     clearLabel="Clear search query"
                     surfaces="external"
@@ -89,13 +86,7 @@ export function SavedViewDialog({
                 }
               />
             </div>
-            <TicketSearchSurfaces
-              id="saved-view-query"
-              query={query}
-              tokens={queryTokens}
-              tags={tags}
-              helpOpen={helpOpen}
-            />
+            <TicketSearchSurfaces id="saved-view-query" model={searchModel} helpOpen={helpOpen} />
             <input type="hidden" name="saved-view-query" value={queryValue} />
             <small>Use the same words, fields, operators, and filter chips as ticket search.</small>
           </label>

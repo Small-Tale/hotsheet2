@@ -3,7 +3,7 @@ import '../components/heading.css';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { signal } from 'kerfjs';
+import { effect, signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
 import { NotificationCenter } from '../components/notification-center';
@@ -25,7 +25,9 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { orderedSearchText } from '../inline-search';
 import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
+import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import {
   editingNoteId,
@@ -42,7 +44,16 @@ import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 export const workspaceSearchOpen = signal(false);
+/** The demo's Kerf-managed workspace search model (HS2-5JXBQY); the tags are the collection's. */
+export const workspaceSearchModel = createTicketSearchModel({
+  tags: () => [...new Set(collectionTickets.value.flatMap((ticket) => ticket.tags))].sort((a, b) => a.localeCompare(b)),
+});
+/** The readable search expression the model holds, for the demo's own row filtering. */
 export const workspaceSearchQuery = signal('');
+effect(() => {
+  const state = workspaceSearchModel.state.value;
+  workspaceSearchQuery.value = orderedSearchText(state.query, inlineSearchTokens(state), () => true);
+});
 export const workspaceSearchHelpOpen = signal(false);
 export const workspaceSort = signal<WorkspaceSort>('updated');
 export const workspaceSortDirection = signal<WorkspaceSortDirection>(
@@ -189,7 +200,7 @@ export function TerminalTicketRailDemo() {
             mode={mode}
             presentation="rail"
             searchOpen={workspaceSearchOpen.value}
-            searchQuery={workspaceSearchQuery.value}
+            searchModel={workspaceSearchModel}
             searchHelpOpen={workspaceSearchHelpOpen.value}
             sort={workspaceSort.value}
             sortDirection={workspaceSortDirection.value}
@@ -333,7 +344,7 @@ export function WorkspaceHeaderDemo() {
         projectName="Hot Sheet 2"
         mode={workspaceMode.value}
         searchOpen={workspaceSearchOpen.value}
-        searchQuery={workspaceSearchQuery.value}
+        searchModel={workspaceSearchModel}
         searchHelpOpen={workspaceSearchHelpOpen.value}
         sort={workspaceSort.value}
         sortDirection={workspaceSortDirection.value}

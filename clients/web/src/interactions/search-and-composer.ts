@@ -1,5 +1,6 @@
+import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
-import { batch, delegate, delegateCapture, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import {
@@ -9,7 +10,7 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
-import { activeDatePattern, type InlineSearchToken } from '../inline-search';
+import { type InlineSearchToken } from '../inline-search';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -21,40 +22,16 @@ import { type Control, type PendingEvidence, type Project } from './types';
 /** Live application bindings used by this handler group. */
 export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
-  readonly readWorkspaceSearchEditor: (editor: HTMLElement) => { text: string; tokens: InlineSearchToken[] };
-  readonly updateTicketSearch: (
-    value: string,
-    forceToken?: boolean,
-    currentTokens?: InlineSearchToken[],
-    parseTokens?: boolean,
-  ) => boolean;
-  readonly restoreWorkspaceSearchEnd: () => void;
-  readonly readInlineSearchField: (
-    editor: HTMLElement,
-    current: readonly InlineSearchToken[],
-  ) => { text: string; tokens: InlineSearchToken[] };
-  readonly savedViewQueryTokens: Signal<InlineSearchToken[]>;
-  readonly updateSavedViewQuery: (
-    value: string,
-    forceToken?: boolean,
-    currentTokens?: InlineSearchToken[],
-    commitToken?: boolean,
-  ) => boolean;
+  /** Kerf-managed ticket search models, keyed by their TicketSearchField ids (HS2-5JXBQY). */
+  readonly workspaceSearchModel: TokenSearchModel;
+  readonly savedViewSearchModel: TokenSearchModel;
+  /** A chip's caret position in each model, for focus restoration around Kerf's chip actions. */
+  readonly workspaceSearchTokenOffset: (raw: string) => number | undefined;
+  readonly savedViewSearchTokenOffset: (raw: string) => number | undefined;
   readonly focusSavedViewQuery: (offset?: number) => void;
-  readonly removeWorkspaceSearchToken: (raw: string) => boolean;
-  readonly removeSavedViewQueryToken: (raw: string) => boolean;
-  readonly addWorkspaceSearchTag: (tag: string) => void;
-  readonly addSavedViewQueryTag: (tag: string) => void;
-  readonly editWorkspaceSearchToken: (event: Event, target: Element) => void;
-  readonly editSavedViewQueryToken: (event: Event, target: Element) => void;
   readonly searchHelpOpen: Signal<boolean>;
   readonly savedViewHelpOpen: Signal<boolean>;
-  readonly savedViewQuery: Signal<string>;
-  readonly savedViewError: Signal<string>;
-  readonly replaceActiveWorkspaceSearchToken: (pattern: RegExp, token: InlineSearchToken) => void;
-  readonly replaceActiveSavedViewQueryToken: (pattern: RegExp, token: InlineSearchToken) => void;
   readonly focusWorkspaceSearch: (offset?: number) => void;
-  workspaceSearchEditingToken: boolean;
   readonly searchQuery: Signal<string>;
   readonly searchTokens: Signal<InlineSearchToken[]>;
   readonly scheduleTicketSearch: () => void;
@@ -91,25 +68,13 @@ export interface SearchAndComposerInteractionsDependencies {
 export function wireSearchAndComposerInteractions(dependencies: SearchAndComposerInteractionsDependencies) {
   const {
     searchOpen,
-    readWorkspaceSearchEditor,
-    updateTicketSearch,
-    restoreWorkspaceSearchEnd,
-    readInlineSearchField,
-    savedViewQueryTokens,
-    updateSavedViewQuery,
+    workspaceSearchModel,
+    savedViewSearchModel,
+    workspaceSearchTokenOffset,
+    savedViewSearchTokenOffset,
     focusSavedViewQuery,
-    removeWorkspaceSearchToken,
-    removeSavedViewQueryToken,
-    addWorkspaceSearchTag,
-    addSavedViewQueryTag,
-    editWorkspaceSearchToken,
-    editSavedViewQueryToken,
     searchHelpOpen,
     savedViewHelpOpen,
-    savedViewQuery,
-    savedViewError,
-    replaceActiveWorkspaceSearchToken,
-    replaceActiveSavedViewQueryToken,
     focusWorkspaceSearch,
     searchQuery,
     searchTokens,
@@ -141,81 +106,59 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     tickets,
     history,
   } = dependencies;
-  // Kerf owns the token-search editor chrome, collapsible reveal/focus/Escape/empty-blur,
-  // Enter submit, adjacent-chip keyboard, and caret restoration. Hot Sheet adopts its persisted
-  // workspace signal and retains parsing plus the caller-owned suggestion/date/help surfaces.
-  const tokenSearchFields = wireTokenSearchFields(document.body, {
-    collapsible: { signals: { 'workspace-search': searchOpen } },
-    onSubmit: ({ id, editor }) => {
-      if (id === 'workspace-search') {
-        const state = readWorkspaceSearchEditor(editor);
-        if (updateTicketSearch(state.text, true, state.tokens)) restoreWorkspaceSearchEnd();
-      } else if (id === 'saved-view-query') {
-        const state = readInlineSearchField(editor, savedViewQueryTokens.value);
-        if (updateSavedViewQuery(state.text, true, state.tokens)) focusSavedViewQuery();
-      }
-    },
-    onEdit: ({ id, editor, event }) => {
-      if (id !== 'workspace-search') return;
-      const state = readWorkspaceSearchEditor(editor),
-        commitsToken =
-          (typeof event.data === 'string' && /\s$/.test(event.data)) ||
-          (event.inputType === 'insertFromPaste' && /\s$/.test(state.text));
-      if (updateTicketSearch(state.text, false, state.tokens, commitsToken)) restoreWorkspaceSearchEnd();
-    },
-    keyboard: {
-      onRemoveToken: ({ id, value }) => {
-        if (id === 'workspace-search') removeWorkspaceSearchToken(value);
-        else if (id === 'saved-view-query') removeSavedViewQueryToken(value);
-      },
-    },
-  });
   // One registration serves every TicketSearchField (workspace header, workspace-grid rail,
-  // saved-view dialog); each callback routes by the owning field id (HS2-N5G6JS).
-  wireTicketSearchFields(document.body, {
-    selectTag: (id, tag) => {
-      if (id === 'workspace-search') addWorkspaceSearchTag(tag);
-      else if (id === 'saved-view-query') addSavedViewQueryTag(tag);
+  // saved-view dialog); each callback routes by the owning field id (HS2-N5G6JS). It is wired
+  // before Kerf's so the focus handlers read a chip's position before Kerf removes or expands it.
+  const modelFor = (id: string) =>
+      id === 'workspace-search' ? workspaceSearchModel : id === 'saved-view-query' ? savedViewSearchModel : undefined,
+    focusField = (id: string, offset?: number) => {
+      if (id === 'workspace-search') focusWorkspaceSearch(offset);
+      else if (id === 'saved-view-query') focusSavedViewQuery(offset);
     },
-    applyDate: (id, prefix, token) => {
-      if (id === 'workspace-search') {
-        replaceActiveWorkspaceSearchToken(activeDatePattern(prefix), token);
-        focusWorkspaceSearch();
-      } else if (id === 'saved-view-query') {
-        replaceActiveSavedViewQueryToken(activeDatePattern(prefix), token);
-        focusSavedViewQuery();
-      }
+    tokenOffset = (id: string, raw: string) =>
+      id === 'workspace-search'
+        ? workspaceSearchTokenOffset(raw)
+        : id === 'saved-view-query'
+          ? savedViewSearchTokenOffset(raw)
+          : undefined;
+  wireTicketSearchFields(document.body, {
+    applyDate: (id, _prefix, value) => {
+      modelFor(id)?.commit(value);
+      focusField(id);
     },
     toggleHelp: (id) => {
       if (id === 'workspace-search') searchHelpOpen.value = !searchHelpOpen.value;
       else if (id === 'saved-view-query') savedViewHelpOpen.value = !savedViewHelpOpen.value;
     },
     clear: (id) => {
-      if (id === 'workspace-search') {
-        dependencies.workspaceSearchEditingToken = false;
-        batch(() => {
-          searchQuery.value = '';
-          searchTokens.value = [];
-          searchHelpOpen.value = false;
-        });
-        scheduleTicketSearch();
-      } else if (id === 'saved-view-query') {
-        batch(() => {
-          savedViewQuery.value = '';
-          savedViewQueryTokens.value = [];
-          savedViewError.value = '';
-          savedViewHelpOpen.value = false;
-        });
-        focusSavedViewQuery(0);
-      }
+      if (id === 'workspace-search') searchHelpOpen.value = false;
+      else if (id === 'saved-view-query') savedViewHelpOpen.value = false;
     },
+    // Kerf removes or expands the chip in its own handler and re-renders the editor afterwards; the
+    // caret goes back once that frame has painted the rebuilt editor.
     removeToken: (id, raw) => {
-      if (id === 'workspace-search') removeWorkspaceSearchToken(raw);
-      else if (id === 'saved-view-query') removeSavedViewQueryToken(raw);
+      const offset = tokenOffset(id, raw);
+      requestAnimationFrame(() => {
+        focusField(id, offset);
+      });
     },
-    editToken: (id, event, target) => {
-      if (id === 'workspace-search') editWorkspaceSearchToken(event, target);
-      else if (id === 'saved-view-query') editSavedViewQueryToken(event, target);
+    editToken: (id, raw) => {
+      const offset = tokenOffset(id, raw);
+      requestAnimationFrame(() => {
+        focusField(id, offset === undefined ? undefined : offset + raw.length);
+      });
+    },
+  });
+  // Kerf owns the token-search editor chrome, collapsible reveal/focus/Escape/empty-blur, Enter
+  // submit, and, through the registered models, parsing, chips, suggestions, chip edit/removal,
+  // and clear (HS2-5JXBQY). Hot Sheet adopts its persisted workspace signal and retains the
+  // caller-owned date/help surfaces.
+  const tokenSearchFields = wireTokenSearchFields(document.body, {
+    models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
+    collapsible: { signals: { 'workspace-search': searchOpen } },
+    // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
+    onSubmit: ({ id }) => {
+      focusField(id);
     },
   });
   delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {

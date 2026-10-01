@@ -1,7 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
-import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -182,20 +181,14 @@ import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import {
-  ACTIVE_TAG_PATTERN,
-  consumeSearchTokens,
   effectiveSearch,
-  fromTokenSearchTokens,
   type InlineSearchToken,
   orderedSearchText,
   sameInlineSearchState,
-  tagSearchToken,
   tokenQuery,
-  toTokenSearchToken,
 } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { beginInteractionTiming } from '../interaction-performance';
-import { data } from '../interactions/dom';
 import type {
   Control,
   DetailsFinishTask,
@@ -287,6 +280,7 @@ import {
   type TicketReaderFrame,
 } from '../ticket-reader-stack';
 import { TicketScrollMemory } from '../ticket-scroll-state';
+import { createTicketSearchModel, inlineSearchTokens, replaceTicketSearch } from '../ticket-search-model';
 import {
   canCreateTicketInView,
   customTicketViewId,
@@ -1038,8 +1032,6 @@ export async function startHotSheetWebClient() {
     savedViewDialogSession,
     savedViewDialogMode,
     savedViewName,
-    savedViewQuery,
-    savedViewQueryTokens,
     savedViewHelpOpen,
     savedViewBusy,
     savedViewError,
@@ -1050,12 +1042,9 @@ export async function startHotSheetWebClient() {
     openSavedViewDialog,
     openSavedViewRename,
     closeSavedViewDialog,
-    updateSavedViewQuery,
-    replaceActiveSavedViewQueryToken,
-    addSavedViewQueryTag,
     focusSavedViewQuery,
-    removeSavedViewQueryToken,
-    editSavedViewQueryToken,
+    savedViewSearchModel,
+    savedViewSearchTokenOffset,
     saveSavedView,
     openSavedViewDelete,
     closeSavedViewDelete,
@@ -1082,10 +1071,7 @@ export async function startHotSheetWebClient() {
   /** Restore a selected shared view; sessions saved before HS2-50R1YQ copied its query into the bar, so drop it. */
   function restoreCustomView(view: CustomView) {
     if (orderedSearchText(searchQuery.value, searchTokens.value, () => true).trim() === view.query.trim())
-      batch(() => {
-        searchQuery.value = '';
-        searchTokens.value = [];
-      });
+      workspaceSearchModel.clear();
     activateCustomView();
   }
   function selectTicketView(next: TicketView, { refresh = true }: { refresh?: boolean } = {}) {
@@ -2003,7 +1989,7 @@ export async function startHotSheetWebClient() {
       selectedView.value =
         stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
       searchOpen.value = stored.searchOpen;
-      searchQuery.value = stored.searchQuery;
+      replaceTicketSearch(workspaceSearchModel, stored.searchQuery);
       searchMatchKeys.value = undefined;
       inspectorTab.value = stored.inspectorTab;
       readerTab.value = stored.readerTab;
@@ -2247,8 +2233,32 @@ export async function startHotSheetWebClient() {
   }
 
   let searchTimer: number | undefined,
-    searchGeneration = 0,
-    workspaceSearchEditingToken = false;
+    searchGeneration = 0;
+  // Kerf's managed TokenSearchModel owns the workspace search text, its chips, and the in-place tag
+  // completion (HS2-5JXBQY); `searchQuery`/`searchTokens` are projections of its state for the rest
+  // of the app, and every change schedules the debounced ticket search.
+  const workspaceSearchModel = createTicketSearchModel({
+    tags: () => availableSearchTags(),
+    onClear: () => {
+      searchHelpOpen.value = false;
+    },
+  });
+  effect(() => {
+    const state = workspaceSearchModel.state.value,
+      tokens = inlineSearchTokens(state);
+    if (sameInlineSearchState(searchQuery.value, searchTokens.value, state.query, tokens)) return;
+    const committed = tokens.length > searchTokens.value.length;
+    batch(() => {
+      searchQuery.value = state.query;
+      searchTokens.value = tokens;
+      if (committed) searchHelpOpen.value = false;
+    });
+    scheduleTicketSearch();
+  });
+  /** The caret position a workspace chip occupies, for focus restoration around Kerf's chip actions. */
+  function workspaceSearchTokenOffset(raw: string) {
+    return workspaceSearchModel.state.value.tokens.find((token) => token.value === raw)?.offset;
+  }
   type EffectiveTicketSearch = ReturnType<typeof effectiveSearch>;
   const searchSignature = () => JSON.stringify([searchQuery.value.trim(), searchTokens.value]);
   const searchScopeQuery = (view: TicketView) => (customTicketViewKey(view) ? {} : ticketViewQuery(view));
@@ -2439,53 +2449,8 @@ export async function startHotSheetWebClient() {
     }
     return availableSearchTagsValue;
   }
-  function addWorkspaceSearchToken(token: InlineSearchToken, offset = searchQuery.value.length) {
-    workspaceSearchEditingToken = false;
-    if (!searchTokens.value.some((value) => value.kind === token.kind && value.value === token.value))
-      searchTokens.value = [...searchTokens.value, { ...token, offset }];
-    searchHelpOpen.value = false;
-    scheduleTicketSearch();
-  }
-  function replaceActiveWorkspaceSearchToken(pattern: RegExp, token: InlineSearchToken) {
-    const match = searchQuery.value.match(pattern);
-    if (!match) {
-      addWorkspaceSearchToken(token);
-      return;
-    }
-    const raw = match[1],
-      start = match.index! + match[0].lastIndexOf(raw);
-    batch(() => {
-      searchQuery.value = searchQuery.value.slice(0, start) + searchQuery.value.slice(start + raw.length);
-      addWorkspaceSearchToken(token, start);
-    });
-  }
-  function addWorkspaceSearchTag(tag: string) {
-    const token = tagSearchToken(tag, availableSearchTags());
-    if (token) replaceActiveWorkspaceSearchToken(ACTIVE_TAG_PATTERN, token);
-    focusWorkspaceSearch();
-  }
-  function readInlineSearchField(editor: HTMLElement, current: readonly InlineSearchToken[]) {
-    const value = readTokenSearchField(editor, current.map(toTokenSearchToken));
-    return { text: value.query, tokens: fromTokenSearchTokens(value.tokens, current) };
-  }
-  function readWorkspaceSearchEditor(editor: HTMLElement) {
-    return readInlineSearchField(editor, searchTokens.value);
-  }
-  function removeWorkspaceSearchToken(raw: string) {
-    const token = searchTokens.value.find((value) => value.raw === raw);
-    if (!token) return false;
-    const offset = token.offset ?? searchQuery.value.length;
-    workspaceSearchEditingToken = false;
-    searchTokens.value = searchTokens.value.filter((value) => value !== token);
-    scheduleTicketSearch();
-    focusWorkspaceSearch(offset);
-    return true;
-  }
   function focusWorkspaceSearch(offset?: number) {
     restoreInlineSearchCaret(document, '[data-token-search-editor="workspace-search"]', offset);
-  }
-  function restoreWorkspaceSearchEnd() {
-    focusWorkspaceSearch();
   }
   function scheduleTicketSearch() {
     resetProgressiveTicketRendering();
@@ -2503,65 +2468,6 @@ export async function startHotSheetWebClient() {
       searchTimer = undefined;
       void refreshTicketSearch();
     }, 150);
-  }
-  function updateTicketSearch(
-    value: string,
-    forceToken = false,
-    currentTokens = searchTokens.value,
-    parseTokens = true,
-  ) {
-    const parsed =
-      !parseTokens || (workspaceSearchEditingToken && !forceToken)
-        ? ({ text: value, tokens: [], removed: [] } as ReturnType<typeof consumeSearchTokens>)
-        : consumeSearchTokens(value, forceToken);
-    if (forceToken) workspaceSearchEditingToken = false;
-    const shifted = currentTokens.map((token) => {
-        const offset = token.offset ?? value.length,
-          shift = parsed.removed.reduce(
-            (total, range) => total + (range.end <= offset ? range.end - range.start : 0),
-            0,
-          );
-        return { ...token, offset: Math.max(0, offset - shift) };
-      }),
-      next: InlineSearchToken[] = [...shifted];
-    for (const token of parsed.tokens)
-      if (!next.some((value) => value.kind === token.kind && value.value === token.value)) next.push(token);
-    if (sameInlineSearchState(searchQuery.value, searchTokens.value, parsed.text, next))
-      return parsed.tokens.length > 0;
-    batch(() => {
-      searchQuery.value = parsed.text;
-      searchTokens.value = next;
-      if (parsed.tokens.length) searchHelpOpen.value = false;
-    });
-    scheduleTicketSearch();
-    return parsed.tokens.length > 0;
-  }
-  function editWorkspaceSearchToken(event: Event, target: Element) {
-    event.preventDefault();
-    const raw = data(target).tokenValue,
-      token = searchTokens.value.find((value) => value.raw === raw);
-    if (!raw || !token) return;
-    workspaceSearchEditingToken = true;
-    const offset = Math.max(0, Math.min(searchQuery.value.length, token.offset ?? searchQuery.value.length)),
-      before = searchQuery.value.slice(0, offset),
-      after = searchQuery.value.slice(offset),
-      leading = before && !/[\s(]$/.test(before) ? ' ' : '',
-      trailing = after && !/^[\s)]/.test(after) ? ' ' : '',
-      insert = `${leading}${raw}${trailing}`;
-    batch(() => {
-      searchTokens.value = searchTokens.value
-        .filter((value) => value.raw !== raw)
-        .map((value) => ({
-          ...value,
-          offset:
-            (value.offset ?? searchQuery.value.length) >= offset
-              ? (value.offset ?? searchQuery.value.length) + insert.length
-              : value.offset,
-        }));
-      searchQuery.value = before + insert + after;
-    });
-    scheduleTicketSearch();
-    focusWorkspaceSearch(offset + leading.length + raw.length);
   }
 
   function mergeTicketLinkRows(existing: readonly WireTicketRow[], incoming: readonly WireTicketRow[]) {
@@ -4219,9 +4125,7 @@ export async function startHotSheetWebClient() {
             mode={mode}
             presentation="rail"
             searchOpen={searchOpen.value}
-            searchQuery={searchQuery.value}
-            searchTokens={searchTokens.value}
-            searchTags={availableSearchTags()}
+            searchModel={workspaceSearchModel}
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}
             sortDirection={sortDirection.value}
@@ -4567,9 +4471,7 @@ export async function startHotSheetWebClient() {
           <WorkspaceControls
             mode={viewMode.value}
             searchOpen={searchOpen.value}
-            searchQuery={searchQuery.value}
-            searchTokens={searchTokens.value}
-            searchTags={availableSearchTags()}
+            searchModel={workspaceSearchModel}
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}
             sortDirection={sortDirection.value}
@@ -4767,9 +4669,7 @@ export async function startHotSheetWebClient() {
           open={savedViewDialogOpen.value}
           mode={savedViewDialogMode.value}
           name={savedViewName.value}
-          query={savedViewQuery.value}
-          queryTokens={savedViewQueryTokens.value}
-          tags={availableSearchTags()}
+          searchModel={savedViewSearchModel}
           helpOpen={savedViewHelpOpen.value}
           busy={savedViewBusy.value}
           error={savedViewError.value}
@@ -5029,10 +4929,10 @@ export async function startHotSheetWebClient() {
     restoreTrashedTickets, bulkTicketDialog, openEmptyTrash, emptyTrash, setTicketCloseReason, searchTicketCloseTargets, ticketCloseDialog, submitTicketClose,
     closeTicketCloseDialog, openDuplicateTarget, notWorkingNote, scheduleProjectSessionPersistence, presentNotWorkingDialog, addNotWorkingFiles, draftScope, notWorkingTarget,
     notWorkingFiles, submitNotWorking, closeNotWorking, notWorkingSubmitting, keyboardShortcutOverrides, appleShortcutPlatform, isEditableEvent, openSavedViewDialog,
-    savedViewMenu, openSavedViewRename, openSavedViewDelete, savedViewName, savedViewError, readInlineSearchField, savedViewQueryTokens, updateSavedViewQuery,
-    focusSavedViewQuery, removeSavedViewQueryToken, editSavedViewQueryToken, savedViewQuery, saveSavedView, closeSavedViewDialog, savedViewBusy, deleteSavedView,
+    savedViewMenu, openSavedViewRename, openSavedViewDelete, savedViewName, savedViewError,
+    focusSavedViewQuery, savedViewSearchModel, savedViewSearchTokenOffset, saveSavedView, closeSavedViewDialog, savedViewBusy, deleteSavedView,
     restoreTicketDraft,
-    savedViewHelpOpen, replaceActiveSavedViewQueryToken, addSavedViewQueryTag,
+    savedViewHelpOpen,
     closeSavedViewDelete, savedViewDeleteBusy, commandGroupExpanded, persistWorkspacePreferences, commandGroupsCollapsed, toggleSidebarDrive, driveOptionsOpen, driveOptionsAnchor, aiTools,
     aiSettingsLoading, refreshAiConfiguration, driveOverridesByProject, normalizedAiSelection, selectDriveModel, openManualModel, effectiveDriveSelection, openSidebarConversation,
     conversationOpen, openConversationExport, pickConversationMessage, copyConversationSelection, clearConversationSelection, conversationExportDialog, finishConversationExport, updateConversationExportDraft,
@@ -5044,7 +4944,7 @@ export async function startHotSheetWebClient() {
     saveAiDefaults, selectDefaultModel, restoreCommandEditorAfterManualModel, aiDefaults, providerConnections, githubAuth, cancelGitHubSignIn, startGitHubSignIn,
     saveExternalProvider, providerRemovingId, requestProviderRemoval, cancelProviderRemoval, removeExternalProvider, toggleProviderDisabled, refreshGitHubRepositories, chooseGitHubEnterprise, copyGitHubCode, reopenGitHubSignIn, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions,
     resolvePermission, selectedProjectId, hideVerifiedByProject, selectLinkedTicket, ticketLinkChoice, openTicketLinkMatch, cancelTicketLinkChoice, searchOpen,
-    readWorkspaceSearchEditor, updateTicketSearch, restoreWorkspaceSearchEnd, removeWorkspaceSearchToken, addWorkspaceSearchTag, editWorkspaceSearchToken, searchHelpOpen, replaceActiveWorkspaceSearchToken,
+    workspaceSearchModel, workspaceSearchTokenOffset, searchHelpOpen,
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,
     composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, addNewTicketFiles, composerAttachments,
     composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, refreshProject,
@@ -5107,12 +5007,6 @@ export async function startHotSheetWebClient() {
           },
     set permissionCountdown(value) {
             permissionsController.permissionCountdown = value;
-          },
-    get workspaceSearchEditingToken() {
-            return workspaceSearchEditingToken;
-          },
-    set workspaceSearchEditingToken(value) {
-            workspaceSearchEditingToken = value;
           },
     get attachmentRangeGesture() {
             return galleryController.attachmentRangeGesture;

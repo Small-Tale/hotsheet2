@@ -144,42 +144,30 @@ describe('extracted handlers retain live application bindings', () => {
     expect(opened.value).toBe(false);
     expect(recovery.value).toBeUndefined();
   });
-  it('keeps saved-view name/query inputs separate through native dismissal, busy protection, and reset', () => {
+  it('keeps the saved-view name input separate through native dismissal, busy protection, and reset', () => {
     const opened = signal(true),
       busy = signal(false),
       name = signal(''),
       error = signal('Old error');
-    const query = signal(''),
-      tokens = signal([]),
-      focusQuery = vi.fn();
     const close = vi.fn(() => {
       if (!busy.value) opened.value = false;
     });
-    const read = vi.fn(() => ({ text: 'query first', tokens: [] }));
     wireViewAndSavedViewInteractions({
       savedViewName: name,
       savedViewError: error,
-      savedViewQuery: query,
-      savedViewQueryTokens: tokens,
       savedViewBusy: busy,
       closeSavedViewDialog: close,
-      readInlineSearchField: read,
-      updateSavedViewQuery: (value: string) => {
-        query.value = value;
-        return false;
-      },
-      focusSavedViewQuery: focusQuery,
     } as unknown as ViewAndSavedViewInteractionsDependencies);
-    const inputQuery = handler('input', '[data-token-search-editor="saved-view-query"]');
+    // The query editor itself is Kerf's model-managed field (HS2-5JXBQY): no app input handler exists for it.
+    expect(
+      registrations.some(
+        (registration) => registration.event === 'input' && registration.selector.includes('saved-view-query'),
+      ),
+    ).toBe(false);
     const inputName = handler('input', '[name="saved-view-name"]');
     const hide = handler('wa-hide', '[data-component="saved-view-dialog"]');
-    inputQuery(new Event('input'), target({}));
-    expect(query.value).toBe('query first');
-    expect(name.value).toBe('');
-    expect(focusQuery).not.toHaveBeenCalled();
     inputName(new Event('input'), Object.assign(target({}), { value: 'Named later' }));
     expect(name.value).toBe('Named later');
-    expect(query.value).toBe('query first');
     expect(error.value).toBe('');
     busy.value = true;
     const prevented = new Event('wa-hide', { cancelable: true });
@@ -192,11 +180,6 @@ describe('extracted handlers retain live application bindings', () => {
     expect(opened.value).toBe(false);
     opened.value = true;
     name.value = '';
-    query.value = '';
-    read.mockReturnValue({ text: 'refilled query', tokens: [] });
-    inputQuery(new Event('input'), target({}));
-    expect(query.value).toBe('refilled query');
-    expect(name.value).toBe('');
     handler('click', '[data-action="cancel-saved-view"]')(new Event('click'), target({}));
     expect(opened.value).toBe(false);
     expect(close).toHaveBeenCalledTimes(2);

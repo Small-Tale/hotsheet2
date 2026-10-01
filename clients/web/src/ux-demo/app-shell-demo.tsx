@@ -45,8 +45,8 @@ import {
   inspectorTab,
   workspaceColumns,
   workspaceMode,
+  workspaceSearchModel,
   workspaceSearchOpen,
-  workspaceSearchQuery,
   workspaceSort,
 } from './workspace-components-demo';
 
@@ -364,7 +364,7 @@ export function AppShellDemo() {
             <WorkspaceControls
               mode={workspaceMode.value}
               searchOpen={workspaceSearchOpen.value}
-              searchQuery={workspaceSearchQuery.value}
+              searchModel={workspaceSearchModel}
               sort={workspaceSort.value}
             />
           ) : undefined

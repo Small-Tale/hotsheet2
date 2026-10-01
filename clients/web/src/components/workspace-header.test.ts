@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { createTicketSearchModel } from '../ticket-search-model';
 import {
   applyWorkspaceSortDirection,
   nextWorkspaceSort,
@@ -16,6 +17,13 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from './workspace-header';
+
+/** A Kerf-managed model edited (not committed) to `text`, as the live field would be mid-typing. */
+function searchModelWith(text: string, tags: readonly string[]) {
+  const model = createTicketSearchModel({ tags: () => tags });
+  model.edit({ query: text, tokens: [] });
+  return model;
+}
 
 describe('WorkspaceHeader', () => {
   it('projects a compact primary heading when the project view title moves into the main toolbar', () => {
@@ -75,9 +83,7 @@ describe('WorkspaceHeader', () => {
         projectName: 'Hot Sheet 2',
         mode: 'settings',
         searchOpen: true,
-        searchQuery: 'NOT  AND tag:cl',
-        searchTokens: [{ kind: 'tag', value: 'server', raw: 'tag:server', label: 'tag:server', offset: 4 }],
-        searchTags: ['client', 'server'],
+        searchModel: searchModelWith('NOT tag:server AND tag:cl', ['client', 'server']),
         searchHelpOpen: true,
         sort: 'priority',
         sortDirection: 'descending',
@@ -97,11 +103,21 @@ describe('WorkspaceHeader', () => {
     expect(markup).toMatch(
       /data-token-search-text data-empty="false">NOT <\/span><span class="kui-token-search__token"[^>]*data-token-value="tag:server">.*tag:server.*data-token-search-text data-empty="false"> AND tag:cl<\/span>/s,
     );
-    expect(markup).toContain('aria-label="Edit tag server"');
+    expect(markup).toContain('aria-label="Edit tag:server"');
     expect(markup).toContain('>tag:server</button>');
-    expect(markup).toContain('aria-label="Remove tag server"');
-    expect(markup).toContain('data-action="select-ticket-search-tag" data-tag="client"');
-    expect(markup).not.toContain('data-tag="server"');
+    expect(markup).toContain('aria-label="Remove tag:server"');
+    // The settings view disables the field, and Kerf renders no suggestions for a disabled field; an
+    // enabled field shows Kerf's in-flow rows without the committed tag (HS2-5JXBQY).
+    expect(markup).not.toContain('kui-token-search__suggestion');
+    const enabled = String(
+      WorkspaceControls({
+        mode: 'list',
+        searchOpen: true,
+        searchModel: searchModelWith('NOT tag:server AND tag:cl', ['client', 'server']),
+      }),
+    );
+    expect(enabled).toContain('class="kui-token-search__suggestion" data-token-search-suggestion="tag:client"');
+    expect(enabled).not.toContain('data-token-search-suggestion="tag:server"');
     expect(markup).toContain('data-action="edit-ticket-search-token"');
     expect(markup).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('name="workspace-sort"');
@@ -118,7 +134,11 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('aria-label="Date and time helper"');
     expect(
       String(
-        WorkspaceControls({ mode: 'list', searchOpen: true, searchQuery: 'created-after:', searchTags: ['client'] }),
+        WorkspaceControls({
+          mode: 'list',
+          searchOpen: true,
+          searchModel: searchModelWith('created-after:', ['client']),
+        }),
       ),
     ).toContain('aria-label="Date and time helper"');
     expect(markup).toContain('aria-label="Search syntax"');
@@ -218,7 +238,7 @@ describe('WorkspaceHeader', () => {
         projectName: 'Hot Sheet 2',
         mode: 'list',
         searchOpen: true,
-        searchTokens: [{ kind: 'tag', value: 'client', raw: 'tag:client', label: 'tag:client', offset: 0 }],
+        searchModel: searchModelWith('tag:client ', ['client']),
       }),
     );
     expect(markup).toMatch(
@@ -248,7 +268,6 @@ describe('WorkspaceHeader', () => {
         projectName: 'Hot Sheet 2',
         mode: 'list',
         notificationCount: 7,
-        searchTags: ['client', 'server'],
         searchHelpOpen: true,
       }),
     );

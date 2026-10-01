@@ -3,27 +3,24 @@ import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TokenSearchField, type TokenSearchFieldProps } from '@kerfjs/ui/token-search-field';
+import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { CircleHelp } from 'lucide';
 
-import {
-  activeDatePrefix,
-  type InlineSearchToken,
-  ticketSearchTagSuggestions,
-  toTokenSearchToken,
-} from '../inline-search';
+import { activeDatePrefix } from '../inline-search';
 
 /**
  * Delegated action names every TicketSearchField renders. Each action element sits inside
  * the field's `.ticket-search-field` group, so a handler resolves the owning field through
- * `ticketSearchFieldId` instead of a per-consumer action name (HS2-N5G6JS).
+ * `ticketSearchFieldId` instead of a per-consumer action name (HS2-N5G6JS). Chip edit, chip
+ * removal, and clear are Kerf's managed model actions (HS2-5JXBQY); the app's handlers for
+ * those names only restore focus and close its own helper surfaces.
  */
 export const TICKET_SEARCH_ACTIONS = {
   editToken: 'edit-ticket-search-token',
   removeToken: 'remove-ticket-search-token',
   clear: 'clear-ticket-search',
   toggleHelp: 'toggle-ticket-search-help',
-  selectTag: 'select-ticket-search-tag',
   applyDate: 'apply-ticket-search-date',
 } as const;
 
@@ -35,28 +32,29 @@ export interface TicketSearchFieldProps {
   /** Kerf token-search editor id; also the identity delegated handlers receive. */
   id: string;
   label: string;
-  query?: string;
-  tokens?: readonly InlineSearchToken[];
-  /** Forwarded to Kerf: change it when the app replaces the editor text itself. */
-  revision?: string | number;
+  /**
+   * The Kerf-managed search model (`createTicketSearchModel`): it owns the query text, the
+   * committed chips, the `tag:` suggestions, and the edit/remove/clear actions; register it under
+   * the same id in `wireTokenSearchFields({ models })`.
+   */
+  model: TokenSearchModel;
   placeholder?: string;
   disabled?: boolean;
   autofocus?: boolean;
   /** Render as Kerf's managed collapsible toolbar field; `expanded` then reports the open state. */
   collapsible?: boolean;
   expanded?: boolean;
-  /** Every tag the project offers; matching suggestions derive from the query's trailing `tag:` text. */
-  tags?: readonly string[];
   /** Whether the syntax help popover is open. */
   helpOpen?: boolean;
   /** Offer the syntax help button and popover (default true). */
   help?: boolean;
   clearLabel?: string;
   /**
-   * Where the tag, date, and help surfaces render. `floating` (default) hangs them below the
-   * group as popovers. `external` renders none inside the group; the consumer places one
+   * Where the date and help surfaces render. `floating` (default) hangs them below the group as
+   * popovers. `external` renders none inside the group; the consumer places one
    * `TicketSearchSurfaces` for the same `id` in its own stacked layout — for dialogs and other
-   * clipping containers where a popover cannot escape.
+   * clipping containers where a popover cannot escape. Kerf's tag suggestions always render in
+   * flow inside the field itself.
    */
   surfaces?: 'floating' | 'external';
 }
@@ -65,9 +63,7 @@ export interface TicketSearchFieldProps {
 export interface TicketSearchSurfacesProps {
   /** The `id` of the TicketSearchField these surfaces serve. */
   id: string;
-  query?: string;
-  tokens?: readonly InlineSearchToken[];
-  tags?: readonly string[];
+  model: TokenSearchModel;
   helpOpen?: boolean;
   help?: boolean;
 }
@@ -154,34 +150,16 @@ function TicketSearchHelp() {
 }
 
 /**
- * The tag-completion listbox, lifecycle date helper, and syntax-help dialog for one
- * TicketSearchField. Rendered inside the field's group (floating popovers) or, with
- * `surfaces="external"`, placed by the consumer in its own stacked layout; either way the
- * `data-ticket-search-for` attribute tells the shared wiring which field the actions belong to.
+ * The lifecycle date helper and syntax-help dialog for one TicketSearchField (its tag completion
+ * is Kerf's, rendered by the model inside the field). Rendered inside the field's group (floating
+ * popovers) or, with `surfaces="external"`, placed by the consumer in its own stacked layout;
+ * either way the `data-ticket-search-for` attribute tells the shared wiring which field the
+ * actions belong to.
  */
-export function TicketSearchSurfaces({
-  id,
-  query = '',
-  tokens = [],
-  tags = [],
-  helpOpen = false,
-  help = true,
-}: TicketSearchSurfacesProps) {
-  const suggestions = ticketSearchTagSuggestions(query, tokens, tags),
-    datePrefix = activeDatePrefix(query);
+export function TicketSearchSurfaces({ id, model, helpOpen = false, help = true }: TicketSearchSurfacesProps) {
+  const datePrefix = activeDatePrefix(model.state.value.query);
   return (
     <div class="ticket-search-surfaces" data-ticket-search-for={id} data-token-search-keep-open>
-      {suggestions.length > 0 ? (
-        <div class="ticket-search-field__suggestions" role="listbox" aria-label="Matching tags">
-          {suggestions.map((tag) => (
-            <button type="button" role="option" data-action={TICKET_SEARCH_ACTIONS.selectTag} data-tag={tag}>
-              tag:{tag.includes(' ') ? `"${tag}"` : tag}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <></>
-      )}
       {datePrefix ? (
         <div class="ticket-search-field__date" role="group" aria-label="Date and time helper">
           <label>
@@ -205,25 +183,23 @@ export function TicketSearchSurfaces({
 }
 
 /**
- * The ticket search query editor: Kerf's grouped TokenSearchField plus Hot Sheet's in-place tag
- * completion, lifecycle date helper, and syntax help. Every ticket-search surface (workspace
- * header, workspace-grid rail, saved-view dialog) composes this one component so the helpers
- * cannot drift apart or be forgotten (HS2-N5G6JS). The group's root class is the static
- * `ticket-search-field`; a consumer sizes and places it through its own context selector
- * (for example `.workspace-header__actions > .ticket-search-field`), never by adding a class.
+ * The ticket search query editor: Kerf's grouped TokenSearchField driven by a managed
+ * `TokenSearchModel` (grammar, chips, in-place tag completion), plus Hot Sheet's lifecycle date
+ * helper and syntax help. Every ticket-search surface (workspace header, workspace-grid rail,
+ * saved-view dialog) composes this one component so the helpers cannot drift apart or be
+ * forgotten (HS2-N5G6JS, HS2-5JXBQY). The group's root class is the static `ticket-search-field`;
+ * a consumer sizes and places it through its own context selector (for example
+ * `.workspace-header__actions > .ticket-search-field`), never by adding a class.
  */
 export function TicketSearchField({
   id,
   label,
-  query = '',
-  tokens = [],
-  revision,
+  model,
   placeholder = 'Search tickets',
   disabled = false,
   autofocus = false,
   collapsible = false,
   expanded = false,
-  tags = [],
   helpOpen = false,
   help = true,
   clearLabel = 'Clear search',
@@ -234,9 +210,7 @@ export function TicketSearchField({
       presentation: 'toolbar-group',
       id,
       label,
-      query,
-      tokens: tokens.map(toTokenSearchToken),
-      revision,
+      model,
       placeholder,
       disabled,
       autofocus,
@@ -262,7 +236,7 @@ export function TicketSearchField({
     <ToolbarControlGroup className="ticket-search-field" expanded={open} single content="search" focusRing="halo">
       {collapsible ? <TokenSearchField {...field} collapsible expanded={expanded} /> : <TokenSearchField {...field} />}
       {open && surfaces === 'floating' ? (
-        <TicketSearchSurfaces id={id} query={query} tokens={tokens} tags={tags} helpOpen={helpOpen} help={help} />
+        <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
       ) : (
         <></>
       )}

@@ -1,5 +1,5 @@
 import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
-import { delegate, delegateCapture } from 'kerfjs';
+import { delegate } from 'kerfjs';
 
 import {
   TICKET_SEARCH_ACTIONS,
@@ -7,25 +7,29 @@ import {
   TICKET_SEARCH_TIME_INPUT,
   ticketSearchFieldId,
 } from '../components/ticket-search-field';
-import { dateTokenFromInput, type InlineSearchToken, type SearchDatePrefix } from '../inline-search';
+import { dateTokenFromInput, type SearchDatePrefix } from '../inline-search';
 import { data } from './dom';
 
 /**
  * Per-field callbacks for the actions every TicketSearchField renders. Each receives the owning
  * field id so one registration serves the workspace search, the workspace-grid rail, the
- * saved-view dialog, and any later ticket-search surface (HS2-N5G6JS).
+ * saved-view dialog, and any later ticket-search surface (HS2-N5G6JS). Chip edit, removal, clear,
+ * and tag completion are Kerf's managed model actions (HS2-5JXBQY): the callbacks here run
+ * beside them, for focus and the app's own helper surfaces.
  */
 export interface TicketSearchFieldHandlers {
-  /** A tag suggestion was chosen; replace the trailing `tag:` text with its chip. */
-  readonly selectTag: (id: string, tag: string) => void;
-  /** The date helper produced a chip for the trailing lifecycle filter. */
-  readonly applyDate: (id: string, prefix: SearchDatePrefix, token: InlineSearchToken) => void;
+  /**
+   * The date helper produced a value for the trailing lifecycle filter (`YYYY-MM-DD` or
+   * `YYYY-MM-DDTHH:MM`); the owner commits it through its model for the active prefix.
+   */
+  readonly applyDate: (id: string, prefix: SearchDatePrefix, value: string) => void;
   readonly toggleHelp: (id: string) => void;
-  /** Kerf's managed clear; the editor is already empty when this runs. */
-  readonly clear: (id: string, editor: HTMLElement | undefined) => void;
+  /** Kerf's managed clear emptied the model; close the app's helper surfaces and restore focus. */
+  readonly clear: (id: string) => void;
+  /** A chip's remove button was pressed (Kerf removes it); restore the caret where the chip sat. */
   readonly removeToken: (id: string, raw: string) => void;
-  /** A chip's edit action, click-count-2 click, or double-click. */
-  readonly editToken: (id: string, event: Event, target: Element) => void;
+  /** A chip's edit button was pressed (Kerf expands it to text); place the caret after that text. */
+  readonly editToken: (id: string, raw: string) => void;
 }
 
 /** The element whose descendants belong to one field: its surfaces block or its group. */
@@ -33,12 +37,6 @@ function withField(root: HTMLElement, target: Element, run: (id: string, scope: 
   const id = ticketSearchFieldId(target),
     scope = target.closest<HTMLElement>('.ticket-search-surfaces, .ticket-search-field');
   if (id && scope && root.contains(scope)) run(id, scope);
-}
-
-function fieldEditor(root: HTMLElement, id: string): HTMLElement | undefined {
-  for (const editor of root.querySelectorAll<HTMLElement>('[data-token-search-editor]'))
-    if (editor.dataset.tokenSearchEditor === id) return editor;
-  return undefined;
 }
 
 function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFieldHandlers) {
@@ -49,15 +47,17 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
       prefix = scope.querySelector<HTMLElement>(`[data-action="${TICKET_SEARCH_ACTIONS.applyDate}"]`)?.dataset
         .datePrefix as SearchDatePrefix | undefined,
       token = prefix ? dateTokenFromInput(prefix, date, time, navigator.language) : undefined;
-    if (prefix && token) handlers.applyDate(id, prefix, token);
+    if (prefix && token) handlers.applyDate(id, prefix, `${date}${time ? `T${time}` : ''}`);
   });
 }
 
 /**
  * Wire the delegated actions of every TicketSearchField under `root`. Kerf's
- * `wireTokenSearchFields` still owns editor chrome, submit, and collapsible behavior; this
- * adds the Hot Sheet helper surfaces (tag completion, date helper, syntax help), chip edit
- * and removal, managed clear, and Home/⌘← caret placement.
+ * `wireTokenSearchFields` owns editor chrome, submit, collapsible behavior, and (with the
+ * registered models) parsing, chips, suggestions, edit, removal, and clear; this adds the Hot
+ * Sheet helper surfaces (date helper, syntax help), focus restoration around Kerf's chip and
+ * clear actions, and Home/⌘← caret placement. Register it before `wireTokenSearchFields` so the
+ * focus handlers can read a chip's position before Kerf removes or expands it.
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): void {
   const action = (name: string) => `[data-action="${name}"]`;
@@ -68,18 +68,6 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
       placeTokenSearchCaret(target as HTMLElement, 0);
     }
   });
-  // Choosing a suggestion must not move focus out of the editor before the chip lands.
-  delegate(root, 'mousedown', action(TICKET_SEARCH_ACTIONS.selectTag), (event) => {
-    event.preventDefault();
-  });
-  delegateCapture(root, 'pointerdown', action(TICKET_SEARCH_ACTIONS.selectTag), (event) => {
-    event.preventDefault();
-  });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.selectTag), (_event, target) => {
-    withField(root, target, (id) => {
-      handlers.selectTag(id, data(target).tag!);
-    });
-  });
   delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.removeToken), (_event, target) => {
     const raw = data(target).tokenValue;
     if (raw)
@@ -87,21 +75,12 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
         handlers.removeToken(id, raw);
       });
   });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.editToken), (event, target) => {
-    withField(root, target, (id) => {
-      handlers.editToken(id, event, target);
-    });
-  });
-  delegate(root, 'click', '.ticket-search-field [data-component="token-search-token"]', (event, target) => {
-    if ((event as MouseEvent).detail === 2)
+  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.editToken), (_event, target) => {
+    const raw = data(target).tokenValue;
+    if (raw)
       withField(root, target, (id) => {
-        handlers.editToken(id, event, target);
+        handlers.editToken(id, raw);
       });
-  });
-  delegate(root, 'dblclick', '.ticket-search-field [data-component="token-search-token"]', (event, target) => {
-    withField(root, target, (id) => {
-      handlers.editToken(id, event, target);
-    });
   });
   delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.toggleHelp), (_event, target) => {
     withField(root, target, (id) => {
@@ -122,9 +101,7 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
   });
   delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.clear), (_event, target) => {
     withField(root, target, (id) => {
-      const editor = fieldEditor(root, id);
-      if (editor) editor.textContent = '';
-      handlers.clear(id, editor);
+      handlers.clear(id);
     });
   });
 }

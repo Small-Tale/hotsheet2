@@ -1,148 +1,106 @@
+import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
-import { batch, type Signal, signal } from 'kerfjs';
+import { batch, signal } from 'kerfjs';
 
 import { TicketSearchField, TicketSearchSurfaces } from '../components/ticket-search-field';
-import {
-  ACTIVE_TAG_PATTERN,
-  activeDatePattern,
-  consumeSearchTokens,
-  type InlineSearchToken,
-  type SearchDatePrefix,
-  tagSearchToken,
-} from '../inline-search';
+import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 
 /** Deterministic project tags for the TicketSearchField catalog entry. */
 export const TICKET_SEARCH_DEMO_TAGS = ['client', 'docs', 'needs design', 'parser', 'server', 'ui'] as const;
 
-export interface TicketSearchDemoField {
-  readonly query: Signal<string>;
-  readonly tokens: Signal<InlineSearchToken[]>;
-  readonly helpOpen: Signal<boolean>;
+export const ticketSearchDemoCollapsibleOpen = signal(false);
+export const ticketSearchDemoEvent = signal('');
+const ticketSearchDemoHelpOpen: Record<string, ReturnType<typeof signal<boolean>>> = {
+  'ticket-search-demo': signal(false),
+  'ticket-search-demo-external': signal(false),
+};
+
+/**
+ * A Kerf-managed demo model whose actions also narrate the catalog's event line, so the demo
+ * proves which model action each control reaches (HS2-N5G6JS, HS2-5JXBQY).
+ */
+function demoModel(initial = '', { commit = true } = {}): TokenSearchModel {
+  const model = createTicketSearchModel({ tags: () => TICKET_SEARCH_DEMO_TAGS });
+  if (initial && commit) replaceTicketSearch(model, initial);
+  else if (initial) model.replace({ query: initial, tokens: [] });
+  const chips = () => model.state.value.tokens.map((token) => token.value);
+  return {
+    ...model,
+    edit(value, commit) {
+      const before = chips();
+      model.edit(value, commit);
+      const added = chips().filter((chip) => !before.includes(chip));
+      if (added.length) ticketSearchDemoEvent.value = `Committed ${added.join(' ')}`;
+    },
+    choose(value) {
+      const before = chips();
+      model.choose(value);
+      const added = chips().filter((chip) => !before.includes(chip));
+      if (added.length) ticketSearchDemoEvent.value = `Added ${added.join(' ')}`;
+    },
+    commit(value) {
+      const before = chips();
+      model.commit(value);
+      const added = chips().filter((chip) => !before.includes(chip));
+      if (added.length) ticketSearchDemoEvent.value = `Added ${added.join(' ')}`;
+    },
+    expandToken(value) {
+      model.expandToken(value);
+      ticketSearchDemoEvent.value = `Editing ${value}`;
+    },
+    remove(value) {
+      model.remove(value);
+      ticketSearchDemoEvent.value = `Removed ${value}`;
+    },
+    clear() {
+      model.clear();
+      ticketSearchDemoEvent.value = 'Cleared';
+    },
+  };
 }
 
-const createField = (): TicketSearchDemoField => ({
-  query: signal(''),
-  tokens: signal<InlineSearchToken[]>([]),
-  helpOpen: signal(false),
-});
+/** The demo fields' models, keyed by editor id for `wireTokenSearchFields({ models })`. */
+export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> = {
+  'ticket-search-demo': demoModel(),
+  'ticket-search-demo-external': demoModel(),
+  'ticket-search-demo-collapsible': demoModel(),
+  // The disabled specimen shows an uncommitted filter as plain text, not a chip.
+  'ticket-search-demo-disabled': demoModel('is:open', { commit: false }),
+};
+/** The saved-view dialog catalog entry's seeded query model. */
+export const savedViewDemoSearchModel = demoModel('is:open tag:bug');
 
-/** Demo state for the two non-collapsible fields, keyed by their editor id. */
-export const ticketSearchDemoFields = {
-  'ticket-search-demo': createField(),
-  'ticket-search-demo-external': createField(),
-} as const;
-export const ticketSearchDemoCollapsibleOpen = signal(false);
-export const ticketSearchDemoCollapsibleQuery = signal('');
-export const ticketSearchDemoEvent = signal('');
-
-export function ticketSearchDemoField(id: string): TicketSearchDemoField | undefined {
-  return Object.hasOwn(ticketSearchDemoFields, id)
-    ? ticketSearchDemoFields[id as keyof typeof ticketSearchDemoFields]
-    : undefined;
+export function ticketSearchDemoModel(id: string): TokenSearchModel | undefined {
+  return Object.hasOwn(ticketSearchDemoModels, id) ? ticketSearchDemoModels[id] : undefined;
 }
 
 export function resetTicketSearchDemo(): void {
   batch(() => {
-    for (const field of Object.values(ticketSearchDemoFields)) {
-      field.query.value = '';
-      field.tokens.value = [];
-      field.helpOpen.value = false;
-    }
+    for (const [id, model] of Object.entries(ticketSearchDemoModels))
+      if (id === 'ticket-search-demo-disabled') model.replace({ query: 'is:open', tokens: [] });
+      else model.replace({ query: '', tokens: [] });
+    for (const open of Object.values(ticketSearchDemoHelpOpen)) open.value = false;
     ticketSearchDemoCollapsibleOpen.value = false;
-    ticketSearchDemoCollapsibleQuery.value = '';
     ticketSearchDemoEvent.value = '';
   });
 }
 
-function addDemoToken(field: TicketSearchDemoField, token: InlineSearchToken, offset = field.query.value.length) {
-  if (!field.tokens.value.some((value) => value.kind === token.kind && value.value === token.value))
-    field.tokens.value = [...field.tokens.value, { ...token, offset }];
-  field.helpOpen.value = false;
-}
-
-/** Mirror of the application's trailing-filter replacement for a demo field. */
-export function replaceActiveDemoToken(id: string, pattern: RegExp, token: InlineSearchToken): void {
-  const field = ticketSearchDemoField(id);
-  if (!field) return;
-  const match = field.query.value.match(pattern);
-  if (match) {
-    const raw = match[1],
-      start = match.index! + match[0].lastIndexOf(raw);
-    batch(() => {
-      field.query.value = field.query.value.slice(0, start) + field.query.value.slice(start + raw.length);
-      addDemoToken(field, token, start);
-    });
-  } else addDemoToken(field, token);
-  ticketSearchDemoEvent.value = `Added ${token.raw}`;
-}
-
-export function selectDemoTag(id: string, tag: string): void {
-  const token = tagSearchToken(tag, TICKET_SEARCH_DEMO_TAGS);
-  if (token) replaceActiveDemoToken(id, ACTIVE_TAG_PATTERN, token);
-}
-
-export function applyDemoDate(id: string, prefix: SearchDatePrefix, token: InlineSearchToken): void {
-  replaceActiveDemoToken(id, activeDatePattern(prefix), token);
-}
-
 export function toggleDemoHelp(id: string): void {
-  const field = ticketSearchDemoField(id);
-  if (field) field.helpOpen.value = !field.helpOpen.value;
-}
-
-/** Commit whitespace-terminated filters typed into a demo field as chips. */
-export function editDemoQuery(id: string, text: string, force = false): void {
-  const field = ticketSearchDemoField(id);
-  if (!field) return;
-  const parsed = consumeSearchTokens(text, force);
-  batch(() => {
-    field.query.value = parsed.text;
-    for (const token of parsed.tokens) addDemoToken(field, token);
-  });
-  if (parsed.tokens.length)
-    ticketSearchDemoEvent.value = `Committed ${parsed.tokens.map((token) => token.raw).join(' ')}`;
-}
-
-export function removeDemoToken(id: string, raw: string): void {
-  const field = ticketSearchDemoField(id),
-    token = field?.tokens.value.find((value) => value.raw === raw);
-  if (!field || !token) return;
-  field.tokens.value = field.tokens.value.filter((value) => value !== token);
-  ticketSearchDemoEvent.value = `Removed ${raw}`;
-}
-
-export function editDemoToken(id: string, raw: string): void {
-  const field = ticketSearchDemoField(id),
-    token = field?.tokens.value.find((value) => value.raw === raw);
-  if (!field || !token) return;
-  batch(() => {
-    field.tokens.value = field.tokens.value.filter((value) => value !== token);
-    field.query.value = `${field.query.value.trimEnd()} ${raw}`.trimStart();
-  });
-  ticketSearchDemoEvent.value = `Editing ${raw}`;
-}
-
-export function clearDemoQuery(id: string): void {
-  const field = ticketSearchDemoField(id);
-  if (!field) return;
-  batch(() => {
-    field.query.value = '';
-    field.tokens.value = [];
-    field.helpOpen.value = false;
-  });
-  ticketSearchDemoEvent.value = 'Cleared';
+  const open = Object.hasOwn(ticketSearchDemoHelpOpen, id) ? ticketSearchDemoHelpOpen[id] : undefined;
+  if (open) open.value = !open.value;
 }
 
 export function TicketSearchFieldDemo() {
-  const floating = ticketSearchDemoFields['ticket-search-demo'],
-    external = ticketSearchDemoFields['ticket-search-demo-external'];
+  const floating = ticketSearchDemoModels['ticket-search-demo'],
+    external = ticketSearchDemoModels['ticket-search-demo-external'];
   return (
     <section class="ticket-search-field-demo" aria-label="TicketSearchField demo">
       <div>
         <h2>Standalone query field, floating surfaces</h2>
         <p class="component-stage__hint">
-          Type <code>tag:</code> for in-place tag completion, a lifecycle filter such as <code>updated-after:</code> for
-          the date helper, or open the syntax help. Whitespace commits a filter as a chip.
+          Type <code>tag:</code> for Kerf's in-place tag completion, a lifecycle filter such as{' '}
+          <code>updated-after:</code> for the date helper, or open the syntax help. Whitespace commits a filter as a
+          chip.
         </p>
         <Toolbar
           className="ticket-search-field-demo__toolbar"
@@ -151,10 +109,8 @@ export function TicketSearchFieldDemo() {
             <TicketSearchField
               id="ticket-search-demo"
               label="Search query"
-              query={floating.query.value}
-              tokens={floating.tokens.value}
-              tags={TICKET_SEARCH_DEMO_TAGS}
-              helpOpen={floating.helpOpen.value}
+              model={floating}
+              helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo'].value}
               clearLabel="Clear search query"
             />
           }
@@ -164,7 +120,8 @@ export function TicketSearchFieldDemo() {
         <h2>External surfaces, dialog layout</h2>
         <p class="component-stage__hint">
           Inside a dialog or other clipping container the field renders no popovers; the consumer places
-          <code>TicketSearchSurfaces</code> for the same id in its own stacked layout.
+          <code>TicketSearchSurfaces</code> for the same id in its own stacked layout. Kerf's tag suggestions stay in
+          flow inside the field.
         </p>
         <Toolbar
           className="ticket-search-field-demo__toolbar"
@@ -173,10 +130,8 @@ export function TicketSearchFieldDemo() {
             <TicketSearchField
               id="ticket-search-demo-external"
               label="Dialog search query"
-              query={external.query.value}
-              tokens={external.tokens.value}
-              tags={TICKET_SEARCH_DEMO_TAGS}
-              helpOpen={external.helpOpen.value}
+              model={external}
+              helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
               clearLabel="Clear dialog search query"
               surfaces="external"
             />
@@ -184,10 +139,8 @@ export function TicketSearchFieldDemo() {
         />
         <TicketSearchSurfaces
           id="ticket-search-demo-external"
-          query={external.query.value}
-          tokens={external.tokens.value}
-          tags={TICKET_SEARCH_DEMO_TAGS}
-          helpOpen={external.helpOpen.value}
+          model={external}
+          helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
         />
       </div>
       <div>
@@ -198,8 +151,7 @@ export function TicketSearchFieldDemo() {
             <TicketSearchField
               id="ticket-search-demo-collapsible"
               label="Search tickets"
-              query={ticketSearchDemoCollapsibleQuery.value}
-              tags={TICKET_SEARCH_DEMO_TAGS}
+              model={ticketSearchDemoModels['ticket-search-demo-collapsible']}
               collapsible
               expanded={ticketSearchDemoCollapsibleOpen.value}
             />
@@ -211,7 +163,14 @@ export function TicketSearchFieldDemo() {
         <Toolbar
           className="ticket-search-field-demo__toolbar"
           centerAlign="stretch"
-          center={<TicketSearchField id="ticket-search-demo-disabled" label="Search query" query="is:open" disabled />}
+          center={
+            <TicketSearchField
+              id="ticket-search-demo-disabled"
+              label="Search query"
+              model={ticketSearchDemoModels['ticket-search-demo-disabled']}
+              disabled
+            />
+          }
         />
       </div>
       <p class="component-stage__event" aria-live="polite">

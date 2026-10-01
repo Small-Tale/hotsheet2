@@ -4,6 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
@@ -25,7 +26,7 @@ import {
   Star,
 } from 'lucide';
 
-import { type InlineSearchToken } from '../inline-search';
+import { createTicketSearchModel } from '../ticket-search-model';
 import { TicketSearchField } from './ticket-search-field';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
@@ -51,15 +52,23 @@ function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
   );
 }
 
+let inertSearchModel: TokenSearchModel | undefined;
+/** An empty, tag-less model for previews that render the controls without the app's search state. */
+function previewSearchModel(): TokenSearchModel {
+  inertSearchModel ??= createTicketSearchModel({ tags: () => [] });
+  return inertSearchModel;
+}
+
 export interface WorkspaceHeaderProps {
   projectName: string;
   mode: WorkspaceViewMode;
   presentation?: WorkspaceControlsPresentation;
   searchOpen?: boolean;
-  searchQuery?: string;
-  searchTokens?: readonly InlineSearchToken[];
-  /** Every project tag; the field derives in-place `tag:` suggestions from them. */
-  searchTags?: readonly string[];
+  /**
+   * The Kerf-managed workspace search model the TicketSearchField renders (HS2-5JXBQY). The app
+   * always passes its own; a standalone preview without one renders an inert, tag-less model.
+   */
+  searchModel?: TokenSearchModel;
   searchHelpOpen?: boolean;
   sort?: WorkspaceSort;
   sortDirection?: WorkspaceSortDirection;
@@ -343,9 +352,7 @@ export function WorkspaceControls({
   mode,
   presentation = 'toolbar',
   searchOpen = false,
-  searchQuery = '',
-  searchTokens = [],
-  searchTags = [],
+  searchModel = previewSearchModel(),
   searchHelpOpen = false,
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
@@ -469,13 +476,11 @@ export function WorkspaceControls({
       <TicketSearchField
         id="workspace-search"
         label="Search tickets"
-        query={searchQuery}
-        tokens={searchTokens}
+        model={searchModel}
         disabled={projectActionsDisabled}
         autofocus
         collapsible
         expanded={searchOpen}
-        tags={searchTags}
         helpOpen={searchHelpOpen}
       />
       <WorkspaceOverflowControls

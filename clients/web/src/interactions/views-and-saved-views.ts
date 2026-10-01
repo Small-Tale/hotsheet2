@@ -3,7 +3,6 @@ import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
-import { type InlineSearchToken } from '../inline-search';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
 import { type Control } from './types';
@@ -22,18 +21,6 @@ export interface ViewAndSavedViewInteractionsDependencies {
   readonly openSavedViewDelete: (viewId: string) => void;
   readonly savedViewName: Signal<string>;
   readonly savedViewError: Signal<string>;
-  readonly readInlineSearchField: (
-    editor: HTMLElement,
-    current: readonly InlineSearchToken[],
-  ) => { text: string; tokens: InlineSearchToken[] };
-  readonly savedViewQueryTokens: Signal<InlineSearchToken[]>;
-  readonly updateSavedViewQuery: (
-    value: string,
-    forceToken?: boolean,
-    currentTokens?: InlineSearchToken[],
-    commitToken?: boolean,
-  ) => boolean;
-  readonly focusSavedViewQuery: (offset?: number) => void;
   readonly saveSavedView: (form: HTMLFormElement) => Promise<void>;
   readonly closeSavedViewDialog: () => void;
   readonly savedViewBusy: Signal<boolean>;
@@ -56,10 +43,6 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     openSavedViewDelete,
     savedViewName,
     savedViewError,
-    readInlineSearchField,
-    savedViewQueryTokens,
-    updateSavedViewQuery,
-    focusSavedViewQuery,
     saveSavedView,
     closeSavedViewDialog,
     savedViewBusy,
@@ -136,15 +119,6 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
   delegate(document.body, 'input', '[name="saved-view-name"]', (_event, target) => {
     savedViewName.value = (target as Control).value;
     savedViewError.value = '';
-  });
-  delegate(document.body, 'input', '[data-token-search-editor="saved-view-query"]', (event, target) => {
-    const editor = target as HTMLElement,
-      state = readInlineSearchField(editor, savedViewQueryTokens.value),
-      input = event as InputEvent,
-      commitsToken =
-        (typeof input.data === 'string' && /\s$/.test(input.data)) ||
-        (input.inputType === 'insertFromPaste' && /\s$/.test(state.text));
-    if (updateSavedViewQuery(state.text, false, state.tokens, commitsToken)) focusSavedViewQuery();
   });
   delegate(document.body, 'submit', '[data-action="save-saved-view"]', (event, target) => {
     event.preventDefault();

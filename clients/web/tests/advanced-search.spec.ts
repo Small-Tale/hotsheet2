@@ -207,7 +207,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
   await expect(search).toContainText('tag:"hello ');
   await search.pressSequentially('world" ');
-  await expect(page.getByRole('button', { name: 'Edit tag hello world' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit tag:hello world' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.pressSequentially('tag:client ');
   const trailingChip = page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
@@ -252,7 +252,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   ).toBe('[tag:client]after');
   await search.press('Home');
   await page.keyboard.type('before ');
-  await expect(page.getByRole('button', { name: 'Edit tag client' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit tag:client' })).toBeVisible();
   expect(
     await search.evaluate((node) =>
       Array.from(node.childNodes)
@@ -303,18 +303,18 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   expect(Math.abs(inline.mode.top - single.mode.top)).toBeLessThanOrEqual(0.5);
   expect(Math.abs(inline.sort.top - single.sort.top)).toBeLessThanOrEqual(0.5);
   await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-wide.png', fullPage: true });
-  await page.getByRole('button', { name: 'Edit tag client' }).click();
+  await page.getByRole('button', { name: 'Edit tag:client' }).click();
   await expect(inlineTag).toHaveCount(0);
   await expect(search).toContainText('NOT tag:client AND parser');
   await search.press('Enter');
   await expect(inlineTag).toBeVisible();
-  await page.getByRole('button', { name: 'Remove tag client' }).click();
+  await page.getByRole('button', { name: 'Remove tag:client' }).click();
   await expect(inlineTag).toHaveCount(0);
   await expect(search).toBeFocused();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.pressSequentially('tag:cl');
-  await expect(page.getByRole('option', { name: 'tag:client' })).toBeVisible();
-  await page.getByRole('option', { name: 'tag:client' }).click();
+  await expect(page.getByRole('button', { name: 'tag:client', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'tag:client', exact: true }).click();
   await expect(inlineTag).toBeVisible();
   await search.pressSequentially(' AND a-very-long-character-level-search-value-that-wraps-without-clipping');
   await page.setViewportSize({ width: 680, height: 720 });
@@ -339,7 +339,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('updated-after:4h ago ');
   await expect(
-    page.locator('[data-component="token-search-token"][data-token-value="updated-after:4h ago"]'),
+    page.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('updated-after:2026/09/07');

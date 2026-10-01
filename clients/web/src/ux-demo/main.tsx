@@ -29,7 +29,6 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { TabBar } from '@kerfjs/ui/tab-bar';
-import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
@@ -73,7 +72,7 @@ import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
-import { toTokenSearchToken } from '../inline-search';
+import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import {
@@ -301,16 +300,11 @@ import {
 } from './ticket-metadata-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import {
-  applyDemoDate,
-  clearDemoQuery,
-  editDemoQuery,
-  editDemoToken,
-  removeDemoToken,
   resetTicketSearchDemo,
-  selectDemoTag,
+  savedViewDemoSearchModel,
   ticketSearchDemoCollapsibleOpen,
-  ticketSearchDemoCollapsibleQuery,
-  ticketSearchDemoField,
+  ticketSearchDemoModel,
+  ticketSearchDemoModels,
   TicketSearchFieldDemo,
   toggleDemoHelp,
 } from './ticket-search-field-demo';
@@ -346,8 +340,8 @@ import {
   WorkspaceHeaderDemo,
   workspaceMode,
   workspaceSearchHelpOpen,
+  workspaceSearchModel,
   workspaceSearchOpen,
-  workspaceSearchQuery,
   workspaceSort,
   workspaceSortDirection,
 } from './workspace-components-demo';
@@ -630,7 +624,7 @@ function demoContent(item: DemoDefinition) {
       <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />
     );
   if (item.id === 'saved-view-dialog')
-    return <SavedViewDialog open mode="create" name="Blocked bugs" query="is:open tag:bug" queryTokens={[]} />;
+    return <SavedViewDialog open mode="create" name="Blocked bugs" searchModel={savedViewDemoSearchModel} />;
   if (item.id === 'ticket-link-choice-dialog')
     return (
       <TicketLinkChoiceDialog
@@ -1168,53 +1162,41 @@ wireWorkbench(root, {
   id: 'app',
   panels: { leftRail: { size: shellSidebarSize }, rightRail: { size: shellInspectorSize } },
 });
-wireTokenSearchFields(root, {
-  collapsible: {
-    signals: {
-      'workspace-search': workspaceSearchOpen,
-      'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
-    },
-  },
-  onEdit: ({ id, editor }) => {
-    const demo = ticketSearchDemoField(id);
-    if (id === 'workspace-search') workspaceSearchQuery.value = editor.textContent;
-    else if (id === 'ticket-search-demo-collapsible') ticketSearchDemoCollapsibleQuery.value = editor.textContent;
-    else if (demo) editDemoQuery(id, readTokenSearchField(editor, demo.tokens.value.map(toTokenSearchToken)).query);
-  },
-  onSubmit: ({ id, editor }) => {
-    const demo = ticketSearchDemoField(id);
-    if (demo) editDemoQuery(id, readTokenSearchField(editor, demo.tokens.value.map(toTokenSearchToken)).query, true);
-  },
-  keyboard: {
-    onRemoveToken: ({ id, value }) => {
-      removeDemoToken(id, value);
-    },
-  },
-});
-// The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS).
+// The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS);
+// it is wired before Kerf's so its focus handlers see a chip before Kerf removes or expands it.
+const demoSearchModel = (id: string) => (id === 'workspace-search' ? workspaceSearchModel : ticketSearchDemoModel(id));
 wireTicketSearchFields(root, {
-  selectTag: selectDemoTag,
-  applyDate: applyDemoDate,
+  applyDate: (id, _prefix, value) => {
+    demoSearchModel(id)?.commit(value);
+  },
   toggleHelp: (id) => {
     if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
     else toggleDemoHelp(id);
   },
   clear: (id) => {
     if (id === 'workspace-search') {
-      workspaceSearchQuery.value = '';
       workspaceSearchHelpOpen.value = false;
       queueMicrotask(() => {
         focusWorkspaceSearch(root);
       });
-    } else if (id === 'ticket-search-demo-collapsible') ticketSearchDemoCollapsibleQuery.value = '';
-    else clearDemoQuery(id);
+    }
   },
-  removeToken: removeDemoToken,
-  editToken: (id, event, target) => {
-    if (!ticketSearchDemoField(id)) return;
-    event.preventDefault();
-    const raw = (target as HTMLElement).dataset.tokenValue;
-    if (raw) editDemoToken(id, raw);
+  removeToken: () => undefined,
+  editToken: () => undefined,
+});
+// Kerf owns editor chrome, collapsible behavior, and, through the registered models, parsing,
+// chips, suggestions, chip edit/removal, and clear (HS2-5JXBQY).
+wireTokenSearchFields(root, {
+  models: { 'workspace-search': workspaceSearchModel, ...ticketSearchDemoModels },
+  // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
+  onSubmit: ({ id }) => {
+    restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);
+  },
+  collapsible: {
+    signals: {
+      'workspace-search': workspaceSearchOpen,
+      'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+    },
   },
 });
 wireCatalog(root, {
@@ -1756,7 +1738,7 @@ delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;
   workspaceSearchOpen.value = false;
   workspaceSearchHelpOpen.value = false;
-  workspaceSearchQuery.value = '';
+  workspaceSearchModel.clear();
   shellEvent.value = shellMode.value === 'terminals' ? 'Workspace grid selected.' : 'Cross-project stats selected.';
 });
 delegate(root, 'click', '[data-action="open-project-stats"]', () => {
@@ -1765,7 +1747,7 @@ delegate(root, 'click', '[data-action="open-project-stats"]', () => {
   shellMode.value = 'stats';
   workspaceSearchOpen.value = false;
   workspaceSearchHelpOpen.value = false;
-  workspaceSearchQuery.value = '';
+  workspaceSearchModel.clear();
   sidebarEvent.value = `${name} project statistics requested.`;
   shellEvent.value = `${name} project statistics selected.`;
 });
@@ -2079,7 +2061,7 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   if (workspaceMode.value === 'settings') {
     workspaceSearchOpen.value = false;
     workspaceSearchHelpOpen.value = false;
-    workspaceSearchQuery.value = '';
+    workspaceSearchModel.clear();
   }
   recordCollectionEvent(
     `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
@@ -2116,7 +2098,7 @@ delegate(root, 'wa-select', '[data-workspace-overflow]', (event) => {
     if (workspaceMode.value === 'settings') {
       workspaceSearchOpen.value = false;
       workspaceSearchHelpOpen.value = false;
-      workspaceSearchQuery.value = '';
+      workspaceSearchModel.clear();
     }
     recordCollectionEvent(
       `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,

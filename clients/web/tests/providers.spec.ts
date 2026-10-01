@@ -2902,7 +2902,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await searchInput.fill('updated-after:4h ago');
   await searchInput.press('Enter');
   await expect(
-    rail.locator('[data-component="token-search-token"][data-token-value="updated-after:4h ago"]'),
+    rail.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(rail.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
@@ -2971,7 +2971,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await rail.getByRole('button', { name: 'Search tickets' }).click();
   await expect.poll(() => expandedSearch.evaluate((node) => node.getAnimations().length)).toBeGreaterThan(0);
   await searchInput.fill('tag:');
-  const suggestions = rail.getByRole('listbox', { name: 'Matching tags' });
+  const suggestions = rail.locator('.kui-token-search__suggestions');
   await expect(suggestions).toBeVisible();
   await expandedSearch.evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
@@ -2982,7 +2982,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
         const rect = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
         return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width };
       },
-      options = [...node.querySelectorAll<HTMLElement>('.ticket-search-field__suggestions button')].map((option) => ({
+      options = [...node.querySelectorAll<HTMLElement>('.kui-token-search__suggestion')].map((option) => ({
         left: option.getBoundingClientRect().left,
         right: option.getBoundingClientRect().right,
         width: option.getBoundingClientRect().width,
@@ -3002,7 +3002,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       search: bounds('.ticket-search-field'),
       sort: bounds('.workspace-header__sort-group'),
       utility: bounds('.workspace-header__utility-group'),
-      suggestions: bounds('.ticket-search-field__suggestions'),
+      suggestions: bounds('.kui-token-search__suggestions'),
       options,
     };
   });
@@ -3013,7 +3013,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   expect(activeSearchGeometry.search.right).toBeCloseTo(activeSearchGeometry.actions.right, 0);
   expect(activeSearchGeometry.options.length).toBeGreaterThan(0);
   for (const option of activeSearchGeometry.options) {
-    expect(option.textAlign).toBe('left');
+    // Kerf's own suggestion rows align their labels to the start edge (HS2-5JXBQY).
+    expect(option.textAlign).toBe('start');
     expect(option.left).toBeGreaterThanOrEqual(activeSearchGeometry.suggestions.left);
     expect(option.right).toBeLessThanOrEqual(activeSearchGeometry.suggestions.right);
     expect(option.width).toBeGreaterThan(activeSearchGeometry.suggestions.width - 24);
@@ -13307,9 +13308,10 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
   await query.fill('tag:cl');
-  const suggestions = page.getByRole('listbox', { name: 'Matching tags' });
-  await expect(suggestions.getByRole('option', { name: 'tag:client' })).toBeVisible();
-  await suggestions.getByRole('option', { name: 'tag:client' }).click();
+  // Kerf's model renders the in-place tag completion inside the field (HS2-5JXBQY).
+  const suggestions = page.locator('.ticket-search-field .kui-token-search__suggestions');
+  await expect(suggestions.getByRole('button', { name: 'tag:client' })).toBeVisible();
+  await suggestions.getByRole('button', { name: 'tag:client' }).click();
   const chip = page.locator('[data-component="token-search-token"]');
   await expect(chip).toContainText('tag:client');
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(8);
@@ -13320,7 +13322,7 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: '/private/tmp/hs2-383d6k-inline-search-narrow.png', fullPage: true });
-  await page.getByRole('button', { name: 'Remove tag client' }).click();
+  await page.getByRole('button', { name: 'Remove tag:client' }).click();
   await expect(chip).toHaveCount(0);
 });
 
@@ -13349,7 +13351,7 @@ test('deletes inline search tokens from either adjacent caret boundary', async (
       { raw, side },
     );
   await query.fill('tag:cl');
-  await page.getByRole('option', { name: 'tag:client' }).click();
+  await page.getByRole('button', { name: 'tag:client', exact: true }).click();
   await placeCaret('tag:client', 'after');
   await query.press('Backspace');
   await expect(chip).toHaveCount(0);
@@ -13545,7 +13547,7 @@ for (const surface of ['workspace', 'saved-view']) {
     await query.fill('refilled tag:client after ');
     await expect(chip).toHaveAttribute('data-token-value', 'tag:client');
     await expect(query.locator('[data-token-search-text]')).toHaveText(['refilled ', ' after ']);
-    await chip.getByRole('button', { name: 'Remove tag client' }).click();
+    await chip.getByRole('button', { name: 'Remove tag:client' }).click();
     await expect(chip).toHaveCount(0);
     await expect(query).toBeFocused();
     await page.keyboard.insertText('more');
@@ -13575,7 +13577,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
   await query.fill('tag:cl');
-  const suggestion = page.getByRole('option', { name: 'tag:client' });
+  const suggestion = page.getByRole('button', { name: 'tag:client', exact: true });
   await expect(suggestion).toBeVisible();
   await expect(suggestion).not.toHaveCSS('color', 'rgb(255, 255, 255)');
   await suggestion.click();

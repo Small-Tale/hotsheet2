@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  activeTagPrefix,
   consumeSearchToken,
   consumeSearchTokens,
   dateTokenFromInput,
@@ -20,7 +19,6 @@ describe('inline advanced-search tokens', () => {
   it('supports quoted tags and attachment wildcards', () => {
     expect(tokenFromRaw('tag:"needs design"')).toMatchObject({ kind: 'tag', value: 'needs design' });
     expect(tokenFromRaw('attachment:*.png')).toMatchObject({ kind: 'attachment', value: '*.png' });
-    expect(activeTagPrefix('words tag:"needs')).toBe('needs');
     expect(tokenFromRaw('tag:"needs')).toBeUndefined();
     expect(tokenFromRaw('attachment:"screen shot')).toBeUndefined();
   });

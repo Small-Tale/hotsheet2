@@ -15,9 +15,7 @@ export function WorkspaceHeader({
   mode,
   presentation = 'toolbar',
   searchOpen = false,
-  searchQuery = '',
-  searchTokens = [],
-  searchTags = [],
+  searchModel,
   searchHelpOpen = false,
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
@@ -41,9 +39,7 @@ export function WorkspaceHeader({
             mode={mode}
             presentation={presentation}
             searchOpen={searchOpen}
-            searchQuery={searchQuery}
-            searchTokens={searchTokens}
-            searchTags={searchTags}
+            searchModel={searchModel}
             searchHelpOpen={searchHelpOpen}
             sort={sort}
             sortDirection={sortDirection}

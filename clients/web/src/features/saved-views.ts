@@ -1,18 +1,12 @@
-import { batch, type Signal, signal } from 'kerfjs';
+import { effect, type Signal, signal } from 'kerfjs';
 
 import { Api, type CustomView } from '../api';
 import type { SavedViewContextMenuState } from '../components/view-navigation';
-import {
-  ACTIVE_TAG_PATTERN,
-  consumeSearchTokens,
-  type InlineSearchToken,
-  orderedSearchText,
-  tagSearchToken,
-} from '../inline-search';
+import { type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
-import { data } from '../interactions/dom';
 import type { Control, Project } from '../interactions/types';
 import { customViewNameAvailable, customViewQueryText, uniqueCustomViewId } from '../saved-views';
+import { createTicketSearchModel, inlineSearchTokens, replaceTicketSearch } from '../ticket-search-model';
 import { customTicketViewId, customTicketViewKey, type TicketView } from '../ticket-views';
 
 export interface SavedViewsControllerDependencies {
@@ -57,6 +51,25 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewDeleteTargetId = signal<string | undefined>(undefined),
     savedViewDeleteBusy = signal(false),
     savedViewDeleteError = signal('');
+  // Kerf's managed TokenSearchModel owns the dialog's query text, chips, and tag completion
+  // (HS2-5JXBQY); `savedViewQuery`/`savedViewQueryTokens` are projections of its state.
+  const savedViewSearchModel = createTicketSearchModel({
+    tags: availableSearchTags,
+    onClear: () => {
+      savedViewHelpOpen.value = false;
+      savedViewError.value = '';
+    },
+  });
+  effect(() => {
+    const state = savedViewSearchModel.state.value;
+    savedViewQuery.value = state.query;
+    savedViewQueryTokens.value = inlineSearchTokens(state);
+    savedViewError.value = '';
+  });
+  /** The caret position a chip occupies, for focus restoration around Kerf's chip actions. */
+  function savedViewSearchTokenOffset(raw: string) {
+    return savedViewSearchModel.state.value.tokens.find((token) => token.value === raw)?.offset;
+  }
 
   function showSavedViewDialog() {
     savedViewDialogSession.value += 1;
@@ -65,9 +78,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     if (name && name.value !== savedViewName.value) name.value = savedViewName.value;
   }
   function setSavedViewQuery(value: string) {
-    const parsed = consumeSearchTokens(value, true);
-    savedViewQuery.value = parsed.text;
-    savedViewQueryTokens.value = parsed.tokens;
+    replaceTicketSearch(savedViewSearchModel, value);
     savedViewHelpOpen.value = false;
   }
   function openSavedViewDialog() {
@@ -104,90 +115,9 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewError.value = '';
     savedViewHelpOpen.value = false;
   }
-  function updateSavedViewQuery(
-    value: string,
-    forceToken = false,
-    currentTokens = savedViewQueryTokens.value,
-    commitToken = forceToken,
-  ) {
-    const parsed = consumeSearchTokens(value, commitToken),
-      shifted = currentTokens.map((token) => {
-        const offset = token.offset ?? value.length,
-          shift = parsed.removed.reduce(
-            (total, range) => total + (range.end <= offset ? range.end - range.start : 0),
-            0,
-          );
-        return { ...token, offset: Math.max(0, offset - shift) };
-      }),
-      next: InlineSearchToken[] = [...shifted];
-    for (const token of parsed.tokens)
-      if (!next.some((value) => value.kind === token.kind && value.value === token.value)) next.push(token);
-    savedViewQuery.value = parsed.text;
-    savedViewQueryTokens.value = next;
-    savedViewError.value = '';
-    return parsed.tokens.length > 0;
-  }
-  function addSavedViewQueryToken(token: InlineSearchToken, offset = savedViewQuery.value.length) {
-    if (!savedViewQueryTokens.value.some((value) => value.kind === token.kind && value.value === token.value))
-      savedViewQueryTokens.value = [...savedViewQueryTokens.value, { ...token, offset }];
-    savedViewHelpOpen.value = false;
-    savedViewError.value = '';
-  }
   /** Replace the trailing uncommitted filter text matched by `pattern` with a chip at that position. */
-  function replaceActiveSavedViewQueryToken(pattern: RegExp, token: InlineSearchToken) {
-    const match = savedViewQuery.value.match(pattern);
-    if (!match) {
-      addSavedViewQueryToken(token);
-      return;
-    }
-    const raw = match[1],
-      start = match.index! + match[0].lastIndexOf(raw);
-    batch(() => {
-      savedViewQuery.value = savedViewQuery.value.slice(0, start) + savedViewQuery.value.slice(start + raw.length);
-      addSavedViewQueryToken(token, start);
-    });
-  }
-  function addSavedViewQueryTag(tag: string) {
-    const token = tagSearchToken(tag, availableSearchTags());
-    if (token) replaceActiveSavedViewQueryToken(ACTIVE_TAG_PATTERN, token);
-    focusSavedViewQuery();
-  }
   function focusSavedViewQuery(offset?: number) {
     restoreInlineSearchCaret(document, '[data-token-search-editor="saved-view-query"]', offset);
-  }
-  function removeSavedViewQueryToken(raw: string) {
-    const token = savedViewQueryTokens.value.find((value) => value.raw === raw);
-    if (!token) return false;
-    const offset = token.offset ?? savedViewQuery.value.length;
-    savedViewQueryTokens.value = savedViewQueryTokens.value.filter((value) => value !== token);
-    savedViewError.value = '';
-    focusSavedViewQuery(offset);
-    return true;
-  }
-  function editSavedViewQueryToken(event: Event, target: Element) {
-    event.preventDefault();
-    const raw = data(target).tokenValue,
-      token = savedViewQueryTokens.value.find((value) => value.raw === raw);
-    if (!raw || !token) return;
-    const offset = Math.max(0, Math.min(savedViewQuery.value.length, token.offset ?? savedViewQuery.value.length)),
-      before = savedViewQuery.value.slice(0, offset),
-      after = savedViewQuery.value.slice(offset),
-      leading = before && !/[\s(]$/.test(before) ? ' ' : '',
-      trailing = after && !/^[\s)]/.test(after) ? ' ' : '',
-      insert = `${leading}${raw}${trailing}`;
-    batch(() => {
-      savedViewQueryTokens.value = savedViewQueryTokens.value
-        .filter((value) => value.raw !== raw)
-        .map((value) => ({
-          ...value,
-          offset:
-            (value.offset ?? savedViewQuery.value.length) >= offset
-              ? (value.offset ?? savedViewQuery.value.length) + insert.length
-              : value.offset,
-        }));
-      savedViewQuery.value = before + insert + after;
-    });
-    focusSavedViewQuery(offset + leading.length + raw.length);
   }
   async function saveSavedView(form: HTMLFormElement) {
     const current = project();
@@ -288,12 +218,9 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     openSavedViewDialog,
     openSavedViewRename,
     closeSavedViewDialog,
-    updateSavedViewQuery,
-    replaceActiveSavedViewQueryToken,
-    addSavedViewQueryTag,
+    savedViewSearchModel,
+    savedViewSearchTokenOffset,
     focusSavedViewQuery,
-    removeSavedViewQueryToken,
-    editSavedViewQueryToken,
     saveSavedView,
     openSavedViewDelete,
     closeSavedViewDelete,

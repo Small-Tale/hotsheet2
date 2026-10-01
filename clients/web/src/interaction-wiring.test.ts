@@ -102,7 +102,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(404);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(403);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))
@@ -115,7 +115,11 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   it('retains shared Kerf tab and token-search adapters in their owning modules', () => {
     const search = read('./interactions/search-and-composer.ts'),
       navigation = read('./interactions/navigation-and-tabs.ts');
-    expect(search).toContainSource("onEdit:({id,editor,event})=>{if(id!=='workspace-search')return;");
+    // The workspace and saved-view fields are Kerf model-managed (HS2-5JXBQY): no app input/submit callbacks.
+    expect(search).toContainSource(
+      "models:{'workspace-search':workspaceSearchModel,'saved-view-query':savedViewSearchModel}",
+    );
+    expect(search).not.toContain('onEdit:');
     expect(search).not.toContain("delegate(document.body,'input','[data-token-search-editor=\"workspace-search\"]'");
     expect(navigation).toContainSource('if(barId===PROJECT_TAB_BAR_ID)');
     expect(navigation).toContainSource('if(barId!==TERMINAL_DRAWER_TAB_BAR_ID)return;');

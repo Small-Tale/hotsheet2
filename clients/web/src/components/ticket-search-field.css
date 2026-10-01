@@ -50,7 +50,6 @@
 :not(.ticket-search-field) > .ticket-search-surfaces:empty {
   display: none;
 }
-:not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__suggestions,
 :not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__date,
 :not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__help {
   position: static;
@@ -60,7 +59,6 @@
 }
 /* Floating surfaces align to the group's end edge and keep a readable width, extending past a
    narrower group's start edge (over the toolbar) rather than cramping their content. */
-.ticket-search-field__suggestions,
 .ticket-search-field__date,
 .ticket-search-field__help {
   position: absolute;
@@ -75,31 +73,6 @@
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-surface-raised);
   box-shadow: var(--wa-shadow-m);
-}
-.ticket-search-field__suggestions {
-  display: flex;
-  box-sizing: border-box;
-  width: min(remify(416px), 100%);
-  align-items: stretch;
-  flex-direction: column;
-  text-align: left;
-}
-.ticket-search-field__suggestions button {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  padding: var(--wa-space-xs) var(--wa-space-s);
-  border: 0;
-  border-radius: var(--wa-border-radius-s);
-  color: var(--wa-color-neutral-on-normal);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.ticket-search-field__suggestions button:hover,
-.ticket-search-field__suggestions button:focus-visible {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
 }
 .ticket-search-field__date {
   display: grid;
