@@ -1525,6 +1525,26 @@ test('captures before and after CSSOM snapshots through CSS Live Edit', async ({
   // Establish the evidence viewport before editing. Resizing can legitimately rerender the demo
   // composition, which would replace a DevTools-authored inline declaration before capture.
   await page.setViewportSize({ width: 760, height: 900 });
+  // Wait for that rerender to finish (no DOM mutations for several frames) instead of assuming it is
+  // already over; under full-suite load it could land after the edit and drop it (HS2-MHPHZB).
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let quietFrames = 0;
+        const observer = new MutationObserver(() => {
+          quietFrames = 0;
+        });
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+        const tick = () => {
+          quietFrames += 1;
+          if (quietFrames >= 10) {
+            observer.disconnect();
+            resolve();
+          } else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = 'playwright-css-live-edit';
@@ -4731,9 +4751,7 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('.app-tab-demo').screenshot({ path: '/private/tmp/hs2-gx51f7-app-tabs-narrow.png' });
   const demoTabStrip = page.locator('.app-tab-demo [data-kui-tab-list]');
-  expect(await demoTabStrip.evaluate((node) => node.scrollWidth)).toBeGreaterThan(
-    await demoTabStrip.evaluate((node) => node.clientWidth),
-  );
+  await expect.poll(() => demoTabStrip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
   await demoTabStrip.evaluate((node) => (node.scrollLeft = node.scrollWidth));
   await expect(page.getByRole('tab', { name: /Terminal tab/ })).toBeInViewport();
   await page.goto('/ux-demo?component=terminal-drawer');
@@ -4759,9 +4777,10 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   });
   await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);
   expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
-  expect(await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate((node) => node.scrollWidth)).toBeGreaterThan(
-    await terminalDrawer.locator('.kui-tab-bar__tabs').evaluate((node) => node.clientWidth),
-  );
+  // The strip overflows once its tabs have laid out; poll rather than sample one frame (HS2-MHPHZB).
+  await expect
+    .poll(() => terminalDrawer.locator('.kui-tab-bar__tabs').evaluate((node) => node.scrollWidth - node.clientWidth))
+    .toBeGreaterThan(0);
   await terminalDrawer
     .locator('.terminal-drawer__rail')
     .screenshot({ path: '/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png' });

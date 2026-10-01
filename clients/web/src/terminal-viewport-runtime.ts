@@ -259,6 +259,10 @@ function initializeTerminalViewport(
   }
   const scrollback = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || magnified);
   element.dataset.scrollbackLimit = String(scrollback);
+  // A magnified terminal stays unpainted until its first geometry pass: under a busy main thread its
+  // first frames could otherwise show the emulator at its constructor size (HS2-MHPHZB). Dedicated
+  // drawer terminals stay paintable (and focusable) from mount.
+  if (magnified && element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
   if (fixedDashboardGrid) {
     element.dataset.geometryReady = 'false';
     element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
@@ -539,6 +543,8 @@ function initializeTerminalViewport(
           element.dataset.containmentRows = '1';
         }
         element.dataset.geometryReady = 'true';
+        // A focus requested while the unfitted terminal was still hidden could not land; retry it now.
+        if (autoFocus && focusRequested && magnified) terminal.focus();
       }
     } catch {
       /* layout can be transiently zero-sized */

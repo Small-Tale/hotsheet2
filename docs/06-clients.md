@@ -2046,7 +2046,11 @@ that terminal is magnified, its matching grid card replaces the live preview wit
 terminal-background placeholder and disposes the preview viewer. Dismissing the magnified view
 remounts the grid preview at 80×24. This keeps exactly one local sizing claimant for that terminal
 through the transition instead of letting the preview and magnified viewport resize the PTY back
-and forth.
+and forth. Fixed grid previews and the magnified terminal never paint their emulator before the
+first geometry pass. Each starts with `data-geometry-ready="false"` (hidden), so a busy main thread
+cannot expose an unfitted constructor-size frame. Once fitted, the magnified terminal re-applies any
+focus that was requested while it was hidden. Dedicated drawer terminals stay paintable and
+focusable from mount (HS2-MHPHZB).
 Dedicated project-drawer terminals are likewise fitted to their actual interactive viewport
 and reserve one physical containment row;
 server size echoes cannot restore the edge row that would otherwise be clipped. Abrupt drawer

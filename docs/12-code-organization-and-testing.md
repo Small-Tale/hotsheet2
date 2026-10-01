@@ -461,6 +461,16 @@ browser flows that must prove real storage/classification/index behavior. Option
 `HOTSHEET_TEST_CLI_BIN` and `HOTSHEET_TEST_SERVER_BIN` paths select frozen verification
 binaries when other worktrees share the build cache.
 
+### Local Playwright parallelism and timeouts
+
+Every Playwright worker drives a browser against the one Vite dev server, so the suite is
+CPU-bound on a single machine. Locally, `playwright.config.ts` starts from half the cores and gives
+back one worker per core of existing load beyond that half, down to three workers
+(`scripts/playwright-workers.mjs`, HS2-MHPHZB). CI keeps Playwright's default, and `--workers`
+or `HOTSHEET_PLAYWRIGHT_WORKERS` overrides the count. Tests get 60 s and assertions 10 s so a
+busy machine slows a run down instead of failing it. Tests still must wait for events or
+state, never for fixed delays.
+
 HS2-AVXYCB exercises the actual reader's quoted inline answer against that server,
 checks the persisted ordinary note and cleared indexed/full-ticket review state, then
 reloads to confirm persistence. Provider discovery stays deterministic; ticket reads and

@@ -38,6 +38,18 @@ for (const width of [1280, 390]) {
       delete document.documentElement.dataset.theme;
     });
     const surrounding = () => page.locator('html').evaluate((node) => getComputedStyle(node).backgroundColor);
+    // Read the device-following light surface only after the theme change has rendered: on a busy
+    // machine an immediate read could catch the catalog override's frame (HS2-MHPHZB).
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          ),
+        ),
+    );
     const lightSurface = await surrounding();
     for (const colorScheme of ['dark', 'light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });

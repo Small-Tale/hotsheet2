@@ -478,3 +478,30 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
     expect(sockets).toHaveLength(2);
   });
 });
+
+describe('unpainted until the first geometry pass (HS2-MHPHZB)', () => {
+  it('marks a fresh magnified viewport not ready, keeps a settled one ready, and leaves dedicated ones paintable', () => {
+    const dedicated = element().viewport;
+    const disposeDedicated = mountTerminalViewportRuntime(dedicated, {
+      url: 'ws://lan/terminal',
+      viewerId: 'dedicated',
+    });
+    expect(dedicated.dataset.geometryReady).toBeUndefined();
+    disposeDedicated();
+    const magnifiedElement = () => {
+      const created = element().viewport;
+      (created as unknown as { closest: (selector: string) => unknown }).closest = (selector: string) =>
+        selector === '[data-fixed-aspect-terminal-card="magnified"]' ? {} : null;
+      return created;
+    };
+    const fresh = magnifiedElement();
+    const disposeFresh = mountTerminalViewportRuntime(fresh, { url: 'ws://lan/terminal', viewerId: 'fresh' });
+    expect(fresh.dataset.geometryReady).toBe('false');
+    disposeFresh();
+    const settled = magnifiedElement();
+    settled.dataset.geometryReady = 'true';
+    const disposeSettled = mountTerminalViewportRuntime(settled, { url: 'ws://lan/terminal', viewerId: 'settled' });
+    expect(settled.dataset.geometryReady).toBe('true');
+    disposeSettled();
+  });
+});

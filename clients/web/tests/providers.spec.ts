@@ -6460,8 +6460,9 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
     readerAttachments = reader.getByRole('tab', { name: /Attachments/ });
   const readerInfo = reader.getByRole('tab', { name: 'Info' });
   await expect(readerInfo).toHaveAttribute('aria-selected', 'true');
-  await readerInfo.focus();
-  await page.keyboard.press('End');
+  // The reader dialog places its own initial focus as it finishes opening; under a busy browser
+  // that can land after an early focus() and swallow the key, so press through the tab itself.
+  await readerInfo.press('End');
   await expect(readerAttachments).toHaveAttribute('aria-selected', 'true');
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-gzn2hz-tab-bar-reader-wide.png', fullPage: true });

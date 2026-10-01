@@ -98,6 +98,12 @@ test('reveals a restored terminal workspace atomically and separates All Project
     }
     Object.assign(window, { WebSocket: FakeSocket });
   });
+  // Hold the ticket lists until the test has observed the pending restore state; a fixed delay let a
+  // busy machine finish the restore before the assertions ran (HS2-MHPHZB).
+  let releaseTickets!: () => void;
+  const ticketsReleased = new Promise<void>((resolve) => {
+    releaseTickets = resolve;
+  });
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -131,7 +137,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
         ],
       });
     if (path.endsWith('/tickets')) {
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await ticketsReleased;
       return route.fulfill({ json: completedRows(other ? 'other' : 'demo', other ? 3 : 2) });
     }
     if (path.endsWith('/terminals')) {
@@ -170,6 +176,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-rpgs2s-atomic-restore-loading.png', fullPage: true });
+  releaseTickets();
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible({ timeout: 5_000 });
   await expect(restoring).toHaveCount(0);

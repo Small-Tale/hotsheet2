@@ -140,6 +140,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/provider-model-effort-menu.tsx # Reusable Provider/Model/Effort/Other wa-dropdown submenu group shared by the Drive options popup and the in-conversation model/effort popup; host-controlled via delegated data-action clicks (HS2-59DWHN)
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     scripts/sync-component-catalog-extension.mjs # Deterministically derives/checks the app-owned Kerf consumer catalog extension from the implemented UX inventory
+    scripts/playwright-workers.mjs # Load-aware local Playwright worker count used by playwright.config.ts (HS2-MHPHZB); tested by scripts/playwright-workers.test.mjs
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup and explicit unhealthy-server recovery, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)

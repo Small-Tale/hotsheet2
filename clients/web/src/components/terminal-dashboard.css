@@ -266,7 +266,9 @@
   pointer-events: none;
   user-select: none;
 }
-.terminal-viewport[data-grid-policy='dashboard-80x24'][data-geometry-ready='false'] .terminal {
+/* Fixed grids and the magnified terminal never paint before their first geometry pass (HS2-MHPHZB). */
+.terminal-viewport[data-grid-policy='dashboard-80x24'][data-geometry-ready='false'] .terminal,
+[data-fixed-aspect-terminal-card='magnified'] .terminal-viewport[data-geometry-ready='false'] .terminal {
   visibility: hidden;
 }
 .terminal-viewport[data-connection='connected'],
