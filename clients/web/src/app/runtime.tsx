@@ -211,7 +211,7 @@ import type {
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
-import { automaticInputFocusAllowed, isMobileViewport } from '../mobile-layout';
+import { automaticInputFocusAllowed, isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import {
   loadMobileTerminalColumns,
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
@@ -4927,11 +4927,18 @@ export async function startHotSheetWebClient() {
   wireWorkbench(appRoot, {
     id: APP_WORKBENCH_ID,
     panels: {
-      leftRail: { size: sidebarSize, storageKey: 'hotsheet.layout.app-left-rail.size', collapsed: sidebarCollapsed },
+      // Menus and dialogs a phone overlay launches keep it open (HS2-5APX20, Kerf `keepOpenOn`).
+      leftRail: {
+        size: sidebarSize,
+        storageKey: 'hotsheet.layout.app-left-rail.size',
+        collapsed: sidebarCollapsed,
+        keepOpenOn: isSidePanelPortal,
+      },
       rightRail: {
         size: inspectorSize,
         storageKey: 'hotsheet.layout.app-right-rail.size',
         collapsed: inspectorCollapsed,
+        keepOpenOn: isSidePanelPortal,
       },
     },
   });

@@ -36,3 +36,28 @@ export function shouldAutoOpenInspectorOnTap(input: {
 }): boolean {
   return input.mobile && !input.rail && !input.shiftKey && !input.metaKey && !input.ctrlKey;
 }
+
+/**
+ * The menu and dialog surfaces a phone side panel launches. They render outside the panel (a
+ * body-level portal or the browser's top layer), so `wireWorkbench` would read a press inside one as
+ * an outside press and close the panel under it; the rails pass {@link isSidePanelPortal} as Kerf's
+ * `keepOpenOn`, so a press in them keeps the panel open (HS2-5APX20, KF-5D6T81). The app's own
+ * backdrop and the main column never match, so a tap there still closes the panel.
+ */
+export const SIDE_PANEL_PORTAL_SELECTOR = [
+  'wa-dialog',
+  'wa-drawer',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[data-component="saved-view-context-menu"]',
+].join(', ');
+
+/** Whether a node in a press's composed path is the root of a surface a side panel launched. */
+export function isSidePanelPortal(node: Node): boolean {
+  // Text nodes, the document, and the window carry no `matches`; only elements can be a portal root.
+  return (
+    typeof (node as Partial<Element>).matches === 'function' && (node as Element).matches(SIDE_PANEL_PORTAL_SELECTOR)
+  );
+}

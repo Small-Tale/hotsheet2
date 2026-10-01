@@ -234,19 +234,27 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
     path: '/private/tmp/hs2-r7gpjm-view-menu-narrow.png',
     clip: { x: 0, y: 230, width: 420, height: 430 },
   });
+  // The phone sidebar overlay stays open through the menu and the dialog it launches: presses in
+  // those portals are not outside presses (HS2-5APX20, Kerf `keepOpenOn`).
+  const sidebarRail = page.locator('#app-left-rail');
   await narrowMenu.getByText('Delete view…').click();
+  await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
   const confirmation = page.locator('[data-component="saved-view-delete-dialog"]');
   await expect(confirmation).toContainText('Tickets are not affected.');
+  await page.screenshot({ path: '/private/tmp/hs2-5apx20-sidebar-delete-dialog-narrow.png', animations: 'disabled' });
   await confirmation.getByRole('button', { name: 'Delete View' }).click();
-  // Kerf's wireWorkbench reads the press inside the confirmation dialog as an outside press and closes
-  // the phone sidebar overlay (KF-5D6T81); reopen it to read the restored selection.
   await expect(confirmation).toHaveJSProperty('open', false);
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.getByRole('button', { name: 'Hide project sidebar' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-5apx20-sidebar-after-delete-narrow.png', animations: 'disabled' });
   await expect(page.getByRole('button', { name: /Queue/ })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('button', { name: /Documentation/ })).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   expect(views()).toEqual([]);
+  // An ordinary outside press, on the backdrop, still closes the overlay.
+  await page.locator('.app-shell__scrim').click({ position: { x: 700, y: 400 } });
+  await expect(sidebarRail).toHaveAttribute('data-collapsed', 'true');
 });
 
 test('scopes the search bar to a selected shared view without populating it (HS2-50R1YQ)', async ({ page }) => {

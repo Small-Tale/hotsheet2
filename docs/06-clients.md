@@ -187,7 +187,10 @@ and identity-less legacy entries remain conservatively blocking.
   rails' sizes. Each rail's Workbench `collapsed` signal is the one overlay state, and
   `wireWorkbench` drives it (HS2-Y1B1Y1): overlays are exclusive, an open overlay takes focus
   and keeps Tab inside it, Escape or a press outside closes it, and focus returns to the control
-  that opened it. Kerf's Workbench overlays carry no backdrop, so the shell keeps a passive
+  that opened it. A menu or dialog the overlay launches (a context menu, a popup menu, a
+  confirmation dialog) renders outside the panel, so each rail passes Kerf's `keepOpenOn` the
+  `isSidePanelPortal` policy (`src/mobile-layout.ts`): a press inside such a surface does not count
+  as an outside press, and the panel stays open beneath it (HS2-5APX20, `KF-5D6T81`). Kerf's Workbench overlays carry no backdrop, so the shell keeps a passive
   backdrop that dims the column and keeps the tap from reaching the control beneath it; Kerf
   reads that tap as the outside press. The left rail's surfaces (project sidebar, settings and
   notification navigators, terminal operations) expose panel parts — a toolbar, the standard
