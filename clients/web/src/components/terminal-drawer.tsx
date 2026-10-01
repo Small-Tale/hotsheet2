@@ -209,7 +209,7 @@ export function TerminalDrawer({
                     rootAttributes={{ 'data-terminal-drawer-create': 'true' }}
                     items={[
                       {
-                        label: 'Default shell',
+                        label: 'Terminal',
                         action: 'create-terminal-drawer-item',
                         icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
                         attributes: { 'data-item-id': 'default-shell' },

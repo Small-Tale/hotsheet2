@@ -3396,7 +3396,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await expect(codexTile).toHaveCount(1);
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('Default shell').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   const dedicated = drawer.locator('[data-component="terminal-session"]:not([hidden])');
@@ -3766,7 +3766,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   // The drawer itself lets the anchored popup escape its clip while the menu is open.
   await expect(region).toHaveCSS('overflow', 'visible');
   const menu = drawer.locator('[data-terminal-drawer-create]');
-  await expect(menu.getByText('Default shell')).toBeVisible();
+  await expect(menu.getByText('Terminal', { exact: true })).toBeVisible();
   await expect(menu.getByText('AI shell')).toBeVisible();
   await expect(menu.locator('[data-component="list-header"]')).toHaveCount(0);
   await expect(menu.locator('[data-lucide="chevron-right"]')).toHaveCount(0);
@@ -4984,7 +4984,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('Default shell').click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
   const viewport = drawer.locator(
     '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
   );

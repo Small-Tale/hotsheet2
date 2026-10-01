@@ -132,7 +132,7 @@ describe('TerminalDrawer', () => {
     expect(chat).toContain('data-component="app-tab"');
     expect(chat).toContain('data-action="close-ai-chat-tab"');
     expect(chat).toContain('data-presentation="embedded"');
-    for (const item of ['Default shell', 'AI shell', 'AI chat', 'Saved conversation…']) expect(chat).toContain(item);
+    for (const item of ['Terminal', 'AI shell', 'AI chat', 'Saved conversation…']) expect(chat).toContain(item);
     expect(chat).toContain('data-action="open-saved-conversation"');
     expect(chat).toContain('data-component="popup-menu"');
     expect(chat).toContain('data-terminal-drawer-create="true"');

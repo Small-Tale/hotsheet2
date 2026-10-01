@@ -2081,7 +2081,7 @@ its tabs until the rail is exhausted, then scrolls horizontally; its growing tra
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
 at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
 one-shot input focus; plus
-opens Kerf PopupMenu choices for Default shell, AI shell, AI chat, and saved conversations.
+opens Kerf PopupMenu choices for Terminal (the default shell, renamed by HS2-92C6AR), AI shell, AI chat, and saved conversations.
 The menu has no redundant heading or submenu chevrons. Its popup keeps the commands within the
 viewport as the drawer and window resize, and supplies native menu keyboard navigation
 (HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection
