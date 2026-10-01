@@ -160,6 +160,9 @@ pub struct AppState {
     /// Bumped by anything that changes tool installation or plugin state; a discovery memo
     /// scanned under an older generation is never served (HS2-QV8B7R).
     ai_tool_generation: Arc<AtomicU64>,
+    /// Memo lifetime and scan behind AI-tool discovery; injectable for hermetic tests
+    /// (HS2-BK350W).
+    ai_tool_discovery: Arc<ai_tool_discovery::AiToolDiscoveryConfig>,
     /// Checkout ids with a background setup refresh in flight; repeated opens coalesce.
     setup_refreshes: Arc<Mutex<std::collections::HashSet<String>>>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
@@ -349,6 +352,7 @@ impl AppState {
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
             model_catalogs: Arc::default(),
             ai_tool_generation: Arc::default(),
+            ai_tool_discovery: Arc::default(),
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
@@ -763,6 +767,41 @@ impl AppState {
     /// Override plugin search roots (for hermetic hosts and integration tests).
     pub fn with_plugin_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
         self.plugin_dirs = Arc::new(dirs);
+        self.model_catalogs = Arc::default();
+        self
+    }
+
+    /// Replace AI-tool discovery's memo lifetime and scan (hermetic tests; HS2-BK350W).
+    /// The scan receives the plugin search dirs, project root, model catalogs, and the
+    /// refresh flag, exactly like the production
+    /// [`hotsheet_aitools::discover_ai_tool_descriptors`]. Resets the memo.
+    pub fn with_ai_tool_discovery<F>(mut self, ttl: std::time::Duration, scanner: F) -> Self
+    where
+        F: Fn(
+                &[std::path::PathBuf],
+                &FsPath,
+                &mut hotsheet_aitools::ModelCatalogCache,
+                bool,
+            ) -> Vec<hotsheet_plugins::AiToolDescriptor>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.ai_tool_discovery = Arc::new(ai_tool_discovery::AiToolDiscoveryConfig {
+            ttl,
+            scanner: Arc::new(scanner),
+        });
+        self.model_catalogs = Arc::default();
+        self
+    }
+
+    /// Replace only the discovery memo lifetime, keeping the real scan (tests that
+    /// exercise real tool discovery but must not see the memo expire mid-test when that
+    /// scan is slow; HS2-BK350W). Resets the memo.
+    pub fn with_ai_tool_discovery_ttl(mut self, ttl: std::time::Duration) -> Self {
+        let scanner = self.ai_tool_discovery.scanner.clone();
+        self.ai_tool_discovery =
+            Arc::new(ai_tool_discovery::AiToolDiscoveryConfig { ttl, scanner });
         self.model_catalogs = Arc::default();
         self
     }
@@ -7062,6 +7101,7 @@ fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins:
     discover_ai_tools_memoized(
         &state.model_catalogs,
         &state.ai_tool_generation,
+        &state.ai_tool_discovery,
         &state.plugin_dirs,
         state.store.root(),
         refresh,
@@ -7074,6 +7114,7 @@ fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins:
 fn discover_ai_tools_memoized(
     catalogs: &Mutex<ai_tool_discovery::AiToolDiscoveryCache>,
     generation: &AtomicU64,
+    config: &ai_tool_discovery::AiToolDiscoveryConfig,
     plugin_dirs: &[std::path::PathBuf],
     root: &FsPath,
     refresh: bool,
@@ -7083,11 +7124,9 @@ fn discover_ai_tools_memoized(
     cache.discover(
         std::time::Instant::now(),
         generation,
-        ai_tool_discovery::AI_TOOL_DISCOVERY_TTL,
+        config.ttl,
         refresh,
-        |catalogs, refresh| {
-            hotsheet_aitools::discover_ai_tool_descriptors(plugin_dirs, root, catalogs, refresh)
-        },
+        |catalogs, refresh| (config.scanner)(plugin_dirs, root, catalogs, refresh),
     )
 }
 
@@ -7109,7 +7148,8 @@ impl AppState {
 /// loading far slower than the first (HS2-10R4VV). Move the whole scan (and its lock) to
 /// the blocking pool so the async workers stay free. See HS2-S66BZZ.
 ///
-/// The result is memoized for [`ai_tool_discovery::AI_TOOL_DISCOVERY_TTL`] under the same
+/// The result is memoized for the configured TTL (default
+/// [`ai_tool_discovery::AI_TOOL_DISCOVERY_TTL`]) under the same
 /// lock, so project activation's `/ai-tools` and `/ai-settings` share one scan and
 /// concurrent callers coalesce onto it; `refresh` bypasses and repopulates the memo
 /// (HS2-QV8B7R).
@@ -7119,10 +7159,18 @@ async fn discovered_ai_tools_off_runtime(
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
     let catalogs = state.model_catalogs.clone();
     let generation = state.ai_tool_generation.clone();
+    let config = state.ai_tool_discovery.clone();
     let plugin_dirs = state.plugin_dirs.clone();
     let root = state.store.root().to_path_buf();
     tokio::task::spawn_blocking(move || {
-        discover_ai_tools_memoized(&catalogs, &generation, &plugin_dirs, &root, refresh)
+        discover_ai_tools_memoized(
+            &catalogs,
+            &generation,
+            &config,
+            &plugin_dirs,
+            &root,
+            refresh,
+        )
     })
     .await
     .unwrap_or_default()

@@ -16,6 +16,8 @@
 //! - Tools installed or removed outside the server are picked up once the memo expires or
 //!   on the next `refresh=true` request.
 
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use hotsheet_aitools::ModelCatalogCache;
@@ -23,6 +25,31 @@ use hotsheet_plugins::AiToolDescriptor;
 
 /// How long a discovery result is reused before the next caller rescans.
 pub(crate) const AI_TOOL_DISCOVERY_TTL: Duration = Duration::from_secs(10);
+
+/// The scan a cache miss runs: plugin search dirs, project root, the model catalogs, and
+/// whether to refresh them. Production uses
+/// [`hotsheet_aitools::discover_ai_tool_descriptors`]; tests inject a hermetic scan.
+pub type AiToolScanner = Arc<
+    dyn Fn(&[PathBuf], &Path, &mut ModelCatalogCache, bool) -> Vec<AiToolDescriptor> + Send + Sync,
+>;
+
+/// How discovery runs: the memo lifetime and the scan behind it. Injectable per
+/// `AppState` so wall-clock-sensitive tests never depend on how long the real AI tools
+/// on `PATH` take to answer (HS2-BK350W).
+#[derive(Clone)]
+pub struct AiToolDiscoveryConfig {
+    pub(crate) ttl: Duration,
+    pub(crate) scanner: AiToolScanner,
+}
+
+impl Default for AiToolDiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            ttl: AI_TOOL_DISCOVERY_TTL,
+            scanner: Arc::new(hotsheet_aitools::discover_ai_tool_descriptors),
+        }
+    }
+}
 
 /// One completed discovery and the conditions it was produced under.
 struct DiscoveryMemo {
@@ -211,6 +238,9 @@ mod tests {
         let cache = Arc::new(Mutex::new(AiToolDiscoveryCache::default()));
         let scans = Arc::new(AtomicUsize::new(0));
         let barrier = Arc::new(Barrier::new(8));
+        // One fixed instant for every caller: the coalescing must not depend on how long
+        // the threads take to queue under load (HS2-BK350W).
+        let now = Instant::now();
         let handles = (0..8)
             .map(|_| {
                 let cache = cache.clone();
@@ -219,7 +249,7 @@ mod tests {
                 std::thread::spawn(move || {
                     barrier.wait();
                     let mut cache = cache.lock().unwrap();
-                    cache.discover(Instant::now(), 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
+                    cache.discover(now, 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
                         scans.fetch_add(1, Ordering::SeqCst);
                         std::thread::sleep(Duration::from_millis(50));
                         vec![tool("shared")]

@@ -622,8 +622,10 @@ async fn concurrent_ai_tool_discovery_stays_coherent_off_the_async_runtime() {
     // neither starve the async workers nor deadlock on the mutex (the mechanism behind a
     // second web client loading far slower than the first, HS2-10R4VV). Fire many discovery
     // requests at once and assert they all succeed and return an identical catalog.
+    // HS2-BK350W: the real scan can outlast the 10 s production TTL on a machine with
+    // many AI tools installed; a long TTL keeps "all callers coalesce onto one scan" true.
     let (_dir, state) = state();
-    let router = app(state);
+    let router = app(state.with_ai_tool_discovery_ttl(std::time::Duration::from_secs(3600)));
     let mut handles = Vec::new();
     for _ in 0..8 {
         let router = router.clone();
@@ -657,6 +659,7 @@ async fn prewarming_the_catalog_coexists_with_a_concurrent_first_client() {
     // `/ai-tools` request both take the shared catalog mutex on the blocking pool, so a
     // client that connects mid-warm must still get a coherent catalog without deadlocking.
     let (_dir, state) = state();
+    let state = state.with_ai_tool_discovery_ttl(std::time::Duration::from_secs(3600));
     state.prewarm_ai_catalog();
     let router = app(state);
     let first = router
@@ -736,17 +739,37 @@ async fn lists_ci_fixture(router: &axum::Router, uri: &str) -> bool {
 }
 
 /// HS2-QV8B7R: AI-tool discovery is memoized briefly, so `/ai-tools` and `/ai-settings`
-/// share one scan. The fixture plugin's manifest is read on every real scan, which makes
+/// share one scan. The fixture plugin's manifest is read on every scan, which makes
 /// the memo observable: removing the plugin is invisible until `refresh=true` rescans,
 /// and re-adding it is invisible until setting a tool up invalidates the memo.
+///
+/// HS2-BK350W: the scan is injected (it reads only the fixture dir, never the real AI
+/// tools on `PATH`, which took >28 s here) and the memo TTL is an hour, so expiry can
+/// never happen mid-test however slow the machine is. The scan log pins exactly which
+/// requests rescanned and with which refresh flag.
 #[tokio::test]
 async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
     let plugins = tempfile::tempdir().unwrap();
     write_memo_fixture_plugin(plugins.path());
     let (_dir, state) = state();
-    let router = app(state.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let scans = Arc::new(Mutex::new(Vec::<bool>::new()));
+    let scan_log = scans.clone();
+    let router = app(state
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_ai_tool_discovery(
+            std::time::Duration::from_secs(3600),
+            move |dirs, _root, _catalogs, refresh| {
+                scan_log.lock().unwrap().push(refresh);
+                dirs.iter()
+                    .flat_map(|dir| hotsheet_plugins::load_dir(dir))
+                    .filter_map(|plugin| hotsheet_plugins::ai_tool_descriptor(&plugin))
+                    .collect()
+            },
+        ));
+    let scan_flags = || scans.lock().unwrap().clone();
 
     assert!(lists_ci_fixture(&router, "/ai-tools").await);
+    assert_eq!(scan_flags(), [false]);
     // /ai-settings reuses the memoized discovery and still resolves a default tool.
     let settings = router
         .clone()
@@ -754,18 +777,22 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
         .await
         .unwrap();
     assert_eq!(settings.status(), StatusCode::OK);
+    assert_eq!(scan_flags(), [false], "/ai-settings shares the memo");
 
     // Hit: the plugin is gone from disk but the memo still answers.
     std::fs::remove_dir_all(plugins.path().join("ci-fixture")).unwrap();
     assert!(lists_ci_fixture(&router, "/ai-tools").await);
+    assert_eq!(scan_flags(), [false]);
 
     // Refresh bypasses the memo and repopulates it with the new state.
     assert!(!lists_ci_fixture(&router, "/ai-tools?refresh=true").await);
+    assert_eq!(scan_flags(), [false, true], "refresh rescans as refresh");
     write_memo_fixture_plugin(plugins.path());
     assert!(
         !lists_ci_fixture(&router, "/ai-tools").await,
         "the refreshed memo answers until it is invalidated"
     );
+    assert_eq!(scan_flags(), [false, true]);
 
     // Setting a tool up changes plugin state and invalidates the memo.
     let setup = router
@@ -775,6 +802,12 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
         .unwrap();
     assert_eq!(setup.status(), StatusCode::OK);
     assert!(lists_ci_fixture(&router, "/ai-tools").await);
+    let after_setup = scan_flags();
+    assert_eq!(
+        after_setup.last(),
+        Some(&false),
+        "setup invalidation forces an ordinary rescan: {after_setup:?}"
+    );
 
     // /ai-settings validation sees the same (memoized) discovery.
     let saved = router
@@ -787,6 +820,11 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
         .await
         .unwrap();
     assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        scan_flags(),
+        after_setup,
+        "/ai-settings validation reuses the post-setup memo"
+    );
 }
 
 #[tokio::test]
@@ -1869,7 +1907,7 @@ async fn tickets_require_the_secret() {
 #[tokio::test]
 async fn ticket_mutation_does_not_wait_for_remote_publication() {
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     fn git(path: &std::path::Path, args: &[&str]) {
         assert!(
@@ -1908,25 +1946,40 @@ async fn ticket_mutation_does_not_wait_for_remote_publication() {
     );
     git(dir.path(), &["push", "-q", "-u", "origin", "HEAD"]);
     let hook = remote.path().join("hooks/pre-receive");
-    std::fs::write(&hook, "#!/bin/sh\nsleep 2\n").unwrap();
+    // HS2-BK350W: the remote blocks until the test releases it (bounded so a failed run
+    // never leaves a hook spinning), instead of a fixed `sleep 2` raced against a tight
+    // wall-clock bound. The mutation can only complete while the hook is still blocked,
+    // so the ordering is asserted directly, independent of machine load.
+    let release = remote.path().join("release-push");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\ni=0\nwhile [ ! -e '{}' ] && [ $i -lt 1200 ]; do sleep 0.1; i=$((i+1)); done\n",
+            release.display()
+        ),
+    )
+    .unwrap();
     let mut permissions = std::fs::metadata(&hook).unwrap().permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(hook, permissions).unwrap();
 
-    let started = Instant::now();
-    let response = app(AppState::new(store, SECRET.into()).unwrap())
-        .oneshot(authed(
+    let response = tokio::time::timeout(
+        Duration::from_secs(60),
+        app(AppState::new(store, SECRET.into()).unwrap()).oneshot(authed(
             "POST",
             "/tickets",
             Some(r#"{"title":"fast local write"}"#),
-        ))
-        .await
-        .unwrap();
+        )),
+    )
+    .await
+    .expect("server mutation waited for the blocked remote publication")
+    .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     assert!(
-        started.elapsed() < Duration::from_secs(1),
-        "server mutation waited for the deliberately slow remote"
+        !release.exists(),
+        "the mutation returned while the remote was still held"
     );
+    std::fs::write(&release, "").unwrap();
 }
 
 #[tokio::test]
