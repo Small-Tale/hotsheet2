@@ -282,6 +282,34 @@ impl GitHubProvider {
         self.json(response)
     }
 
+    /// Every `reopened` issue event, oldest first (HS2-N3RMTV). Issue events page in
+    /// ascending order, so read every page; a short page ends the history.
+    fn reopen_times(&self, native_id: &str) -> Result<Vec<String>, ProviderError> {
+        const PAGE: usize = 100;
+        let mut reopens = Vec::new();
+        for page in 1..=MAX_HISTORY_PAGES {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issues/{native_id}/events?per_page={PAGE}&page={page}"
+                )),
+                None,
+            )?;
+            let events: Vec<GitHubIssueEvent> = self.json(response)?;
+            let len = events.len();
+            reopens.extend(
+                events
+                    .into_iter()
+                    .filter(|event| event.event == "reopened")
+                    .map(|event| event.created_at),
+            );
+            if len < PAGE {
+                break;
+            }
+        }
+        Ok(reopens)
+    }
+
     fn api_ticket(&self, issue: GitHubIssue, comments: Vec<GitHubComment>) -> ApiTicket {
         let labels = issue
             .labels
@@ -309,7 +337,7 @@ impl GitHubProvider {
                 }
             })
             .collect::<Vec<_>>();
-        let latest_confidence = note_trailer::latest_confidence(status, &notes);
+        let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
         let close_reason = if issue.state == "closed" {
             Some(
                 close_reason_from_labels(&labels).unwrap_or(match issue.state_reason.as_deref() {
@@ -663,7 +691,16 @@ impl TicketProvider for GitHubProvider {
     }
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
-        Ok(self.api_ticket(self.issue(native_id)?, self.comments(native_id)?))
+        let mut ticket = self.api_ticket(self.issue(native_id)?, self.comments(native_id)?);
+        if note_trailer::needs_reopen_history(ticket.status, &ticket.notes) {
+            let reopens = self.reopen_times(native_id)?;
+            ticket.latest_confidence = note_trailer::latest_confidence(
+                ticket.status,
+                &ticket.notes,
+                note_trailer::last_reopen(reopens.iter().map(String::as_str)),
+            );
+        }
+        Ok(ticket)
     }
 
     fn create(
@@ -942,6 +979,15 @@ struct GitHubLabel {
 struct GitHubUser {
     login: String,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubIssueEvent {
+    event: String,
+    created_at: String,
+}
+
+/// Upper bound on history pages read for one detail request (100 entries each).
+const MAX_HISTORY_PAGES: usize = 50;
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubComment {
@@ -1360,6 +1406,11 @@ mod tests {
                     {"id":92,"body":"Agreed.\n\nConfidence: 99%","created_at":"2026-08-26T00:03:00Z"}
                 ]),
             ),
+            // A scored completed issue reads its reopen history (HS2-N3RMTV): none here.
+            response(
+                200,
+                json!([{"event":"closed","created_at":"2026-08-27T00:00:00Z"}]),
+            ),
         ]);
         let github = provider(transport.clone());
         assert!(github.supports_note_confidence());
@@ -1389,6 +1440,109 @@ mod tests {
         assert_eq!(ticket.notes[1].text, "Agreed.\n\nConfidence: 99%");
         assert_eq!(ticket.notes[1].confidence, None);
         assert_eq!(ticket.latest_confidence, Some(82));
+        assert!(
+            requests[4]
+                .1
+                .ends_with("/issues/42/events?per_page=100&page=1")
+        );
+    }
+
+    fn scored_comment(id: u64, score: u64, created_at: &str) -> Value {
+        let body = note_trailer::compose_comment(
+            "Done.",
+            Some(hotsheet_model::Confidence::new(score).unwrap()),
+            hotsheet_model::Ulid::new(),
+        );
+        json!({"id": id, "body": body, "created_at": created_at})
+    }
+
+    fn event(event: &str, created_at: &str) -> Value {
+        json!({"event": event, "created_at": created_at})
+    }
+
+    /// HS2-N3RMTV: complete (scored) → reopen → re-complete without a new score reports no
+    /// confidence; a score written after the reopen wins. The `reopened` event sits on the
+    /// second events page, so the history is read to its end.
+    #[test]
+    fn latest_confidence_is_bounded_by_the_latest_reopen_event() {
+        let full_page = (0..100)
+            .map(|index| event("labeled", &format!("2026-08-26T00:00:{:02}Z", index % 60)))
+            .collect::<Vec<_>>();
+        let history = |tail: Vec<Value>| {
+            vec![
+                response(200, json!(full_page)),
+                response(
+                    200,
+                    json!(
+                        [
+                            vec![
+                                event("closed", "2026-08-26T01:00:00Z"),
+                                event("reopened", "2026-08-26T02:00:00Z"),
+                            ],
+                            tail
+                        ]
+                        .concat()
+                    ),
+                ),
+            ]
+        };
+        let old_score = scored_comment(91, 80, "2026-08-26T00:30:00Z");
+        let unscored = json!({"id":92,"body":"Back on it.","created_at":"2026-08-26T02:30:00Z"});
+        let mut responses = vec![
+            response(200, closed_issue(42, "completed", &[])),
+            response(200, json!([old_score.clone(), unscored.clone()])),
+        ];
+        responses.extend(history(vec![event("closed", "2026-08-26T03:00:00Z")]));
+        responses.push(response(200, closed_issue(42, "completed", &[])));
+        responses.push(response(
+            200,
+            json!([
+                old_score,
+                unscored,
+                scored_comment(93, 95, "2026-08-26T02:45:00Z")
+            ]),
+        ));
+        responses.extend(history(vec![event("closed", "2026-08-26T03:00:00Z")]));
+        let transport = FakeTransport::with(responses);
+        let github = provider(transport.clone());
+
+        let recompleted = github.get("42").unwrap();
+        assert_eq!(recompleted.notes[0].confidence, Some(80));
+        assert_eq!(
+            recompleted.latest_confidence, None,
+            "the pre-reopen score does not survive the re-completion"
+        );
+        assert_eq!(github.get("42").unwrap().latest_confidence, Some(95));
+        let requests = transport.requests.lock().unwrap();
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issues/42/events?per_page=100&page=1")
+        );
+        assert!(
+            requests[3]
+                .1
+                .ends_with("/issues/42/events?per_page=100&page=2")
+        );
+        assert_eq!(requests.len(), 8);
+    }
+
+    /// An open issue, or a closed one without a scored comment, never pays for history.
+    #[test]
+    fn unscored_or_open_issues_skip_the_history_request() {
+        let transport = FakeTransport::with(vec![
+            response(200, issue(42, "open widget", "details")),
+            response(200, json!([scored_comment(91, 80, "2026-08-26T00:30:00Z")])),
+            response(200, closed_issue(42, "completed", &[])),
+            response(
+                200,
+                json!([{"id":92,"body":"plain","created_at":"2026-08-26T00:30:00Z"}]),
+            ),
+        ]);
+        let github = provider(transport.clone());
+        assert_eq!(github.get("42").unwrap().latest_confidence, None);
+        assert_eq!(github.get("42").unwrap().latest_confidence, None);
+        assert_eq!(transport.requests.lock().unwrap().len(), 4);
     }
 
     fn closed_issue(number: u64, state_reason: &str, labels: &[&str]) -> Value {

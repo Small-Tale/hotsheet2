@@ -285,17 +285,36 @@ trailer becomes the note's `confidence` only when the comment carries that marke
 trailer is the final paragraph before it, after non-empty text, matching exactly
 `Confidence: <integer 0-100>%`. Ordinary human comments, prose on the same line,
 out-of-range or non-integer values, and earlier paragraphs never become a score. Jira
-writes the trailer as its own ADF paragraph. These providers derive `latest_confidence`
-for a completed or verified ticket from the newest scored comment, because comments
-alone carry no reopen history. The git provider instead bounds the score by the current
-completion cycle.
+writes the trailer as its own ADF paragraph.
 
-| Note capability                | git                      | GitHub Issues                       | GitLab        | Jira               |
-| ------------------------------ | ------------------------ | ----------------------------------- | ------------- | ------------------ |
-| `note_confidence` (append)     | yes                      | yes, comment trailer                | yes, trailer  | yes, ADF paragraph |
-| Note edit (text or confidence) | yes                      | no (`note_edit` capability off)     | no            | no                 |
-| Activity `summary`             | yes                      | no (falls back to the comment body) | no            | no                 |
-| `latest_confidence` derivation | current completion cycle | newest scored comment               | newest scored | newest scored      |
+`latest_confidence` is bounded by the current completion cycle on every provider
+(HS2-N3RMTV). A completed or verified ticket reports its newest scored note written
+strictly after the latest reopen, so an old score never survives a reopen unless the next
+completion reports a new one. A completing note written just before the close still
+counts. The git provider reads reopens from its activity notes. The external trackers
+use their native history:
+
+- **GitHub:** issue events with `event: "reopened"`, read page by page to the end.
+- **GitLab:** `resource_state_events` with `state: "reopened"`, following `x-next-page`.
+- **Jira:** changelog status items whose `from` status is in the `done` category and
+  whose `to` status is not. The changelog carries status ids only, so the status
+  catalogue (`GET /rest/api/3/status`) supplies the categories. It is requested only when
+  the changelog has a status transition. A move between two done statuses is not a reopen.
+
+The trade-off is request cost. History is read **only on detail reads**, and only when it
+can change the answer: the ticket is completed or verified _and_ at least one comment
+carries a score. List and page reads never fetch comments, so they report no
+`latest_confidence` for external tickets and make no extra request per ticket. A scored
+detail read pays one history request, or a few when the history spans several pages.
+That history is capped at 50 pages of 100 entries. Jira may add one status-catalogue
+request.
+
+| Note capability                | git                      | GitHub Issues                        | GitLab                                   | Jira                                           |
+| ------------------------------ | ------------------------ | ------------------------------------ | ---------------------------------------- | ---------------------------------------------- |
+| `note_confidence` (append)     | yes                      | yes, comment trailer                 | yes, trailer                             | yes, ADF paragraph                             |
+| Note edit (text or confidence) | yes                      | no (`note_edit` capability off)      | no                                       | no                                             |
+| Activity `summary`             | yes                      | no (falls back to the comment body)  | no                                       | no                                             |
+| `latest_confidence` derivation | current completion cycle | since last `reopened` event (detail) | since last reopened state event (detail) | since last changelog exit from `done` (detail) |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

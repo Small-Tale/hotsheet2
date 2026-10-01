@@ -11327,6 +11327,12 @@ async fn github_provider_route_carries_note_confidence_through_a_comment_trailer
                         "created_at": "2026-08-26T00:02:00Z"
                     }]),
                 ),
+                // HS2-N3RMTV: a scored closed issue reads its reopen history; a reopen
+                // before the scored comment does not bound it away.
+                github_response(
+                    200,
+                    serde_json::json!([{"event": "reopened", "created_at": "2026-08-26T00:01:00Z"}]),
+                ),
             ]
             .into(),
         ),

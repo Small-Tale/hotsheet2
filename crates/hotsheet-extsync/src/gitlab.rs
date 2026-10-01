@@ -153,6 +153,38 @@ impl GitLabProvider {
         self.json(response)
     }
 
+    /// Every `reopened` resource state event (HS2-N3RMTV), following `x-next-page`.
+    fn reopen_times(&self, native_id: &str) -> Result<Vec<String>, ProviderError> {
+        let mut reopens = Vec::new();
+        let mut page = String::from("1");
+        for _ in 0..MAX_HISTORY_PAGES {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issues/{native_id}/resource_state_events?per_page=100&page={page}"
+                )),
+                None,
+            )?;
+            let next = response
+                .headers
+                .get("x-next-page")
+                .filter(|value| !value.is_empty())
+                .cloned();
+            let events: Vec<GitLabStateEvent> = self.json(response)?;
+            reopens.extend(
+                events
+                    .into_iter()
+                    .filter(|event| event.state == "reopened")
+                    .map(|event| event.created_at),
+            );
+            match next {
+                Some(next) => page = next,
+                None => break,
+            }
+        }
+        Ok(reopens)
+    }
+
     fn notes(&self, native_id: &str) -> Result<Vec<GitLabNote>, ProviderError> {
         let response = self.request(
             "GET",
@@ -261,7 +293,7 @@ impl GitLabProvider {
                 }
             })
             .collect::<Vec<_>>();
-        let latest_confidence = note_trailer::latest_confidence(status, &notes);
+        let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
@@ -529,7 +561,16 @@ impl TicketProvider for GitLabProvider {
     }
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
-        Ok(self.ticket(self.issue(native_id)?, self.notes(native_id)?))
+        let mut ticket = self.ticket(self.issue(native_id)?, self.notes(native_id)?);
+        if note_trailer::needs_reopen_history(ticket.status, &ticket.notes) {
+            let reopens = self.reopen_times(native_id)?;
+            ticket.latest_confidence = note_trailer::latest_confidence(
+                ticket.status,
+                &ticket.notes,
+                note_trailer::last_reopen(reopens.iter().map(String::as_str)),
+            );
+        }
+        Ok(ticket)
     }
 
     fn create(&self, _: MutationContext, draft: ProviderDraft) -> Result<ApiTicket, ProviderError> {
@@ -718,6 +759,15 @@ struct GitLabIssue {
 struct GitLabUser {
     username: String,
 }
+
+#[derive(Debug, Deserialize)]
+struct GitLabStateEvent {
+    state: String,
+    created_at: String,
+}
+
+/// Upper bound on history pages read for one detail request (100 entries each).
+const MAX_HISTORY_PAGES: usize = 50;
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitLabNote {
@@ -949,10 +999,16 @@ mod tests {
                     response(201, json!({"id":5})),
                     response(200, closed.clone()),
                     response(200, notes.clone()),
+                    // A scored closed issue reads its reopen history (HS2-N3RMTV): none.
+                    response(
+                        200,
+                        json!([{"state":"closed","created_at":"2026-08-26T00:04:00Z"}]),
+                    ),
                     // The retry finds its marker and only re-reads the issue.
                     response(200, notes.clone()),
                     response(200, closed),
                     response(200, notes),
+                    response(200, json!([])),
                 ]
                 .into(),
             ),
@@ -983,6 +1039,11 @@ mod tests {
         assert_eq!(ticket.notes[0].confidence, Some(64));
         assert_eq!(ticket.latest_confidence, Some(64));
         assert_eq!(add().notes[0].confidence, Some(64));
+        assert!(
+            fake.requests.lock().unwrap()[4]
+                .1
+                .ends_with("/issues/7/resource_state_events?per_page=100&page=1")
+        );
         let requests = fake.requests.lock().unwrap();
         let posts = requests
             .iter()
@@ -1174,5 +1235,89 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
+    }
+
+    fn scored_note(id: u64, score: u64, created_at: &str) -> Value {
+        let body = note_trailer::compose_comment(
+            "Done.",
+            Some(hotsheet_model::Confidence::new(score).unwrap()),
+            hotsheet_model::Ulid::new(),
+        );
+        json!({"id": id, "body": body, "created_at": created_at})
+    }
+
+    /// HS2-N3RMTV: complete (scored) → reopen → re-complete without a new score reports no
+    /// confidence; a score written after the reopen wins. The `reopened` state event is on
+    /// the page `x-next-page` points at.
+    #[test]
+    fn latest_confidence_is_bounded_by_the_latest_reopened_state_event() {
+        let mut closed = issue(7, "closed");
+        closed["state"] = json!("closed");
+        let mut first_page = response(
+            200,
+            json!([{"state":"closed","created_at":"2026-08-26T01:00:00.000Z"}]),
+        );
+        first_page.headers.insert("x-next-page".into(), "2".into());
+        let second_page = || {
+            response(
+                200,
+                json!([
+                    {"state":"reopened","created_at":"2026-08-26T02:00:00.000Z"},
+                    {"state":"closed","created_at":"2026-08-26T03:00:00.000Z"}
+                ]),
+            )
+        };
+        let old = scored_note(5, 80, "2026-08-26T00:30:00.000Z");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, closed.clone()),
+                    response(200, json!([old.clone()])),
+                    first_page.clone(),
+                    second_page(),
+                    response(200, closed),
+                    response(
+                        200,
+                        json!([old, scored_note(6, 70, "2026-08-26T02:30:00.000Z")]),
+                    ),
+                    first_page,
+                    second_page(),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let gitlab = provider(fake.clone());
+        assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
+        assert_eq!(gitlab.get("7").unwrap().latest_confidence, Some(70));
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests[3]
+                .1
+                .ends_with("resource_state_events?per_page=100&page=2")
+        );
+        assert_eq!(requests.len(), 8);
+    }
+
+    #[test]
+    fn unscored_or_open_issues_skip_the_state_event_request() {
+        let mut closed = issue(7, "closed");
+        closed["state"] = json!("closed");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, issue(7, "open")),
+                    response(200, json!([scored_note(5, 80, "2026-08-26T00:30:00.000Z")])),
+                    response(200, closed),
+                    response(200, json!([])),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let gitlab = provider(fake.clone());
+        assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
+        assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
+        assert_eq!(fake.requests.lock().unwrap().len(), 4);
     }
 }

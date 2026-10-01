@@ -141,6 +141,53 @@ impl JiraProvider {
         self.json(response)
     }
 
+    /// When the issue left the `done` status category, from its changelog (HS2-N3RMTV).
+    /// Changelog items carry status ids but not categories, so the status catalogue is read
+    /// only when the changelog has a status transition at all.
+    fn reopen_times(&self, key: &str) -> Result<Vec<String>, ProviderError> {
+        let mut transitions = Vec::new();
+        let mut start_at = 0usize;
+        for _ in 0..MAX_HISTORY_PAGES {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!(
+                    "issue/{key}/changelog?startAt={start_at}&maxResults=100"
+                )),
+                None,
+            )?;
+            let page: JiraChangelog = self.json(response)?;
+            let len = page.values.len();
+            for history in page.values {
+                for item in history.items {
+                    if item.field == "status"
+                        && let (Some(from), Some(to)) = (item.from, item.to)
+                    {
+                        transitions.push((history.created.clone(), from, to));
+                    }
+                }
+            }
+            start_at += len;
+            if page.is_last || len == 0 {
+                break;
+            }
+        }
+        if transitions.is_empty() {
+            return Ok(Vec::new());
+        }
+        let response = self.request("GET", &self.endpoint("status"), None)?;
+        let done = self
+            .json::<Vec<JiraStatusEntry>>(response)?
+            .into_iter()
+            .filter(|status| status.status_category.key == "done")
+            .map(|status| status.id)
+            .collect::<std::collections::HashSet<_>>();
+        Ok(transitions
+            .into_iter()
+            .filter(|(_, from, to)| done.contains(from) && !done.contains(to))
+            .map(|(created, _, _)| created)
+            .collect())
+    }
+
     fn comments(&self, key: &str) -> Result<Vec<JiraComment>, ProviderError> {
         let response = self.request(
             "GET",
@@ -251,7 +298,7 @@ impl JiraProvider {
                 }
             })
             .collect::<Vec<_>>();
-        let latest_confidence = note_trailer::latest_confidence(status, &notes);
+        let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: issue.key.clone(),
@@ -517,7 +564,16 @@ impl TicketProvider for JiraProvider {
     }
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
-        Ok(self.ticket(self.issue(native_id)?, self.comments(native_id)?))
+        let mut ticket = self.ticket(self.issue(native_id)?, self.comments(native_id)?);
+        if note_trailer::needs_reopen_history(ticket.status, &ticket.notes) {
+            let reopens = self.reopen_times(native_id)?;
+            ticket.latest_confidence = note_trailer::latest_confidence(
+                ticket.status,
+                &ticket.notes,
+                note_trailer::last_reopen(reopens.iter().map(String::as_str)),
+            );
+        }
+        Ok(ticket)
     }
 
     fn create(&self, _: MutationContext, draft: ProviderDraft) -> Result<ApiTicket, ProviderError> {
@@ -741,6 +797,40 @@ struct JiraSearch {
     is_last: bool,
     issues: Vec<JiraIssue>,
 }
+#[derive(Debug, Deserialize)]
+struct JiraChangelog {
+    #[serde(default)]
+    values: Vec<JiraHistory>,
+    #[serde(rename = "isLast", default = "default_true")]
+    is_last: bool,
+}
+fn default_true() -> bool {
+    true
+}
+#[derive(Debug, Deserialize)]
+struct JiraHistory {
+    created: String,
+    #[serde(default)]
+    items: Vec<JiraHistoryItem>,
+}
+#[derive(Debug, Deserialize)]
+struct JiraHistoryItem {
+    field: String,
+    #[serde(default)]
+    from: Option<String>,
+    #[serde(default)]
+    to: Option<String>,
+}
+#[derive(Debug, Deserialize)]
+struct JiraStatusEntry {
+    id: String,
+    #[serde(rename = "statusCategory")]
+    status_category: JiraStatusCategory,
+}
+
+/// Upper bound on changelog pages read for one detail request (100 entries each).
+const MAX_HISTORY_PAGES: usize = 50;
+
 #[derive(Debug, Deserialize)]
 struct JiraComments {
     comments: Vec<JiraComment>,
@@ -1002,6 +1092,9 @@ mod tests {
                             {"id":"71","body":text_to_adf("Thanks.\n\nConfidence: 50%"),"created":"2026-08-26T00:03:00Z"}
                         ]}),
                     ),
+                    // A scored done issue reads its changelog (HS2-N3RMTV); with no status
+                    // transition the status catalogue is never requested.
+                    response(200, json!({"values":[],"isLast":true})),
                 ]
                 .into(),
             ),
@@ -1205,5 +1298,120 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
+    }
+
+    fn scored_comment(id: &str, score: u64, created: &str) -> Value {
+        let body = text_to_adf(&note_trailer::compose_comment(
+            "Shipped.",
+            Some(hotsheet_model::Confidence::new(score).unwrap()),
+            hotsheet_model::Ulid::new(),
+        ));
+        json!({"id": id, "body": body, "created": created})
+    }
+
+    fn status_change(created: &str, from: &str, to: &str) -> Value {
+        json!({"created": created, "items": [
+            {"field": "assignee", "from": null, "to": "acct-1"},
+            {"field": "status", "from": from, "to": to}
+        ]})
+    }
+
+    /// HS2-N3RMTV: the changelog's transitions out of the `done` category bound the score.
+    /// Two done statuses ("Done" 3, "Won't Do" 4) and paging by `startAt` are exercised; a
+    /// move between done statuses is not a reopen.
+    #[test]
+    fn latest_confidence_is_bounded_by_the_latest_changelog_reopen() {
+        let mut done = issue("ENG-9", "done");
+        done["fields"]["status"]["statusCategory"]["key"] = json!("done");
+        let changelog = || {
+            vec![
+                response(
+                    200,
+                    json!({"values":[
+                        status_change("2026-08-26T08:30:00.000+0800", "1", "3")
+                    ],"isLast":false}),
+                ),
+                response(
+                    200,
+                    json!({"values":[
+                        // Reopened Done -> In Progress at 01:00Z (09:00 +0800).
+                        status_change("2026-08-26T09:00:00.000+0800", "3", "2"),
+                        status_change("2026-08-26T02:00:00.000+0000", "2", "3"),
+                        // Done -> Won't Do stays done: not a reopen.
+                        status_change("2026-08-26T03:00:00.000+0000", "3", "4")
+                    ],"isLast":true}),
+                ),
+                response(
+                    200,
+                    json!([
+                        {"id":"1","statusCategory":{"key":"new"}},
+                        {"id":"2","statusCategory":{"key":"indeterminate"}},
+                        {"id":"3","statusCategory":{"key":"done"}},
+                        {"id":"4","statusCategory":{"key":"done"}}
+                    ]),
+                ),
+            ]
+        };
+        let old = scored_comment("70", 80, "2026-08-26T00:45:00.000+0000");
+        let mut responses = vec![
+            response(200, done.clone()),
+            response(200, json!({"comments":[old.clone()]})),
+        ];
+        responses.extend(changelog());
+        responses.push(response(200, done));
+        responses.push(response(
+            200,
+            json!({"comments":[old, scored_comment("71", 66, "2026-08-26T09:30:00.000+0800")]}),
+        ));
+        responses.extend(changelog());
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(responses.into()),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert_eq!(
+            jira.get("ENG-9").unwrap().latest_confidence,
+            None,
+            "the pre-reopen score does not survive the re-completion"
+        );
+        assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, Some(66));
+        let requests = fake.requests.lock().unwrap();
+        assert!(
+            requests[2]
+                .1
+                .ends_with("/issue/ENG-9/changelog?startAt=0&maxResults=100")
+        );
+        assert!(
+            requests[3]
+                .1
+                .ends_with("/issue/ENG-9/changelog?startAt=1&maxResults=100")
+        );
+        assert!(requests[4].1.ends_with("/rest/api/3/status"));
+        assert_eq!(requests.len(), 10);
+    }
+
+    #[test]
+    fn unscored_or_open_issues_skip_the_changelog_request() {
+        let mut done = issue("ENG-9", "done");
+        done["fields"]["status"]["statusCategory"]["key"] = json!("done");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, issue("ENG-9", "open")),
+                    response(
+                        200,
+                        json!({"comments":[scored_comment("70", 80, "2026-08-26T00:45:00.000+0000")]}),
+                    ),
+                    response(200, done),
+                    response(200, json!({"comments":[]})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, None);
+        assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, None);
+        assert_eq!(fake.requests.lock().unwrap().len(), 4);
     }
 }

@@ -332,7 +332,8 @@ should the fix also cover the dashboard dedicated view?
     reopen. The wire ticket exposes it as `latest_confidence`; the per-note value stays
     in Notes as history. A note edit may set, keep, or clear the score
     (HS2-CY4CWC); the derived value follows automatically. GitHub Issues, GitLab, and
-    Jira carry the score as a strict `Confidence: NN%` comment trailer (HS2-5YNASC,
+    Jira carry the score as a strict `Confidence: NN%` comment trailer (HS2-5YNASC) and
+    bound it by the tracker's native reopen history on detail reads (HS2-N3RMTV,
     [16-external-sync-interface.md](16-external-sync-interface.md)). Any provider that
     cannot carry it reports the `note_confidence` capability as unsupported and rejects a
     score (on append or edit) explicitly.

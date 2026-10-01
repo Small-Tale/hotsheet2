@@ -18,7 +18,7 @@
 //! be the final non-empty line before the marker, and it must match exactly
 //! `Confidence: <integer 0-100>%`.
 
-use hotsheet_model::{Confidence, Status};
+use hotsheet_model::{Confidence, Status, Timestamp};
 use hotsheet_ticketing::wire::ApiNote;
 
 /// Prefix of the HTML comment that identifies a Hot Sheet-authored comment.
@@ -76,17 +76,67 @@ fn parse_trailer(line: &str) -> Option<u8> {
         .map(Confidence::get)
 }
 
-/// The derived completion confidence for a provider whose comments carry no reopen history:
-/// a completed or verified ticket reports its newest scored note.
-pub fn latest_confidence(status: Status, notes: &[ApiNote]) -> Option<u8> {
+/// The derived completion confidence of an external ticket: a completed or verified ticket
+/// reports its newest scored note written in the current completion cycle, i.e. strictly
+/// after `last_reopen` (the tracker's latest reopen, when it has one). This mirrors the git
+/// provider's `ops::latest_confidence`: an old score never survives a reopen unless the next
+/// completion reports a new one, while a completing note written just before the close
+/// still counts (HS2-N3RMTV).
+pub fn latest_confidence(
+    status: Status,
+    notes: &[ApiNote],
+    last_reopen: Option<&str>,
+) -> Option<u8> {
     if !matches!(status, Status::Completed | Status::Verified) {
         return None;
     }
     notes
         .iter()
         .filter(|note| note.confidence.is_some())
-        .max_by(|left, right| left.created_at.as_str().cmp(right.created_at.as_str()))
+        .filter(|note| {
+            last_reopen.is_none_or(|reopen| {
+                chronological_cmp(&note.created_at, reopen) == std::cmp::Ordering::Greater
+            })
+        })
+        .max_by(|left, right| chronological_cmp(&left.created_at, &right.created_at))
         .and_then(|note| note.confidence)
+}
+
+/// Whether a detail read must fetch the tracker's reopen history: only a completed or
+/// verified ticket with at least one scored comment has a score a reopen could invalidate,
+/// so every other read skips the extra request.
+pub fn needs_reopen_history(status: Status, notes: &[ApiNote]) -> bool {
+    matches!(status, Status::Completed | Status::Verified)
+        && notes.iter().any(|note| note.confidence.is_some())
+}
+
+/// The latest of a tracker's reopen timestamps.
+pub fn last_reopen<'a>(reopens: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    reopens.into_iter().max_by(|a, b| chronological_cmp(a, b))
+}
+
+/// Chronological order of two tracker timestamps, falling back to text order when either
+/// is unparseable. Jira's `+0000` offsets are normalised to RFC3339 `+00:00` first.
+pub fn chronological_cmp(left: &str, right: &str) -> std::cmp::Ordering {
+    timestamp(left)
+        .chronological_cmp(&timestamp(right))
+        .unwrap_or_else(|| left.cmp(right))
+}
+
+fn timestamp(raw: &str) -> Timestamp {
+    let parsed = Timestamp::new(raw);
+    if parsed.is_valid() {
+        return parsed;
+    }
+    let bytes = raw.as_bytes();
+    let offset = bytes.len().checked_sub(5).map(|start| &bytes[start..]);
+    match offset {
+        Some([b'+' | b'-', rest @ ..]) if rest.iter().all(u8::is_ascii_digit) => {
+            let split = raw.len() - 2;
+            Timestamp::new(format!("{}:{}", &raw[..split], &raw[split..]))
+        }
+        _ => parsed,
+    }
 }
 
 #[cfg(test)]
@@ -169,9 +219,111 @@ mod tests {
             note("2026-08-26T00:03:00Z", None),
             note("2026-08-26T00:01:00Z", Some(60)),
         ];
-        assert_eq!(latest_confidence(Status::Completed, &notes), Some(90));
-        assert_eq!(latest_confidence(Status::Verified, &notes), Some(90));
-        assert_eq!(latest_confidence(Status::Started, &notes), None);
-        assert_eq!(latest_confidence(Status::Completed, &notes[2..3]), None);
+        assert_eq!(latest_confidence(Status::Completed, &notes, None), Some(90));
+        assert_eq!(latest_confidence(Status::Verified, &notes, None), Some(90));
+        assert_eq!(latest_confidence(Status::Started, &notes, None), None);
+        assert_eq!(
+            latest_confidence(Status::Completed, &notes[2..3], None),
+            None
+        );
+    }
+
+    fn note(created_at: &str, confidence: Option<u8>) -> ApiNote {
+        ApiNote {
+            id: created_at.into(),
+            kind: hotsheet_model::NoteKind::Regular,
+            created_at: created_at.into(),
+            edited_at: created_at.into(),
+            summary: None,
+            confidence,
+            text: String::new(),
+        }
+    }
+
+    /// HS2-N3RMTV: the completion-cycle transition matrix. Complete (scored) → reopen →
+    /// re-complete without a score reports nothing; a new score after the reopen wins; a
+    /// second reopen discards that one too; a completing note written before the close but
+    /// after the reopen still counts.
+    #[test]
+    fn a_reopen_bounds_the_score_to_the_current_completion_cycle() {
+        let first = note("2026-08-26T00:01:00Z", Some(80));
+        let reopen = "2026-08-26T00:02:00Z";
+        let unscored = note("2026-08-26T00:03:00Z", None);
+        assert_eq!(
+            latest_confidence(Status::Completed, std::slice::from_ref(&first), None),
+            Some(80)
+        );
+        assert_eq!(
+            latest_confidence(
+                Status::Completed,
+                &[first.clone(), unscored.clone()],
+                Some(reopen)
+            ),
+            None,
+            "re-completed without a new score"
+        );
+        let second = note("2026-08-26T00:04:00Z", Some(95));
+        let both = [first.clone(), unscored, second.clone()];
+        assert_eq!(
+            latest_confidence(Status::Verified, &both, Some(reopen)),
+            Some(95)
+        );
+        // Reopened again after the second score: nothing survives.
+        let reopens = ["2026-08-26T00:02:00Z", "2026-08-26T00:05:00Z"];
+        assert_eq!(
+            latest_confidence(Status::Completed, &both, last_reopen(reopens)),
+            None
+        );
+        // A note exactly at the reopen instant belongs to the old cycle (strictly after).
+        let at_reopen = note(reopen, Some(70));
+        assert_eq!(
+            latest_confidence(Status::Completed, &[at_reopen], Some(reopen)),
+            None
+        );
+        // Reopened (no longer completed): never a score.
+        assert_eq!(latest_confidence(Status::Started, &[second], None), None);
+    }
+
+    #[test]
+    fn history_is_needed_only_for_a_scored_completed_ticket() {
+        let scored = [note("2026-08-26T00:01:00Z", Some(80))];
+        let unscored = [note("2026-08-26T00:01:00Z", None)];
+        assert!(needs_reopen_history(Status::Completed, &scored));
+        assert!(needs_reopen_history(Status::Verified, &scored));
+        assert!(!needs_reopen_history(Status::Completed, &unscored));
+        assert!(!needs_reopen_history(Status::Completed, &[]));
+        assert!(!needs_reopen_history(Status::Started, &scored));
+        assert!(!needs_reopen_history(Status::NotStarted, &scored));
+    }
+
+    #[test]
+    fn tracker_timestamps_compare_chronologically_across_offsets() {
+        use std::cmp::Ordering;
+        // Jira's `+0000`/`+0800` offsets are not RFC3339 but still order by instant.
+        assert_eq!(
+            chronological_cmp(
+                "2026-08-26T08:00:00.000+0800",
+                "2026-08-26T00:30:00.000+0000"
+            ),
+            Ordering::Less
+        );
+        assert_eq!(
+            chronological_cmp("2026-08-26T00:00:00Z", "2026-08-26T00:00:00.000+0000"),
+            Ordering::Equal
+        );
+        assert_eq!(
+            chronological_cmp("2026-08-26T01:00:00.000Z", "2026-08-26T00:59:59Z"),
+            Ordering::Greater
+        );
+        // Unparseable text falls back to text order instead of panicking.
+        assert_eq!(chronological_cmp("b", "a"), Ordering::Greater);
+        assert_eq!(
+            last_reopen([
+                "2026-08-26T09:00:00.000+0800",
+                "2026-08-26T02:00:00.000+0000"
+            ]),
+            Some("2026-08-26T02:00:00.000+0000")
+        );
+        assert_eq!(last_reopen([]), None);
     }
 }
