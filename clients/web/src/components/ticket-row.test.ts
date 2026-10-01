@@ -7,6 +7,7 @@ import {
   getPriorityPresentation,
   normalizeTicketRowProps,
   TicketRow,
+  ticketRowConfidence,
   ticketRowIndicator,
   type TicketRowProps,
 } from './ticket-row';
@@ -355,5 +356,39 @@ describe('TicketRow', () => {
         }),
       ),
     ).not.toContain('data-action="toggle-row-up-next"');
+  });
+
+  it('shows the compact confidence pill only on completed and verified summaries (HS2-A0Q6G6)', () => {
+    const base: TicketRowProps = {
+      slug: 'HS2-SCORE',
+      title: 'Scored work',
+      status: 'completed',
+      priority: 'default',
+      category: 'task',
+      tags: ['client'],
+      latestConfidence: 82,
+    };
+    for (const status of ['completed', 'verified'] as const) {
+      for (const presentation of ['list', 'column'] as const) {
+        const markup = String(TicketRow({ ...base, status, presentation }));
+        expect(markup).toContain('data-component="confidence-badge"');
+        expect(markup).toContain('confidence-badge--compact');
+        expect(markup).toContain('data-band="assumed"');
+        expect(markup).toContain('aria-label="Confidence 82 percent"');
+        expect(markup).toContain('data-lucide="gauge"');
+        expect(markup).toContain('>82%<');
+        // The labeled form stays in the inspector/reader header.
+        expect(markup).not.toContain('Confidence 82%');
+        // The pill sits with the other metadata pills, before the tags.
+        expect(markup).toMatch(/ticket-list-row__metadata[\s\S]*confidence-badge[\s\S]*ticket-list-row__tags/u);
+      }
+    }
+    for (const status of ['not_started', 'started', 'backlog'] as const) {
+      expect(String(TicketRow({ ...base, status }))).not.toContain('confidence-badge');
+    }
+    expect(String(TicketRow({ ...base, latestConfidence: undefined }))).not.toContain('confidence-badge');
+    expect(String(TicketRow({ ...base, latestConfidence: 0 }))).toContain('data-band="unverified"');
+    expect(ticketRowConfidence({ status: 'verified', latestConfidence: 95 })).toBe(95);
+    expect(ticketRowConfidence({ status: 'started', latestConfidence: 95 })).toBeUndefined();
   });
 });

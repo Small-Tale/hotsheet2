@@ -12,6 +12,7 @@ import {
   resolveCategoryIcon,
   resolveCategoryIconColor,
 } from './category-presentation';
+import { ConfidenceBadge } from './confidence-badge';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
 
@@ -40,6 +41,11 @@ export interface TicketRowProps {
   /** Progress toward the live claim's ETA, shown beside the active-work indicator (HS2-XQMDQB). */
   claimEta?: ClaimEtaPresentation;
   updatedLabel?: string;
+  /**
+   * Derived AI completion confidence (0-100) of a completed/verified ticket (HS2-A0Q6G6).
+   * Shown as the compact pill among the row's other pills; ignored for any other status.
+   */
+  latestConfidence?: number;
   cutPending?: boolean;
   presentation?: TicketRowPresentation;
 }
@@ -52,6 +58,11 @@ const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: strin
   default: { icon: Minus, name: 'minus', color: 'var(--hs-priority-default)' },
   low: { icon: ChevronDown, name: 'chevron-down', color: 'var(--hs-priority-low)' },
 };
+
+/** The confidence a summary shows: only a completed/verified ticket carries one. */
+export function ticketRowConfidence(props: Pick<TicketRowProps, 'status' | 'latestConfidence'>): number | undefined {
+  return props.status === 'completed' || props.status === 'verified' ? props.latestConfidence : undefined;
+}
 
 export function getPriorityPresentation(priority: TicketPriority) {
   return priorityPresentation[priority];
@@ -118,6 +129,7 @@ export function TicketRow(raw: TicketRowProps) {
   const indicator = ticketRowIndicator(props);
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
+  const confidence = ticketRowConfidence(props);
   const category = categoryIcon ? (
     <span
       class="ticket-list-row__category"
@@ -213,6 +225,7 @@ export function TicketRow(raw: TicketRowProps) {
                 {props.agentName}
               </span>
               {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
+              {confidence !== undefined && <ConfidenceBadge value={confidence} />}
               {props.tags.length > 0 && (
                 <div class="ticket-list-row__tags">
                   {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}

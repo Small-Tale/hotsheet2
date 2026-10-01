@@ -39,6 +39,7 @@ const initialTickets: TicketRowProps[] = [
     categoryColor: '#ef4444',
     agentName: 'Claude',
     updatedLabel: '8m ago',
+    latestConfidence: 55,
   },
   {
     slug: 'HS2-RPVFA4',
@@ -50,6 +51,7 @@ const initialTickets: TicketRowProps[] = [
     categoryColor: '#14b8a6',
     agentName: 'AI',
     updatedLabel: '2h ago',
+    latestConfidence: 94,
   },
   {
     slug: 'HS2-JN3X4W',

@@ -2,13 +2,16 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Activity, Check, CircleAlert, FilePenLine, Gauge, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
+import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
 import { type InlineFeedbackReply, splitFeedbackPrompt } from '../feedback-replies';
 import { AIContentLabel } from './ai-content-label';
+import { ConfidenceBadge } from './confidence-badge';
 import { MarkdownPreview } from './markdown-preview';
+
+export { ConfidenceBadge, type ConfidenceBand, confidenceBand } from './confidence-badge';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'feedback_draft' | 'activity';
 export interface NoteCardProps {
@@ -32,48 +35,6 @@ export interface NoteCardProps {
   aiMayContainErrors?: boolean;
   /** AI completion confidence (0-100) recorded on this note; absent for unscored notes. */
   confidence?: number;
-}
-
-export type ConfidenceBand = 'verified' | 'assumed' | 'partial' | 'unverified';
-
-/** Map a 0-100 score to the documented anchor bands (docs/05 completion confidence rubric). */
-export function confidenceBand(value: number): ConfidenceBand {
-  if (value >= 90) return 'verified';
-  if (value >= 70) return 'assumed';
-  if (value >= 40) return 'partial';
-  return 'unverified';
-}
-
-const confidenceBandLabels: Record<ConfidenceBand, string> = {
-  verified: 'fully verified',
-  assumed: 'verified with minor assumptions',
-  partial: 'partially verified',
-  unverified: 'largely unverified',
-};
-
-/** Compact AI completion confidence badge (HS2-DWTJ43), tinted by its rubric band. */
-export function ConfidenceBadge({
-  value,
-  appearance = 'compact',
-}: {
-  value: number;
-  appearance?: 'compact' | 'labeled';
-}) {
-  const band = confidenceBand(value);
-  return (
-    <span
-      class={`confidence-badge confidence-badge--${appearance}`}
-      data-component="confidence-badge"
-      data-band={band}
-      data-confidence={value}
-      role="img"
-      aria-label={`Confidence ${value} percent`}
-      title={`AI-reported confidence ${value}%: ${confidenceBandLabels[band]}`}
-    >
-      <LucideIcon icon={Gauge} name="gauge" />
-      <span aria-hidden="true">{appearance === 'labeled' ? `Confidence ${value}%` : `${value}%`}</span>
-    </span>
-  );
 }
 
 const presentations = {

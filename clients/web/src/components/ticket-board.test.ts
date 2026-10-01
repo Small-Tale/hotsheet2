@@ -202,4 +202,21 @@ describe('TicketBoard', () => {
     expect(markup).not.toContain('data-component="empty-state"');
     expect(markup).not.toContain('No tickets in Verified');
   });
+
+  it('projects each card confidence through the shared summary (HS2-A0Q6G6)', () => {
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'active', title: 'Active', tickets: [{ ...ticket, latestConfidence: 30 }] },
+          {
+            id: 'done',
+            title: 'Done',
+            tickets: [{ ...ticket, slug: 'HS2-DONE', status: 'completed', latestConfidence: 30 }],
+          },
+        ],
+      }),
+    );
+    expect(markup.match(/data-component="confidence-badge"/gu)).toHaveLength(1);
+    expect(markup).toMatch(/data-ticket-slug="HS2-DONE"[\s\S]*data-band="unverified"/u);
+  });
 });

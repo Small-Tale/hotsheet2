@@ -85,4 +85,18 @@ describe('TicketList', () => {
     expect(listRule).toContain('width: 100%');
     expect(listRule).not.toContain('max-width');
   });
+
+  it('projects each row confidence through the shared summary (HS2-A0Q6G6)', () => {
+    const markup = String(
+      TicketList({
+        tickets: [
+          { ...ticket, status: 'verified', latestConfidence: 91 },
+          { ...ticket, slug: 'HS2-OPEN', latestConfidence: 91 },
+        ],
+        label: 'Tickets',
+      }),
+    );
+    expect(markup.match(/data-component="confidence-badge"/gu)).toHaveLength(1);
+    expect(markup).toContain('data-band="verified"');
+  });
 });

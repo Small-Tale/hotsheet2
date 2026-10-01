@@ -126,6 +126,12 @@ import {
 import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
 import {
+  ConfidenceBadgeDemo,
+  ConfidenceBadgeSettings,
+  confidenceBadgeSettings,
+  resetConfidenceBadgeDemo,
+} from './confidence-badge-demo';
+import {
   ConnectionDetailsDialogDemo,
   ConnectionDetailsDialogSettings,
   connectionDetailsScenario,
@@ -493,6 +499,7 @@ const commandRunDialogDemoRun: CommandRun = {
 
 function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
+  if (item.id === 'confidence-badge') return <ConfidenceBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
   if (item.id === 'ticket-row') return <TicketRowDemo />;
   if (item.id === 'ticket-list') return <TicketListDemo />;
@@ -1081,6 +1088,7 @@ function DemoApp() {
   const hasSettings =
     selected.id === 'tag-chip' ||
     selected.id === 'status-badge' ||
+    selected.id === 'confidence-badge' ||
     selected.id === 'ticket-row' ||
     selected.id === 'repository-status-popover' ||
     selected.id === 'connection-details-dialog' ||
@@ -1152,6 +1160,8 @@ function DemoApp() {
             <TagChipSettings />
           ) : selected.id === 'status-badge' ? (
             <StatusBadgeSettings />
+          ) : selected.id === 'confidence-badge' ? (
+            <ConfidenceBadgeSettings />
           ) : selected.id === 'ticket-row' ? (
             <TicketRowSettings />
           ) : selected.id === 'repository-status-popover' ? (
@@ -1959,6 +1969,7 @@ window.addEventListener('keydown', (event) => {
 delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
+  if (selectedId.value === 'confidence-badge') resetConfidenceBadgeDemo(root);
   if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
   if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
   if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
@@ -2101,6 +2112,12 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
     statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
   if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
   if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
+});
+delegate(root, 'change', '[data-settings="confidence-badge"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'value') confidenceBadgeSettings.value.value = control.value;
+  if (control.getAttribute('name') === 'appearance')
+    confidenceBadgeSettings.appearance.value = control.value as typeof confidenceBadgeSettings.appearance.value;
 });
 wireWorkspaceOverflowKeyboard(root);
 delegate(root, 'click', '[data-action="set-toolbar-group-demo-mode"]', (_event, target) => {
@@ -2563,6 +2580,9 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
       break;
     case 'claim-eta':
       ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;
+      break;
+    case 'confidence':
+      ticketRowSettings.confidence.value = control.value;
       break;
     case null:
       break;

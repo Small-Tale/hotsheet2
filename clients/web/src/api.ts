@@ -162,6 +162,8 @@ export interface TicketRow {
   worker_label?: string;
   legacy_number?: string;
   claim_count: number;
+  /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
+  latest_confidence?: number;
   claim_history?: ClaimEvent[];
   created_at?: string;
   updated_at?: string;

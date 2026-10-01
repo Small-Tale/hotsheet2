@@ -71,6 +71,7 @@ describe('UX demo catalog', () => {
       'ticket-priority-select',
       'ticket-status-menu',
       'status-badge',
+      'confidence-badge',
       'tag-chip',
       'ticket-reader',
       'markdown-editor',
@@ -130,7 +131,7 @@ describe('UX demo catalog', () => {
     expect(findDemo('list-header')).toMatchObject({ name: 'ListHeader', implemented: true });
     expect(findDemo('menu-item')).toBeUndefined();
     expect(findDemo('menu-header')).toBeUndefined();
-    expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
+    expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'confidence-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map((entry) => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
     expect(demosUsing('ticket-row').map((entry) => entry.id)).toEqual(['ticket-list', 'ticket-board-column']);
     expect(findDemo('ticket-board')?.uses).toEqual(['ticket-board-column']);
@@ -216,6 +217,7 @@ describe('UX demo catalog', () => {
     expect(ticketRow?.tags).toEqual(expect.arrayContaining(['Feature floor']));
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Uses').map((entry) => entry.id)).toEqual([
       'status-badge',
+      'confidence-badge',
       'tag-chip',
     ]);
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Used by').map((entry) => entry.id)).toEqual([

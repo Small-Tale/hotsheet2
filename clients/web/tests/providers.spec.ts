@@ -6533,6 +6533,128 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await expect(indicator).toHaveCount(0, { timeout: 13_000 });
 });
 
+test('shows the compact confidence pill on completed list rows and board cards and follows a re-score (HS2-A0Q6G6)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  // Real wire shape: `latest_confidence` is present only on scored completed/verified rows.
+  let done: typeof completedRow & { latest_confidence?: number } = { ...completedRow, latest_confidence: 92 };
+  let open = { ...row, latest_confidence: 50 };
+  const verified = { ...verifiedRow, latest_confidence: 35 },
+    unscored = { ...startedRow2 };
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const rows = [open, unscored, done, verified],
+      url = new URL(route.request().url());
+    return route.fulfill({
+      json: url.searchParams.has('page_size')
+        ? {
+            items: rows,
+            counts: {
+              total: 4,
+              queued: 4,
+              backlog: 0,
+              archive: 0,
+              open: 2,
+              up_next: 1,
+              active: 2,
+              started: 2,
+              completed_today: 1,
+            },
+          }
+        : rows,
+    });
+  });
+  const polls: import('@playwright/test').Route[] = [];
+  await page.route('**/ws/poll*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('since') === null)
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const pillOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-component="confidence-badge"]`);
+  const assertPills = async (score: string, band: string) => {
+    const pill = pillOf('HS2-DONE01');
+    await expect(pill).toHaveText(score);
+    await expect(pill).toHaveAttribute('data-band', band);
+    await expect(pill).toHaveAccessibleName(`Confidence ${score.replace('%', '')} percent`);
+    await expect(pill.locator('[data-lucide="gauge"]')).toHaveCount(1);
+    await expect(pill).not.toContainText('Confidence');
+    // Not-done tickets never show a score, even with a stale value on the wire.
+    await expect(pillOf('HS2-DEMO01')).toHaveCount(0);
+    await expect(pillOf('HS2-START02')).toHaveCount(0);
+  };
+  const assertVerified = async () => {
+    const verifiedPill = pillOf('HS2-VERIFY01');
+    if ((await page.locator('[data-ticket-slug="HS2-VERIFY01"]').count()) > 0) {
+      await expect(verifiedPill).toHaveText('35%');
+      await expect(verifiedPill).toHaveAttribute('data-band', 'unverified');
+    }
+  };
+  await assertPills('92%', 'verified');
+  await assertVerified();
+  // The pill sits on the metadata line with the other pills, at chip height.
+  const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="ticket-list-row"]').first();
+  await expect(doneRow).toHaveAttribute('data-presentation', 'list');
+  await expect(doneRow.locator('.ticket-list-row__metadata [data-component="confidence-badge"]')).toHaveCount(1);
+  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-list-wide.png' });
+
+  await page.getByLabel('Columns view').click();
+  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await assertPills('92%', 'verified');
+  await assertVerified();
+  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-columns-wide.png' });
+
+  // An agent corrects the score; the change stream refreshes the card's pill and band.
+  done = { ...done, latest_confidence: 61 };
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 2,
+      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      overflow: false,
+    },
+  });
+  await assertPills('61%', 'partial');
+  // Reopening removes the pill; scoring the open ticket again stays hidden until done.
+  done = { ...done, status: 'started', latest_confidence: undefined };
+  open = { ...open, latest_confidence: 99 };
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 3,
+      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      overflow: false,
+    },
+  });
+  await expect(pillOf('HS2-DONE01')).toHaveCount(0);
+  await expect(pillOf('HS2-DEMO01')).toHaveCount(0);
+
+  // Narrow list: the pill stays inside the row without overflow.
+  done = { ...done, status: 'completed', latest_confidence: 88 };
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 4,
+      events: [{ store: 'demo-checkout', kind: 'updated', id: '06', slug: 'HS2-DONE01' }],
+      overflow: false,
+    },
+  });
+  await page.getByLabel('List view').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrowPill = pillOf('HS2-DONE01').first();
+  await expect(narrowPill).toHaveText('88%');
+  const [pillBox, rowBox] = await Promise.all([narrowPill.boundingBox(), doneRow.boundingBox()]);
+  expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+  await page.waitForTimeout(800); // let the responsive panel transition settle before capturing evidence
+  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-list-narrow.png' });
+  await doneRow.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-row-narrow.png' });
+});
+
 test('shows ETA progress on actively claimed tickets in list and column views and follows a re-estimate (HS2-XQMDQB)', async ({
   page,
 }) => {
@@ -18642,7 +18764,10 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
       header = inspector.locator('.ticket-inspector__confidence'),
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
-      badge = card.locator('[data-component="confidence-badge"]');
+      badge = card.locator('[data-component="confidence-badge"]'),
+      rowPill = page.locator(
+        `[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"] [data-component="confidence-badge"]`,
+      );
     const openTicket = async () => {
       await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     };
@@ -18673,6 +18798,9 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await expect(badge).toHaveText('72%');
     await expect(badge).toHaveAttribute('data-band', 'assumed');
     await expect(badge).toHaveAccessibleName('Confidence 72 percent');
+    // HS2-A0Q6G6: the real server's list row carries latest_confidence as the compact pill.
+    await expect(rowPill).toHaveText('72%');
+    await expect(rowPill).toHaveAttribute('data-band', 'assumed');
     await expect(card).toContainText('Shipped and documented.');
     await card.scrollIntoViewIfNeeded();
     await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-corrected-wide.png' });
@@ -18685,6 +18813,8 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await expect(badge).toHaveCount(0);
     await expect(card).not.toHaveAttribute('data-confidence');
     await expect(header).toHaveCount(0);
+    // The real list row follows the cleared score (HS2-A0Q6G6).
+    await expect(rowPill).toHaveCount(0);
     await page.setViewportSize({ width: 1024, height: 700 });
     await card.scrollIntoViewIfNeeded();
     await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-cleared-narrow.png' });

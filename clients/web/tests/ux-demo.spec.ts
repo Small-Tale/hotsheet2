@@ -1579,6 +1579,48 @@ test('keeps feedback rectangle input within its frame budget in the UX demo', as
   await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-ux-demo-narrow.png', fullPage: true });
 });
 
+test('round-trips ConfidenceBadge appearance and band controls through reset and a post-reset edit (HS2-A0Q6G6)', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=confidence-badge');
+  const badge = page.locator('.component-stage [data-component="confidence-badge"]');
+  await expect(badge).toHaveText('82%');
+  await expect(badge).toHaveAttribute('data-band', 'assumed');
+  await expect(badge).toHaveClass(/confidence-badge--compact/);
+  await page.locator('[data-action="toggle-settings"]').click();
+  const inspector = page.getByRole('complementary', { name: 'ConfidenceBadge settings' });
+  const value = inspector.locator('wa-select[name="value"]');
+  const appearance = inspector.locator('wa-select[name="appearance"]');
+  const set = (control: typeof value, next: string) =>
+    control.evaluate((node: HTMLElement & { value: string }, to) => {
+      node.value = to;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, next);
+  for (const [score, band] of [
+    ['96', 'verified'],
+    ['55', 'partial'],
+    ['20', 'unverified'],
+  ] as const) {
+    await set(value, score);
+    await expect(badge).toHaveText(`${score}%`);
+    await expect(badge).toHaveAttribute('data-band', band);
+    await expect(badge).toHaveAccessibleName(`Confidence ${score} percent`);
+  }
+  await set(appearance, 'labeled');
+  await expect(badge).toHaveText('Confidence 20%');
+  await expect(badge).toHaveClass(/confidence-badge--labeled/);
+  await expect(badge.locator('[data-lucide="gauge"]')).toHaveCount(1);
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(value).toHaveJSProperty('value', '82');
+  await expect(appearance).toHaveJSProperty('value', 'compact');
+  await expect(badge).toHaveText('82%');
+  await expect(badge).toHaveAttribute('data-band', 'assumed');
+  await expect(badge).toHaveClass(/confidence-badge--compact/);
+  await set(value, '55');
+  await expect(badge).toHaveText('55%');
+  await expect(badge).toHaveAttribute('data-band', 'partial');
+});
+
 test('round-trips StatusBadge controls through reset and a post-reset edit', async ({ page }) => {
   await page.goto('/ux-demo?component=status-badge');
   const badge = page.locator('[data-component="status-badge"]');
@@ -1705,6 +1747,24 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(eta).toHaveCount(0);
   await setClaimEta('overrun');
   await expect(eta).toHaveCount(0);
+  // HS2-A0Q6G6: a verified row shows the compact confidence pill; changing the score
+  // updates its percentage and band, and unscored removes it.
+  const confidence = inspector.locator('wa-select[name="confidence"]');
+  const confidencePill = row.locator('[data-component="confidence-badge"]');
+  const setConfidence = (value: string) =>
+    confidence.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  await expect(confidencePill).toHaveCount(0);
+  await setConfidence('82');
+  await expect(confidencePill).toHaveText('82%');
+  await expect(confidencePill).toHaveAttribute('data-band', 'assumed');
+  await expect(confidencePill).toHaveAccessibleName('Confidence 82 percent');
+  await expect(confidencePill.locator('[data-lucide="gauge"]')).toHaveCount(1);
+  await setConfidence('25');
+  await expect(confidencePill).toHaveText('25%');
+  await expect(confidencePill).toHaveAttribute('data-band', 'unverified');
   const feedbackNeeded = inspector.locator('wa-checkbox[name="feedback-needed"]');
   await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
@@ -1768,6 +1828,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(busy).toHaveJSProperty('checked', true);
   await expect(claimEta).toHaveJSProperty('value', 'estimate');
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
+  await expect(confidence).toHaveJSProperty('value', 'none');
+  await expect(confidencePill).toHaveCount(0);
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
@@ -1792,6 +1854,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(eta).toHaveCount(0);
   await setClaimEta('estimate');
   await expect(eta).toHaveText('~45m left');
+  // A started row never shows a score, even when one is set.
+  await setConfidence('94');
+  await expect(confidencePill).toHaveCount(0);
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(row).toHaveAttribute('data-selected', 'true');

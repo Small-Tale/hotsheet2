@@ -218,10 +218,14 @@ export const demoCatalog: DemoCategory[] = [
             true,
             ['ticket-row'],
           ),
-          demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, [
-            'status-badge',
-            'tag-chip',
-          ]),
+          demo(
+            'ticket-row',
+            'TicketRow',
+            'Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.',
+            'feature-floor',
+            true,
+            ['status-badge', 'confidence-badge', 'tag-chip'],
+          ),
         ],
       },
       {
@@ -345,6 +349,13 @@ export const demoCatalog: DemoCategory[] = [
             'status-badge',
             'StatusBadge',
             'Readable ticket state with reinforcing iconography.',
+            'feature-floor',
+            true,
+          ),
+          demo(
+            'confidence-badge',
+            'ConfidenceBadge',
+            'Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.',
             'feature-floor',
             true,
           ),

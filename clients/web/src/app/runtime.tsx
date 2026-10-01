@@ -2189,6 +2189,7 @@ export async function startHotSheetWebClient() {
     claimEta: claimEtaPresentation(ticket, claimEtaClock.value),
     agentName: ticket.worker_label || ticket.claimed_by || 'AI',
     updatedLabel: ago(ticket.updated_at),
+    latestConfidence: ticket.latest_confidence,
   });
 
   function projectTabTicketRows(projectId: string) {

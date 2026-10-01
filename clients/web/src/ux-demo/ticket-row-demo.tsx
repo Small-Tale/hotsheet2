@@ -14,6 +14,15 @@ export const TICKET_ROW_CLAIM_ETA: Record<Exclude<TicketRowClaimEta, 'none'>, Cl
   overrun: { kind: 'overrun', label: 'Soon', title: 'Past its estimate by about 10 minutes' },
 };
 
+/** Completion confidence choices the demo exposes (HS2-A0Q6G6); `none` is unscored. */
+const TICKET_ROW_CONFIDENCE_CHOICES: SelectChoice[] = [
+  { value: 'none', label: 'Unscored' },
+  { value: '94', label: '94% (fully verified)' },
+  { value: '82', label: '82% (minor assumptions)' },
+  { value: '55', label: '55% (partially verified)' },
+  { value: '25', label: '25% (largely unverified)' },
+];
+
 export const ticketRowSettings = {
   title: signal('Build the first client ticket list'),
   status: signal<TicketStatus>('started'),
@@ -27,6 +36,8 @@ export const ticketRowSettings = {
   selected: signal(false),
   busy: signal(true),
   claimEta: signal<TicketRowClaimEta>('estimate'),
+  /** Derived completion confidence; shown only for completed/verified rows (HS2-A0Q6G6). */
+  confidence: signal<string>('none'),
   categoryIcon: signal('sparkles'),
   categoryColor: signal('#3b82f6'),
   agentName: signal('Claude'),
@@ -47,6 +58,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
   ticketRowSettings.claimEta.value = 'estimate';
+  ticketRowSettings.confidence.value = 'none';
   ticketRowSettings.categoryIcon.value = 'sparkles';
   ticketRowSettings.categoryColor.value = '#3b82f6';
   ticketRowSettings.agentName.value = 'Claude';
@@ -62,6 +74,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         tags: ticketRowSettings.tags.value,
         'category-icon': ticketRowSettings.categoryIcon.value,
         'claim-eta': ticketRowSettings.claimEta.value,
+        confidence: ticketRowSettings.confidence.value,
         'category-color': ticketRowSettings.categoryColor.value,
         agent: ticketRowSettings.agentName.value,
         updated: ticketRowSettings.updatedLabel.value,
@@ -102,6 +115,8 @@ export function TicketRowDemo() {
           categoryColor: ticketRowSettings.categoryColor.value,
           agentName: ticketRowSettings.agentName.value,
           updatedLabel: ticketRowSettings.updatedLabel.value,
+          latestConfidence:
+            ticketRowSettings.confidence.value === 'none' ? undefined : Number(ticketRowSettings.confidence.value),
         })}
       </div>
       <p class="component-stage__event" aria-live="polite">
@@ -177,6 +192,12 @@ export function TicketRowSettings() {
           { value: 'estimate', label: 'On track (~45m left)' },
           { value: 'overrun', label: 'Past its estimate (Soon)' },
         ]}
+      />
+      <Select
+        name="confidence"
+        label="Completion confidence (shown when completed or verified)"
+        value={ticketRowSettings.confidence.value}
+        choices={TICKET_ROW_CONFIDENCE_CHOICES}
       />
       <wa-button type="button" data-action="reset-settings">
         Reset

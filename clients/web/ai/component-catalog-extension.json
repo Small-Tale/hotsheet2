@@ -466,9 +466,9 @@
       "id": "ticket-row",
       "name": "TicketRow",
       "kind": "component",
-      "purpose": "Dense ticket summary and selection target.",
+      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
       "useWhen": [
-        "Hot Sheet needs dense ticket summary and selection target."
+        "Hot Sheet needs dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketRow behavior."
@@ -754,6 +754,28 @@
         "margin": "none",
         "border": "self",
         "padding": "self"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "confidence-badge",
+      "name": "ConfidenceBadge",
+      "kind": "component",
+      "purpose": "Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.",
+      "useWhen": [
+        "Hot Sheet needs banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConfidenceBadge behavior."
+      ],
+      "publicClasses": [
+        "confidence-badge"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
       },
       "documentation": "docs/ux-components.md"
     },

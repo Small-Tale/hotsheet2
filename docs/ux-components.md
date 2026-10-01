@@ -661,7 +661,11 @@ always retain native clipboard behavior.
   floats right, allowing later lines of a long title to use the space beneath it. A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
-  collapsing metadata at narrow widths. It also includes blue selection, keyboard
+  collapsing metadata at narrow widths. A completed or verified ticket with a derived
+  `latest_confidence` adds the compact `ConfidenceBadge` pill (gauge icon + percentage,
+  band-tinted) just before its tags in both list rows and board cards (HS2-A0Q6G6).
+  Any other status never shows a score, even when the wire still carries one. The
+  labeled "Confidence NN%" form stays in the inspector/reader header. It also includes blue selection, keyboard
   selection, and one shared right-click context menu. Plainly reactivating the one
   already-selected, fully loaded row is inert, including while an inspector editor owns
   focus; modifier selection and double-click reader opening remain active. The real TicketList and TicketBoard
@@ -1083,6 +1087,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact
     sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
+  - `ConfidenceBadge` — **built** (`components/confidence-badge.tsx`, HS2-A0Q6G6): the
+    banded AI completion confidence. The `compact` pill is used on note cards and ticket
+    list/board summaries; `labeled` is used in the inspector/reader header. Its own
+    `/ux-demo` entry exposes both appearances across all four rubric bands
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection` — section header remains outside its visually distinct

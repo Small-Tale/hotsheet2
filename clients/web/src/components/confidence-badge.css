@@ -1,0 +1,47 @@
+/* AI completion confidence (HS2-DWTJ43): tinted by rubric band through Web Awesome tokens. */
+.confidence-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  height: remify(24px);
+  padding: 0 var(--kui-space-xs);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+  font-size: var(--wa-font-size-2xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--wa-font-weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+.confidence-badge svg {
+  width: remify(12px);
+  height: remify(12px);
+  flex: none;
+}
+.confidence-badge--labeled {
+  height: remify(32px);
+  padding: 0 var(--kui-space-s);
+  font-size: var(--wa-font-size-xs);
+}
+.confidence-badge--labeled svg {
+  width: remify(16px);
+  height: remify(16px);
+}
+.confidence-badge[data-band='verified'] {
+  color: var(--wa-color-success-on-quiet);
+  background: var(--wa-color-success-fill-quiet);
+}
+.confidence-badge[data-band='assumed'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.confidence-badge[data-band='partial'] {
+  color: var(--wa-color-warning-on-quiet);
+  background: var(--wa-color-warning-fill-quiet);
+}
+.confidence-badge[data-band='unverified'] {
+  color: var(--wa-color-danger-on-quiet);
+  background: var(--wa-color-danger-fill-quiet);
+}

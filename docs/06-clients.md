@@ -2690,7 +2690,11 @@ guessed from their prose or author-like display text.
 compact Lucide `gauge` badge with the percentage in its header beside the timestamp,
 tinted by rubric band through Web Awesome tokens (90-100 success, 70-89 brand, 40-69
 warning, below 40 danger) and named "Confidence NN percent" for assistive technology.
-Every scored note keeps its badge, so earlier completions remain visible as history. A
+Every scored note keeps its badge, so earlier completions remain visible as history.
+List rows and board cards show the same compact pill (gauge icon + percentage, band
+tint) beside their other pills for a completed or verified ticket. The pill reads the
+list row's `latest_confidence`, so low-confidence completions stand out while browsing
+(HS2-A0Q6G6). A
 `completed`/`verified` ticket with a server-derived `latest_confidence` shows a labeled
 "Confidence NN%" badge plus "Reported by the completing AI" in the inspector and reader
 header, beside the other header status banners; it disappears as soon as the ticket is
