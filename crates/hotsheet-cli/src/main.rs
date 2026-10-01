@@ -507,6 +507,13 @@ enum Cmd {
         #[arg(long)]
         index: Option<PathBuf>,
     },
+    /// Compare reported completion confidence with later outcomes (reopened vs. verified)
+    /// per rubric band, to calibrate the bands over time (HS2-RD4M29).
+    ConfidenceReport {
+        /// Print the full report (bands and every completion event) as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
     /// by model, and by day. DB-free: settled rollup files + a live scan of the raw tail.
     Metrics {
@@ -1378,6 +1385,7 @@ fn main() -> Result<()> {
         Cmd::Doctor { project } => cmd_doctor(&cli.path, &project),
         Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
         Cmd::Worklist => cmd_worklist(&cli.path, &cwd),
+        Cmd::ConfidenceReport { json } => cmd_confidence_report(&cli.path, json),
         Cmd::Metrics {
             roll_up,
             prune_before,
@@ -4324,6 +4332,50 @@ fn validate_note_modifiers(
         }
         _ => Ok(()),
     }
+}
+
+fn cmd_confidence_report(path: &Path, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let tickets = store.list_tickets_resilient()?.tickets;
+    let report = hotsheet_ticketing::calibration::calibration(&tickets);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    println!(
+        "Completion confidence calibration: {} completions, {} scored",
+        report.completions, report.scored
+    );
+    println!(
+        "{:<11} {:>6} {:>11} {:>8} {:>8} {:>7} {:>11} {:>9}",
+        "band", "range", "completions", "verified", "reopened", "pending", "reopen-rate", "mean"
+    );
+    for band in &report.bands {
+        let rate = band
+            .reopen_rate
+            .map(|rate| format!("{:.0}%", rate * 100.0))
+            .unwrap_or_else(|| "-".into());
+        let mean = band
+            .mean_confidence
+            .map(|mean| format!("{mean:.1}"))
+            .unwrap_or_else(|| "-".into());
+        println!(
+            "{:<11} {:>6} {:>11} {:>8} {:>8} {:>7} {:>11} {:>9}",
+            band.band,
+            band.range,
+            band.completions,
+            band.verified,
+            band.reopened,
+            band.pending,
+            rate,
+            mean
+        );
+    }
+    println!(
+        "Reopen rate counts resolved completions only (verified or reopened). A well-calibrated \
+         rubric reopens less as the band rises."
+    );
+    Ok(())
 }
 
 fn cmd_close(

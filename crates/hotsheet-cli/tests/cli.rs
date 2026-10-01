@@ -5253,3 +5253,78 @@ fn ai_actor_completion_requires_a_confidence_score() {
         .success()
         .stdout(predicate::str::contains("\"latest_confidence\": 90"));
 }
+
+/// HS2-RD4M29: `confidence-report` compares reported completion confidence with what
+/// happened next (reopened vs. verified) per rubric band, as text and JSON.
+#[test]
+fn confidence_report_compares_scores_with_reopen_and_verified_outcomes() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    hs(p)
+        .arg("confidence-report")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("0 completions, 0 scored"));
+    let complete = |slug: &str, score: &str| {
+        hs(p)
+            .args(["edit", slug, "--status", "completed", "--note"])
+            .arg(format!("## Confidence\n{score}"))
+            .args(["--note-confidence", score])
+            .assert()
+            .success();
+    };
+    let overconfident = new_ticket(p, "Overconfident");
+    complete(&overconfident, "95");
+    hs(p)
+        .args(["edit", &overconfident, "--status", "started"])
+        .assert()
+        .success();
+    complete(&overconfident, "65");
+    hs(p)
+        .args(["edit", &overconfident, "--status", "verified"])
+        .assert()
+        .success();
+    let unscored = new_ticket(p, "Unscored");
+    hs(p)
+        .args(["edit", &unscored, "--status", "completed"])
+        .assert()
+        .success();
+
+    hs(p)
+        .arg("confidence-report")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("3 completions, 2 scored"))
+        .stdout(
+            predicate::str::is_match(r"verified\s+90-100\s+1\s+0\s+1\s+0\s+100%\s+95\.0").unwrap(),
+        )
+        .stdout(predicate::str::is_match(r"partial\s+40-69\s+1\s+1\s+0\s+0\s+0%\s+65\.0").unwrap())
+        .stdout(predicate::str::is_match(r"unscored\s+-\s+1\s+0\s+0\s+1\s+-\s+-").unwrap());
+    let json = hs(p)
+        .args(["confidence-report", "--json"])
+        .assert()
+        .success();
+    let report: serde_json::Value = serde_json::from_slice(&json.get_output().stdout).unwrap();
+    assert_eq!(report["completions"], 3);
+    assert_eq!(report["scored"], 2);
+    let outcomes = report["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| {
+            (
+                event["confidence"].as_u64(),
+                event["outcome"].as_str().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        outcomes,
+        [
+            (Some(95), "reopened"),
+            (Some(65), "verified"),
+            (None, "pending")
+        ]
+    );
+}

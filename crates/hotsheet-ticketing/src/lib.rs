@@ -13,6 +13,7 @@ pub mod activity_distillation;
 pub mod actor;
 pub mod analytics;
 pub mod annotation_activity;
+pub mod calibration;
 pub mod checkout_order;
 pub mod checkout_page;
 pub mod corrupt_cache;

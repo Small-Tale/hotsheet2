@@ -1132,8 +1132,21 @@ fn chronological_note_cmp(a: &Note, b: &Note) -> std::cmp::Ordering {
         .then(a.id.cmp(&b.id))
 }
 
+/// The target status of an automatic status-transition activity note, if it is one.
+pub(crate) fn transition_target(note: &Note) -> Option<Status> {
+    if note.kind != NoteKind::Activity {
+        return None;
+    }
+    note.text
+        .lines()
+        .next()?
+        .strip_prefix("Status changed from ")?
+        .rsplit_once(" to ")
+        .and_then(|(_, to)| status_from_label(to))
+}
+
 /// Whether an automatic activity note records the ticket returning to active work.
-fn note_reopens_ticket(note: &Note) -> bool {
+pub(crate) fn note_reopens_ticket(note: &Note) -> bool {
     if note.kind != NoteKind::Activity {
         return false;
     }

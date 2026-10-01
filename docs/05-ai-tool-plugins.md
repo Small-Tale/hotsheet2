@@ -246,6 +246,17 @@ Rules are role-specific, and their feedback is written for the reader:
 The bundled instruction blocks tell an AI to identify itself as the `ai` actor. Further
 role-specific rules and human-tailored feedback are follow-up work.
 
+**Calibration (HS2-RD4M29).** `hotsheet-cli confidence-report [--json]` reads each
+ticket's own history (`hotsheet-ticketing/src/calibration.rs`):
+
+- **Events:** every completion is one event, scored with the newest score of its cycle.
+  Its outcome is _reopened_ if a later reopen or Not Working report ends the cycle,
+  _verified_ if it reached Verified first, and _pending_ otherwise.
+- **Per-band totals:** for each rubric band (and unscored completions), the report gives
+  counts, the reopen rate over resolved completions, and the mean score.
+- **Reading it:** a well-calibrated rubric reopens less as the band rises, so these numbers
+  are the evidence for tuning the anchors. The JSON lists every event for drill-down.
+
 Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
 instructions.md`) carries a compact, **project-neutral** default policy so a brand-new
 project that never customizes its `CLAUDE.md`/`AGENTS.md` still gets strong defaults
