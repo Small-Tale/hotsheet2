@@ -96,6 +96,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global/view/panel/tab-cycling chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR, HS2-9SHYWD)
     src/tab-cycle.ts # Pure next/previous wrap-around cycling over an ordered tab-id list, shared by the project-tab and drawer-tab keyboard shortcuts (HS2-9SHYWD)
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
+    src/tracked-size-observer.ts # ResizeObserver that re-binds to whichever element currently renders a slot and ignores 0x0 hidden/detached reports (drawer + workspace grid bounds, HS2-0PF13V)
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)

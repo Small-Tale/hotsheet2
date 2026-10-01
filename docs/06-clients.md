@@ -2223,7 +2223,12 @@ not activate a grid; PTY resizing remains lazy and follows only the surface actu
 Drawer scale always uses the 1–3 short-container model. Level 1 makes
 one 160px-minimum row fit the available drawer height and flows additional terminals
 horizontally. Levels 2 and 3 instead mean columns across the available width (treating widths
-below 240px as 240px), wrap left-to-right into additional rows, and scroll vertically. Its
+below 240px as 240px), wrap left-to-right into additional rows, and scroll vertically. The
+drawer and workspace grids measure the element that currently renders them: their size
+observer re-binds after every render that replaces it (a Settings/Notifications round trip
+remounts the drawer, as does a startup that restores it open) and ignores the 0×0 report of a
+hidden or detached node, so tiles track the live drawer size through window and side-panel
+resizes without a manual drawer drag or project switch (**HS2-0PF13V**). Its
 accessible vertical splitter persists heights from 228px
 through the live boundary immediately below `PageHeader`, so it can consume the full
 ticket work area on taller windows instead of stopping at the former 520px cap. At the minimum,

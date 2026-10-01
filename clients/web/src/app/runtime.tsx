@@ -299,6 +299,7 @@ import {
   type TicketView,
   ticketViewQuery,
 } from '../ticket-views';
+import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
 import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
 import { syncVideoPosters } from '../video-posters';
@@ -467,8 +468,6 @@ export async function startHotSheetWebClient() {
     terminalContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined),
     terminalRename = signal<{ projectId: string; terminalId: string; value: string } | undefined>(undefined);
   let terminalDashboardGeneration = 0,
-    terminalDashboardObserver: ResizeObserver | undefined,
-    terminalDrawerObserver: ResizeObserver | undefined,
     terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
@@ -1310,9 +1309,23 @@ export async function startHotSheetWebClient() {
       openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
     terminalDashboardLoading.value = false;
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function observeTerminalDashboard(){queueMicrotask(()=>{terminalDashboardObserver?.disconnect();const target=document.querySelector<HTMLElement>('[data-terminal-grid-measure="true"]');if(!target)return;terminalDashboardObserver=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(!rect)return;const next={width:Math.max(1,Math.floor(rect.width)),height:Math.max(1,Math.floor(rect.height))},previous=terminalDashboardSize.value;if(next.width!==previous.width||next.height!==previous.height)terminalDashboardSize.value=next});terminalDashboardObserver.observe(target)})}
+  // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
+  // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
+  const terminalDashboardSizeObserver = createTrackedSizeObserver({
+    // The drawer's own grid carries the same measure marker; only the workspace dashboard counts here.
+    find: () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-terminal-grid-measure="true"]')).find(
+        (element) => !element.closest('[data-component="terminal-drawer"]'),
+      ),
+    enabled: () => shellMode.value === 'terminals',
+    onSize: (next) => {
+      const previous = terminalDashboardSize.value;
+      if (next.width !== previous.width || next.height !== previous.height) terminalDashboardSize.value = next;
+    },
+  });
+  function observeTerminalDashboard() {
+    queueMicrotask(terminalDashboardSizeObserver.sync);
+  }
   function updateTerminalDrawerBounds(
     target: HTMLElement,
     rect: Pick<DOMRectReadOnly, 'width' | 'height'> = target.getBoundingClientRect(),
@@ -1321,9 +1334,18 @@ export async function startHotSheetWebClient() {
       previous = terminalDrawerBounds.value;
     if (next.width !== previous.width || next.height !== previous.height) terminalDrawerBounds.value = next;
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function observeTerminalDrawer(){queueMicrotask(()=>{terminalDrawerObserver?.disconnect();if(!terminalDrawerVisible.value)return;const target=document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content');if(!target)return;terminalDrawerObserver=new ResizeObserver(entries=>{if(appRegionResizeDrag?.id==='app-bottom-drawer')return;const rect=entries[0]?.contentRect;if(rect)updateTerminalDrawerBounds(target,rect)});terminalDrawerObserver.observe(target)})}
+  // The drag owns the drawer size while it runs and applies the final bounds itself on release.
+  const terminalDrawerSizeObserver = createTrackedSizeObserver({
+    find: () => document.querySelector<HTMLElement>('[data-terminal-drawer-measure="true"] .terminal-drawer__content'),
+    enabled: () => terminalDrawerVisible.value,
+    paused: () => appRegionResizeDrag?.id === 'app-bottom-drawer',
+    onSize: (size, target) => {
+      updateTerminalDrawerBounds(target, size);
+    },
+  });
+  function observeTerminalDrawer() {
+    queueMicrotask(terminalDrawerSizeObserver.sync);
+  }
   function requestDrawerInputFocus(projectId: string, id: string, chat: DrawerAIChat | undefined) {
     if (id === 'grid') return;
     if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
@@ -1331,7 +1353,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===terminalDrawerSelected.value):undefined;if(current)requestDrawerInputFocus(current.id,terminalDrawerSelected.value,chat);terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerObserver?.disconnect()}
+  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===terminalDrawerSelected.value):undefined;if(current)requestDrawerInputFocus(current.id,terminalDrawerSelected.value,chat);terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerSizeObserver.disconnect()}
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function selectDrawerItem(id:string,focusInput=true){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current){localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id);if(focusInput)requestDrawerInputFocus(current.id,id,chat)}}
@@ -1659,7 +1681,7 @@ export async function startHotSheetWebClient() {
     if (mode === 'terminals') {
       void refreshTerminalDashboard();
       observeTerminalDashboard();
-    } else terminalDashboardObserver?.disconnect();
+    } else terminalDashboardSizeObserver.disconnect();
   }
   // Switch the workspace to a list/board/notifications/settings view from anywhere (a keyboard shortcut
   // may fire while a terminal grid or stats overlay is active), so return to the project shell first and
@@ -4695,6 +4717,8 @@ export async function startHotSheetWebClient() {
       );
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
       syncTerminalViewportMounts();
+      terminalDrawerSizeObserver.sync();
+      terminalDashboardSizeObserver.sync();
       syncRepositoryPaginationObserver();
       syncTerminalDrawerMaximum();
       syncAttachmentGalleryMeasurement();
