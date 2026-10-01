@@ -50,6 +50,7 @@ declare module 'kerfjs/jsx-runtime' {
       'wa-divider': WaBase;
       'wa-skeleton': WaBase & { effect?: AttrLike };
       'wa-progress-bar': WaProgressBar;
+      'wa-progress-ring': Omit<WaBase, 'value'> & { value?: AttrLike<number> };
       feGaussianBlur: SvgFilterPrimitive;
       feColorMatrix: SvgFilterPrimitive;
       feBlend: SvgFilterPrimitive;

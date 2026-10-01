@@ -1664,6 +1664,17 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const needsReview = inspector.locator('wa-checkbox[name="needs-review"]');
   const selected = inspector.locator('wa-checkbox[name="selected"]');
   const busy = inspector.locator('wa-checkbox[name="busy"]');
+  const claimEta = inspector.locator('wa-select[name="claim-eta"]');
+  const eta = row.locator('[data-claim-eta]');
+  const setClaimEta = (value: string) =>
+    claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  // A live claim with an estimate shows a progress ring and the time left (HS2-XQMDQB).
+  await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
+  await expect(eta).toHaveText('~45m left');
+  await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
   await title.fill('Fix selection synchronization');
   await category.fill('bug');
   await tags.fill('client, regression');
@@ -1690,6 +1701,10 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await needsReview.click();
   await selected.click();
   await busy.click();
+  // Without live work no estimate shows, whatever the ETA setting.
+  await expect(eta).toHaveCount(0);
+  await setClaimEta('overrun');
+  await expect(eta).toHaveCount(0);
   const feedbackNeeded = inspector.locator('wa-checkbox[name="feedback-needed"]');
   await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
@@ -1751,6 +1766,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(categoryColor).toHaveJSProperty('value', '#3b82f6');
   await expect(selected).toHaveJSProperty('checked', false);
   await expect(busy).toHaveJSProperty('checked', true);
+  await expect(claimEta).toHaveJSProperty('value', 'estimate');
+  await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
@@ -1767,6 +1784,14 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(page.getByText('No actions yet')).toBeVisible();
   await title.fill('Post-reset edit works');
   await expect(row).toContainText('Post-reset edit works');
+  await setClaimEta('overrun');
+  await expect(eta).toHaveAttribute('data-claim-eta', 'overrun');
+  await expect(eta).toHaveText('Soon');
+  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await setClaimEta('none');
+  await expect(eta).toHaveCount(0);
+  await setClaimEta('estimate');
+  await expect(eta).toHaveText('~45m left');
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(row).toHaveAttribute('data-selected', 'true');

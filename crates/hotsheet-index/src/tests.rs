@@ -1363,6 +1363,11 @@ fn assignee_facet_and_claimed_filters() {
         claimed[0].claim_eta_at.as_deref(),
         Some("2026-08-22T00:45:00Z")
     );
+    // ... and when the live claim began, for progress toward that ETA (HS2-XQMDQB).
+    assert_eq!(
+        claimed[0].claim_started_at.as_deref(),
+        Some("2026-08-22T00:00:00Z")
+    );
     let unclaimed = ix
         .query(&TicketQuery {
             claimed: Some(false),

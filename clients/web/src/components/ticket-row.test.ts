@@ -3,7 +3,13 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { getPriorityPresentation, normalizeTicketRowProps, TicketRow, ticketRowIndicator } from './ticket-row';
+import {
+  getPriorityPresentation,
+  normalizeTicketRowProps,
+  TicketRow,
+  ticketRowIndicator,
+  type TicketRowProps,
+} from './ticket-row';
 
 describe('TicketRow', () => {
   it('normalizes fallbacks, tags, and boolean defaults', () => {
@@ -104,6 +110,38 @@ describe('TicketRow', () => {
     expect(tokenCss).toContain('--hs-ticket-state-needs-review: #cb30e0');
     expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
     expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');
+  });
+
+  it('renders a live claim ETA as a progress ring with time left, or as Soon once overrun (HS2-XQMDQB)', () => {
+    const base: TicketRowProps = {
+      slug: 'HS2-ETA001',
+      title: 'Estimated work',
+      status: 'started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      busy: true,
+    };
+    const estimate = String(
+      TicketRow({
+        ...base,
+        claimEta: { kind: 'estimate', percent: 25, label: '~45m left', title: 'Estimated to finish 11:00' },
+      }),
+    );
+    expect(estimate).toContain('data-claim-eta="estimate"');
+    expect(estimate).toMatch(/<wa-progress-ring[^>]*value="25"/);
+    expect(estimate).toContain('~45m left');
+    expect(estimate).toContain('title="Estimated to finish 11:00"');
+    const overrun = String(
+      TicketRow({ ...base, claimEta: { kind: 'overrun', label: 'Soon', title: 'Past its estimate' } }),
+    );
+    expect(overrun).toContain('data-claim-eta="overrun"');
+    expect(overrun).not.toContain('wa-progress-ring');
+    expect(overrun).toContain('>Soon<');
+    // No ETA without live work, even if a stale presentation is passed.
+    expect(
+      String(TicketRow({ ...base, busy: false, claimEta: { kind: 'overrun', label: 'Soon', title: '' } })),
+    ).not.toContain('data-claim-eta');
   });
 
   it('maps HS2 priorities onto the HS1 icon and color semantics', () => {

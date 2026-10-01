@@ -2539,6 +2539,9 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
     case 'busy':
       ticketRowSettings.busy.value = control.checked;
       break;
+    case 'claim-eta':
+      ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;
+      break;
     case null:
       break;
   }

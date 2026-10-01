@@ -1737,6 +1737,19 @@ pub fn parse_claim_eta(now: &Timestamp, raw: &str) -> Result<Timestamp, OpError>
     Ok(eta)
 }
 
+/// When the live claim began: the holder's most recent `claim` event (HS2-XQMDQB). Renewals
+/// and holder retries keep the start; a release, takeover, or new acquisition starts anew.
+pub fn claim_started_at(t: &Ticket) -> Option<&Timestamp> {
+    let holder = t.claimed_by.as_deref()?;
+    t.claim_history
+        .iter()
+        .rev()
+        .take_while(|event| event.kind != ClaimEventKind::Release)
+        .filter(|event| event.kind == ClaimEventKind::Claim && event.worker == holder)
+        .map(|event| &event.at)
+        .next()
+}
+
 /// Whether the live claim's ETA has passed at `now`, so the holder should re-estimate.
 pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
     t.claimed_by.is_some()
@@ -4269,6 +4282,75 @@ mod tests {
         )
         .unwrap();
         assert!(completed.claim_eta_at.is_none());
+    }
+
+    /// The live claim's start (HS2-XQMDQB) survives renewals and holder retries, and restarts
+    /// on a release followed by a new claim or on an expiry takeover by another worker.
+    #[test]
+    fn claim_started_at_tracks_the_live_holders_latest_claim() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FD1").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "timed work".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let unclaimed = store.read_ticket(&id).unwrap();
+        assert_eq!(claim_started_at(&unclaimed), None);
+        let lease = ts("2026-08-19T01:00:00Z");
+        let first = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:10:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(claim_started_at(&first), Some(&ts("2026-08-19T00:10:00Z")));
+        renew(&store, &id, ts("2026-08-19T00:20:00Z"), lease.clone(), "w1").unwrap();
+        let retried = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:25:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            claim_started_at(&retried),
+            Some(&ts("2026-08-19T00:10:00Z"))
+        );
+        let released = release(&store, &id, ts("2026-08-19T00:30:00Z"), "w1", false).unwrap();
+        assert_eq!(claim_started_at(&released), None);
+        let again = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:40:00Z"),
+            lease.clone(),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(claim_started_at(&again), Some(&ts("2026-08-19T00:40:00Z")));
+        let taken = claim(
+            &store,
+            &id,
+            &ts("2026-08-19T01:30:00Z"),
+            ts("2026-08-19T02:00:00Z"),
+            "w2",
+            None,
+        )
+        .unwrap();
+        assert_eq!(claim_started_at(&taken), Some(&ts("2026-08-19T01:30:00Z")));
     }
 
     #[test]

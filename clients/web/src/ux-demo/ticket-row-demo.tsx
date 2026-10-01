@@ -1,10 +1,18 @@
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
+import type { ClaimEtaPresentation } from '../active-ticket-work';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
 import { syncSettingsControls } from './settings-controls';
+
+/** Claim ETA states the demo exposes (HS2-XQMDQB). */
+export type TicketRowClaimEta = 'none' | 'estimate' | 'overrun';
+export const TICKET_ROW_CLAIM_ETA: Record<Exclude<TicketRowClaimEta, 'none'>, ClaimEtaPresentation> = {
+  estimate: { kind: 'estimate', percent: 25, label: '~45m left', title: 'Estimated to finish in about 45 minutes' },
+  overrun: { kind: 'overrun', label: 'Soon', title: 'Past its estimate by about 10 minutes' },
+};
 
 export const ticketRowSettings = {
   title: signal('Build the first client ticket list'),
@@ -18,6 +26,7 @@ export const ticketRowSettings = {
   feedbackNeeded: signal(false),
   selected: signal(false),
   busy: signal(true),
+  claimEta: signal<TicketRowClaimEta>('estimate'),
   categoryIcon: signal('sparkles'),
   categoryColor: signal('#3b82f6'),
   agentName: signal('Claude'),
@@ -37,6 +46,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.feedbackNeeded.value = false;
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
+  ticketRowSettings.claimEta.value = 'estimate';
   ticketRowSettings.categoryIcon.value = 'sparkles';
   ticketRowSettings.categoryColor.value = '#3b82f6';
   ticketRowSettings.agentName.value = 'Claude';
@@ -51,6 +61,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         category: ticketRowSettings.category.value,
         tags: ticketRowSettings.tags.value,
         'category-icon': ticketRowSettings.categoryIcon.value,
+        'claim-eta': ticketRowSettings.claimEta.value,
         'category-color': ticketRowSettings.categoryColor.value,
         agent: ticketRowSettings.agentName.value,
         updated: ticketRowSettings.updatedLabel.value,
@@ -83,6 +94,10 @@ export function TicketRowDemo() {
           feedbackNeeded: ticketRowSettings.feedbackNeeded.value,
           selected: ticketRowSettings.selected.value,
           busy: ticketRowSettings.busy.value,
+          claimEta:
+            ticketRowSettings.claimEta.value === 'none'
+              ? undefined
+              : TICKET_ROW_CLAIM_ETA[ticketRowSettings.claimEta.value],
           categoryIcon: ticketRowSettings.categoryIcon.value,
           categoryColor: ticketRowSettings.categoryColor.value,
           agentName: ticketRowSettings.agentName.value,
@@ -153,6 +168,16 @@ export function TicketRowSettings() {
       <wa-checkbox name="busy" checked={ticketRowSettings.busy.value}>
         AI working
       </wa-checkbox>
+      <Select
+        name="claim-eta"
+        label="Claim ETA (shown while AI working)"
+        value={ticketRowSettings.claimEta.value}
+        choices={[
+          { value: 'none', label: 'No estimate' },
+          { value: 'estimate', label: 'On track (~45m left)' },
+          { value: 'overrun', label: 'Past its estimate (Soon)' },
+        ]}
+      />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>

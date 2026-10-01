@@ -6533,6 +6533,119 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await expect(indicator).toHaveCount(0, { timeout: 13_000 });
 });
 
+test('shows ETA progress on actively claimed tickets in list and column views and follows a re-estimate (HS2-XQMDQB)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const minutes = (count: number) => new Date(Date.now() + count * 60_000).toISOString(),
+    lease = minutes(120);
+  let estimated = {
+    ...row,
+    claimed_by: 'codex-worker',
+    worker_label: 'Codex',
+    claim_lease_expires_at: lease,
+    claim_started_at: minutes(-15),
+    claim_eta_at: minutes(45),
+    claim_count: 1,
+  };
+  const overrun = {
+      ...startedRow2,
+      claimed_by: 'claude-worker',
+      worker_label: 'Claude',
+      claim_lease_expires_at: lease,
+      claim_started_at: minutes(-60),
+      claim_eta_at: minutes(-10),
+      claim_count: 1,
+    },
+    // A finished ticket never shows an estimate, even with stale claim fields.
+    done = { ...completedRow, claim_eta_at: minutes(30) };
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const rows = [estimated, overrun, done],
+      url = new URL(route.request().url());
+    return route.fulfill({
+      json: url.searchParams.has('page_size')
+        ? {
+            items: rows,
+            counts: {
+              total: 3,
+              queued: 3,
+              backlog: 0,
+              archive: 0,
+              open: 2,
+              up_next: 1,
+              active: 2,
+              started: 2,
+              completed_today: 0,
+            },
+          }
+        : rows,
+    });
+  });
+  const polls: import('@playwright/test').Route[] = [];
+  await page.route('**/ws/poll*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('since') === null)
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const etaOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-claim-eta]`),
+    estimateEta = etaOf('HS2-DEMO01'),
+    overrunEta = etaOf('HS2-START02');
+  const assertEtas = async () => {
+    await expect(estimateEta).toHaveAttribute('data-claim-eta', 'estimate');
+    await expect(estimateEta).toHaveText(/~4[45]m left/);
+    // 15 of 60 minutes elapsed: the ring reads about a quarter done.
+    await expect
+      .poll(() =>
+        estimateEta.locator('wa-progress-ring').evaluate((ring) => (ring as HTMLElement & { value: number }).value),
+      )
+      .toBeGreaterThanOrEqual(24);
+    await expect(estimateEta).toHaveAttribute('title', /Estimated to finish/);
+    await expect(overrunEta).toHaveAttribute('data-claim-eta', 'overrun');
+    await expect(overrunEta).toHaveText('Soon');
+    await expect(overrunEta.locator('wa-progress-ring')).toHaveCount(0);
+    await expect(overrunEta).toHaveAttribute('title', /Past its estimate .* by about 10m/);
+    await expect(etaOf('HS2-DONE01')).toHaveCount(0);
+  };
+  await assertEtas();
+  await page.screenshot({ path: test.info().outputPath('claim-eta-list-wide.png') });
+  await page.getByLabel('Columns view').click();
+  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await assertEtas();
+  await page.screenshot({ path: test.info().outputPath('claim-eta-column-wide.png') });
+
+  // The worker re-estimates on renew; the change stream refreshes the row's estimate.
+  estimated = { ...estimated, claim_eta_at: minutes(120) };
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 2,
+      events: [{ store: 'demo-checkout', kind: 'renewed', id: '01', slug: 'HS2-DEMO01' }],
+      overflow: false,
+    },
+  });
+  await expect(estimateEta).toHaveText(/~(1h 5[89]m|2h) left/);
+  // At phone width the list keeps the estimate readable inside the row.
+  await page.getByLabel('List view').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(estimateEta).toBeVisible();
+  const [etaBox, rowBox] = await Promise.all([
+    estimateEta.boundingBox(),
+    page
+      .locator('[data-ticket-slug="HS2-DEMO01"] [data-component="ticket-list-row"], [data-ticket-slug="HS2-DEMO01"]')
+      .first()
+      .boundingBox(),
+  ]);
+  expect(etaBox!.x + etaBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: test.info().outputPath('claim-eta-list-narrow.png') });
+});
+
 test('copies the ticket number when the browser refuses the Clipboard API (HS2-1A2BQR)', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   // Safari intermittently rejects writeText with NotAllowedError inside a click; refuse every

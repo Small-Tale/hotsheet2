@@ -10,9 +10,11 @@ import { ChevronLeft, Trash2 } from 'lucide';
 
 import {
   applyKnownActiveTicketExpiries,
+  claimEtaPresentation,
   claimExpiryWakeDelay,
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
+  nextClaimEtaTick,
   projectTabTicketState,
 } from '../active-ticket-work';
 import {
@@ -536,6 +538,7 @@ export async function startHotSheetWebClient() {
   const projectChangeStreams = new Map<string, () => void>();
   const repositoryRefreshTimers = new Map<string, number>();
   let claimLeaseExpiryTimer: number | undefined;
+  let claimEtaTimer: number | undefined;
   const storedWorkspacePreferences = loadWorkspacePreferences(localStorage);
   const loading = signal(false),
     error = signal(''),
@@ -626,7 +629,9 @@ export async function startHotSheetWebClient() {
     }, 2_500);
   }
   const activeTicketCount = signal(0),
-    projectTabClaimClock = signal(Date.now());
+    projectTabClaimClock = signal(Date.now()),
+    // Local render clock for ETA countdowns (HS2-XQMDQB); its timer never makes network requests.
+    claimEtaClock = signal(Date.now());
   // The selected settings view is shared across projects: switching project keeps the same
   // settings view rather than resetting per-project (HS2-4J50K3).
   const selectedSettingsCategory = signal<SettingsCategory>('sources');
@@ -2159,6 +2164,7 @@ export async function startHotSheetWebClient() {
       clipboard.tickets.some((item) => item.slug === ticket.slug),
     ),
     busy: isTicketActivelyWorkedOn(ticket),
+    claimEta: claimEtaPresentation(ticket, claimEtaClock.value),
     agentName: ticket.worker_label || ticket.claimed_by || 'AI',
     updatedLabel: ago(ticket.updated_at),
   });
@@ -2175,7 +2181,24 @@ export async function startHotSheetWebClient() {
       Object.entries(ticketCountsByProject.value).filter(([id]) => id !== projectId),
     );
   }
+  /** Re-render ETA countdowns while a live claim has a future ETA; a local timer only (HS2-XQMDQB). */
+  function scheduleClaimEtaTick() {
+    if (claimEtaTimer !== undefined) window.clearTimeout(claimEtaTimer);
+    claimEtaTimer = undefined;
+    const now = Date.now(),
+      delay = nextClaimEtaTick(
+        projects.value.flatMap((item) => projectTabTicketRows(item.id)),
+        now,
+      );
+    claimEtaClock.value = now;
+    if (delay === undefined) return;
+    claimEtaTimer = window.setTimeout(() => {
+      claimEtaTimer = undefined;
+      scheduleClaimEtaTick();
+    }, delay);
+  }
   function scheduleClaimLeaseExpiry() {
+    scheduleClaimEtaTick();
     if (claimLeaseExpiryTimer !== undefined) window.clearTimeout(claimLeaseExpiryTimer);
     claimLeaseExpiryTimer = undefined;
     const now = Date.now(),

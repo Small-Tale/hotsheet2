@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyKnownActiveTicketExpiries,
+  claimEtaPresentation,
   claimExpiryWakeDelay,
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
+  nextClaimEtaTick,
   projectTabTicketState,
 } from './active-ticket-work';
 import type { TicketRow } from './api';
@@ -124,5 +126,71 @@ describe('active ticket work', () => {
       active: 3,
     });
     expect(applyKnownActiveTicketExpiries(counts, [claimed], now, now)).toBe(counts);
+  });
+});
+
+describe('claim ETA presentation (HS2-XQMDQB)', () => {
+  const at = (iso: string) => Date.parse(iso),
+    live = {
+      status: 'started',
+      claimed_by: 'agent-1',
+      claim_lease_expires_at: '2026-10-01T12:00:00Z',
+      claim_started_at: '2026-10-01T10:00:00Z',
+      claim_eta_at: '2026-10-01T11:00:00Z',
+    };
+
+  it('walks from no estimate through progress to overrun and back after a re-estimate', () => {
+    expect(claimEtaPresentation({ ...live, claim_eta_at: undefined }, at('2026-10-01T10:30:00Z'))).toBeUndefined();
+    expect(claimEtaPresentation(live, at('2026-10-01T10:00:00Z'))).toMatchObject({
+      kind: 'estimate',
+      percent: 0,
+      label: '~1h left',
+    });
+    expect(claimEtaPresentation(live, at('2026-10-01T10:15:00Z'))).toMatchObject({
+      kind: 'estimate',
+      percent: 25,
+      label: '~45m left',
+    });
+    const almost = claimEtaPresentation(live, at('2026-10-01T10:59:45Z'));
+    expect(almost).toMatchObject({ kind: 'estimate', percent: 99, label: '<1m left' });
+    const overrun = claimEtaPresentation(live, at('2026-10-01T11:10:00Z'));
+    expect(overrun).toMatchObject({ kind: 'overrun', label: 'Soon' });
+    expect(overrun?.title).toContain('by about 10m');
+    // A renewal with a new estimate leaves the overrun state.
+    expect(
+      claimEtaPresentation({ ...live, claim_eta_at: '2026-10-01T13:30:00Z' }, at('2026-10-01T11:10:00Z')),
+    ).toMatchObject({ kind: 'estimate', percent: 33, label: '~2h 20m left' });
+  });
+
+  it('shows nothing once the claim is released, expired, or the ticket is done', () => {
+    const now = at('2026-10-01T10:30:00Z');
+    expect(claimEtaPresentation({ ...live, claimed_by: undefined }, now)).toBeUndefined();
+    expect(claimEtaPresentation({ ...live, claim_lease_expires_at: '2026-10-01T10:29:00Z' }, now)).toBeUndefined();
+    expect(claimEtaPresentation({ ...live, status: 'completed' }, now)).toBeUndefined();
+    expect(claimEtaPresentation({ ...live, claim_eta_at: 'not a time' }, now)).toBeUndefined();
+  });
+
+  it('falls back to zero progress without a known claim start and formats long estimates in days', () => {
+    expect(claimEtaPresentation({ ...live, claim_started_at: undefined }, at('2026-10-01T10:30:00Z'))).toMatchObject({
+      kind: 'estimate',
+      percent: 0,
+      label: '~30m left',
+    });
+    expect(
+      claimEtaPresentation(
+        { ...live, claim_lease_expires_at: '2026-10-09T00:00:00Z', claim_eta_at: '2026-10-04T10:00:00Z' },
+        at('2026-10-01T10:00:00Z'),
+      ),
+    ).toMatchObject({ label: '~3d left' });
+  });
+
+  it('ticks the local countdown at most every 30s and just after the nearest ETA, never for overruns', () => {
+    const now = at('2026-10-01T10:59:50Z');
+    expect(nextClaimEtaTick([], now)).toBeUndefined();
+    expect(nextClaimEtaTick([{ ...live, claim_eta_at: undefined }], now)).toBeUndefined();
+    expect(nextClaimEtaTick([live], at('2026-10-01T10:00:00Z'))).toBe(30_000);
+    expect(nextClaimEtaTick([live], now)).toBe(10_025);
+    expect(nextClaimEtaTick([live], at('2026-10-01T11:00:01Z'))).toBeUndefined();
+    expect(nextClaimEtaTick([live, { ...live, claim_eta_at: '2026-10-01T10:59:55Z' }], now)).toBe(5_025);
   });
 });

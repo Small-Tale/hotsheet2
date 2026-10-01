@@ -157,6 +157,8 @@ export interface TicketRow {
   claim_lease_expires_at?: string;
   /** The live claim holder's estimated completion time (HS2-DQQ0AX). */
   claim_eta_at?: string;
+  /** When the live claim began, derived from its history (HS2-XQMDQB). */
+  claim_started_at?: string;
   worker_label?: string;
   legacy_number?: string;
   claim_count: number;

@@ -12286,6 +12286,8 @@ async fn claim_next_release_renew_over_http() {
         claimed["claim_lease_expires_at"]
     );
     assert_eq!(claimed_row["claim_eta_at"], claimed["claim_eta_at"]);
+    assert!(claimed["claim_started_at"].as_str().is_some(), "{claimed}");
+    assert_eq!(claimed_row["claim_started_at"], claimed["claim_started_at"]);
 
     // Renew (holder): a plain renew keeps the ETA; a nonsense one is a 400 that changes nothing.
     let resp = app

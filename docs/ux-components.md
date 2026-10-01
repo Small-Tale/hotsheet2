@@ -673,6 +673,14 @@ always retain native clipboard behavior.
   non-expired worker claim adds a yellow activity spinner immediately after the status badge;
   started-but-unclaimed and
   previously claimed tickets do not show it.
+  When that live claim carries an ETA (HS2-XQMDQB), the agent name is followed by a compact
+  estimate: a brand-blue Web Awesome progress ring showing the elapsed share of the time from
+  the claim's start (`claim_started_at`) to its ETA, plus `~45m left` (`<1m`, `~1h 20m`, `~3d`
+  forms). Once the ETA passes, the ring gives way to `Soon`, with the activity spinner as the
+  indeterminate cue, until the worker re-estimates or the claim ends. Both states carry a
+  title with the absolute time. The countdown re-renders from a local timer (at most every 30
+  seconds, and just after the nearest ETA) that never makes network requests. The demo's
+  **Claim ETA** setting exposes the none, on-track, and past-estimate variants.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon

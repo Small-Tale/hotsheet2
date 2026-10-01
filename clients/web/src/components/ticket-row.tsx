@@ -1,9 +1,11 @@
+import '@awesome.me/webawesome/dist/components/progress-ring/progress-ring.js';
 import './ticket-row.css';
 
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
+import type { ClaimEtaPresentation } from '../active-ticket-work';
 import {
   categoryAbbreviation,
   defaultCategoryPresentation,
@@ -35,6 +37,8 @@ export interface TicketRowProps {
   categoryColor?: string;
   categoryShortLabel?: string;
   agentName?: string;
+  /** Progress toward the live claim's ETA, shown beside the active-work indicator (HS2-XQMDQB). */
+  claimEta?: ClaimEtaPresentation;
   updatedLabel?: string;
   cutPending?: boolean;
   presentation?: TicketRowPresentation;
@@ -69,6 +73,17 @@ function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
       <span class="ticket-list-row__claim-spinner">
         <LoadingSpinner label={label} />
       </span>
+    </span>
+  );
+}
+
+function ClaimEta({ eta }: { eta: ClaimEtaPresentation }) {
+  return (
+    <span class={`ticket-list-row__eta ticket-list-row__eta--${eta.kind}`} data-claim-eta={eta.kind} title={eta.title}>
+      {eta.kind === 'estimate' && (
+        <wa-progress-ring class="ticket-list-row__eta-ring" value={eta.percent} aria-hidden="true"></wa-progress-ring>
+      )}
+      <span class="ticket-list-row__eta-label">{eta.label}</span>
     </span>
   );
 }
@@ -197,6 +212,7 @@ export function TicketRow(raw: TicketRowProps) {
               <span class="ticket-list-row__owner" aria-label={props.agentName}>
                 {props.agentName}
               </span>
+              {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
               {props.tags.length > 0 && (
                 <div class="ticket-list-row__tags">
                   {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}

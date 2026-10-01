@@ -66,6 +66,9 @@ pub struct ApiTicket {
     /// The live claim holder's estimated completion time (HS2-DQQ0AX).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_eta_at: Option<String>,
+    /// When the live claim began, derived from `claim_history` (HS2-XQMDQB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_started_at: Option<String>,
     pub worker_label: Option<String>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when imported (HS2-XB5R3Y).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,6 +168,7 @@ impl ApiTicket {
             claimed_by: t.claimed_by.clone(),
             claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             claim_eta_at: ts(&t.claim_eta_at),
+            claim_started_at: crate::ops::claim_started_at(t).map(|at| at.as_str().to_string()),
             worker_label: t.worker_label.clone(),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
@@ -270,6 +274,9 @@ pub struct TicketRow {
     /// The live claim holder's estimated completion time (HS2-DQQ0AX).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_eta_at: Option<String>,
+    /// When the live claim began, derived from `claim_history` (HS2-XQMDQB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_started_at: Option<String>,
     pub worker_label: Option<String>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when it was imported,
     /// so clients can recognize and resolve legacy references in ticket text without an
@@ -310,6 +317,7 @@ impl From<&Ticket> for TicketRow {
             claimed_by: t.claimed_by.clone(),
             claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             claim_eta_at: ts(&t.claim_eta_at),
+            claim_started_at: crate::ops::claim_started_at(t).map(|at| at.as_str().to_string()),
             worker_label: t.worker_label.clone(),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
