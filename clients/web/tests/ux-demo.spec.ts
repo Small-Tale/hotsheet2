@@ -3125,9 +3125,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await tagEditor.fill('regression');
   await tagEditor.press('Enter');
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
-  await inspector
-    .locator('[data-component="tag-chip"][data-tag-id="client"]')
-    .evaluate((node) => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
+  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"] [data-action="remove-tag-chip"]').click();
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
   await expect(inspector.getByRole('tab', { name: 'Info' })).toHaveAttribute('aria-selected', 'true');
   expect(
@@ -3847,14 +3845,15 @@ test('opens the shared TicketReader intent when a composed row is double-clicked
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');
-  const chip = page.locator('[data-component="tag-chip"]');
+  const chip = page.locator('[data-component="tag-chip"]'),
+    kerfChip = chip.locator('[data-component="chip"]');
   await expect(chip).toContainText('needs-design');
-  const padding = await chip.evaluate((node) => {
-    const style = getComputedStyle(node);
-    return { horizontal: Number.parseFloat(style.paddingLeft), vertical: Number.parseFloat(style.paddingTop) };
-  });
-  expect(padding.horizontal).toBeCloseTo(8, 1);
-  expect(padding.vertical).toBeCloseTo(3.2, 1);
+  await expect(kerfChip).toHaveAttribute('data-size', 'compact');
+  await expect(kerfChip).toHaveAttribute('data-appearance', 'quiet');
+  await expect(kerfChip).toHaveAttribute('data-shape', 'rounded');
+  await expect(kerfChip).toHaveAttribute('data-item-id', 'demo-tag');
+  const chipPadding = await chip.evaluate((node) => getComputedStyle(node).paddingLeft);
+  expect(chipPadding).toBe('0px');
   const toggle = page.locator('[data-action="toggle-settings"]');
   await expect(toggle).toHaveCount(1);
   await expect(toggle).toContainText('Settings');
@@ -3881,11 +3880,12 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
     node.value = 'success';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await expect(chip).toHaveAttribute('variant', 'success');
+  await expect(kerfChip).toHaveAttribute('data-tone', 'success');
   await expect(inspector).toBeVisible();
   await inspector.locator('wa-checkbox[name="pill"]').click();
+  await expect(kerfChip).toHaveAttribute('data-shape', 'pill');
   await expect(inspector).toBeVisible();
-  await chip.locator('[part~="remove-button"]').click();
+  await chip.getByRole('button', { name: 'Remove server' }).click();
   await expect(page.getByText('Remove requested for demo-tag')).toBeVisible();
   await expect(inspector).toBeVisible();
   await inspector.getByRole('button', { name: 'Reset' }).click();
@@ -3897,7 +3897,8 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(inspector.locator('wa-checkbox[name="pill"]')).toHaveJSProperty('checked', false);
   await expect(inspector.locator('wa-checkbox[name="disabled"]')).toHaveJSProperty('checked', false);
   await expect(chip).toContainText('needs-design');
-  await expect(chip).toHaveAttribute('variant', 'neutral');
+  await expect(kerfChip).toHaveAttribute('data-tone', 'neutral');
+  await expect(kerfChip).toHaveAttribute('data-shape', 'rounded');
   await expect(page.getByText('No actions yet')).toBeVisible();
   await expect(inspector).toBeVisible();
   await toggle.click();

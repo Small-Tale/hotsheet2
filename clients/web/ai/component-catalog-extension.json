@@ -772,8 +772,8 @@
       "publicTokens": [],
       "geometry": {
         "margin": "none",
-        "border": "self",
-        "padding": "self"
+        "border": "child",
+        "padding": "child"
       },
       "documentation": "docs/ux-components.md"
     },

@@ -21,7 +21,7 @@ describe('TicketTagEditor', () => {
         popoverId: 'ticket-tag-sidebar-test',
       }),
     );
-    expect(editable).toContain('with-remove');
+    expect(editable).toContain('data-action="remove-tag-chip"');
     expect(editable).toContain(
       'data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby="ticket-tag-sidebar-test-title"',
     );
@@ -30,7 +30,7 @@ describe('TicketTagEditor', () => {
     expect(editable).toContain('<option value="server"');
     expect(editable).not.toContain('<option value="client"');
     const readOnly = String(TicketTagEditor({ tags: ['client'], suggestions: ['server'], editable: false }));
-    expect(readOnly).not.toContain('with-remove');
+    expect(readOnly).not.toContain('data-action="remove-tag-chip"');
     expect(readOnly).not.toContain('ticket-tag-popover');
   });
 

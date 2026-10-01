@@ -2,6 +2,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
+import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { codeReviewTarget } from '../components/ticket-code-review';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
@@ -322,8 +323,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     if ((target as HTMLInputElement).value.trim()) addTagFromInput(target as HTMLInputElement);
     void tagsAutosave.flush();
   });
-  delegate(document.body, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
-    const tag = data(target).tagId;
+  delegate(document.body, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
+    const chip = target.closest<HTMLElement>('[data-component="tag-chip"]'),
+      tag = chip ? data(chip).tagId : undefined;
     if (tag) setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
   });
   delegateCapture(document.body, 'pointerdown', '*', (event, target) => {

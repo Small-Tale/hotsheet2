@@ -359,7 +359,7 @@ inspector-and-editor	delegate	document.body	'input'	'[name="ticket-title"]'
 inspector-and-editor	delegate	document.body	'focusout'	'[name="ticket-title"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[name="ticket-tag-input"]'
 inspector-and-editor	delegate	document.body	'focusout'	'[name="ticket-tag-input"]'
-inspector-and-editor	delegate	document.body	'wa-remove'	'[data-component="tag-chip"]'
+inspector-and-editor	delegate	document.body	'click'	`[data-action="${TAG_CHIP_REMOVE_ACTION}"]`
 inspector-and-editor	delegateCapture	document.body	'pointerdown'	'*'
 inspector-and-editor	delegate	document.body	'dblclick'	'[data-action="edit-markdown"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="edit-markdown"]'

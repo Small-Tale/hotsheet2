@@ -62,8 +62,8 @@ export function TagChipDemo() {
         {tagChipSettings.event}
       </p>
       <p class="component-stage__guidance">
-        The owning feature handles removal and ticket mutation. TagChip emits a semantic remove event with stable tag
-        identity.
+        The owning feature handles removal and ticket mutation. The chip's delegated remove action carries the stable
+        tag identity.
       </p>
     </section>
   );

@@ -1,9 +1,14 @@
-import '@awesome.me/webawesome/dist/components/tag/tag.js';
+import '@kerfjs/ui/chip.css';
 import './tag-chip.css';
+
+import { Chip } from '@kerfjs/ui/chip';
 
 export type TagChipVariant = 'brand' | 'neutral' | 'success' | 'warning' | 'danger';
 export type TagChipAppearance = 'accent' | 'filled' | 'outlined' | 'filled-outlined';
 export type TagChipSize = 'small' | 'medium' | 'large';
+
+/** The delegated action Kerf's remove button carries; the owning feature handles the click. */
+export const TAG_CHIP_REMOVE_ACTION = 'remove-tag-chip';
 
 export interface TagChipProps {
   id: string;
@@ -33,22 +38,36 @@ export function normalizeTagChipProps(props: TagChipProps): NormalizedTagChipPro
   };
 }
 
-/** A domain tag whose parent owns mutations triggered by bubbling `wa-remove`. */
+const CHIP_APPEARANCE = {
+  accent: 'solid',
+  filled: 'quiet',
+  outlined: 'outline',
+  'filled-outlined': 'outline',
+} as const;
+
+/**
+ * A domain tag on Kerf's `Chip` (HS2-HJEHRW): the app wrapper carries the stable tag identity and
+ * the parent owns the mutation that the chip's delegated remove action requests.
+ */
 export function TagChip(raw: TagChipProps) {
   const props = normalizeTagChipProps(raw);
+  const presentation = {
+    tone: props.variant,
+    appearance: CHIP_APPEARANCE[props.appearance],
+    shape: props.pill ? 'pill' : 'rounded',
+    size: props.size === 'small' ? 'compact' : 'default',
+    disabled: props.disabled,
+    itemId: props.id,
+  } as const;
   return (
-    <wa-tag
-      data-component="tag-chip"
-      data-tag-id={props.id}
-      data-disabled={props.disabled ? 'true' : 'false'}
-      aria-disabled={props.disabled ? 'true' : 'false'}
-      variant={props.variant}
-      appearance={props.appearance}
-      size={props.size}
-      pill={props.pill}
-      with-remove={props.removable && !props.disabled}
-    >
-      {props.label}
-    </wa-tag>
+    <span class="tag-chip" data-component="tag-chip" data-tag-id={props.id} data-disabled={String(props.disabled)}>
+      {props.removable ? (
+        <Chip {...presentation} removeAction={TAG_CHIP_REMOVE_ACTION} removeLabel={`Remove ${props.label}`}>
+          {props.label}
+        </Chip>
+      ) : (
+        <Chip {...presentation}>{props.label}</Chip>
+      )}
+    </span>
   );
 }

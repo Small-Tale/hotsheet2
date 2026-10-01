@@ -9866,9 +9866,7 @@ test('edits title and tags through controlled capability-aware inspector state',
   await expect
     .poll(() => patches.some((patch) => Array.isArray(patch.tags) && patch.tags.includes('regression')))
     .toBe(true);
-  await inspector
-    .locator('[data-component="tag-chip"][data-tag-id="client"]')
-    .evaluate((node) => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
+  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"] [data-action="remove-tag-chip"]').click();
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
   await expect
     .poll(() => patches.some((patch) => Array.isArray(patch.tags) && !patch.tags.includes('client')))
@@ -9893,7 +9891,8 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await inspector.getByRole('heading', { name: 'Use real project tickets' }).dblclick();
   await expect(inspector.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
   await expect(inspector.getByRole('combobox', { name: 'Add tag' })).toHaveCount(0);
-  await expect(inspector.locator('[data-component="tag-chip"]')).not.toHaveAttribute('with-remove', '');
+  await expect(inspector.locator('[data-component="tag-chip"]')).toHaveCount(1);
+  await expect(inspector.locator('[data-component="tag-chip"] [data-action="remove-tag-chip"]')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Delete note' })).toHaveCount(0);
   const statusField = inspector.locator('.ticket-inspector__status-field'),

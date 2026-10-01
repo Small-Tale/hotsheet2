@@ -36,7 +36,6 @@ const selfGeometryIds = new Set([
   'quick-ticket-composer',
   'repository-summary',
   'status-badge',
-  'tag-chip',
   'ticket-row',
 ]);
 const publicClassOverrides = {

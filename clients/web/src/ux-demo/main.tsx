@@ -53,6 +53,7 @@ import { ProviderSetupForm } from '../components/provider-setup-form';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { SavedViewDialog } from '../components/saved-view-dialog';
 import { SettingsWorkspace } from '../components/settings-workspace';
+import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
@@ -2036,9 +2037,10 @@ delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) =
       break;
   }
 });
-delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
-  if ((target as HTMLElement).dataset.disabled !== 'true')
-    tagChipSettings.event.value = `Remove requested for ${(target as HTMLElement).dataset.tagId}`;
+delegate(root, 'click', `[aria-label="TagChip demo"] [data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
+  const chip = target.closest<HTMLElement>('[data-component="tag-chip"]');
+  if (chip && chip.dataset.disabled !== 'true')
+    tagChipSettings.event.value = `Remove requested for ${chip.dataset.tagId}`;
 });
 delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, target) => {
   const control = target as FormControl;
@@ -2227,8 +2229,8 @@ delegate(root, 'focusout', '[name="ticket-tag-input"]', (_event, target) => {
   if ((target as HTMLInputElement).value.trim()) addInspectorTag(target as HTMLInputElement);
   void tagsAutosave.flush();
 });
-delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
-  const tag = (target as HTMLElement).dataset.tagId;
+delegate(root, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
+  const tag = target.closest<HTMLElement>('[data-component="tag-chip"]')?.dataset.tagId;
   if (!tag) return;
   inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
   tagsAutosave.schedule(inspectorTags.value);

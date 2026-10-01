@@ -1121,10 +1121,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 ### 4.3 Tags — feature floor
 
 - `TagList`
-- `TagChip` — **built**: Web Awesome tag primitive, stable domain identity, compact
-  filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
-  `/ux-demo` coverage. Kerf beta 18 owns the shared 8px inline Web Awesome tag inset;
-  Hot Sheet retains only its compact 3.2px block inset.
+- `TagChip` — **built**: Kerf's removable `Chip` primitive inside an app wrapper that carries
+  the stable domain identity (`data-tag-id`), compact quiet rounded default presentation plus
+  optional variants (mapped onto Chip tone, appearance, shape, and size), disabled/removable
+  behavior, unit tests, and interactive `/ux-demo` coverage. Removal is Chip's delegated
+  `remove-tag-chip` action; the owning feature resolves the tag from the wrapper and mutates
+  the ticket (HS2-HJEHRW). Hot Sheet owns no chip chrome.
 
 The component catalog records composition relationships. A left-aligned “Related
 components” menu in the main demo footer uses the shared `Select`. It lists `Used by`
@@ -1940,7 +1942,7 @@ HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402A
 
 | Severity | Exact diagnostic budgets                                             |
 | -------- | -------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 3; `KUI-L022` 0; `KUI-L201` 0 |
+| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 1; `KUI-L022` 0; `KUI-L201` 0 |
 | review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                             |
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
@@ -1950,8 +1952,8 @@ tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app
 accepts only dormant decoration, so no `Toolbar` owns a control group there. The rules whose
 subject is still a raw Web Awesome element are deliberate: `cursor-semantics.css` applies the
 cursor policy through documented Web Awesome parts (`wa-dropdown-item` and friends) as
-CLAUDE.md requires; `tag-chip.css` keeps `wa-tag`'s compact geometry, 16px remove button, and
-disabled state until Kerf ships a removable chip primitive (`KF-PDPAVF`); and `drive-options-menu.css`
+CLAUDE.md requires; `tag-chip.css` kept `wa-tag`'s compact geometry, 16px remove button, and
+disabled state until Kerf shipped its removable `Chip` (`KF-PDPAVF`, adopted by HS2-HJEHRW); and `drive-options-menu.css`
 styled the raw submenu items until `HS2-2EHD8R` replaced that menu with `PopupMenu` context mode
 (83). HS2-AT4AAA upgraded `@kerfjs/ui` to 5.0.0-beta.60, which ships the seven requested
 API groups below, and adopted the first two: the workspace header Toolbar takes
@@ -2059,6 +2061,15 @@ Hot Sheet's own elements or the public `--kui-workbench-popup-z` token. HS2-RWGQ
 `mobile-side-panels.css` (the inspector's own safe-area insets) by letting the Workbench pad
 the rail around the inspector's Pane-based card, and its `KUI-L005` profile exception with it;
 the shared `SidebarPane` wrapper's forwarded `className` is a reviewed `KUI-L008` exception.
+
+HS2-HJEHRW rebuilt `TagChip` on Kerf's `Chip` (`@kerfjs/ui/chip`), taking `KUI-L019` from 3 to
+1: the only remaining application rule on a non-app subject is `cursor-semantics.css`'s
+`wa-dropdown-item` cursor policy. The wrapper `span.tag-chip[data-component="tag-chip"]` keeps
+the tag identity and disabled flag for tests and delegation, the Chip owns every pixel of
+chrome (compact size, quiet/solid/outline appearance, rounded/pill shape, tone, remove
+button), and the three former `wa-remove` listeners are click delegates on the Chip's
+`remove-tag-chip` action. The catalog records the component's border and padding as `child`
+geometry.
 
 HS2-M6B8AD resolved every review finding. `KUI-L006` off-scale spacing was rewritten to Kerf
 steps (dev-review overlay, demo caret spacing), a named app token
