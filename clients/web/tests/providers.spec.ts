@@ -6485,6 +6485,27 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await expect(indicator).toHaveCount(0, { timeout: 13_000 });
 });
 
+test('copies the ticket number when the browser refuses the Clipboard API (HS2-1A2BQR)', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  // Safari intermittently rejects writeText with NotAllowedError inside a click; refuse every
+  // asynchronous write so only the in-gesture selection copy can succeed.
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = () =>
+      Promise.reject(new DOMException('The request is not allowed by the user agent.', 'NotAllowedError'));
+  });
+  await mockProject(page, true, false, 300);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const region = page.locator('#app-right-rail');
+  await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
+  await expect(page.getByText('HS2-DEMO01 copied to clipboard.', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
+  await expect(page.getByText(/Copy failed/)).toHaveCount(0);
+});
+
 test('keeps the visible inspector region mounted while a selected ticket loads', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await mockProject(page, true, false, 300);

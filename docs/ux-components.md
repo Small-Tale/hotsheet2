@@ -953,7 +953,11 @@ multi-selection placeholders keep the divider to preserve their intentional stat
 The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar
 inspector (HS2-9MCJ2B) and the reader dialog (HS2-FZ5HB2); it centers only for the terminal
 ticket rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`
-overrides this per composition (the rail passes `center`). The section strip uses Kerf
+overrides this per composition (the rail passes `center`). Clicking it copies through the
+shared `copyText` helper (`clients/web/src/copy-text.ts`, also used by the repository-file
+and attachment Copy actions): when Safari refuses the Clipboard API inside the click, the
+helper copies through a temporary selection in the same gesture and restores focus and
+selection, so a copy never fails intermittently (HS2-1A2BQR). The section strip uses Kerf
 `TabBar`/`AppTab` with automatic keyboard activation and one selected, roving-focus tab.
 The inspector owns one 8px outer inset and removes the TabBar toolbar padding; its auto
 width includes those margins within the available space. The rail keeps a 4px inset,

@@ -8,6 +8,7 @@ import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import { copyText } from '../copy-text';
 import { type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
@@ -189,8 +190,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   delegate(document.body, 'click', '[data-action="copy-ticket-slug"]', (_event, target) => {
     const slug = target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug;
     if (!slug) return;
-    void navigator.clipboard
-      .writeText(slug)
+    void copyText(slug)
       .then(() => {
         showToast(`${slug} copied to clipboard.`);
       })

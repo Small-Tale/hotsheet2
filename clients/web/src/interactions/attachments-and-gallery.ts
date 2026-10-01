@@ -23,6 +23,7 @@ import {
   attachmentGalleryZoomModel,
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { copyText } from '../copy-text';
 import { data } from './dom';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
@@ -447,8 +448,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }
     if (action === 'copy-reference') {
       const local = menu.ticket === selectedTicket.value?.slug;
-      void navigator.clipboard
-        .writeText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
+      void copyText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
         .then(() => {
           showToast('Attachment reference copied to clipboard.');
         })
@@ -462,7 +462,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         .then(
           (result) =>
             result &&
-            navigator.clipboard.writeText(result.path).then(() => {
+            copyText(result.path).then(() => {
               showToast('Attachment path copied to clipboard.');
             }),
         )

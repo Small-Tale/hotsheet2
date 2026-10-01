@@ -10,6 +10,7 @@ import {
 } from '../components/repository-status-popover';
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { copyText } from '../copy-text';
 import { updateRepositoryFileSelection } from '../repository-file-selection';
 import { data } from './dom';
 import { type Control, type Project, type RepositoryDetailState } from './types';
@@ -280,8 +281,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     if (action === 'copy-path' || action === 'copy-absolute-path') {
       const values =
         action === 'copy-path' ? paths : (menu.absolutePaths ?? (menu.absolutePath ? [menu.absolutePath] : []));
-      void navigator.clipboard
-        .writeText(values.join('\n'))
+      void copyText(values.join('\n'))
         .then(() => {
           showToast(`${values.length === 1 ? 'Path' : `${values.length} paths`} copied.`);
         })
