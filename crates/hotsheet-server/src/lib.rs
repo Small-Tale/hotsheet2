@@ -173,6 +173,9 @@ pub struct AppState {
     /// so tests inject a directory with [`AppState::with_machine_home`] instead of mutating
     /// the process-global environment (HS2-NYZ3PS).
     machine_home: Arc<std::path::PathBuf>,
+    /// Machine-local cache root (video posters), resolved once at construction and
+    /// injectable for hermetic tests (HS2-FQEESP).
+    cache_dir: Arc<std::path::PathBuf>,
     commands: commands::CommandManager,
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
@@ -352,6 +355,7 @@ impl AppState {
                 machine_home.join("checkouts.json"),
             ),
             machine_home: Arc::new(machine_home),
+            cache_dir: Arc::new(media::default_cache_root()),
             commands,
             notifications: Default::default(),
             tts: Default::default(),
@@ -525,6 +529,19 @@ impl AppState {
         self.plugin_dirs = Arc::new(vec![home.join("plugins")]);
         self.machine_home = Arc::new(home);
         self
+    }
+
+    /// Root the machine-local cache (browser/ffmpeg video posters) at `dir` instead of
+    /// `${HOTSHEET_CACHE_DIR}` / the platform cache dir, so tests never mutate the
+    /// process environment (HS2-FQEESP).
+    pub fn with_cache_dir(mut self, dir: impl Into<std::path::PathBuf>) -> Self {
+        self.cache_dir = Arc::new(dir.into());
+        self
+    }
+
+    /// The machine-local cache root this state writes video posters under.
+    pub fn cache_dir(&self) -> &std::path::Path {
+        &self.cache_dir
     }
 
     /// The machine-local home this state reads and writes under.
@@ -5384,19 +5401,21 @@ async fn get_checkout_ticket_attachment_thumbnail(
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
     let filename = attachment.filename;
-    let thumbnail =
-        tokio::task::spawn_blocking(move || media::optional_video_poster(&filename, &bytes))
-            .await
-            .map_err(|error| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("video thumbnail task failed: {error}"),
-                )
-            })?
-            .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?
-            .ok_or_else(|| {
-                ApiError::new(StatusCode::NOT_FOUND, "video poster has not been generated")
-            })?;
+    let thumbnail = {
+        let cache_dir = Arc::clone(&state.cache_dir);
+        tokio::task::spawn_blocking(move || {
+            media::optional_video_poster(&cache_dir, &filename, &bytes)
+        })
+    }
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("video thumbnail task failed: {error}"),
+        )
+    })?
+    .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "video poster has not been generated"))?;
     let mut response = media::attachment_response("thumbnail.jpg", thumbnail, None);
     response.headers_mut().insert(
         "cache-control",
@@ -5438,7 +5457,8 @@ async fn put_checkout_ticket_attachment_thumbnail(
             "attachment is not a supported video",
         ));
     }
-    tokio::task::spawn_blocking(move || media::cache_video_poster(&bytes, &body))
+    let cache_dir = Arc::clone(&state.cache_dir);
+    tokio::task::spawn_blocking(move || media::cache_video_poster(&cache_dir, &bytes, &body))
         .await
         .map_err(|error| {
             ApiError::new(
@@ -7999,14 +8019,10 @@ fn shell_single_quote(value: &str) -> String {
 
 const INHERIT_GLOBAL_SHELL_HISTORY_SETTING: &str = "terminal.inherit_global_shell_history";
 
-fn terminal_history_home() -> std::path::PathBuf {
-    std::env::var_os("HOTSHEET_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".hotsheet2"))
-        })
-        .unwrap_or_else(std::env::temp_dir)
-        .join("terminal-history")
+/// Per-terminal shell history lives under the state's injected machine home, never a
+/// direct `HOTSHEET_HOME` read (HS2-FQEESP).
+fn terminal_history_home(state: &AppState) -> std::path::PathBuf {
+    state.machine_home().join("terminal-history")
 }
 
 fn history_key(value: &str) -> String {
@@ -8185,7 +8201,7 @@ fn terminal_shell_history_only_env(
         .map(FsPath::new)
         .unwrap_or_else(|| state.store.root());
     shell_history_environment(
-        &terminal_history_home(),
+        &terminal_history_home(state),
         project,
         terminal_id,
         command,
@@ -8221,6 +8237,34 @@ mod foreground_command_tests {
 #[cfg(test)]
 mod terminal_history_tests {
     use super::{shell_command_args, shell_history_environment};
+
+    /// HS2-FQEESP: terminal history is rooted at the state's injected machine home, so two
+    /// states in one process never share (or touch the real) `~/.hotsheet2` history.
+    #[test]
+    fn terminal_history_lives_under_the_injected_machine_home() {
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = hotsheet_ticketing::FsStore::init(
+            store_dir.path(),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let home_a = tempfile::tempdir().unwrap();
+        let home_b = tempfile::tempdir().unwrap();
+        let state = super::AppState::new(store, "secret".into()).unwrap();
+        let state_a = state.clone().with_machine_home(home_a.path());
+        let state_b = state.with_machine_home(home_b.path());
+        let req: super::OpenTerminalReq = serde_json::from_str("{}").unwrap();
+        for (state, home) in [(&state_a, home_a.path()), (&state_b, home_b.path())] {
+            let env =
+                super::terminal_shell_history_only_env(state, &req, "term-1", "/bin/bash").unwrap();
+            let histfile = &env.iter().find(|(key, _)| key == "HISTFILE").unwrap().1;
+            assert!(
+                std::path::Path::new(histfile).starts_with(home.join("terminal-history")),
+                "{histfile} must live under {}",
+                home.display()
+            );
+        }
+    }
 
     #[test]
     fn shell_command_uses_the_platform_shell_command_boundary() {

@@ -126,12 +126,8 @@ pub fn is_video(filename: &str) -> bool {
     )
 }
 
-/// Read a browser-generated poster from the content-addressed local cache.
-pub fn cached_video_poster(bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
-    cached_video_poster_at(&cache_root(), bytes)
-}
-
-fn cached_video_poster_at(root: &Path, bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
+/// Read a browser-generated poster from the content-addressed cache under `root`.
+pub fn cached_video_poster(root: &Path, bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
     match fs::read(video_poster_cache_path(root, bytes)) {
         Ok(poster) => Ok(Some(poster)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -139,12 +135,9 @@ fn cached_video_poster_at(root: &Path, bytes: &[u8]) -> Result<Option<Vec<u8>>, 
     }
 }
 
-/// Last-write-wins publication for a content-addressed browser-generated poster.
-pub fn cache_video_poster(bytes: &[u8], poster: &[u8]) -> Result<(), MediaError> {
-    cache_video_poster_at(&cache_root(), bytes, poster)
-}
-
-fn cache_video_poster_at(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<(), MediaError> {
+/// Last-write-wins publication for a content-addressed browser-generated poster
+/// under the cache `root`.
+pub fn cache_video_poster(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<(), MediaError> {
     static POSTER_WRITER: OnceLock<Mutex<()>> = OnceLock::new();
     let _writer = POSTER_WRITER
         .get_or_init(|| Mutex::new(()))
@@ -170,13 +163,17 @@ fn cache_video_poster_at(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<(),
 
 /// Return an existing poster or opportunistically generate one with ffmpeg.
 /// Absence/failure of ffmpeg is intentionally a cache miss, never a setup failure.
-pub fn optional_video_poster(filename: &str, bytes: &[u8]) -> Result<Option<Vec<u8>>, MediaError> {
+pub fn optional_video_poster(
+    root: &Path,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<Option<Vec<u8>>, MediaError> {
     if !is_video(filename) {
         return Err(MediaError::Thumbnail(
             "attachment is not a supported video".into(),
         ));
     }
-    if let Some(cached) = cached_video_poster(bytes)? {
+    if let Some(cached) = cached_video_poster(root, bytes)? {
         return Ok(Some(cached));
     }
     let workspace = tempfile::tempdir()?;
@@ -208,7 +205,7 @@ pub fn optional_video_poster(filename: &str, bytes: &[u8]) -> Result<Option<Vec<
         return Ok(None);
     }
     let thumbnail = fs::read(output)?;
-    cache_video_poster(bytes, &thumbnail)?;
+    cache_video_poster(root, bytes, &thumbnail)?;
     Ok(Some(thumbnail))
 }
 
@@ -267,7 +264,10 @@ fn video_poster_cache_path(root: &Path, bytes: &[u8]) -> PathBuf {
     root.join("video-thumbnails").join(format!("{digest}.jpg"))
 }
 
-fn cache_root() -> PathBuf {
+/// The machine-local cache root a server resolves **once** at construction
+/// (HS2-FQEESP): `${HOTSHEET_CACHE_DIR}` when set, else the platform cache directory.
+/// Request handlers use the root injected on `AppState`, never the environment.
+pub fn default_cache_root() -> PathBuf {
     if let Some(path) = std::env::var_os("HOTSHEET_CACHE_DIR") {
         return PathBuf::from(path);
     }
@@ -366,21 +366,18 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let first_video = b"first video";
         let second_video = b"second video";
+        assert_eq!(cached_video_poster(root.path(), first_video).unwrap(), None);
+        cache_video_poster(root.path(), first_video, b"old poster").unwrap();
+        cache_video_poster(root.path(), first_video, b"new poster").unwrap();
+        cache_video_poster(root.path(), second_video, b"other poster").unwrap();
         assert_eq!(
-            cached_video_poster_at(root.path(), first_video).unwrap(),
-            None
-        );
-        cache_video_poster_at(root.path(), first_video, b"old poster").unwrap();
-        cache_video_poster_at(root.path(), first_video, b"new poster").unwrap();
-        cache_video_poster_at(root.path(), second_video, b"other poster").unwrap();
-        assert_eq!(
-            cached_video_poster_at(root.path(), first_video)
+            cached_video_poster(root.path(), first_video)
                 .unwrap()
                 .unwrap(),
             b"new poster"
         );
         assert_eq!(
-            cached_video_poster_at(root.path(), second_video)
+            cached_video_poster(root.path(), second_video)
                 .unwrap()
                 .unwrap(),
             b"other poster"
@@ -408,12 +405,10 @@ mod tests {
             for poster in &writers {
                 let video = &video;
                 let root = root.path();
-                scope.spawn(move || cache_video_poster_at(root, video, poster).unwrap());
+                scope.spawn(move || cache_video_poster(root, video, poster).unwrap());
             }
         });
-        let stored = cached_video_poster_at(root.path(), &video)
-            .unwrap()
-            .unwrap();
+        let stored = cached_video_poster(root.path(), &video).unwrap().unwrap();
         assert!(writers.contains(&stored));
     }
 }

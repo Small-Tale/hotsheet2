@@ -5041,7 +5041,12 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     FsStore::init(extra.path(), &StoreMetadata::new("EX")).unwrap();
     let checkout = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    // HS2-FQEESP: the poster cache is injected on AppState, never via a process-wide
+    // HOTSHEET_CACHE_DIR mutation that would leak into concurrently running tests.
+    let poster_cache = tempfile::tempdir().unwrap();
+    let app = app(st
+        .with_cache_dir(poster_cache.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
     let added = body_json(
         app.clone()
             .oneshot(authed(
@@ -5176,8 +5181,6 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         ranged_video.into_body().collect().await.unwrap().to_bytes(),
         Bytes::from_static(&[0x5a; 10])
     );
-    let poster_cache = tempfile::tempdir().unwrap();
-    unsafe { std::env::set_var("HOTSHEET_CACHE_DIR", poster_cache.path()) };
     let poster_uri = format!(
         "/checkouts/combo/tickets/{qualified_id}/attachments/{video_attachment_id}/thumbnail"
     );
@@ -5235,7 +5238,16 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .await
         .unwrap();
     assert_eq!(wrong_type.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
-    unsafe { std::env::remove_var("HOTSHEET_CACHE_DIR") };
+    let cached_posters: Vec<_> = std::fs::read_dir(poster_cache.path().join("video-thumbnails"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(
+        cached_posters.len(),
+        1,
+        "the uploaded poster lands in the injected cache dir: {cached_posters:?}"
+    );
+    assert_eq!(std::fs::read(&cached_posters[0]).unwrap(), b"second jpeg");
     let regrouped = body_json(
         app.clone()
             .oneshot(authed(
