@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { QuickTicketComposer, QuickTicketLauncher, showQuickTicketComposer } from './quick-ticket-composer';
+import {
+  QuickTicketComposer,
+  QuickTicketLauncher,
+  showQuickTicketComposer,
+  strandedNewTicketAttachments,
+} from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
@@ -182,5 +187,67 @@ describe('QuickTicketComposer', () => {
     expect(markup).toContain('Create ticket');
     expect(markup).not.toContain('Creating…');
     expect(markup.match(/disabled/g)).toHaveLength(1);
+  });
+  it('keeps staged files but blocks Create across an attachment-less source switch and back (HS2-8HHHK3)', () => {
+    expect(strandedNewTicketAttachments(0, true)).toBe(false);
+    expect(strandedNewTicketAttachments(2, true)).toBe(false);
+    expect(strandedNewTicketAttachments(0, false)).toBe(false);
+    expect(strandedNewTicketAttachments(1, false)).toBe(true);
+    const sources = [
+        { value: 'git-a', label: 'HS2 git tickets' },
+        { value: 'github-b', label: 'GitHub issues' },
+      ],
+      attachments = [
+        { id: 'proof', name: 'proof.png' },
+        { id: 'trace', name: 'trace.log' },
+      ],
+      render = (source: string, providerName: string, attachmentsEnabled: boolean, staged = attachments) =>
+        String(
+          QuickTicketComposer({
+            expanded: true,
+            title: 'Routed work',
+            sources,
+            source,
+            providerName,
+            attachments: staged,
+            attachmentsEnabled,
+          }),
+        ),
+      createDisabled = (markup: string) => /<wa-button[^>]*type="submit"[^>]*disabled/.test(markup);
+    // Source A takes attachments: files are staged, the drop zone shows, and Create is enabled.
+    const sourceA = render('git-a', 'HS2 git tickets', true);
+    expect(sourceA).toContain('data-pending-attachment-id="proof"');
+    expect(sourceA).toContain('data-pending-attachment-id="trace"');
+    expect(sourceA).toContain('Drop attachment files anywhere in this area or browse');
+    expect(sourceA).not.toContain('data-action="clear-new-ticket-attachments"');
+    expect(sourceA).not.toContain('data-new-ticket-attachments-stranded');
+    expect(createDisabled(sourceA)).toBe(false);
+    // Source B cannot: the files stay listed, Create is blocked with an explanation, Remove all appears.
+    const sourceB = render('github-b', 'GitHub issues', false);
+    expect(sourceB).toContain('data-pending-attachment-id="proof"');
+    expect(sourceB).toContain('data-pending-attachment-id="trace"');
+    expect(sourceB).not.toContain('name="new-ticket-attachments"');
+    expect(sourceB).toMatch(
+      /role="status" data-new-ticket-attachments-stranded="true">GitHub issues does not support attachments\. Remove the 2 staged files or choose a source that supports attachments to create this ticket\./,
+    );
+    expect(sourceB).not.toContain('This ticket provider does not support attachments.');
+    expect(sourceB).toMatch(
+      /<button type="button" data-action="clear-new-ticket-attachments" aria-label="Remove all staged attachments">[\s\S]*data-lucide="trash-2"[\s\S]*Remove all<\/button>/,
+    );
+    expect(createDisabled(sourceB)).toBe(true);
+    expect(render('github-b', 'GitHub issues', false, attachments.slice(0, 1))).toContain('Remove the staged file or');
+    // Back to source A: the same files are ready to create again and every B-only presentation is gone.
+    const backToA = render('git-a', 'HS2 git tickets', true);
+    expect(backToA).toBe(sourceA);
+    // Removing the files on source B unblocks Create there and returns to the plain notice.
+    const cleared = render('github-b', 'GitHub issues', false, []);
+    expect(cleared).toContain('This ticket provider does not support attachments.');
+    expect(cleared).not.toContain('data-action="clear-new-ticket-attachments"');
+    expect(cleared).not.toContain('data-new-ticket-attachments-stranded');
+    expect(createDisabled(cleared)).toBe(false);
+    // While a create is in flight the Remove all control is disabled with the rest of the form.
+    expect(
+      String(QuickTicketComposer({ expanded: true, attachments, attachmentsEnabled: false, submitting: true })),
+    ).toMatch(/data-action="clear-new-ticket-attachments"[^>]*disabled/);
   });
 });

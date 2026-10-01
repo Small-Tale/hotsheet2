@@ -155,6 +155,34 @@
 .quick-ticket-composer__attachments header label:hover {
   background: var(--wa-color-brand-fill-quiet);
 }
+/* Clears files staged for a source that cannot take them (HS2-8HHHK3). */
+.quick-ticket-composer__attachments header button {
+  display: inline-flex;
+  min-height: remify(30.4px);
+  padding: 0 var(--kui-space-xs);
+  border: 0;
+  border-radius: remify(6.4px);
+  color: var(--wa-color-danger-on-quiet);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--wa-font-size-xs);
+  font-weight: 650;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+}
+.quick-ticket-composer__attachments header button:hover,
+.quick-ticket-composer__attachments header button:focus-visible {
+  background: var(--wa-color-danger-fill-quiet);
+}
+.quick-ticket-composer__attachments header button:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+.quick-ticket-composer__attachments header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .quick-ticket-composer__attachments input {
   position: absolute;
   width: 1px;

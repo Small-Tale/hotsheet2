@@ -3046,6 +3046,39 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await page.getByRole('button', { name: /New ticket/ }).click();
   await expect(source).toHaveJSProperty('value', 'github-issues');
   await page.getByRole('button', { name: /Cancel/ }).click();
+  // HS2-8HHHK3: files staged for git stay listed but block Create on attachment-less GitHub issues.
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  await expect(source).toHaveJSProperty('value', 'github-issues');
+  await source.click();
+  await source.locator('wa-option[value="git-local"]').click();
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await form
+    .getByLabel('Browse attachments for new ticket', { exact: true })
+    .setInputFiles({ name: 'demo-proof.png', mimeType: 'image/png', buffer: Buffer.from('demo') });
+  await expect(form.getByText('demo-proof.png')).toBeVisible();
+  const demoCreate = form.locator('wa-button[type="submit"]'),
+    demoStranded = form.locator('[data-new-ticket-attachments-stranded="true"]'),
+    demoRemoveAll = form.getByRole('button', { name: 'Remove all staged attachments' });
+  await expect(demoCreate).toHaveJSProperty('disabled', false);
+  await source.click();
+  await source.locator('wa-option[value="github-issues"]').click();
+  await expect(source).toHaveJSProperty('value', 'github-issues');
+  await expect(demoStranded).toContainText('GitHub issues does not support attachments');
+  await expect(form.getByText('demo-proof.png')).toBeVisible();
+  await expect(demoCreate).toHaveJSProperty('disabled', true);
+  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-ux-demo-stranded.png' });
+  await source.click();
+  await source.locator('wa-option[value="git-local"]').click();
+  await expect(demoStranded).toHaveCount(0);
+  await expect(form.getByText('demo-proof.png')).toBeVisible();
+  await expect(demoCreate).toHaveJSProperty('disabled', false);
+  await source.click();
+  await source.locator('wa-option[value="github-issues"]').click();
+  await demoRemoveAll.click();
+  await expect(page.getByText('Staged attachments removed')).toBeVisible();
+  await expect(form.getByText('demo-proof.png')).toHaveCount(0);
+  await expect(demoCreate).toHaveJSProperty('disabled', false);
+  await page.getByRole('button', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
   const cancel = page.getByRole('button', { name: /Cancel/ });

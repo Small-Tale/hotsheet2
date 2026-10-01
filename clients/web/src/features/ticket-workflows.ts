@@ -17,7 +17,12 @@ import { type AttachmentReferenceContext, isVideoAttachment } from '../attachmen
 import { browserRandomId } from '../browser-id';
 import type { BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
-import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
+import {
+  focusQuickTicketComposerTitle,
+  showQuickTicketComposer,
+  STRANDED_ATTACHMENTS_MESSAGE,
+  strandedNewTicketAttachments,
+} from '../components/quick-ticket-composer';
 import type { TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
@@ -1836,6 +1841,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       !(target?.capabilities.create ?? true)
     )
       return;
+    // Staged files are kept, not silently dropped, when the chosen source cannot take them; the
+    // composer disables Create and this guard covers Enter/programmatic submits (HS2-8HHHK3).
+    if (strandedNewTicketAttachments(composerAttachments.value.length, canStageNewTicketAttachments())) {
+      composerAttachmentMessage.value = STRANDED_ATTACHMENTS_MESSAGE;
+      composerAttachmentError.value = true;
+      return;
+    }
     const client = new Api(origin.apiPath),
       files = composerAttachments.value.map((item) => item.file),
       batch_id = browserRandomId(),

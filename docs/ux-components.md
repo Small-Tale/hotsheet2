@@ -617,6 +617,10 @@ always retain native clipboard behavior.
   The provider destination is plain "Creating in" text for one writable source and a compact
   Kerf source `Select` for several (HS2-NZMJBJ); the demo settings switch between the two
   variants, and the demo remembers the last source it created in, preselecting it next time.
+  The demo's GitHub issues source reports no attachment support, so files browsed in while
+  Hot Sheet git is selected stay listed but block Create, with an explanation and a
+  **Remove all** header action, until they are removed or the user switches back
+  (HS2-8HHHK3).
   Textual Cancel intentionally has no redundant icon. Production and catalog keep one
   controlled Web Awesome dialog host mounted, call `show()` while the live launcher owns
   focus, and let native modality confine Tab/Shift-Tab, order nested-control Escape, inert

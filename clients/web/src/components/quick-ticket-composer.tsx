@@ -38,6 +38,18 @@ export interface QuickTicketDialogElement extends HTMLElement {
   show(): Promise<void>;
 }
 
+/**
+ * Whether staged new-ticket files are stranded: the selected source cannot take attachments, so
+ * creation is blocked until the user removes them or picks a source that can (HS2-8HHHK3).
+ */
+/** The error a blocked submit reports; a later source switch clears it (HS2-8HHHK3). */
+export const STRANDED_ATTACHMENTS_MESSAGE =
+  'Remove the staged attachments or choose a ticket source that supports attachments.';
+
+export function strandedNewTicketAttachments(attachmentCount: number, attachmentsEnabled: boolean): boolean {
+  return !attachmentsEnabled && attachmentCount > 0;
+}
+
 export function showQuickTicketComposer(root: ParentNode): boolean {
   const dialog = root.querySelector<QuickTicketDialogElement>('[data-component="quick-ticket-composer"]');
   if (!dialog) return false;
@@ -100,6 +112,9 @@ export function QuickTicketComposer({
   busy = false,
   submitting = false,
 }: QuickTicketComposerProps) {
+  // Files staged for a source that takes attachments stay listed after switching to one that does
+  // not; creation is blocked until the user removes them or switches back (HS2-8HHHK3).
+  const strandedAttachments = strandedNewTicketAttachments(attachments.length, attachmentsEnabled);
   return (
     <wa-dialog
       class="quick-ticket-dialog"
@@ -162,6 +177,17 @@ export function QuickTicketComposer({
                   />
                 </label>
               )}
+              {strandedAttachments && (
+                <button
+                  type="button"
+                  data-action="clear-new-ticket-attachments"
+                  aria-label="Remove all staged attachments"
+                  disabled={submitting}
+                >
+                  <LucideIcon icon={Trash2} name="trash-2" />
+                  Remove all
+                </button>
+              )}
             </header>
             {attachments.length > 0 && (
               <div class="quick-ticket-composer__attachment-list">
@@ -193,6 +219,12 @@ export function QuickTicketComposer({
                   aria-label="Drop or browse attachments for new ticket"
                 />
               </label>
+            ) : strandedAttachments ? (
+              <p class="quick-ticket-composer__notice" role="status" data-new-ticket-attachments-stranded="true">
+                {providerName} does not support attachments. Remove the{' '}
+                {attachments.length === 1 ? 'staged file' : `${attachments.length} staged files`} or choose a source
+                that supports attachments to create this ticket.
+              </p>
             ) : (
               <p class="quick-ticket-composer__notice">This ticket provider does not support attachments.</p>
             )}
@@ -236,7 +268,11 @@ export function QuickTicketComposer({
               >
                 Cancel
               </wa-button>
-              <wa-button type="submit" appearance="accent" disabled={!canCreate || busy || submitting}>
+              <wa-button
+                type="submit"
+                appearance="accent"
+                disabled={!canCreate || strandedAttachments || busy || submitting}
+              >
                 {submitting ? 'Creating…' : 'Create ticket'}
               </wa-button>
             </div>

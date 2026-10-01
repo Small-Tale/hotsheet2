@@ -3,6 +3,7 @@ import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type TicketRow as WireTicketRow } from '../api';
+import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
 import { TICKET_SEARCH_ACTIONS, ticketSearchFieldId } from '../components/ticket-search-field';
 import {
   nextWorkspaceSort,
@@ -275,6 +276,11 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   delegate(document.body, 'change', '[name="new-ticket-source"]', (_event, target) => {
     // In-memory only: the pick lasts while the composer is open; creating remembers it (HS2-NZMJBJ).
     composerSource.value = (target as Control).value || undefined;
+    // A blocked-submit explanation is about the previous source; the new one shows its own state.
+    if (composerAttachmentMessage.value === STRANDED_ATTACHMENTS_MESSAGE) {
+      composerAttachmentMessage.value = '';
+      composerAttachmentError.value = false;
+    }
   });
   delegate(document.body, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
     composerUpNext.value = !composerUpNext.value;
@@ -289,6 +295,15 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     const id = data(target).pendingAttachmentId;
     if (id) void deleteDraftFiles(draftScope('composer'), [id]);
     composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+    composerAttachmentMessage.value = '';
+    composerAttachmentError.value = false;
+    scheduleProjectSessionPersistence();
+  });
+  delegate(document.body, 'click', '[data-action="clear-new-ticket-attachments"]', () => {
+    // Drops every file staged for a source that cannot take attachments (HS2-8HHHK3).
+    const ids = composerAttachments.value.map((item) => item.id);
+    if (ids.length) void deleteDraftFiles(draftScope('composer'), ids);
+    composerAttachments.value = [];
     composerAttachmentMessage.value = '';
     composerAttachmentError.value = false;
     scheduleProjectSessionPersistence();

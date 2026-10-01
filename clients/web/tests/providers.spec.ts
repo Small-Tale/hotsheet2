@@ -7709,6 +7709,163 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   expect(creates).toEqual(['?source=github-acme', '?source=git-local']);
 });
 
+test('keeps staged files but blocks Create on an attachment-less source, then creates after switching back (HS2-8HHHK3)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const capabilities = (attachments: boolean) => ({
+    create: true,
+    update: true,
+    close: true,
+    notes: true,
+    note_edit: true,
+    note_delete: true,
+    attachments,
+    assignment: true,
+    review_requests: true,
+    dependencies: true,
+    up_next: true,
+    close_reasons: true,
+    claims: true,
+    atomic_batch: true,
+    not_working_report: true,
+    offline_mutation: true,
+    history: true,
+    watch: true,
+    provider_idempotency: true,
+    query_fields: [],
+  });
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'HS2 git tickets',
+          locator: '/tickets',
+          default: true,
+          capabilities: capabilities(true),
+        },
+        {
+          connection_id: 'github-acme',
+          provider: 'github',
+          display_name: 'GitHub issues',
+          locator: 'acme/widgets',
+          default: false,
+          capabilities: capabilities(false),
+        },
+      ],
+    }),
+  );
+  const creates: string[] = [],
+    uploads: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
+      creates.push(url.search);
+    if (request.method() === 'POST' && /\/attachments$/.test(url.pathname))
+      uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    dialog = page.getByRole('dialog', { name: 'Create ticket' }),
+    form = dialog.locator('[data-action="create-ticket-form"]'),
+    source = dialog.locator('wa-select[name="new-ticket-source"]'),
+    create = dialog.locator('wa-button[type="submit"]'),
+    removeAll = form.getByRole('button', { name: 'Remove all staged attachments' }),
+    stranded = form.locator('[data-new-ticket-attachments-stranded="true"]'),
+    browse = form.getByLabel('Browse attachments for new ticket', { exact: true }),
+    pick = async (value: string, label: string) => {
+      await source.click();
+      await source.locator(`wa-option[value="${value}"]`).click();
+      await expect(source).toHaveJSProperty('value', value);
+      await expect
+        .poll(() =>
+          source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
+        )
+        .toBe(label);
+    };
+  await launcher.click();
+  // Source A (git) takes attachments: stage two files.
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await browse.setInputFiles([
+    { name: 'proof.txt', mimeType: 'text/plain', buffer: Buffer.from('proof') },
+    { name: 'trace.log', mimeType: 'text/plain', buffer: Buffer.from('trace') },
+  ]);
+  await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(2);
+  await expect(form.getByText('proof.txt')).toBeVisible();
+  await expect(form.getByText('trace.log')).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Evidence routed back to git');
+  await expect(create).toHaveJSProperty('disabled', false);
+  await expect(removeAll).toHaveCount(0);
+  // Source B (GitHub) cannot: the files stay, Create is blocked with an explanation, Remove all appears.
+  await pick('github-acme', 'GitHub issues');
+  await expect(form.getByText('proof.txt')).toBeVisible();
+  await expect(form.getByText('trace.log')).toBeVisible();
+  await expect(stranded).toHaveText(
+    'GitHub issues does not support attachments. Remove the 2 staged files or choose a source that supports attachments to create this ticket.',
+  );
+  await expect(stranded).toHaveAttribute('role', 'status');
+  await expect(browse).toHaveCount(0);
+  await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(0);
+  await expect(create).toHaveJSProperty('disabled', true);
+  await expect(removeAll).toBeVisible();
+  await expect(removeAll).toHaveCSS('cursor', 'pointer');
+  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-stranded-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(removeAll).toBeVisible();
+  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-stranded-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  // A programmatic/Enter submit is refused by the same guard: nothing is created or uploaded.
+  await form.evaluate((node: HTMLFormElement) => {
+    node.requestSubmit();
+  });
+  await expect(form.getByRole('alert')).toHaveText(
+    'Remove the staged attachments or choose a ticket source that supports attachments.',
+  );
+  expect(creates).toEqual([]);
+  // Back to source A: the same files are ready, the drop zone returns, and the stale error clears.
+  await pick('git-local', 'HS2 git tickets');
+  await expect(form.getByRole('alert')).toHaveCount(0);
+  await expect(stranded).toHaveCount(0);
+  await expect(removeAll).toHaveCount(0);
+  await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(1);
+  await expect(form.getByText('proof.txt')).toBeVisible();
+  await expect(form.getByText('trace.log')).toBeVisible();
+  await expect(create).toHaveJSProperty('disabled', false);
+  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-back-to-git-wide.png' });
+  await create.click();
+  await expect(dialog).toBeHidden();
+  expect(creates).toEqual(['?source=git-local']);
+  await expect.poll(() => uploads).toEqual(['proof.txt', 'trace.log']);
+  // Remove all on source B clears every staged file, unblocks Create, and creates without uploads.
+  await launcher.click();
+  await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(0);
+  await browse.setInputFiles({ name: 'later.txt', mimeType: 'text/plain', buffer: Buffer.from('later') });
+  await expect(form.getByText('later.txt')).toBeVisible();
+  await pick('github-acme', 'GitHub issues');
+  await expect(stranded).toContainText('Remove the staged file or choose');
+  await expect(create).toHaveJSProperty('disabled', true);
+  await removeAll.click();
+  await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(0);
+  await expect(stranded).toHaveCount(0);
+  await expect(form.getByText('This ticket provider does not support attachments.')).toBeVisible();
+  await expect(create).toHaveJSProperty('disabled', false);
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('No evidence for GitHub');
+  // Switching back after Remove all keeps the list empty: nothing comes back.
+  await pick('git-local', 'HS2 git tickets');
+  await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(0);
+  await pick('github-acme', 'GitHub issues');
+  await create.click();
+  await expect(dialog).toBeHidden();
+  expect(creates).toEqual(['?source=git-local', '?source=github-acme']);
+  expect(uploads).toEqual(['proof.txt', 'trace.log']);
+});
+
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {
   await mockProject(page);
   const creates: string[] = [];

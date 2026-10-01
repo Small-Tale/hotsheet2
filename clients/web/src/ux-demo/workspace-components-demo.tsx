@@ -7,7 +7,11 @@ import { effect, signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
 import { NotificationCenter } from '../components/notification-center';
-import { QuickTicketComposer, QuickTicketLauncher } from '../components/quick-ticket-composer';
+import {
+  QuickTicketComposer,
+  QuickTicketLauncher,
+  strandedNewTicketAttachments,
+} from '../components/quick-ticket-composer';
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
@@ -67,9 +71,13 @@ export const composerCategory = signal('task');
 export const composerUpNext = signal(false);
 /** Writable ticket sources the demo composer can target (HS2-NZMJBJ). */
 export const composerSources = [
-  { value: 'git-local', label: 'Hot Sheet git' },
-  { value: 'github-issues', label: 'GitHub issues' },
+  { value: 'git-local', label: 'Hot Sheet git', attachments: true },
+  // GitHub issues cannot take attachments, so files staged for git stay listed but block Create
+  // until removed or the user switches back (HS2-8HHHK3).
+  { value: 'github-issues', label: 'GitHub issues', attachments: false },
 ] as const;
+/** Demo files staged in the composer (names only; nothing is uploaded). */
+export const composerAttachments = signal<readonly { id: string; name: string }[]>([]);
 /** Whether the demo project has several writable sources (the Select) or one (plain text). */
 export const composerMultipleSources = signal(true);
 /** The demo's in-memory "most recently used" source, which the next composer preselects. */
@@ -77,6 +85,10 @@ export const composerSource = signal<string>(composerSources[0].value);
 /** The source picked in the open composer; creating remembers it, cancelling forgets it. */
 export const composerSourcePick = signal<string | undefined>(undefined);
 export const demoComposerTarget = () => composerSourcePick.value ?? composerSource.value;
+const demoComposerSource = () =>
+  composerMultipleSources.value
+    ? composerSources.find((item) => item.value === demoComposerTarget())!
+    : composerSources[0];
 export const inspectorOpen = signal(true);
 export const inspectorTab = signal<InspectorTab>('info');
 export const inspectorCategory = signal('feature');
@@ -291,6 +303,7 @@ export function workspaceColumns(tickets = filteredWorkspaceTickets()): TicketCo
 export function createDemoTicket(): boolean {
   const title = composerTitle.value.trim();
   if (!title) return false;
+  if (strandedNewTicketAttachments(composerAttachments.value.length, demoComposerSource().attachments)) return false;
   const slug = `HS2-DEMO${demoSequence++}`;
   const category = DEFAULT_TICKET_CATEGORIES.find((choice) => choice.value === composerCategory.value)!;
   collectionTickets.value = [
@@ -313,9 +326,8 @@ export function createDemoTicket(): boolean {
   composerTitle.value = '';
   composerDetails.value = '';
   composerUpNext.value = false;
-  const source = composerMultipleSources.value
-    ? composerSources.find((item) => item.value === demoComposerTarget())!
-    : composerSources[0];
+  composerAttachments.value = [];
+  const source = demoComposerSource();
   composerSource.value = source.value;
   composerSourcePick.value = undefined;
   collectionEvent.value = `${slug} created in ${source.label}`;
@@ -437,9 +449,11 @@ export function QuickTicketComposerDemo() {
         details={composerDetails.value}
         category={composerCategory.value}
         upNext={composerUpNext.value}
-        providerName={composerSources[0].label}
+        providerName={demoComposerSource().label}
         sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
-        source={composerMultipleSources.value ? demoComposerTarget() : composerSources[0].value}
+        source={demoComposerSource().value}
+        attachments={composerAttachments.value}
+        attachmentsEnabled={demoComposerSource().attachments}
       />
       <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
       <p class="component-stage__event" aria-live="polite">

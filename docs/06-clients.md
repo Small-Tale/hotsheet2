@@ -1627,6 +1627,14 @@ and identity-less legacy entries remain conservatively blocking.
   `?source=<connection-id>`, and attachment staging follows that source's capabilities. A
   project with a single writable source keeps the plain "Creating in" label and the
   checkout's default routing (HS2-NZMJBJ).
+  Files staged while a source that takes attachments is selected are never silently dropped
+  or uploaded just to fail: switching to a source whose capabilities report
+  `attachments: false` keeps them listed, disables **Create ticket**, and explains that the
+  named source does not support attachments, so the user removes the staged files (per file,
+  or **Remove all** in the attachments header) or chooses a source that supports them.
+  Switching back restores the drop zone and the same staged files, and the create action
+  re-checks the rule so an Enter or programmatic submit is refused with the same
+  explanation, which the next source switch clears (HS2-8HHHK3).
   Its chosen height is a device-local preference. The live textarea is morph-protected so a
   controlled-value rerender cannot replace the browser-resized element, while
   cancellation/reopening and later new-ticket sessions restore the persisted height.

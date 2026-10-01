@@ -314,6 +314,7 @@ import { ToolbarControlGroupDemo, toolbarGroupDemoMode } from './toolbar-control
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
 import {
+  composerAttachments,
   composerCategory,
   composerDetails,
   composerExpanded,
@@ -2197,6 +2198,7 @@ delegateCapture(root, 'wa-after-hide', '[data-component="quick-ticket-composer"]
   composerDetails.value = '';
   composerUpNext.value = false;
   composerSourcePick.value = undefined;
+  composerAttachments.value = [];
   recordCollectionEvent('Ticket creation cancelled');
 });
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => {
@@ -2217,9 +2219,29 @@ delegate(root, 'change', '[data-settings="quick-ticket-composer"] [name="compose
 delegate(root, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
   composerUpNext.value = !composerUpNext.value;
 });
+let demoAttachmentSequence = 0;
+delegate(root, 'change', 'input[name="new-ticket-attachments"]', (_event, target) => {
+  const input = target as HTMLInputElement;
+  composerAttachments.value = [
+    ...composerAttachments.value,
+    ...Array.from(input.files ?? [], (file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
+  ];
+  input.value = '';
+});
+delegate(root, 'click', '[data-action="remove-new-ticket-attachment"]', (_event, target) => {
+  const id = (target as HTMLElement).dataset.pendingAttachmentId;
+  composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+});
+delegate(root, 'click', '[data-action="clear-new-ticket-attachments"]', () => {
+  composerAttachments.value = [];
+  recordCollectionEvent('Staged attachments removed');
+});
 delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => {
   event.preventDefault();
-  if (!createDemoTicket()) recordCollectionEvent('Enter a ticket title');
+  if (!createDemoTicket())
+    recordCollectionEvent(
+      composerTitle.value.trim() ? 'Remove the staged attachments or choose another source' : 'Enter a ticket title',
+    );
 });
 delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => {
   const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
