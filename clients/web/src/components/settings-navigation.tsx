@@ -52,6 +52,43 @@ const appCategories = [
 
 const allCategories = [...projectCategories, ...appCategories];
 
+/**
+ * Where a settings control stores its value: a server path as the web client requests it
+ * (`{project}` marks the project id; the project bridge decides whether the server sees it
+ * checkout-scoped), or a browser `localStorage` key.
+ */
+export type SettingsStorage =
+  { control: string; server: string; browser?: never } | { control: string; browser: string; server?: never };
+
+/**
+ * Every settings category's controls and where each one stores its value (HS2-S1184P). A
+ * project category may only store per project and an app category only machine- or
+ * browser-wide; `settings-storage-scope.test.ts` resolves each entry through the project
+ * bridge and fails when a setting is filed under the wrong group. Add a control's storage
+ * here when you add the control.
+ */
+export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage[]> = {
+  sources: [
+    { control: 'Linked sources list', server: '/providers' },
+    { control: 'Attach and detach a source', server: '/checkouts/{project}/sources' },
+    { control: 'Default source', server: '/checkouts/{project}/default-source' },
+  ],
+  ai: [{ control: 'Default tool, model, and effort', server: '/ai-settings' }],
+  commands: [
+    { control: 'Command definitions', server: '/commands' },
+    { control: 'Command groups', server: '/command-groups' },
+  ],
+  lifecycle: [{ control: 'Trash retention', server: '/checkouts/{project}/trash-settings' }],
+  terminals: [{ control: 'Use global shell history', server: '/terminal-settings' }],
+  permissions: [
+    { control: 'Automatic decision and delay', browser: 'hotsheet.project.{project}.permission-automation' },
+  ],
+  columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
+  general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
+  connections: [{ control: 'Connection catalog, Disable/Enable, Remove', server: '/provider-connections' }],
+  keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
+};
+
 /** Whether a settings category is app-scoped (device-local) rather than project-scoped. */
 export function isAppSettingsCategory(category: SettingsCategory): boolean {
   return appCategories.some((item) => item.id === category);

@@ -550,6 +550,24 @@ and identity-less legacy entries remain conservatively blocking.
   machine-wide connection catalog (edit for every project, Disable/Enable, Remove) is the
   **App Settings → Connections** page (HS2-3SCH1K, see
   [16-external-sync-interface.md](16-external-sync-interface.md)).
+  A category's group states what its controls affect (HS2-S1184P). `SETTINGS_STORAGE` in
+  `components/settings-navigation.tsx` declares each control's storage, and
+  `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting
+  filed under the wrong group fails the build:
+
+  | Group   | Category       | Stored in                                                                    | Scope                   |
+  | ------- | -------------- | ---------------------------------------------------------------------------- | ----------------------- |
+  | Project | Ticket sources | `/checkouts/{id}/providers`, `/sources/{connection}`, `/default-source`      | this project, machine   |
+  | Project | AI tools       | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`) | this project, machine   |
+  | Project | Commands       | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)               | this project, machine   |
+  | Project | Lifecycle      | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                           | this project, committed |
+  | Project | Terminals      | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                         | this project, machine   |
+  | Project | Permissions    | `localStorage hotsheet.project.{id}.permission-automation`                   | this project, browser   |
+  | Project | Column view    | `localStorage hotsheet.project.{id}.hide-verified-column`                    | this project, browser   |
+  | App     | General        | `localStorage hotsheet.show-loading-activity`                                | every project, browser  |
+  | App     | Connections    | `/provider-connections` (`providers.json`)                                   | every project, machine  |
+  | App     | Keyboard       | `localStorage hotsheet.keyboard-shortcuts`                                   | every project, browser  |
+
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
   `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup and
