@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { loadLucideCatalog } from '../lucide-catalog';
 import { LucideIconPicker } from './lucide-icon-picker';
@@ -17,9 +17,15 @@ describe('LucideIconPicker', () => {
     expect(markup).toMatch(/data-icon-name="test-tube-2" aria-pressed="true"/);
   });
 
-  it('shows a loading hint when searching before the catalog has loaded', () => {
+  it('shows a loading hint when searching before the catalog has loaded', async () => {
+    // The catalog is cached in module state once any test loads it; a fresh module graph keeps
+    // this test's "not loaded yet" precondition true in any test order (HS2-HBY8HN).
+    vi.resetModules();
+    const { isLucideCatalogLoaded } = await import('../lucide-catalog'),
+      { LucideIconPicker: FreshPicker } = await import('./lucide-icon-picker');
+    expect(isLucideCatalogLoaded()).toBe(false);
     const markup = String(
-      LucideIconPicker({ query: 'compass', searchName: 'command-icon-search', selectAction: 'select-command-icon' }),
+      FreshPicker({ query: 'compass', searchName: 'command-icon-search', selectAction: 'select-command-icon' }),
     );
     expect(markup).toContain('Loading icons…');
   });
