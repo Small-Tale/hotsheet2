@@ -22,6 +22,8 @@ export interface Project {
   hs1SourcePath?: string;
   hs1DatabasePath?: string;
   hs1PostgresVersion?: string;
+  /** Why opening skipped the project's setup refresh; shown as a dismissible warning (HS2-0TXM8S). */
+  setupWarning?: string;
 }
 
 export type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };

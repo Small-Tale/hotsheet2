@@ -29,6 +29,7 @@ import {
   projectSessionRegistry,
   recoverUnhealthyServer,
   refreshLocalProjectSetup,
+  refreshProjectSetupOnOpen,
   removeHs1LiveData,
   requireCompatibleServer,
   requireCurrentSetupAssets,
@@ -126,6 +127,32 @@ describe('project setup compatibility', () => {
       ['-C', '/work/tickets.hs2', 'setup', '--refresh', '--project', '/work/code'],
       expect.any(String),
     );
+  });
+  it('opens a project even when its setup refresh is refused, reporting why (HS2-0TXM8S)', async () => {
+    const refreshed: string[] = [];
+    expect(
+      await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', (root, store) => {
+        refreshed.push(`${root}|${store}`);
+        return Promise.resolve();
+      }),
+    ).toBeUndefined();
+    expect(refreshed).toEqual(['/work/code|/work/tickets.hs2']);
+    // The stale-CLI guard still refuses to write, but opening continues with its explanation.
+    const staleRunner = vi.fn().mockResolvedValue(JSON.stringify(cli));
+    const warning = await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', (root, store) =>
+      refreshLocalProjectSetup(root, store, staleRunner),
+    );
+    expect(warning).toMatch(/does not report.*cargo build -p hotsheet-cli.*No setup files were changed/i);
+    expect(staleRunner).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(['setup']),
+      expect.anything(),
+    );
+    expect(
+      await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', () =>
+        Promise.reject(new Error('plain failure')),
+      ),
+    ).toBe('plain failure');
   });
   it('refuses missing or mismatched compiled setup assets with rebuild guidance before writing', async () => {
     const fingerprint = await developmentSetupAssetsFingerprint();

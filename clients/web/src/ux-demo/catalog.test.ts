@@ -116,6 +116,7 @@ describe('UX demo catalog', () => {
       'pending-attachment-picker',
       'hs1-migration-dialog',
       'hs1-migration-banner',
+      'project-setup-warning-banner',
       'ticket-source-setup-dialog',
       'provider-setup-form',
       'ticket-sources-settings',

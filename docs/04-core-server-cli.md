@@ -403,7 +403,11 @@ asset. The source-backed web development bridge calculates the same digest from 
 `plugins/` tree before project-open refresh, bootstrap, or post-import setup. A missing or
 mismatched digest stops before any setup mutation and tells the developer to run
 `cargo build -p hotsheet-cli`; project open awaits this gate so the diagnostic is visible
-instead of being discarded by a background refresh (HS2-EK0B1Z).
+instead of being discarded by a background refresh (HS2-EK0B1Z). The refusal never blocks
+the project itself (HS2-0TXM8S): opening or restoring continues with the setup refresh
+skipped, and the project carries `setupWarning`, shown as a dismissible **Project setup was
+skipped** warning banner with the reason and fix. Bootstrap and post-import setup still stop,
+because they would otherwise leave a project half set up.
 
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain

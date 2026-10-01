@@ -33,6 +33,11 @@ export interface ProjectSession {
   hs1SourcePath?: string;
   hs1DatabasePath?: string;
   hs1PostgresVersion?: string;
+  /**
+   * Why opening skipped the project's setup refresh (HS2-0TXM8S). The project is fully usable;
+   * only its AI-tool guidance files were left as they were.
+   */
+  setupWarning?: string;
 }
 
 export interface InstanceInfo {
@@ -315,6 +320,25 @@ async function requireCurrentSetupCli(store: string | undefined, runner: Process
 
 function sessionForRoot(root: string): SessionTarget | undefined {
   return [...sessions.values()].find((target) => target.root === root);
+}
+
+/**
+ * Refresh a project's setup while opening it, without letting a refusal block the project
+ * (HS2-0TXM8S). The refresh only rewrites AI-tool guidance; a stale development CLI must not
+ * write it, but that is no reason to keep the user out of their tickets. Returns the reason the
+ * refresh was skipped, for a warning banner.
+ */
+export async function refreshProjectSetupOnOpen(
+  root: string,
+  store: string,
+  refresh: (root: string, store: string) => Promise<void> = refreshLocalProjectSetup,
+): Promise<string | undefined> {
+  try {
+    await refresh(root, store);
+    return undefined;
+  } catch (reason) {
+    return reason instanceof Error ? reason.message : String(reason);
+  }
 }
 
 /** Run current-app setup writers independently of the detached server's build, after a
@@ -969,7 +993,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
     : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));
-  if (ticketStore) await refreshLocalProjectSetup(root, ticketStore);
+  const setupWarning = ticketStore ? await refreshProjectSetupOnOpen(root, ticketStore) : undefined;
   const plan = projectServerPlan(await bootstrapStore(), root, ticketStore);
   let instance = await ensureServer(plan.serverStore),
     target: SessionTarget = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
@@ -1008,6 +1032,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     stores: opened.checkout.stores,
     apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`,
     compatibility,
+    ...(setupWarning ? { setupWarning } : {}),
     needsTicketSetup: opened.checkout.sources.length === 0,
     needsHs1Migration: hs1DataPresent && !imported,
     hs1ImportCompleted: imported,

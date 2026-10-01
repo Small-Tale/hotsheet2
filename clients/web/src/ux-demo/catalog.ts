@@ -721,6 +721,13 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'project-setup-warning-banner',
+        'ProjectSetupWarningBanner',
+        'Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'ticket-source-setup-dialog',
         'TicketSourceSetupDialog',
         'Choose and configure a git or external ticket source.',

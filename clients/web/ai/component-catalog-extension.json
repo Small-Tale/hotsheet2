@@ -1519,6 +1519,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "project-setup-warning-banner",
+      "name": "ProjectSetupWarningBanner",
+      "kind": "component",
+      "purpose": "Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.",
+      "useWhen": [
+        "Hot Sheet needs dismissible warning that a project opened but skipped its setup refresh, with the reason and fix."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectSetupWarningBanner behavior."
+      ],
+      "publicClasses": [
+        "project-setup-warning-banner"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "ticket-source-setup-dialog",
       "name": "TicketSourceSetupDialog",
       "kind": "component",

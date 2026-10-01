@@ -170,6 +170,13 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   delegate(document.body, 'click', '[data-action="remove-hs1-data"]', () => {
     void removeOldHs1Data();
   });
+  delegate(document.body, 'click', '[data-action="dismiss-project-setup-warning"]', () => {
+    const current = project();
+    if (!current) return;
+    projects.value = projects.value.map((item) =>
+      item.id === current.id ? { ...item, setupWarning: undefined } : item,
+    );
+  });
   delegate(document.body, 'click', '[data-action="dismiss-hs1-cleanup"]', () => {
     const current = project();
     if (!current) return;

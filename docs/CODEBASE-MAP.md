@@ -107,6 +107,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-scroll-state.ts # In-session project/mode/view scroll snapshots, deferred restoration, and content-bound clamping
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
     src/ai-provider-defaults.ts # Per-provider AI default model/effort resolution, save and default-switch helpers (HS2-EK24KF)
+    src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
     src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)
     src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics

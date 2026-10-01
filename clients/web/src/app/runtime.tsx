@@ -89,6 +89,7 @@ import {
 } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectRestoreError, projectRestoreTabId } from '../components/project-restore-error';
+import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
 import { type ProjectTabProps } from '../components/project-tab';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
@@ -4549,6 +4550,7 @@ export async function startHotSheetWebClient() {
             )}{' '}
             {current.hs1CleanupEligible &&
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
+            {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
           </>
         }
         pageHeader={pageHeader}

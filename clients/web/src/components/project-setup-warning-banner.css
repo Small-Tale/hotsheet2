@@ -1,0 +1,12 @@
+/* A full-width warning strip above the workspace, matching the HS1 banners (HS2-0TXM8S). */
+.project-setup-warning-banner {
+  --kui-layout-inline-margin: 0;
+  --kui-layout-item-gap: var(--kui-space-m);
+  --kui-layout-item-padding: var(--kui-space-xs) var(--kui-space-m);
+  --kui-layout-rounded-radius: 0;
+  --kui-state-banner-border: transparent;
+  --kui-state-banner-copy-gap: var(--kui-space-2xs);
+  --kui-state-banner-foreground: var(--wa-color-warning-on-quiet);
+  display: grid;
+  border-bottom: 1px solid var(--wa-color-warning-border-quiet);
+}

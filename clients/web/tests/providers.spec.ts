@@ -1733,6 +1733,38 @@ test('falls back to the project dialog when the direct native chooser fails', as
   await expect(dialog).toHaveJSProperty('open', false);
 });
 
+test('opens a project whose setup refresh was skipped and explains it in a dismissible banner (HS2-0TXM8S)', async ({
+  page,
+}) => {
+  const warning =
+    'The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed.';
+  await mockProject(page);
+  // The bridge's real open response: the project plus why its setup refresh was skipped.
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, setupWarning: warning } }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/');
+    // The first pass opens the project; the reload restores it through the same open path.
+    if (width === 1280) {
+      await page.getByRole('button', { name: 'Open project' }).click();
+      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    }
+    const banner = page.locator('[data-component="project-setup-warning-banner"]');
+    await expect(banner).toContainText('Project setup was skipped');
+    await expect(banner).toContainText('Run cargo build -p hotsheet-cli');
+    // The project is fully usable: its tickets load and nothing reports it unavailable.
+    await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`setup-warning-${width}.png`) });
+    await banner.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+  }
+});
+
 test('clears a failed project-open error when retrying successfully', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

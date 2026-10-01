@@ -47,6 +47,7 @@ import { ConversationExportDialog } from '../components/conversation-export-dial
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { ProjectCloseDialog } from '../components/project-close-dialog';
+import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
@@ -525,6 +526,10 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'value-table') return <ValueTableDemo />;
   if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
+  if (item.id === 'project-setup-warning-banner')
+    return (
+      <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
+    );
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'list') return <ListDemo />;
