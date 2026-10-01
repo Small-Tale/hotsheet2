@@ -1996,7 +1996,7 @@ advanced search surface and state as the main workspace, including chips,
 tag completion, attachment/presence filters, relative or local dates, and syntax help: the
 rail, the workspace header, and the saved-view dialog's query field all render the one
 shared `TicketSearchField` component over a Kerf-managed `TokenSearchModel` (HS2-5JXBQY), so
-tag completion (Kerf's in-flow suggestion rows), the date helper, and syntax help are
+tag completion (Kerf's anchored suggestion popover), the date helper, and syntax help are
 available wherever tickets are searched (HS2-N5G6JS). A
 well-formed structured value becomes a chip only after an explicit impossible continuation
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.

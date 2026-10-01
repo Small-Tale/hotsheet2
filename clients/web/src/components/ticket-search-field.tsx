@@ -2,7 +2,7 @@ import './ticket-search-field.css';
 import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { TokenSearchField, type TokenSearchFieldProps } from '@kerfjs/ui/token-search-field';
+import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { CircleHelp } from 'lucide';
@@ -206,8 +206,10 @@ export function TicketSearchField({
   surfaces = 'floating',
 }: TicketSearchFieldProps) {
   const open = collapsible ? expanded : true,
-    field: Omit<TokenSearchFieldProps, 'collapsible' | 'expanded' | 'expandAction' | 'expandLabel'> = {
-      presentation: 'toolbar-group',
+    // Inferred, not annotated: `Omit` over Kerf's union props (beta.64 `trailing` XOR `trailingAction`)
+    // would collapse the branches.
+    field = {
+      presentation: 'toolbar-group' as const,
       id,
       label,
       model,

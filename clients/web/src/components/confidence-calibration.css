@@ -79,9 +79,12 @@
 .confidence-calibration__rate {
   min-width: remify(128px);
 }
-.confidence-calibration__rate wa-progress-bar {
+.confidence-calibration__rate-stack {
+  /* The app-owned stack spaces the label above the bar and sets the bar's track height by
+     inheritance, so no rule restyles the Web Awesome element itself. */
   --track-height: remify(4px);
-  margin-top: var(--kui-space-2xs);
+  display: grid;
+  gap: var(--kui-space-2xs);
 }
 .confidence-calibration__recent {
   display: grid;

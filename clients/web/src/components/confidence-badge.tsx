@@ -35,8 +35,9 @@ export function ConfidenceBadge({
   const band = confidenceBand(value);
   return (
     <span
-      class={`confidence-badge confidence-badge--${appearance}`}
+      class="confidence-badge"
       data-component="confidence-badge"
+      data-appearance={appearance}
       data-band={band}
       data-confidence={value}
       role="img"

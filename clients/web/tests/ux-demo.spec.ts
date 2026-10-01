@@ -1639,7 +1639,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   const badge = page.locator('.component-stage [data-component="confidence-badge"]');
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
-  await expect(badge).toHaveClass(/confidence-badge--compact/);
+  await expect(badge).toHaveAttribute('data-appearance', 'compact');
   await page.locator('[data-action="toggle-settings"]').click();
   const inspector = page.getByRole('complementary', { name: 'ConfidenceBadge settings' });
   const value = inspector.locator('wa-select[name="value"]');
@@ -1661,14 +1661,14 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   }
   await set(appearance, 'labeled');
   await expect(badge).toHaveText('Confidence 20%');
-  await expect(badge).toHaveClass(/confidence-badge--labeled/);
+  await expect(badge).toHaveAttribute('data-appearance', 'labeled');
   await expect(badge.locator('[data-lucide="gauge"]')).toHaveCount(1);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(value).toHaveJSProperty('value', '82');
   await expect(appearance).toHaveJSProperty('value', 'compact');
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
-  await expect(badge).toHaveClass(/confidence-badge--compact/);
+  await expect(badge).toHaveAttribute('data-appearance', 'compact');
   await set(value, '55');
   await expect(badge).toHaveText('55%');
   await expect(badge).toHaveAttribute('data-band', 'partial');
@@ -6216,7 +6216,8 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     externalSurfaces = externalSection.locator('.ticket-search-surfaces');
   await expect(fields.nth(1).locator('.ticket-search-surfaces')).toHaveCount(0);
   await externalQuery.fill('tag:d');
-  // Kerf's tag completion stays in flow inside the field itself, even with external helper surfaces.
+  // Kerf's tag completion stays inside the field itself, even with external helper surfaces; since
+  // beta.63 (KF-EZRBXH, KF-94A4J3) it is an anchored popover below the editor rather than in flow.
   const externalSuggestions = fields.nth(1).locator('.kui-token-search__suggestions');
   await expect(externalSuggestions.getByRole('button')).toHaveText(['tag:docs']);
   expect(
@@ -6230,7 +6231,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
           field.querySelector<HTMLElement>('[data-token-search-editor]')!.getBoundingClientRect().bottom - 1,
       };
     }),
-  ).toEqual({ position: 'static', insideField: true, belowEditor: true });
+  ).toEqual({ position: 'absolute', insideField: true, belowEditor: true });
   await expect(externalSurfaces.locator('.kui-token-search__suggestions')).toHaveCount(0);
   await externalSuggestions.getByRole('button', { name: 'tag:docs' }).click();
   await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveAttribute(

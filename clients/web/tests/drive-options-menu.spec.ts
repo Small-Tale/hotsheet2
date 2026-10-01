@@ -31,11 +31,23 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await modelChoices.first().evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  const modelGeometry = await modelChoices.first().evaluate((node) => {
-    const item = node.getBoundingClientRect();
-    const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
-    const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
-    return { iconInset: icon.left - item.left, labelInset: label.left - item.left };
+  const modelGeometry = await modelChoices.first().evaluate(async (node) => {
+    // Read once the submenu's show animation (which scales its container, outside this
+    // item's own animations) has settled: two consecutive frames with identical geometry.
+    const read = () => {
+      const item = node.getBoundingClientRect();
+      const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
+      const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
+      return { iconInset: icon.left - item.left, labelInset: label.left - item.left, width: item.width };
+    };
+    let previous = read();
+    for (let frame = 0; frame < 120; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const next = read();
+      if (JSON.stringify(next) === JSON.stringify(previous)) return next;
+      previous = next;
+    }
+    return previous;
   });
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-drive-options-menu-wide.png', fullPage: true });
 
@@ -49,11 +61,23 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await effortChoices.first().evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  const effortGeometry = await effortChoices.first().evaluate((node) => {
-    const item = node.getBoundingClientRect();
-    const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
-    const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
-    return { iconInset: icon.left - item.left, labelInset: label.left - item.left };
+  const effortGeometry = await effortChoices.first().evaluate(async (node) => {
+    // Read once the submenu's show animation (which scales its container, outside this
+    // item's own animations) has settled: two consecutive frames with identical geometry.
+    const read = () => {
+      const item = node.getBoundingClientRect();
+      const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
+      const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
+      return { iconInset: icon.left - item.left, labelInset: label.left - item.left, width: item.width };
+    };
+    let previous = read();
+    for (let frame = 0; frame < 120; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const next = read();
+      if (JSON.stringify(next) === JSON.stringify(previous)) return next;
+      previous = next;
+    }
+    return previous;
   });
   expect(Math.abs(effortGeometry.iconInset - modelGeometry.iconInset)).toBeLessThan(1);
   expect(Math.abs(effortGeometry.labelInset - modelGeometry.labelInset)).toBeLessThan(4);

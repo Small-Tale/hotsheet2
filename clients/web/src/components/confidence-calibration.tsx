@@ -47,13 +47,15 @@ function BandRow({ band }: { band: CalibrationBand }) {
       <td>{band.reopened}</td>
       <td>{band.pending}</td>
       <td class="confidence-calibration__rate">
-        <span>{reopenRateLabel(band)}</span>
-        {rate !== undefined && (
-          <wa-progress-bar
-            value={String(Math.round(rate * 100))}
-            label={`${BAND_LABELS[band.band] ?? band.band} reopen rate`}
-          ></wa-progress-bar>
-        )}
+        <div class="confidence-calibration__rate-stack">
+          <span>{reopenRateLabel(band)}</span>
+          {rate !== undefined && (
+            <wa-progress-bar
+              value={String(Math.round(rate * 100))}
+              label={`${BAND_LABELS[band.band] ?? band.band} reopen rate`}
+            ></wa-progress-bar>
+          )}
+        </div>
       </td>
       <td>{band.mean_confidence === undefined ? '—' : band.mean_confidence.toFixed(1)}</td>
     </tr>

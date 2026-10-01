@@ -805,7 +805,7 @@ the app's own `tokenFromRaw`, the `tag` rule's `suggest(input, state)` serves th
 completion from the project's tags minus the chips already committed (capped at eight), and the
 documented relative syntax `updated-after:4h ago` is quoted (`updated-after:"4h ago"`, the chip's
 canonical value) before Kerf's whitespace-delimited grammar sees it. Kerf owns parsing, chips,
-the in-flow suggestion rows (`kui-token-search__suggestion`, inside the field itself), chip
+the anchored suggestion popover rows (in flow before beta.63; beta.64 adopted) (`kui-token-search__suggestion`, inside the field itself), chip
 edit/remove, clear, Enter, and the keyboard; the app projects `model.state` into its
 `searchQuery`/`searchTokens` signals (`inlineSearchTokens`) and reseeds the editor through
 `model.replace` (`replaceTicketSearch` for a restored session or a seeded saved-view query). The
@@ -2068,6 +2068,18 @@ parent gap (`HS2-10KEHN`) persists in beta.62. Beta.62 also ships the removable 
 (`HS2-2GYQ6C`), ListItem tones and the caret-free Select trigger (`HS2-1QQGH4`), the
 TokenSearchModel additions (`HS2-06Q4MG`), and the scoped Workbench selectors that `HS2-P289N2`
 waits on (`KF-JTVA2F`).
+HS2-MM9XKW upgraded all three packages to 5.0.0-beta.64 (beta.63 was skipped: its Workbench
+overlay `:has()` rules restyled the whole work area on every DOM change and failed the 138-ticket
+paint budget, fixed upstream as `KF-FN91ET`). The doctor baseline is unchanged (3 errors); the
+FloatingToolbar parent gap (`HS2-10KEHN`) still persists, so beta.63 and beta.64 join the adapter's
+version list. TokenSearchField suggestions are now an anchored popover with a rounded (not pill)
+radius and leading-aligned rows (`KF-EZRBXH`, `KF-94A4J3`, `KF-3XSD7K`, `KF-KMR9HJ`). The release
+also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-DNVMQE`,
+`HS2-TNE7V7`) and removal/clear focus restoration (`KF-Q2G9QS`, `HS2-45F8WW`), Workbench
+`keepOpenOn` (`KF-5D6T81`, `HS2-5APX20`), the Workbench panel `header` (`KF-ZBW7MS`, `HS2-QQW6CT`),
+the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
+parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
+TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers

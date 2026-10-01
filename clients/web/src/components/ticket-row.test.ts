@@ -372,7 +372,7 @@ describe('TicketRow', () => {
       for (const presentation of ['list', 'column'] as const) {
         const markup = String(TicketRow({ ...base, status, presentation }));
         expect(markup).toContain('data-component="confidence-badge"');
-        expect(markup).toContain('confidence-badge--compact');
+        expect(markup).toContain('data-appearance="compact"');
         expect(markup).toContain('data-band="assumed"');
         expect(markup).toContain('aria-label="Confidence 82 percent"');
         expect(markup).toContain('data-lucide="gauge"');

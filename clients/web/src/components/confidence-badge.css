@@ -20,12 +20,12 @@
   height: remify(12px);
   flex: none;
 }
-.confidence-badge--labeled {
+.confidence-badge[data-appearance='labeled'] {
   height: remify(32px);
   padding: 0 var(--kui-space-s);
   font-size: var(--wa-font-size-xs);
 }
-.confidence-badge--labeled svg {
+.confidence-badge[data-appearance='labeled'] svg {
   width: remify(16px);
   height: remify(16px);
 }
