@@ -921,6 +921,7 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
         edited_at: Timestamp::new("2026-08-19T01:00:00Z"),
         kind: NoteKind::Regular,
         summary: None,
+        confidence: None,
         text: "Context first. FEEDBACK NEEDED choose one".into(),
     });
     store.write_ticket(&ticket).unwrap();

@@ -9,8 +9,8 @@
 //! `feedback_draft` notes remain excluded because they are intentionally local-only.
 
 use hotsheet_model::{
-    CloseReason, ExternalLink, Note, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket,
-    Timestamp, Ulid, parse_file, to_file_string,
+    CloseReason, Confidence, ExternalLink, Note, NoteKind, Priority, ReviewKind, ReviewRequest,
+    Status, Ticket, Timestamp, Ulid, parse_file, to_file_string,
 };
 use proptest::collection::vec;
 use proptest::option;
@@ -118,16 +118,21 @@ fn arb_note() -> impl Strategy<Value = Note> {
             Just(Some("Résumé ✓".to_string())),
         ],
         prop_oneof![
+            Just(None),
+            (0u64..=100).prop_map(|value| Some(Confidence::new(value).unwrap()))
+        ],
+        prop_oneof![
             "[!-~][ -~\n]{0,80}".prop_map(|s| s.trim().to_string()),
             Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
         ],
     )
-        .prop_map(|(id, kind, at, summary, text)| Note {
+        .prop_map(|(id, kind, at, summary, confidence, text)| Note {
             id,
             kind,
             created_at: at.clone(),
             edited_at: at,
             summary,
+            confidence,
             text: text.trim().to_string(),
         })
 }

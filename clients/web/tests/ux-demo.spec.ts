@@ -1846,21 +1846,36 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  await expect(notes).toHaveCount(5);
-  for (const [kind, icon] of [
-    ['regular', 'message-square-text'],
-    ['status', 'refresh-cw'],
-    ['feedback_needed', 'circle-alert'],
-    ['feedback_draft', 'file-pen-line'],
-    ['activity', 'activity'],
+  await expect(notes).toHaveCount(7);
+  const noteById = (id: string) => page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
+  for (const [id, kind, icon] of [
+    ['regular', 'regular', 'message-square-text'],
+    ['status', 'status', 'refresh-cw'],
+    ['feedback', 'feedback_needed', 'circle-alert'],
+    ['draft', 'feedback_draft', 'file-pen-line'],
+    ['activity', 'activity', 'activity'],
   ] as const) {
-    const note = notes.filter({ has: page.locator(`[data-lucide="${icon}"]`) });
+    const note = noteById(id);
     await expect(note).toHaveAttribute('data-kind', kind);
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   }
-  const standaloneNote = notes.filter({ has: page.locator('[data-lucide="message-square-text"]') });
-  const feedbackNote = notes.filter({ has: page.locator('[data-lucide="circle-alert"]') }),
-    activityNote = notes.filter({ has: page.locator('[data-lucide="activity"]') });
+  // The demo exposes every confidence band (HS2-DWTJ43); unscored kinds carry no badge.
+  for (const [id, value, band] of [
+    ['regular', 82, 'assumed'],
+    ['activity', 96, 'verified'],
+    ['scored-partial', 55, 'partial'],
+    ['scored-low', 32, 'unverified'],
+  ] as const) {
+    const badge = noteById(id).locator('.note-card__header-end [data-component="confidence-badge"]');
+    await expect(badge).toHaveAttribute('data-band', band);
+    await expect(badge).toHaveAccessibleName(`Confidence ${value} percent`);
+    await expect(badge.locator('[data-lucide="gauge"]')).toBeVisible();
+  }
+  for (const id of ['status', 'feedback', 'draft'])
+    await expect(noteById(id).locator('[data-component="confidence-badge"]')).toHaveCount(0);
+  const standaloneNote = noteById('regular');
+  const feedbackNote = noteById('feedback'),
+    activityNote = noteById('activity');
   expect(
     await standaloneNote.evaluate((node) => {
       const card = getComputedStyle(node),

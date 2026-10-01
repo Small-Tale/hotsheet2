@@ -7,12 +7,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp, Ulid};
+use hotsheet_model::{
+    CloseReason, Confidence, NoteKind, Priority, ReviewRequest, Status, Timestamp, Ulid,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::checkout_order::{self, MergeKey};
-use crate::ops::{self, NewTicket, TicketPatch, TicketQuery};
+use crate::ops::{self, NewTicket, NoteMetadataInput, TicketPatch, TicketQuery};
 use crate::wire::{ApiAttachment, ApiTicket};
 use crate::{FsStore, OpError, StoreError};
 
@@ -272,6 +274,10 @@ pub struct ProviderCapabilities {
     /// One all-or-nothing note/evidence/reopen operation.
     #[serde(default)]
     pub not_working_report: bool,
+    /// Notes can carry a structured completion confidence score (HS2-DWTJ43).
+    /// Providers without Hot Sheet note metadata reject a score explicitly.
+    #[serde(default)]
+    pub note_confidence: bool,
     pub offline_mutation: bool,
     pub history: bool,
     pub watch: bool,
@@ -297,6 +303,7 @@ impl ProviderCapabilities {
             claims: true,
             atomic_batch: true,
             not_working_report: true,
+            note_confidence: true,
             offline_mutation: true,
             history: true,
             watch: true,
@@ -765,6 +772,9 @@ pub trait TicketProvider: Send + Sync {
     fn supports_note_delete(&self) -> bool {
         self.descriptor().capabilities.note_delete
     }
+    fn supports_note_confidence(&self) -> bool {
+        self.descriptor().capabilities.note_confidence
+    }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
     /// Return one bounded page. The cursor is provider-owned and opaque to the host.
     fn query_page(
@@ -853,6 +863,25 @@ pub trait TicketProvider: Send + Sync {
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
         self.add_note(native_id, ctx, kind, text)
+    }
+    /// Append a note with every optional metadata field. A confidence score fails
+    /// explicitly on a provider whose `note_confidence` capability is off rather than
+    /// being silently dropped (HS2-DWTJ43); the summary keeps its best-effort fallback.
+    fn add_note_with_metadata(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        kind: NoteKind,
+        metadata: NoteMetadataInput,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        if metadata.confidence.is_some() && !self.supports_note_confidence() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "note_confidence",
+            });
+        }
+        self.add_note_with_summary(native_id, ctx, kind, metadata.summary, text)
     }
     fn report_not_working(
         &self,
@@ -1187,17 +1216,43 @@ impl TicketProvider for GitProvider {
         summary: Option<String>,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
+        self.add_note_with_metadata(
+            native_id,
+            ctx,
+            kind,
+            NoteMetadataInput {
+                summary,
+                confidence: None,
+            },
+            text,
+        )
+    }
+
+    fn add_note_with_metadata(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        kind: NoteKind,
+        metadata: NoteMetadataInput,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        if metadata.confidence.is_some() && !self.supports_note_confidence() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "note_confidence",
+            });
+        }
         let ticket = self.ticket(native_id)?;
         if ticket.notes.iter().any(|note| note.id == ctx.generated_id) {
             return Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None));
         }
-        let updated = ops::add_note_with_summary(
+        let updated = ops::add_note_with_metadata(
             &self.store,
             &ticket.id,
             ctx.generated_id,
             ctx.now,
             kind,
-            summary,
+            metadata,
             text,
         )?;
         Ok(ApiTicket::from_provider(
@@ -1646,6 +1701,14 @@ pub fn copy_between(
             field: "edited notes",
         });
     }
+    if ticket.notes.iter().any(|note| note.confidence.is_some())
+        && !destination.supports_note_confidence()
+    {
+        return Err(TransferError::UnsupportedField {
+            connection_id: destination_connection.into(),
+            field: "note confidence",
+        });
+    }
     let draft = ProviderDraft {
         title: ticket.title,
         category: ticket.category,
@@ -1669,14 +1732,19 @@ pub fn copy_between(
     )?;
     for note in ticket.notes {
         let generated_id = transfer_ulid(operation_id, &format!("note:{}", note.id));
-        destination.add_note_with_summary(
+        destination.add_note_with_metadata(
             &created.native_id,
             MutationContext {
                 now: Timestamp::new(note.created_at.clone()),
                 generated_id,
             },
             note.kind,
-            note.summary.clone(),
+            NoteMetadataInput {
+                summary: note.summary.clone(),
+                confidence: note
+                    .confidence
+                    .and_then(|value| Confidence::new(u64::from(value)).ok()),
+            },
             note.text.clone(),
         )?;
         if note.edited_at != note.created_at {
@@ -2611,6 +2679,139 @@ mod tests {
             TransferError::UnsupportedField { field: "notes", .. }
         ));
         assert!(destination_store.list_tickets().unwrap().is_empty());
+    }
+
+    /// HS2-DWTJ43: a confidence score is preserved by a capable provider (including
+    /// across a transfer) and fails explicitly, never silently, everywhere else.
+    #[test]
+    fn note_confidence_is_preserved_or_rejected_explicitly() {
+        let (_source_dir, source) = git_provider();
+        let source_id = Ulid::new();
+        let draft = || ProviderDraft {
+            title: "scored".into(),
+            category: "task".into(),
+            priority: Priority::Default,
+            status: Status::NotStarted,
+            details: String::new(),
+            tags: vec![],
+            up_next: false,
+            blocked_by: vec![],
+            transfer: None,
+        };
+        source
+            .create(ctx(source_id, "2026-08-26T03:00:00Z"), draft())
+            .unwrap();
+        assert!(source.supports_note_confidence());
+        let scored = source
+            .add_note_with_metadata(
+                &source_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(Confidence::new(73).unwrap()),
+                },
+                "## Confidence\n73".into(),
+            )
+            .unwrap();
+        assert_eq!(scored.notes.last().unwrap().confidence, Some(73));
+
+        // A provider without the capability rejects the score before writing anything.
+        let (_plain_dir, plain) = git_provider();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.note_confidence = false;
+        let plain = plain.with_test_capabilities(capabilities.clone());
+        let plain_id = Ulid::new();
+        plain
+            .create(ctx(plain_id, "2026-08-26T03:00:00Z"), draft())
+            .unwrap();
+        let error = plain
+            .add_note_with_metadata(
+                &plain_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(Confidence::new(10).unwrap()),
+                },
+                "scored".into(),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            ProviderError::Unsupported {
+                capability: "note_confidence",
+                ..
+            }
+        ));
+        assert!(plain.get(&plain_id.to_string()).unwrap().notes.is_empty());
+        // ...while an unscored note still works there.
+        plain
+            .add_note_with_metadata(
+                &plain_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T03:02:00Z"),
+                NoteKind::Regular,
+                NoteMetadataInput::default(),
+                "unscored".into(),
+            )
+            .unwrap();
+
+        // Transfers carry the score to a capable destination and refuse an incapable one.
+        let capable_dir = tempfile::tempdir().unwrap();
+        let capable_store = FsStore::init(capable_dir.path(), &StoreMetadata::new("CAP")).unwrap();
+        let incapable_dir = tempfile::tempdir().unwrap();
+        let incapable_store =
+            FsStore::init(incapable_dir.path(), &StoreMetadata::new("INC")).unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry
+            .register(Arc::new(GitProvider::new("capable", capable_store)))
+            .unwrap();
+        registry
+            .register(Arc::new(
+                GitProvider::new("incapable", incapable_store.clone())
+                    .with_test_capabilities(capabilities),
+            ))
+            .unwrap();
+        let source_ref = TicketRef {
+            connection_id: "local".into(),
+            native_id: source_id.to_string(),
+        };
+        let error = copy_between(
+            &registry,
+            source_ref.clone(),
+            "incapable",
+            "confidence-refused",
+            Timestamp::new("2026-08-26T03:03:00Z"),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            TransferError::UnsupportedField {
+                field: "note confidence",
+                ..
+            }
+        ));
+        assert!(incapable_store.list_tickets().unwrap().is_empty());
+        let copied = copy_between(
+            &registry,
+            source_ref,
+            "capable",
+            "confidence-copied",
+            Timestamp::new("2026-08-26T03:04:00Z"),
+        )
+        .unwrap();
+        assert_eq!(
+            registry
+                .get("capable")
+                .unwrap()
+                .get(&copied.destination.native_id)
+                .unwrap()
+                .notes
+                .iter()
+                .find_map(|note| note.confidence),
+            Some(73)
+        );
     }
 
     #[test]

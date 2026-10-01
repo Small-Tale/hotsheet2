@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 52 -->
+<!-- hotsheet-skill-version: 53 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -64,6 +64,23 @@ docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; include result, verification, and all follow-up slugs in the
 completing note.
+
+**Completion confidence:** the note that moves a ticket to `completed` must include a
+`## Confidence` section with the integer score (0-100) and one line per factor, each rated
+high/medium/low with a short phrase:
+- clarity of the request;
+- context and supporting information available;
+- comprehensiveness and realism of verification (unit, E2E, real-browser visual QA;
+  actually ran vs. assumed);
+- scope deviation or unverified assumptions;
+- known gaps deferred to follow-ups.
+
+Pass the same integer in the same update with `--note-confidence <0-100>` (MCP
+`note_confidence`). Anchor bands: 90-100 fully verified end to end against the real
+system; 70-89 verified with minor assumptions; 40-69 partially verified or an ambiguous
+ask; below 40 largely unverified — name the gaps. A bare number without the factor lines
+is non-compliant. Example:
+`hotsheet-cli edit <slug> --status completed --note-file done.md --note-confidence 82`.
 
 Format AI-authored notes for human scanning. Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as

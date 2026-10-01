@@ -359,9 +359,11 @@ impl GitHubProvider {
                     created_at: comment.created_at.clone(),
                     edited_at: comment.updated_at.unwrap_or(comment.created_at),
                     summary: None,
+                    confidence: None,
                     text: strip_note_marker(comment.body),
                 })
                 .collect(),
+            latest_confidence: None,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -940,6 +942,8 @@ fn github_capabilities() -> ProviderCapabilities {
         claims: false,
         atomic_batch: false,
         not_working_report: false,
+        // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
+        note_confidence: false,
         offline_mutation: false,
         history: true,
         watch: true,

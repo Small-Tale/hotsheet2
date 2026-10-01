@@ -197,6 +197,21 @@ empty sections are omitted, and raw logs or multi-part results are not left as o
 paragraph. Multiline CLI notes use `--note-file` so the intended Markdown structure reaches
 the ticket intact.
 
+Every AI completion also reports a **completion confidence** (HS2-DWTJ43). The bundled
+instruction blocks and Hot Sheet skills require the note that moves a ticket to `completed`
+to include a `## Confidence` section with an integer score (0-100) and one line per rubric
+factor, each rated high/medium/low with a short phrase: clarity of the request; context and
+supporting information available; comprehensiveness and realism of verification (unit, E2E,
+real-browser visual QA; actually ran vs. assumed); scope deviation or unverified assumptions;
+and known gaps deferred to follow-ups. The same integer is passed as structured metadata
+(`--note-confidence` / MCP `note_confidence`) so clients never parse prose. Anchor bands:
+90-100 fully verified end to end against the real system; 70-89 verified with minor
+assumptions; 40-69 partially verified or an ambiguous ask; below 40 largely unverified, with
+the gaps named. A bare number without the factor lines is non-compliant. Self-reported
+confidence is weakly calibrated, so the factor lines — not the number — are the primary
+value; enforcement is prompt-level in this phase (hard enforcement, list filters, and
+calibration reporting are HS2-RD4M29; external-provider trailers are HS2-5YNASC).
+
 Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
 instructions.md`) carries a compact, **project-neutral** default policy so a brand-new
 project that never customizes its `CLAUDE.md`/`AGENTS.md` still gets strong defaults

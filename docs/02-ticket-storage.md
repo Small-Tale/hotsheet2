@@ -317,6 +317,16 @@ should the fix also cover the dashboard dedicated view?
     their marker as the forward-compatible `summary_hex:` token. It is the concise
     Timeline headline; the Markdown body remains the full record in Notes. Missing
     summaries are valid for old files and external providers.
+    Any note may carry an optional integer `confidence` (0-100) — the author's
+    self-reported completion confidence (HS2-DWTJ43) — as the forward-compatible
+    `confidence: NN` marker token. The ticket's _current_ confidence is **derived at
+    read time, never stored in frontmatter**: only a `completed`/`verified` ticket has
+    one, and it is the newest scored note written after the latest reopen (an automatic
+    transition into Not Started/Started, or a Not Working report). A score written just
+    before the completion flip in the same cycle counts; an old score never survives a
+    reopen. The wire ticket exposes it as `latest_confidence`; the per-note value stays
+    in Notes as history. Providers without note metadata report the
+    `note_confidence` capability as unsupported and reject a score explicitly.
     The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
     get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store

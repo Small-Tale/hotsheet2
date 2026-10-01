@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { NoteCard } from './note-card';
+import { ConfidenceBadge, confidenceBand, NoteCard } from './note-card';
 
 describe('NoteCard', () => {
   it.each([
@@ -19,6 +19,39 @@ describe('NoteCard', () => {
     expect(markup).toContain(label);
     expect(markup).toContain('Codex');
     expect(markup).toContain('Body');
+  });
+
+  it('renders a banded confidence badge only for scored notes (HS2-DWTJ43)', () => {
+    const unscored = String(NoteCard({ id: 'plain', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
+    expect(unscored).not.toContain('confidence-badge');
+    expect(unscored).not.toContain('data-confidence');
+    for (const [value, band] of [
+      [100, 'verified'],
+      [90, 'verified'],
+      [89, 'assumed'],
+      [70, 'assumed'],
+      [69, 'partial'],
+      [40, 'partial'],
+      [39, 'unverified'],
+      [0, 'unverified'],
+    ] as const) {
+      expect(confidenceBand(value)).toBe(band);
+      const markup = String(
+        NoteCard({ id: `n${value}`, kind: 'regular', author: 'Codex', time: 'Now', body: 'Body', confidence: value }),
+      );
+      expect(markup).toContain(`data-confidence="${value}"`);
+      expect(markup).toContain(`data-band="${band}"`);
+      expect(markup).toContain(`aria-label="Confidence ${value} percent"`);
+      expect(markup).toContain('data-lucide="gauge"');
+      expect(markup).toContain(`${value}%`);
+      // The badge sits in the header beside the timestamp, not in the body.
+      expect(markup).toMatch(/note-card__header-end">[\s\S]*confidence-badge[\s\S]*<time>/u);
+    }
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    for (const band of ['verified', 'assumed', 'partial', 'unverified']) {
+      expect(css).toContain(`.confidence-badge[data-band='${band}']`);
+    }
+    expect(String(ConfidenceBadge({ value: 82, appearance: 'labeled' }))).toContain('Confidence 82%');
   });
 
   it('renders a controlled editor only when editing is requested', () => {

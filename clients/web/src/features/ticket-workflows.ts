@@ -1126,7 +1126,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       status: ticket.status,
       up_next: ticket.up_next,
       tags: ticket.tags,
-      notes: full?.notes.map((note) => ({ kind: note.kind, text: note.text, summary: note.summary })) ?? [],
+      notes:
+        full?.notes.map((note) => ({
+          kind: note.kind,
+          text: note.text,
+          summary: note.summary,
+          confidence: note.confidence,
+        })) ?? [],
       attachments: full?.attachments.map((item) => ({ id: item.id, filename: item.filename })) ?? [],
     };
   }
@@ -1164,6 +1170,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               note: note.text,
               note_kind: note.kind,
               note_summary: note.summary,
+              note_confidence: note.confidence,
             })
           ).ticket;
         for (const attachment of source.attachments)
@@ -1340,6 +1347,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         body: note.text,
         aiAuthored,
         aiTool: aiAuthored ? 'Hot Sheet AI' : undefined,
+        confidence: note.confidence,
       } as const;
     });
   }

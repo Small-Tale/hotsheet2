@@ -17,17 +17,59 @@ function statusTransitionTitle(source: string, destination: string): string {
   return `Moved to ${destination.toLowerCase()}`;
 }
 
-function noteEntry(note: Note): TimestampedTimelineEntry {
+function noteEntry(note: Note, confidence?: number): TimestampedTimelineEntry {
   const [title] = note.text.split('\n');
   const transition = title.match(statusTransition);
   const conciseStatus = transition ? statusTransitionTitle(transition[1], transition[2]) : undefined;
+  const headline = conciseStatus || timelineHeadline(note.summary?.trim() || title);
   return {
     id: note.id,
     timestamp: note.created_at,
     time: note.created_at,
-    title: conciseStatus || timelineHeadline(note.summary?.trim() || title),
+    title: confidence === undefined ? headline : `${headline} · ${confidence}% confidence`,
     emphasized: note.kind === 'status' || Boolean(conciseStatus),
   };
+}
+
+const chronological = (left: Note, right: Note) =>
+  left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id);
+
+function transitionDestination(note: Note): string | undefined {
+  if (note.kind !== 'activity') return undefined;
+  return note.text.split('\n')[0].match(statusTransition)?.[2];
+}
+
+/** A reopen starts a new completion cycle: an automatic move back to active work or a
+ * Not Working report (mirrors `ops::latest_confidence`, HS2-DWTJ43). */
+function reopensTicket(note: Note): boolean {
+  if (note.kind !== 'activity') return false;
+  if (note.summary === 'Reported as not working') return true;
+  const destination = transitionDestination(note);
+  return destination === 'Not Started' || destination === 'Started';
+}
+
+/** Map each completion cycle's first Completed/Verified transition note to that cycle's
+ * newest confidence score, so the timeline headline carries the score it was completed with. */
+export function completionConfidenceByNote(notes: readonly Note[]): Map<string, number> {
+  const scores = new Map<string, number>();
+  let completion: Note | undefined;
+  let score: number | undefined;
+  const close = () => {
+    if (completion && score !== undefined) scores.set(completion.id, score);
+  };
+  for (const note of [...notes].sort(chronological)) {
+    if (reopensTicket(note)) {
+      close();
+      completion = undefined;
+      score = undefined;
+      continue;
+    }
+    if (note.confidence !== undefined) score = note.confidence;
+    const destination = transitionDestination(note);
+    if (!completion && (destination === 'Completed' || destination === 'Verified')) completion = note;
+  }
+  close();
+  return scores;
 }
 
 function timelineHeadline(text: string): string {
@@ -47,9 +89,10 @@ function timelineHeadline(text: string): string {
  * legacy tickets that predate automatic status-transition activity notes. */
 export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEntry[] {
   const verifiedAt = (ticket as FullTicket & { verified_at?: string }).verified_at;
+  const confidence = completionConfidenceByNote(ticket.notes);
   const entries: TimestampedTimelineEntry[] = ticket.notes
     .filter((note) => note.kind === 'activity' || note.kind === 'status')
-    .map(noteEntry);
+    .map((note) => noteEntry(note, confidence.get(note.id)));
   const recordedTransitionTimestamps = new Set(
     ticket.notes
       .filter((note) => note.kind === 'activity' && note.text.startsWith('Status changed from '))

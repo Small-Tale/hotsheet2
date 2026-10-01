@@ -80,6 +80,8 @@ export interface Note {
   created_at: string;
   edited_at: string;
   summary?: string;
+  /** AI completion confidence (0-100) recorded on this note (HS2-DWTJ43). */
+  confidence?: number;
   text: string;
 }
 export interface MediaAnnotation {
@@ -258,6 +260,8 @@ export interface FullTicket extends TicketRow {
   details: string;
   blocked_reason?: string;
   notes: Note[];
+  /** Derived confidence of a completed/verified ticket: newest scored note of the current cycle. */
+  latest_confidence?: number;
   attachments: Attachment[];
   concurrency_token?: string;
   warnings?: string[];

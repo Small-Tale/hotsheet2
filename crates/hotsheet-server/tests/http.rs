@@ -8386,6 +8386,144 @@ async fn close_duplicate_without_target_is_a_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
+/// HS2-DWTJ43: PATCH `note_confidence` on both the legacy ticket route and the
+/// provider route — validation, the per-note wire field, the derived
+/// `latest_confidence`, and the capability flag.
+#[tokio::test]
+async fn update_records_note_confidence_and_derives_latest_confidence() {
+    let (_d, st) = state();
+    let app = app(st);
+    let patch = |path: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            app.oneshot(authed("PATCH", &path, Some(&body.to_string())))
+                .await
+                .unwrap()
+        }
+    };
+    let created = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Scored"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let path = format!("/tickets/{id}");
+    assert!(created.get("latest_confidence").is_none());
+
+    for (body, message) in [
+        (
+            serde_json::json!({"note":"x","note_confidence":101}),
+            "integer from 0 to 100",
+        ),
+        (
+            serde_json::json!({"note":"x","note_confidence":-1}),
+            "integer from 0 to 100",
+        ),
+        (
+            serde_json::json!({"note":"x","note_confidence":82.5}),
+            "integer from 0 to 100",
+        ),
+        (
+            serde_json::json!({"note":"x","note_confidence":"82"}),
+            "integer from 0 to 100",
+        ),
+        (
+            serde_json::json!({"status":"completed","note_confidence":82}),
+            "requires a non-empty note",
+        ),
+    ] {
+        let response = patch(path.clone(), body.clone()).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+        let text = String::from_utf8(
+            axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(text.contains(message), "{body}: {text}");
+    }
+
+    let completed = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({
+                "status": "completed",
+                "note": "## Result\nDone\n\n## Confidence\n82",
+                "note_confidence": 82,
+            }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(completed["status"], "completed");
+    assert_eq!(completed["latest_confidence"], 82);
+    let scored = completed["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["confidence"] == 82)
+        .unwrap();
+    assert!(scored["text"].as_str().unwrap().contains("## Confidence"));
+    let editing = patch(
+        path.clone(),
+        serde_json::json!({"note":"x","note_id":scored["id"],"note_confidence":82}),
+    )
+    .await;
+    assert_eq!(editing.status(), StatusCode::BAD_REQUEST);
+    // Unscored notes omit the field entirely (backward-compatible wire shape).
+    assert!(
+        completed["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note["kind"] == "activity")
+            .all(|note| note.get("confidence").is_none())
+    );
+
+    // The provider route shares the contract and exposes the capability.
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(providers[0]["capabilities"]["note_confidence"], true);
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    let provider_path = format!("/providers/{connection}/tickets/{id}");
+    let bad = patch(
+        provider_path.clone(),
+        serde_json::json!({"note":"x","note_confidence":1000}),
+    )
+    .await;
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    let rescored = body_json(
+        patch(
+            provider_path,
+            serde_json::json!({"note":"re-verified","note_confidence":0}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(rescored["latest_confidence"], 0);
+
+    // Reopening clears the derived value; the per-note history stays.
+    let reopened = body_json(patch(path, serde_json::json!({"status":"started"})).await).await;
+    assert!(reopened.get("latest_confidence").is_none());
+    assert_eq!(
+        reopened["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note.get("confidence").is_some())
+            .count(),
+        2
+    );
+}
+
 #[tokio::test]
 async fn update_can_append_edit_and_preserve_repeated_activity() {
     let (_d, st) = state();

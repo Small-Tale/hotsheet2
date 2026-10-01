@@ -1077,6 +1077,7 @@ impl FsStore {
             created_at: now.clone(),
             edited_at: now.clone(),
             summary: Some(summary),
+            confidence: None,
             text,
         });
         ticket.updated_at = now;

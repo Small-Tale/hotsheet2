@@ -300,9 +300,11 @@ impl GitLabProvider {
                     created_at: note.created_at.clone(),
                     edited_at: note.updated_at.unwrap_or(note.created_at),
                     summary: None,
+                    confidence: None,
                     text: strip_note(&note.body),
                 })
                 .collect(),
+            latest_confidence: None,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -718,6 +720,8 @@ fn capabilities() -> ProviderCapabilities {
         claims: false,
         atomic_batch: false,
         not_working_report: false,
+        // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
+        note_confidence: false,
         offline_mutation: false,
         history: true,
         watch: true,

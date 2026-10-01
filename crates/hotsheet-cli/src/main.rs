@@ -11,8 +11,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
-    CloseReason, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid,
-    parse_file, to_file_string,
+    CloseReason, Confidence, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket,
+    Timestamp, Ulid, parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OsKeychain, Person,
@@ -207,6 +207,9 @@ enum Cmd {
         /// Concise plain-text timeline headline for an activity/status note.
         #[arg(long, conflicts_with = "edit_note")]
         note_summary: Option<String>,
+        /// AI completion confidence (integer 0-100) recorded on the appended note.
+        #[arg(long, value_name = "0-100", conflicts_with = "edit_note", value_parser = parse_confidence_arg)]
+        note_confidence: Option<Confidence>,
     },
     /// Close a provider-native ticket.
     ProviderClose {
@@ -300,6 +303,9 @@ enum Cmd {
         /// Concise plain-text timeline headline for an activity/status note.
         #[arg(long, conflicts_with = "edit_note")]
         note_summary: Option<String>,
+        /// AI completion confidence (integer 0-100) recorded on the appended note.
+        #[arg(long, value_name = "0-100", conflicts_with = "edit_note", value_parser = parse_confidence_arg)]
+        note_confidence: Option<Confidence>,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -1106,6 +1112,7 @@ fn main() -> Result<()> {
             allow_literal_backslash_n,
             note_kind,
             note_summary,
+            note_confidence,
             edit_note,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
@@ -1113,6 +1120,7 @@ fn main() -> Result<()> {
                 &note,
                 note_kind.as_ref(),
                 note_summary.as_ref(),
+                note_confidence,
                 edit_note.as_ref(),
             )?;
             cmd_provider_edit(
@@ -1127,6 +1135,7 @@ fn main() -> Result<()> {
                     note,
                     note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
                     note_summary,
+                    note_confidence,
                     edit_note,
                 },
             )
@@ -1190,6 +1199,7 @@ fn main() -> Result<()> {
             allow_literal_backslash_n,
             note_kind,
             note_summary,
+            note_confidence,
             edit_note,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
@@ -1197,6 +1207,7 @@ fn main() -> Result<()> {
                 &note,
                 note_kind.as_ref(),
                 note_summary.as_ref(),
+                note_confidence,
                 edit_note.as_ref(),
             )?;
             cmd_edit(
@@ -1217,6 +1228,7 @@ fn main() -> Result<()> {
                 note,
                 parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
                 note_summary,
+                note_confidence,
                 edit_note,
             )
         }
@@ -2284,6 +2296,7 @@ struct ProviderEditInput {
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
+    note_confidence: Option<Confidence>,
     edit_note: Option<String>,
 }
 
@@ -2312,14 +2325,17 @@ fn cmd_provider_edit(
     if let Some(note) = input.note {
         ticket = match input.edit_note {
             Some(note_id) => provider.edit_note(id, &note_id, now, note),
-            None => provider.add_note_with_summary(
+            None => provider.add_note_with_metadata(
                 id,
                 MutationContext {
                     now,
                     generated_id: Ulid::new(),
                 },
                 input.note_kind,
-                input.note_summary,
+                ops::NoteMetadataInput {
+                    summary: input.note_summary,
+                    confidence: input.note_confidence,
+                },
                 note,
             ),
         }?;
@@ -3899,6 +3915,7 @@ fn cmd_edit(
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
+    note_confidence: Option<Confidence>,
     edit_note: Option<String>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
@@ -3955,13 +3972,16 @@ fn cmd_edit(
         if let Some(note_id) = edit_note {
             updated = ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
         } else {
-            updated = ops::add_note_with_summary(
+            updated = ops::add_note_with_metadata(
                 &store,
                 &ticket.id,
                 Ulid::new(),
                 now_ts(),
                 note_kind,
-                note_summary,
+                ops::NoteMetadataInput {
+                    summary: note_summary,
+                    confidence: note_confidence,
+                },
                 text,
             )?;
         }
@@ -4094,14 +4114,30 @@ fn has_matching_backtick_run(bytes: &[u8], mut index: usize, expected: usize) ->
     false
 }
 
+/// Clap value parser for `--note-confidence`: a plain integer from 0 to 100 (HS2-DWTJ43).
+fn parse_confidence_arg(value: &str) -> Result<Confidence, String> {
+    value
+        .parse::<Confidence>()
+        .map_err(|error| error.to_string())
+}
+
 fn validate_note_modifiers(
     note: &Option<String>,
     note_kind: Option<&String>,
     note_summary: Option<&String>,
+    note_confidence: Option<Confidence>,
     edit_note: Option<&String>,
 ) -> Result<()> {
-    if note.is_none() && (note_kind.is_some() || note_summary.is_some() || edit_note.is_some()) {
-        bail!("--note-kind, --note-summary, and --edit-note require --note or --note-file");
+    if note.is_none()
+        && (note_kind.is_some()
+            || note_summary.is_some()
+            || note_confidence.is_some()
+            || edit_note.is_some())
+    {
+        bail!(
+            "--note-kind, --note-summary, --note-confidence, and --edit-note require --note or \
+             --note-file"
+        );
     }
     Ok(())
 }

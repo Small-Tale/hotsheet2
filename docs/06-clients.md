@@ -2602,7 +2602,11 @@ regions. Fixed action targets, choice indicators, and glyphs remain explicit geo
   New AI-authored activity notes supply a plain-text, one-line, outcome-oriented
   `note_summary` in the same write. Legacy notes and providers without structured
   summary metadata use a Markdown-stripped, word-boundary-truncated first-line fallback;
-  clients never invoke AI while rendering or opening a ticket. Never collapse duplicate,
+  clients never invoke AI while rendering or opening a ticket. A completion confidence
+  score (HS2-DWTJ43) is appended to the headline of the first Completed/Verified
+  transition in each completion cycle as `Completed · 82% confidence`, using that cycle's
+  newest scored note (a reopen starts a new cycle), so historical completions keep the
+  score they were completed with. Never collapse duplicate,
   repeated, or reversed transitions;
   each entry is historical context. Every actual status change appends one of these
   durable activity notes. For tickets created before transition recording, clients also
@@ -2623,6 +2627,18 @@ provider accepts notes. The optional explanation and consequence-oriented rating
 then appended as an ordinary ticket note, so feedback is syncable and auditable rather
 than trapped in browser state. Legacy notes without durable AI provenance are not
 guessed from their prose or author-like display text.
+
+**AI completion confidence (HS2-DWTJ43).** A note carrying a `confidence` score renders a
+compact Lucide `gauge` badge with the percentage in its header beside the timestamp,
+tinted by rubric band through Web Awesome tokens (90-100 success, 70-89 brand, 40-69
+warning, below 40 danger) and named "Confidence NN percent" for assistive technology.
+Every scored note keeps its badge, so earlier completions remain visible as history. A
+`completed`/`verified` ticket with a server-derived `latest_confidence` shows a labeled
+"Confidence NN%" badge plus "Reported by the completing AI" in the inspector and reader
+header, beside the other header status banners; it disappears as soon as the ticket is
+reopened, and re-completing without a new score does not bring the old one back. Clients
+display the server's derivation rather than re-deriving it, and copy/paste carries a
+note's score with the note.
 
 **Feedback needed is needs review.** These are one user-facing concept, not competing
 ticket states. A `feedback_needed` note, a description containing the case-sensitive

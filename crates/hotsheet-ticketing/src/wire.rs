@@ -11,7 +11,8 @@
 //!   [`TicketRow::from`], so a list looks identical whichever path produced it.
 
 use hotsheet_model::{
-    ClaimEvent, CloseReason, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp,
+    ClaimEvent, CloseReason, Confidence, NoteKind, Priority, ReviewRequest, Status, Ticket,
+    Timestamp,
 };
 use serde::Serialize;
 
@@ -74,6 +75,11 @@ pub struct ApiTicket {
     pub review_requests: Vec<ReviewRequest>,
     pub schema: u32,
     pub notes: Vec<ApiNote>,
+    /// Derived completion confidence of a `completed`/`verified` ticket: the newest
+    /// scored note of the current completion cycle (`ops::latest_confidence`,
+    /// HS2-DWTJ43). Never persisted; absent when the ticket has no current score.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_confidence: Option<u8>,
     pub attachments: Vec<ApiAttachment>,
     /// Non-fatal, mutation-specific feedback for the caller. Never persisted.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -91,6 +97,9 @@ pub struct ApiNote {
     pub edited_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// The author's completion confidence (0-100) recorded on this note (HS2-DWTJ43).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<u8>,
     pub text: String,
 }
 
@@ -172,9 +181,11 @@ impl ApiTicket {
                     created_at: n.created_at.as_str().to_string(),
                     edited_at: n.edited_at.as_str().to_string(),
                     summary: n.summary.clone(),
+                    confidence: n.confidence.map(Confidence::get),
                     text: n.text.clone(),
                 })
                 .collect(),
+            latest_confidence: crate::ops::latest_confidence(t).map(Confidence::get),
             attachments: t
                 .attachments
                 .iter()
@@ -448,6 +459,7 @@ mod tests {
             created_at: Timestamp::new(created_at),
             edited_at: Timestamp::new(created_at),
             summary: None,
+            confidence: None,
             text: "please confirm".into(),
         };
 
@@ -502,6 +514,7 @@ mod tests {
             created_at: Timestamp::new("2026-08-20T00:00:00Z"),
             edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
             summary: None,
+            confidence: None,
             text: "Context first. IMMEDIATE FEEDBACK NEEDED choose one".into(),
         });
 

@@ -885,6 +885,7 @@ fn build_ticket(
                 created_at: created_at.clone(),
                 edited_at: created_at,
                 summary: None,
+                confidence: None,
                 text: n.text.clone(),
             }
         })

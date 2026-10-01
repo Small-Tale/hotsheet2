@@ -73,6 +73,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
+    src/components/note-card.tsx # Kind-specific NoteCard plus the shared banded AI completion ConfidenceBadge (note header, inspector/reader header; HS2-DWTJ43)
+    src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities using UUID/getRandomValues, legacy no-Crypto fallback
@@ -158,10 +160,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)
       src/ticket.rs          #   Ticket/Note/ReviewRequest/ExternalLink; Ticket::new
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
-      src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps; legacy reader)
+      src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps + summary_hex/confidence note tokens; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
+      src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign/add_note_with_metadata/latest_confidence — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
       src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll
@@ -187,7 +189,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/corrupt_cache.rs   #   stat-validated per-store memo of corrupt ticket files; re-parses only changed files (checkout corrupt-tickets, HS2-KYSBT2)
       src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close/disable/enable/remove, provider-copy/move, setup/plugins/settings/server/workflows

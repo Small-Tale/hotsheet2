@@ -43,8 +43,8 @@ use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, TicketSummary, hash_bytes};
 use hotsheet_model::{
-    CloseReason, NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid, parse_file,
-    to_file_string,
+    CloseReason, Confidence, ConfidenceError, NoteKind, ReviewKind, ReviewRequest, Status, Ticket,
+    Timestamp, Ulid, parse_file, to_file_string,
 };
 use hotsheet_ticketing::checkout_order::{AfterKey, MergeKey};
 use hotsheet_ticketing::checkout_page;
@@ -2911,6 +2911,13 @@ fn do_provider_update(
             "note_summary requires a non-empty note",
         ));
     }
+    let note_confidence = req.note_confidence(req.note_id.is_some())?;
+    if note_confidence.is_some() && !provider.supports_note_confidence() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note confidence"),
+        ));
+    }
     let timestamp = now();
     let note = req.note.clone();
     let note_id = req.note_id.clone();
@@ -2937,14 +2944,17 @@ fn do_provider_update(
     if let Some(note) = note {
         ticket = match note_id {
             Some(note_id) => provider.edit_note(id, &note_id, timestamp, note),
-            None => provider.add_note_with_summary(
+            None => provider.add_note_with_metadata(
                 id,
                 MutationContext {
                     now: timestamp,
                     generated_id: Ulid::new(),
                 },
                 note_kind,
-                note_summary,
+                ops::NoteMetadataInput {
+                    summary: note_summary,
+                    confidence: note_confidence,
+                },
                 note,
             ),
         }
@@ -5979,6 +5989,7 @@ fn do_update(
             "note_summary requires a non-empty note",
         ));
     }
+    let note_confidence = req.note_confidence(edit_note_id.is_some())?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
         Some(needles) => Some(ops::resolve_blockers(
@@ -6004,13 +6015,16 @@ fn do_update(
     let latest = match req.note.filter(|t| !t.is_empty()) {
         Some(text) => match edit_note_id {
             Some(note_id) => ops::edit_note(&entry.store, &ticket.id, &note_id, now(), text)?,
-            None => ops::add_note_with_summary(
+            None => ops::add_note_with_metadata(
                 &entry.store,
                 &ticket.id,
                 Ulid::new(),
                 now(),
                 req.note_kind.unwrap_or(NoteKind::Regular),
-                req.note_summary,
+                ops::NoteMetadataInput {
+                    summary: req.note_summary,
+                    confidence: note_confidence,
+                },
                 text,
             )?,
         },
@@ -9593,6 +9607,39 @@ struct UpdateReq {
     note_kind: Option<NoteKind>,
     /// Optional concise plain-text headline used by timeline presentations.
     note_summary: Option<String>,
+    /// Optional AI completion confidence (integer 0-100) on the appended note
+    /// (HS2-DWTJ43). Kept as raw JSON so a malformed value gets an explicit 400.
+    note_confidence: Option<serde_json::Value>,
+}
+
+impl UpdateReq {
+    /// Validate the optional note confidence: only when appending a non-empty note,
+    /// and only as a JSON integer from 0 to 100.
+    fn note_confidence(&self, editing_note: bool) -> Result<Option<Confidence>, ApiError> {
+        let Some(value) = self.note_confidence.as_ref() else {
+            return Ok(None);
+        };
+        if editing_note {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "note_confidence is only valid when appending a note",
+            ));
+        }
+        if self.note.as_deref().is_none_or(str::is_empty) {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "note_confidence requires a non-empty note",
+            ));
+        }
+        value
+            .as_u64()
+            .ok_or_else(|| ConfidenceError(value.to_string()))
+            .and_then(Confidence::new)
+            .map(Some)
+            .map_err(|error| {
+                ApiError::new(StatusCode::BAD_REQUEST, format!("note_confidence: {error}"))
+            })
+    }
 }
 
 fn deserialize_nullable_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>

@@ -282,9 +282,11 @@ impl JiraProvider {
                     created_at: comment.created.clone(),
                     edited_at: comment.updated.unwrap_or(comment.created),
                     summary: None,
+                    confidence: None,
                     text: strip_note(&adf_to_text(Some(&comment.body))),
                 })
                 .collect(),
+            latest_confidence: None,
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
@@ -745,6 +747,8 @@ fn capabilities() -> ProviderCapabilities {
         claims: false,
         atomic_batch: false,
         not_working_report: false,
+        // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
+        note_confidence: false,
         offline_mutation: false,
         history: true,
         watch: true,

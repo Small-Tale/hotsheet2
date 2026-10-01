@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FullTicket, Note } from './api';
-import { ticketTimelineEntries } from './ticket-timeline-data';
+import { completionConfidenceByNote, ticketTimelineEntries } from './ticket-timeline-data';
 
 const note = (id: string, kind: Note['kind'], created_at: string, text: string): Note => ({
   id,
@@ -52,6 +52,49 @@ describe('ticketTimelineEntries', () => {
     expect(entries[1].subtitle).toBeUndefined();
     expect(entries[2].emphasized).toBe(true);
     expect(entries[2].title).toBe('Completed');
+  });
+
+  it('appends each completion cycle its own confidence across reopen and re-completion (HS2-DWTJ43)', () => {
+    const scored = (id: string, created_at: string, confidence: number): Note => ({
+      ...note(id, 'regular', created_at, '## Confidence'),
+      confidence,
+    });
+    const notes = [
+      note('start-1', 'activity', '2026-09-02T01:10:00Z', 'Status changed from Not Started to Started'),
+      // A score written before the flip still belongs to that completion cycle.
+      scored('early', '2026-09-02T01:20:00Z', 60),
+      note('done-1', 'activity', '2026-09-02T01:30:00Z', 'Status changed from Started to Completed'),
+      scored('late', '2026-09-02T01:40:00Z', 82),
+      note('verify-1', 'activity', '2026-09-02T01:50:00Z', 'Status changed from Completed to Verified'),
+      note('reopen', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Verified to Started'),
+      note('done-2', 'activity', '2026-09-02T02:30:00Z', 'Status changed from Started to Completed'),
+      {
+        ...note('broken', 'activity', '2026-09-02T02:40:00Z', 'Reported as not working'),
+        summary: 'Reported as not working',
+      },
+      note('done-3', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Not Started to Completed'),
+      scored('final', '2026-09-02T03:10:00Z', 35),
+    ];
+    const titles = new Map(
+      ticketTimelineEntries(ticket({ status: 'completed', notes: [...notes].reverse() })).map((entry) => [
+        entry.id,
+        entry.title,
+      ]),
+    );
+    expect(titles.get('done-1')).toBe('Completed · 82% confidence');
+    expect(titles.get('verify-1')).toBe('Verified');
+    expect(titles.get('done-2')).toBe('Completed');
+    expect(titles.get('done-3')).toBe('Completed · 35% confidence');
+    expect(titles.get('reopen')).toBe('Started');
+    expect(titles.has('late')).toBe(false);
+    expect(completionConfidenceByNote([])).toEqual(new Map());
+    // Zero is a real score.
+    expect(
+      completionConfidenceByNote([
+        note('d', 'activity', '2026-09-02T01:00:00Z', 'Status changed from Started to Completed'),
+        scored('z', '2026-09-02T01:01:00Z', 0),
+      ]).get('d'),
+    ).toBe(0);
   });
 
   it('deduplicates a persisted transition but not unrelated activity at the same time', () => {

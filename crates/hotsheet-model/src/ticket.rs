@@ -25,7 +25,63 @@ pub struct Note {
     /// Concise, plain-text timeline headline. Optional for files written before
     /// HS2-A32EAK and for note kinds that do not appear in the timeline.
     pub summary: Option<String>,
+    /// The author's self-reported confidence (0-100) in the work this note reports,
+    /// carried as the `confidence:` note-marker token (HS2-DWTJ43). Optional and
+    /// absent on every note written before it existed.
+    pub confidence: Option<Confidence>,
     pub text: String,
+}
+
+/// A validated AI completion confidence score: an integer percentage from 0 to 100
+/// (`docs/17` §17.3, HS2-DWTJ43). Construct through [`Confidence::new`] or
+/// [`str::parse`] so an out-of-range value can never reach a ticket file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct Confidence(u8);
+
+/// Why a confidence value was rejected. The message is shared by every write surface
+/// (CLI, server, MCP) so callers see one explicit contract.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("confidence must be an integer from 0 to 100 (got {0})")]
+pub struct ConfidenceError(pub String);
+
+impl Confidence {
+    pub const MAX: u8 = 100;
+
+    pub fn new(value: u64) -> Result<Self, ConfidenceError> {
+        u8::try_from(value)
+            .ok()
+            .filter(|value| *value <= Self::MAX)
+            .map(Self)
+            .ok_or_else(|| ConfidenceError(value.to_string()))
+    }
+
+    pub fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl std::str::FromStr for Confidence {
+    type Err = ConfidenceError;
+
+    /// Accept only a plain base-10 integer (no sign, fraction, or whitespace padding
+    /// beyond trimming), matching the documented `confidence: NN` token.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || !trimmed.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(ConfidenceError(value.to_string()));
+        }
+        trimmed
+            .parse::<u64>()
+            .map_err(|_| ConfidenceError(value.to_string()))
+            .and_then(Self::new)
+    }
+}
+
+impl std::fmt::Display for Confidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl Note {
@@ -343,8 +399,40 @@ mod tests {
             created_at: Timestamp::new(created_at),
             edited_at: Timestamp::new(created_at),
             summary: None,
+            confidence: None,
             text: String::new(),
         }
+    }
+
+    #[test]
+    fn confidence_accepts_only_integers_from_0_to_100() {
+        assert_eq!(Confidence::new(0).unwrap().get(), 0);
+        assert_eq!(Confidence::new(100).unwrap().get(), 100);
+        assert!(Confidence::new(101).is_err());
+        assert!(Confidence::new(u64::MAX).is_err());
+        assert_eq!("82".parse::<Confidence>().unwrap().get(), 82);
+        assert_eq!(" 7 ".parse::<Confidence>().unwrap().get(), 7);
+        for bad in [
+            "",
+            "-1",
+            "+5",
+            "82.5",
+            "1e2",
+            "abc",
+            "101",
+            "999999999999999999999",
+        ] {
+            let error = bad.parse::<Confidence>().unwrap_err();
+            assert!(
+                error.to_string().contains("integer from 0 to 100"),
+                "{bad}: {error}"
+            );
+        }
+        assert_eq!(Confidence::new(82).unwrap().to_string(), "82");
+        assert_eq!(
+            serde_json::to_string(&Confidence::new(82).unwrap()).unwrap(),
+            "82"
+        );
     }
 
     #[test]

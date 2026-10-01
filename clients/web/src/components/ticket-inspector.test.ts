@@ -149,6 +149,30 @@ describe('TicketInspector', () => {
     expect(outcome('works_as_designed')).toBe('Closed as works as designed');
   });
 
+  it('shows the derived completion confidence only on completed or verified tickets (HS2-DWTJ43)', () => {
+    const row = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
+      /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?<\/div>/u.exec(
+        String(TicketInspector({ ...base, ...props })),
+      )?.[0];
+    expect(row({ status: 'completed' })).toBeUndefined();
+    for (const status of ['not_started', 'started', 'backlog', 'archive'] as const) {
+      expect(row({ status, latestConfidence: 82 })).toBeUndefined();
+    }
+    for (const [status, value, band] of [
+      ['completed', 82, 'assumed'],
+      ['verified', 95, 'verified'],
+      ['completed', 0, 'unverified'],
+    ] as const) {
+      const markup = row({ status, latestConfidence: value });
+      expect(markup).toContain(`data-confidence="${value}"`);
+      expect(markup).toContain(`aria-label="Confidence ${value} percent"`);
+      expect(markup).toContain(`data-band="${band}"`);
+      expect(markup).toContain(`Confidence ${value}%`);
+      expect(markup).toContain('data-lucide="gauge"');
+      expect(markup).toContain('Reported by the completing AI');
+    }
+  });
+
   it('shows a feedback-needed banner only when the ticket is waiting on the user', () => {
     expect(String(TicketInspector({ ...base }))).not.toContain('ticket-inspector__feedback');
     const waiting = String(TicketInspector({ ...base, feedbackNeeded: true }));

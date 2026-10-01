@@ -1070,9 +1070,9 @@
       "id": "note-card",
       "name": "NoteCard",
       "kind": "component",
-      "purpose": "Kind-specific note presentation.",
+      "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
       "useWhen": [
-        "Hot Sheet needs kind-specific note presentation."
+        "Hot Sheet needs kind-specific note presentation with an optional banded AI completion confidence badge."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NoteCard behavior."

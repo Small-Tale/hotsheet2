@@ -87,7 +87,7 @@ export interface ClipboardTicket {
   status?: string;
   up_next: boolean;
   tags: string[];
-  notes: Array<{ kind: string; text: string; summary?: string }>;
+  notes: Array<{ kind: string; text: string; summary?: string; confidence?: number }>;
   attachments: Array<{ id: string; filename: string }>;
 }
 export function deduplicateTitle(title: string, existing: readonly string[]): string {

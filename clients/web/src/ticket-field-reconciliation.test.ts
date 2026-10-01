@@ -95,6 +95,16 @@ describe('field-aware ticket reconciliation', () => {
     ).toEqual({ retry: { note: 'Full detail', note_kind: 'activity', note_summary: 'Finished work' }, conflicts: [] });
   });
 
+  it('keeps note confidence attached to a retried note write and never treats it as a field (HS2-DWTJ43)', () => {
+    expect(
+      reconcileTicketPatch(ticket(), ticket({ status: 'completed' }), {
+        note: 'Done',
+        note_confidence: 0,
+      }),
+    ).toEqual({ retry: { note: 'Done', note_confidence: 0 }, conflicts: [] });
+    expect(reconcileTicketPatch(ticket(), ticket(), { note_confidence: 82 })).toEqual({ retry: {}, conflicts: [] });
+  });
+
   it('covers active-draft interleavings without warning for remote-only or converged edits', () => {
     expect(reconcileActiveDraft('base', 'base', 'remote')).toEqual({
       kind: 'adopt-remote',

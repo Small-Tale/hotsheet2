@@ -852,11 +852,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 52 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 53 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 53 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 54 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -895,11 +895,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 51 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 52 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 52 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 53 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -3104,6 +3104,128 @@ fn edit_can_append_and_edit_an_activity_note() {
         edited_activity.summary.as_deref(),
         Some("Started flicker investigation")
     );
+}
+
+/// HS2-DWTJ43: `--note-confidence` records a validated score on the appended note,
+/// the ticket's derived latest confidence follows the completion cycle, and invalid
+/// or misplaced values fail explicitly without writing anything.
+#[test]
+fn edit_records_note_confidence_on_completion() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Scored completion");
+    let note_file = p.join("completing-note.md");
+    std::fs::write(
+        &note_file,
+        "## Result\nDone.\n\n## Confidence\n82 - verified end to end.\n",
+    )
+    .unwrap();
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let read = || {
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+    };
+
+    for (args, message) in [
+        (
+            vec!["--note", "x", "--note-confidence", "101"],
+            "integer from 0 to 100",
+        ),
+        (
+            vec!["--note", "x", "--note-confidence=-1"],
+            "integer from 0 to 100",
+        ),
+        (
+            vec!["--note", "x", "--note-confidence", "82.5"],
+            "integer from 0 to 100",
+        ),
+        (
+            vec!["--note", "x", "--note-confidence", "high"],
+            "integer from 0 to 100",
+        ),
+        (
+            vec!["--note-confidence", "82"],
+            "require --note or --note-file",
+        ),
+        (
+            vec![
+                "--note",
+                "x",
+                "--note-confidence",
+                "82",
+                "--edit-note",
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            ],
+            "cannot be used with",
+        ),
+    ] {
+        hs(p)
+            .args(["edit", &slug, "--status", "completed"])
+            .args(&args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(message));
+    }
+    assert_eq!(
+        read().status,
+        hotsheet_model::Status::NotStarted,
+        "nothing written"
+    );
+    assert!(read().notes.is_empty());
+
+    hs(p)
+        .args(["edit", &slug, "--status", "completed", "--note-file"])
+        .arg(&note_file)
+        .args(["--note-confidence", "82"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(" confidence: 82 -->"));
+    let ticket = read();
+    let scored = ticket
+        .notes
+        .iter()
+        .find(|note| note.confidence.is_some())
+        .unwrap();
+    assert!(scored.text.contains("## Confidence"));
+    assert_eq!(
+        hotsheet_ticketing::ops::latest_confidence(&ticket).map(hotsheet_model::Confidence::get),
+        Some(82)
+    );
+
+    // Reopen and re-complete without a score: the old score no longer applies.
+    hs(p)
+        .args(["edit", &slug, "--status", "started"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--status", "completed", "--note", "redone"])
+        .assert()
+        .success();
+    assert_eq!(hotsheet_ticketing::ops::latest_confidence(&read()), None);
+
+    // The provider-native edit path accepts the same flag for the git provider.
+    let connection = hotsheet_ticketing::provider::git_connection_id(&store);
+    let native_id = read().id.to_string();
+    hs(p)
+        .args([
+            "provider-edit",
+            &connection,
+            &native_id,
+            "--note",
+            "re-verified",
+            "--note-confidence",
+            "64",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"latest_confidence\": 64"))
+        .stdout(predicate::str::contains("\"confidence\": 64"));
 }
 
 #[test]

@@ -11,8 +11,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::str::FromStr;
 
 use hotsheet_model::{
-    ClaimEvent, ClaimEventKind, CloseReason, Note, NoteKind, Priority, ReviewRequest, Status,
-    Ticket, Timestamp, Ulid, derive_slug,
+    ClaimEvent, ClaimEventKind, CloseReason, Confidence, Note, NoteKind, Priority, ReviewRequest,
+    Status, Ticket, Timestamp, Ulid, derive_slug,
 };
 
 use crate::store::{FsStore, StoreError};
@@ -758,6 +758,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         created_at: now.clone(),
         edited_at: now.clone(),
         summary: Some(status_label(to).to_string()),
+        confidence: None,
         text: format!(
             "Status changed from {} to {}",
             status_label(from),
@@ -806,7 +807,8 @@ pub fn prepare_not_working(
         kind: NoteKind::Activity,
         created_at: now.clone(),
         edited_at: now.clone(),
-        summary: Some("Reported as not working".into()),
+        summary: Some(NOT_WORKING_SUMMARY.into()),
+        confidence: None,
         text: reporter
             .filter(|value| !value.trim().is_empty())
             .map(|value| format!("{} reported as not working\n{summary}", value.trim()))
@@ -819,6 +821,7 @@ pub fn prepare_not_working(
             created_at: now.clone(),
             edited_at: now.clone(),
             summary: None,
+            confidence: None,
             text: format!("Not working: {text}"),
         });
     }
@@ -833,6 +836,8 @@ pub fn prepare_not_working(
     ticket.updated_at = now;
     Ok(())
 }
+
+const NOT_WORKING_SUMMARY: &str = "Reported as not working";
 
 fn summarize_not_working(text: &str) -> String {
     let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -993,6 +998,39 @@ pub fn add_note_with_summary(
     summary: Option<String>,
     text: String,
 ) -> Result<Ticket, StoreError> {
+    add_note_with_metadata(
+        store,
+        id,
+        note_id,
+        now,
+        kind,
+        NoteMetadataInput {
+            summary,
+            confidence: None,
+        },
+        text,
+    )
+}
+
+/// Optional per-note metadata a caller may attach when appending a note: the
+/// timeline headline (HS2-A32EAK) and the author's completion confidence
+/// (HS2-DWTJ43). Both are stored as note-marker tokens (`docs/17` §17.3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NoteMetadataInput {
+    pub summary: Option<String>,
+    pub confidence: Option<Confidence>,
+}
+
+/// Append a note with optional metadata (see [`NoteMetadataInput`]).
+pub fn add_note_with_metadata(
+    store: &FsStore,
+    id: &Ulid,
+    note_id: Ulid,
+    now: Timestamp,
+    kind: NoteKind,
+    metadata: NoteMetadataInput,
+    text: String,
+) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
     let text = canonicalize_attachment_id_references(store, &t, &text);
     let kind = if kind == NoteKind::Regular && Note::text_requests_feedback(&text) {
@@ -1005,15 +1043,72 @@ pub fn add_note_with_summary(
         kind,
         created_at: now.clone(),
         edited_at: now.clone(),
-        summary: summary.and_then(|value| {
+        summary: metadata.summary.and_then(|value| {
             let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
             (!value.is_empty()).then_some(value)
         }),
+        confidence: metadata.confidence,
         text,
     });
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+/// The ticket's current completion confidence (HS2-DWTJ43), derived at read time and
+/// never stored in frontmatter (`docs/02` §2.6).
+///
+/// Only a `completed`/`verified` ticket has one. It is the newest note carrying a
+/// `confidence` score written in the current completion cycle: after the most recent
+/// reopen (an automatic transition into Not Started/Started, or a Not Working report).
+/// Bounding by the reopen rather than by the completion transition itself keeps a
+/// completing note that a surface appended just before flipping the status, while an
+/// old score never survives a reopen unless the next completion reports a new one.
+pub fn latest_confidence(ticket: &Ticket) -> Option<Confidence> {
+    if !matches!(ticket.status, Status::Completed | Status::Verified) {
+        return None;
+    }
+    let reopened = ticket
+        .notes
+        .iter()
+        .filter(|note| note_reopens_ticket(note))
+        .max_by(|a, b| chronological_note_cmp(a, b));
+    ticket
+        .notes
+        .iter()
+        .filter(|note| note.confidence.is_some())
+        .filter(|note| {
+            reopened.is_none_or(|reopen| {
+                chronological_note_cmp(note, reopen) == std::cmp::Ordering::Greater
+            })
+        })
+        .max_by(|a, b| chronological_note_cmp(a, b))
+        .and_then(|note| note.confidence)
+}
+
+fn chronological_note_cmp(a: &Note, b: &Note) -> std::cmp::Ordering {
+    a.created_at
+        .chronological_cmp(&b.created_at)
+        .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
+        .then(a.id.cmp(&b.id))
+}
+
+/// Whether an automatic activity note records the ticket returning to active work.
+fn note_reopens_ticket(note: &Note) -> bool {
+    if note.kind != NoteKind::Activity {
+        return false;
+    }
+    if note.summary.as_deref() == Some(NOT_WORKING_SUMMARY) {
+        return true;
+    }
+    note.text
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("Status changed from "))
+        .and_then(|rest| rest.rsplit_once(" to "))
+        .is_some_and(|(_, to)| {
+            to == status_label(Status::NotStarted) || to == status_label(Status::Started)
+        })
 }
 
 /// Edit an existing note without changing its creation time.
@@ -2409,6 +2504,179 @@ mod tests {
         .unwrap();
         assert_eq!(c.close_reason, Some(CloseReason::Completed));
         assert!(c.closed_at.is_some());
+    }
+
+    /// Transition matrix for the derived completion confidence (HS2-DWTJ43): scores
+    /// across start, completion, verification, backlog, reopen, re-completion, a Not
+    /// Working report, and unscored notes in between.
+    #[test]
+    fn latest_confidence_tracks_the_current_completion_cycle() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "Scored work".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut minute = 0;
+        let mut at = || {
+            minute += 1;
+            ts(&format!("2026-08-19T01:{minute:02}:00Z"))
+        };
+        let set_status = |at: Timestamp, status: Status| {
+            update(
+                &store,
+                &id,
+                at,
+                TicketPatch {
+                    status: Some(status),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let note = |at: Timestamp, confidence: Option<u64>| {
+            add_note_with_metadata(
+                &store,
+                &id,
+                Ulid::new(),
+                at,
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: confidence.map(|value| Confidence::new(value).unwrap()),
+                },
+                "note".into(),
+            )
+            .unwrap()
+        };
+        let score = |ticket: &Ticket| latest_confidence(ticket).map(Confidence::get);
+
+        // No score anywhere, and an active ticket never reports one.
+        let t = set_status(at(), Status::Started);
+        assert_eq!(score(&t), None);
+        let t = note(at(), Some(40));
+        assert_eq!(
+            score(&t),
+            None,
+            "started tickets have no current confidence"
+        );
+        // A score written during this cycle, before the completion flip, counts: some
+        // surfaces append the completing note before changing the status.
+        let t = set_status(at(), Status::Completed);
+        assert_eq!(score(&t), Some(40));
+        // Newer scores win; unscored notes do not clear the score.
+        let t = note(at(), Some(82));
+        assert_eq!(score(&t), Some(82));
+        let t = note(at(), None);
+        assert_eq!(score(&t), Some(82));
+        // A zero score is a real score, not "absent".
+        let t = note(at(), Some(0));
+        assert_eq!(score(&t), Some(0));
+        let t = note(at(), Some(82));
+        let t2 = set_status(at(), Status::Verified);
+        assert_eq!(score(&t), Some(82));
+        assert_eq!(
+            score(&t2),
+            Some(82),
+            "verification keeps the completion score"
+        );
+        // Leaving for a non-active status hides it; returning without a reopen restores it.
+        let t = set_status(at(), Status::Backlog);
+        assert_eq!(score(&t), None);
+        let t = set_status(at(), Status::Completed);
+        assert_eq!(score(&t), Some(82), "backlog is not a reopen");
+        // Reopen: the old score never survives into the next completion.
+        let t = set_status(at(), Status::Started);
+        assert_eq!(score(&t), None);
+        let t = set_status(at(), Status::Completed);
+        assert_eq!(score(&t), None, "re-completed without a new score");
+        let t = note(at(), Some(91));
+        assert_eq!(score(&t), Some(91));
+        // Re-enqueue straight to Not Started is a reopen too.
+        set_status(at(), Status::NotStarted);
+        let t = set_status(at(), Status::Completed);
+        assert_eq!(score(&t), None);
+        let mut t = note(at(), Some(77));
+        assert_eq!(score(&t), Some(77));
+        // A Not Working report reopens without a "Status changed" note.
+        prepare_not_working(
+            &mut t,
+            at(),
+            Some((Ulid::new(), "broken".into())),
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(t.status, Status::NotStarted);
+        t.status = Status::Completed;
+        assert_eq!(score(&t), None, "a Not Working report bounds the cycle");
+    }
+
+    #[test]
+    fn latest_confidence_handles_legacy_and_equal_timestamps() {
+        let note = |id: &str, kind: NoteKind, at: &str, confidence: Option<u64>, text: &str| Note {
+            id: Ulid::from_string(id).unwrap(),
+            kind,
+            created_at: ts(at),
+            edited_at: ts(at),
+            summary: None,
+            confidence: confidence.map(|value| Confidence::new(value).unwrap()),
+            text: text.into(),
+        };
+        let mut ticket = Ticket {
+            status: Status::Completed,
+            ..Default::default()
+        };
+        // Legacy file: no transition notes at all, so every scored note is in-cycle.
+        ticket.notes = vec![
+            note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+                NoteKind::Regular,
+                "2026-08-19T01:00:00Z",
+                Some(55),
+                "a",
+            ),
+            note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+                NoteKind::Regular,
+                "2026-08-19T01:00:00Z",
+                Some(66),
+                "b",
+            ),
+        ];
+        assert_eq!(
+            latest_confidence(&ticket).map(Confidence::get),
+            Some(66),
+            "id breaks ties"
+        );
+        // A reopen sharing the scored note's timestamp but a later id bounds it out.
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+            NoteKind::Activity,
+            "2026-08-19T01:00:00Z",
+            None,
+            "Status changed from Completed to Started",
+        ));
+        assert_eq!(latest_confidence(&ticket), None);
+        // Only automatic activity notes reopen; a regular note quoting the text does not.
+        ticket.notes.pop();
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+            NoteKind::Regular,
+            "2026-08-19T02:00:00Z",
+            None,
+            "Status changed from Completed to Started",
+        ));
+        assert_eq!(latest_confidence(&ticket).map(Confidence::get), Some(66));
+        ticket.status = Status::Archive;
+        assert_eq!(latest_confidence(&ticket), None);
     }
 
     #[test]

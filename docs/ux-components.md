@@ -1216,6 +1216,8 @@ icons; structural separators do not require icons.
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed,
   feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,
+  an optional banded AI completion `ConfidenceBadge` (all four rubric bands shown in the
+  demo; HS2-DWTJ43),
   contained long-token wrapping, and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
   In reader mode, regular/status notes remain directly editable, while feedback-needed

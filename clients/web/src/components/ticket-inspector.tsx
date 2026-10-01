@@ -29,7 +29,7 @@ import type { InlineFeedbackReply } from '../feedback-replies';
 import { ticketCloseReasonLabel } from '../ticket-close';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import type { MarkdownEditorMode } from './markdown-editor';
-import type { NoteCardProps } from './note-card';
+import { ConfidenceBadge, type NoteCardProps } from './note-card';
 import type { TicketStatus } from './status-badge';
 import { type TicketAttachmentItem, TicketAttachments } from './ticket-attachments';
 import { TicketCodeReview } from './ticket-code-review';
@@ -71,6 +71,8 @@ export interface TicketInspectorProps {
   /** The ticket has an unresolved `feedback_needed` note — it is waiting on the user. */
   feedbackNeeded?: boolean;
   closeReason?: TicketCloseReason;
+  /** Derived AI completion confidence of a completed/verified ticket (HS2-DWTJ43). */
+  latestConfidence?: number;
   duplicateTarget?: DuplicateTargetSummary;
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
@@ -135,6 +137,7 @@ export function TicketInspector({
   upNextEligible = status === 'not_started' || status === 'started',
   feedbackNeeded = false,
   closeReason,
+  latestConfidence,
   duplicateTarget,
   duplicateBacklinks = [],
   duplicateBacklinkInaccessibleProjects = [],
@@ -291,6 +294,12 @@ export function TicketInspector({
                   <LucideIcon icon={CircleAlert} name="circle-alert" />
                 </span>
                 <span>Needs review</span>
+              </div>
+            )}
+            {(status === 'completed' || status === 'verified') && latestConfidence !== undefined && (
+              <div class="ticket-inspector__confidence" role="status" data-confidence={String(latestConfidence)}>
+                <ConfidenceBadge value={latestConfidence} appearance="labeled" />
+                <span>Reported by the completing AI</span>
               </div>
             )}
             {closeReason && closeReason !== 'duplicate' && (

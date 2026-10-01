@@ -150,6 +150,7 @@ fn tools_list() -> Value {
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
                 "note_summary": str_prop("optional concise plain-text timeline headline"),
+                "note_confidence": { "type": "integer", "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
@@ -1197,6 +1198,7 @@ mod core_backend {
                     {
                         return Err(bad_request("note_summary requires a non-empty note"));
                     }
+                    let note_confidence = note_confidence_field(body, edit_note_id.is_some())?;
                     let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
                     let note_text = str_field(body, "note").filter(|text| !text.is_empty());
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
@@ -1240,13 +1242,16 @@ mod core_backend {
                                 ops::edit_note(&self.store, &t.id, &note_id, (self.now)(), text)
                                     .map_err(store_err)?
                             }
-                            None => ops::add_note_with_summary(
+                            None => ops::add_note_with_metadata(
                                 &self.store,
                                 &t.id,
                                 (self.mint)(),
                                 (self.now)(),
                                 new_note_kind,
-                                str_field(body, "note_summary"),
+                                ops::NoteMetadataInput {
+                                    summary: str_field(body, "note_summary"),
+                                    confidence: note_confidence,
+                                },
                                 text,
                             )
                             .map_err(store_err)?,
@@ -1699,6 +1704,31 @@ mod core_backend {
             Some(Value::String(s)) => opt_enum_str(Some(s)),
             Some(_) => Err(bad_request(format!("{key} must be a string"))),
         }
+    }
+
+    /// Validate `note_confidence` with the server's exact contract (HS2-DWTJ43): only
+    /// when appending a non-empty note, and only as a JSON integer from 0 to 100.
+    fn note_confidence_field(
+        body: &Value,
+        editing_note: bool,
+    ) -> Result<Option<hotsheet_model::Confidence>, BackendError> {
+        let Some(value) = body.get("note_confidence").filter(|value| !value.is_null()) else {
+            return Ok(None);
+        };
+        if editing_note {
+            return Err(bad_request(
+                "note_confidence is only valid when appending a note",
+            ));
+        }
+        if str_field(body, "note").is_none_or(|note| note.is_empty()) {
+            return Err(bad_request("note_confidence requires a non-empty note"));
+        }
+        value
+            .as_u64()
+            .ok_or_else(|| hotsheet_model::ConfidenceError(value.to_string()))
+            .and_then(hotsheet_model::Confidence::new)
+            .map(Some)
+            .map_err(|error| bad_request(format!("note_confidence: {error}")))
     }
 
     fn opt_enum_str<T: serde::de::DeserializeOwned>(
@@ -2906,6 +2936,77 @@ mod tests {
         );
         let open = call(&backend, "hotsheet_query", json!({ "open": true }));
         assert_eq!(open.as_array().unwrap().len(), 1);
+    }
+
+    /// HS2-DWTJ43: the direct-core `hotsheet_update` accepts `note_confidence` with the
+    /// server's exact validation and returns the per-note and derived scores.
+    #[test]
+    fn corebackend_update_records_note_confidence() {
+        let (_d, backend) = core();
+        let created = call(&backend, "hotsheet_create", json!({ "title": "Scored" }));
+        let id = created["id"].as_str().unwrap().to_string();
+        for (args, message) in [
+            (
+                json!({ "id": id, "note": "x", "note_confidence": 101 }),
+                "integer from 0 to 100",
+            ),
+            (
+                json!({ "id": id, "note": "x", "note_confidence": 8.5 }),
+                "integer from 0 to 100",
+            ),
+            (
+                json!({ "id": id, "note": "x", "note_confidence": "82" }),
+                "integer from 0 to 100",
+            ),
+            (
+                json!({ "id": id, "status": "completed", "note_confidence": 82 }),
+                "requires a non-empty note",
+            ),
+        ] {
+            let error = call(&backend, "hotsheet_update", args.clone());
+            assert!(
+                error["error"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains(message),
+                "{args}: {error}"
+            );
+        }
+        let completed = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "status": "completed", "note": "## Confidence\n90", "note_confidence": 90 }),
+        );
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(completed["latest_confidence"], 90);
+        let scored = completed["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["confidence"] == 90)
+            .unwrap();
+        let editing = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": scored["id"], "note": "y", "note_confidence": 5 }),
+        );
+        assert!(
+            editing["error"]
+                .as_str()
+                .unwrap()
+                .contains("only valid when appending")
+        );
+        let tools = handle_message(&req("tools/list", json!({})), &backend).unwrap();
+        let update = tools["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "hotsheet_update")
+            .unwrap();
+        assert_eq!(
+            update["inputSchema"]["properties"]["note_confidence"]["maximum"],
+            100
+        );
     }
 
     #[test]

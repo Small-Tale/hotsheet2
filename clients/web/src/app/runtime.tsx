@@ -3731,6 +3731,7 @@ export async function startHotSheetWebClient() {
       upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
       feedbackNeeded: fullTicketFeedbackNeeded(ticket),
       closeReason: ticket.close_reason,
+      latestConfidence: ticket.latest_confidence,
       duplicateTarget: duplicateTargetFor(ticket),
       duplicateBacklinks: backlinks?.backlinks,
       duplicateBacklinkInaccessibleProjects: backlinks?.inaccessibleProjects,
@@ -3819,6 +3820,7 @@ export async function startHotSheetWebClient() {
         upNextEligible={editable && (ticket.status === 'not_started' || ticket.status === 'started')}
         feedbackNeeded={fullTicketFeedbackNeeded(ticket)}
         closeReason={ticket.close_reason}
+        latestConfidence={ticket.latest_confidence}
         duplicateTarget={duplicateTargetFor(ticket)}
         timelineEntries={timeline(ticket)}
         attachments={attachmentItems(ticket, current)}

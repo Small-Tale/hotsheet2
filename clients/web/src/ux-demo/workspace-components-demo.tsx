@@ -34,6 +34,7 @@ import {
   inspectorBlockedReason,
   inspectorBlockedReasonDraft,
   inspectorBlockedReasonEditing,
+  latestDemoConfidence,
   markdownMode,
   markdownSavedValue,
   markdownValue,
@@ -477,6 +478,7 @@ export function TicketInspectorDemo() {
           activeTab={inspectorTab.value}
           upNext={ticket.upNext}
           feedbackNeeded={readerNotes.value.some((note) => note.kind === 'feedback_needed')}
+          latestConfidence={latestDemoConfidence(readerNotes.value)}
           codeReview={inspectorCodeReview}
         />
       ) : (

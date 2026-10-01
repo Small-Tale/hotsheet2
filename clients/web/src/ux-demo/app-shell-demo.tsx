@@ -17,6 +17,7 @@ import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import {
   editingNoteId,
+  latestDemoConfidence,
   markdownMode,
   markdownSavedValue,
   markdownValue,
@@ -404,6 +405,7 @@ export function AppShellDemo() {
               activeTab={inspectorTab.value}
               upNext={ticket.upNext}
               codeReview={inspectorCodeReview}
+              latestConfidence={latestDemoConfidence(readerNotes.value)}
             />
           )
         }

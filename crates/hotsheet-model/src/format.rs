@@ -14,7 +14,7 @@ use serde_yaml::{Mapping, Value};
 
 use crate::enums::NoteKind;
 use crate::ids::Ulid;
-use crate::ticket::{Note, Ticket};
+use crate::ticket::{Confidence, Note, Ticket};
 use crate::timestamp::Timestamp;
 
 const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
@@ -303,6 +303,7 @@ struct NoteMetadata {
     created_at: Option<Timestamp>,
     edited_at: Option<Timestamp>,
     summary: Option<String>,
+    confidence: Option<Confidence>,
 }
 
 fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
@@ -319,6 +320,9 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         created_at: value_after("created_at:").map(Timestamp::new),
         edited_at: value_after("edited_at:").map(Timestamp::new),
         summary: value_after("summary_hex:").and_then(decode_note_summary),
+        // An out-of-range or malformed score degrades to "no score" rather than failing
+        // the whole file (HS2-DWTJ43); writers can only emit validated values.
+        confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
     }
 }
 
@@ -345,6 +349,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         created_at,
         edited_at,
         summary: metadata.summary,
+        confidence: metadata.confidence,
         text,
     })
 }
@@ -373,6 +378,10 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(summary) = n.summary.as_deref() {
             out.push_str(" summary_hex: ");
             out.push_str(&encode_note_summary(summary));
+        }
+        if let Some(confidence) = n.confidence {
+            out.push_str(" confidence: ");
+            out.push_str(&confidence.to_string());
         }
         out.push_str(" -->\n");
         out.push_str(&escape_content(&n.text));
@@ -580,6 +589,7 @@ mod tests {
                 created_at: "2026-08-19T15:20:44Z".into(),
                 edited_at: "2026-08-19T15:20:44Z".into(),
                 summary: None,
+                confidence: None,
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
             },
             Note {
@@ -588,6 +598,7 @@ mod tests {
                 created_at: "2026-08-19T15:31:02Z".into(),
                 edited_at: "2026-08-19T15:31:02Z".into(),
                 summary: None,
+                confidence: None,
                 text: "should the fix also cover the dashboard dedicated view?".into(),
             },
         ];
@@ -791,6 +802,7 @@ mod tests {
             created_at: "2026-08-19T16:00:00Z".into(),
             edited_at: "2026-08-19T16:00:00Z".into(),
             summary: None,
+            confidence: None,
             text: "half-written reply".into(),
         });
         let text = to_file_string(&t);
@@ -810,6 +822,7 @@ mod tests {
             created_at: "2026-08-19T15:20:44Z".into(),
             edited_at: "2026-08-19T15:20:44Z".into(),
             summary: None,
+            confidence: None,
             text: "   ".into(),
         }];
         let text = to_file_string(&t);
@@ -874,6 +887,74 @@ mod tests {
     }
 
     #[test]
+    fn note_confidence_token_round_trips_beside_the_summary() {
+        let mut ticket = sample();
+        ticket.notes = vec![
+            Note {
+                id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2"),
+                kind: NoteKind::Regular,
+                created_at: "2026-08-19T15:20:44Z".into(),
+                edited_at: "2026-08-19T15:20:44Z".into(),
+                summary: Some("Shipped".into()),
+                confidence: Some(Confidence::new(82).unwrap()),
+                text: "## Result\nDone\n\n## Confidence\n82".into(),
+            },
+            Note {
+                id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB3"),
+                kind: NoteKind::Regular,
+                created_at: "2026-08-19T15:21:44Z".into(),
+                edited_at: "2026-08-19T15:21:44Z".into(),
+                summary: None,
+                confidence: Some(Confidence::new(0).unwrap()),
+                text: "zero is a real score".into(),
+            },
+        ];
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("summary_hex: 53686970706564 confidence: 82 -->"));
+        assert!(encoded.contains("edited_at: 2026-08-19T15:21:44Z confidence: 0 -->"));
+        assert_eq!(parse_file(&encoded).unwrap(), ticket);
+        assert_eq!(to_file_string(&parse_file(&encoded).unwrap()), encoded);
+    }
+
+    #[test]
+    fn notes_without_or_with_invalid_confidence_parse_as_unscored() {
+        let mut ticket = sample();
+        ticket.notes = vec![Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2"),
+            kind: NoteKind::Regular,
+            created_at: "2026-08-19T15:20:44Z".into(),
+            edited_at: "2026-08-19T15:20:44Z".into(),
+            summary: None,
+            confidence: None,
+            text: "unscored".into(),
+        }];
+        let unscored = to_file_string(&ticket);
+        assert!(!unscored.contains("confidence:"));
+        let marker_end = "edited_at: 2026-08-19T15:20:44Z -->";
+        for (token, expected) in [
+            ("confidence: 101", None),
+            ("confidence: -3", None),
+            ("confidence: 8.5", None),
+            ("confidence: high", None),
+            ("confidence:", None),
+            // A future writer's unknown token beside a valid score is ignored.
+            ("confidence: 64 future_token: x", Some(64)),
+        ] {
+            let text = unscored.replace(
+                marker_end,
+                &format!("edited_at: 2026-08-19T15:20:44Z {token} -->"),
+            );
+            let parsed = parse_file(&text).unwrap();
+            assert_eq!(
+                parsed.notes[0].confidence.map(Confidence::get),
+                expected,
+                "{token}"
+            );
+            assert_eq!(parsed.notes[0].text, "unscored");
+        }
+    }
+
+    #[test]
     fn activity_kind_and_distinct_note_timestamps_round_trip() {
         let mut ticket = sample();
         ticket.notes = vec![Note {
@@ -882,6 +963,7 @@ mod tests {
             created_at: "2026-08-19T15:20:44Z".into(),
             edited_at: "2026-08-19T16:00:00Z".into(),
             summary: Some("Completed café investigation".into()),
+            confidence: None,
             text: "completed investigation".into(),
         }];
         let encoded = to_file_string(&ticket);
@@ -932,6 +1014,7 @@ mod tests {
             created_at: "2026-08-19T00:00:00Z".into(),
             edited_at: "2026-08-19T00:00:00Z".into(),
             summary: None,
+            confidence: None,
             text: text.into(),
         };
         // Content that looks exactly like the structural markers, which the writer must
@@ -993,6 +1076,7 @@ mod tests {
             created_at: "t0".into(),
             edited_at: "t0".into(),
             summary: None,
+            confidence: None,
             text: "half-written".into(),
         }];
         let text = to_file_string(&t);

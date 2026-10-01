@@ -426,6 +426,7 @@ mod tests {
             created_at: ts("2026-08-19T01:00:00Z"),
             edited_at: ts("2026-08-19T01:00:00Z"),
             summary: None,
+            confidence: None,
             text: "ours note".into(),
         }];
         let mut theirs = base.clone();
@@ -435,6 +436,7 @@ mod tests {
             created_at: ts("2026-08-19T02:00:00Z"),
             edited_at: ts("2026-08-19T02:00:00Z"),
             summary: None,
+            confidence: None,
             text: "theirs note".into(),
         }];
         let m = merge_tickets(&base, &ours, &theirs).ticket;
@@ -488,6 +490,7 @@ mod tests {
             created_at: ts("2026-08-19T01:00:00Z"),
             edited_at: ts("2026-08-19T01:00:00Z"),
             summary: Some("Started implementation".into()),
+            confidence: None,
             text: "started".into(),
         }];
         let mut ours = base.clone();
@@ -500,6 +503,57 @@ mod tests {
         assert_eq!(merged.notes[0].text, "theirs");
         assert_eq!(merged.notes[0].created_at.as_str(), "2026-08-19T01:00:00Z");
         assert_eq!(merged.notes[0].edited_at.as_str(), "2026-08-19T03:00:00Z");
+    }
+
+    /// HS2-DWTJ43: a note's confidence survives a concurrent text edit, and scored
+    /// notes appended on both sides are both kept with their own scores.
+    #[test]
+    fn merge_preserves_note_confidence_across_edits_and_concurrent_appends() {
+        let confidence = |value| Some(hotsheet_model::Confidence::new(value).unwrap());
+        let scored = |id: &str, at: &str, value: u64, text: &str| Note {
+            id: ulid(id),
+            kind: hotsheet_model::NoteKind::Regular,
+            created_at: ts(at),
+            edited_at: ts(at),
+            summary: None,
+            confidence: confidence(value),
+            text: text.into(),
+        };
+        let mut base = base_ticket();
+        base.notes = vec![scored(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+            "2026-08-19T01:00:00Z",
+            70,
+            "done",
+        )];
+        let mut ours = base.clone();
+        ours.notes[0].edited_at = ts("2026-08-19T02:00:00Z");
+        ours.notes[0].text = "done, clarified".into();
+        ours.notes.push(scored(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            "2026-08-19T02:30:00Z",
+            85,
+            "ours",
+        ));
+        let mut theirs = base.clone();
+        theirs.notes.push(scored(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+            "2026-08-19T03:00:00Z",
+            90,
+            "theirs",
+        ));
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        let by_text = |text: &str| {
+            merged
+                .notes
+                .iter()
+                .find(|note| note.text == text)
+                .and_then(|note| note.confidence)
+        };
+        assert_eq!(merged.notes.len(), 3);
+        assert_eq!(by_text("done, clarified"), confidence(70));
+        assert_eq!(by_text("ours"), confidence(85));
+        assert_eq!(by_text("theirs"), confidence(90));
     }
 
     #[test]

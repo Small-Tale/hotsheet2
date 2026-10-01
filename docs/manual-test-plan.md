@@ -176,6 +176,16 @@ a command that needs approval. The permission prompt must appear in the Hot Shee
 the shell, and the app's answer must be honored (HS2-HE4AVD). Real interactive tools can't run
 in CI; the automated tests prove the route-back environment reaches the shell.
 
+### AI completion confidence rubric compliance (HS2-DWTJ43)
+
+The storage, write surfaces, and display are automated; whether a live agent follows the
+prompt-level rubric is not. After refreshing a project with `hotsheet-cli setup --refresh`,
+have Claude and Codex each complete a small ticket and confirm the completing note has a
+`## Confidence` section with the integer and one high/medium/low line per factor (request
+clarity, context, verification realism, scope deviation/assumptions, deferred gaps), that
+the same integer arrived as structured `confidence` metadata (`hotsheet-cli show` prints
+`confidence: NN`), and that the web inspector shows the matching header badge.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

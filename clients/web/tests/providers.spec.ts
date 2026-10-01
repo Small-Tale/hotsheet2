@@ -17584,6 +17584,116 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
   }
 });
 
+test('shows recorded completion confidence through the real server (HS2-DWTJ43)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Score the completion confidence',
+      category: 'feature',
+    });
+    const patch = (body: Record<string, unknown>) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', body);
+    // Cycle 1: completed at 48, then reopened; cycle 2: completed at 86 — the real ops derive the latest.
+    await patch({ status: 'started' });
+    await patch({ status: 'completed', note: '## Result\nFirst pass.\n\n## Confidence\n48', note_confidence: 48 });
+    await patch({ status: 'started' });
+    const completed = await patch({
+      status: 'completed',
+      note: '## Result\nShipped.\n\n## Confidence\n86 - verified in a real browser.',
+      note_confidence: 86,
+    });
+    expect(completed.latest_confidence).toBe(86);
+    const [first, second] = completed.notes.filter((note) => note.confidence !== undefined);
+    await mockProject(page);
+    // Only project discovery is a fixture; ticket reads, status mutations, and the derived score are the real server's.
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+      header = inspector.locator('.ticket-inspector__confidence'),
+      noteBadge = (id: string) =>
+        inspector.locator(`article[data-note-id="${id}"] [data-component="confidence-badge"]`);
+    // Completed-ticket header shows the derived latest score, not the historical one.
+    await expect(header).toHaveAttribute('data-confidence', '86');
+    await expect(header.getByRole('img', { name: 'Confidence 86 percent' })).toBeVisible();
+    await expect(header).toContainText('Confidence 86%');
+    await expect(header.locator('[data-band="assumed"] [data-lucide="gauge"]')).toBeVisible();
+    // Every scored note keeps its own badge in the Notes list, including the earlier cycle's.
+    await expect(noteBadge(first.id)).toHaveAttribute('data-band', 'partial');
+    await expect(noteBadge(first.id)).toHaveAccessibleName('Confidence 48 percent');
+    await expect(noteBadge(second.id)).toHaveAttribute('data-band', 'assumed');
+    await expect(noteBadge(second.id)).toHaveText('86%');
+    await expect(inspector.locator('[data-component="confidence-badge"]')).toHaveCount(3);
+    await inspector.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
+    await inspector.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-inspector-wide.png' });
+    // Timeline: each completion carries the score it was completed with.
+    await inspector.locator('[data-inspector-tab="timeline"]').click();
+    const timeline = inspector.locator('[data-component="ticket-timeline"]');
+    await expect(timeline.getByText('Completed · 48% confidence')).toBeVisible();
+    await expect(timeline.getByText('Completed · 86% confidence')).toBeVisible();
+    await inspector.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-timeline-wide.png' });
+    await inspector.locator('[data-inspector-tab="info"]').click();
+    // Reopen through the real status control: the derived score disappears, the history stays.
+    const status = inspector.locator('wa-select[name="inspector-status"]');
+    await status.click();
+    await status.locator('wa-option[value="started"]').click();
+    await expect.poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).status).toBe('started');
+    await expect(header).toHaveCount(0);
+    await expect(noteBadge(second.id)).toHaveAttribute('data-confidence', '86');
+    // Re-completing without a new score must not resurrect the old one.
+    await status.click();
+    await status.locator('wa-option[value="completed"]').click();
+    await expect
+      .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).status)
+      .toBe('completed');
+    await expect(status).toHaveJSProperty('value', 'completed');
+    await expect(header).toHaveCount(0);
+    // A new scored completion note written by an agent appears once the ticket is reloaded.
+    await patch({ note: 'Re-verified after the reopen.', note_confidence: 93 });
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(header).toHaveAttribute('data-confidence', '93', { timeout: 15_000 });
+    await expect(header.locator('[data-band="verified"]')).toBeVisible();
+    // The reader composition renders the same header and note badges.
+    await page.getByRole('button', { name: 'Open ticket reader' }).click();
+    const reader = page.getByRole('dialog').filter({ has: page.locator('[data-component="ticket-inspector"]') });
+    await expect(reader.locator('.ticket-inspector__confidence')).toHaveAttribute('data-confidence', '93');
+    await expect(reader.locator(`article[data-note-id="${first.id}"] [data-component="confidence-badge"]`)).toHaveText(
+      '48%',
+    );
+    await page.waitForTimeout(500); // let the reader's open transition settle before capturing evidence
+    await reader.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-reader-wide.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(reader.locator('.ticket-inspector__confidence')).toBeVisible();
+    await reader.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
+    await reader.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-reader-narrow.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
 test('loads board columns independently from the real server (HS2-HNZZHC)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

@@ -23,6 +23,7 @@ export const noteDemoNotes = signal<NoteCardProps[]>([
     aiAuthored: true,
     aiTool: 'Claude',
     aiMayContainErrors: false,
+    confidence: 82,
   },
   {
     id: 'status',
@@ -54,8 +55,35 @@ export const noteDemoNotes = signal<NoteCardProps[]>([
     body: 'Finished the responsive layout pass and browser verification.',
     aiAuthored: true,
     aiTool: 'Codex',
+    confidence: 96,
+  },
+  {
+    id: 'scored-partial',
+    kind: 'regular' as const,
+    author: 'Claude',
+    time: 'Now',
+    body: 'Completed with unit coverage; the narrow-layout pass was not run in a browser.',
+    aiAuthored: true,
+    aiTool: 'Claude',
+    aiMayContainErrors: false,
+    confidence: 55,
+  },
+  {
+    id: 'scored-low',
+    kind: 'regular' as const,
+    author: 'Codex',
+    time: 'Now',
+    body: 'Shipped without end-to-end verification; the gaps are filed as follow-ups.',
+    aiAuthored: true,
+    aiTool: 'Codex',
+    confidence: 32,
   },
 ]);
+
+/** Demo stand-in for the server-derived `latest_confidence`: the newest scored note. */
+export function latestDemoConfidence(notes: readonly NoteCardProps[]): number | undefined {
+  return [...notes].reverse().find((note) => note.confidence !== undefined)?.confidence;
+}
 
 export function NoteCardDemo() {
   return (
@@ -97,6 +125,7 @@ export const READER_NOTES: NoteCardProps[] = [
     aiAuthored: true,
     aiTool: 'Claude',
     aiMayContainErrors: false,
+    confidence: 88,
   },
   {
     id: 'reader-feedback',

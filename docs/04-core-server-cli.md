@@ -482,6 +482,16 @@ text, direct `--note` input containing a literal `\n` sequence outside Markdown 
 code or fenced backtick code is rejected with guidance to use `--note-file`. Intentional
 literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
 form also accepts intentional literal sequences without needing the override.
+`--note-confidence <0-100>` (HS2-DWTJ43) records the author's completion confidence on the
+**appended** note; like `--note-summary` it requires `--note`/`--note-file` and conflicts
+with `--edit-note`. Anything but a plain integer from 0 to 100 is rejected before any write.
+`provider-edit` accepts the same flag. The server's `PATCH /tickets/{id}`, checkout and
+provider ticket routes, and MCP `hotsheet_update` take the equivalent `note_confidence`
+JSON integer with identical validation (400 for a non-integer, out-of-range, orphan, or
+note-edit value; 409 when the provider's `note_confidence` capability is off). Full ticket
+responses carry each note's `confidence` and the derived `latest_confidence` (`docs/02`
+§2.6); both are omitted when absent, so older clients see an unchanged shape. `show`
+prints the stored `confidence: NN` marker token.
 Appending or editing a note remains successful when an `attachment:` reference does not
 resolve yet, which supports note-before-upload workflows. The CLI prints an actionable warning
 to stderr, and mutation API responses include a non-persisted `warnings` array. Resolution uses
