@@ -197,6 +197,14 @@ empty sections are omitted, and raw logs or multi-part results are not left as o
 paragraph. Multiline CLI notes use `--note-file` so the intended Markdown structure reaches
 the ticket intact.
 
+Before implementing a ticket that is not trivially simple, the bundled instruction blocks
+and Hot Sheet skills ask the AI to post its **preliminary thoughts** (HS2-C4X2MD): a short
+`regular` note headed `## Preliminary thoughts` with its understanding of the problem or
+likely root cause, the planned approach, the main risks or open questions, and how it will
+verify the work. People can steer early, and a later reader sees the starting reasoning. A
+quick, obvious change skips it, and it never replaces a `FEEDBACK NEEDED` blocker. Like
+confidence, this is prompt-level guidance.
+
 Every AI completion also reports a **completion confidence** (HS2-DWTJ43). The bundled
 instruction blocks and Hot Sheet skills require the note that moves a ticket to `completed`
 to include a `## Confidence` section with an integer score (0-100) and one line per rubric

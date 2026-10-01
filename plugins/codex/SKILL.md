@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 53 -->
+<!-- hotsheet-skill-version: 54 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -64,6 +64,12 @@ docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; include result, verification, and all follow-up slugs in the
 completing note.
+
+**Preliminary thoughts:** for a ticket that is not trivially simple, add a short `regular`
+note headed `## Preliminary thoughts` after your initial analysis and before implementing:
+your understanding of the problem (or likely root cause), the planned approach, the main
+risks or open questions, and how you will verify it. Skip it for a quick, obvious change; it
+never replaces a `FEEDBACK NEEDED` blocker.
 
 **Completion confidence:** the note that moves a ticket to `completed` must include a
 `## Confidence` section with the integer score (0-100) and one line per factor, each rated

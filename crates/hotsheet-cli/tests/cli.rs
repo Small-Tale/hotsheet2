@@ -405,6 +405,8 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let mcp = std::fs::read(project.join(".codex/config.toml")).unwrap();
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
     assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
+    // The installed workflow asks for preliminary thoughts on non-trivial tickets (HS2-C4X2MD).
+    assert!(String::from_utf8_lossy(&instructions).contains("## Preliminary thoughts"));
     assert_eq!(skill, include_bytes!("../../../plugins/codex/SKILL.md"));
     assert_eq!(
         std::fs::read_to_string(&custom_skill).unwrap(),
@@ -852,11 +854,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 53 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 54 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 54 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 55 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -895,11 +897,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 52 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 53 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 53 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 54 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)

@@ -413,7 +413,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 52 -->
+<!-- hotsheet-instructions-version: 53 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -429,23 +429,21 @@ code-changing task. Skip ticketing only for trivial one-offs: simple questions, 
 lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
 
 **Find and plan the queue:**
-
 - `hotsheet-cli ls --up-next` — the prioritized Up Next queue.
 - `hotsheet-cli show <slug>` — read one ticket in full.
 - Or the MCP tools: `hotsheet_query` (with `up_next: true`) and `hotsheet_get`.
 
 **Claim a ticket before you work it — claiming, not `started`, is what signals live work:**
-
 - `hotsheet-cli claim <slug> --worker <your-id>` when you begin. This atomically moves a Not
-  Started ticket to **Started** _and_ takes a renewable live lease that tells everyone you are
+  Started ticket to **Started** *and* takes a renewable live lease that tells everyone you are
   actively on it. Always claim before you touch code. Prefer it over `hotsheet-cli edit <slug>
---status started`, which only flips the status and does **not** claim or signal live work.
+  --status started`, which only flips the status and does **not** claim or signal live work.
   (Self-serve the top of the queue with `hotsheet-cli claim-next --worker <your-id>`.)
 - **Your worker id:** if `HOTSHEET_WORKER_ID` is set in your environment, use its value as
   `<your-id>`. Hot Sheet gave it to this session and releases whatever it still holds when the
   session ends. Otherwise choose one stable id for the session.
 - `hotsheet-cli renew <slug> --worker <your-id>` during long work; `hotsheet-cli release <slug>
---worker <your-id>` whenever you stop working it (see below).
+  --worker <your-id>` whenever you stop working it (see below).
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
@@ -472,9 +470,16 @@ ticket's completing note, then continue.
 docs the change requires; scan for placeholders, TODO/FIXME, stubs, and documented-but-
 unbuilt behavior; create a follow-up for every incomplete item; and put the result,
 verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` is only for a
-blocker on the _current_ ticket that needs a user decision or unavailable external state —
+blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
+ticket that is not trivially simple, and before you implement, add a short `regular` note
+headed `## Preliminary thoughts`: your understanding of the problem (or likely root cause),
+the approach you plan, the main risks or open questions, and how you will verify it. It lets
+people steer early and gives a later reader your starting reasoning. Skip it for trivial
+tickets (a quick, obvious change); never let it replace a `FEEDBACK NEEDED` blocker.
 
 **Report completion confidence.** When you move a ticket to `completed`, the completing note
 must include a `## Confidence` section: the integer score (0-100), then one short line per
@@ -511,11 +516,11 @@ local path only as clearly labeled machine-local diagnostic evidence.
   dependencies mocked) **and** end-to-end tests (real user flows through the running system,
   minimal mocking). Keep test fakes faithful to the real contract — same shapes, fields, and
   status codes.
-- **Coverage is a floor, not a ceiling.** 100% lines means every line _ran_, not that every
-  _behavior_ — or every _sequence_ of behaviors — is _asserted_. It is blind to missing state
+- **Coverage is a floor, not a ceiling.** 100% lines means every line *ran*, not that every
+  *behavior* — or every *sequence* of behaviors — is *asserted*. It is blind to missing state
   transitions.
 - **Stateful code gets transition-matrix + adversarial tests.** For anything with modes, a
-  cache, or a state machine, enumerate the states _and_ the transitions, then walk realistic
+  cache, or a state machine, enumerate the states *and* the transitions, then walk realistic
   multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
   interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
   regression test.

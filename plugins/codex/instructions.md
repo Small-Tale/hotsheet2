@@ -1,4 +1,4 @@
-<!-- hotsheet-instructions-version: 52 -->
+<!-- hotsheet-instructions-version: 53 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -58,6 +58,13 @@ verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` 
 blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
+ticket that is not trivially simple, and before you implement, add a short `regular` note
+headed `## Preliminary thoughts`: your understanding of the problem (or likely root cause),
+the approach you plan, the main risks or open questions, and how you will verify it. It lets
+people steer early and gives a later reader your starting reasoning. Skip it for trivial
+tickets (a quick, obvious change); never let it replace a `FEEDBACK NEEDED` blocker.
 
 **Report completion confidence.** When you move a ticket to `completed`, the completing note
 must include a `## Confidence` section: the integer score (0-100), then one short line per

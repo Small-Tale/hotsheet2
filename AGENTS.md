@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 51 -->
+<!-- hotsheet-instructions-version: 53 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -71,6 +71,24 @@ verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` 
 blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
+ticket that is not trivially simple, and before you implement, add a short `regular` note
+headed `## Preliminary thoughts`: your understanding of the problem (or likely root cause),
+the approach you plan, the main risks or open questions, and how you will verify it. It lets
+people steer early and gives a later reader your starting reasoning. Skip it for trivial
+tickets (a quick, obvious change); never let it replace a `FEEDBACK NEEDED` blocker.
+
+**Report completion confidence.** When you move a ticket to `completed`, the completing note
+must include a `## Confidence` section: the integer score (0-100), then one short line per
+factor, each rated high/medium/low with a phrase — clarity of the request; context and
+supporting information available; comprehensiveness and realism of verification (unit, E2E,
+real-browser visual QA; actually ran vs. assumed); scope deviation or unverified assumptions;
+known gaps deferred to follow-ups. Pass the same integer in that same update as
+`--note-confidence <0-100>` (MCP `note_confidence`) so clients never parse prose. Anchor
+bands: **90-100** fully verified end to end against the real system; **70-89** verified with
+minor assumptions; **40-69** partially verified or an ambiguous ask; **below 40** largely
+unverified — name the gaps. A bare number without the factor lines is non-compliant.
 
 **Format AI-authored notes for human scanning.** Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as
