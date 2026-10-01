@@ -1774,9 +1774,10 @@ bulk actions in beta.62; HS2-8ZC1YB then moved it onto a controlled multiple `Se
 `disabledReason`, `selectAllLabel`, and `clearLabel`, deleting the app's morph-skip island and
 its MutationObserver value sync. `KUI-L301` (discouraged Web Awesome elements) fell from 108 to
 102 with the PopupMenu adoption, to 94 with the Select adoption, to 76 with the context-menu
-adoption, to 9 with the demo-stage conversion (HS2-W0N1KP), and to 2 with the picker adoption;
-the two that remain are the visibility dialog's group context menu `wa-dropdown-item`s
-(`HS2-84751P`). It is a warning-level rule without an exact budget,
+adoption, to 9 with the demo-stage conversion (HS2-W0N1KP), to 2 with the picker adoption, and
+to 0 when HS2-84751P rendered the visibility dialog's group context menu as a context-mode
+`PopupMenu` (revealed through the shared `revealContextPopupMenu` helper at the pointer, with the
+Rename… and danger-toned Delete items). It is a warning-level rule without an exact budget,
 so the remaining count is tracked here rather than in the doctor script. The related warning-level
 `KUI-L401` (a module rendering `Select` or `PopupMenu` should import its `register` entry) stays
 accepted: the app registers those elements once in its entry points, because the register modules

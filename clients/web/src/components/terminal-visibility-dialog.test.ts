@@ -93,6 +93,9 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('>Project</h2>');
     expect(markup).toContain('>Other</h2>');
     expect(markup).toContain('aria-label="Visibility group actions"');
+    expect(markup).toContain('data-context-anchor-x="20" data-context-anchor-y="30"');
+    expect(markup).toContain('data-context-menu="terminal-visibility-group"');
+    expect(markup).toContain('data-component="popup-menu"');
     expect(markup).toContain('rename-terminal-visibility-group');
     expect(markup).toContain('remove-terminal-visibility-group');
     expect(

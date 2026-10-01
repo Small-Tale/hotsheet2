@@ -120,6 +120,9 @@ export function submitTerminalVisibilityDemoName(name: string) {
 export function showTerminalVisibilityDemoContextMenu(id: string, x: number, y: number) {
   if (id !== 'default') terminalVisibilityDemoContextMenu.value = { id, x, y };
 }
+export function closeTerminalVisibilityDemoContextMenu() {
+  terminalVisibilityDemoContextMenu.value = undefined;
+}
 export function promptRenameTerminalVisibilityDemoGroup() {
   const id = terminalVisibilityDemoContextMenu.value?.id,
     group = terminalVisibilityDemoState.value.groups.find((item) => item.id === id);

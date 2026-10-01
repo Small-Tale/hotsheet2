@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './terminal-visibility-dialog.css';
 
@@ -7,9 +6,11 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
+import { contextPopupMenuAnchor } from '../context-menu-position';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
   TERMINAL_VISIBILITY_TYPES,
@@ -186,25 +187,33 @@ export function TerminalVisibilityDialog({
           </wa-button>
         </footer>
         {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
+          // A context-mode Kerf PopupMenu anchored at the pointer (HS2-84751P); the app owns the open
+          // state through `contextMenu` and reveals the rendered menu with `revealContextPopupMenu`.
           <div
             class="terminal-visibility-dialog__context-menu"
             role="menu"
             aria-label="Visibility group actions"
-            style={`left:${contextMenu.x}px;top:${contextMenu.y}px`}
-            data-visibility-group-id={contextMenu.id}
+            data-context-group-id={contextMenu.id}
+            {...contextPopupMenuAnchor(contextMenu.x, contextMenu.y)}
           >
-            <wa-dropdown-item data-action="rename-terminal-visibility-group">
-              <span slot="icon">
-                <LucideIcon icon={Pencil} name="pencil" />
-              </span>
-              Rename…
-            </wa-dropdown-item>
-            <wa-dropdown-item data-action="remove-terminal-visibility-group" variant="danger">
-              <span slot="icon">
-                <LucideIcon icon={Trash2} name="trash-2" />
-              </span>
-              Delete
-            </wa-dropdown-item>
+            <PopupMenu
+              context
+              label="Visibility group actions"
+              rootAttributes={{ 'data-context-menu': 'terminal-visibility-group' }}
+              items={[
+                {
+                  label: 'Rename…',
+                  action: 'rename-terminal-visibility-group',
+                  icon: <LucideIcon icon={Pencil} name="pencil" />,
+                },
+                {
+                  label: 'Delete',
+                  action: 'remove-terminal-visibility-group',
+                  tone: 'danger',
+                  icon: <LucideIcon icon={Trash2} name="trash-2" />,
+                },
+              ]}
+            />
           </div>
         )}
       </section>

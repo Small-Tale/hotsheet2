@@ -248,6 +248,7 @@ import { syncTerminalDemoViewports } from './terminal-demo';
 import {
   cancelTerminalVisibilityDemoName,
   closeTerminalVisibilityDemo,
+  closeTerminalVisibilityDemoContextMenu,
   promptAddTerminalVisibilityDemoGroup,
   promptRenameTerminalVisibilityDemoGroup,
   removeTerminalVisibilityDemoGroup,
@@ -1159,6 +1160,7 @@ delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
     else if (surface === 'app-tab') tabContextMenu.value = undefined;
     else if (surface === 'terminal') terminalDashboardContextMenu.value = undefined;
     else if (surface === 'attachment') closeAttachmentDemoMenu();
+    else if (surface === 'terminal-visibility-group') closeTerminalVisibilityDemoContextMenu();
   }, 0);
 });
 // The AppShell demo's rails resize through Kerf's Workbench wiring, as in the app (HS2-P289N2).

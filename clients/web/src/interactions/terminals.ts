@@ -6,7 +6,7 @@ import { type ProjectCloseDialogState } from '../components/project-close-dialog
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
-import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { type DrawerAIChat } from '../project-drive';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
@@ -345,13 +345,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     if (!id || id === 'default') return;
     event.preventDefault();
     const pointer = event as MouseEvent;
-    terminalVisibilityContextMenu.value = {
-      id,
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 192,
-        height: 96,
-      }),
-    };
+    // Kerf's context PopupMenu flips and clamps itself at the pointer, so the raw point is the anchor.
+    terminalVisibilityContextMenu.value = { id, x: pointer.clientX, y: pointer.clientY };
+    revealContextPopupMenu('terminal-visibility-group');
   });
   delegate(document.body, 'click', '[data-action="add-terminal-visibility-group"]', () => {
     terminalVisibilityContextMenu.value = undefined;

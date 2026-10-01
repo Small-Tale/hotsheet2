@@ -76,24 +76,13 @@
   border-top: 1px solid var(--wa-color-surface-border);
   gap: var(--wa-space-xs);
 }
+/* Zero-size viewport anchor for the group context menu, a context-mode Kerf PopupMenu that owns its
+   own surface and positions itself at the recorded pointer point (HS2-84751P). */
 .terminal-visibility-dialog__context-menu {
   position: fixed;
   z-index: 80;
-  display: grid;
-  width: remify(192px);
-  padding: var(--wa-space-2xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.terminal-visibility-dialog__context-menu [slot='icon'] {
-  display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.terminal-visibility-dialog__context-menu svg {
-  width: remify(16px);
-  height: remify(16px);
+  width: 1px;
+  height: 1px;
 }
 [data-terminal-visibility-name-dialog] {
   --width: min(remify(448px), calc(100vw - remify(32px)));
