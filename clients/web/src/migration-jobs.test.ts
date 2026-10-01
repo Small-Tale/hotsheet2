@@ -1,10 +1,11 @@
+import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { MigrationJobs, type MigrationOwner } from './migration-jobs';
+import { MigrationJobs, type MigrationOwner, type WatchDirectory } from './migration-jobs';
 import {
   acceptMigrationJob,
   migrationCounter,
@@ -161,6 +162,168 @@ describe('migration ownership adversaries', () => {
       expect((await b.start(owner)).attempt).toBe(current.attempt);
     } finally {
       finish();
+      await a.flush();
+      await b.flush();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // HS2-D6TDWY: under full-suite load macOS FSEvents refuses new directory
+  // watchers with EMFILE. A foreign watcher must degrade, never fail the long poll.
+  async function foreignWatchThroughFailingWatcher(
+    watchDirectory: WatchDirectory,
+    beforeObserving: (finish: () => void, owner: MigrationJobs) => Promise<void>,
+  ) {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-watch-fallback-'));
+    const locks = memoryLocks();
+    let finish = () => {};
+    const runner = vi.fn(
+      async () =>
+        new Promise<undefined>((done) => {
+          finish = () => {
+            done(undefined);
+          };
+        }),
+    );
+    const a = new MigrationJobs(directory, runner, undefined, locks.lock);
+    let installed = () => {};
+    const subscribed = new Promise<void>((done) => {
+      installed = done;
+    });
+    const b = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, (path, changed) => {
+      installed();
+      return watchDirectory(path, changed);
+    });
+    try {
+      const current = await a.start(owner);
+      const changed = b.watch(owner.root, current.revision, undefined, 60_000);
+      await subscribed;
+      await beforeObserving(finish, a);
+      let terminal = await changed;
+      while (terminal?.status === 'running') terminal = await b.watch(owner.root, terminal.revision, undefined, 60_000);
+      expect(terminal?.status).toBe('succeeded');
+      expect(terminal?.attempt).toBe(current.attempt);
+    } finally {
+      finish();
+      // Let the owner persist its terminal checkpoint so cleanup cannot race it.
+      while ((await a.snapshot(owner.root))?.status === 'running') await a.flush();
+      await a.flush();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  it('keeps a foreign long poll alive when the OS refuses a directory watcher at start', async () => {
+    const refused = vi.fn<WatchDirectory>(() => {
+      throw Object.assign(new Error('EMFILE: too many open files, watch'), { code: 'EMFILE' });
+    });
+    await foreignWatchThroughFailingWatcher(refused, async (finish) => {
+      finish();
+    });
+    expect(refused).toHaveBeenCalled();
+  });
+
+  it('re-reads a change missed while a failed directory watcher degrades', async () => {
+    const watchers: (EventEmitter & { close: () => void })[] = [];
+    const silent: WatchDirectory = () => {
+      const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
+      watchers.push(watcher);
+      return watcher;
+    };
+    await foreignWatchThroughFailingWatcher(silent, async (finish, a) => {
+      // The foreign owner completes while the native watcher reports nothing;
+      // its later error must re-read the durable checkpoint, not wait for idle.
+      finish();
+      let durable: MigrationJob | undefined;
+      while (durable?.status !== 'succeeded') {
+        await a.flush();
+        durable = await a.snapshot(owner.root);
+      }
+      expect(watchers).toHaveLength(1);
+      watchers[0].emit('error', Object.assign(new Error('EMFILE: too many open files, watch'), { code: 'EMFILE' }));
+      expect(watchers[0].close).toHaveBeenCalled();
+    });
+  });
+
+  it('stops a degraded watcher when the long poll ends and ignores late watcher errors', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-watch-close-'));
+    const locks = memoryLocks();
+    const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
+    const a = new MigrationJobs(directory, async () => new Promise<undefined>(() => {}), undefined, locks.lock);
+    const b = new MigrationJobs(directory, vi.fn(), undefined, locks.lock, undefined, () => watcher);
+    try {
+      const current = await a.start(owner);
+      const abort = new AbortController(),
+        waiting = b.watch(owner.root, current.revision, abort.signal, 60_000);
+      while (watcher.listenerCount('error') === 0) await new Promise((done) => setImmediate(done));
+      abort.abort();
+      expect((await waiting)?.revision).toBe(current.revision);
+      expect(watcher.close).toHaveBeenCalled();
+      // A late error after close must not start stat-watching a finished poll.
+      watcher.emit('error', new Error('EMFILE: too many open files, watch'));
+      const idle = await b.watch(owner.root, current.revision, undefined, 1);
+      expect(idle?.status).toBe('running');
+    } finally {
+      await a.flush();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // HS2-D6TDWY: an owner persists its terminal checkpoint before releasing the
+  // native locks. A foreign start in that window must rejoin, not misreport ownership.
+  it('rejoins a finished foreign job while its owner is still releasing the native locks', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-release-window-'));
+    const locks = memoryLocks();
+    let openGate = () => {};
+    const gate = new Promise<void>((done) => {
+      openGate = done;
+    });
+    const slowRelease = async (paths: string[]) => {
+      const release = await locks.lock(paths);
+      return async () => {
+        await gate;
+        await release();
+      };
+    };
+    let finish = () => {};
+    const runner = vi.fn(
+      async () =>
+        new Promise<undefined>((done) => {
+          finish = () => {
+            done(undefined);
+          };
+        }),
+    );
+    const a = new MigrationJobs(directory, runner, undefined, slowRelease);
+    const b = new MigrationJobs(directory, runner, undefined, slowRelease);
+    try {
+      const running = await a.start(owner);
+      // A running foreign owner still holds the project exclusively.
+      await expect(b.start(owner)).rejects.toThrow(/Another project/);
+      finish();
+      let durable = await b.snapshot(owner.root);
+      while (durable?.status === 'running') {
+        await a.flush();
+        durable = await b.snapshot(owner.root);
+      }
+      expect(durable?.status).toBe('succeeded');
+      // Inside the release window: same inputs rejoin the finished attempt...
+      const rejoined = await b.start(owner);
+      expect(rejoined.status).toBe('succeeded');
+      expect(rejoined.attempt).toBe(running.attempt);
+      expect((await b.start(owner)).revision).toBe(rejoined.revision);
+      // ...while launching work still requires the locks and fails explicitly.
+      await expect(b.start(owner, running.attempt)).rejects.toThrow(/Another project/);
+      await expect(b.start({ ...owner, store: '/other.hs2' })).rejects.toThrow(/Another project/);
+      expect(runner).toHaveBeenCalledTimes(1);
+      openGate();
+      while ((await a.snapshot(owner.root))?.status !== 'succeeded') await a.flush();
+      const retried = await b.start(owner, running.attempt);
+      expect(retried.attempt).not.toBe(running.attempt);
+      expect(runner).toHaveBeenCalledTimes(2);
+    } finally {
+      openGate();
+      finish();
+      while ((await b.snapshot(owner.root))?.status === 'running') await b.flush();
       await a.flush();
       await b.flush();
       await rm(directory, { recursive: true, force: true });

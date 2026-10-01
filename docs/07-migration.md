@@ -323,11 +323,17 @@ attempt; conflicting writers fail explicitly. Native advisory locks serialize th
 canonical project and destination across bridge processes. The process-owned registry
 persists atomic snapshots under `${HOTSHEET_HOME:-~/.hotsheet2}/migration-jobs`
 (`HOTSHEET_MIGRATION_JOBS` overrides that directory). Lock files stay in place; their
-existence alone is never treated as ownership.
+existence alone is never treated as ownership. An owner makes its terminal checkpoint
+durable before releasing those locks; a start from another bridge that loses the lock in
+that window re-reads the checkpoint and rejoins the finished attempt (same inputs, no
+retry) instead of reporting foreign ownership. Launching new work still requires the locks.
 
 `GET` on the same route returns a snapshot for `root`; `after=<revision>` blocks until
 change or a 25-second idle timeout. Subscribers may disconnect without cancelling the
-job. There is no fixed-interval state polling. Reload/reopen joins the saved attempt,
+job. There is no fixed-interval network polling. A bridge watching another bridge's job
+uses a native directory watcher; when the OS refuses one (macOS FSEvents `EMFILE`, Linux
+inotify `ENOSPC`), the long poll stays open and re-reads the local checkpoint revision
+every 250 ms instead of failing the request. Reload/reopen joins the saved attempt,
 and stale revisions cannot overwrite a retry. Invalid/version-skewed or immediate idle
 watch responses stop watching with an explicit Reconnect action rather than looping.
 The stable project id, attempt id, and increasing revision keep background completion

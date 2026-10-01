@@ -7,6 +7,22 @@ import { acquireMigrationLock, type MigrationLock } from './migration-lock';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 
 export type MigrationOwner = Pick<MigrationJob, 'projectId' | 'root' | 'sourceIdentity' | 'store' | 'kind' | 'remote'>;
+/** The subset of a native directory watcher the registry relies on. */
+export interface DirectoryWatcher {
+  close(): void;
+  on(event: 'error', listener: (error: Error) => void): unknown;
+}
+/** Starts a native watcher; it may throw (or later emit `error`) when the OS refuses one. */
+export type WatchDirectory = (directory: string, changed: (filename: string | null) => void) => DirectoryWatcher;
+const nativeWatchDirectory: WatchDirectory = (directory, changed) =>
+  watchFiles(directory, (_event, filename) => {
+    changed(filename);
+  });
+/**
+ * Re-read interval for a foreign checkpoint, used only while the OS cannot start a
+ * native directory watcher. It reads local checkpoint files, never the network.
+ */
+export const CHECKPOINT_REREAD_INTERVAL_MS = 250;
 export type MigrationJobRunner = (
   job: MigrationJob,
   progress: (event: MigrationProgress) => void | Promise<void>,
@@ -34,6 +50,7 @@ export class MigrationJobs {
     },
     private lock: MigrationLock = acquireMigrationLock,
     private beforeSave: (job: MigrationJob) => Promise<void> = async () => {},
+    private watchDirectory: WatchDirectory = nativeWatchDirectory,
   ) {}
 
   private async load() {
@@ -111,10 +128,32 @@ export class MigrationJobs {
           return;
         }
         const storeId = createHash('sha256').update(owner.store).digest('hex');
-        const release = await this.lock([
-          resolve(this.directory, 'locks', `project-${id}`),
-          resolve(this.directory, 'locks', `store-${storeId}`),
-        ]);
+        const rejoinsFinished = (value: MigrationJob) =>
+          (value.status === 'succeeded' || value.status === 'failed') &&
+          !retryAttempt &&
+          (matches(value) ||
+            (value.kind === 'backup' &&
+              owner.kind === 'import' &&
+              value.store === owner.store &&
+              value.sourceIdentity === owner.sourceIdentity));
+        let release: () => Promise<void>;
+        try {
+          release = await this.lock([
+            resolve(this.directory, 'locks', `project-${id}`),
+            resolve(this.directory, 'locks', `store-${storeId}`),
+          ]);
+        } catch (error) {
+          // An owner makes its terminal checkpoint durable before it releases the
+          // native locks. A start racing that release must rejoin the finished job,
+          // exactly as it would under the lock, not report foreign ownership.
+          await this.loadFiles();
+          const settled = this.jobs.get(id);
+          if (settled && rejoinsFinished(settled)) {
+            snapshot = this.copy(settled);
+            return;
+          }
+          throw error;
+        }
         let transferred = false;
         try {
           // Refresh under the native locks: another bridge may have completed work
@@ -239,6 +278,53 @@ export class MigrationJobs {
     this.jobs.set(job.id, terminal);
     for (const listener of this.listeners.get(job.id) ?? []) listener();
   }
+  /**
+   * Observe a foreign owner's checkpoint. A native directory watcher can fail to
+   * start under OS resource pressure (macOS FSEvents reports EMFILE, Linux inotify
+   * ENOSPC), synchronously or later through `error`. That must not fail the long
+   * poll, so the subscription degrades to re-reading the checkpoint revision until
+   * the poll ends. Comparing revisions (not file stats) leaves no gap to miss a
+   * change made while switching.
+   */
+  private watchCheckpoint(id: string, changed: () => void, recheck: () => Promise<void>): () => void {
+    const name = `${id}.json`;
+    let closed = false,
+      reading = false,
+      native: DirectoryWatcher | undefined,
+      fallback: ReturnType<typeof setInterval> | undefined;
+    const reread = () => {
+      if (reading || closed) return;
+      reading = true;
+      void recheck().finally(() => {
+        reading = false;
+      });
+    };
+    const degrade = (synchronous: boolean) => {
+      native?.close();
+      native = undefined;
+      if (closed || fallback) return;
+      fallback = setInterval(reread, CHECKPOINT_REREAD_INTERVAL_MS);
+      // The caller re-reads once after subscribing; a later failure must re-read
+      // immediately because events may have been lost before the error surfaced.
+      if (!synchronous) reread();
+    };
+    try {
+      native = this.watchDirectory(this.directory, (filename) => {
+        if (filename === name) changed();
+      });
+      native.on('error', () => {
+        degrade(false);
+      });
+    } catch {
+      degrade(true);
+    }
+    return () => {
+      closed = true;
+      native?.close();
+      native = undefined;
+      clearInterval(fallback);
+    };
+  }
   /** Flush checkpoints before a graceful shutdown or a persistence assertion. */
   async flush(): Promise<void> {
     await this.writes;
@@ -249,33 +335,22 @@ export class MigrationJobs {
     await new Promise<void>((resolveWatch, rejectWatch) => {
       const listeners = this.listeners.get(initial.id) ?? new Set<() => void>();
       this.listeners.set(initial.id, listeners);
-      const filesystem = this.active.has(initial.id)
-        ? undefined
-        : watchFiles(this.directory, (_event, filename) => {
-            if (filename === `${initial.id}.json`) finish();
-          });
+      // Watcher callbacks and errors are asynchronous, so `finish` can only run
+      // after the subscription below has been recorded.
+      const subscription = { done: false, close: () => {} };
       const finish = () => {
-        filesystem?.close();
+        if (subscription.done) return;
+        subscription.done = true;
+        subscription.close();
         clearTimeout(timeout);
         signal?.removeEventListener('abort', finish);
         listeners.delete(finish);
         resolveWatch();
       };
-      filesystem?.on('error', (error) => {
-        filesystem.close();
-        clearTimeout(timeout);
-        listeners.delete(finish);
-        signal?.removeEventListener('abort', finish);
-        rejectWatch(error);
-      });
-      const timeout = setTimeout(finish, idleMs);
-      listeners.add(finish);
-      signal?.addEventListener('abort', finish, { once: true });
-      if (signal?.aborted || this.jobs.get(initial.id)?.revision !== initial.revision) finish();
-      // A foreign owner may have renamed its checkpoint between the initial read
-      // and watcher installation. Re-read after subscribing to close that gap.
-      if (filesystem)
-        void this.snapshot(root)
+      // A foreign owner may have renamed its checkpoint before a watcher was
+      // observing it. Re-read after (re)subscribing to close that gap.
+      const recheck = () =>
+        this.snapshot(root)
           .then((latest) => {
             if (!latest || latest.revision !== initial.revision || latest.status !== 'running') finish();
           })
@@ -283,6 +358,16 @@ export class MigrationJobs {
             finish();
             rejectWatch(error instanceof Error ? error : new Error(String(error)));
           });
+      const timeout = setTimeout(finish, idleMs);
+      listeners.add(finish);
+      signal?.addEventListener('abort', finish, { once: true });
+      if (signal?.aborted || this.jobs.get(initial.id)?.revision !== initial.revision) {
+        finish();
+        return;
+      }
+      if (this.active.has(initial.id)) return;
+      subscription.close = this.watchCheckpoint(initial.id, finish, recheck);
+      void recheck();
     });
     return this.snapshot(root);
   }
