@@ -47,6 +47,26 @@ describe('SettingsWorkspace', () => {
     expect(permissions).toContain('name="permission-automation-action"');
     expect(permissions).toContain('value="allow"');
     expect(permissions).toContain('2 minutes');
+    // HS2-EBGCGW: immediate (0 s) is an Auto-allow-only choice; Auto-deny never offers it.
+    const delays = [0, 15_000, 60_000],
+      allowImmediately = String(
+        SettingsWorkspace({
+          ...props,
+          category: 'permissions',
+          permissions: { automation: { action: 'allow', delayMs: 0 }, delays },
+        }),
+      ),
+      deny = String(
+        SettingsWorkspace({
+          ...props,
+          category: 'permissions',
+          permissions: { automation: { action: 'deny', delayMs: 15_000 }, delays },
+        }),
+      );
+    expect(allowImmediately).toContain('0 seconds');
+    expect(allowImmediately).toContain('without showing the popup');
+    expect(deny).not.toContain('>0 seconds');
+    expect(deny).toContain('15 seconds');
     const sources = String(
       SettingsWorkspace({
         ...props,

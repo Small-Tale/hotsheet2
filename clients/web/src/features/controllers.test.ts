@@ -409,6 +409,83 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionPopupSurface()).toBeUndefined();
   });
 
+  it('auto-allows immediately (0 s) without presenting the popup while still recording and sending it (HS2-EBGCGW)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),
+      posts: string[] = [];
+    owner.permissionAutomationByProject.value = {
+      a: { action: 'allow', delayMs: 0 },
+      b: { action: 'deny', delayMs: 15_000 },
+    };
+    let pendingA = [{ id: 1, connection: 'c', tool: 'Bash', action: 'npm test' }];
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === 'POST') {
+        posts.push(url);
+        pendingA = [];
+        return json({ connection: 'c', decision: 'allow', persisted: false });
+      }
+      if (url === '/api/a/permissions') return json(pendingA);
+      if (url === '/api/b/permissions') return json([{ id: 2, connection: 'd', tool: 'Edit', action: 'b.ts' }]);
+      return json([]);
+    });
+    await owner.refreshPermissions();
+    // The immediate request never became the visible popup: only the other project's request remains.
+    expect(owner.pendingPermissions().map((item) => item.key)).toEqual(['b:2']);
+    expect(String(owner.permissionPopupSurface())).toContain('b.ts');
+    await vi.waitFor(() => {
+      expect(posts).toEqual(['/api/a/permissions/1']);
+    });
+    expect(owner.projectPermissionHistory('a')).toEqual([
+      expect.objectContaining({ key: 'a:1', decision: 'allow', scope: 'once', automatic: true }),
+    ]);
+    // A later refresh neither reopens nor re-sends the decided request.
+    await owner.refreshPermissions();
+    expect(posts).toHaveLength(1);
+    expect(owner.projectPermissionHistory('a')).toHaveLength(1);
+  });
+
+  it('leaves ignored requests alone and falls back to the popup without retrying a failed immediate allow', async () => {
+    vi.stubGlobal('window', { setInterval });
+    const projects = signal([project('a')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    let posts = 0;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === 'POST') {
+        posts += 1;
+        return Response.json({ error: 'Disconnected' }, { status: 503 });
+      }
+      return json(url.endsWith('/permissions') ? [{ id: 1, connection: 'c', tool: 'Bash', action: 'npm test' }] : []);
+    });
+    owner.permissionInbox.reconcile(
+      projects.value[0],
+      [{ id: 1, connection: 'c', tool: 'Bash', action: 'npm test' }],
+      [],
+    );
+    owner.permissionInbox.ignore('a:1');
+    // Off -> Auto-allow 0 s: an ignored request stays parked for a manual decision.
+    owner.permissionAutomationByProject.value = { a: { action: 'allow', delayMs: 0 } };
+    owner.updatePermissionTimer();
+    expect(posts).toBe(0);
+    expect(owner.pendingPermissions()).toHaveLength(1);
+    // Presenting it again lets the immediate setting decide it; the send fails.
+    owner.permissionInbox.present('a:1');
+    owner.updatePermissionTimer();
+    expect(owner.pendingPermissions()).toEqual([]);
+    await vi.waitFor(() => {
+      expect(owner.pendingPermissions()).toHaveLength(1);
+    });
+    expect(posts).toBe(1);
+    expect(String(owner.permissionPopupSurface())).toContain('Disconnected');
+    // Neither the per-second timer nor a refresh turns the failure into a request loop.
+    owner.startPermissionUpdates();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(posts).toBe(1);
+    expect(owner.pendingPermissions()).toHaveLength(1);
+    expect(owner.permissionCountdown).toBeUndefined();
+  });
+
   it('resets gallery-owned playback, gestures, annotations and menu state before a second image edit', () => {
     const ticket: FullTicket = {
       id: 't',

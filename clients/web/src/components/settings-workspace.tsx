@@ -3,7 +3,7 @@ import './settings-workspace.css';
 import { Select } from '@kerfjs/ui/select';
 
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
-import type { PermissionAutomation } from '../permission-notifications';
+import { formatPermissionDelay, type PermissionAutomation, permissionDelaysFor } from '../permission-notifications';
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
@@ -92,14 +92,14 @@ export function SettingsWorkspace({
             label="After visible for"
             value={String(permissions.automation.delayMs)}
             disabled={permissions.automation.action === 'off'}
-            choices={permissions.delays.map((value) => ({
-              value: String(value),
-              label: value < 60_000 ? '15 seconds' : `${value / 60_000} minute${value === 60_000 ? '' : 's'}`,
-            }))}
+            choices={permissions.delays
+              .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
+              .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
           />
           <p>
             Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
-            auto-allow or Stop auto-deny disables that automatic decision for this request.
+            auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds
+            allows each request without showing the popup; it is still recorded in Notifications.
           </p>
         </div>
       )}

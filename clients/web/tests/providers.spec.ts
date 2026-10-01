@@ -16906,6 +16906,129 @@ test('persists and restores per-project permission automation settings', async (
   await expect(delay).toHaveJSProperty('value', '120000');
 });
 
+test('auto-allows immediately at 0 seconds without ever presenting the popup (HS2-EBGCGW)', async ({ page }) => {
+  await mockProject(page);
+  const bodies: unknown[] = [];
+  let pending = [
+    {
+      id: 9,
+      connection: 'codex-session',
+      tool: 'item/commandExecution/requestApproval',
+      action: 'npm run lint',
+      always_allow_supported: true,
+    },
+  ];
+  await page.route('**/connections', (route) =>
+    route.fulfill({
+      json: [{ id: 'codex-session', tool: 'Codex', project: '/work/demo', role: 'worker', busy: true }],
+    }),
+  );
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/9', (route) => {
+    bodies.push(route.request().postDataJSON());
+    pending = [];
+    return route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
+  });
+  // Record any frame in which a permission popup exists, so even a one-frame flash fails the test.
+  await page.addInitScript(() => {
+    const flag = window as unknown as { permissionPopupSeen?: boolean };
+    flag.permissionPopupSeen = false;
+    new MutationObserver(() => {
+      if (document.querySelector('[data-component="permission-request-popup"]')) flag.permissionPopupSeen = true;
+    }).observe(document, { childList: true, subtree: true });
+  });
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'hotsheet.project.demo-checkout.permission-automation',
+      JSON.stringify({ action: 'allow', delayMs: 0 }),
+    );
+  });
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect.poll(() => bodies).toEqual([{ decision: 'allow', scope: 'once' }]);
+  await page.getByRole('button', { name: /Notifications view/ }).click();
+  const center = page.locator('[data-component="notification-center"]');
+  await page.getByRole('button', { name: /Last 24 Hours/ }).click();
+  await expect(center).toContainText('Automatically allowed permission');
+  await expect(center).toContainText('npm run lint');
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { permissionPopupSeen?: boolean }).permissionPopupSeen)).toBe(
+    false,
+  );
+  expect(bodies).toHaveLength(1);
+});
+
+test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-EBGCGW)', async ({ page }) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const action = page.locator('wa-select[name="permission-automation-action"]'),
+    delay = page.locator('wa-select[name="permission-automation-delay"]'),
+    stored = () => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'));
+  const setValue = (locator: typeof action, value: string) =>
+    locator.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  await setValue(action, 'allow');
+  await setValue(delay, '0');
+  await expect.poll(stored).toBe('{"action":"allow","delayMs":0}');
+  await expect(delay).toHaveJSProperty('value', '0');
+  await expect(page.locator('[data-settings-category="permissions"]')).toContainText(
+    'Auto-allow after 0 seconds allows each request without showing the popup',
+  );
+  await delay.click();
+  await expect(delay).toHaveJSProperty('open', true);
+  await expect(delay.locator('wa-option[value="0"]')).toHaveText('0 seconds');
+  // Screenshot only after every finite popup/chevron animation and transition has finished.
+  const settle = () =>
+    expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+              ).length,
+        ),
+      )
+      .toBe(0);
+  await settle();
+  await page.screenshot({ path: '/private/tmp/hs2-ebgcgw-delay-open-wide.png' });
+  await page.keyboard.press('Escape');
+  await expect(delay).toHaveJSProperty('open', false);
+  // Switching to Auto-deny never keeps an immediate delay: it moves to the shortest deny delay.
+  await setValue(action, 'deny');
+  await expect.poll(stored).toBe('{"action":"deny","delayMs":15000}');
+  await expect(delay).toHaveJSProperty('value', '15000');
+  await expect(delay.locator('wa-option[value="0"]')).toHaveCount(0);
+  await expect(delay.locator('wa-option').first()).toHaveText('15 seconds');
+  // Back to Auto-allow, then edit again after the reset.
+  await setValue(action, 'allow');
+  await expect(delay.locator('wa-option[value="0"]')).toHaveCount(1);
+  await setValue(delay, '0');
+  await expect.poll(stored).toBe('{"action":"allow","delayMs":0}');
+  await page.getByLabel('List view').click();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await expect(action).toHaveJSProperty('value', 'allow');
+  await expect(delay).toHaveJSProperty('value', '0');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(delay).toBeInViewport();
+  await settle();
+  await delay.click();
+  await expect(delay).toHaveJSProperty('open', true);
+  await settle();
+  await page.screenshot({ path: '/private/tmp/hs2-ebgcgw-delay-open-narrow.png' });
+});
+
 test('shows and persists the shared Trash retention period in Lifecycle settings', async ({ page }) => {
   const writes: unknown[] = [],
     requests: string[] = [];

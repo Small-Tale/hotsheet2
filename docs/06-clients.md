@@ -1869,7 +1869,15 @@ view rather than changing the workspace width.
 Ignore is client-only and hides the popup without answering. When the server advertises
 durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow Once;
 otherwise the final action is simply Allow. Per-project localStorage settings can turn
-on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. The timer accumulates
+on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. Auto-Allow alone also
+offers **0 seconds** (HS2-EBGCGW): each arriving request (and every presented pending request
+when the setting is chosen) is allowed once before anything renders, so its popup never
+appears, while the decision still goes through the same server route and is recorded in
+Notifications history as "Automatically allowed". Ignored requests and requests whose
+automation was stopped wait for a manual decision; a failed immediate send falls back to the
+popup with its error and is never retried automatically. Auto-Deny deliberately has no
+0-second option, and a stored or switched-to Auto-Deny with 0 seconds uses 15 seconds. The
+timer accumulates
 only while that request's popup is visibly presented, updates once per second, pauses when
 hidden or ignored, and appears as flat text aligned with the decision buttons plus an
 icon-only pause control whose accessible label and tooltip name the automatic outcome.

@@ -46,8 +46,33 @@ export interface PermissionAutomation {
   delayMs: number;
 }
 
-export const PERMISSION_DELAYS = [15_000, 60_000, 120_000, 300_000, 900_000, 3_600_000] as const;
+/**
+ * Every automatic-decision delay. `0` is the immediate Auto-allow option (HS2-EBGCGW): the request is
+ * allowed and recorded without ever presenting the popup. It is deliberately not offered for
+ * Auto-deny; use {@link permissionDelaysFor} for the delays a given action may choose.
+ */
+export const PERMISSION_DELAYS = [0, 15_000, 60_000, 120_000, 300_000, 900_000, 3_600_000] as const;
 export const DEFAULT_PERMISSION_AUTOMATION: PermissionAutomation = { action: 'off', delayMs: 60_000 };
+const SHORTEST_DENY_DELAY = 15_000;
+
+/** The delays the settings form offers for `action`; immediate (0 s) is Auto-allow only. */
+export function permissionDelaysFor(action: PermissionAutomationAction): readonly number[] {
+  return action === 'deny' ? PERMISSION_DELAYS.filter((value) => value > 0) : PERMISSION_DELAYS;
+}
+
+/** Human label for an automatic-decision delay, as shown in the "After visible for" select. */
+export function formatPermissionDelay(value: number): string {
+  if (value < 60_000) {
+    const seconds = value / 1000;
+    return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  }
+  return `${value / 60_000} minute${value === 60_000 ? '' : 's'}`;
+}
+
+/** Whether `automation` allows a request immediately, so the popup must never be presented. */
+export function allowsImmediately(automation: PermissionAutomation): boolean {
+  return automation.action === 'allow' && automation.delayMs === 0;
+}
 
 export function permissionBelongsToProject(
   request: WirePermissionRequest,
@@ -66,10 +91,13 @@ export function permissionBelongsToProject(
 export function parsePermissionAutomation(raw: unknown): PermissionAutomation {
   if (!raw || typeof raw !== 'object') return DEFAULT_PERMISSION_AUTOMATION;
   const value = raw as Partial<PermissionAutomation>;
-  return {
-    action: value.action === 'allow' || value.action === 'deny' ? value.action : 'off',
-    delayMs: PERMISSION_DELAYS.includes(value.delayMs as (typeof PERMISSION_DELAYS)[number]) ? value.delayMs! : 60_000,
-  };
+  const action = value.action === 'allow' || value.action === 'deny' ? value.action : 'off';
+  const delayMs = PERMISSION_DELAYS.includes(value.delayMs as (typeof PERMISSION_DELAYS)[number])
+    ? value.delayMs!
+    : 60_000;
+  // Immediate (0 s) is Auto-allow only; a deny (for example after switching from Auto-allow 0 s)
+  // falls back to the shortest deny delay rather than denying without showing the request.
+  return { action, delayMs: action === 'deny' && delayMs === 0 ? SHORTEST_DENY_DELAY : delayMs };
 }
 
 export function parsePermissionHistory(raw: unknown, now = Date.now()): PermissionHistoryItem[] {
@@ -233,6 +261,9 @@ export class VisiblePermissionTimer {
     this.consume(now);
     this.cancelled.add(key);
     if (this.active?.key === key) this.active = undefined;
+  }
+  isCancelled(key: string) {
+    return this.cancelled.has(key);
   }
   remove(key: string) {
     this.remaining.delete(key);

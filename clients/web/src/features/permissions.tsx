@@ -7,6 +7,7 @@ import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { Project } from '../interactions/types';
 import {
+  allowsImmediately,
   DEFAULT_PERMISSION_AUTOMATION,
   formatPermissionCountdown,
   parsePermissionAutomation,
@@ -54,7 +55,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionResolutionEpoch = 0,
     permissionTimerInterval: number | undefined,
     permissionRefreshInterval: number | undefined,
-    permissionCountdown: { key: string; remainingMs: number } | undefined;
+    permissionCountdown: { key: string; remainingMs: number } | undefined,
+    allowingImmediately = false;
   const pendingPermissions = () => permissionInbox.pending();
   const permissionHistory = () => permissionInbox.history();
   const projectPendingPermissions = (projectId = selectedProjectId.value) =>
@@ -165,6 +167,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       permissionInbox.restore(item);
       if (noLongerPending) permissionInbox.removeExternal(item.key);
       persistPermissionHistory();
+      // A failed automatic decision falls back to a manual one: never retry it on the next timer tick,
+      // which for an immediate (0 s) Auto-allow would become a once-per-second request loop.
+      if (automatic && !noLongerPending) permissionTimer.cancel(item.key);
       if (!noLongerPending)
         permissionResolutionErrors.value = {
           ...permissionResolutionErrors.value,
@@ -193,7 +198,31 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     persistPermissionHistory();
   }
 
+  /**
+   * Resolve every pending request whose project is set to Auto-allow after 0 seconds (HS2-EBGCGW)
+   * before anything renders, so its popup is never presented. Each decision still goes through
+   * {@link resolvePermission}: it is sent to the server and recorded in history as automatic.
+   * Ignored requests and requests whose automation was stopped (or whose automatic send failed)
+   * keep waiting for a manual decision.
+   */
+  function allowImmediatePermissions() {
+    if (allowingImmediately) return;
+    allowingImmediately = true;
+    try {
+      for (const item of pendingPermissions())
+        if (
+          !item.ignored &&
+          !permissionTimer.isCancelled(item.key) &&
+          allowsImmediately(permissionAutomation(item.projectId))
+        )
+          void resolvePermission(item, 'allow', 'once', true);
+    } finally {
+      allowingImmediately = false;
+    }
+  }
+
   function updatePermissionTimer() {
+    allowImmediatePermissions();
     const item = visiblePermission();
     if (!item) {
       permissionTimer.hide();

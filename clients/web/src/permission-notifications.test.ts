@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  allowsImmediately,
   formatPermissionCountdown,
+  formatPermissionDelay,
   parsePermissionAutomation,
   parsePermissionHistory,
   parsePermissionResolution,
+  PERMISSION_DELAYS,
   permissionBelongsToProject,
+  permissionDelaysFor,
   PermissionInbox,
   VisiblePermissionTimer,
 } from './permission-notifications';
@@ -120,6 +124,37 @@ describe('permission notifications', () => {
     });
     expect(parsePermissionAutomation({ action: 'allow', delayMs: 12 })).toEqual({ action: 'allow', delayMs: 60_000 });
     expect(formatPermissionCountdown(61_001)).toBe('1:02');
+  });
+  it('offers an immediate 0 s delay for Auto-allow only (HS2-EBGCGW)', () => {
+    expect(PERMISSION_DELAYS[0]).toBe(0);
+    expect(permissionDelaysFor('allow')).toContain(0);
+    expect(permissionDelaysFor('off')).toContain(0);
+    expect(permissionDelaysFor('deny')).not.toContain(0);
+    expect(permissionDelaysFor('deny')).toEqual(PERMISSION_DELAYS.slice(1));
+    expect(PERMISSION_DELAYS.map(formatPermissionDelay)).toEqual([
+      '0 seconds',
+      '15 seconds',
+      '1 minute',
+      '2 minutes',
+      '5 minutes',
+      '15 minutes',
+      '60 minutes',
+    ]);
+    expect(formatPermissionDelay(1_000)).toBe('1 second');
+    expect(parsePermissionAutomation({ action: 'allow', delayMs: 0 })).toEqual({ action: 'allow', delayMs: 0 });
+    expect(parsePermissionAutomation({ action: 'off', delayMs: 0 })).toEqual({ action: 'off', delayMs: 0 });
+    // Never deny without showing the request: a stored or switched-to deny + 0 s uses the shortest deny delay.
+    expect(parsePermissionAutomation({ action: 'deny', delayMs: 0 })).toEqual({ action: 'deny', delayMs: 15_000 });
+    expect(allowsImmediately({ action: 'allow', delayMs: 0 })).toBe(true);
+    expect(allowsImmediately({ action: 'allow', delayMs: 15_000 })).toBe(false);
+    expect(allowsImmediately({ action: 'off', delayMs: 0 })).toBe(false);
+    expect(allowsImmediately({ action: 'deny', delayMs: 0 })).toBe(false);
+    const timer = new VisiblePermissionTimer();
+    expect(timer.isCancelled('p:1')).toBe(false);
+    timer.cancel('p:1');
+    expect(timer.isCancelled('p:1')).toBe(true);
+    timer.remove('p:1');
+    expect(timer.isCancelled('p:1')).toBe(false);
   });
   it('rejects malformed and older-than-seven-days persisted history', () => {
     const week = 7 * 24 * 60 * 60 * 1000,

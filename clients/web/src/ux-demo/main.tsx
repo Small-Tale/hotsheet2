@@ -791,7 +791,7 @@ function demoContent(item: DemoDefinition) {
         commands={{ commands: [] }}
         lifecycle={{ days: 30, message: '' }}
         terminals={{ inheritGlobalShellHistory: false, message: '' }}
-        permissions={{ automation: { action: 'off', delayMs: 60_000 }, delays: [15_000, 60_000, 120_000] }}
+        permissions={{ automation: { action: 'off', delayMs: 60_000 }, delays: [0, 15_000, 60_000, 120_000] }}
         columns={{ hideVerified: false }}
         general={{ showLoadingActivity: true }}
         keyboard={{ overrides: {}, apple: true }}
