@@ -460,7 +460,8 @@ enum Cmd {
     },
     /// Rebuild the on-disk index (SQLite/FTS) from a full store walk. The index is a
     /// disposable cache, so this is always safe — use it after an external edit or if the
-    /// index looks stale. Writes to the same path the server reads (docs/03 §3.4).
+    /// index looks stale. Writes to the same path the server reads (docs/03 §3.4), then
+    /// prunes index files older schema generations left that no running process holds.
     Reindex {
         /// Index database file (default: ${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite).
         #[arg(long)]
@@ -2859,6 +2860,13 @@ fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
     let idx = hotsheet_index::Index::open(&index_path, store_id)?;
     let n = idx.rebuild_from_store(&store)?;
     println!("reindexed {n} ticket(s) → {}", index_path.display());
+    // Index maintenance also drops files older schema generations left behind, unless a
+    // running process (an older build's server) still holds them (HS2-Y0PAEM).
+    let report =
+        hotsheet_index::prune_stale_index_files(&hotsheet_plugins::hotsheet_home().join("index"))?;
+    if let Some(summary) = report.summary() {
+        println!("{summary}");
+    }
     Ok(())
 }
 

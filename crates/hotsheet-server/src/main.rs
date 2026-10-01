@@ -187,6 +187,7 @@ async fn main() -> Result<()> {
     };
     let index = Index::open_reconciled(&index_path, &store)?;
     println!("index: {}", index_path.display());
+    prune_stale_indexes();
     // A real run persists the indexes of any POST /stores-registered store too.
     let permission_rules_path = hotsheet_server::multistore::permission_rules_path_for(&store)?;
     let store_id = hotsheet_server::multistore::store_url_id(&store);
@@ -504,6 +505,20 @@ fn default_index_path(store: &FsStore) -> Result<PathBuf> {
     let dir = hotsheet_plugins::hotsheet_home().join("index");
     std::fs::create_dir_all(&dir)?;
     Ok(dir.join(hotsheet_index::index_file_name(id)))
+}
+
+/// Remove index files that older schema generations left in the machine index dir and that
+/// no running process still holds open (HS2-Y0PAEM). Best-effort: a failure is logged only.
+fn prune_stale_indexes() {
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
+    match hotsheet_index::prune_stale_index_files(&dir) {
+        Ok(report) => {
+            if let Some(summary) = report.summary() {
+                println!("index: {summary}");
+            }
+        }
+        Err(error) => eprintln!("index: could not prune stale index files: {error}"),
+    }
 }
 
 #[cfg(test)]

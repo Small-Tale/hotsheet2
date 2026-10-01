@@ -612,7 +612,7 @@ hotsheet bootstrap [--project <path>] [--store <path>] [--remote <url>] [--tool 
 hotsheet serve         # run the server
 hotsheet serve --stop  # stop the server; preserve detached terminals
 hotsheet serve --stop --kill-all-terminals  # stop it and explicitly clear project terminals
-hotsheet reindex       # drop + rebuild the index from disk
+hotsheet reindex       # drop + rebuild the index from disk; prune idle older-schema index files
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)
 ```

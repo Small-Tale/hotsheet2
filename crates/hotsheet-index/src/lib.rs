@@ -110,6 +110,9 @@ pub enum IndexError {
 /// list is identical whichever path produced it.
 pub use hotsheet_ticketing::TicketRow;
 
+mod prune;
+pub use prune::{PruneReport, prune_stale_index_files};
+
 /// The small projection needed to display a reverse duplicate link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateBacklinkRow {

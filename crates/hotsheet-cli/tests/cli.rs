@@ -4293,6 +4293,74 @@ fn reindex_rebuilds_the_index_from_disk() {
         .stdout(predicate::str::contains("reindexed 2 ticket"));
 }
 
+/// HS2-Y0PAEM: `reindex` writes the current schema generation's index and prunes the files
+/// older generations (and unversioned pre-HS2-8ZM4PT builds) left in the machine index dir,
+/// keeping newer generations and unrelated files.
+#[test]
+fn reindex_prunes_index_files_from_older_schema_generations() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    new_ticket(p, "first");
+    let home = tempfile::tempdir().unwrap();
+    let index_dir = home.path().join("index");
+    std::fs::create_dir_all(&index_dir).unwrap();
+    let current = hotsheet_index::index_file_name("aaaa");
+    let version: i64 = current
+        .trim_end_matches(".sqlite")
+        .rsplit_once(".v")
+        .unwrap()
+        .1
+        .parse()
+        .unwrap();
+    // Real (closed) SQLite index files for each generation.
+    let older = index_dir.join(format!("aaaa.v{}.sqlite", version - 1));
+    let legacy = index_dir.join("bbbb.sqlite");
+    let newer = index_dir.join(format!("aaaa.v{}.sqlite", version + 1));
+    for path in [&older, &legacy, &newer] {
+        drop(hotsheet_index::Index::open(path, "fixture").unwrap());
+    }
+    std::fs::write(index_dir.join("notes.txt"), "keep").unwrap();
+
+    let reindex = || {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.env("HOTSHEET_HOME", home.path())
+            .arg("-C")
+            .arg(p)
+            .arg("reindex");
+        cmd
+    };
+    reindex()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("reindexed 1 ticket"))
+        .stdout(predicate::str::contains(
+            "pruned 2 index file(s) from older schema generations",
+        ));
+    assert!(
+        !older.exists() && !legacy.exists(),
+        "older generations pruned"
+    );
+    assert!(newer.exists(), "a newer build's index is never pruned");
+    assert!(index_dir.join("notes.txt").exists());
+    let names: Vec<String> = std::fs::read_dir(&index_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names
+            .iter()
+            .any(|name| name.ends_with(&format!(".v{version}.sqlite"))),
+        "the current generation's index was written: {names:?}"
+    );
+
+    // Nothing stale remains, so a second reindex reports no prune.
+    reindex()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pruned").not());
+}
+
 #[test]
 fn mutations_keep_worklist_current_and_inactive_tickets_off_up_next() {
     let dir = tempfile::tempdir().unwrap();

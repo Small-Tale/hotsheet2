@@ -1641,3 +1641,174 @@ fn an_unreadable_index_file_is_still_rebuilt_but_a_busy_one_is_not_deleted() {
         "the first process's file was not deleted"
     );
 }
+
+/// HS2-Y0PAEM: index files from older schema generations (and unversioned pre-HS2-8ZM4PT
+/// files) are pruned with their sidecars; the current generation, newer generations, and
+/// unrelated files are kept.
+#[test]
+fn prune_removes_only_idle_older_generation_index_files() {
+    let (_store_dir, store, _) = seeded();
+    let dir = tempfile::tempdir().unwrap();
+    let older = dir
+        .path()
+        .join(format!("aaaa.v{}.sqlite", SCHEMA_VERSION - 1));
+    let legacy = dir.path().join("bbbb.sqlite");
+    let current = dir.path().join(index_file_name("aaaa"));
+    let newer = dir
+        .path()
+        .join(format!("aaaa.v{}.sqlite", SCHEMA_VERSION + 1));
+    let unrelated = dir.path().join("notes.txt");
+    for path in [&older, &legacy, &current, &newer] {
+        // Real WAL-mode index files, closed again (like a crashed or exited older build).
+        drop(Index::open_reconciled(path, &store).unwrap());
+    }
+    std::fs::write(&unrelated, "keep me").unwrap();
+    std::fs::write(sidecar(&legacy, "-wal"), b"").unwrap();
+    std::fs::write(sidecar(&legacy, "-shm"), b"").unwrap();
+
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    let mut removed = report.removed.clone();
+    removed.sort();
+    let mut expected = vec![older.clone(), legacy.clone()];
+    expected.sort();
+    assert_eq!(removed, expected);
+    assert!(report.in_use.is_empty());
+    for gone in [&older, &legacy] {
+        assert!(!gone.exists(), "{} pruned", gone.display());
+        for suffix in ["-wal", "-shm", "-journal"] {
+            assert!(!sidecar(gone, suffix).exists(), "{suffix} sidecar pruned");
+        }
+    }
+    for kept in [&current, &newer, &unrelated] {
+        assert!(kept.exists(), "{} kept", kept.display());
+    }
+    // The current generation is still a working index.
+    let reopened = Index::open_reconciled(&current, &store).unwrap();
+    assert!(reopened.ticket_count().unwrap() > 0);
+
+    // Idempotent: a second prune has nothing left to do.
+    assert_eq!(
+        prune_stale_index_files(dir.path()).unwrap(),
+        PruneReport::default()
+    );
+}
+
+/// HS2-Y0PAEM: a stale file a live connection holds open (an older build still running)
+/// is never deleted; it is reported in use and pruned once that connection goes away.
+/// Walks open → prune (kept) → write while held → prune (kept) → second opener → close →
+/// prune (removed).
+#[test]
+fn prune_never_deletes_a_stale_index_a_live_connection_holds() {
+    let (_store_dir, store, _) = seeded();
+    let dir = tempfile::tempdir().unwrap();
+    let held_path = dir
+        .path()
+        .join(format!("cccc.v{}.sqlite", SCHEMA_VERSION - 1));
+    let held = Index::open_reconciled(&held_path, &store).unwrap();
+    let count = held.ticket_count().unwrap();
+
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(report.in_use, vec![held_path.clone()]);
+    assert!(report.removed.is_empty());
+    assert!(held_path.exists());
+
+    // The holder keeps working normally after the failed probe (its locks are intact).
+    held.rebuild_from_store(&store).unwrap();
+    assert_eq!(held.ticket_count().unwrap(), count);
+    let again = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(again.in_use, vec![held_path.clone()]);
+
+    // Another opener still reads the same live file (not a recreated empty one).
+    let second = Index::open_reconciled(&held_path, &store).unwrap();
+    assert_eq!(second.ticket_count().unwrap(), count);
+    drop(second);
+    assert_eq!(
+        prune_stale_index_files(dir.path()).unwrap().in_use,
+        vec![held_path.clone()],
+        "still held by the first connection"
+    );
+
+    drop(held);
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(report.removed, vec![held_path.clone()]);
+    assert!(!held_path.exists());
+    assert!(!sidecar(&held_path, "-wal").exists());
+}
+
+const PRUNE_HOLDER_ENV: &str = "HS2_PRUNE_TEST_HOLD_INDEX";
+
+/// Child-process half of [`prune_never_deletes_a_stale_index_another_process_holds`]:
+/// a no-op unless that test re-executes this binary with [`PRUNE_HOLDER_ENV`] set. It then
+/// opens the given index (as an older build's server would), reports `ready`, and holds
+/// the file open until its stdin closes.
+#[test]
+fn prune_holder_child_process() {
+    let Ok(path) = std::env::var(PRUNE_HOLDER_ENV) else {
+        return;
+    };
+    let index = Index::open(std::path::Path::new(&path), "holder").unwrap();
+    assert!(index.ticket_count().is_ok());
+    println!("ready");
+    use std::io::Write as _;
+    std::io::stdout().flush().unwrap();
+    let mut sink = String::new();
+    let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut sink);
+    drop(index);
+}
+
+/// HS2-Y0PAEM: the real hazard is another *process* (an older build's server) using a
+/// stale generation's file. SQLite's file locks are the evidence: while that process holds
+/// the file the prune keeps it; once the process exits, the prune removes it.
+#[test]
+fn prune_never_deletes_a_stale_index_another_process_holds() {
+    use std::io::BufRead as _;
+    let dir = tempfile::tempdir().unwrap();
+    let held_path = dir
+        .path()
+        .join(format!("eeee.v{}.sqlite", SCHEMA_VERSION - 1));
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tests::prune_holder_child_process",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(PRUNE_HOLDER_ENV, &held_path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    while stdout.read_line(&mut line).unwrap() > 0 && !line.contains("ready") {
+        line.clear();
+    }
+    assert!(line.contains("ready"), "holder process opened the index");
+
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(report.in_use, vec![held_path.clone()]);
+    assert!(held_path.exists(), "a file another process holds is kept");
+
+    drop(child.stdin.take());
+    assert!(child.wait().unwrap().success());
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(report.removed, vec![held_path.clone()]);
+    assert!(!held_path.exists());
+}
+
+/// HS2-Y0PAEM: a stale file that is not a database at all is removed; a missing index
+/// directory is an empty report, not an error.
+#[test]
+fn prune_removes_corrupt_stale_files_and_tolerates_a_missing_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let garbage = dir.path().join("dddd.v1.sqlite");
+    std::fs::write(&garbage, vec![0x5a; 8192]).unwrap();
+    let report = prune_stale_index_files(dir.path()).unwrap();
+    assert_eq!(report.removed, vec![garbage.clone()]);
+    assert!(!garbage.exists());
+
+    assert_eq!(
+        prune_stale_index_files(&dir.path().join("missing")).unwrap(),
+        PruneReport::default()
+    );
+}

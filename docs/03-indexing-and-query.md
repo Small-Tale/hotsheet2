@@ -89,7 +89,15 @@ disposable). Keyed so a project spanning multiple stores has one index. The file
 the index `SCHEMA_VERSION` (`hotsheet_index::index_file_name`): opening rebuilds any file whose
 schema differs, so binaries from different builds (an orphaned older server, a stale installed
 CLI) each keep their own file instead of downgrading the schema under a newer running process
-(`no such column`, HS2-8ZM4PT). Files left behind by older schema generations are inert caches.
+(`no such column`, HS2-8ZM4PT). Files left behind by older schema generations are inert caches,
+pruned by `hotsheet_index::prune_stale_index_files` at server start and after `hotsheet-cli
+reindex` (HS2-Y0PAEM): an unversioned `<project-id>.sqlite` or a `.v<N>` below this build's
+schema is removed with its `-wal`/`-shm`/`-journal` sidecars **only when no live connection
+holds it**. The probe takes a non-blocking exclusive SQLite lock (`locking_mode=EXCLUSIVE`,
+`BEGIN EXCLUSIVE`), which fails while any process keeps the file open, because every open
+WAL connection holds a shared lock on it. The file is unlinked while that lock is still held.
+A held file is kept for a later prune. Newer generations (a newer build that may be running)
+are never touched.
 Several processes (the server, the CLI, the app's setup refresh) may open one file at once:
 each connection waits up to 30 s on a busy lock, the schema check and creation run in one
 `BEGIN IMMEDIATE` transaction so a concurrent opener re-reads the version the winner committed,
