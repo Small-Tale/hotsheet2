@@ -3900,6 +3900,54 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-narrow.png') });
 });
 
+test('reopens the drawer AI shell submenu after Escape closes and breakpoint resizes (HS2-GV7A43)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    menu = drawer.locator('[data-terminal-drawer-create]'),
+    parent = menu.locator('[data-item-id="ai-shell-providers"]'),
+    shell = parent.locator('[data-action="create-terminal-drawer-item"]:not([data-provider])'),
+    hoverSubmenu = async () => {
+      await page.mouse.move(0, 0);
+      await parent.hover();
+      await expect(shell).toBeVisible();
+    },
+    closeMenu = async () => {
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await expect(parent).toBeHidden();
+    };
+  await create.click();
+  await hoverSubmenu();
+  // A breakpoint resize while the submenu is open used to leave it unable to reopen.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await closeMenu();
+  await create.click();
+  await hoverSubmenu();
+  // Keyboard opens it too.
+  await closeMenu();
+  await create.click();
+  await expect(menu.locator('wa-dropdown-item').first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(parent).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(shell).toBeVisible();
+  // Closing with Escape and reopening right away keeps working every time.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await closeMenu();
+    await create.click();
+    await hoverSubmenu();
+  }
+});
+
 test('names the AI shell after the only installed provider (HS2-3HT4PA)', async ({ page }) => {
   const created: Array<Record<string, unknown>> = [];
   await mockProject(page);
