@@ -421,6 +421,10 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
 - A bare terminal-create request launches the host user's default shell (`SHELL` on
   Unix or `COMSPEC` on Windows, with `/bin/sh` and `cmd.exe` fallbacks), matching
   HS1's explicit new-terminal behavior.
+- **No lost output from fast exits:** the server keeps its own PTY slave open until the
+  child has exited and the master has nothing left to read, so a command that writes and
+  exits while the drain is starved still lands in scrollback (macOS discards unread output
+  shortly after the last slave close; HS2-BCE5XG).
 - A **scrollback ring buffer** and multi-client attach (many viewers see one
   stream, tmux-style). Retained scrollback and the live broadcast share one atomic
   handoff: output concurrent with attach appears exactly once in either the snapshot or

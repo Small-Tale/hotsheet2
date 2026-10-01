@@ -229,7 +229,7 @@ impl OutputReplay {
 pub struct Terminal {
     kind: TerminalKind,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
-    child: Mutex<Box<dyn Child + Send + Sync>>,
+    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     writer: Mutex<Box<dyn Write + Send>>,
     output: Arc<OutputReplay>,
     busy: Arc<Mutex<BusyDetector>>,
@@ -276,6 +276,67 @@ fn resize_pty(
 /// session's claims when the terminal ends (HS2-RXWXQ8).
 pub const WORKER_ID_ENV: &str = "HOTSHEET_WORKER_ID";
 
+/// Test hook (one-shot: the next drain thread consumes it): delay the drain thread's first read, simulating a loaded machine where a fast
+/// child exits before the reader starts (HS2-BCE5XG).
+#[cfg(test)]
+static DRAIN_START_DELAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How often the slave keeper re-checks child exit and the unread byte count. A local
+/// process check, never a network request.
+#[cfg(unix)]
+const SLAVE_RELEASE_POLL: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// Hold the parent's PTY slave until the child has exited **and** the master has no unread
+/// output, then drop it so the drain thread reads EOF (HS2-BCE5XG). Exits early (dropping
+/// the slave) once the terminal itself is gone.
+#[cfg(unix)]
+fn release_slave_when_drained(
+    slave: Box<dyn portable_pty::SlavePty + Send>,
+    child: std::sync::Weak<Mutex<Box<dyn Child + Send + Sync>>>,
+    master: std::sync::Weak<Mutex<Box<dyn MasterPty + Send>>>,
+) {
+    std::thread::spawn(move || {
+        let _slave = slave;
+        loop {
+            let (Some(child), Some(master)) = (child.upgrade(), master.upgrade()) else {
+                return;
+            };
+            let exited = child
+                .lock()
+                .ok()
+                .and_then(|mut child| child.try_wait().ok())
+                .is_none_or(|status| status.is_some());
+            if exited {
+                let unread = master
+                    .lock()
+                    .ok()
+                    .and_then(|master| master.as_raw_fd())
+                    .map(unread_bytes)
+                    .unwrap_or(0);
+                if unread == 0 {
+                    return;
+                }
+            }
+            drop((child, master));
+            std::thread::sleep(SLAVE_RELEASE_POLL);
+        }
+    });
+}
+
+/// Bytes waiting to be read from a PTY master (`FIONREAD`); 0 when it cannot tell.
+#[cfg(unix)]
+fn unread_bytes(fd: std::os::unix::io::RawFd) -> usize {
+    let mut available: libc::c_int = 0;
+    // SAFETY: FIONREAD writes one c_int through the valid pointer; the fd belongs to a live
+    // master the caller holds locked.
+    let result = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
+    if result == 0 {
+        usize::try_from(available).unwrap_or(0)
+    } else {
+        0
+    }
+}
+
 impl Terminal {
     /// Spawn `spec` in a fresh PTY, scrubbing the environment and starting the drain thread.
     pub fn spawn(spec: TermSpec) -> Result<Terminal, TermError> {
@@ -318,15 +379,30 @@ impl Terminal {
         }
 
         let child = pair.slave.spawn_command(cmd).map_err(pty_err)?;
-        drop(pair.slave); // release the slave in the parent so EOF is seen on child exit
         let mut reader = pair.master.try_clone_reader().map_err(pty_err)?;
         let writer = pair.master.take_writer().map_err(pty_err)?;
+        let master = Arc::new(Mutex::new(pair.master));
+        let child = Arc::new(Mutex::new(child));
+        // HS2-BCE5XG: on macOS the *last* close of a PTY slave waits only briefly (about half a
+        // second here) for the master to read pending output, then discards it. A command that
+        // writes and exits while the drain thread is starved under load therefore lost
+        // all of its output. Keep the parent's slave open until the child has exited and the
+        // master has nothing left to read; only then release it so the drain sees EOF.
+        #[cfg(unix)]
+        release_slave_when_drained(pair.slave, Arc::downgrade(&child), Arc::downgrade(&master));
+        #[cfg(not(unix))]
+        drop(pair.slave); // release the slave in the parent so EOF is seen on child exit
 
         let output = Arc::new(OutputReplay::new(SCROLLBACK_BYTES, OUTPUT_CHANNEL_CAP));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
         let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(initial_cwd)));
         let (out, bz, oc) = (output.clone(), busy.clone(), osc.clone());
         std::thread::spawn(move || {
+            #[cfg(test)]
+            {
+                let delay = DRAIN_START_DELAY_MS.swap(0, std::sync::atomic::Ordering::Relaxed);
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+            }
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf) {
@@ -350,8 +426,8 @@ impl Terminal {
         sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
             kind: spec.kind,
-            master: Arc::new(Mutex::new(pair.master)),
-            child: Mutex::new(child),
+            master,
+            child,
             writer: Mutex::new(writer),
             output,
             busy,
@@ -706,6 +782,73 @@ mod tests {
         );
         let plain = Terminal::spawn(TermSpec::new("true")).expect("spawn");
         assert_eq!(plain.worker_id(), None);
+    }
+
+    /// HS2-BCE5XG: a command that writes and exits before the drain thread starts reading
+    /// keeps its output. Before the fix the parent dropped its slave at spawn, so the child's
+    /// exit was the last slave close; macOS waits only briefly for a reader, then discards the
+    /// unread bytes (scrollback empty). The 2 s delay outlasts that wait.
+    #[test]
+    fn a_child_that_exits_before_the_drain_starts_keeps_its_output() {
+        DRAIN_START_DELAY_MS.store(2000, std::sync::atomic::Ordering::Relaxed);
+        let mut spec = TermSpec::new("printf");
+        spec.args = vec!["\x1b]7;file://host/tmp/late-reader\x07early-exit".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        assert!(wait_until(|| !term.is_alive(), 5), "printf should exit");
+        assert!(
+            wait_until(
+                || String::from_utf8_lossy(&term.scrollback()).contains("early-exit"),
+                5
+            ),
+            "output written before the drain started must survive the child's exit"
+        );
+        assert_eq!(term.term_state().cwd.as_deref(), Some("/tmp/late-reader"));
+    }
+
+    /// HS2-BCE5XG regression at the PTY level: with the parent's slave dropped at spawn, a
+    /// child that writes and exits while nobody reads for 2 s loses that output (macOS reports EOF
+    /// with no data). The slave keeper holds the slave until the output has been read, so a
+    /// reader that starts late still receives every byte and then EOF.
+    #[cfg(unix)]
+    #[test]
+    fn the_slave_keeper_preserves_output_for_a_late_reader() {
+        use std::io::Read;
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("printf");
+        cmd.arg("late-reader-bytes");
+        let child = Arc::new(Mutex::new(pair.slave.spawn_command(cmd).unwrap()));
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let master = Arc::new(Mutex::new(pair.master));
+        release_slave_when_drained(pair.slave, Arc::downgrade(&child), Arc::downgrade(&master));
+        // Nobody reads yet: the child has written (and exited, or is blocked draining).
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&buf[..n]);
+            }
+            let _ = tx.send(out);
+        });
+        let out = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the drain reaches EOF once the slave keeper releases the slave");
+        assert_eq!(String::from_utf8_lossy(&out), "late-reader-bytes");
+        assert!(wait_until(
+            || child.lock().unwrap().try_wait().unwrap().is_some(),
+            5
+        ));
     }
 
     #[test]

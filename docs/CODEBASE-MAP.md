@@ -248,7 +248,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
-      src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, drain thread, write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)
+      src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, drain thread (slave kept until the child exits and output is drained, HS2-BCE5XG), write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)
       src/manager.rs         #   TerminalManager: per-(project,terminal) lazy spawn + shared Arc<Terminal> + list/get/kill/reap
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
       src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify}; surfaced on the terminal read/list state (HS2-RCKEJ9)
