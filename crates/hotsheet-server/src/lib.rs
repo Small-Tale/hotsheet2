@@ -167,6 +167,12 @@ pub struct AppState {
     /// Machine-local checkout discovery. Checkout ids identify working directories and
     /// are intentionally separate from store ids and server authentication tokens.
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
+    /// The machine-local Hot Sheet home (`${HOTSHEET_HOME:-~/.hotsheet2}`), resolved once at
+    /// construction. Every machine-local path this state reads or writes (instance files,
+    /// index-writer locks, file-backed indexes, `stores.json`, key metadata) derives from it,
+    /// so tests inject a directory with [`AppState::with_machine_home`] instead of mutating
+    /// the process-global environment (HS2-NYZ3PS).
+    machine_home: Arc<std::path::PathBuf>,
     commands: commands::CommandManager,
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
@@ -223,6 +229,7 @@ impl AppState {
     /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
     pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
         let store = store.with_deferred_push();
+        let machine_home = hotsheet_plugins::hotsheet_home();
         let (events, _) = broadcast::channel(256);
         let index = Arc::new(Mutex::new(index));
         let corrupt = Arc::default();
@@ -338,8 +345,9 @@ impl AppState {
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
-                hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+                machine_home.join("checkouts.json"),
             ),
+            machine_home: Arc::new(machine_home),
             commands,
             notifications: Default::default(),
             tts: Default::default(),
@@ -454,6 +462,33 @@ impl AppState {
             quiescent: blockers.is_empty(),
             blockers,
         }
+    }
+
+    /// Root every machine-local path at `home` instead of `${HOTSHEET_HOME}` (hermetic
+    /// tests; HS2-NYZ3PS). Also re-derives the checkout registry and plugin search dirs
+    /// from it, so call this **before** [`Self::with_checkout_registry`] /
+    /// [`Self::with_plugin_dirs`] when overriding those too.
+    pub fn with_machine_home(mut self, home: impl Into<std::path::PathBuf>) -> Self {
+        let home = home.into();
+        self.checkout_registry =
+            hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+        self.plugin_dirs = Arc::new(vec![home.join("plugins")]);
+        self.machine_home = Arc::new(home);
+        self
+    }
+
+    /// The machine-local home this state reads and writes under.
+    pub fn machine_home(&self) -> &std::path::Path {
+        &self.machine_home
+    }
+
+    /// The instance-file / index-writer-lock registry under [`Self::machine_home`].
+    pub fn instance_registry(&self) -> lifecycle::InstanceRegistry {
+        lifecycle::InstanceRegistry::at(self.machine_home.join("instances"))
+    }
+
+    fn key_registry(&self) -> KeyRegistry<OsKeychain> {
+        KeyRegistry::new(self.machine_home.as_ref().clone(), OsKeychain)
     }
 
     /// Override checkout-registry storage (primarily for hermetic tests).
@@ -704,7 +739,7 @@ impl AppState {
             return Ok(false);
         }
         let index = if self.persist_indexes {
-            let path = multistore::index_path_for(&store)
+            let path = multistore::index_path_for(&self.machine_home, &store)
                 .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
             Index::open_reconciled(&path, &store)?
         } else {
@@ -906,7 +941,7 @@ impl AppState {
         let index_path = if self.persist_indexes {
             FsStore::open(store_path)
                 .ok()
-                .and_then(|s| multistore::index_path_for(&s).ok())
+                .and_then(|s| multistore::index_path_for(&self.machine_home, &s).ok())
                 .map(|p| p.display().to_string())
                 .unwrap_or_default()
         } else {
@@ -926,8 +961,9 @@ impl AppState {
         // is logged, not fatal — the discovery instance file (above) already steers clients
         // to a single server; this is belt-and-suspenders against a stray duplicate.
         let is_primary = same_path(store_path, self.store.root());
+        let instances = self.instance_registry();
         if !is_primary {
-            match lifecycle::acquire_writer_lock(store_path) {
+            match instances.acquire_writer_lock(store_path) {
                 Ok(lock) => {
                     if let Ok(mut w) = self.writer_locks.lock() {
                         w.insert(store_path.display().to_string(), lock);
@@ -941,7 +977,7 @@ impl AppState {
                 Err(e) => eprintln!("writer lock for {} failed: {e}", store_path.display()),
             }
         }
-        match lifecycle::register_instance(&info, store_path) {
+        match instances.register_instance(&info, store_path) {
             Ok(guard) => {
                 if let Ok(mut g) = self.instance_guards.lock() {
                     g.insert(store_path.display().to_string(), guard);
@@ -959,7 +995,7 @@ impl AppState {
     /// stops the server. Returns how many were newly hosted.
     pub fn host_configured_stores(&self) -> usize {
         let mut hosted = 0;
-        for path in multistore::configured_store_paths() {
+        for path in multistore::configured_store_paths(&self.machine_home) {
             match FsStore::open(&path) {
                 Ok(store) => match self.host_store(store) {
                     Ok(true) => hosted += 1,
@@ -2295,6 +2331,7 @@ async fn start_github_device_auth(
         .insert(session_id.clone(), session.clone());
     let device_code = authorization.device_code.clone();
     let mut interval = authorization.interval.max(1);
+    let keys = state.key_registry();
     std::thread::spawn(move || {
         let client =
             hotsheet_extsync::GitHubDeviceClient::live(client_id.clone(), web_base.clone());
@@ -2316,7 +2353,7 @@ async fn start_github_device_auth(
                 }
                 Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
                     let result = hotsheet_extsync::store_device_authorization(
-                        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+                        &keys,
                         &credential_reference,
                         &client_id,
                         &web_base,
@@ -2432,7 +2469,8 @@ async fn list_github_auth_repositories(
             "GitHub sign-in is not complete",
         ));
     }
-    let raw = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
+    let raw = state
+        .key_registry()
         .get(&session.credential_reference)
         .map_err(provider_transfer_error)?;
     let stored: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
@@ -2586,10 +2624,10 @@ fn save_provider_connections(
         .map_err(provider_transfer_error)
 }
 
-fn connection_token(connection: &ProviderConnection) -> Result<String, ApiError> {
+fn connection_token(state: &AppState, connection: &ProviderConnection) -> Result<String, ApiError> {
     hotsheet_extsync::connection_access_token(
         connection,
-        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+        &state.key_registry(),
         OffsetDateTime::now_utc().unix_timestamp(),
     )
     .map_err(|error| match error {
@@ -2685,7 +2723,7 @@ async fn delete_provider_connection(
         hotsheet_ticketing::connection_removal::remove_provider_connection(
             &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             &state.checkout_registry,
-            &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+            &state.key_registry(),
             &connection_id,
         )
         .map(Json)
@@ -2740,7 +2778,7 @@ fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiErr
         if connection.provider == "git" {
             continue;
         }
-        let token = connection_token(&connection)?;
+        let token = connection_token(state, &connection)?;
         registry
             .register(
                 hotsheet_extsync::live_provider(&connection, token)
@@ -2785,7 +2823,7 @@ fn provider_for(
         .into_iter()
         .find(|connection| connection.id == connection_id)
         .ok_or_else(|| ApiError::not_found(connection_id))?;
-    let token = connection_token(&connection)?;
+    let token = connection_token(state, &connection)?;
     hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)
 }
 

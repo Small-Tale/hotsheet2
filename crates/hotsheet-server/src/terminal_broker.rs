@@ -25,8 +25,13 @@ impl TerminalBroker {
     /// New namespaces use short private paths. An adopted legacy namespace keeps its
     /// original address across idle exits so old and new server handles cannot split.
     fn socket_for(project: &str) -> std::io::Result<PathBuf> {
-        let home = hotsheet_plugins::hotsheet_home();
-        hotsheet_terminals::broker_socket::select_socket(&home, project)
+        Self::socket_in(&hotsheet_plugins::hotsheet_home(), project)
+    }
+
+    /// [`Self::socket_for`] under an explicit machine home, so tests inject a directory
+    /// instead of mutating the process-global `HOTSHEET_HOME` (HS2-NYZ3PS).
+    fn socket_in(home: &Path, project: &str) -> std::io::Result<PathBuf> {
+        hotsheet_terminals::broker_socket::select_socket(home, project)
     }
 
     /// Ensure a broker is running for `store_path` and return its coordinates. Connects to an
@@ -221,14 +226,25 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    /// A hermetic machine home for the legacy-namespace tests. The legacy socket lives at
+    /// `<home>/broker/project.sock`, so the home must be short enough for a Unix socket
+    /// path (`sun_path` is 104 bytes on macOS); a long `$TMPDIR` falls back to `/tmp`.
+    fn legacy_home() -> tempfile::TempDir {
+        let base = std::env::temp_dir();
+        let base = if base.as_os_str().len() <= 60 {
+            base
+        } else {
+            std::path::PathBuf::from("/tmp")
+        };
+        tempfile::Builder::new()
+            .prefix("hs-legacy-")
+            .tempdir_in(base)
+            .unwrap()
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn legacy_namespace_stays_pinned_across_idle_exit_and_interleaved_restarts() {
-        let home = tempfile::Builder::new()
-            .prefix("hs-legacy-")
-            .tempdir_in("/tmp")
-            .unwrap();
-        // SAFETY: nextest isolates tests in separate processes.
-        unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+        let home = legacy_home();
         let parent = home.path().join("broker");
         std::fs::create_dir(&parent).unwrap();
         std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -239,7 +255,10 @@ mod tests {
             "project".into(),
             Arc::new(TerminalManager::new()),
         ));
-        assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+        assert_eq!(
+            TerminalBroker::socket_in(home.path(), "project").unwrap(),
+            legacy
+        );
         let retained = TerminalBroker::at(&legacy, "project");
         assert_eq!(
             std::fs::metadata(&parent).unwrap().permissions().mode() & 0o777,
@@ -249,7 +268,10 @@ mod tests {
         let _ = task.await;
         std::fs::remove_file(&legacy).unwrap();
         // Idle cleanup removed the socket, but the ownership marker pins the address.
-        let fresh = TerminalBroker::at(TerminalBroker::socket_for("project").unwrap(), "project");
+        let fresh = TerminalBroker::at(
+            TerminalBroker::socket_in(home.path(), "project").unwrap(),
+            "project",
+        );
         assert_eq!(fresh.socket, retained.socket);
         for (first, second) in [(&fresh, &retained), (&retained, &fresh)] {
             let listener = tokio::net::UnixListener::bind(&first.socket).unwrap();
@@ -266,7 +288,10 @@ mod tests {
                 client.request(&BrokerRequest::Ping).await.unwrap(),
                 BrokerResponse::Pong
             ));
-            assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+            assert_eq!(
+                TerminalBroker::socket_in(home.path(), "project").unwrap(),
+                legacy
+            );
             drop(client);
             task.abort();
             let _ = task.await;
@@ -276,18 +301,16 @@ mod tests {
 
     #[test]
     fn accepting_legacy_without_pong_does_not_choose_a_new_namespace() {
-        let home = tempfile::Builder::new()
-            .prefix("hs-legacy-")
-            .tempdir_in("/tmp")
-            .unwrap();
-        // SAFETY: nextest isolates tests in separate processes.
-        unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+        let home = legacy_home();
         let parent = home.path().join("broker");
         std::fs::create_dir(&parent).unwrap();
         let legacy = parent.join("project.sock");
         let _listener = std::os::unix::net::UnixListener::bind(&legacy).unwrap();
         // No accept/Pong loop exists: selection must depend on ownership, not health.
-        assert_eq!(TerminalBroker::socket_for("project").unwrap(), legacy);
+        assert_eq!(
+            TerminalBroker::socket_in(home.path(), "project").unwrap(),
+            legacy
+        );
         assert!(legacy.with_extension("lock").is_file());
     }
 

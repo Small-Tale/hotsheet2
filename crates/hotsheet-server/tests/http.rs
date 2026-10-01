@@ -9339,16 +9339,16 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
 
 #[tokio::test]
 async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
-    use hotsheet_server::lifecycle;
-
-    // Isolate the machine home so the lock files land in a temp dir (nextest runs each test
-    // in its own process, so this env write is safe).
+    // Inject the machine home so the lock files land in a temp dir without mutating the
+    // process-global environment (HS2-NYZ3PS).
     let home = tempfile::tempdir().unwrap();
-    unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
-
     let dir1 = tempfile::tempdir().unwrap();
     let store1 = FsStore::init(dir1.path(), &StoreMetadata::new("AA")).unwrap();
-    let st = AppState::new(store1, SECRET.into()).unwrap();
+    let st = AppState::new(store1, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path());
+    let locks = st.instance_registry();
+    assert_eq!(locks.dir(), home.path().join("instances"));
     let app = app(st.clone());
 
     // Register a second store.
@@ -9363,21 +9363,19 @@ async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     assert!(resp.status().is_success());
 
     // Before publishing (not a "real" run), no writer locks are taken — tests stay hermetic.
-    assert!(!lifecycle::is_writer_locked(dir2.path()));
+    assert!(!locks.is_writer_locked(dir2.path()));
 
     // Publishing marks this as a real machine server; every *additional* hosted store then
     // gets its own index-writer lock, but the primary is skipped (the binary locks that).
     st.publish_instances("http://127.0.0.1:0".into(), "2026-08-23T00:00:00Z".into());
     assert!(
-        lifecycle::is_writer_locked(dir2.path()),
+        locks.is_writer_locked(dir2.path()),
         "the registered store should be index-write-locked"
     );
     assert!(
-        !lifecycle::is_writer_locked(dir1.path()),
+        !locks.is_writer_locked(dir1.path()),
         "the primary store is locked by the binary, not the server state"
     );
-
-    unsafe { std::env::remove_var("HOTSHEET_HOME") };
 }
 
 #[tokio::test]
@@ -11459,10 +11457,8 @@ async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
 async fn a_disabled_source_is_never_contacted_and_its_tickets_return_when_enabled() {
     // HS2-SF6W34: disabling is temporary; while disabled the provider is neither read nor written.
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
     let (_primary, st) = state();
+    let st = st.with_machine_home(home.path());
     let workspace = tempfile::tempdir().unwrap();
     let checkout = workspace.path().join("mixed");
     std::fs::create_dir(&checkout).unwrap();
@@ -11913,15 +11909,14 @@ async fn creating_a_connection_without_an_id_generates_a_unique_readable_one() {
 
 #[tokio::test]
 async fn provider_connections_crud_keeps_only_references_and_one_default() {
-    // Hermetic: removal walks the checkout registry and key metadata (nextest isolates each
-    // test process, so the env var cannot leak).
+    // Hermetic: removal walks the checkout registry and key metadata under an injected
+    // machine home (HS2-NYZ3PS).
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
     let (_dir, st) = state();
     let registry = tempfile::tempdir().unwrap();
-    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
     let github = serde_json::json!({
         "id":"github-main","provider":"github","locator":"acme/repo",
         "name":"Public bugs","default":true,
@@ -12085,16 +12080,14 @@ async fn provider_connections_crud_keeps_only_references_and_one_default() {
 
 #[tokio::test]
 async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
-    // Hermetic: point HOTSHEET_HOME at a tempdir (nextest isolates each test process).
+    // Hermetic: inject the machine home rather than mutating HOTSHEET_HOME (HS2-NYZ3PS).
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
 
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
+        .with_machine_home(home.path())
         .with_persistent_registered_indexes();
     let app = app(st);
 
@@ -12109,7 +12102,7 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     assert_eq!(resp.status(), StatusCode::CREATED);
     let id2 = body_json(resp).await["id"].as_str().unwrap().to_string();
 
-    // The registered store's index was written under ${HOTSHEET_HOME}/index/<id>.v<schema>.sqlite.
+    // The registered store's index was written under <home>/index/<id>.v<schema>.sqlite.
     let index_file = home
         .path()
         .join("index")
@@ -12119,18 +12112,11 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
         "file-backed index persisted: {}",
         index_file.display()
     );
-
-    unsafe {
-        std::env::remove_var("HOTSHEET_HOME");
-    }
 }
 
 #[tokio::test]
 async fn startup_discovery_hosts_stores_from_stores_json() {
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
 
     // Two stores on disk; one listed in stores.json, one bogus path (must be skipped).
     let good = tempfile::tempdir().unwrap();
@@ -12143,7 +12129,9 @@ async fn startup_discovery_hosts_stores_from_stores_json() {
     // Primary store + discovery.
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let st = AppState::new(store, SECRET.into()).unwrap();
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path());
     let hosted = st.host_configured_stores();
     assert_eq!(hosted, 1, "one good store hosted, the bogus path skipped");
 
@@ -12161,25 +12149,19 @@ async fn startup_discovery_hosts_stores_from_stores_json() {
         arr.iter().any(|s| s["prefix"] == "BB"),
         "the discovered store is served"
     );
-
-    unsafe {
-        std::env::remove_var("HOTSHEET_HOME");
-    }
 }
 
 #[tokio::test]
 async fn one_machine_server_is_discoverable_for_every_hosted_store() {
-    use hotsheet_server::lifecycle;
-
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
 
     // Primary store + machine server.
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let st = AppState::new(store, SECRET.into()).unwrap();
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path());
+    let instances = st.instance_registry();
 
     // Publish the machine server's coordinates → the primary gets a discovery file.
     st.publish_instances(
@@ -12200,18 +12182,52 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
     assert_eq!(resp.status(), StatusCode::CREATED);
 
     // "Who serves project X?" resolves to the ONE machine server for BOTH projects.
-    let primary = lifecycle::find_instance(dir.path()).expect("primary discoverable");
+    let primary = instances
+        .find_instance(dir.path())
+        .expect("primary discoverable");
     assert_eq!(primary.url, "http://127.0.0.1:9999");
-    let second = lifecycle::find_instance(dir2.path()).expect("registered store discoverable");
+    let second = instances
+        .find_instance(dir2.path())
+        .expect("registered store discoverable");
     assert_eq!(second.url, "http://127.0.0.1:9999");
     assert_eq!(
         second.pid, primary.pid,
         "same machine server process hosts both"
     );
+}
 
-    unsafe {
-        std::env::remove_var("HOTSHEET_HOME");
-    }
+/// HS2-NYZ3PS: two states in one process serving the **same** store, each with an injected
+/// machine home, publish into their own instance registries. Were the home shared (as with
+/// the old process-global `HOTSHEET_HOME` fixture), the two would overwrite one instance
+/// file and each would read back the other's URL.
+#[test]
+fn injected_machine_homes_isolate_concurrent_states_in_one_process() {
+    let homes: Vec<_> = (0..2).map(|_| tempfile::tempdir().unwrap()).collect();
+    let store_dir = tempfile::tempdir().unwrap();
+    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let barrier = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        for (thread, home) in homes.iter().enumerate() {
+            let (barrier, store_dir) = (&barrier, store_dir.path());
+            scope.spawn(move || {
+                let store = FsStore::open(store_dir).unwrap();
+                let st = AppState::new(store, SECRET.into())
+                    .unwrap()
+                    .with_machine_home(home.path());
+                barrier.wait();
+                for round in 0..50 {
+                    let url = format!("http://127.0.0.1:{}", 9000 + thread * 100 + round);
+                    st.publish_instances(url.clone(), "2026-10-01T00:00:00Z".into());
+                    let found = st
+                        .instance_registry()
+                        .find_instance(store_dir)
+                        .expect("own instance file under the injected home");
+                    assert_eq!(found.url, url, "another state's publish leaked in");
+                }
+                barrier.wait();
+            });
+        }
+    });
 }
 
 #[tokio::test]
@@ -13736,14 +13752,13 @@ async fn a_broker_shell_terminal_releases_claims_when_its_foreground_command_exi
 #[tokio::test]
 async fn checkout_providers_list_only_linked_sources_with_the_checkout_default() {
     let home = tempfile::tempdir().unwrap();
-    unsafe {
-        std::env::set_var("HOTSHEET_HOME", home.path());
-    }
     let (primary, st) = state();
     let first = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
     for (id, locator) in [("github-a", "acme/a"), ("github-b", "acme/b")] {
         let connection = serde_json::json!({
             "id":id,"provider":"github","locator":locator,"name":id,"default":true,

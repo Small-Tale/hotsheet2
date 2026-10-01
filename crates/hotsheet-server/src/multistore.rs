@@ -33,16 +33,17 @@ pub fn store_url_id(store: &FsStore) -> String {
 }
 
 /// The store paths a machine server should auto-host at startup, read from
-/// `${HOTSHEET_HOME}/stores.json` — `{ "stores": ["/path/a", "/path/b"] }` (HS2-87). A
+/// `<home>/stores.json` (normally `${HOTSHEET_HOME}`, injected so tests never mutate the
+/// environment — HS2-NYZ3PS) — `{ "stores": ["/path/a", "/path/b"] }` (HS2-87). A
 /// missing or malformed file yields an empty list (nothing extra hosted; the primary
 /// store is always served regardless).
-pub fn configured_store_paths() -> Vec<std::path::PathBuf> {
+pub fn configured_store_paths(home: &std::path::Path) -> Vec<std::path::PathBuf> {
     #[derive(serde::Deserialize, Default)]
     struct Config {
         #[serde(default)]
         stores: Vec<String>,
     }
-    let path = hotsheet_plugins::hotsheet_home().join("stores.json");
+    let path = home.join("stores.json");
     let Ok(text) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
@@ -54,11 +55,14 @@ pub fn configured_store_paths() -> Vec<std::path::PathBuf> {
         .collect()
 }
 
-/// The file-backed index path for a hosted store — `${HOTSHEET_HOME}/index/<id>.v<schema>.sqlite`,
+/// The file-backed index path for a hosted store — `<home>/index/<id>.v<schema>.sqlite`,
 /// the same convention the server binary uses for the primary store, so a store's index
 /// file is shared whether it's served as the primary or a registered store.
-pub fn index_path_for(store: &FsStore) -> std::io::Result<std::path::PathBuf> {
-    let dir = hotsheet_plugins::hotsheet_home().join("index");
+pub fn index_path_for(
+    home: &std::path::Path,
+    store: &FsStore,
+) -> std::io::Result<std::path::PathBuf> {
+    let dir = home.join("index");
     std::fs::create_dir_all(&dir)?;
     Ok(dir.join(hotsheet_index::index_file_name(&store_url_id(store))))
 }
