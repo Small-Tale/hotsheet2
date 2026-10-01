@@ -226,8 +226,11 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(signedIn).toContain('Signed in to GitHub.');
-    // The responsive two-column form grid is app-owned (Kerf's Grid takes a fixed column count).
-    expect(signedIn).toContain('<div class="provider-setup-form__grid">');
+    // The two-column form grid is Kerf's responsive Grid (beta.62 `minColumnWidth`, HS2-7XX356).
+    expect(signedIn).toMatch(
+      /<div class="kui-grid"[^>]*data-min-column-width="true"[^>]*--_kui-grid-min-column-width:/,
+    );
+    expect(signedIn).not.toContain('provider-setup-form__grid');
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
     expect(signedIn).not.toContain('name="api-base"');
@@ -287,9 +290,11 @@ describe('ticket source surfaces', () => {
       'data-ticket-source-setup-dialog',
     );
     expect(provider).toContain('.provider-setup-form');
-    expect(provider).toMatch(
-      /@media \(max-width: remify\(768px\)\) \{\s*\.provider-setup-form__grid \{\s*grid-template-columns: 1fr;/,
-    );
+    // The collapse to one column is Kerf's (responsive Grid); the app keeps only the full-width rows
+    // and the form's maximum width.
+    expect(provider).not.toContain('provider-setup-form__grid');
+    expect(provider).toMatch(/\.provider-setup-form \{[^}]*max-width: remify\(640px\)/);
+    expect(provider).toMatch(/\.provider-setup-form__wide \{[^}]*grid-column: 1 \/ -1/);
     expect(readFileSync(new URL('./ticket-sources-settings.css', import.meta.url), 'utf8')).toContain(
       '.ticket-provider-settings',
     );

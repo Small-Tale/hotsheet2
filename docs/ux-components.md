@@ -2040,7 +2040,8 @@ rail project and view, mobile project switcher), `ListItem` `divider="after"` (r
 files), and `data-state`-keyed public tokens (visibility rows). The gallery footer is an
 app-owned balanced grid whose cells each host a gap-less Kerf Toolbar around one control group,
 the zoom FloatingToolbar hangs off a zero-size safe-area anchor, and the provider setup form
-uses an app-owned responsive grid (`KF-18Z9DC` requests a responsive Kerf `Grid`). The filled
+used an app-owned responsive grid until HS2-7XX356 adopted beta.62's responsive Kerf `Grid`
+(`minColumnWidth`, `KF-18Z9DC`) with a form maximum width that keeps two columns at most. The filled
 command rows painted their fill on the wrapper and neutralized the row border tones through the
 scoped semantic tokens until HS2-Z5YQWT moved them onto beta.62's public ListItem resting,
 hover, and selected tone tokens (`KF-0PKY5K`). The three residual `KUI-L022` findings were

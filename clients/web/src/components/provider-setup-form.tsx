@@ -1,6 +1,8 @@
 import './provider-setup-form.css';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
+import { rem } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { ChevronLeft, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
@@ -186,8 +188,10 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
           )}
         </SunkenPanel>
       )}
+      {/* Two 15rem-minimum columns that collapse to one when the form is narrower (Kerf beta.62
+          responsive Grid, HS2-7XX356); the form's max width keeps a third column from appearing. */}
       {showFields && (
-        <div class="provider-setup-form__grid">
+        <Grid minColumnWidth={rem(15)} gap="m">
           <wa-input
             class="provider-setup-form__wide"
             name="connection-name"
@@ -335,7 +339,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
             Use as the default ticket source
             <span slot="hint">New tickets will be created here.</span>
           </wa-checkbox>
-        </div>
+        </Grid>
       )}
       {error && (
         <p class="provider-setup-form__error" role="alert">

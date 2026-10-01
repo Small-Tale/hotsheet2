@@ -374,7 +374,7 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
   await page.goto('/ux-demo?component=provider-setup-form&dev-review=false');
   const provider = page.locator('[data-component="provider-setup-form"]');
   const grid = provider.locator('[data-component="grid"]');
-  await expect(grid).toHaveAttribute('data-columns', '2');
+  await expect(grid).toHaveAttribute('data-min-column-width', 'true');
   const wideColumns = await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
   expect(wideColumns).toBe(2);
   await provider.screenshot({ path: '/private/tmp/hs2-s3bxc0-provider-wide.png', animations: 'disabled' });
