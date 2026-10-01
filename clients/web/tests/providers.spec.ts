@@ -3923,6 +3923,35 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect(create).toBeVisible();
   await openSubmenu();
   await page.waitForTimeout(250);
+  // On a phone Kerf places the submenu above or below its parent menu, never over it, so the
+  // AI shell label and its sibling items stay readable (KF-5PZ768, HS2-282GTZ).
+  const geometry = await parent.evaluate((item: HTMLElement & { submenuElement?: HTMLElement | null }) => {
+    const box = (element: Element | null | undefined) => {
+      const rect = element?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0);
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, height: rect.height };
+    };
+    const dropdown = item.closest<HTMLElement & { menu?: HTMLElement | null }>('wa-dropdown');
+    return {
+      submenu: box(item.submenuElement),
+      placement: item.submenuElement?.getAttribute('data-placement'),
+      menu: box(dropdown?.menu),
+      item: box(item),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+  });
+  const { submenu, menu: menuBox, item, viewport } = geometry;
+  for (const rendered of [submenu, menuBox, item]) expect(rendered.height).toBeGreaterThan(0);
+  expect(['top-start', 'bottom-start']).toContain(geometry.placement);
+  // Entirely above or below the parent menu (and therefore its AI shell row).
+  expect(submenu.bottom <= menuBox.top || submenu.top >= menuBox.bottom).toBe(true);
+  expect(submenu.bottom <= item.top || submenu.top >= item.bottom).toBe(true);
+  // And within the phone viewport.
+  expect(submenu.left).toBeGreaterThanOrEqual(0);
+  expect(submenu.right).toBeLessThanOrEqual(viewport.width);
+  expect(submenu.top).toBeGreaterThanOrEqual(0);
+  expect(submenu.bottom).toBeLessThanOrEqual(viewport.height);
+  await shell().hover();
+  await expect(shell()).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-narrow.png') });
 });
 
