@@ -462,7 +462,7 @@ enum Cmd {
     /// disposable cache, so this is always safe — use it after an external edit or if the
     /// index looks stale. Writes to the same path the server reads (docs/03 §3.4).
     Reindex {
-        /// Index database file (default: ${HOTSHEET_HOME}/index/<project-id>.sqlite).
+        /// Index database file (default: ${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite).
         #[arg(long)]
         index: Option<PathBuf>,
     },
@@ -2829,7 +2829,7 @@ fn render_onboarding_report(store: &Path, project: &Path, detected: &[(String, S
 }
 
 /// Default index DB path for a store — mirrors the server's `default_index_path` so the
-/// CLI and server share one index file (`${HOTSHEET_HOME}/index/<project-id>.sqlite`).
+/// CLI and server share one index file (`${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite`).
 fn default_index_path(store: &FsStore) -> Result<PathBuf> {
     let root = store
         .root()
@@ -2838,7 +2838,7 @@ fn default_index_path(store: &FsStore) -> Result<PathBuf> {
     let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
     let dir = hotsheet_plugins::hotsheet_home().join("index");
     std::fs::create_dir_all(&dir)?;
-    Ok(dir.join(format!("{id}.sqlite")))
+    Ok(dir.join(hotsheet_index::index_file_name(id)))
 }
 
 /// Rebuild the disposable index from a full store walk (`hotsheet-cli reindex`).

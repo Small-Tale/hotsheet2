@@ -18,6 +18,17 @@ use sha2::{Digest, Sha256};
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
 const SCHEMA_VERSION: i64 = 17;
 
+/// The machine-local index file name for one store, scoped by [`SCHEMA_VERSION`].
+///
+/// `Index::open` rebuilds a file whose schema differs from its own, so binaries built
+/// from different commits must never share one file: an older process would downgrade
+/// the schema under a newer one still running (`no such column`), and the two would keep
+/// rebuilding each other's index (HS2-8ZM4PT). The index is a disposable cache, so each
+/// schema generation simply keeps its own file.
+pub fn index_file_name(store_key: &str) -> String {
+    format!("{store_key}.v{SCHEMA_VERSION}.sqlite")
+}
+
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
   rowid           INTEGER PRIMARY KEY,

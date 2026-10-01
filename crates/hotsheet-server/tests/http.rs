@@ -12109,8 +12109,11 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     assert_eq!(resp.status(), StatusCode::CREATED);
     let id2 = body_json(resp).await["id"].as_str().unwrap().to_string();
 
-    // The registered store's index was written under ${HOTSHEET_HOME}/index/<id>.sqlite.
-    let index_file = home.path().join("index").join(format!("{id2}.sqlite"));
+    // The registered store's index was written under ${HOTSHEET_HOME}/index/<id>.v<schema>.sqlite.
+    let index_file = home
+        .path()
+        .join("index")
+        .join(hotsheet_index::index_file_name(&id2));
     assert!(
         index_file.is_file(),
         "file-backed index persisted: {}",

@@ -109,7 +109,7 @@ pub struct AppState {
     /// states; OAuth device/access/refresh tokens never cross this boundary.
     github_auth_sessions: Arc<Mutex<std::collections::HashMap<String, Arc<GitHubAuthSession>>>>,
     /// Whether a `POST /stores`-registered store gets a **file-backed** index
-    /// (`${HOTSHEET_HOME}/index/<id>.sqlite`, persists + restores) or an in-memory one.
+    /// (`${HOTSHEET_HOME}/index/<id>.v<schema>.sqlite`, persists + restores) or an in-memory one.
     /// Off by default so tests stay hermetic (they never touch the machine home); the
     /// server binary turns it on for a real run.
     persist_indexes: bool,

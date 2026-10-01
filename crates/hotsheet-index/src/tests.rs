@@ -1536,3 +1536,34 @@ fn value_keyset_matches_the_checkout_order_for_every_sort_and_arbitrary_keys() {
         }
     }
 }
+
+#[test]
+fn index_file_name_is_scoped_by_schema_version_so_builds_never_share_a_file() {
+    // HS2-8ZM4PT: an older build rebuilding the shared file at its own schema dropped
+    // columns under a newer running process. Each schema generation owns its own file.
+    let name = index_file_name("0123456789abcdef");
+    assert_eq!(name, format!("0123456789abcdef.v{SCHEMA_VERSION}.sqlite"));
+    assert_ne!(
+        name, "0123456789abcdef.sqlite",
+        "must not collide with the unversioned legacy file"
+    );
+
+    // A file another (older) generation rebuilt at its schema is left alone: this build's
+    // file keeps its schema and rows.
+    let (dir, store, _) = seeded();
+    let ours = dir.path().join(index_file_name("k"));
+    let older = dir.path().join(format!("k.v{}.sqlite", SCHEMA_VERSION - 1));
+    let ix = Index::open_reconciled(&ours, &store).unwrap();
+    let before = ix.ticket_count().unwrap();
+    {
+        let conn = Connection::open(&older).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE index_meta(key TEXT PRIMARY KEY, value TEXT); \
+             INSERT INTO index_meta VALUES('schema_version','0'); CREATE TABLE tickets(id TEXT);",
+        )
+        .unwrap();
+    }
+    let reopened = Index::open_reconciled(&ours, &store).unwrap();
+    assert_eq!(reopened.ticket_count().unwrap(), before);
+    assert_eq!(ix.ticket_count().unwrap(), before);
+}

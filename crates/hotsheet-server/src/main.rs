@@ -31,7 +31,7 @@ struct Cli {
     /// Shared secret required on `X-Hotsheet-Secret` (generated + printed if omitted).
     #[arg(long)]
     secret: Option<String>,
-    /// Index database file (default: ${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite).
+    /// Index database file (default: ${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.v<schema>.sqlite).
     #[arg(long)]
     index: Option<PathBuf>,
     /// Stop the running server for this store (explicit shutdown), then exit.
@@ -380,7 +380,7 @@ fn git_email(path: &std::path::Path) -> Option<String> {
     (!email.is_empty()).then_some(email)
 }
 
-/// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite`, keyed by a hash of the store's path
+/// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.v<schema>.sqlite`, keyed by a hash of the store's path
 /// (machine-local, gitignored, disposable — `docs/03` §3.2).
 fn default_index_path(store: &FsStore) -> Result<PathBuf> {
     let root = store
@@ -392,7 +392,7 @@ fn default_index_path(store: &FsStore) -> Result<PathBuf> {
     // a separately installed Hot Sheet 1 owns (HS2-104).
     let dir = hotsheet_plugins::hotsheet_home().join("index");
     std::fs::create_dir_all(&dir)?;
-    Ok(dir.join(format!("{id}.sqlite")))
+    Ok(dir.join(hotsheet_index::index_file_name(id)))
 }
 
 #[cfg(test)]
