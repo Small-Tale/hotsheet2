@@ -14208,7 +14208,29 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
     const url = new URL(route.request().url());
     if (route.request().method() === 'GET' && [...url.searchParams].some(([key]) => key !== 'text')) {
       structured.push(url);
-      return route.fulfill({ json: [row] });
+      // Answer with the server's real wire shape per request kind (HS2-S47AXH): a paged read is a
+      // CheckoutTicketPage (`counts: null` when it asked for `counts=false`), an unpaged one an array.
+      if (!url.searchParams.has('page_size')) return route.fulfill({ json: [row] });
+      return route.fulfill({
+        json: {
+          items: [row],
+          counts:
+            url.searchParams.get('counts') === 'false'
+              ? null
+              : {
+                  total: 1,
+                  queued: 1,
+                  backlog: 0,
+                  archive: 0,
+                  trash: 0,
+                  open: 1,
+                  up_next: 0,
+                  active: 0,
+                  started: 0,
+                  completed_today: 0,
+                },
+        },
+      });
     }
     return route.fallback();
   });
@@ -14264,6 +14286,10 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await expect(dateChip).toBeVisible();
   await expect(dateChip).toHaveAttribute('data-token-value', 'created-after:2026-09-01T11:05');
   await expect.poll(() => structured.some((url) => url.searchParams.has('created_after'))).toBe(true);
+  // The filtered page renders its row instead of failing on a malformed page (HS2-S47AXH).
+  await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await expect(page.locator('.app-toast')).toHaveCount(0);
   const inputBox = (await query.boundingBox())!,
     tokenBox = (await chip.first().boundingBox())!;
   expect(Math.abs(tokenBox.y + tokenBox.height / 2 - (inputBox.y + inputBox.height / 2))).toBeLessThanOrEqual(3);
