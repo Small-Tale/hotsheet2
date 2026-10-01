@@ -28,6 +28,7 @@ import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { ticketCloseReasonLabel } from '../ticket-close';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
+import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
 import { ConfidenceBadge } from './confidence-badge';
 import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
@@ -74,6 +75,8 @@ export interface TicketInspectorProps {
   closeReason?: TicketCloseReason;
   /** Derived AI completion confidence of a completed/verified ticket (HS2-DWTJ43). */
   latestConfidence?: number;
+  /** A live claim lease: who is actively working on the ticket and its ETA progress (HS2-QKNQXC). */
+  liveClaim?: LiveClaimNoticeProps;
   duplicateTarget?: DuplicateTargetSummary;
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
@@ -139,6 +142,7 @@ export function TicketInspector({
   feedbackNeeded = false,
   closeReason,
   latestConfidence,
+  liveClaim,
   duplicateTarget,
   duplicateBacklinks = [],
   duplicateBacklinkInaccessibleProjects = [],
@@ -289,6 +293,7 @@ export function TicketInspector({
                 </h1>
               )}
             </div>
+            {liveClaim && <LiveClaimNotice {...liveClaim} />}
             {feedbackNeeded && (
               <div class="ticket-inspector__feedback" role="status">
                 <span class="ticket-inspector__feedback-icon">

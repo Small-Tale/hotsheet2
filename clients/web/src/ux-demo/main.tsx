@@ -332,6 +332,8 @@ import {
   focusWorkspaceSearch,
   ignoreWorkspaceDemoPermission,
   inspectorCategory,
+  inspectorLiveClaim,
+  type InspectorLiveClaimDemo,
   inspectorOpen,
   inspectorPriority,
   inspectorStatus,
@@ -347,6 +349,7 @@ import {
   resolveWorkspaceDemoPermission,
   TerminalTicketRailDemo,
   TicketInspectorDemo,
+  TicketInspectorSettings,
   TicketInspectorSkeletonDemo,
   toggleWorkspaceDemoUpNext,
   WorkspaceHeaderDemo,
@@ -1095,7 +1098,8 @@ function DemoApp() {
     selected.id === 'content-transition' ||
     selected.id === 'permission-request' ||
     selected.id === 'ai-conversation' ||
-    selected.id === 'quick-ticket-composer';
+    selected.id === 'quick-ticket-composer' ||
+    selected.id === 'ticket-inspector';
   const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
     modified = demoModified.value[selected.id];
   return (
@@ -1176,6 +1180,8 @@ function DemoApp() {
             <AIConversationSettings />
           ) : selected.id === 'quick-ticket-composer' ? (
             <QuickTicketComposerSettings />
+          ) : selected.id === 'ticket-inspector' ? (
+            <TicketInspectorSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -2229,6 +2235,9 @@ delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => {
 });
 delegate(root, 'change', '[name="new-ticket-source"]', (_event, target) => {
   composerSourcePick.value = (target as FormControl).value;
+});
+delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-live-claim"]', (_event, target) => {
+  inspectorLiveClaim.value = (target as FormControl).value as InspectorLiveClaimDemo;
 });
 delegate(root, 'change', '[data-settings="quick-ticket-composer"] [name="composer-source-count"]', (_event, target) => {
   composerMultipleSources.value = (target as FormControl).value === 'several';

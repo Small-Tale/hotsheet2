@@ -69,6 +69,7 @@ import {
   nextBoardColumnFetch,
 } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
+import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
@@ -2204,6 +2205,15 @@ export async function startHotSheetWebClient() {
       Object.entries(ticketCountsByProject.value).filter(([id]) => id !== projectId),
     );
   }
+  /** The inspector/reader header's live-claim notice, on the same local ETA clock as rows (HS2-QKNQXC). */
+  function liveClaimNotice(ticket: WireTicketRow): LiveClaimNoticeProps | undefined {
+    const now = claimEtaClock.value;
+    if (!isTicketActivelyWorkedOn(ticket, now)) return undefined;
+    return {
+      agentName: ticket.worker_label || ticket.claimed_by || 'AI',
+      eta: claimEtaPresentation(ticket, now),
+    };
+  }
   /** Re-render ETA countdowns while a live claim has a future ETA; a local timer only (HS2-XQMDQB). */
   function scheduleClaimEtaTick() {
     if (claimEtaTimer !== undefined) window.clearTimeout(claimEtaTimer);
@@ -3755,6 +3765,7 @@ export async function startHotSheetWebClient() {
       slugPlacement,
       slug: ticket.slug,
       title: ticket.title,
+      liveClaim: liveClaimNotice(ticket),
       titleEditing: titleEditing.value,
       titleDraft: titleDraft.value,
       canUpdate: canUpdateSelected(),
@@ -3851,6 +3862,7 @@ export async function startHotSheetWebClient() {
               ? readerDetailsDraft.value
               : ticket.details
         }
+        liveClaim={liveClaimNotice(ticket)}
         detailsMode={linked?.detailsMode ?? (editable ? readerDetailsMode.value : 'preview')}
         detailsDirty={
           Boolean(linked && linked.detailsDraft !== ticket.details) ||

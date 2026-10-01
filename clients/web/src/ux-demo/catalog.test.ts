@@ -304,6 +304,8 @@ describe('UX demo catalog', () => {
     // Helpers, sub-components, context menus, transient banners, and states rendered only within a
     // demoed parent are not standalone catalog surfaces. Keep each reason accurate.
     const EXEMPT: Record<string, string> = {
+      'active-claim':
+        'Live-claim spinner, ETA, and header notice rendered within TicketRow and TicketInspector (both demo every claim state).',
       'ai-content-label': 'Inline AI attribution label rendered within AIConversation / NoteCard (both demoed).',
       'app-error': 'Transient top-level error banner, not a standalone catalog surface.',
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',

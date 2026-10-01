@@ -1,11 +1,10 @@
-import '@awesome.me/webawesome/dist/components/progress-ring/progress-ring.js';
 import './ticket-row.css';
 
-import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
+import { ActiveClaimSpinner, ClaimEta } from './active-claim';
 import {
   categoryAbbreviation,
   defaultCategoryPresentation,
@@ -81,20 +80,7 @@ function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
-      <span class="ticket-list-row__claim-spinner">
-        <LoadingSpinner label={label} />
-      </span>
-    </span>
-  );
-}
-
-function ClaimEta({ eta }: { eta: ClaimEtaPresentation }) {
-  return (
-    <span class={`ticket-list-row__eta ticket-list-row__eta--${eta.kind}`} data-claim-eta={eta.kind} title={eta.title}>
-      {eta.kind === 'estimate' && (
-        <wa-progress-ring class="ticket-list-row__eta-ring" value={eta.percent} aria-hidden="true"></wa-progress-ring>
-      )}
-      <span class="ticket-list-row__eta-label">{eta.label}</span>
+      <ActiveClaimSpinner label={label} />
     </span>
   );
 }

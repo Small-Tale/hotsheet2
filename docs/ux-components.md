@@ -966,6 +966,10 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
 The zero-selection placeholder omits the otherwise-shared Toolbar divider so the empty
 navbar does not leave a stray rule above its centered guidance. Loading and
 multi-selection placeholders keep the divider to preserve their intentional state boundary.
+While a live claim is held, the header leads its status notices with a `LiveClaimNotice`
+(holder, the shared activity spinner, and the row's ETA ring/time left or `Soon`); the demo's
+**Live claim** setting exposes none, with an estimate, past its estimate, and without an ETA
+(HS2-QKNQXC).
 The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar
 inspector (HS2-9MCJ2B) and the reader dialog (HS2-FZ5HB2); it centers only for the terminal
 ticket rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`

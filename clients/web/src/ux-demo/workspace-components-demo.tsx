@@ -6,6 +6,7 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { effect, signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
+import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { NotificationCenter } from '../components/notification-center';
 import {
   QuickTicketComposer,
@@ -46,6 +47,7 @@ import {
   readerNotes,
 } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
+import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 export const workspaceSearchOpen = signal(false);
@@ -463,6 +465,33 @@ export function QuickTicketComposerDemo() {
   );
 }
 
+/** Live-claim header states the TicketInspector demo exposes (HS2-QKNQXC). */
+export type InspectorLiveClaimDemo = 'none' | 'estimate' | 'overrun' | 'no-eta';
+export const inspectorLiveClaim = signal<InspectorLiveClaimDemo>('none');
+function demoLiveClaim(): LiveClaimNoticeProps | undefined {
+  const state = inspectorLiveClaim.value;
+  if (state === 'none') return undefined;
+  return { agentName: 'Claude', eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state] };
+}
+
+export function TicketInspectorSettings() {
+  return (
+    <form class="settings-form" data-settings="ticket-inspector">
+      <Select
+        name="inspector-live-claim"
+        label="Live claim (AI working)"
+        value={inspectorLiveClaim.value}
+        choices={[
+          { value: 'none', label: 'None' },
+          { value: 'estimate', label: 'With ETA estimate' },
+          { value: 'overrun', label: 'Past its ETA (Soon)' },
+          { value: 'no-eta', label: 'Without an ETA' },
+        ]}
+      />
+    </form>
+  );
+}
+
 export function TicketInspectorDemo() {
   const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
   return (
@@ -493,6 +522,7 @@ export function TicketInspectorDemo() {
           upNext={ticket.upNext}
           feedbackNeeded={readerNotes.value.some((note) => note.kind === 'feedback_needed')}
           latestConfidence={latestDemoConfidence(readerNotes.value)}
+          liveClaim={demoLiveClaim()}
           codeReview={inspectorCodeReview}
         />
       ) : (

@@ -149,6 +149,29 @@ describe('TicketInspector', () => {
     expect(outcome('works_as_designed')).toBe('Closed as works as designed');
   });
 
+  it('shows the live claim and its ETA in the header only while a claim is live (HS2-QKNQXC)', () => {
+    const idle = String(TicketInspector(base));
+    expect(idle).not.toContain('data-component="live-claim-notice"');
+    const working = String(
+      TicketInspector({
+        ...base,
+        feedbackNeeded: true,
+        liveClaim: {
+          agentName: 'Codex',
+          eta: { kind: 'estimate', percent: 50, label: '~10m left', title: 'Estimated to finish 10:00' },
+        },
+      }),
+    );
+    expect(working).toContain('<span class="live-claim-notice__agent">Codex</span> is working on this');
+    expect(working).toContain('data-claim-eta="estimate"');
+    // The live-work notice leads the header notices, above Needs review.
+    expect(working.indexOf('data-component="live-claim-notice"')).toBeLessThan(
+      working.indexOf('class="ticket-inspector__feedback"'),
+    );
+    const reader = String(TicketInspector({ ...base, presentation: 'reader', liveClaim: { agentName: 'Codex' } }));
+    expect(reader).toContain('data-component="live-claim-notice"');
+  });
+
   it('shows the derived completion confidence only on completed or verified tickets (HS2-DWTJ43)', () => {
     const row = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
       /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?<\/div>/u.exec(

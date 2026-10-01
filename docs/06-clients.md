@@ -2686,6 +2686,15 @@ then appended as an ordinary ticket note, so feedback is syncable and auditable 
 than trapped in browser state. Legacy notes without durable AI provenance are not
 guessed from their prose or author-like display text.
 
+**Live claim in the inspector and reader (HS2-QKNQXC).** While a ticket has a live,
+non-expired claim lease, the inspector and reader header leads its status notices with a
+brand-tinted "<holder> is working on this" line: the holder's worker label (else worker id), the
+shared activity spinner, and, when the claim carries an ETA, the same progress ring and time
+left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It uses the rows'
+local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
+the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA
+come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
+
 **AI completion confidence (HS2-DWTJ43).** A note carrying a `confidence` score renders a
 compact Lucide `gauge` badge with the percentage in its header beside the timestamp,
 tinted by rubric band through Web Awesome tokens (90-100 success, 70-89 brand, 40-69

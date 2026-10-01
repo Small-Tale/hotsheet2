@@ -564,7 +564,8 @@ once the ETA has passed, CLI `renew` prints `ETA passed; pass --eta with a new e
 MCP `hotsheet_renew` returns `eta_expired: true`. The bundled instructions ask agents to
 pass an ETA when claiming non-trivial work. Claims are git-store coordination, so the ETA
 lives only on git-provider tickets. Ticket list and column rows show progress toward the ETA
-and the time left, or `Soon` once it passes (HS2-XQMDQB; see
+and the time left, or `Soon` once it passes, and the inspector and reader headers show who holds
+the live claim with the same estimate (HS2-XQMDQB, HS2-QKNQXC; see
 [ux-components.md](ux-components.md) TicketRow); wire tickets and rows also carry the derived
 `claim_started_at` (the live holder's latest `claim` event) as the progress origin.
 

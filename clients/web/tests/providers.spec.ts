@@ -6655,6 +6655,102 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await doneRow.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-row-narrow.png' });
 });
 
+test('shows the live claim and its ETA in the inspector and reader headers and clears it on release (HS2-QKNQXC)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const minutes = (count: number) => new Date(Date.now() + count * 60_000).toISOString();
+  const claim = {
+    claimed_by: 'codex-worker',
+    worker_label: 'Codex',
+    claim_lease_expires_at: minutes(120),
+    claim_started_at: minutes(-15),
+    claim_eta_at: minutes(45),
+    claim_count: 1,
+  };
+  let claimed = true;
+  const current = () => ({ ...row, ...(claimed ? claim : { claim_count: 1 }) });
+  await page.route('**/*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
+    if (request.method() !== 'GET') return route.fallback();
+    // Mirrors GET /checkouts/{reference}/tickets/{id}: the flattened full ticket plus its store.
+    if (path.endsWith('/tickets/01')) return route.fulfill({ json: { store: 'git-local', ...full, ...current() } });
+    if (!path.endsWith('/tickets')) return route.fallback();
+    const rows = [current()];
+    return route.fulfill({
+      json: url.searchParams.has('page_size')
+        ? {
+            items: rows,
+            counts: {
+              total: 1,
+              queued: 1,
+              backlog: 0,
+              archive: 0,
+              open: 1,
+              up_next: 1,
+              active: claimed ? 1 : 0,
+              started: 1,
+              completed_today: 0,
+            },
+          }
+        : rows,
+    });
+  });
+  const polls: import('@playwright/test').Route[] = [];
+  await page.route('**/ws/poll*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('since') === null)
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+    inspectorNotice = inspector.locator('[data-component="live-claim-notice"]');
+  await expect(inspectorNotice).toContainText('Codex is working on this');
+  await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveAttribute(
+    'aria-label',
+    'Codex is actively working on this ticket',
+  );
+  await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveAttribute('data-claim-eta', 'estimate');
+  await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
+  // The same row also shows the estimate, so opening the ticket keeps both cues (HS2-XQMDQB).
+  await expect(
+    page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"] [data-claim-eta]'),
+  ).toHaveAttribute('data-claim-eta', 'estimate');
+  await inspector.screenshot({ path: test.info().outputPath('live-claim-inspector-wide.png') });
+
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
+  const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
+    readerNotice = reader.locator('[data-component="live-claim-notice"]');
+  await expect(readerNotice).toContainText('Codex is working on this');
+  await expect(readerNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
+  // Evidence capture only: let the reader's open transition finish (spinners animate forever).
+  await page.waitForTimeout(600);
+  await reader.screenshot({ path: test.info().outputPath('live-claim-reader-wide.png') });
+
+  // Releasing the claim clears the notice from both open surfaces through the change stream.
+  claimed = false;
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 2,
+      events: [{ store: 'demo-checkout', kind: 'released', id: '01', slug: 'HS2-DEMO01' }],
+      overflow: false,
+    },
+  });
+  await expect(readerNotice).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(reader).toBeHidden();
+  await expect(inspectorNotice).toHaveCount(0);
+  await expect(inspector).toContainText('HS2-DEMO01');
+});
+
 test('shows ETA progress on actively claimed tickets in list and column views and follows a re-estimate (HS2-XQMDQB)', async ({
   page,
 }) => {

@@ -1686,6 +1686,53 @@ test('demonstrates the production Not Working dialog and pending evidence picker
   await expect(page.getByText('Ticket returned to Not Started and added to Up Next.')).toBeVisible();
 });
 
+test('switches the TicketInspector live-claim header through every claim state (HS2-QKNQXC)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto('/ux-demo?component=ticket-inspector');
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toBeVisible();
+  const notice = inspector.locator('[data-component="live-claim-notice"]'),
+    eta = notice.locator('[data-claim-eta]');
+  await expect(notice).toHaveCount(0);
+  await page.locator('[data-action="toggle-settings"]').click();
+  const control = page
+    .getByRole('complementary', { name: 'TicketInspector settings' })
+    .locator('wa-select[name="inspector-live-claim"]');
+  await expect(control).toHaveJSProperty('value', 'none');
+  const setLiveClaim = async (value: string) => {
+    await control.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await expect(control).toHaveJSProperty('value', value);
+  };
+  await setLiveClaim('estimate');
+  await expect(notice).toContainText('Claude is working on this');
+  await expect(notice.locator('[data-component="loading-spinner"]')).toHaveAttribute(
+    'aria-label',
+    'Claude is actively working on this ticket',
+  );
+  await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
+  await expect(eta).toHaveText('~45m left');
+  await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
+  // The notice leads the header notices and sits inside the inspector's width.
+  const [noticeBox, inspectorBox] = await Promise.all([notice.boundingBox(), inspector.boundingBox()]);
+  expect(noticeBox!.x).toBeGreaterThanOrEqual(inspectorBox!.x);
+  expect(noticeBox!.x + noticeBox!.width).toBeLessThanOrEqual(inspectorBox!.x + inspectorBox!.width + 0.5);
+  await notice.screenshot({ path: test.info().outputPath('live-claim-notice-estimate.png') });
+  await setLiveClaim('overrun');
+  await expect(eta).toHaveAttribute('data-claim-eta', 'overrun');
+  await expect(eta).toHaveText('Soon');
+  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await setLiveClaim('no-eta');
+  await expect(notice).toContainText('Claude is working on this');
+  await expect(eta).toHaveCount(0);
+  await setLiveClaim('none');
+  await expect(notice).toHaveCount(0);
+  await setLiveClaim('estimate');
+  await expect(eta).toHaveText('~45m left');
+});
+
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
