@@ -1302,6 +1302,50 @@ mod tests {
             .unwrap();
     }
 
+    /// HS2-7D9BPK: the reopen-history bound against a real Jira changelog and status
+    /// catalogue. The Jira adapter cannot transition status, so the operator prepares an
+    /// issue by hand: a Hot Sheet scored comment, Done, reopened, Done again (optionally a
+    /// later scored comment). `HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED` is the score the issue
+    /// should report now, or `none`.
+    #[test]
+    #[ignore = "reads a prepared real Jira issue; set HOTSHEET_JIRA_LIVE_BASE_URL/PROJECT/EMAIL/TOKEN, HOTSHEET_JIRA_LIVE_REOPENED_ISSUE and HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED"]
+    fn jira_live_reopen_bounds_latest_confidence() {
+        let connection = ProviderConnection {
+            id: "jira-live".into(),
+            provider: "jira".into(),
+            locator: std::env::var("HOTSHEET_JIRA_LIVE_PROJECT").expect("live project"),
+            name: None,
+            default: false,
+            settings: json!({
+                "base_url":std::env::var("HOTSHEET_JIRA_LIVE_BASE_URL").expect("base url"),
+                "email":std::env::var("HOTSHEET_JIRA_LIVE_EMAIL").expect("email")
+            }),
+            disabled: false,
+        };
+        let provider = JiraProvider::live(
+            JiraConfig::from_connection(
+                &connection,
+                std::env::var("HOTSHEET_JIRA_LIVE_TOKEN").expect("live token"),
+            )
+            .unwrap(),
+        );
+        let issue = std::env::var("HOTSHEET_JIRA_LIVE_REOPENED_ISSUE").expect("prepared issue key");
+        let expected =
+            std::env::var("HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED").expect("expected score");
+        let expected = (expected != "none").then(|| expected.parse::<u8>().expect("0-100 or none"));
+        let ticket = provider.get(&issue).unwrap();
+        assert_eq!(
+            ticket.status,
+            Status::Completed,
+            "prepare the issue in a done status"
+        );
+        assert!(
+            ticket.notes.iter().any(|note| note.confidence.is_some()),
+            "prepare the issue with a Hot Sheet scored comment"
+        );
+        assert_eq!(ticket.latest_confidence, expected);
+    }
+
     fn scored_comment(id: &str, score: u64, created: &str) -> Value {
         let body = text_to_adf(&note_trailer::compose_comment(
             "Shipped.",

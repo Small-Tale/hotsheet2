@@ -309,6 +309,18 @@ detail read pays one history request, or a few when the history spans several pa
 That history is capped at 50 pages of 100 entries. Jira may add one status-catalogue
 request.
 
+The reopen bound is covered by fake-transport tests on every provider. Opt-in live tests
+also exist in the creds-gated live tier (HS2-7D9BPK), but they have not run yet because
+they need live credentials:
+
+- **GitHub:** the CRUD test walks score, close, reopen, re-close (no score), then
+  re-score.
+- **GitLab:** `gitlab_live_reopen_bounds_latest_confidence` does the same and writes
+  only with `HOTSHEET_GITLAB_LIVE_WRITE=1`.
+- **Jira:** the adapter cannot transition status, so
+  `jira_live_reopen_bounds_latest_confidence` reads an operator-prepared reopened issue
+  (`HOTSHEET_JIRA_LIVE_REOPENED_ISSUE`, `..._EXPECTED`).
+
 | Note capability                | git                      | GitHub Issues                        | GitLab                                   | Jira                                           |
 | ------------------------------ | ------------------------ | ------------------------------------ | ---------------------------------------- | ---------------------------------------------- |
 | `note_confidence` (append)     | yes                      | yes, comment trailer                 | yes, trailer                             | yes, ADF paragraph                             |

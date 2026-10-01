@@ -2165,5 +2165,55 @@ mod tests {
             )
             .unwrap();
         assert_eq!(closed.close_reason, Some(CloseReason::Completed));
+        // HS2-7D9BPK: the reopen-history bound against real issue events. Closed with the
+        // scored comment above, the score is current; reopen and re-close with no new score
+        // and it is gone; a score written after the reopen is reported.
+        assert_eq!(
+            provider.get(&created.native_id).unwrap().latest_confidence,
+            Some(77)
+        );
+        let second = std::time::Duration::from_millis(1100); // GitHub timestamps are whole seconds
+        let status = |status| ProviderPatch {
+            status: Some(status),
+            ..Default::default()
+        };
+        std::thread::sleep(second);
+        provider
+            .update(
+                &created.native_id,
+                Timestamp::new("2026-08-26T00:03:00Z"),
+                status(hotsheet_model::Status::NotStarted),
+            )
+            .unwrap();
+        std::thread::sleep(second);
+        provider
+            .close(
+                &created.native_id,
+                Timestamp::new("2026-08-26T00:04:00Z"),
+                CloseReason::Completed,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            provider.get(&created.native_id).unwrap().latest_confidence,
+            None,
+            "a reopen discards the earlier cycle's score"
+        );
+        let rescored = provider
+            .add_note_with_metadata(
+                &created.native_id,
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:05:00Z"),
+                    generated_id: hotsheet_model::Ulid::new(),
+                },
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    summary: None,
+                    confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),
+                },
+                "Hot Sheet live re-completion validation".into(),
+            )
+            .unwrap();
+        assert_eq!(rescored.latest_confidence, Some(88));
     }
 }

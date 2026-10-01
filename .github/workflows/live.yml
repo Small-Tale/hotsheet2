@@ -59,4 +59,18 @@ jobs:
           RUSTFLAGS: -D warnings
           HOTSHEET_CODEX_LIVE: '1'
           HOTSHEET_CLAUDE_LIVE: '1'
+          # External ticket providers (HS2-7D9BPK): the GitHub CRUD test also walks a
+          # reopen cycle; the GitLab reopen test writes only with HOTSHEET_GITLAB_LIVE_WRITE=1;
+          # the Jira reopen test reads an operator-prepared issue.
+          HOTSHEET_GITHUB_LIVE_REPO: ${{ secrets.HOTSHEET_GITHUB_LIVE_REPO }}
+          HOTSHEET_GITHUB_LIVE_TOKEN: ${{ secrets.HOTSHEET_GITHUB_LIVE_TOKEN }}
+          HOTSHEET_GITLAB_LIVE_PROJECT: ${{ secrets.HOTSHEET_GITLAB_LIVE_PROJECT }}
+          HOTSHEET_GITLAB_LIVE_TOKEN: ${{ secrets.HOTSHEET_GITLAB_LIVE_TOKEN }}
+          HOTSHEET_GITLAB_LIVE_WRITE: ${{ secrets.HOTSHEET_GITLAB_LIVE_WRITE }}
+          HOTSHEET_JIRA_LIVE_BASE_URL: ${{ secrets.HOTSHEET_JIRA_LIVE_BASE_URL }}
+          HOTSHEET_JIRA_LIVE_PROJECT: ${{ secrets.HOTSHEET_JIRA_LIVE_PROJECT }}
+          HOTSHEET_JIRA_LIVE_EMAIL: ${{ secrets.HOTSHEET_JIRA_LIVE_EMAIL }}
+          HOTSHEET_JIRA_LIVE_TOKEN: ${{ secrets.HOTSHEET_JIRA_LIVE_TOKEN }}
+          HOTSHEET_JIRA_LIVE_REOPENED_ISSUE: ${{ secrets.HOTSHEET_JIRA_LIVE_REOPENED_ISSUE }}
+          HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED: ${{ secrets.HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED }}
         run: cargo nextest run --all-features --run-ignored all

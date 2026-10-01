@@ -1239,6 +1239,105 @@ mod tests {
             .unwrap();
     }
 
+    /// HS2-7D9BPK: the reopen-history bound against real `resource_state_events`. Writes to
+    /// the live project (creates, scores, closes, reopens, re-closes one issue), so it also
+    /// requires `HOTSHEET_GITLAB_LIVE_WRITE=1`.
+    #[test]
+    #[ignore = "creates and closes a real GitLab issue; set HOTSHEET_GITLAB_LIVE_PROJECT, HOTSHEET_GITLAB_LIVE_TOKEN and HOTSHEET_GITLAB_LIVE_WRITE=1"]
+    fn gitlab_live_reopen_bounds_latest_confidence() {
+        assert_eq!(
+            std::env::var("HOTSHEET_GITLAB_LIVE_WRITE").as_deref(),
+            Ok("1"),
+            "write access to the live project must be opted into"
+        );
+        let connection = ProviderConnection {
+            id: "gitlab-live".into(),
+            provider: "gitlab".into(),
+            locator: std::env::var("HOTSHEET_GITLAB_LIVE_PROJECT").expect("live project"),
+            name: None,
+            default: false,
+            settings: json!({"api_base":std::env::var("HOTSHEET_GITLAB_LIVE_API_BASE").unwrap_or_else(|_|"https://gitlab.com/api/v4".into())}),
+            disabled: false,
+        };
+        let provider = GitLabProvider::live(
+            GitLabConfig::from_connection(
+                &connection,
+                std::env::var("HOTSHEET_GITLAB_LIVE_TOKEN").expect("live token"),
+            )
+            .unwrap(),
+        );
+        let now = || Timestamp::new("2026-08-26T00:00:00Z");
+        let ctx = || MutationContext {
+            now: now(),
+            generated_id: hotsheet_model::Ulid::new(),
+        };
+        let created = provider
+            .create(
+                ctx(),
+                ProviderDraft {
+                    title: format!("Hot Sheet reopen live test {}", hotsheet_model::Ulid::new()),
+                    category: "test".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details:
+                        "Created by an opt-in Hot Sheet provider validation; closed automatically."
+                            .into(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let id = created.native_id.clone();
+        let score = |value: u64| NoteMetadataInput {
+            summary: None,
+            confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),
+        };
+        let set_status = |status| {
+            std::thread::sleep(std::time::Duration::from_millis(1100));
+            provider
+                .update(
+                    &id,
+                    now(),
+                    ProviderPatch {
+                        status: Some(status),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        };
+        provider
+            .add_note_with_metadata(
+                &id,
+                ctx(),
+                NoteKind::Regular,
+                score(77),
+                "first cycle".into(),
+            )
+            .unwrap();
+        set_status(Status::Completed);
+        assert_eq!(provider.get(&id).unwrap().latest_confidence, Some(77));
+        set_status(Status::NotStarted);
+        set_status(Status::Completed);
+        assert_eq!(
+            provider.get(&id).unwrap().latest_confidence,
+            None,
+            "a reopen discards the earlier cycle's score"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let rescored = provider
+            .add_note_with_metadata(
+                &id,
+                ctx(),
+                NoteKind::Regular,
+                score(88),
+                "second cycle".into(),
+            )
+            .unwrap();
+        assert_eq!(rescored.latest_confidence, Some(88));
+    }
+
     fn scored_note(id: u64, score: u64, created_at: &str) -> Value {
         let body = note_trailer::compose_comment(
             "Done.",
