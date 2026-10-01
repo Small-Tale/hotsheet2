@@ -55,6 +55,7 @@ import {
   normalizeAppRegionSize,
   saveAppRegionSize,
   terminalDrawerMaximum,
+  terminalDrawerMinimum,
 } from '../app-region-resize';
 import { attachmentRoundNumbers } from '../attachment-grouping';
 import {
@@ -450,6 +451,7 @@ export async function startHotSheetWebClient() {
     terminalDrawerTransitioning = signal(false),
     terminalDrawerSize = signal(loadAppRegionSize(localStorage, 'app-bottom-drawer')),
     terminalDrawerMax = signal(520),
+    terminalDrawerMin = signal(terminalDrawerMinimum()),
     terminalDrawerMaximized = signal(false),
     terminalDrawerBounds = signal({ width: 900, height: 320 }),
     terminalDrawerFitAcross = signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-across')) || 2),
@@ -1707,10 +1709,13 @@ export async function startHotSheetWebClient() {
         ? inspectorSize.value
         : terminalDrawerMaximized.value
           ? terminalDrawerMax.value
-          : Math.min(terminalDrawerSize.value, terminalDrawerMax.value);
+          : Math.max(terminalDrawerMin.value, Math.min(terminalDrawerSize.value, terminalDrawerMax.value));
   function setAppRegionSize(id: AppRegionId, size: number) {
     if (id === 'app-bottom-drawer') {
-      const next = Math.min(terminalDrawerMax.value, normalizeAppRegionSize(id, size));
+      const next = Math.min(
+        terminalDrawerMax.value,
+        Math.max(terminalDrawerMin.value, normalizeAppRegionSize(id, size)),
+      );
       if (terminalDrawerMaximized.value && next === terminalDrawerMax.value) return;
       terminalDrawerMaximized.value = false;
       terminalDrawerSize.value = saveAppRegionSize(localStorage, id, next);
@@ -1726,7 +1731,19 @@ export async function startHotSheetWebClient() {
     const shell = document.querySelector<HTMLElement>('.app-shell'),
       workArea = shell?.querySelector<HTMLElement>('.app-shell__work-area');
     if (!shell || !workArea) return;
-    const next = terminalDrawerMaximum(shell.getBoundingClientRect().bottom, workArea.getBoundingClientRect().top);
+    // The phone drawer pads its content by the home-indicator inset (HS2-ZEC4QV), so its minimum
+    // grows by the resolved inset; on desktop the inset is zero.
+    const minimum = terminalDrawerMinimum(
+      viewportMobile.value
+        ? Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hotsheet-safe-area-bottom'))
+        : 0,
+    );
+    if (minimum !== terminalDrawerMin.value) terminalDrawerMin.value = minimum;
+    const next = terminalDrawerMaximum(
+      shell.getBoundingClientRect().bottom,
+      workArea.getBoundingClientRect().top,
+      minimum,
+    );
     if (next !== terminalDrawerMax.value) terminalDrawerMax.value = next;
   }
   function settleTerminalDrawerGeometry() {
@@ -4594,6 +4611,7 @@ export async function startHotSheetWebClient() {
         terminalDrawerVisible={terminalDrawerVisible.value && drawerViewAllowed}
         terminalDrawerSize={appRegionSize('app-bottom-drawer')}
         terminalDrawerMax={terminalDrawerMax.value}
+        terminalDrawerMin={terminalDrawerMin.value}
         terminalDrawerTransitioning={terminalDrawerTransitioning.value}
         terminalFocusMode={
           mobileTerminalFocus.value.active &&
@@ -5018,7 +5036,7 @@ export async function startHotSheetWebClient() {
     readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, canDeleteNotes, workspaceSearchActive, loadBoardColumnMore, loadNextTicketPage, readerBlockedReasonEditing, blockedReasonEditing,
     readerBlockedReasonAutosave, blockedReasonAutosave, presentTicketReaderDialog, readerTab, codeReviewLoading, refreshCodeReview, readerDialog, readerApprovedClose,
     approveTicketReaderClose, finishTicketReaderClose, readerLargeText, linkedReaderStack, inspectorTab, setSidebarVisible, sidebarVisible, appRegionSize,
-    setAppRegionSize, terminalDrawerMax, syncTerminalDrawerMaximum, updateTerminalDrawerBounds, copyDraggedTickets, inspectorVisible, switchWorkspaceView, shellMode,
+    setAppRegionSize, terminalDrawerMax, terminalDrawerMin, syncTerminalDrawerMaximum, updateTerminalDrawerBounds, copyDraggedTickets, inspectorVisible, switchWorkspaceView, shellMode,
     terminalDrawerSelected, ticketWorkAreaFocused, ordinaryTextSelected, openCommandHistory, completePointerDetailsFinish, schedulePointerDetailsFinish,
     get repositoryFileSelectionAnchor() {
             return repositoryController.repositoryFileSelectionAnchor;

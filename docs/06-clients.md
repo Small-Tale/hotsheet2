@@ -214,7 +214,12 @@ and identity-less legacy entries remain conservatively blocking.
   Kerf's logical `--kui-safe-area-*` tokens so both share one override point (HS2-4A29RR). The terminal-drawer restore and workspace-grid zoom controls
   use Kerf `FloatingToolbar` with dark `ToolbarControlGroup` controls, adding the device safe-area
   insets so they remain above the browser's bottom chrome and home indicator as those appear or
-  retract (HS2-43N9ZB, HS2-W3GPHW). On mobile the
+  retract (HS2-43N9ZB, HS2-W3GPHW). The expanded phone terminal drawer owns the bottom edge: Kerf's
+  Workbench pads the drawer's panel content by the home-indicator inset, so a single terminal, a
+  one-row (horizontally scrolling) grid, and a vertically scrolling grid all stop above the unsafe
+  area; the app grows the drawer's resize minimum by that resolved inset (228px usable plus the
+  inset) and keeps the grid zoom control at the padded edge instead of adding the inset again
+  (HS2-ZEC4QV). On mobile the
   Columns view remains available (HS2-ZYJMDP, replacing the earlier list-only rule from
   HS2-1XCHZT): the edge-to-edge board uses TicketBoard's `paged` layout, showing one
   near-full-width column at a time with the next column peeking in. The workspace-grid ticket

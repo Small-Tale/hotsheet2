@@ -1194,3 +1194,56 @@ test('resizing the phone drawer never focuses its terminal, only a tap does (HS2
   await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'true');
   await context.close();
 });
+
+test('phone terminal drawer keeps the home-indicator inset below every content view and grows its minimum (HS2-ZEC4QV)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page, true);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '34px');
+  });
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+    gap = (selector: string) =>
+      page
+        .locator(selector)
+        .evaluateAll((nodes) => nodes.map((node) => innerHeight - node.getBoundingClientRect().bottom));
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  // Kerf's Workbench pads the drawer's panel content by the bottom inset; the app adds no second one.
+  await expect(page.locator('#app-bottom-drawer .kui-workbench__panel-content')).toHaveCSS('padding-bottom', '34px');
+  await expect(drawer).toHaveCSS('padding-bottom', '0px');
+  await expect.poll(() => gap('[data-component="terminal-drawer"] .terminal-drawer__content')).toEqual([34]);
+  // The resize range reflects the padded minimum (228px usable + 34px inset).
+  await expect(handle).toHaveAttribute('aria-valuemin', '262');
+  await expect(handle).toHaveAttribute('aria-valuenow', '320');
+  // Vertically scrolling grid (two across): the scroller itself ends above the inset.
+  const grid = drawer.locator('.terminal-dashboard'),
+    zoomIn = grid.getByRole('button', { name: /^Zoom in/ });
+  await expect(grid).toHaveAttribute('data-fit', '2');
+  await expect.poll(() => gap('[data-component="terminal-drawer"] .terminal-dashboard__content')).toEqual([34]);
+  const zoomToolbar = grid.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  // The zoom toolbar hangs off the padded edge (its own 16px inset), not below it.
+  expect((await gap('[data-component="terminal-drawer"] [aria-label="Workspace tile zoom"]'))[0]).toBeCloseTo(50, 0);
+  await expect(zoomToolbar).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('drawer-grid-two-across.png'), animations: 'disabled' });
+  // One-row grid (horizontal scrolling): every tile stops above the inset.
+  await zoomIn.click();
+  await expect(grid).toHaveAttribute('data-fit', '1');
+  await expect
+    .poll(async () => (await gap('[data-component="terminal-drawer"] .terminal-tile')).every((value) => value >= 34))
+    .toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('drawer-grid-one-row.png'), animations: 'disabled' });
+  // A single terminal view ends above the inset too.
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await expect(drawer.locator('.terminal-session:not([hidden]) [data-geometry-ready="true"]')).toHaveCount(1);
+  await expect.poll(() => gap('[data-component="terminal-drawer"] .terminal-session:not([hidden])')).toEqual([34]);
+  await page.screenshot({ path: testInfo.outputPath('drawer-single-terminal.png'), animations: 'disabled' });
+  // Keyboard shrinking stops at the padded minimum, and one more step collapses the drawer.
+  await handle.focus();
+  for (let step = 0; step < 4; step += 1) await page.keyboard.press('ArrowDown');
+  await expect(handle).toHaveAttribute('aria-valuenow', '262');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+});

@@ -8,6 +8,7 @@ import {
   TERMINAL_DRAWER_MIN_SIZE,
   terminalDrawerDragDecision,
   terminalDrawerMaximum,
+  terminalDrawerMinimum,
 } from './app-region-resize';
 
 describe('production app region sizing', () => {
@@ -43,6 +44,16 @@ describe('production app region sizing', () => {
     expect(terminalDrawerDragDecision(181, 520)).toEqual({ size: 228, collapse: false });
     expect(terminalDrawerDragDecision(180, 520)).toEqual({ size: 228, collapse: true });
     expect(terminalDrawerDragDecision(700, 520)).toEqual({ size: 520, collapse: false });
+  });
+  it('grows the phone minimum by the home-indicator inset it pads (HS2-ZEC4QV)', () => {
+    expect(terminalDrawerMinimum()).toBe(228);
+    expect(terminalDrawerMinimum(34)).toBe(262);
+    expect(terminalDrawerMinimum(-5)).toBe(228);
+    expect(terminalDrawerMinimum(Number.NaN)).toBe(228);
+    expect(terminalDrawerMaximum(300, 100, 262)).toBe(262);
+    expect(terminalDrawerDragDecision(240, 520, 262)).toEqual({ size: 262, collapse: false });
+    expect(terminalDrawerDragDecision(215, 520, 262)).toEqual({ size: 262, collapse: false });
+    expect(terminalDrawerDragDecision(214, 520, 262)).toEqual({ size: 262, collapse: true });
   });
 
   it('loads defaults for missing or invalid values and persists normalized values', () => {

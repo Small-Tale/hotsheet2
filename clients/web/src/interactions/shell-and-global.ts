@@ -6,12 +6,7 @@ import {
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 
 import { type TicketRow as WireTicketRow } from '../api';
-import {
-  type AppRegionId,
-  normalizeAppRegionSize,
-  TERMINAL_DRAWER_MIN_SIZE,
-  terminalDrawerDragDecision,
-} from '../app-region-resize';
+import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } from '../app-region-resize';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
@@ -60,6 +55,7 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly setTerminalDrawerVisible: (visible: boolean, refresh?: boolean) => void;
   readonly setAppRegionSize: (id: AppRegionId, size: number) => void;
   readonly terminalDrawerMax: Signal<number>;
+  readonly terminalDrawerMin: Signal<number>;
   readonly syncTerminalDrawerMaximum: () => void;
   readonly updateTerminalDrawerBounds: (target: HTMLElement, rect?: Pick<DOMRectReadOnly, 'width' | 'height'>) => void;
   draggedTickets: { slugs: string[]; source: Project } | undefined;
@@ -124,6 +120,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     setTerminalDrawerVisible,
     setAppRegionSize,
     terminalDrawerMax,
+    terminalDrawerMin,
     syncTerminalDrawerMaximum,
     updateTerminalDrawerBounds,
     project,
@@ -222,7 +219,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     const direction = ['ArrowRight', 'ArrowDown'].includes(keyboard.key) ? 1 : -1,
       edge = (region.dataset.edge ?? 'end') as ResizableRegionEdge,
       raw = resizeRegionFromPointer(appRegionSize(id), direction * 16, edge);
-    if (appRegionSize(id) <= TERMINAL_DRAWER_MIN_SIZE && raw < TERMINAL_DRAWER_MIN_SIZE) {
+    if (appRegionSize(id) <= terminalDrawerMin.value && raw < terminalDrawerMin.value) {
       setTerminalDrawerVisible(false);
       return;
     }
@@ -234,7 +231,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     const point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
       raw = resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge);
     if (drag.id === 'app-bottom-drawer') {
-      const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value);
+      const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value, terminalDrawerMin.value);
       drag.pendingSize = decision.size;
       drag.collapseRequested = decision.collapse;
     } else drag.pendingSize = normalizeAppRegionSize(drag.id, raw);

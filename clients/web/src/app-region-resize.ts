@@ -42,13 +42,30 @@ export function saveAppRegionSize(storage: Pick<Storage, 'setItem'>, id: AppRegi
   return normalized;
 }
 
-export function terminalDrawerMaximum(mainBottom: number, workAreaTop: number): number {
-  return Math.max(APP_REGION_BOUNDS['app-bottom-drawer'].min, Math.floor(mainBottom - workAreaTop));
+/**
+ * The drawer's usable minimum. On a phone the expanded drawer owns the bottom screen edge and pads
+ * its content by the home-indicator inset, so the minimum grows by that inset to keep the same
+ * usable height (HS2-ZEC4QV).
+ */
+export function terminalDrawerMinimum(safeAreaBottom = 0): number {
+  return TERMINAL_DRAWER_MIN_SIZE + Math.max(0, Math.round(Number.isFinite(safeAreaBottom) ? safeAreaBottom : 0));
 }
 
-export function terminalDrawerDragDecision(rawSize: number, maximum: number): { size: number; collapse: boolean } {
+export function terminalDrawerMaximum(
+  mainBottom: number,
+  workAreaTop: number,
+  minimum = APP_REGION_BOUNDS['app-bottom-drawer'].min,
+): number {
+  return Math.max(minimum, Math.floor(mainBottom - workAreaTop));
+}
+
+export function terminalDrawerDragDecision(
+  rawSize: number,
+  maximum: number,
+  minimum = TERMINAL_DRAWER_MIN_SIZE,
+): { size: number; collapse: boolean } {
   return {
-    size: Math.min(maximum, Math.max(TERMINAL_DRAWER_MIN_SIZE, Math.round(rawSize))),
-    collapse: rawSize <= TERMINAL_DRAWER_MIN_SIZE - TERMINAL_DRAWER_COLLAPSE_OVERSHOOT,
+    size: Math.min(maximum, Math.max(minimum, Math.round(rawSize))),
+    collapse: rawSize <= minimum - TERMINAL_DRAWER_COLLAPSE_OVERSHOOT,
   };
 }

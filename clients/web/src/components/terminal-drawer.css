@@ -8,6 +8,13 @@
   flex-direction: column;
   background: var(--wa-color-surface-default);
 }
+/* The Workbench pads the drawer's panel content by the home-indicator inset (Kerf's safe-area
+   block-end token), so a single terminal, a one-row grid, and a scrolling grid all stop above the
+   unsafe area and the drawer's minimum grows by that inset in the app (HS2-ZEC4QV). The grid's zoom
+   anchor therefore sits at the padded edge rather than adding the inset a second time. */
+.app-shell[data-mobile='true'] .terminal-drawer:not([data-focus-mode='true']) .terminal-dashboard__zoom {
+  inset-block-end: 0;
+}
 .terminal-drawer[data-focus-mode='true'] {
   position: fixed;
   z-index: 200;

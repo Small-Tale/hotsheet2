@@ -46,6 +46,8 @@ export interface AppShellProps {
   terminalDrawerVisible?: boolean;
   terminalDrawerSize?: number;
   terminalDrawerMax?: number;
+  /** The drawer's usable minimum; a phone grows it by the home-indicator inset it pads (HS2-ZEC4QV). */
+  terminalDrawerMin?: number;
   terminalDrawerTransitioning?: boolean;
   terminalFocusMode?: boolean;
   sidePanelSeparator?: ResizableRegionSeparator;
@@ -84,6 +86,7 @@ export function AppShell({
   terminalDrawerVisible = false,
   terminalDrawerSize = APP_REGION_BOUNDS['app-bottom-drawer'].fallback,
   terminalDrawerMax = 520,
+  terminalDrawerMin = TERMINAL_DRAWER_MIN_SIZE,
   terminalDrawerTransitioning = false,
   terminalFocusMode = false,
   sidePanelSeparator = 'auto',
@@ -128,7 +131,7 @@ export function AppShell({
           label: 'Terminal drawer',
           collapsed: !terminalDrawerVisible,
           size: terminalDrawerSize,
-          resizable: { min: TERMINAL_DRAWER_MIN_SIZE, max: Math.max(TERMINAL_DRAWER_MIN_SIZE, terminalDrawerMax) },
+          resizable: { min: terminalDrawerMin, max: Math.max(terminalDrawerMin, terminalDrawerMax) },
           separator: terminalFocusMode ? 'hidden' : 'auto',
           collapseMotion: 'fade-slide',
           contentOverflow: terminalFocusMode ? 'visible' : terminalDrawerContentOverflow,
