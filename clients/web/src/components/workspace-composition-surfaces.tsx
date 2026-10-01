@@ -15,7 +15,7 @@ import {
   TerminalOperationsSidebar,
   type TerminalProjectSummary,
 } from './terminal-operations-sidebar';
-import { TerminalTicketRail, type TerminalTicketRailProps } from './terminal-ticket-rail';
+import { TerminalTicketRail, terminalTicketRailPanel, type TerminalTicketRailProps } from './terminal-ticket-rail';
 import { TicketBoard } from './ticket-board';
 import { TicketList } from './ticket-list';
 
@@ -68,6 +68,10 @@ export interface TerminalRailSurfaceProps {
 }
 export function TerminalRailSurface({ rail }: TerminalRailSurfaceProps) {
   return <TerminalTicketRail {...rail} />;
+}
+/** The workspace grid's right-rail panel for the same routing, composed by the Workbench (HS2-QQW6CT). */
+export function terminalRailSurfacePanel({ rail }: TerminalRailSurfaceProps): SidebarPanelParts {
+  return terminalTicketRailPanel(rail);
 }
 
 export type GlobalWorkspaceSurfaceProps =

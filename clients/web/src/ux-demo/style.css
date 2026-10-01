@@ -607,6 +607,8 @@ body[data-resizing-project-sidebar='true'] {
   gap: var(--wa-space-m);
 }
 .terminal-ticket-rail-demo {
+  /* The stage stretches the rail's standalone panel Pane to its fixed height (HS2-QQW6CT). */
+  display: grid;
   width: min(remify(384px), 100%);
   height: remify(672px);
   overflow: hidden;

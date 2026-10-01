@@ -2289,19 +2289,16 @@ delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) =>
   if (selectedId.value === 'ticket-reader') readerTab.value = tab;
   else inspectorTab.value = tab;
 });
-delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => {
-  inspectorOpen.value = false;
-  recordCollectionEvent('Inspector closed');
+// The right rail's standard toggle (HS2-QQW6CT) both hides and shows the inspector.
+delegate(root, 'click', '[data-action="toggle-ticket-inspector"]', () => {
+  inspectorOpen.value = !inspectorOpen.value;
+  recordCollectionEvent(inspectorOpen.value ? 'Inspector opened' : 'Inspector closed');
 });
 delegate(root, 'click', '[data-action="open-code-review"]', (_event, target) => {
   const item = target as HTMLElement;
   recordCollectionEvent(
     item.dataset.reviewMode === 'range' ? 'Commit range opened in Glassbox' : 'Commit opened in Glassbox',
   );
-});
-delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => {
-  inspectorOpen.value = true;
-  recordCollectionEvent('Inspector opened');
 });
 delegate(root, 'change', '[name="inspector-category"]', (_event, target) => {
   inspectorCategory.value = (target as FormControl).value;

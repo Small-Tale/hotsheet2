@@ -375,23 +375,18 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
       }),
     )
     .toEqual({ top: 0, bottom: 844, viewportBottom: 844 });
-  // The inspector is a Kerf Pane inside its app card (HS2-RWGQWN). The card is the rail's child, so
-  // Kerf pads the rail's panel content for the device insets once (top, right, and the home
-  // indicator) and the card and its Pane carry none of their own (HS2-4A29RR).
-  const panelContent = inspectorRegion.locator('> .kui-workbench__panel-content'),
-    inspector = inspectorRegion.locator('.ticket-inspector'),
-    inspectorPane = inspector.locator('[data-component="pane"]').first();
-  await expect(panelContent).toHaveCSS('padding-top', '13px');
-  await expect(panelContent).toHaveCSS('padding-right', '11px');
-  await expect(panelContent).toHaveCSS('padding-bottom', '37px');
-  await expect(inspector).toHaveCSS('padding-top', '0px');
-  await expect(inspector).toHaveCSS('padding-bottom', '0px');
-  await expect(inspector).toHaveCSS('padding-right', '0px');
-  await expect(inspectorPane.locator('> .kui-pane__header')).toHaveCSS('padding-top', '0px');
-  await expect(inspectorPane.locator('> .kui-pane__content')).toHaveCSS('padding-bottom', '0px');
+  // The inspector is a Workbench toolbar panel (HS2-QQW6CT): like the sidebar, its Pane surface reaches
+  // every edge and Kerf pads its pinned header and scroller slots once for the device insets (top,
+  // right, and the home indicator), with no app-level padding on top of it (HS2-4A29RR).
+  const inspectorPane = inspectorRegion.locator('[data-component="pane"]').first();
+  await expect(inspectorPane).toHaveCSS('padding-top', '0px');
+  await expect(inspectorPane.locator('> .kui-pane__header')).toHaveCSS('padding-top', '13px');
+  await expect(inspectorPane.locator('> .kui-pane__header')).toHaveCSS('padding-right', '11px');
+  await expect(inspectorPane.locator('> .kui-pane__content')).toHaveCSS('padding-bottom', '37px');
+  await expect(inspectorPane.locator('> .kui-pane__content')).toHaveCSS('padding-right', '11px');
   expect(
     await inspectorPane.locator('> .kui-pane__content').evaluate((node) => node.getBoundingClientRect().bottom),
-  ).toBe(844 - 37);
+  ).toBe(844);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await page.screenshot({
     path: '/private/tmp/hs2-3bvwme-mobile-inspector-full-height.png',
@@ -603,7 +598,7 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-M1"]').click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(scrim).toBeVisible();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(page.locator('#app-right-rail')).toBeVisible();
   // Ordinary Select content retains its name and selected text alongside the custom project control.
   await expect(inspector.getByRole('combobox', { name: 'Category', exact: true })).toHaveValue('Bug');
   await expect(inspector.locator('wa-select[name="inspector-category"]')).toHaveJSProperty('value', 'bug');
@@ -801,7 +796,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
   await page.locator('[data-ticket-slug="HS2-M1"]').click();
   const shell = page.locator('[data-component="app-shell"]'),
     inspector = page.locator('#app-right-rail'),
-    content = inspector.locator('[data-component="ticket-inspector"]');
+    content = inspector;
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   // Crossing into mobile intentionally closes desktop panels. Reopen through the public
   // control before measuring: a still-present closing panel is not an open overlay.
@@ -826,7 +821,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
     if (width === 940 || width === 390)
       await page.screenshot({ path: `/private/tmp/hs2-5jkngs-inspector-${width}-settled.png`, animations: 'disabled' });
     if (width < 1024) {
-      await content.getByRole('button', { name: 'Hide inspector', exact: true }).click();
+      await content.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
       await expect(inspector).toHaveAttribute('data-collapsed', 'true');
       await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
       await page.getByRole('button', { name: 'Show ticket inspector' }).click();
@@ -926,8 +921,9 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await workspace.hover();
   await page.mouse.wheel(0, -3000);
   await page.locator('[data-ticket-slug="HS2-M1"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
-    body = inspector.locator('.ticket-inspector__content');
+  const inspector = page.locator('#app-right-rail'),
+    // The rail panel's Pane content is the inspector's one scroll owner (HS2-QQW6CT).
+    body = inspector.locator('[data-component="pane"] > .kui-pane__content').first();
   await expect
     .poll(() =>
       inspector.evaluate((node) => {
@@ -941,7 +937,7 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await expect.poll(() => body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   await expect(inspector.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
   await page.screenshot({ path: '/private/tmp/hs2-jbtpnr-inspector-mobile.png', animations: 'disabled' });
-  await inspector.getByRole('button', { name: 'Hide inspector', exact: true }).click();
+  await inspector.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
   await expect(scrim).toHaveCount(0);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
 });
@@ -1287,7 +1283,7 @@ test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus ret
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await page.screenshot({ path: testInfo.outputPath('phone-inspector-overlay.png'), animations: 'disabled' });
   // Hiding the overlay inspector from its own control never touches the persisted desktop preference.
-  await inspector.getByRole('button', { name: 'Hide inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');

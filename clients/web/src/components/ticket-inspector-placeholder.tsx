@@ -1,33 +1,38 @@
 import './ticket-inspector-placeholder.css';
 
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { PanelRightClose } from 'lucide';
+import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
-export function TicketInspectorPlaceholder({ selectionCount }: { selectionCount: number }) {
+/** The empty or multi-selection inspector's panel parts for the Workbench's right rail (HS2-QQW6CT). */
+export function ticketInspectorPlaceholderPanel({ selectionCount }: { selectionCount: number }): SidebarPanelParts {
+  return {
+    label: 'Ticket inspector',
+    toolbar: { label: 'Ticket inspector toolbar', dividerSides: '' },
+    toggle: inspectorToggle(),
+    content: (
+      <div class="ticket-inspector-placeholder" data-component="ticket-inspector-placeholder">
+        <p>
+          {selectionCount === 0
+            ? 'Select a ticket to see and edit its details'
+            : `${selectionCount} items selected — use batch actions to edit them together`}
+        </p>
+      </div>
+    ),
+    pane: {},
+  };
+}
+
+export function TicketInspectorPlaceholder({
+  selectionCount,
+  collapseControl = false,
+}: {
+  selectionCount: number;
+  collapseControl?: boolean;
+}) {
   return (
-    <aside class="ticket-inspector-placeholder" aria-label="Ticket inspector">
-      <Toolbar
-        dividerSides=""
-        trailing={
-          <ToolbarControlGroup appearance="borderless" single>
-            <button
-              type="button"
-              data-action="close-ticket-inspector"
-              aria-label="Hide ticket inspector"
-              title="Hide ticket inspector"
-            >
-              <LucideIcon icon={PanelRightClose} name="panel-right-close" />
-            </button>
-          </ToolbarControlGroup>
-        }
-      />
-      <p>
-        {selectionCount === 0
-          ? 'Select a ticket to see and edit its details'
-          : `${selectionCount} items selected — use batch actions to edit them together`}
-      </p>
-    </aside>
+    <SidebarPane
+      parts={ticketInspectorPlaceholderPanel({ selectionCount })}
+      side="right"
+      collapseControl={collapseControl}
+    />
   );
 }

@@ -147,9 +147,12 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   await expect(page.locator('[data-ticket-slug="HS2-MATCH"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toHaveCount(0);
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-MATCH"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await expect(inspector).toBeVisible();
-  await expect(inspector).toHaveAttribute('data-ticket-slug', 'HS2-MATCH');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'HS2-MATCH',
+  );
 
   // Start editing the details field so it holds focus.
   await inspector.locator('[data-action="edit-markdown"]').first().dblclick();
@@ -168,7 +171,10 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   });
 
   await expect(inspector).toBeVisible();
-  await expect(inspector).toHaveAttribute('data-ticket-slug', 'HS2-MATCH');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'HS2-MATCH',
+  );
   await expect(editor).toBeFocused();
   const matchRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MATCH"]');
   await expect(matchRow).toBeVisible();

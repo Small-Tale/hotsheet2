@@ -174,7 +174,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
   // No false conflict, and the last edit wins.
   await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
   await expect(priority_).toHaveJSProperty('value', 'low');
-  await expect(page.locator('[data-component="ticket-inspector"]')).not.toContainText('ticket was modified');
+  await expect(page.locator('#app-right-rail')).not.toContainText('ticket was modified');
 });
 
 test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)', async ({ page }) => {
@@ -392,7 +392,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 
@@ -525,7 +525,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
       }
     }
     await row.click();
-    const inspector = page.locator('[data-component="ticket-inspector"]');
+    const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
     return inspector.getByRole('textbox', { name: 'Ticket details' });
   };
@@ -672,7 +672,7 @@ for (const keepTyping of [true, false])
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
-    const inspector = page.locator('[data-component="ticket-inspector"]');
+    const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
     const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 

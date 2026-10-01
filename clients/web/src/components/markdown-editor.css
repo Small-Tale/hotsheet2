@@ -55,8 +55,8 @@
   padding: remify(12px);
   resize: vertical;
 }
-.ticket-inspector .markdown-editor--embedded .markdown-editor__preview,
-.ticket-inspector .markdown-editor--embedded .markdown-editor__surface textarea {
+.ticket-inspector__body .markdown-editor--embedded .markdown-editor__preview,
+.ticket-inspector__body .markdown-editor--embedded .markdown-editor__surface textarea {
   padding-inline: remify(8.8px);
 }
 .markdown-editor__toolbar {

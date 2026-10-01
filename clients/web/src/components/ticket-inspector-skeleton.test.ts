@@ -4,7 +4,7 @@ import { TicketInspectorSkeleton } from './ticket-inspector-skeleton';
 
 describe('TicketInspectorSkeleton', () => {
   it('renders the real inspector chrome in a busy, value-free placeholder state', () => {
-    const markup = String(TicketInspectorSkeleton());
+    const markup = String(TicketInspectorSkeleton({ collapseControl: true }));
     expect(markup).toContain('data-component="ticket-inspector-skeleton"');
     expect(markup).toContain('aria-busy="true"');
     // It reuses the real inspector chrome so it still looks like the inspector.
@@ -29,7 +29,9 @@ describe('TicketInspectorSkeleton', () => {
     // Unknown value slots (title, details, note bodies, provenance) use the native Skeleton block.
     expect(markup).toContain('kui-skeleton');
     // The collapse control still works while loading; nothing else is interactive.
-    expect(markup).toContain('data-action="close-ticket-inspector"');
+    expect(markup).toContain('data-action="toggle-ticket-inspector"');
+    expect(markup).toContain('aria-label="Hide ticket inspector"');
+    expect(markup).toContain('data-component="ticket-inspector-skeleton-body"');
     expect(markup).not.toMatch(/HS2-/);
   });
 

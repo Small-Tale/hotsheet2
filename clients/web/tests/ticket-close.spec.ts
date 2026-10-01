@@ -243,7 +243,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
       // The web client identifies itself as the human actor on closes (HS2-XF81CJ, HS2-62G365).
       actor: { role: 'human' },
     });
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     outcome = inspector.locator('[data-component="ticket-duplicate-target"]');
   await expect(outcome).toContainText('Duplicate of');
   await expect(outcome).toContainText('Hot Sheet 2 · HS2-1S6DS9');
@@ -263,7 +263,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await page.getByRole('tab', { name: 'Hot Sheet 2' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-1S6DS9"]')).toBeVisible();
   await page.locator('[data-ticket-slug="HS2-1S6DS9"]').click();
-  const targetInspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const targetInspector = page.locator('#app-right-rail'),
     backlinks = targetInspector.locator('[data-component="ticket-duplicate-backlinks"]'),
     count = backlinks.locator('.kui-list-header .kui-badge');
   await expect(backlinks.locator('h2')).toContainText('Duplicates');

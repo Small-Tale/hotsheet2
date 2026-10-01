@@ -125,21 +125,16 @@
     animation: none;
   }
 }
-.corrupt-ticket-inspector {
-  display: flex;
-  min-width: 0;
-  height: 100%;
-  flex-direction: column;
-  color: var(--wa-color-danger-on-normal);
-  background: var(--wa-color-surface-default);
-}
+/* The recovery surface is a right-rail panel (HS2-QQW6CT): Kerf's Pane owns the toolbar, the fixed
+   header slot, and the one scrolling content owner; these rules style only the app-owned markup. */
 .corrupt-ticket-inspector__header {
   display: grid;
-  grid-template-columns: remify(21.6px) minmax(0, 1fr) remify(32px);
+  grid-template-columns: remify(21.6px) minmax(0, 1fr);
   align-items: start;
   gap: var(--kui-space-xs);
   padding: var(--kui-space-m);
-  border-bottom: 1px solid var(--wa-color-danger-border-quiet);
+  border-block: 1px solid var(--wa-color-danger-border-quiet);
+  color: var(--wa-color-danger-on-normal);
   background: var(--wa-color-danger-fill-quiet);
 }
 .corrupt-ticket-inspector__header > svg {
@@ -160,30 +155,12 @@
   font-size: var(--wa-font-size-m);
   overflow-wrap: anywhere;
 }
-.corrupt-ticket-inspector__header button {
-  display: inline-grid;
-  width: remify(32px);
-  height: remify(32px);
-  padding: 0;
-  border: 0;
-  border-radius: remify(5.6px);
-  background: transparent;
-  color: var(--wa-color-danger-on-normal);
-  cursor: pointer;
-  place-items: center;
-}
-.corrupt-ticket-inspector__header button:hover {
-  background: var(--wa-color-danger-fill-normal);
-}
-.corrupt-ticket-inspector__header button svg {
-  width: remify(16px);
-}
 .corrupt-ticket-inspector__body {
   display: grid;
   min-width: 0;
   padding: var(--kui-space-m);
-  overflow: auto;
   gap: var(--kui-space-l);
+  color: var(--wa-color-danger-on-normal);
 }
 .corrupt-ticket-inspector__body h2 {
   margin: 0 0 var(--kui-space-xs);

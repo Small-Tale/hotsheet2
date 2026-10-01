@@ -129,8 +129,12 @@
 }
 /* The surface owns the 8px inset; the embedded editor sits flush (overriding markdown-editor's own
    8.8px inline padding) so preview and edit text both land on the 17px column (HS2-EQEGGG). */
-.ticket-inspector .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__preview,
-.ticket-inspector .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__surface textarea {
+.ticket-inspector__body .ticket-inspector__details-surface .markdown-editor--embedded .markdown-editor__preview,
+.ticket-inspector__body
+  .ticket-inspector__details-surface
+  .markdown-editor--embedded
+  .markdown-editor__surface
+  textarea {
   padding: 0;
 }
 .ticket-inspector__details-surface[data-feedback-needed='true'] {
@@ -496,7 +500,7 @@
 }
 .ticket-attachments__drop:hover,
 [data-dragging-attachment='true'] .ticket-attachments__drop,
-[data-dragging-attachment='true'].ticket-inspector,
+[data-dragging-attachment='true']:is(.ticket-inspector, .ticket-inspector__header, .ticket-inspector__body),
 [data-dragging-attachment='true'].ticket-list-row {
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);

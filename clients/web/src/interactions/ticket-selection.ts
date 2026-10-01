@@ -159,7 +159,9 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     if (
       pointer.button === 0 &&
       active instanceof HTMLElement &&
-      active.closest('[data-component="ticket-inspector"], [data-component="ticket-reader"]') &&
+      active.closest(
+        '[data-component="ticket-inspector-header"], [data-component="ticket-inspector-body"], [data-component="ticket-reader"]',
+      ) &&
       active.matches(
         'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
       ) &&

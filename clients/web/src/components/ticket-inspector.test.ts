@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { TicketInspector } from './ticket-inspector';
+import { TicketInspector, ticketInspectorPanel } from './ticket-inspector';
 
 const base = {
   slug: 'HS2-TEST',
@@ -19,7 +19,10 @@ describe('TicketInspector', () => {
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0 0 var\(--kui-space-m\)/);
+    expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0;/);
+    expect(css).toMatch(
+      /\.ticket-inspector__header h1 \{[^}]*margin: var\(--kui-space-2xs\) var\(--kui-space-m\) var\(--kui-space-m\)/,
+    );
     expect(css).toMatch(
       /\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
     );
@@ -33,7 +36,7 @@ describe('TicketInspector', () => {
 
   it('renders each public tab without changing ticket identity', () => {
     for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
-      const markup = String(TicketInspector({ ...base, activeTab: tab }));
+      const markup = String(TicketInspector({ ...base, activeTab: tab, collapseControl: true }));
       expect(markup).toContain('HS2-TEST');
       expect(markup).toContain('data-component="tab-bar"');
       expect(markup).toContain('data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST"');
@@ -50,12 +53,15 @@ describe('TicketInspector', () => {
           `role="tab" aria-selected="true" aria-label="[^"]+"[^>]*data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,
         ),
       );
-      expect(markup).toContain('aria-label="Hide inspector"');
+      expect(markup).toContain('aria-label="Hide ticket inspector"');
+      expect(markup).toContain('data-action="toggle-ticket-inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
       expect(markup).toContain(
         'data-component="toolbar-text" data-size="small"><span class="kui-toolbar-text__text">HS2-TEST',
       );
-      expect(markup).toContain('data-action="copy-ticket-slug" aria-label="Copy ticket number HS2-TEST"');
+      expect(markup).toContain(
+        'data-action="copy-ticket-slug" data-ticket-slug="HS2-TEST" aria-label="Copy ticket number HS2-TEST"',
+      );
       expect(markup).toContain('data-appearance="borderless"');
       if (tab === 'info') {
         expect(markup.match(/<wa-option value="feature"/g)).toHaveLength(1);
@@ -383,5 +389,43 @@ describe('TicketInspector', () => {
     expect(String(TicketInspector({ ...base, upNextEligible: false }))).not.toContain(
       'data-action="toggle-inspector-up-next"',
     );
+  });
+
+  it('exposes Workbench panel parts whose fixed header keeps the title and status notices (HS2-QQW6CT)', () => {
+    const parts = ticketInspectorPanel({
+      ...base,
+      status: 'completed',
+      latestConfidence: 82,
+      feedbackNeeded: true,
+      liveClaim: { agentName: 'Codex' },
+    });
+    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket inspector' });
+    expect(parts.label).toBe('HS2-TEST inspector');
+    expect(String(parts.toolbar.leading)).toContain('data-action="copy-ticket-slug"');
+    expect(String(parts.toolbar.trailing)).toContain('data-action="open-ticket-reader"');
+    // The Workbench renders the toggle itself; the parts carry no hand-made hide control.
+    expect(String(parts.toolbar.trailing)).not.toContain('toggle-ticket-inspector');
+    const header = String(parts.header);
+    expect(header).toContain('data-component="ticket-inspector-header"');
+    expect(header).toContain('data-ticket-slug="HS2-TEST"');
+    expect(header).toContain('data-needs-review="true"');
+    expect(header).toContain('Inspect this ticket');
+    expect(header).toContain('data-component="live-claim-notice"');
+    expect(header).toContain('data-confidence="82"');
+    expect(header).toContain('Needs review');
+    expect(header).toContain('data-component="tab-bar"');
+    const content = String(parts.content);
+    expect(content).toContain('data-component="ticket-inspector-body"');
+    expect(content).toContain('data-attachment-drop-target="true"');
+    expect(content).toContain('data-presentation="sidebar"');
+    expect(content).not.toContain('data-component="tab-bar"');
+    // The center placement the terminal rail uses balances the toolbar tracks.
+    const centered = ticketInspectorPanel({ ...base, slugPlacement: 'center' });
+    expect(centered.toolbar.centerAlign).toBe('balanced');
+    expect(String(centered.toolbar.center)).toContain('data-action="copy-ticket-slug"');
+    // The reader keeps its own close control and never the rail toggle.
+    const reader = String(TicketInspector({ ...base, presentation: 'reader', collapseControl: true }));
+    expect(reader).not.toContain('toggle-ticket-inspector');
+    expect(reader).toContain('data-action="close-ticket-reader"');
   });
 });

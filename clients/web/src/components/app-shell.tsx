@@ -7,7 +7,7 @@ import type { ResizableRegionContentOverflow, ResizableRegionSeparator } from '@
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Workbench, type WorkbenchPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { PanelBottomOpen, PanelRightOpen } from 'lucide';
+import { PanelBottomOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
 import type { ProjectTabProps } from './project-tab';
@@ -28,7 +28,9 @@ export interface AppShellProps {
   pageHeader?: SafeHtml;
   workspace: SafeHtml;
   composer?: SafeHtml;
-  inspector?: SafeHtml;
+  /** The right rail's panel parts; the Workbench composes its toolbar, header, and collapse toggle and
+   * relocates the toggle to the trailing edge of the workspace toolbar while the rail is collapsed. */
+  inspector?: SidebarPanelParts;
   inspectorVisible?: boolean;
   banner?: SafeHtml;
   sidebarSize?: number;
@@ -115,9 +117,10 @@ export function AppShell({
   const rightRail: WorkbenchPanel | undefined =
     mode !== 'stats' && inspector
       ? {
-          // The inspector surfaces render a Kerf Pane, which takes the safe-area insets the rail routes
-          // to its content (HS2-RWGQWN).
-          content: inspector,
+          // Every right-rail surface exposes panel parts (HS2-QQW6CT): the Workbench composes the
+          // toolbar, the fixed header, and the scrolling content in one Pane, which takes the
+          // safe-area insets the rail routes to its content.
+          ...workbenchSidebarPanel(inspector),
           label: mode === 'terminals' ? 'Tickets rail' : 'Inspector rail',
           collapsed: !inspectorVisible,
           size: inspectorSize,
@@ -195,26 +198,10 @@ export function AppShell({
           responsive: 'trailing-priority',
           responsiveAt: 'narrow',
           safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
-          // The collapsed left rail's toggle leads this zone; the Workbench relocates it here.
+          // The collapsed left rail's toggle leads this zone and the collapsed right rail's toggle
+          // trails it; the Workbench relocates both here.
           leading: header,
-          trailing: (
-            <>
-              {headerActions}
-              {mode !== 'stats' && inspector && !inspectorVisible && (
-                <ToolbarControlGroup appearance="borderless" single>
-                  <button
-                    type="button"
-                    data-action="open-ticket-inspector"
-                    aria-controls={`${APP_WORKBENCH_ID}-right-rail`}
-                    aria-label={mode === 'terminals' ? 'Show ticket rail' : 'Show ticket inspector'}
-                    title={mode === 'terminals' ? 'Show ticket rail' : 'Show ticket inspector'}
-                  >
-                    <LucideIcon icon={PanelRightOpen} name="panel-right-open" />
-                  </button>
-                </ToolbarControlGroup>
-              )}
-            </>
-          ),
+          trailing: headerActions,
         }}
         main={
           <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>

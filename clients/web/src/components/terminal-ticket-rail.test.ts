@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { QuickTicketLauncher } from './quick-ticket-composer';
-import { TerminalTicketRail } from './terminal-ticket-rail';
+import { TerminalTicketRail, terminalTicketRailPanel } from './terminal-ticket-rail';
 
 describe('TerminalTicketRail', () => {
   const props = {
@@ -22,13 +22,21 @@ describe('TerminalTicketRail', () => {
     inspector: 'Inspector' as never,
   };
   it('starts on a compact project ticket surface whose project menu can grow to fit longer names', () => {
-    const markup = String(TerminalTicketRail({ ...props, active: 'root' }));
+    const markup = String(TerminalTicketRail({ ...props, active: 'root', collapseControl: true }));
     expect(markup).toContain('name="terminal-rail-project"');
     expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><wa-select[^>]*name="terminal-rail-project"/);
     expect(markup).toContain('Project One');
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
+    expect(markup).toContain('data-action="toggle-ticket-inspector"');
+    // As Workbench panel parts (HS2-QQW6CT) the project selector rides the panel toolbar with the
+    // standard rail toggle, while the push navigation stays the panel's content.
+    const parts = terminalTicketRailPanel({ ...props, active: 'root' });
+    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket rail' });
+    expect(String(parts.toolbar.leading)).toContain('name="terminal-rail-project"');
+    expect(String(parts.content)).toContain('data-component="terminal-ticket-rail"');
+    expect(String(parts.content)).not.toContain('name="terminal-rail-project"');
     expect(markup).toContain('<div class="terminal-ticket-rail__content"><div class="kui-sunken-panel"');
     expect(markup).toContain('data-component="sunken-panel"');
     expect(markup).toContain('data-shape="square"');
@@ -72,8 +80,9 @@ describe('TerminalTicketRail', () => {
   it('uses the canonical compact-rail spacing while retaining control and transition geometry', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    // The project Toolbar keeps Kerf's own inset and height; the app only sets public tokens on it.
-    expect(css).toMatchSource(/__project \{ --kui-toolbar-trailing-justify-self:end;/);
+    // The project Select sits in Kerf's panel toolbar; the app only sets public Select tokens on it.
+    expect(css).toMatchSource(/__project \{ --kui-select-selected-color:/);
+    expect(css).not.toContain('--kui-toolbar-trailing-justify-self');
     expect(css).not.toMatch(/__project \{[^}]*\b(padding|min-height|height):/);
     expect(css).not.toContain('.kui-select__custom-selected');
     expect(css).not.toMatch(/\.kui-select \{/);

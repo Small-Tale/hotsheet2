@@ -297,9 +297,9 @@ search-and-composer	delegate	document.body	'drop'	'[data-new-ticket-drop-target=
 search-and-composer	delegate	document.body	'submit'	'[data-action="create-ticket-form"]'
 search-and-composer	delegate	document.body	'click'	'[data-action="toggle-row-up-next"]'
 attachments-and-gallery	delegate	document.body	'change'	'input[name="ticket-attachments"]'
-attachments-and-gallery	delegate	document.body	'dragover'	'[data-attachment-drop-target="true"]'
-attachments-and-gallery	delegate	document.body	'dragleave'	'[data-attachment-drop-target="true"]'
-attachments-and-gallery	delegate	document.body	'drop'	'[data-attachment-drop-target="true"]'
+attachments-and-gallery	delegate	document.body	'dragover'	dropTargets
+attachments-and-gallery	delegate	document.body	'dragleave'	ATTACHMENT_DROP_TARGET
+attachments-and-gallery	delegate	document.body	'drop'	dropTargets
 attachments-and-gallery	delegate	document.body	'change'	'[name="attachment-batch-label"], [name="attachment-batch-purpose"]'
 attachments-and-gallery	delegate	document.body	'dblclick'	'[data-action="edit-attachment-batch-label"]'
 attachments-and-gallery	delegate	document.body	'keydown'	'[name="attachment-batch-label"]'
@@ -402,8 +402,7 @@ inspector-and-editor	delegateCapture	document.body	'wa-after-hide'	'[data-compon
 inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-reader-text-size"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="set-inspector-tab"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-code-review"]'
-shell-and-global	delegate	document.body	'click'	'[data-action="close-ticket-inspector"]'
-shell-and-global	delegate	document.body	'click'	'[data-action="open-ticket-inspector"]'
+shell-and-global	delegate	document.body	'click'	'[data-action="toggle-ticket-inspector"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="toggle-project-sidebar"]'
 shell-and-global	delegate	document.body	'pointerdown'	'[data-kui-resize-handle]'
 shell-and-global	delegate	document.body	'keydown'	'[data-kui-resize-handle]'

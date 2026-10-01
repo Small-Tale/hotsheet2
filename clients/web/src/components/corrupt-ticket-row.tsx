@@ -1,9 +1,10 @@
 import './corrupt-ticket-row.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Bot, FileWarning, FolderOpen, PanelRightClose, RefreshCw } from 'lucide';
+import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
+import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
@@ -102,22 +103,25 @@ export function CorruptTicketRow({
   );
 }
 
-export function CorruptTicketInspector({
+/**
+ * The unreadable ticket's recovery panel parts for the Workbench's right rail (HS2-QQW6CT): the fixed
+ * header names the file's problem, the content explains it and offers recovery.
+ */
+export function corruptTicketInspectorPanel({
   ticket,
   recovery,
 }: {
   ticket: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
-}) {
+}): SidebarPanelParts {
   const identity = corruptTicketIdentity(ticket),
     upgradeRequired = ticket.error_code === 'upgrade_required';
-  return (
-    <section
-      class="corrupt-ticket-inspector"
-      data-component="corrupt-ticket-inspector"
-      aria-label={`Recovery for ${identity}`}
-    >
-      <header class="corrupt-ticket-inspector__header">
+  return {
+    label: `Recovery for ${identity}`,
+    toolbar: { label: 'Ticket recovery toolbar', dividerSides: '' },
+    toggle: inspectorToggle(),
+    header: (
+      <header class="corrupt-ticket-inspector__header" data-component="corrupt-ticket-inspector-header">
         <LucideIcon
           icon={upgradeRequired ? RefreshCw : FileWarning}
           name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
@@ -126,11 +130,10 @@ export function CorruptTicketInspector({
           <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Unreadable ticket'}</span>
           <h1>{identity}</h1>
         </div>
-        <button type="button" data-action="close-ticket-inspector" aria-label="Hide inspector" title="Hide inspector">
-          <LucideIcon icon={PanelRightClose} name="panel-right-close" />
-        </button>
       </header>
-      <div class="corrupt-ticket-inspector__body">
+    ),
+    content: (
+      <div class="corrupt-ticket-inspector__body" data-component="corrupt-ticket-inspector">
         <section>
           <h2>{upgradeRequired ? 'Update required' : 'Ticket parsing error'}</h2>
           <p>{ticket.error}</p>
@@ -151,6 +154,25 @@ export function CorruptTicketInspector({
           </p>
         )}
       </div>
-    </section>
+    ),
+    pane: {},
+  };
+}
+
+export function CorruptTicketInspector({
+  ticket,
+  recovery,
+  collapseControl = false,
+}: {
+  ticket: CorruptTicket;
+  recovery?: CorruptTicketRecoveryState;
+  collapseControl?: boolean;
+}) {
+  return (
+    <SidebarPane
+      parts={corruptTicketInspectorPanel({ ticket, recovery })}
+      side="right"
+      collapseControl={collapseControl}
+    />
   );
 }

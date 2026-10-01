@@ -249,7 +249,7 @@ async function resolvedColor(locator: Locator, value: string) {
 async function captureInspectorStatus(surface: Locator, path: string) {
   const clip = await surface.locator('.ticket-inspector__status-field').evaluate((node) => {
     const field = node.getBoundingClientRect(),
-      inspector = node.closest('[data-component="ticket-inspector"]')!.getBoundingClientRect();
+      inspector = node.closest('[data-component="ticket-inspector"], #app-right-rail')!.getBoundingClientRect();
     return { x: inspector.left, y: field.top - 8, width: inspector.width, height: field.height + 16 };
   });
   await surface.page().screenshot({ path, clip });
@@ -2943,7 +2943,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const rail = page.locator('[data-component="terminal-ticket-rail"]'),
-    projectSelect = rail.locator('wa-select[name="terminal-rail-project"]'),
+    projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
     viewSelect = rail.locator('wa-select[name="terminal-rail-view"]'),
     launcher = rail.getByRole('button', { name: 'Ticket…' });
   await expect(rail).toBeVisible();
@@ -2961,8 +2961,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
-      hide = node.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
+      project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
     return {
@@ -3041,7 +3041,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(searchInput).toBeFocused();
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
-  await rail.getByRole('button', { name: 'Hide ticket rail' }).click();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Hide ticket rail' }).click();
   const railRegion = page.locator('#app-right-rail');
   await expect(railRegion).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show ticket rail' }).click();
@@ -5588,8 +5588,11 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   );
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
-  await expect(inspector).toHaveAttribute('data-needs-review', 'true');
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-needs-review',
+    'true',
+  );
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
   await expect.poll(() => inspector.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('auto');
   await page.screenshot({ path: '/private/tmp/hs2-9fa1bv-feedback-sidebar-without-rail-wide.png', fullPage: true });
@@ -5604,7 +5607,10 @@ test('projects an indexed feedback-needed note into the real row and inspector r
     'background-color',
     'rgb(203, 48, 224)',
   );
-  await expect(inspector).toHaveAttribute('data-needs-review', 'true');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-needs-review',
+    'true',
+  );
   await page.screenshot({ path: '/private/tmp/hs2-9fa1bv-feedback-sidebar-without-rail-narrow.png', fullPage: true });
 });
 
@@ -5703,7 +5709,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     sidebarDetails = inspector.locator('.ticket-inspector__details-surface[data-feedback-needed="true"]'),
     open = inspector.getByRole('button', { name: 'Respond to Feedback' });
   await expect(sidebarDetails).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
@@ -5767,7 +5773,7 @@ test('records No response needed as a subtle regular response and clears review 
   await page.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await ticket.click();
-  const acknowledgement = page.locator('[data-component="ticket-inspector"] [data-acknowledgement="true"]');
+  const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
   await expect(acknowledgement).toBeVisible();
   await acknowledgement.screenshot({ path: '/private/tmp/hs2-yk27gp-no-response-needed.png' });
 });
@@ -5779,7 +5785,7 @@ test('opens reader at the active feedback note from its inspector action', async
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     action = inspector.getByRole('button', { name: 'Respond to Feedback' });
   await expect(action).toHaveCount(1);
   await action.scrollIntoViewIfNeeded();
@@ -6206,8 +6212,11 @@ test('clears needs review when a regular response follows the feedback-needed no
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCount(0);
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await ticket.click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
-  await expect(inspector).toHaveAttribute('data-needs-review', 'false');
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-needs-review',
+    'false',
+  );
   await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
   await expect(inspector.locator('[data-component="note-card"][data-note-id="N2"]')).toHaveAttribute(
     'data-kind',
@@ -6247,7 +6256,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
   const review = inspector.locator('[data-component="ticket-code-review"]');
   const commits = review.locator('.ticket-code-review__commits'),
@@ -6349,7 +6358,7 @@ test('renders the exact shared Code Review component in the inspector and reader
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('tab', { name: 'Code Review' }).click();
   const sidebarReview = sidebar.locator('[data-component="ticket-code-review"]');
   await expect(sidebarReview).toContainText('Opens in Glassbox');
@@ -6396,7 +6405,7 @@ test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', asy
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
   await inspector.getByRole('button', { name: 'Open change evidence' }).click();
   const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
@@ -6423,7 +6432,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await expect(reader).toBeVisible();
@@ -6474,7 +6483,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  let sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  let sidebar = page.locator('#app-right-rail'),
     sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
   const sidebarInfo = sidebar.getByRole('tab', { name: 'Info' });
   await expect(sidebarInfo).toHaveAttribute('aria-selected', 'true');
@@ -6510,7 +6519,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
     .toBe('timeline:attachments');
   await sidebar.screenshot({ path: '/private/tmp/hs2-gzn2hz-tab-bar-inspector-narrow.png' });
   await page.reload();
-  sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  sidebar = page.locator('#app-right-rail');
   sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
   await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
@@ -6766,7 +6775,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     inspectorNotice = inspector.locator('[data-component="live-claim-notice"]');
   await expect(inspectorNotice).toContainText('Codex is working on this');
   await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveAttribute(
@@ -6934,7 +6943,7 @@ test('copies the ticket number when the browser refuses the Clipboard API (HS2-1
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const region = page.locator('#app-right-rail');
-  await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
   await expect(page.getByText('HS2-DEMO01 copied to clipboard.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
@@ -6954,9 +6963,10 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await page.waitForTimeout(75);
   await expect(region).toBeVisible();
   await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();
-  await expect(region.locator('.ticket-inspector-placeholder > .kui-toolbar')).not.toHaveAttribute('divider-sides');
+  // The placeholder keeps the rail's standard toggle in the Workbench-composed toolbar (HS2-QQW6CT).
+  await expect(region.getByRole('button', { name: 'Hide ticket inspector' })).toBeVisible();
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(before);
-  await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
   await expect(page.getByText('HS2-DEMO01 copied to clipboard.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
@@ -6968,12 +6978,17 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   // value-free loading skeleton (aria-busy) — not the previous ticket's stale data. Updated for the
   // inspector-loading-skeleton behavior that replaced the dimmed stale inspector (HS2-YSHZQK; the old
   // `.ticket-inspector-transition` dimmed-stale presentation is gone, per the inspector-loading-skeleton feature).
-  await expect(region.locator('[data-component="ticket-inspector-skeleton"]')).toHaveAttribute('aria-busy', 'true');
+  await expect(region.locator('[data-component="ticket-inspector-skeleton-body"]')).toHaveAttribute(
+    'aria-busy',
+    'true',
+  );
   await expect(region.locator('.ticket-inspector-placeholder')).toHaveCount(0);
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(widthBeforeSwitch);
   await expect(region).not.toContainText('Use real project tickets');
   await page.screenshot({ path: '/private/tmp/hs2-zt5qnw-inspector-transition-floor.png', fullPage: true });
-  await expect(region.locator('[data-component="ticket-inspector"][data-ticket-slug="HS2-START02"]')).toBeVisible();
+  await expect(
+    region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
+  ).toBeVisible();
 });
 
 test('keeps an active editor stable when its already-selected ticket is clicked again', async ({ page }) => {
@@ -6991,7 +7006,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   await editor.fill('Draft preserved across a redundant reselect');
@@ -7095,7 +7110,7 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Jira routed ticket');
   await expect(inspector).toContainText('Before edit');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
@@ -7126,20 +7141,21 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
+  // Every right-rail surface's toolbar is the Workbench-composed panel toolbar (HS2-QQW6CT).
   const placeholder = page.locator('.ticket-inspector-placeholder'),
-    toolbar = placeholder.locator(':scope > .kui-toolbar');
+    toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]');
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(toolbar).not.toHaveAttribute('divider-sides');
   await expect(toolbar).toHaveCSS('box-shadow', /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/);
   await page.screenshot({ path: '/private/tmp/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(
-    page.locator('[data-component="ticket-inspector"] .ticket-inspector__header > .kui-toolbar'),
+    page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]'),
   ).not.toHaveAttribute('divider-sides');
   await page.getByRole('button', { name: /Notifications view/ }).click();
-  const notificationToolbar = page
-    .getByRole('complementary', { name: 'Notification inspector' })
-    .locator(':scope > .kui-toolbar');
+  const notificationToolbar = page.locator(
+    '#app-right-rail [data-component="toolbar"][aria-label="Notification inspector toolbar"]',
+  );
   await expect(notificationToolbar).not.toHaveAttribute('divider-sides');
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(notificationToolbar).toHaveCSS(
@@ -7217,6 +7233,28 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Project commands' })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await expect.poll(() => inspector.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialInspector + 16);
+  // HS2-QQW6CT: the right rail's standard toggle sits in the rail's panel toolbar while it is open;
+  // closing it from there moves the toggle — and focus — to the trailing edge of the workspace
+  // toolbar, and reopening returns focus to the rail's own toggle.
+  const workspaceToolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
+    railToggle = inspector.getByRole('button', { name: 'Hide ticket inspector' });
+  await expect(railToggle).toHaveAttribute('aria-controls', 'app-right-rail');
+  await expect(railToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(workspaceToolbar.getByRole('button', { name: 'Show ticket inspector' })).toHaveCount(0);
+  await railToggle.click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  const relocated = workspaceToolbar.getByRole('button', { name: 'Show ticket inspector' });
+  await expect(relocated).toBeFocused();
+  await expect(relocated).toHaveAttribute('aria-expanded', 'false');
+  expect(
+    await workspaceToolbar.evaluate((node) => {
+      const buttons = [...node.querySelectorAll<HTMLElement>('.kui-toolbar__trailing button')];
+      return buttons.at(-1)?.getAttribute('aria-label');
+    }),
+  ).toBe('Show ticket inspector');
+  await relocated.click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await expect(inspector.getByRole('button', { name: 'Hide ticket inspector' })).toBeFocused();
 });
 
 test('orders equal status priority and title groups by most recently updated', async ({ page }) => {
@@ -7326,7 +7364,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   const sidebarTabs = page.locator('#app-right-rail .ticket-inspector__tabs');
   const captureTabChrome = async (tabs: Locator, path: string) => {
     const clip = await tabs.evaluate((node) => {
-      const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"]')!,
+      const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"], #app-right-rail')!,
         frame = inspector.getBoundingClientRect(),
         title = inspector.querySelector('h1')!.getBoundingClientRect(),
         strip = node.getBoundingClientRect(),
@@ -7338,7 +7376,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   const expectTabGeometry = async (tabs: Locator) => {
     await expect(async () => {
       const geometry = await tabs.evaluate((node) => {
-        const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"]')!,
+        const inspector = node.closest<HTMLElement>('[data-component="ticket-inspector"], #app-right-rail')!,
           inspectorBox = inspector.getBoundingClientRect(),
           inspectorStyle = getComputedStyle(inspector),
           strip = node.getBoundingClientRect(),
@@ -8247,9 +8285,11 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
   // The overlay opens on the new ticket with its details editor ready, not inert offscreen.
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(page.locator('.app-shell__scrim')).toBeVisible();
-  const ticketInspector = page.locator('[data-component="ticket-inspector"]');
+  const ticketInspector = page.locator('#app-right-rail');
   await expect(ticketInspector).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'HS2-NEW001 inspector' })).toBeVisible();
+  await expect(
+    page.locator('#app-right-rail [data-component="ticket-inspector-header"][data-ticket-slug="HS2-NEW001"]'),
+  ).toBeVisible();
   await expect(ticketInspector.getByRole('heading', { name: 'Created title', level: 1 })).toBeVisible();
   await expect(ticketInspector.locator('[name="markdown-source"]')).toBeFocused();
   await page.waitForTimeout(350);
@@ -8272,7 +8312,7 @@ test('creating a ticket on a desktop leaves the inspector as the user set it (HS
   await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Created title');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-inspector"] [name="markdown-source"]')).toBeFocused();
+  await expect(page.locator('#app-right-rail [name="markdown-source"]')).toBeFocused();
 });
 
 test('does not resurrect a dismissed ticket composer after another modal closes', async ({ page }) => {
@@ -9465,12 +9505,14 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await page.getByLabel('Settings view').click();
   const navigation = page.getByRole('navigation', { name: 'Settings categories' }),
     placeholder = page.locator('.ticket-inspector-placeholder'),
-    placeholderToolbar = placeholder.locator(':scope > .kui-toolbar');
+    placeholderToolbar = page.locator(
+      '#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]',
+    );
   await expect(navigation).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ticket sources settings' })).toBeVisible();
   await expect(page.locator('.project-settings > h2')).toHaveCount(0);
   await expect(page.locator('.project-sidebar__content')).toHaveCount(0);
-  await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
+  await expect(page.locator('#app-right-rail')).toBeVisible();
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(placeholderToolbar).not.toHaveAttribute('divider-sides');
   await expect(placeholderToolbar).toHaveCSS(
@@ -9821,8 +9863,10 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     return { iconX: icon.x, railWidth: rail.width, railColor: rail.backgroundColor };
   });
   expect(errorRowAfter).toEqual(errorRowBefore);
+  // The recovery body is the right-rail panel's content (HS2-QQW6CT).
   const inspector = page.locator('[data-component="corrupt-ticket-inspector"]');
-  await expect(inspector.locator('.corrupt-ticket-inspector__body')).toHaveCSS('gap', '24px');
+  await expect(inspector).toHaveClass(/corrupt-ticket-inspector__body/);
+  await expect(inspector).toHaveCSS('gap', '24px');
   await expect(inspector).toContainText('Ticket parsing error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
   await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
@@ -9855,7 +9899,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toHaveCount(0);
 
   await page.getByText('Use real project tickets').click();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
+  await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
 });
 
 test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt', async ({ page }) => {
@@ -9922,9 +9966,9 @@ test('updates the open project after external ticket additions edits and deletio
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const original = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await original.click();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
+  await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
 
-  const openSelect = page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]');
+  const openSelect = page.locator('#app-right-rail wa-select[name="inspector-priority"]');
   await openSelect.click();
   await expect(openSelect).toHaveJSProperty('open', true);
   liveRows = liveRows.map((item) => (item.id === '01' ? { ...item, title: 'Externally edited ticket' } : item));
@@ -9936,7 +9980,7 @@ test('updates the open project after external ticket additions edits and deletio
   await expect(openSelect).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(original).toContainText('Externally edited ticket');
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Externally edited ticket');
+  await expect(page.locator('#app-right-rail')).toContainText('Externally edited ticket');
 
   const external = {
     ...row,
@@ -9959,9 +10003,7 @@ test('updates the open project after external ticket additions edits and deletio
   liveRows = liveRows.filter((item) => item.id !== '01');
   await emit('deleted', '01', '');
   await expect(original).toHaveCount(0);
-  await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toContainText(
-    'Select a ticket to see and edit its details',
-  );
+  await expect(page.locator('#app-right-rail')).toContainText('Select a ticket to see and edit its details');
 });
 
 test('merges unrelated external ticket fields and offers an editable merge for the active field', async ({ page }) => {
@@ -10010,7 +10052,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   let editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 
@@ -10102,7 +10144,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   await expect(editor).toHaveValue('Intro\nMiddle\nEnd');
@@ -10161,7 +10203,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
   const title = inspector.getByRole('textbox', { name: 'Ticket title' });
   await expect(title).toHaveValue('Fix the parser bug');
@@ -10220,7 +10262,7 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   const partial = 'they should have round borders and outl',
@@ -10261,12 +10303,13 @@ test('translates urgent priority through the canonical server contract', async (
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect.poll(() => patches.at(-1)?.priority).toBe('highest');
-  await expect(
-    page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]'),
-  ).toHaveJSProperty('value', 'urgent');
+  await expect(page.locator('#app-right-rail wa-select[name="inspector-priority"]')).toHaveJSProperty(
+    'value',
+    'urgent',
+  );
   await expect(
     page.locator(
-      '[data-component="ticket-inspector"] wa-select[name="inspector-priority"] .kui-select__icon--selected [data-lucide="chevrons-up"]',
+      '#app-right-rail wa-select[name="inspector-priority"] .kui-select__icon--selected [data-lucide="chevrons-up"]',
     ),
   ).toBeVisible();
 });
@@ -10279,7 +10322,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await page.getByRole('button', { name: /Archive/ }).click();
   const archived = page.locator('[data-ticket-slug="HS2-ARCH01"]');
   await archived.click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     status = inspector.locator('wa-select[name="inspector-status"]');
   await expect(status).toHaveJSProperty('value', 'archive');
   await expect(status).toHaveAttribute('aria-label', 'Change status, Archive');
@@ -10545,7 +10588,7 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await expect(page.locator('[data-ticket-slug]')).toHaveCount(1);
   await page.screenshot({ path: '/private/tmp/hs2-mwdr19-trash-view-wide.png' });
   await deleted.click({ button: 'right' });
-  await expect(page.locator('[data-component="ticket-inspector"] [data-status="deleted"]')).toContainText('Deleted');
+  await expect(page.locator('#app-right-rail [data-status="deleted"]')).toContainText('Deleted');
   const restore = page.locator('[data-context-action="Restore ticket"]');
   await expect(restore).toBeVisible();
   await expect(restore.locator('[data-lucide="archive-restore"]')).toBeVisible();
@@ -10663,7 +10706,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     status = inspector.locator('wa-select[name="inspector-status"]'),
     badge = status.locator('.kui-select__custom-selected [data-component="status-badge"]');
   const expectStatusGeometry = async (surface: Locator) => {
@@ -10740,7 +10783,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const sidebar = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const sidebar = page.locator('#app-right-rail');
   const expectDetailsSpacing = async (surface: Locator) => {
     await expect(async () => {
       const spacing = await surface.evaluate((node) => {
@@ -10789,7 +10832,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const details = inspector.getByRole('textbox', { name: 'Ticket details' });
   await details.fill('Autosaved details');
@@ -10835,7 +10878,7 @@ test('honors the first control click while ticket details is focused', async ({ 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const details = inspector.getByRole('textbox', { name: 'Ticket details' });
   await details.fill('Saved before the first action');
@@ -10856,7 +10899,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Add note' }).first().click();
   const composer = inspector.locator('[data-component="note-composer"]');
   await expect(composer.getByRole('textbox', { name: 'New note' })).toBeFocused();
@@ -10926,7 +10969,7 @@ test('aligns the empty Notes text and preserves Add note before the first note e
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   const add = inspector.locator('.ticket-notes__add');
   const expectEmptyNotes = async (surface: Locator, name: string) => {
     const notes = surface.locator('[data-component="ticket-notes"]');
@@ -10947,7 +10990,7 @@ test('aligns the empty Notes text and preserves Add note before the first note e
     expect(geometry.paddingBlock).toEqual(['0px', '0px']);
     const clip = await notes.evaluate((node) => {
       const notes = node.getBoundingClientRect(),
-        inspector = node.closest('[data-component="ticket-inspector"]')!.getBoundingClientRect();
+        inspector = node.closest('[data-component="ticket-inspector"], #app-right-rail')!.getBoundingClientRect();
       return { x: inspector.left, y: notes.top, width: inspector.width, height: notes.height };
     });
     await page.screenshot({ path: `/private/tmp/hs2-d4vee8-empty-notes-${name}.png`, clip });
@@ -10983,7 +11026,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
   await expect(info).toBeVisible();
   await expect(info.locator('[data-component="list-header"]')).toHaveCount(4);
@@ -11046,7 +11089,7 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   const title = inspector.getByRole('heading', { name: 'Use real project tickets' });
   await title.dblclick();
   const titleInput = inspector.getByRole('textbox', { name: 'Ticket title' });
@@ -11088,7 +11131,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('heading', { name: 'Use real project tickets' }).dblclick();
   await expect(inspector.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
   await expect(inspector.getByRole('combobox', { name: 'Add tag' })).toHaveCount(0);
@@ -11129,9 +11172,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.screenshot({ path: '/private/tmp/hs2-a32eak-activity-note-wide.png', fullPage: true });
   await page.locator('wa-select[name="inspector-status"]').click();
   await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();
-  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText(
-    'Completed',
-  );
+  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Completed');
   await page.getByRole('tab', { name: 'Timeline' }).click();
   await expect(page.getByText('Ticket created')).toBeVisible();
   await expect(page.getByText('Connected project client', { exact: true })).toBeVisible();
@@ -11180,16 +11221,16 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   });
   await expect(createdRow.getByRole('button', { name: 'Remove from Up Next' })).toBeVisible();
   await expect(createdRow).toHaveAttribute('data-selected', 'true');
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');
-  await expect(page.locator('[data-component="ticket-inspector"] [data-component="markdown-editor"]')).toHaveAttribute(
+  await expect(page.locator('#app-right-rail')).toContainText('HS2-NEW001');
+  await expect(page.locator('#app-right-rail [data-component="markdown-editor"]')).toHaveAttribute(
     'data-mode',
     'write',
   );
   await expect(page.getByRole('textbox', { name: 'Details' })).toHaveValue('Created with **Markdown** details.');
   await expect(page.getByRole('textbox', { name: 'Details' })).toBeFocused();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('client');
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Needs-Review');
+  await expect(page.locator('#app-right-rail')).toContainText('client');
+  await expect(page.locator('#app-right-rail')).toContainText('Needs-Review');
   await page.screenshot({ path: '/private/tmp/hs2-chzkr5-create-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
   await page.screenshot({ path: '/private/tmp/hs2-chzkr5-create-narrow.png', fullPage: true });
@@ -12223,7 +12264,7 @@ test('keeps the priority select open when opened right after creating a ticket (
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await form.getByRole('button', { name: 'Create ticket' }).click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     priority = inspector.locator('wa-select[name="inspector-priority"]');
   await priority.click();
   // The post-creation auto-focus of the details editor must not steal focus and close a popup the
@@ -12299,9 +12340,9 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   });
   await form.getByRole('button', { name: 'Create ticket' }).click();
   await expect.poll(() => uploads).toEqual(['final-proof.txt']);
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');
+  await expect(page.locator('#app-right-rail')).toContainText('HS2-NEW001');
   await page.getByRole('tab', { name: /Attachments/ }).click();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('final-proof.txt');
+  await expect(page.locator('#app-right-rail')).toContainText('final-proof.txt');
 });
 
 test('generates video posters in the browser for uploads and lazy backfills without blocking unsupported codecs', async ({
@@ -12743,7 +12784,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await inspector.evaluate((node: HTMLElement) => {
     node.style.width = '250px';
   });
@@ -12852,7 +12893,7 @@ test('renders canonical attachment references for filenames containing backticks
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     reference = inspector.getByRole('link', { name: filename });
   await expect(reference).toBeVisible();
   await expect(reference).toHaveAttribute('href', /\/attachments\/A-BACKTICK$/);
@@ -12922,7 +12963,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await gallery.getByRole('button', { name: 'Close image gallery' }).click();
   await expect.poll(() => writes.length).toBe(2);
   await page.getByRole('tab', { name: 'Info' }).click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+  const inspector = page.locator('#app-right-rail'),
     activity = inspector.locator('article').filter({ hasText: 'Annotations changed for' }).last();
   await expect(activity).toBeVisible();
   await expect(activity.getByRole('link', { name: 'attachment:proof.png' })).toBeVisible();
@@ -13278,7 +13319,7 @@ test('links ticket references in details and notes and layers the referenced tic
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const inspector = page.locator('#app-right-rail');
   const backlogLink = inspector.getByRole('link', { name: 'HS2-BACK01' }),
     archiveLink = inspector.getByRole('link', { name: 'HS2-ARCH01' });
   await expect(backlogLink).toBeVisible();
@@ -13287,7 +13328,10 @@ test('links ticket references in details and notes and layers the referenced tic
   await inspector.screenshot({ path: '/private/tmp/hs2-bd09b6-ticket-links.png' });
   await backlogLink.click();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-BACK01 in demo' })).toBeVisible();
-  await expect(inspector).toHaveAttribute('data-ticket-slug', 'HS2-DEMO01');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'HS2-DEMO01',
+  );
 });
 
 test('renders attachment identity from a selected real ticket', async ({ page }) => {
@@ -13302,8 +13346,8 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
-  await page.locator('[data-component="ticket-inspector"]').evaluate((node: HTMLElement) => {
+  await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
+  await page.locator('#app-right-rail').evaluate((node: HTMLElement) => {
     node.style.width = '250px';
   });
   await expect(
@@ -13346,7 +13390,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await gallery.screenshot({ path: '/private/tmp/hs2-64651d-gallery-wide.png' });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
-  await page.locator('[data-component="ticket-inspector"]').getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader.locator('dialog:modal')).toHaveCount(1);
   await reader.locator('.markdown-preview__attachment-image').click();
@@ -13420,32 +13464,26 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.screenshot({ path: '/private/tmp/hs2-note-reference-gallery-navigation.png', fullPage: true });
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: /Attachments/ }).click();
-  await page
-    .locator('[data-component="ticket-inspector"]')
-    .getByRole('heading', { name: 'Attachments' })
-    .scrollIntoViewIfNeeded();
+  await page.locator('#app-right-rail').getByRole('heading', { name: 'Attachments' }).scrollIntoViewIfNeeded();
   await item.click({ button: 'right' });
   attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
   await expect(attachmentMenu.getByRole('menuitem')).toHaveCount(6);
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  await page
-    .locator('[data-component="ticket-inspector"]')
-    .screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-wide.png' });
+  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-wide.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 940, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await item.scrollIntoViewIfNeeded();
   await more.click();
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  await page
-    .locator('[data-component="ticket-inspector"]')
-    .screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-narrow.png' });
+  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-narrow.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.locator('[data-component="ticket-inspector"]').evaluate((node: HTMLElement) => {
+  // Narrow the inspector body inside the right rail's panel content (HS2-QQW6CT).
+  await page.locator('#app-right-rail [data-component="ticket-inspector-body"]').evaluate((node: HTMLElement) => {
     node.style.width = '250px';
   });
-  const inspector = await page.locator('[data-component="ticket-inspector"]').elementHandle();
+  const inspector = await page.locator('#app-right-rail [data-component="ticket-inspector-body"]').elementHandle();
   const attachmentLayout = await item.evaluate((node, container) => {
     const filename = node.querySelector<HTMLElement>(':scope > span')!;
     filename.textContent = 'an-extremely-long-attachment-filename-that-must-ellipsis-before-the-actions.png';
@@ -13460,13 +13498,13 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     .getByLabel('Browse and add attachments')
     .setInputFiles({ name: 'new-proof.txt', mimeType: 'text/plain', buffer: Buffer.from('proof') });
   await expect(page.locator('[data-attachment-id="A3"]')).toContainText('new-proof.txt');
-  await page.locator('[data-component="ticket-inspector"]').evaluate((node) => {
+  await page.locator('#app-right-rail').evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['drop proof'], 'dropped-proof.txt', { type: 'text/plain' }));
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }));
   });
   await expect(page.locator('[data-attachment-id="A4"]')).toContainText('dropped-proof.txt');
-  await page.locator('[data-component="ticket-inspector"]').evaluate((node) => {
+  await page.locator('#app-right-rail').evaluate((node) => {
     class PromisedFile extends File {
       override arrayBuffer() {
         return Promise.reject(new TypeError('backing file is unavailable'));
@@ -13585,7 +13623,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await preview.dblclick();
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(reader).toHaveCount(0);
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   await expect(inspector.getByRole('textbox', { name: 'Ticket details' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit Ticket details' })).toContainText('The real ticket body.');
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
@@ -15358,7 +15396,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const inspector = page.getByRole('complementary', { name: 'Ticket inspector' }),
+  const inspector = page.locator('#app-right-rail'),
     first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START03"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
@@ -15415,7 +15453,7 @@ test('drops ticket selection across ticket views but preserves it across view mo
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     active = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await active.click();
   await expect(active).toHaveAttribute('data-selected', 'true');
@@ -15428,17 +15466,13 @@ test('drops ticket selection across ticket views but preserves it across view mo
   await expect(inspector).toContainText('HS2-DEMO01');
   await page.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
-  await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toContainText(
-    'Select a ticket to see and edit its details',
-  );
+  await expect(page.locator('#app-right-rail')).toContainText('Select a ticket to see and edit its details');
   const backlog = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-BACK01"]');
   await backlog.click();
   await expect(backlog).toHaveAttribute('data-selected', 'true');
   await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
-  await expect(page.getByRole('complementary', { name: 'Ticket inspector' })).toContainText(
-    'Select a ticket to see and edit its details',
-  );
+  await expect(page.locator('#app-right-rail')).toContainText('Select a ticket to see and edit its details');
 });
 
 test('styles completed and verified titles consistently in list and column rows', async ({ page }) => {
@@ -15475,9 +15509,7 @@ test('offers Up Next only on active tickets across rows and inspector', async ({
     ),
   ).toHaveCount(0);
   await page.getByText('Completed ticket', { exact: true }).click();
-  await expect(
-    page.locator('[data-component="ticket-inspector"] [data-action="toggle-inspector-up-next"]'),
-  ).toHaveCount(0);
+  await expect(page.locator('#app-right-rail [data-action="toggle-inspector-up-next"]')).toHaveCount(0);
   await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
   await expect(
     page.locator(
@@ -15624,7 +15656,7 @@ test('reports a completed ticket with note and evidence through one atomic provi
     'aria-label',
     'Remove from Up Next',
   );
-  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('The fix regressed after restart.');
+  await expect(page.locator('#app-right-rail')).toContainText('The fix regressed after restart.');
   await page.getByRole('tab', { name: 'Timeline' }).click();
   const timeline = page.locator('[data-component="ticket-timeline"]');
   await expect(timeline).toContainText('Brian reported as not working');
@@ -15692,7 +15724,7 @@ test('opens shared Markdown links safely in new tabs across the real inspector a
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]'),
+  const inspector = page.locator('#app-right-rail'),
     projectGuide = inspector.getByRole('link', { name: 'Project guide' });
   await expect(projectGuide).toHaveAttribute('target', '_blank');
   await expect(projectGuide).toHaveAttribute('rel', 'noopener noreferrer');
@@ -15717,7 +15749,7 @@ test('opens ticket references without leaving column view (HS2-230NY7)', async (
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Columns view').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.locator('[data-component="ticket-inspector"]').getByRole('link', { name: 'HS2-START02' }).click();
+  await page.locator('#app-right-rail').getByRole('link', { name: 'HS2-START02' }).click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
@@ -15814,7 +15846,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     const sourceRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
     await expect(sourceRow).toBeVisible();
     await sourceRow.click();
-    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+    const inspector = page.locator('#app-right-rail');
     await expect(inspector.getByRole('link', { name: 'HS2-OTHER1', exact: true })).toBeVisible();
     return inspector;
   };
@@ -15930,7 +15962,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
-  const inspector = page.locator('[data-component="ticket-inspector"]');
+  const inspector = page.locator('#app-right-rail');
   const legacyLink = inspector.getByRole('link', { name: 'HS-7', exact: true });
   await expect(legacyLink).toBeVisible();
   await expect(inspector.getByRole('link', { name: 'AB-1', exact: true })).toHaveCount(0);
@@ -16462,26 +16494,20 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   let response = nextPatch();
   await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();
   await response;
-  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText(
-    'Completed',
-  );
+  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Completed');
   await expect.poll(() => patches.filter((patch) => patch.status === 'completed').length).toBe(1);
   await page.locator('.app-shell__work-area').focus();
   response = nextPatch();
   await page.keyboard.press(`${shortcut}+z`);
   await response;
-  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText(
-    'Started',
-  );
+  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Started');
   await expect.poll(() => patches.filter((patch) => patch.status === 'started').length).toBe(1);
   await page.waitForTimeout(0);
   await page.locator('.app-shell__work-area').focus();
   response = nextPatch();
   await page.keyboard.press(`${shortcut}+Shift+z`);
   await response;
-  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText(
-    'Completed',
-  );
+  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Completed');
   await expect.poll(() => patches.filter((patch) => patch.status === 'completed').length).toBe(2);
   await ticket.focus();
   await page.keyboard.press(`${shortcut}+c`);
@@ -17013,7 +17039,7 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
       page.evaluate(() => (window as typeof window & { shortcutDefaults: boolean[] }).shortcutDefaults.at(-1)),
     )
     .toBe(true);
-  const inspectorSlug = page.locator('[data-component="ticket-inspector"] [data-component="toolbar-text"]');
+  const inspectorSlug = page.locator('#app-right-rail [data-component="toolbar-text"]');
   await inspectorSlug.click();
   await inspectorSlug.evaluate((node) => {
     const range = document.createRange();
@@ -17659,7 +17685,7 @@ test('live project visual review', async ({ page }) => {
   await page.locator('[data-component="ticket-list-row"]').first().click();
   expect((await loaded).status()).toBe(200);
   expect(pageErrors).toEqual([]);
-  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(page.locator('#app-right-rail')).toBeVisible();
   if (process.env.HOTSHEET_LIVE_ATTACHMENT) {
     await page.getByRole('tab', { name: /Attachments/ }).click();
     const uploaded = page.waitForResponse(
@@ -18797,7 +18823,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
       .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).close_reason)
       .toBe('works_as_designed');
     await page.locator('[data-ticket-slug]').filter({ hasText: created.title }).first().click();
-    const outcome = page.locator('[data-component="ticket-inspector"] [data-close-reason="works_as_designed"]');
+    const outcome = page.locator('#app-right-rail [data-close-reason="works_as_designed"]');
     await expect(outcome).toHaveText('Closed as works as designed');
     await expect(page.locator('.app-toast')).toContainText(`${created.slug} closed as works as designed.`);
     await page.screenshot({ path: '/private/tmp/claude/hs2-n11t22-closed-outcome.png' });
@@ -18853,7 +18879,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
-    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+    const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
       noteBadge = (id: string) =>
         inspector.locator(`article[data-note-id="${id}"] [data-component="confidence-badge"]`);
@@ -18958,7 +18984,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await page.goto('/?dev-review=false');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+    const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
       badge = card.locator('[data-component="confidence-badge"]'),
@@ -19063,7 +19089,7 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
-    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]'),
+    const inspector = page.locator('#app-right-rail'),
       card = (text: string) => inspector.locator(`[data-component="note-card"][data-note-id="${noteId(text)}"]`);
     const ai = card('Investigated by the agent.'),
       human = card('Reviewed by a person.'),
@@ -19188,7 +19214,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
-    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+    const inspector = page.locator('#app-right-rail');
     const status = inspector.locator('wa-select[name="inspector-status"]');
     await status.click();
     await status.locator('wa-option[value="completed"]').click();

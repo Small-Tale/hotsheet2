@@ -1,15 +1,14 @@
 import './terminal-ticket-rail.css';
 
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { PanelRightClose } from 'lucide';
 
 import { ContentTransition, type ContentTransitionDirection } from './content-transition';
+import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export interface TerminalTicketRailProps {
   projects: readonly { id: string; name: string }[];
@@ -25,7 +24,12 @@ export interface TerminalTicketRailProps {
   action?: SafeHtml;
 }
 
-export function TerminalTicketRail({
+/**
+ * The workspace grid's ticket rail as Workbench panel parts (HS2-QQW6CT): the panel toolbar holds the
+ * project selector and the standard rail toggle, and the content keeps the rail's push navigation
+ * between the ticket collection and the pushed ticket detail, which renders standalone inside it.
+ */
+export function terminalTicketRailPanel({
   projects,
   selectedProjectId,
   views = [],
@@ -37,7 +41,7 @@ export function TerminalTicketRail({
   direction = 'forward',
   title = 'Queue',
   action,
-}: TerminalTicketRailProps) {
+}: TerminalTicketRailProps): SidebarPanelParts {
   const heading = views.length ? (
     <div class="terminal-ticket-rail__view">
       <Select
@@ -54,35 +58,6 @@ export function TerminalTicketRail({
   );
   const root = (
     <section class="terminal-ticket-rail__root" aria-label="Project tickets">
-      <Toolbar
-        className="terminal-ticket-rail__project"
-        dividerSides=""
-        leading={
-          <ToolbarControlGroup single appearance="borderless">
-            <Select
-              presentation="toolbar-borderless"
-              name="terminal-rail-project"
-              value={selectedProjectId}
-              ariaLabel="Ticket rail project"
-              triggerWidth="max-content"
-              choices={projects.map((project) => ({ value: project.id, label: project.name }))}
-              renderSelected={(choice) => <span>{choice.label}</span>}
-            />
-          </ToolbarControlGroup>
-        }
-        trailing={
-          <ToolbarControlGroup appearance="borderless" single>
-            <button
-              type="button"
-              data-action="close-ticket-inspector"
-              aria-label="Hide ticket rail"
-              title="Hide ticket rail"
-            >
-              <LucideIcon icon={PanelRightClose} name="panel-right-close" />
-            </button>
-          </ToolbarControlGroup>
-        }
-      />
       {/* The shared WorkspaceControls groups are genuine Toolbar zone content here too (HS2-K9KWJJ). The
           rail is always narrower than Kerf's stack breakpoint, so the zone stacks and wraps at group
           granularity: the full-width view switcher takes the first row; sort, selection actions, and the
@@ -103,20 +78,51 @@ export function TerminalTicketRail({
       </div>
     </section>
   );
-  return (
-    <aside
-      class="terminal-ticket-rail"
-      data-component="terminal-ticket-rail"
-      data-screen={active}
-      aria-label="Ticket rail"
-    >
-      <ContentTransition
-        active={active === 'ticket' ? 'b' : 'a'}
-        direction={direction}
-        a={root}
-        b={inspector}
-        label="Ticket navigation"
-      />
-    </aside>
-  );
+  return {
+    label: 'Ticket rail',
+    toolbar: {
+      label: 'Ticket rail toolbar',
+      dividerSides: '',
+      leading: (
+        <ToolbarControlGroup single appearance="borderless">
+          <Select
+            className="terminal-ticket-rail__project"
+            presentation="toolbar-borderless"
+            name="terminal-rail-project"
+            value={selectedProjectId}
+            ariaLabel="Ticket rail project"
+            triggerWidth="max-content"
+            choices={projects.map((project) => ({ value: project.id, label: project.name }))}
+            renderSelected={(choice) => <span>{choice.label}</span>}
+          />
+        </ToolbarControlGroup>
+      ),
+    },
+    toggle: inspectorToggle('ticket rail'),
+    content: (
+      <section
+        class="terminal-ticket-rail"
+        data-component="terminal-ticket-rail"
+        data-screen={active}
+        aria-label="Ticket rail"
+      >
+        <ContentTransition
+          active={active === 'ticket' ? 'b' : 'a'}
+          direction={direction}
+          a={root}
+          b={inspector}
+          label="Ticket navigation"
+        />
+      </section>
+    ),
+    pane: {},
+  };
+}
+
+/** The ticket rail rendered standalone from its panel parts (the UX catalog). */
+export function TerminalTicketRail({
+  collapseControl = false,
+  ...props
+}: TerminalTicketRailProps & { collapseControl?: boolean }) {
+  return <SidebarPane parts={terminalTicketRailPanel(props)} side="right" collapseControl={collapseControl} />;
 }

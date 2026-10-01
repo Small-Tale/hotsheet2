@@ -297,13 +297,16 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   await mockLayeredProjects(page);
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
-  const workspaceInspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+  const workspaceInspector = page.locator('#app-right-rail');
   const inspectorLink = workspaceInspector.getByRole('link', { name: '@target-project/HS2-LINK01' });
   await inspectorLink.click();
   const first = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await expect(first).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Kerf' })).toHaveAttribute('aria-selected', 'true');
-  await expect(workspaceInspector).toHaveAttribute('data-ticket-slug', 'KF-ROOT01');
+  await expect(workspaceInspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
   await first.getByRole('link', { name: '@third-project/HS2-LINK01' }).click();
   const third = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
   await expect(third).toBeVisible();
@@ -322,7 +325,10 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   await expect(first).toHaveCount(0);
   await expect(inspectorLink).toBeFocused();
   await expect(page.getByRole('tab', { name: projects.source.name })).toHaveAttribute('aria-selected', 'true');
-  await expect(workspaceInspector).toHaveAttribute('data-ticket-slug', 'KF-ROOT01');
+  await expect(workspaceInspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
 });
 
 test('layers links above an existing reader and closes one level at a time', async ({ page }) => {
@@ -345,10 +351,7 @@ test('edits same-slug linked readers through their owning project and flushes be
   await mockLayeredProjects(page, mutations);
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
-  await page
-    .locator('[data-component="ticket-inspector"][data-presentation="sidebar"]')
-    .getByRole('link', { name: '@target-project/HS2-LINK01' })
-    .click();
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const targetReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await targetReader.getByRole('link', { name: '@third-project/HS2-LINK01' }).click();
   const deepReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
@@ -371,7 +374,7 @@ test('edits same-slug linked readers through their owning project and flushes be
       ['third-project', 'git-deep:deep', 'Deep project draft stays with git-deep.'],
       ['target-project', 'git-target:target', 'Target project draft stays with git-target.'],
     ]);
-  await expect(page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]')).toHaveAttribute(
+  await expect(page.locator('#app-right-rail [data-component="ticket-inspector-header"]')).toHaveAttribute(
     'data-ticket-slug',
     'KF-ROOT01',
   );
@@ -448,10 +451,7 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   });
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
-  await page
-    .locator('[data-component="ticket-inspector"][data-presentation="sidebar"]')
-    .getByRole('link', { name: '@target-project/HS2-LINK01' })
-    .click();
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await reader.locator('[data-action="edit-markdown"]').dblclick();
   const editor = reader.getByRole('textbox', { name: 'Ticket details' });

@@ -28,13 +28,15 @@ describe('CorruptTicketRow', () => {
   });
 
   it('presents the full error and recovery actions in an inspector', () => {
-    const markup = String(CorruptTicketInspector({ ticket: corrupt }));
+    const markup = String(CorruptTicketInspector({ ticket: corrupt, collapseControl: true }));
     expect(markup).toContain('data-component="corrupt-ticket-inspector"');
     expect(markup).toContain('Ticket parsing error');
     expect(markup).toContain('unsupported content follows the bounded Notes section');
     expect(markup).toContain('data-action="reveal-corrupt-ticket"');
     expect(markup).toContain('Attempt AI repair');
-    expect(markup).toContain('data-action="close-ticket-inspector"');
+    expect(markup).toContain('data-action="toggle-ticket-inspector"');
+    expect(markup).toContain('aria-label="Hide ticket inspector"');
+    expect(markup).toContain('data-component="corrupt-ticket-inspector-header"');
   });
 
   it('falls back through id, filename, and a generic label', () => {

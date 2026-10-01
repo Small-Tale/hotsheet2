@@ -200,7 +200,7 @@ for (const width of [390, 1280]) {
             'true',
           );
           await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
-          await page.getByRole('button', { name: 'Hide inspector' }).click();
+          await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
         } else await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
         if (index === 1) {
           await expect.poll(() => uploads.length).toBe(3);

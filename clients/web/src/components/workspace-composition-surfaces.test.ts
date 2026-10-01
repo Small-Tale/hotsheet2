@@ -48,15 +48,19 @@ describe('workspace composition surfaces', () => {
     expect(source).not.toMatch(
       /function (Sidebar|Workspace|TerminalRail|GlobalWorkspace|ProjectTerminalDrawer|TerminalOperations)\(/,
     );
-    for (const surface of [
-      'WorkspaceSurface',
-      'TerminalRailSurface',
-      'GlobalWorkspaceSurface',
-      'ProjectTerminalDrawerSurface',
-    ])
+    for (const surface of ['WorkspaceSurface', 'GlobalWorkspaceSurface', 'ProjectTerminalDrawerSurface'])
       expect(source).toContain(`<${surface}`);
-    // The left rail takes panel parts the Workbench composes (HS2-RWGQWN).
-    for (const panel of ['sidebarSurfacePanel', 'terminalOperationsSurfacePanel'])
+    // Both rails take panel parts the Workbench composes (HS2-RWGQWN, HS2-QQW6CT).
+    for (const panel of [
+      'sidebarSurfacePanel',
+      'terminalOperationsSurfacePanel',
+      'terminalRailSurfacePanel',
+      'inspectorPanel',
+      'inspectorPlaceholderPanel',
+      'inspectorSkeletonPanel',
+      'notificationInspectorSurfacePanel',
+      'corruptInspectorPanel',
+    ])
       expect(source).toContain(`${panel}(`);
   });
 });

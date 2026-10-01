@@ -11,8 +11,8 @@ import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab
 import { QuickTicketComposer, QuickTicketLauncher } from '../components/quick-ticket-composer';
 import { terminalOperationsPanel } from '../components/terminal-operations-sidebar';
 import { TicketBoard } from '../components/ticket-board';
-import { TicketInspector } from '../components/ticket-inspector';
-import { TicketInspectorPlaceholder } from '../components/ticket-inspector-placeholder';
+import { ticketInspectorPanel } from '../components/ticket-inspector';
+import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import {
@@ -384,30 +384,28 @@ export function AppShellDemo() {
         terminalDrawerVisible={shellTerminalDrawerVisible.value}
         inspectorSize={shellInspectorSize.value}
         inspector={
-          projectSettings ? (
-            <TicketInspectorPlaceholder selectionCount={0} />
-          ) : (
-            <TicketInspector
-              slug={ticket.slug}
-              title={ticket.title}
-              status={ticket.status}
-              priority={ticket.priority}
-              category={ticket.category}
-              tags={ticket.tags}
-              details={markdownValue.value}
-              detailsMode={markdownMode.value}
-              detailsDirty={markdownValue.value !== markdownSavedValue.value}
-              notes={readerNotes.value}
-              editingNoteId={editingNoteId.value}
-              noteDraft={noteDraft.value}
-              providerName="Hot Sheet git"
-              updatedLabel={ticket.updatedLabel}
-              activeTab={inspectorTab.value}
-              upNext={ticket.upNext}
-              codeReview={inspectorCodeReview}
-              latestConfidence={latestDemoConfidence(readerNotes.value)}
-            />
-          )
+          projectSettings
+            ? ticketInspectorPlaceholderPanel({ selectionCount: 0 })
+            : ticketInspectorPanel({
+                slug: ticket.slug,
+                title: ticket.title,
+                status: ticket.status,
+                priority: ticket.priority,
+                category: ticket.category,
+                tags: ticket.tags,
+                details: markdownValue.value,
+                detailsMode: markdownMode.value,
+                detailsDirty: markdownValue.value !== markdownSavedValue.value,
+                notes: readerNotes.value,
+                editingNoteId: editingNoteId.value,
+                noteDraft: noteDraft.value,
+                providerName: 'Hot Sheet git',
+                updatedLabel: ticket.updatedLabel,
+                activeTab: inspectorTab.value,
+                upNext: ticket.upNext,
+                codeReview: inspectorCodeReview,
+                latestConfidence: latestDemoConfidence(readerNotes.value),
+              })
         }
         inspectorVisible={inspectorOpen.value}
       />

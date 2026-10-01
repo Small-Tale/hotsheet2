@@ -210,6 +210,7 @@ export function TerminalTicketRailDemo() {
   return (
     <section class="terminal-ticket-rail-demo">
       <TerminalTicketRail
+        collapseControl
         projects={[
           { id: 'demo', name: 'Demo project' },
           { id: 'docs', name: 'Documentation and release planning' },
@@ -246,7 +247,7 @@ export function TerminalTicketRailDemo() {
             <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />
           )
         }
-        inspector={<TicketInspectorDemo />}
+        inspector={<TicketInspectorDemo collapseControl={false} />}
         active="root"
         action={<QuickTicketLauncher label="Ticket…" />}
       />
@@ -492,7 +493,8 @@ export function TicketInspectorSettings() {
   );
 }
 
-export function TicketInspectorDemo() {
+/** `collapseControl` mirrors the rail's standard toggle; the terminal rail's pushed detail omits it. */
+export function TicketInspectorDemo({ collapseControl = true }: { collapseControl?: boolean } = {}) {
   const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
   return (
     <section class="inspector-demo" aria-label="TicketInspector demo">
@@ -524,9 +526,10 @@ export function TicketInspectorDemo() {
           latestConfidence={latestDemoConfidence(readerNotes.value)}
           liveClaim={demoLiveClaim()}
           codeReview={inspectorCodeReview}
+          collapseControl={collapseControl}
         />
       ) : (
-        <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>
+        <wa-button data-action="toggle-ticket-inspector">Open ticket inspector</wa-button>
       )}
       <p class="component-stage__event" aria-live="polite">
         {collectionEvent.value}
@@ -538,7 +541,7 @@ export function TicketInspectorDemo() {
 export function TicketInspectorSkeletonDemo() {
   return (
     <section class="inspector-demo" aria-label="TicketInspectorSkeleton demo">
-      <TicketInspectorSkeleton slug="HS2-4J50K3" />
+      <TicketInspectorSkeleton slug="HS2-4J50K3" collapseControl />
     </section>
   );
 }

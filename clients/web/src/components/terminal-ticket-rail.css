@@ -19,10 +19,9 @@
   overflow: hidden;
   flex-direction: column;
 }
-/* Kerf beta.60 public tokens: the close control hugs the trailing edge and the project Select's
-   selected name reads at body size in the normal text color. */
+/* Kerf beta.60 public tokens: the project Select in the rail's panel toolbar (HS2-QQW6CT) reads its
+   selected name at body size in the normal text color. */
 .terminal-ticket-rail__project {
-  --kui-toolbar-trailing-justify-self: end;
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
   --kui-select-selected-font-size: var(--wa-font-size-m);
 }

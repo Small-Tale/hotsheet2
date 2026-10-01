@@ -195,10 +195,20 @@ and identity-less legacy entries remain conservatively blocking.
   (HS2-RWGQWN): the toggle carries `aria-controls`/`aria-expanded` and names the panel it
   shows ("Show project sidebar", "Show notification sidebar"), and the Workbench relocates it
   to the leading edge of the workspace toolbar while the rail is collapsed, so the shell
-  composes no Show/Hide sidebar controls of its own. The ticket inspector and its loading
-  skeleton render a Kerf `Pane` (fixed header chrome, scrolling content) inside their app
-  card; the right rail pads that card for the device safe areas, so no app rule insets the
-  inspector.
+  composes no Show/Hide sidebar controls of its own. The right rail works the same way
+  (HS2-QQW6CT): every right-rail surface — the ticket inspector, its loading skeleton, the
+  empty/multi-selection placeholder, the notification inspector, the unreadable-ticket recovery
+  surface, and the workspace grid's ticket rail — exposes panel parts with one standard toggle
+  (`toggle-ticket-inspector`, "Hide/Show ticket inspector", "… notification inspector", or
+  "… ticket rail"). The panel toolbar carries the ticket number and actions (the ticket rail: its
+  project selector), the panel's fixed `header` keeps the inspector's title, live-claim notice,
+  needs-review and confidence notices, close outcome, duplicates, field conflict, and section
+  tabs pinned while the one Pane content scrolls, and the Workbench relocates the toggle to the
+  trailing edge of the workspace toolbar while the rail is collapsed; Kerf's Pane pads the
+  header and content slots for the device safe areas. The ticket rail's push navigation into
+  ticket detail stays its panel content, with the detail rendered standalone inside it. The
+  reader modal is not a Workbench panel: it renders the same parts through `SidebarPane` with
+  its own close and text-size controls instead of the rail toggle.
   The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
   clearing, and typing in search must not pan the whole workspace, including across desktop/mobile
   resize. Embedded AI conversations also opt into flex shrink containment so their header,

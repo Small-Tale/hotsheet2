@@ -103,9 +103,19 @@ maximum and drag-past-minimum collapse. The left rail is a Workbench toolbar pan
 config), the shell spreads them into the rail through `workbenchSidebarPanel()`, and the
 Workbench renders the panel's toolbar with the collapse toggle and relocates that toggle into
 the workspace toolbar while the rail is collapsed; the standalone components render the same
-parts as a Kerf `Pane` through `SidebarPane` for the catalog. The right rail's inspector
-surfaces (`TicketInspector`, `TicketInspectorSkeleton`) render a Kerf `Pane` inside their app
-card, so the rail pads the card for safe areas and `mobile-side-panels.css` is gone.
+parts as a Kerf `Pane` through `SidebarPane` for the catalog. The right rail is a Workbench
+toolbar panel too (HS2-QQW6CT): `ticketInspectorPanel`, `ticketInspectorSkeletonPanel`,
+`ticketInspectorPlaceholderPanel`, `notificationInspectorPanel`, `corruptTicketInspectorPanel`,
+and `terminalTicketRailPanel` return `SidebarPanelParts` with an optional fixed `header` (Kerf
+`KF-ZBW7MS`) and the shared `inspectorToggle()` (`toggle-ticket-inspector`), routed by
+`ticket-inspector-surface.tsx`; the shell spreads them into the right rail and composes no Show
+inspector control of its own. Because the Workbench owns the panel's Pane root, the inspector's
+identity (`data-ticket-slug`, `data-needs-review`, `data-presentation`) and attachment drop
+target live on its app-owned `ticket-inspector-header` and `ticket-inspector-body` wrappers, and
+inspector CSS scopes to those wrappers. The standalone components (`TicketInspector` for the
+reader modal, the terminal rail's pushed detail, and the catalog) render the parts inside their
+`[data-component]` card through `SidebarPane`; `collapseControl` mirrors the rail toggle in the
+catalog. `mobile-side-panels.css` is gone.
 Magnified terminal mode suppresses side-panel
 separators through the typed policy, and terminal focus mode lifts the drawer through the
 public `--kui-workbench-popup-z` token instead of descendant CSS. The main column (shell

@@ -1,17 +1,32 @@
 import type { CorruptTicket } from '../api';
-import { CorruptTicketInspector, type CorruptTicketRecoveryState } from './corrupt-ticket-row';
-import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
-import { TicketInspectorPlaceholder } from './ticket-inspector-placeholder';
+import { corruptTicketInspectorPanel, type CorruptTicketRecoveryState } from './corrupt-ticket-row';
+import { notificationInspectorPanel } from './notification-inspector';
+import type { SidebarPanelParts } from './sidebar-panel';
+import { ticketInspectorPanel, type TicketInspectorProps } from './ticket-inspector';
+import { ticketInspectorPlaceholderPanel } from './ticket-inspector-placeholder';
+import { ticketInspectorSkeletonPanel } from './ticket-inspector-skeleton';
 
-export function Inspector(props: TicketInspectorProps) {
-  return <TicketInspector {...props} />;
+/**
+ * The application shell's right-rail surfaces as Workbench panel parts (HS2-QQW6CT). Each routes to
+ * one surface's parts, so every surface shares the standard toggle the Workbench relocates.
+ */
+export function inspectorPanel(props: TicketInspectorProps): SidebarPanelParts {
+  return ticketInspectorPanel(props);
 }
 
-export function InspectorPlaceholder({ selectionCount }: { selectionCount: number }) {
-  return <TicketInspectorPlaceholder selectionCount={selectionCount} />;
+export function inspectorPlaceholderPanel({ selectionCount }: { selectionCount: number }): SidebarPanelParts {
+  return ticketInspectorPlaceholderPanel({ selectionCount });
 }
 
-export function CorruptInspector({
+export function inspectorSkeletonPanel({ slug }: { slug?: string }): SidebarPanelParts {
+  return ticketInspectorSkeletonPanel({ slug });
+}
+
+export function notificationInspectorSurfacePanel(): SidebarPanelParts {
+  return notificationInspectorPanel();
+}
+
+export function corruptInspectorPanel({
   ticket,
   recovery,
   selectionCount,
@@ -19,10 +34,6 @@ export function CorruptInspector({
   ticket?: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
   selectionCount: number;
-}) {
-  return ticket ? (
-    <CorruptTicketInspector ticket={ticket} recovery={recovery} />
-  ) : (
-    <InspectorPlaceholder selectionCount={selectionCount} />
-  );
+}): SidebarPanelParts {
+  return ticket ? corruptTicketInspectorPanel({ ticket, recovery }) : inspectorPlaceholderPanel({ selectionCount });
 }

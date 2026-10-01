@@ -11,24 +11,13 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Pane } from '@kerfjs/ui/pane';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { TabBar } from '@kerfjs/ui/tab-bar';
-import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import {
-  Activity,
-  BookOpen,
-  Info,
-  ListTree,
-  MessageSquareCode,
-  MessageSquareText,
-  PanelRightClose,
-  Paperclip,
-  Plus,
-} from 'lucide';
+import { Activity, BookOpen, Info, ListTree, MessageSquareCode, MessageSquareText, Paperclip, Plus } from 'lucide';
 
+import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketPrioritySelect } from './ticket-priority-select';
 import { TicketStatusMenu } from './ticket-status-menu';
@@ -70,64 +59,52 @@ function PlaceholderNote({ kind, card = false }: { kind: 'activity' | 'regular';
  * value slots use the framework's native component `placeholder` mode and `Skeleton` block, so the
  * metadata controls track the real Select sizes automatically instead of hand-maintained CSS
  * (HS2-KWWSWY). The inspector still looks like the inspector; only the per-ticket values are absent.
+ * Like the inspector it exposes Workbench panel parts (HS2-QQW6CT): the same toolbar, standard
+ * toggle, fixed header, and scrolling content.
  */
-export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
-  const actions = (
-    <ToolbarControlGroup appearance="borderless" label="Ticket actions">
-      <button type="button" aria-label="Open ticket reader" title="Open ticket reader" tabIndex={-1}>
-        <LucideIcon icon={BookOpen} name="book-open" />
-      </button>
-      <button type="button" data-action="close-ticket-inspector" aria-label="Hide inspector" title="Hide inspector">
-        <LucideIcon icon={PanelRightClose} name="panel-right-close" />
-      </button>
-    </ToolbarControlGroup>
-  );
-  return (
-    <aside
-      class="ticket-inspector ticket-inspector--placeholder"
-      data-component="ticket-inspector-skeleton"
-      aria-busy="true"
-      aria-label="Loading ticket"
-    >
-      <Pane
-        element="div"
-        header={
-          <>
-            <div class="ticket-inspector__header">
-              <Toolbar
-                dividerSides=""
-                center={
-                  slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />
-                }
-                trailing={actions}
+export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): SidebarPanelParts {
+  return {
+    label: 'Loading ticket',
+    toolbar: {
+      label: 'Ticket inspector toolbar',
+      dividerSides: '',
+      center: slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />,
+      trailing: (
+        <ToolbarControlGroup appearance="borderless" label="Ticket actions">
+          <button type="button" aria-label="Open ticket reader" title="Open ticket reader" tabIndex={-1}>
+            <LucideIcon icon={BookOpen} name="book-open" />
+          </button>
+        </ToolbarControlGroup>
+      ),
+    },
+    toggle: inspectorToggle(),
+    header: (
+      <div class="ticket-inspector__header ticket-inspector--placeholder" aria-hidden="true">
+        <div class="ticket-inspector__ph-title">
+          <Skeleton height={rem(1.25)} />
+          <Skeleton width={pct(62)} height={rem(1.25)} />
+        </div>
+        <div class="ticket-inspector__tabs-frame">
+          <TabBar id="ticket-inspector-loading" label="Ticket inspector sections" className="ticket-inspector__tabs">
+            {TABS.map((tab) => (
+              <AppTab
+                id={tab.id}
+                name={tab.label}
+                selected={tab.id === 'info'}
+                closable={false}
+                placeholder
+                leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
               />
-              <div class="ticket-inspector__ph-title" aria-hidden="true">
-                <Skeleton height={rem(1.25)} />
-                <Skeleton width={pct(62)} height={rem(1.25)} />
-              </div>
-            </div>
-            <div aria-hidden="true">
-              <div class="ticket-inspector__tabs-frame">
-                <TabBar
-                  id="ticket-inspector-loading"
-                  label="Ticket inspector sections"
-                  className="ticket-inspector__tabs"
-                >
-                  {TABS.map((tab) => (
-                    <AppTab
-                      id={tab.id}
-                      name={tab.label}
-                      selected={tab.id === 'info'}
-                      closable={false}
-                      placeholder
-                      leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
-                    />
-                  ))}
-                </TabBar>
-              </div>
-            </div>
-          </>
-        }
+            ))}
+          </TabBar>
+        </div>
+      </div>
+    ),
+    content: (
+      <div
+        class="ticket-inspector__body ticket-inspector--placeholder"
+        data-component="ticket-inspector-skeleton-body"
+        aria-busy="true"
       >
         <div class="ticket-inspector__content" aria-hidden="true">
           <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
@@ -186,7 +163,30 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
             <Skeleton width={rem(4)} height={rem(0.6875)} />
           </footer>
         </div>
-      </Pane>
+      </div>
+    ),
+    pane: {},
+  };
+}
+
+/** The skeleton rendered standalone (the terminal rail's pushed detail and the UX catalog). */
+export function TicketInspectorSkeleton({
+  slug,
+  collapseControl = false,
+}: { slug?: string; collapseControl?: boolean } = {}) {
+  return (
+    <aside
+      class="ticket-inspector ticket-inspector--placeholder"
+      data-component="ticket-inspector-skeleton"
+      aria-busy="true"
+      aria-label="Loading ticket"
+    >
+      <SidebarPane
+        parts={ticketInspectorSkeletonPanel({ slug })}
+        element="div"
+        side="right"
+        collapseControl={collapseControl}
+      />
     </aside>
   );
 }

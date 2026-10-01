@@ -158,11 +158,10 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     completePointerDetailsFinish,
     schedulePointerDetailsFinish,
   } = dependencies;
-  delegate(document.body, 'click', '[data-action="close-ticket-inspector"]', () => {
-    setInspectorVisible(false);
-  });
-  delegate(document.body, 'click', '[data-action="open-ticket-inspector"]', () => {
-    setInspectorVisible(true);
+  // Every right-rail surface shares the Workbench's standard toggle, in the open rail's toolbar or
+  // relocated to the workspace toolbar while the rail is collapsed (HS2-QQW6CT).
+  delegate(document.body, 'click', '[data-action="toggle-ticket-inspector"]', () => {
+    setInspectorVisible(inspectorCollapsed.value);
   });
   delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
     setSidebarVisible(sidebarCollapsed.value);

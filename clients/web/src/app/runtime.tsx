@@ -82,7 +82,6 @@ import { MainShell } from '../components/main-shell';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
 import { NotificationCenter } from '../components/notification-center';
-import { NotificationInspector } from '../components/notification-inspector';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
 import {
   ProjectCloseDialog,
@@ -129,9 +128,16 @@ import {
 import { TicketBoard } from '../components/ticket-board';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { TicketEmptyStateProps } from '../components/ticket-empty-state';
-import { type InspectorTab, type TicketInspectorProps } from '../components/ticket-inspector';
+import { type InspectorTab, TicketInspector, type TicketInspectorProps } from '../components/ticket-inspector';
+import { TicketInspectorPlaceholder } from '../components/ticket-inspector-placeholder';
 import { TicketInspectorSkeleton } from '../components/ticket-inspector-skeleton';
-import { CorruptInspector, Inspector, InspectorPlaceholder } from '../components/ticket-inspector-surface';
+import {
+  corruptInspectorPanel,
+  inspectorPanel,
+  inspectorPlaceholderPanel,
+  inspectorSkeletonPanel,
+  notificationInspectorSurfacePanel,
+} from '../components/ticket-inspector-surface';
 import { type TicketLinkChoice, TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketList } from '../components/ticket-list';
 import { showTicketReaderDialog, type TicketReaderDialogElement } from '../components/ticket-reader';
@@ -145,7 +151,7 @@ import {
   type SidebarSurfaceProps,
   terminalOperationsSurfacePanel,
   type TerminalOperationsSurfaceProps,
-  TerminalRailSurface,
+  terminalRailSurfacePanel,
   type TerminalRailSurfaceProps,
   WorkspaceSurface,
   type WorkspaceSurfaceProps,
@@ -2626,9 +2632,7 @@ export async function startHotSheetWebClient() {
         row.focus({ preventScroll: true });
         return;
       }
-      const inspector = document.querySelector<HTMLElement>(
-        '[data-component="ticket-inspector"][data-presentation="sidebar"] [data-action="open-ticket-reader"]',
-      );
+      const inspector = document.querySelector<HTMLElement>('#app-right-rail [data-action="open-ticket-reader"]');
       if (inspector) {
         inspector.focus({ preventScroll: true });
         return;
@@ -4231,11 +4235,11 @@ export async function startHotSheetWebClient() {
           <LucideIcon icon={ChevronLeft} name="chevron-left" />
         </button>
         {railInspectorProps ? (
-          <Inspector {...railInspectorProps} />
+          <TicketInspector {...railInspectorProps} />
         ) : railTransitioning ? (
           <TicketInspectorSkeleton slug={selectedTicketSlugs.value[0]} />
         ) : (
-          <InspectorPlaceholder selectionCount={selectedTicketSlugs.value.length} />
+          <TicketInspectorPlaceholder selectionCount={selectedTicketSlugs.value.length} />
         )}
       </div>
     );
@@ -4495,9 +4499,7 @@ export async function startHotSheetWebClient() {
           }
           workspace={<GlobalWorkspaceSurface {...globalWorkspaceSurfaceProps()} />}
           workspacePresentation="edge-to-edge"
-          inspector={
-            shellMode.value === 'terminals' ? <TerminalRailSurface {...terminalRailSurfaceProps()} /> : undefined
-          }
+          inspector={shellMode.value === 'terminals' ? terminalRailSurfacePanel(terminalRailSurfaceProps()) : undefined}
           inspectorVisible={!inspectorCollapsed.value}
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
@@ -4675,23 +4677,21 @@ export async function startHotSheetWebClient() {
         }
         sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
         inspector={
-          viewMode.value === 'notifications' ? (
-            <NotificationInspector />
-          ) : viewMode.value === 'settings' ? (
-            <InspectorPlaceholder selectionCount={0} />
-          ) : corruptKey ? (
-            <CorruptInspector
-              ticket={corruptTicket}
-              recovery={corruptKey ? corruptRecovery.value[corruptKey] : undefined}
-              selectionCount={selectedTicketSlugs.value.length}
-            />
-          ) : inspectorProps ? (
-            <Inspector {...inspectorProps} />
-          ) : selectedTransitioning ? (
-            <TicketInspectorSkeleton slug={selectedSlug} />
-          ) : (
-            <InspectorPlaceholder selectionCount={selectedTicketSlugs.value.length} />
-          )
+          viewMode.value === 'notifications'
+            ? notificationInspectorSurfacePanel()
+            : viewMode.value === 'settings'
+              ? inspectorPlaceholderPanel({ selectionCount: 0 })
+              : corruptKey
+                ? corruptInspectorPanel({
+                    ticket: corruptTicket,
+                    recovery: corruptRecovery.value[corruptKey],
+                    selectionCount: selectedTicketSlugs.value.length,
+                  })
+                : inspectorProps
+                  ? inspectorPanel(inspectorProps)
+                  : selectedTransitioning
+                    ? inspectorSkeletonPanel({ slug: selectedSlug })
+                    : inspectorPlaceholderPanel({ selectionCount: selectedTicketSlugs.value.length })
         }
         inspectorVisible={!inspectorCollapsed.value}
         inspectorSize={inspectorSize.value}

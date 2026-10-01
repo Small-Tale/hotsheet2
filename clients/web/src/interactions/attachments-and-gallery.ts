@@ -28,6 +28,11 @@ import { data } from './dom';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
+const ATTACHMENT_DROP_TARGET = '[data-attachment-drop-target="true"]';
+/** The shell's right rail while its panel shows the ticket inspector (not the terminal rail's list). */
+export const INSPECTOR_RAIL_DROP_TARGET =
+  '#app-right-rail:has(> .kui-workbench__panel-content > .kui-pane > .kui-pane__header [data-component="ticket-inspector-header"])';
+
 export interface AttachmentAndGalleryInteractionsDependencies {
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly tickets: Signal<TicketRow[]>;
@@ -135,14 +140,19 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     if (slug && input.files?.length) void addAttachments(slug, input.files);
     input.value = '';
   });
-  delegate(document.body, 'dragover', '[data-attachment-drop-target="true"]', (event, target) => {
+  // The shell's right rail is a Workbench panel whose toolbar and padding Kerf owns (HS2-QQW6CT), so a
+  // drop anywhere on the rail while it shows a ticket inspector attaches to that ticket; the app-owned
+  // header and body wrappers carry the highlight.
+  const dropTargets = `${ATTACHMENT_DROP_TARGET}, ${INSPECTOR_RAIL_DROP_TARGET}`;
+  delegate(document.body, 'dragover', dropTargets, (event, target) => {
     event.preventDefault();
-    (target as HTMLElement).dataset.draggingAttachment = 'true';
+    if ((target as HTMLElement).matches(ATTACHMENT_DROP_TARGET))
+      (target as HTMLElement).dataset.draggingAttachment = 'true';
   });
-  delegate(document.body, 'dragleave', '[data-attachment-drop-target="true"]', (_event, target) => {
+  delegate(document.body, 'dragleave', ATTACHMENT_DROP_TARGET, (_event, target) => {
     delete (target as HTMLElement).dataset.draggingAttachment;
   });
-  delegate(document.body, 'drop', '[data-attachment-drop-target="true"]', (event, target) => {
+  delegate(document.body, 'drop', dropTargets, (event, target) => {
     event.preventDefault();
     const element = target as HTMLElement;
     delete element.dataset.draggingAttachment;

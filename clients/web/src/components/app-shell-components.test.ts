@@ -32,6 +32,14 @@ const sidebarParts = (name: string): SidebarPanelParts => ({
   pane: {},
 });
 
+const inspectorParts = (content: string, name = 'ticket inspector'): SidebarPanelParts => ({
+  label: name,
+  toolbar: { label: `${name} toolbar` },
+  toggle: { action: 'toggle-ticket-inspector', name },
+  content: content as never,
+  pane: {},
+});
+
 describe('application shell components', () => {
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
@@ -520,7 +528,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
-        inspector: 'inspect' as never,
+        inspector: inspectorParts('inspect'),
         mobile: true,
         sidePanelSeparator: 'hidden',
       }),
@@ -538,7 +546,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
-        inspector: 'ticket rail' as never,
+        inspector: inspectorParts('ticket rail', 'ticket rail'),
       }),
     );
     expect(markup).toContain('data-region-id="app-left-rail"');
@@ -552,7 +560,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
-        inspector: 'ticket rail' as never,
+        inspector: inspectorParts('ticket rail', 'ticket rail'),
         inspectorVisible: false,
       }),
     );
@@ -590,7 +598,7 @@ describe('application shell components', () => {
         }),
         composer: 'compose' as never,
         workspace: 'work' as never,
-        inspector: 'inspect' as never,
+        inspector: inspectorParts('inspect'),
         banner: 'banner' as never,
         overlay: 'overlay' as never,
         viewportOverlay: 'viewport-overlay' as never,
@@ -632,7 +640,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
-        inspector: 'inspect' as never,
+        inspector: inspectorParts('inspect'),
       }),
     );
     expect(globalMarkup).toContain('data-mode="stats"');
@@ -645,7 +653,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('operations sidebar'),
         header: 'head' as never,
         workspace: 'terminals' as never,
-        inspector: 'tickets' as never,
+        inspector: inspectorParts('tickets', 'ticket rail'),
       }),
     );
     expect(terminalMarkup).toContain('aria-label="Operations rail"');
@@ -682,11 +690,16 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
-        inspector: 'inspect' as never,
+        inspector: inspectorParts('inspect'),
         inspectorVisible: false,
       }),
     );
     expect(hiddenInspectorMarkup).toContain('aria-label="Show ticket inspector"');
+    // The Workbench relocates the right rail's standard toggle to the trailing edge of the workspace
+    // toolbar; the shell composes no Show control of its own (HS2-QQW6CT).
+    expect(hiddenInspectorMarkup).not.toContain('open-ticket-inspector');
+    expect(hiddenInspectorMarkup.match(/data-action="toggle-ticket-inspector"/g)).toHaveLength(2);
+    expect(hiddenInspectorMarkup).toContain('aria-controls="app-right-rail"');
     expect(hiddenInspectorMarkup).toContain('data-region-id="app-right-rail"');
     expect(hiddenInspectorMarkup).toContain('data-collapsed="true"');
   });

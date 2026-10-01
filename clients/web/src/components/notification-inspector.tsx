@@ -1,28 +1,18 @@
 import './notification-inspector.css';
 
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { PanelRightClose } from 'lucide';
+import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
-export function NotificationInspector() {
-  return (
-    <aside class="notification-inspector-empty" aria-label="Notification inspector">
-      <Toolbar
-        dividerSides=""
-        trailing={
-          <ToolbarControlGroup appearance="borderless" single>
-            <button
-              type="button"
-              data-action="close-ticket-inspector"
-              aria-label="Hide notification inspector"
-              title="Hide notification inspector"
-            >
-              <LucideIcon icon={PanelRightClose} name="panel-right-close" />
-            </button>
-          </ToolbarControlGroup>
-        }
-      />
-    </aside>
-  );
+/** The notifications view's (empty) inspector panel parts for the Workbench's right rail (HS2-QQW6CT). */
+export function notificationInspectorPanel(): SidebarPanelParts {
+  return {
+    label: 'Notification inspector',
+    toolbar: { label: 'Notification inspector toolbar', dividerSides: '' },
+    toggle: inspectorToggle('notification inspector'),
+    content: <div class="notification-inspector-empty" data-component="notification-inspector" />,
+    pane: {},
+  };
+}
+
+export function NotificationInspector({ collapseControl = false }: { collapseControl?: boolean } = {}) {
+  return <SidebarPane parts={notificationInspectorPanel()} side="right" collapseControl={collapseControl} />;
 }

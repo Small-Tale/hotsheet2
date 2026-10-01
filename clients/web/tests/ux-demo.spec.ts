@@ -868,8 +868,11 @@ test('represents aggregate and per-project terminal operations in the UX catalog
 test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
-  const rail = page.locator('[data-component="terminal-ticket-rail"]'),
-    project = rail.locator('wa-select[name="terminal-rail-project"]'),
+  // The rail renders as Workbench panel parts (HS2-QQW6CT): its panel toolbar holds the project
+  // selector and the standard toggle above the push-navigation content.
+  const panel = page.locator('.terminal-ticket-rail-demo'),
+    rail = page.locator('[data-component="terminal-ticket-rail"]'),
+    project = panel.locator('wa-select[name="terminal-rail-project"]'),
     view = rail.locator('wa-select[name="terminal-rail-view"]'),
     launcher = rail.getByRole('button', { name: 'Ticket…' });
   await expect(rail).toBeVisible();
@@ -878,7 +881,11 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(launcher).toContainText('Ticket…');
   await expect(launcher).not.toContainText('New ticket');
-  await expect(rail.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Hide ticket rail' })).toHaveAttribute(
+    'data-action',
+    'toggle-ticket-inspector',
+  );
   await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);
   await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style', 'push');
   const geometry = await rail.evaluate((node) => {
@@ -887,8 +894,10 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
-      projectChrome = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__project')!),
+      project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      projectChrome = getComputedStyle(
+        document.querySelector<HTMLElement>('.terminal-ticket-rail-demo .kui-pane__header > .kui-toolbar')!,
+      ),
       controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading .kui-toolbar')!),
       headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
@@ -998,10 +1007,11 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   expect(viewMenuGeometry.labelScrollWidth - viewMenuGeometry.labelClientWidth).toBeLessThanOrEqual(1);
   await page.screenshot({ path: '/private/tmp/hs2-7n6f67-terminal-ticket-rail-view-menu-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
-  // HS2-HEYASQ: the rail clips overflow on several ancestors, so the select focus rings must be inset
-  // (negative outline-offset) to stay fully visible rather than cropped at a container edge.
+  // HS2-HEYASQ: the rail content clips overflow on several ancestors, so the view select's focus ring
+  // must be inset (negative outline-offset) to stay fully visible rather than cropped at a container
+  // edge. The project select sits in the panel toolbar's padded control band instead (HS2-QQW6CT).
   const focusRingOffsets = await rail.evaluate((node) =>
-    ['terminal-rail-project', 'terminal-rail-view'].map((name) => {
+    ['terminal-rail-view'].map((name) => {
       const combobox = node
         .querySelector<HTMLElement>(`wa-select[name="${name}"]`)!
         .shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!;
@@ -3413,7 +3423,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
         tabSelect = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-app-tab__select')!);
       return {
         headerBottom: header.paddingBottom,
-        titleMargin: [title.marginTop, title.marginLeft],
+        titleMargin: [title.marginTop, title.marginLeft, title.marginBottom],
         tabsMargin: [tabs.marginRight, tabs.marginBottom],
         tabsInset: [tabsFrame.paddingLeft, tabsFrame.paddingRight, tabsFrame.paddingBottom],
         tabsPadding: tabs.paddingTop,
@@ -3422,8 +3432,10 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
       };
     }),
   ).toEqual({
-    headerBottom: '16px',
-    titleMargin: ['4px', '16px'],
+    // The header holds the title, notices, and tabs under the panel toolbar (HS2-QQW6CT), so the
+    // title owns the space below it.
+    headerBottom: '0px',
+    titleMargin: ['4px', '16px', '16px'],
     tabsMargin: ['0px', '0px'],
     tabsInset: ['8px', '8px', '8px'],
     tabsPadding: '0px',
@@ -3627,7 +3639,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-attachment-id]')).toHaveCount(2);
   await expect(inspector.getByLabel('2 attachments')).toBeVisible();
   await expect(inspector.locator('[data-action="toggle-inspector-up-next"]')).toHaveCount(0);
-  await inspector.getByRole('button', { name: 'Hide inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
   await expect(inspector).toHaveCount(0);
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
   const reopened = page.locator('[data-component="ticket-inspector"]');
@@ -5050,7 +5062,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['state-banner', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector'])
+  for (const component of ['state-banner', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector-header'])
     await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   // The header identity and controls are Toolbar zone children, not wrapper components (HS2-EZ1N7Z).
   await expect(shell.locator('.kui-toolbar__leading > .workspace-header__identity')).toHaveCount(1);
@@ -5070,7 +5082,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
       .getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
     const workArea = node.querySelector('.app-shell__work-area')!.getBoundingClientRect();
-    const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
+    const inspector = node.querySelector('#app-right-rail')!.getBoundingClientRect();
     return {
       shellTop: shellRect.top,
       toolbarTop: toolbar.top,
@@ -5109,7 +5121,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.locator('.project-tab-bar [data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
   await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-wide.png', fullPage: true });
   await expect(
-    shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]'),
+    shell.getByRole('button', { name: 'Hide ticket inspector' }).locator('[data-lucide="panel-right-close"]'),
   ).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
@@ -5136,7 +5148,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
   await expect(shellComposer).toBeHidden();
   const inspectorToolbarAlignment = await shell
-    .locator('.ticket-inspector__header > [data-component="toolbar"]')
+    .locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]')
     .evaluate((node) => {
       const slug = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
       const controls = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
@@ -5200,7 +5212,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shell.getByRole('tab', { name: 'Info' }).click();
   await expect(shell.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const inspectorExpandedWidth = Number(await inspectorHandle.getAttribute('aria-valuenow'));
-  await shell.getByRole('button', { name: 'Hide inspector' }).click();
+  await shell.getByRole('button', { name: 'Hide ticket inspector' }).click();
   const showInspector = shell.getByRole('button', { name: 'Show ticket inspector' });
   await expect(showInspector).toBeVisible();
   const collapsedInspector = shell.locator('#app-right-rail');
@@ -5215,7 +5227,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="tab-bar"]')).toHaveCount(0);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showInspector.click();
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(shell.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
   const crampedToolbar = await shell
     .locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')
@@ -5292,7 +5304,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(shell.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
+  await expect(shell.locator('#app-right-rail [data-component="ticket-inspector-placeholder"]')).toBeVisible();
   for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) {
     const control = shell.getByRole('button', { name });
     if (await control.count()) await expect(control).toHaveAttribute('disabled', '');
@@ -5300,7 +5312,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer-launcher"]')).toBeVisible();
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(shell.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await shell.getByRole('button', { name: 'Search tickets' }).click();
   const shellSearch = shell.getByRole('searchbox', { name: 'Search tickets' });
   await expect(shellSearch).toBeFocused();
@@ -5319,7 +5331,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
   await expect(shell.locator('#app-right-rail')).toHaveAttribute('aria-label', 'Tickets rail');
   await expect(shell.locator('#app-right-rail')).toBeVisible();
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(shell.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.locator('.workspace-header__identity').getByText('Workspace grid', { exact: true })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Workspace grid workspace' })).toBeVisible();
@@ -5331,7 +5343,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await shell.getByRole('tab', { name: /Hot Sheet 2/ }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
   await expect(shell.locator('#app-left-rail')).toBeVisible();
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await expect(shell.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await expect(shell.locator('.view-mode-switcher')).toBeVisible();
   await shell.locator('[data-component="project-summary"]').click();
   await expect(shell).toHaveAttribute('data-mode', 'stats');
@@ -5755,7 +5767,7 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   await expect(skeleton).toHaveAttribute('aria-busy', 'true');
   // It IS the inspector: same aside chrome, working collapse control, real segmented tab bar.
   await expect(skeleton).toHaveClass(/\bticket-inspector--placeholder\b/);
-  await expect(skeleton.getByRole('button', { name: 'Hide inspector' })).toBeVisible();
+  await expect(skeleton.getByRole('button', { name: 'Hide ticket inspector' })).toBeVisible();
   await expect(skeleton.locator('.ticket-inspector__tabs [data-component="app-tab"]')).toHaveCount(4);
   // Real controls/section headers are drawn; only the per-ticket values are placeholders.
   for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes', 'Activity']) {
