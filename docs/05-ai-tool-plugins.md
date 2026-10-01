@@ -846,6 +846,19 @@ still served by the unscoped `GET`/`PUT /ai-settings` and `hotsheet-cli ai-setti
 saved value is validated against the installed providers; one that names an uninstalled tool is
 ignored on read.
 
+Each provider also keeps **its own default model and effort** (HS2-EK24KF). The saved value's
+optional `providers` map (`{ "<tool>": { "model": …, "effort": … } }`) records one entry per
+provider; the top-level `tool`/`model`/`effort` stay the default provider's choice and its entry
+mirrors them. A provider without an entry falls back to its manifest default model and effort.
+Saving validates every entry for an installed provider (an invalid one is rejected with
+`provider '<tool>': …`), keeps the entries of providers that are not installed on this machine so
+reinstalling restores them, and drops invalid stored entries on read. Switching the default
+provider carries that provider's own entry to the top level and keeps the outgoing default's
+choice as its entry, so switching back restores it. Project Settings → AI tools shows the
+default-provider Select and then one Model/Effort pair per installed provider; the CLI's
+`hotsheet-cli ai-settings set-provider --tool <id> [--model <id>] [--effort <level>] [--global]`
+saves one provider's entry without changing the default.
+
 The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
 Codex app-server supplies its current paginated `model/list` catalog at runtime.
 OpenCode and Antigravity declare their installed-runtime catalog commands (`opencode models`

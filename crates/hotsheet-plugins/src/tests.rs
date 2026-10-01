@@ -332,6 +332,7 @@ fn plugin_model_catalog_suggests_models_without_rejecting_manual_ids() {
             tool: "codex".into(),
             model: Some("legacy model \"beta\"".into()),
             effort: None,
+            ..AiToolDefaults::default()
         },
     )
     .unwrap();
@@ -342,6 +343,7 @@ fn plugin_model_catalog_suggests_models_without_rejecting_manual_ids() {
                 tool: "codex".into(),
                 model: Some("   ".into()),
                 effort: None,
+                ..AiToolDefaults::default()
             },
         )
         .is_err()
@@ -560,5 +562,88 @@ fn hotsheet_home_respects_env_and_avoids_hs1_dir() {
         !dir.to_string_lossy().contains("/.hotsheet/"),
         "must not live under ~/.hotsheet (HS1): {}",
         dir.display()
+    );
+}
+
+/// HS2-EK24KF: per-provider defaults validate per installed provider, survive a provider being
+/// uninstalled, mirror the default provider's selection, and an invalid entry is dropped on read.
+#[test]
+fn per_provider_ai_defaults_merge_validate_and_sanitize() {
+    let tool = |id: &str, models: &[(&str, &[&str])]| AiToolDescriptor {
+        id: id.into(),
+        display_name: id.into(),
+        models: models
+            .iter()
+            .map(|(model, efforts)| ModelSpec {
+                id: (*model).into(),
+                label: (*model).into(),
+                effort_levels: efforts.iter().map(|effort| (*effort).into()).collect(),
+            })
+            .collect(),
+        default_model: models.first().map(|(model, _)| (*model).into()),
+        default_effort: None,
+        actions: Vec::new(),
+    };
+    let tools = vec![
+        tool(
+            "claude",
+            &[("sonnet", &["low", "high"]), ("opus", &["high"])],
+        ),
+        tool("codex", &[("gpt", &["medium"])]),
+    ];
+    let entry = |model: &str, effort: Option<&str>| AiProviderDefaults {
+        model: Some(model.into()),
+        effort: effort.map(Into::into),
+    };
+    let previous = AiToolDefaults {
+        tool: "claude".into(),
+        model: Some("sonnet".into()),
+        effort: Some("low".into()),
+        providers: BTreeMap::from([
+            ("gemini".into(), entry("flash", None)),
+            ("codex".into(), entry("gpt", Some("medium"))),
+        ]),
+    };
+    // Switching the default to Codex keeps Claude's choice, the uninstalled Gemini entry, and
+    // mirrors the default selection into its own entry.
+    let submitted = AiToolDefaults {
+        tool: "codex".into(),
+        model: Some("gpt".into()),
+        effort: Some("medium".into()),
+        providers: BTreeMap::from([("claude".into(), entry("opus", Some("high")))]),
+    };
+    let saved = prepare_ai_defaults_for_save(&tools, &submitted, Some(&previous)).unwrap();
+    assert_eq!(saved.tool, "codex");
+    assert_eq!(saved.providers["claude"], entry("opus", Some("high")));
+    assert_eq!(saved.providers["codex"], entry("gpt", Some("medium")));
+    assert_eq!(saved.providers["gemini"], entry("flash", None));
+    // An installed provider's entry must validate; the error names the provider.
+    let invalid = AiToolDefaults {
+        providers: BTreeMap::from([("claude".into(), entry("opus", Some("low")))]),
+        ..submitted.clone()
+    };
+    let error = prepare_ai_defaults_for_save(&tools, &invalid, None).unwrap_err();
+    assert!(error.contains("provider 'claude'"), "{error}");
+    // Reading drops entries that no longer validate (uninstalled or stale) but keeps the rest.
+    let stale = AiToolDefaults {
+        providers: BTreeMap::from([
+            ("claude".into(), entry("opus", Some("low"))),
+            ("codex".into(), entry("gpt", Some("medium"))),
+            ("gemini".into(), entry("flash", None)),
+        ]),
+        ..submitted
+    };
+    let sanitized = sanitize_ai_defaults(&tools, stale);
+    assert_eq!(
+        sanitized.providers.keys().collect::<Vec<_>>(),
+        vec!["codex"]
+    );
+    // A value saved before HS2-EK24KF (no providers) still deserializes and round-trips.
+    let legacy: AiToolDefaults =
+        serde_json::from_str(r#"{"tool":"codex","model":"gpt","effort":"medium"}"#).unwrap();
+    assert!(legacy.providers.is_empty());
+    assert_eq!(
+        serde_json::to_string(&legacy).unwrap(),
+        r#"{"tool":"codex","model":"gpt","effort":"medium"}"#
     );
 }

@@ -973,7 +973,12 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
     let defaults: serde_json::Value = serde_json::from_slice(&read.stdout).unwrap();
     assert_eq!(
         defaults,
-        serde_json::json!({"tool":"codex","model":"legacy model \"beta\"","effort":"high"})
+        serde_json::json!({
+            "tool": "codex",
+            "model": "legacy model \"beta\"",
+            "effort": "high",
+            "providers": {"codex": {"model": "legacy model \"beta\"", "effort": "high"}}
+        })
     );
     // HS2-SW5S13: the plain `set` is this project's choice, so nothing machine-wide was written.
     assert!(!home.join("settings.json").is_file());
@@ -1010,13 +1015,45 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
         .success();
     assert!(home.join("settings.json").is_file());
     assert_eq!(
-        read_json(&["ai-settings", "get", "--json", "--global"]),
-        serde_json::json!({"tool":"codex","model":"legacy model \"beta\"","effort":"low"})
+        read_json(&["ai-settings", "get", "--json", "--global"])["effort"],
+        "low"
     );
     // The project's own choice still wins over the machine-wide fallback.
     assert_eq!(
         read_json(&["ai-settings", "get", "--json"])["effort"],
         "high"
+    );
+    // HS2-EK24KF: a non-default provider gets its own default model without changing the default.
+    let claude = bin.join("claude");
+    std::fs::write(&claude, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&claude, std::fs::metadata(&codex).unwrap().permissions()).unwrap();
+    let set_provider = read_json(&[
+        "ai-settings",
+        "set-provider",
+        "--tool",
+        "claude",
+        "--model",
+        "custom-claude",
+    ]);
+    assert_eq!(set_provider["tool"], "codex");
+    let project = read_json(&["ai-settings", "get", "--json"]);
+    assert_eq!(project["tool"], "codex");
+    assert_eq!(project["providers"]["claude"]["model"], "custom-claude");
+    assert_eq!(project["providers"]["codex"]["effort"], "high");
+    // Making Claude the default keeps Codex's choice.
+    read_json(&[
+        "ai-settings",
+        "set",
+        "--tool",
+        "claude",
+        "--model",
+        "custom-claude",
+    ]);
+    let switched = read_json(&["ai-settings", "get", "--json"]);
+    assert_eq!(switched["tool"], "claude");
+    assert_eq!(
+        switched["providers"]["codex"]["model"],
+        "legacy model \"beta\""
     );
 }
 

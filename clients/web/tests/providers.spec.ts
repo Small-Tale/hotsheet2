@@ -10579,7 +10579,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.screenshot({ path: '/private/tmp/hs2-8xrcyx-haiku-without-effort-narrow.png', fullPage: true });
 });
 
-test('configures plugin-discovered machine-local AI defaults and exposes Claude Fable effort', async ({ page }) => {
+test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-EK24KF)', async ({ page }) => {
   const saves: unknown[] = [];
   await mockProject(page);
   page.on('request', (request) => {
@@ -10594,43 +10594,84 @@ test('configures plugin-discovered machine-local AI defaults and exposes Claude 
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     tool = settings.locator('wa-select[name="ai-default-tool"]'),
-    model = settings.locator('wa-select[name="ai-default-model"]'),
-    effort = settings.locator('wa-select[name="ai-default-effort"]'),
-    modelOption = (id: string) => model.locator(`wa-option[value="${id}"]`);
+    provider = (id: string) => settings.locator(`[data-ai-provider="${id}"]`),
+    model = (id: string) => settings.locator(`wa-select[name="ai-provider-model-${id}"]`),
+    effort = (id: string) => settings.locator(`wa-select[name="ai-provider-effort-${id}"]`),
+    modelOption = (toolId: string, id: string) => model(toolId).locator(`wa-option[value="${id}"]`);
   await expect(settings).toBeVisible();
   await expect(tool).toHaveAttribute('value', 'codex');
-  await expect(model).toHaveAttribute('value', 'gpt-6-astra');
+  await expect(provider('codex')).toHaveAttribute('data-ai-provider-default', 'true');
+  await expect(provider('codex').getByText('Codex (default)')).toBeVisible();
+  await expect(provider('claude')).toHaveAttribute('data-ai-provider-default', 'false');
+  await expect(model('codex')).toHaveAttribute('value', 'gpt-6-astra');
+  await expect(effort('codex')).toHaveAttribute('value', 'medium');
+  // A provider with no saved entry shows its manifest defaults.
+  await expect(model('claude')).toHaveAttribute('value', 'sonnet');
+  await expect(effort('claude')).toHaveAttribute('value', 'medium');
   for (const id of ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.3-codex-spark'])
-    await expect(modelOption(id)).toBeAttached();
-  await expect(model.getByText('Other…')).toBeAttached();
-  const settingsGeometry = await settings.evaluate((node) => {
-    const description = node.querySelector<HTMLElement>(':scope > p')!.getBoundingClientRect(),
-      grid = node.querySelector<HTMLElement>('.ai-tool-settings__grid')!,
-      gridBox = grid.getBoundingClientRect(),
-      controls = [...grid.children].map((control) => control.getBoundingClientRect());
+    await expect(modelOption('codex', id)).toBeAttached();
+  for (const id of ['fable', 'opus', 'sonnet', 'haiku']) await expect(modelOption('claude', id)).toBeAttached();
+  await expect(model('codex').getByText('Other…')).toBeAttached();
+  const geometry = await settings.evaluate((node) => {
+    const box = (selector: string) => node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
     return {
-      sectionGap: gridBox.top - description.bottom,
-      fieldGaps: [controls[1].top - controls[0].bottom, controls[2].top - controls[1].bottom],
+      sectionGap: box('.ai-tool-settings__default').top - box(':scope > p').bottom,
+      providerGap: box('[data-ai-provider="claude"]').top - box('[data-ai-provider="codex"]').bottom,
+      sideBySide: box('[name="ai-provider-effort-codex"]').top === box('[name="ai-provider-model-codex"]').top,
     };
   });
-  expect(settingsGeometry.sectionGap).toBeCloseTo(24, 0);
-  expect(settingsGeometry.fieldGaps).toEqual([16, 16]);
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-ai-tool-settings-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 1024, height: 600 });
-  await page.waitForTimeout(250);
-  await expect(modelOption('gpt-5.3-codex-spark')).toBeAttached();
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-ai-tool-settings-narrow.png', fullPage: true });
+  expect(geometry).toEqual({ sectionGap: 24, providerGap: 24, sideBySide: true });
+  await page.screenshot({ path: test.info().outputPath('ai-provider-defaults-wide.png'), fullPage: true });
+  // A non-default provider keeps its own model and effort without changing the default.
+  await model('claude').click();
+  await modelOption('claude', 'fable').click();
+  await expect(effort('claude')).toBeEnabled();
+  await effort('claude').click();
+  for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
+    await expect(effort('claude').locator(`wa-option[value="${level}"]`)).toBeVisible();
+  await effort('claude').locator('wa-option[value="high"]').click();
+  await expect
+    .poll(() => saves.at(-1))
+    .toEqual({
+      tool: 'codex',
+      model: 'gpt-6-astra',
+      effort: 'medium',
+      providers: { claude: { model: 'fable', effort: 'high' } },
+    });
+  await expect(tool).toHaveAttribute('value', 'codex');
+  await expect(model('codex')).toHaveAttribute('value', 'gpt-6-astra');
+  // Switching the default carries that provider's own choice to the top level.
   await tool.click();
   await tool.locator('wa-option[value="claude"]').click();
-  await expect.poll(() => saves).toEqual([{ tool: 'claude', model: 'sonnet', effort: 'medium' }]);
-  for (const id of ['fable', 'opus', 'sonnet', 'haiku']) await expect(modelOption(id)).toBeAttached();
-  await model.click();
-  await modelOption('fable').click();
-  await expect(effort).toBeEnabled();
-  await effort.click();
-  for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
-    await expect(effort.locator(`wa-option[value="${level}"]`)).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-r9bss0-claude-fable-effort.png', fullPage: true });
+  await expect
+    .poll(() => saves.at(-1))
+    .toEqual({
+      tool: 'claude',
+      model: 'fable',
+      effort: 'high',
+      providers: { claude: { model: 'fable', effort: 'high' }, codex: { model: 'gpt-6-astra', effort: 'medium' } },
+    });
+  await expect(provider('claude').getByText('Claude (default)')).toBeVisible();
+  await expect(provider('codex')).toHaveAttribute('data-ai-provider-default', 'false');
+  await expect(model('claude')).toHaveAttribute('value', 'fable');
+  await expect(effort('claude')).toHaveAttribute('value', 'high');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const narrow = await settings.evaluate((node) => {
+    const box = (selector: string) => node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+    return {
+      stacked: box('[name="ai-provider-effort-claude"]').top > box('[name="ai-provider-model-claude"]').bottom,
+      fits: node.scrollWidth <= node.clientWidth,
+    };
+  });
+  expect(narrow).toEqual({ stacked: true, fits: true });
+  await page.screenshot({ path: test.info().outputPath('ai-provider-defaults-narrow.png'), fullPage: true });
+  // Switching back restores the first provider's own choice.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await tool.click();
+  await tool.locator('wa-option[value="codex"]').click();
+  await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'codex', model: 'gpt-6-astra', effort: 'medium' });
+  await expect(model('claude')).toHaveAttribute('value', 'fable');
   await expect(settings).toContainText('Saved for this project on this machine.');
 });
 
@@ -10650,7 +10691,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
-    model = settings.locator('wa-select[name="ai-default-model"]'),
+    model = settings.locator('wa-select[name="ai-provider-model-codex"]'),
     custom = 'claude legacy "beta"';
   await model.click();
   await model.getByText('Other…').click();
@@ -10662,16 +10703,25 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.screenshot({ path: '/private/tmp/hs2-p28pv9-other-model-dialog-wide.png', fullPage: true });
   await page.getByRole('textbox', { name: /Model identifier/ }).fill(custom);
   await dialogHost.getByRole('button', { name: 'Use model' }).click();
-  await expect.poll(() => saves.at(-1)).toEqual({ tool: 'codex', model: custom });
+  await expect
+    .poll(() => saves.at(-1))
+    .toEqual({ tool: 'codex', model: custom, providers: { codex: { model: custom } } });
   await expect(model).toHaveAttribute('value', custom);
   await expect(model.locator(`wa-option[value='${custom}']`)).toBeAttached();
-  await expect(settings.locator('wa-select[name="ai-default-effort"]')).toHaveJSProperty('disabled', true);
+  await expect(settings.locator('wa-select[name="ai-provider-effort-codex"]')).toHaveJSProperty('disabled', true);
   await page.setViewportSize({ width: 760, height: 640 });
   await model.click();
   await page.waitForTimeout(250);
   await page.screenshot({ path: '/private/tmp/hs2-p28pv9-selected-manual-model-narrow.png', fullPage: true });
   await model.locator('wa-option[value="gpt-6-astra"]').click();
-  await expect.poll(() => saves.at(-1)).toEqual({ tool: 'codex', model: 'gpt-6-astra', effort: 'low' });
+  await expect
+    .poll(() => saves.at(-1))
+    .toEqual({
+      tool: 'codex',
+      model: 'gpt-6-astra',
+      effort: 'low',
+      providers: { codex: { model: 'gpt-6-astra', effort: 'low' } },
+    });
   await expect(model.locator(`wa-option[value='${custom}']`)).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List view').click();
@@ -10785,16 +10835,18 @@ test('shows runtime-discovered Antigravity and OpenCode model catalogs', async (
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     tool = settings.locator('wa-select[name="ai-default-tool"]'),
-    model = settings.locator('wa-select[name="ai-default-model"]');
+    model = settings.locator('wa-select[name="ai-provider-model-antigravity"]'),
+    opencode = settings.locator('wa-select[name="ai-provider-model-opencode"]');
   await expect(tool).toHaveAttribute('value', 'antigravity');
   await expect(model).toHaveAttribute('value', 'gemini-3.8-flash-high');
   await expect(model.locator('wa-option[value="claude-sonnet-4-6"]')).toBeAttached();
   await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-antigravity-models-wide.png', fullPage: true });
   await tool.click();
   await tool.locator('wa-option[value="opencode"]').click();
-  await expect(model).toHaveAttribute('value', 'opencode/big-pickle');
+  await expect(opencode).toHaveAttribute('value', 'opencode/big-pickle');
+  await expect(settings.locator('[data-ai-provider="opencode"]')).toHaveAttribute('data-ai-provider-default', 'true');
   await page.setViewportSize({ width: 760, height: 640 });
-  await expect(model.locator('wa-option[value="openai/gpt-5.6"]')).toBeAttached();
+  await expect(opencode.locator('wa-option[value="openai/gpt-5.6"]')).toBeAttached();
   await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-opencode-models-narrow.png', fullPage: true });
 });
 

@@ -408,7 +408,9 @@ session_options = ["model", "effort"]
         serde_json::json!({
             "tool": "ci-fixture",
             "model": "fixture-model",
-            "effort": "high"
+            "effort": "high",
+            // HS2-EK24KF: the default provider's own entry mirrors the default selection.
+            "providers": {"ci-fixture": {"model": "fixture-model", "effort": "high"}}
         })
     );
 
@@ -542,8 +544,58 @@ session_options = ["model", "effort"]
     assert_eq!(global.status(), StatusCode::OK);
     assert_eq!(
         get(beta).await,
-        serde_json::json!({"tool":"ci-fixture","model":"fixture-model","effort":"high"})
+        serde_json::json!({
+            "tool": "ci-fixture",
+            "model": "fixture-model",
+            "effort": "high",
+            "providers": {"ci-fixture": {"model": "fixture-model", "effort": "high"}}
+        })
     );
+    // HS2-EK24KF: a provider that is not installed keeps its saved choice across saves, and an
+    // installed provider's entry must validate.
+    let with_absent = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{beta}/ai-settings"),
+            Some(
+                r#"{"tool":"ci-fixture","model":"fixture-model","effort":"low","providers":{"absent-tool":{"model":"x"}}}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(with_absent.status(), StatusCode::OK);
+    let resaved = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{beta}/ai-settings"),
+            Some(r#"{"tool":"ci-fixture","model":"other-model","effort":"low"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resaved.status(), StatusCode::OK);
+    let (beta_root, _) = &checkouts[1];
+    let stored = std::fs::read_to_string(beta_root.join(".hotsheet2/settings.local.json")).unwrap();
+    assert!(stored.contains("absent-tool"), "{stored}");
+    // Served values only list providers that are installed and valid.
+    let served = get(beta).await;
+    assert_eq!(
+        served["providers"],
+        serde_json::json!({"ci-fixture": {"model": "other-model", "effort": "low"}})
+    );
+    let bad_entry = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{beta}/ai-settings"),
+            Some(
+                r#"{"tool":"ci-fixture","model":"fixture-model","providers":{"ci-fixture":{"model":"fixture-model","effort":"extreme"}}}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bad_entry.status(), StatusCode::BAD_REQUEST);
     assert_eq!(get(alpha).await["model"], "other-model");
     // An uninstalled tool is rejected for a project exactly as for the machine-wide value.
     let invalid = router

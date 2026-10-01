@@ -381,10 +381,20 @@ export interface AiToolDescriptor {
   default_effort?: string;
   actions?: Array<'change_model' | 'change_effort'>;
 }
+/** One provider's default model and effort (HS2-EK24KF). */
+export interface AiProviderDefaults {
+  model?: string;
+  effort?: string;
+}
+/**
+ * A project's AI defaults: the default provider with its model and effort, plus every provider's
+ * own default model and effort keyed by tool id (HS2-EK24KF).
+ */
 export interface AiToolDefaults {
   tool: string;
   model?: string;
   effort?: string;
+  providers?: Record<string, AiProviderDefaults>;
 }
 export interface ToolConnection {
   id: string;

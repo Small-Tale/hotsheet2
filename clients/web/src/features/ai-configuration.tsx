@@ -2,6 +2,7 @@ import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
 
 import { type ConversationState, EMPTY_CONVERSATION } from '../ai-conversation';
+import { providerSelection, withDefaultProvider, withProviderSelection } from '../ai-provider-defaults';
 import { type AiToolDefaults, type AiToolDescriptor, Api, type CommandDefinition, type ToolConnection } from '../api';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
@@ -70,9 +71,21 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     );
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function normalizedAiSelection(value:Partial<AiToolDefaults>={}):AiToolDefaults{const tool=value.tool??aiDefaults.value.tool??aiTools.value[0]?.id??'codex',descriptor=aiTools.value.find(item=>item.id===tool),model=value.model??(tool===aiDefaults.value.tool?aiDefaults.value.model:undefined)??descriptor?.default_model??descriptor?.models[0]?.id,modelDescriptor=descriptor?.models.find(item=>item.id===model),efforts=modelDescriptor?.effort_levels??[],requestedEffort=value.effort??(tool===aiDefaults.value.tool&&model===aiDefaults.value.model?aiDefaults.value.effort:undefined)??descriptor?.default_effort,effort=requestedEffort&&efforts.includes(requestedEffort)?requestedEffort:efforts.at(0);return{tool,...(model?{model}:{}),...(effort?{effort}:{})}}
+  /**
+   * A complete selection for a request: the requested tool (else the project's default provider)
+   * with the requested model and effort, else that provider's own saved defaults (HS2-EK24KF), else
+   * its manifest defaults; the effort is kept only when the model supports it.
+   */
+  function normalizedAiSelection(value: Partial<AiToolDefaults> = {}): AiToolDefaults {
+    const tool = value.tool ?? (aiDefaults.value.tool || aiTools.value[0]?.id || 'codex'),
+      base = providerSelection(aiDefaults.value, aiTools.value, tool),
+      descriptor = aiTools.value.find((item) => item.id === tool),
+      model = value.model ?? base.model,
+      efforts = descriptor?.models.find((item) => item.id === model)?.effort_levels ?? [],
+      requestedEffort = value.effort ?? (model === base.model ? base.effort : undefined) ?? descriptor?.default_effort,
+      effort = requestedEffort && efforts.includes(requestedEffort) ? requestedEffort : efforts.at(0);
+    return { tool, ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  }
 
   function effectiveCommandAiSelection(command: CommandDefinition): AiToolDefaults {
     return normalizedAiSelection({
@@ -98,11 +111,23 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     };
   }
 
-  function selectDefaultModel(model: string) {
+  /** Save one provider's default model (its first supported effort) for this project (HS2-EK24KF). */
+  function selectDefaultModel(model: string, tool = aiDefaults.value.tool) {
     if (!model) return;
-    const descriptor = aiTools.value.find((item) => item.id === aiDefaults.value.tool),
+    const descriptor = aiTools.value.find((item) => item.id === tool),
       effort = descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
-    void saveAiDefaults({ tool: aiDefaults.value.tool, model, ...(effort ? { effort } : {}) });
+    void saveAiDefaults(withProviderSelection(aiDefaults.value, tool, { model, ...(effort ? { effort } : {}) }));
+  }
+
+  /** Save one provider's default effort, keeping its model. */
+  function selectDefaultEffort(effort: string, tool = aiDefaults.value.tool) {
+    const current = providerSelection(aiDefaults.value, aiTools.value, tool);
+    void saveAiDefaults(withProviderSelection(aiDefaults.value, tool, { model: current.model, effort }));
+  }
+
+  /** Make `tool` the project's default provider, carrying its own saved model and effort. */
+  function selectDefaultProvider(tool: string) {
+    void saveAiDefaults(withDefaultProvider(aiDefaults.value, aiTools.value, tool));
   }
 
   function selectConversationModel(model: string) {
@@ -240,7 +265,11 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     }
   }
 
-  function openManualModel(target: 'settings' | 'drive' | 'conversation' | 'command', commandId?: string) {
+  function openManualModel(
+    target: 'settings' | 'drive' | 'conversation' | 'command',
+    commandId?: string,
+    providerId?: string,
+  ) {
     const connectionId = conversationConnectionId.value;
     const command = commandId ? commandSettingsDefinitions().find((item) => item.id === commandId) : undefined,
       selection =
@@ -250,7 +279,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
             ? conversationAiSelection(connectionId)
             : target === 'command' && command
               ? effectiveCommandAiSelection(command)
-              : aiDefaults.value,
+              : providerSelection(aiDefaults.value, aiTools.value, providerId ?? aiDefaults.value.tool),
       descriptor = aiTools.value.find((item) => item.id === selection.tool),
       custom =
         selection.model && !descriptor?.models.some((model) => model.id === selection.model) ? selection.model : '';
@@ -265,7 +294,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     manualModelDialogShown = false;
     // prettier-ignore
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    manualModelDialog.value={target,providerName:descriptor?.display_name??selection.tool??'this provider',value:custom??'',...(commandId?{commandId}:{})};
+    manualModelDialog.value={target,providerName:descriptor?.display_name??selection.tool??'this provider',value:custom??'',...(commandId?{commandId}:{}),...(target==='settings'&&providerId?{providerId}:{})};
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const dialog = document.querySelector<Control>('[data-component="manual-model-dialog"]');
@@ -408,6 +437,8 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     effectiveDriveSelection,
     selectDriveModel,
     selectDefaultModel,
+    selectDefaultEffort,
+    selectDefaultProvider,
     selectConversationModel,
     selectConversationEffort,
     aiToolOptions,

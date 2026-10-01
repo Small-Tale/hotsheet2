@@ -13,6 +13,8 @@ export interface ManualModelDialogState {
   providerName: string;
   value: string;
   commandId?: string;
+  /** The provider whose default model the Settings "Other…" choice sets (HS2-EK24KF). */
+  providerId?: string;
 }
 
 export function ManualModelDialog({ state }: { state?: ManualModelDialogState }) {

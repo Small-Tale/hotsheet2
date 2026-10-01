@@ -242,9 +242,25 @@ pub struct AiToolDescriptor {
     pub actions: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, Deserialize, PartialEq, Eq)]
+/// A project's AI defaults: the default provider (`tool`) with its model and effort, plus the
+/// default model and effort chosen for every other provider (HS2-EK24KF), keyed by tool id.
+#[derive(Debug, Clone, Default, serde::Serialize, Deserialize, PartialEq, Eq)]
 pub struct AiToolDefaults {
     pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    /// Per-provider default model and effort, used whenever that provider is picked (Drive,
+    /// AI shells, commands) without an explicit model. The default provider's entry mirrors the
+    /// top-level `model`/`effort`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub providers: BTreeMap<String, AiProviderDefaults>,
+}
+
+/// One provider's default model and effort.
+#[derive(Debug, Clone, Default, serde::Serialize, Deserialize, PartialEq, Eq)]
+pub struct AiProviderDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -647,7 +663,83 @@ pub fn default_ai_settings(tools: &[AiToolDescriptor]) -> Option<AiToolDefaults>
         tool: tool.id.clone(),
         model: tool.default_model.clone(),
         effort: tool.default_effort.clone(),
+        ..AiToolDefaults::default()
     })
+}
+
+/// Validate one provider's default model and effort exactly like a default selection.
+fn validate_provider_defaults(
+    tools: &[AiToolDescriptor],
+    tool: &str,
+    defaults: &AiProviderDefaults,
+) -> Result<(), String> {
+    validate_ai_defaults(
+        tools,
+        &AiToolDefaults {
+            tool: tool.to_string(),
+            model: defaults.model.clone(),
+            effort: defaults.effort.clone(),
+            ..AiToolDefaults::default()
+        },
+    )
+}
+
+/// Prepare AI defaults for storage (HS2-EK24KF): the default selection and every entry for an
+/// installed provider must validate; entries for providers that are not installed right now are
+/// carried over from `previous` (and from the submitted value) untouched, so uninstalling a tool
+/// temporarily never loses its choices. The default provider's entry mirrors the top-level
+/// model and effort.
+pub fn prepare_ai_defaults_for_save(
+    tools: &[AiToolDescriptor],
+    submitted: &AiToolDefaults,
+    previous: Option<&AiToolDefaults>,
+) -> Result<AiToolDefaults, String> {
+    validate_ai_defaults(tools, submitted)?;
+    let installed = |id: &str| tools.iter().any(|tool| tool.id == id);
+    let mut providers = BTreeMap::new();
+    if let Some(previous) = previous {
+        for (id, entry) in &previous.providers {
+            if !installed(id) {
+                providers.insert(id.clone(), entry.clone());
+            }
+        }
+    }
+    for (id, entry) in &submitted.providers {
+        if installed(id) {
+            validate_provider_defaults(tools, id, entry)
+                .map_err(|error| format!("provider '{id}': {error}"))?;
+        }
+        providers.insert(id.clone(), entry.clone());
+    }
+    providers.insert(
+        submitted.tool.clone(),
+        AiProviderDefaults {
+            model: submitted.model.clone(),
+            effort: submitted.effort.clone(),
+        },
+    );
+    Ok(AiToolDefaults {
+        providers,
+        ..submitted.clone()
+    })
+}
+
+/// Keep only the per-provider entries that still validate against the installed tools; the
+/// default selection itself is checked by the caller.
+pub fn sanitize_ai_defaults(
+    tools: &[AiToolDescriptor],
+    defaults: AiToolDefaults,
+) -> AiToolDefaults {
+    let providers = defaults
+        .providers
+        .iter()
+        .filter(|(id, entry)| validate_provider_defaults(tools, id, entry).is_ok())
+        .map(|(id, entry)| (id.clone(), entry.clone()))
+        .collect();
+    AiToolDefaults {
+        providers,
+        ..defaults
+    }
 }
 
 /// The machine-local plugin search dirs (currently just `<home>/plugins`). Deliberately

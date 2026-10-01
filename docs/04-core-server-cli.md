@@ -638,7 +638,9 @@ and concurrent callers coalesce onto it; `refresh=true` bypasses and repopulates
 and `POST /setup/{tool}` (or replacing the plugin roots) invalidates it. Tools installed
 outside the server appear once the memo expires or on the next refresh (HS2-QV8B7R). `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
 [--model <id>] [--effort <level>]` provide headless parity for the machine-local defaults
-exposed by `/ai-tools` and `/ai-settings`.
+exposed by `/ai-tools` and `/ai-settings`; `ai-settings set-provider --tool <id> [--model <id>]
+[--effort <level>]` saves one provider's own default model and effort without changing the
+default provider (HS2-EK24KF).
 
 **Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
 new or existing code project. It initializes or reuses a standalone HS2 store, links

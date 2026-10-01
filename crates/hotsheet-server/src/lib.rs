@@ -6820,11 +6820,20 @@ fn saved_ai_defaults(
     scope: hotsheet_ticketing::Scope,
     tools: &[hotsheet_plugins::AiToolDescriptor],
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    Ok(stored_ai_defaults(settings, scope)?
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok())
+        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults)))
+}
+
+/// The AI defaults stored in one scope, unvalidated.
+fn stored_ai_defaults(
+    settings: &Settings,
+    scope: hotsheet_ticketing::Scope,
+) -> Result<Option<hotsheet_plugins::AiToolDefaults>, ApiError> {
     Ok(settings
         .get(AI_DEFAULTS_SETTING, scope)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
-        .and_then(|value| serde_json::from_value(value).ok())
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
+        .and_then(|value| serde_json::from_value(value).ok()))
 }
 
 /// The effective AI defaults: the project's own choice (machine-local project settings, HS2-SW5S13),
@@ -6851,26 +6860,28 @@ async fn effective_ai_settings(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no drivable AI tools are installed"))
 }
 
-/// Validate and store AI defaults in one settings scope.
+/// Validate and store AI defaults in one settings scope, keeping the per-provider choices for
+/// tools that are not installed right now (HS2-EK24KF). Returns the value as served back.
 async fn save_ai_settings(
     state: &AppState,
     settings: &Settings,
     scope: hotsheet_ticketing::Scope,
     defaults: &hotsheet_plugins::AiToolDefaults,
-) -> Result<(), ApiError> {
-    hotsheet_plugins::validate_ai_defaults(
-        &discovered_ai_tools_off_runtime(state, false).await,
-        defaults,
-    )
-    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
+    let tools = discovered_ai_tools_off_runtime(state, false).await;
+    let previous = stored_ai_defaults(settings, scope)?;
+    let prepared =
+        hotsheet_plugins::prepare_ai_defaults_for_save(&tools, defaults, previous.as_ref())
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
     settings
         .set(
             AI_DEFAULTS_SETTING,
-            serde_json::to_value(defaults)
+            serde_json::to_value(&prepared)
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
             scope,
         )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(hotsheet_plugins::sanitize_ai_defaults(&tools, prepared))
 }
 
 /// A project's AI defaults (HS2-SW5S13): stored in the checkout's machine-local settings because the
@@ -6890,14 +6901,15 @@ async fn put_checkout_ai_settings(
     Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
-    save_ai_settings(
-        &state,
-        &settings,
-        hotsheet_ticketing::Scope::Local,
-        &defaults,
-    )
-    .await?;
-    Ok(Json(defaults))
+    Ok(Json(
+        save_ai_settings(
+            &state,
+            &settings,
+            hotsheet_ticketing::Scope::Local,
+            &defaults,
+        )
+        .await?,
+    ))
 }
 
 /// The machine-wide AI defaults: the fallback for projects without their own choice.
@@ -6911,14 +6923,15 @@ async fn put_ai_settings(
     State(state): State<AppState>,
     Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    save_ai_settings(
-        &state,
-        &Settings::new(state.store.root()),
-        hotsheet_ticketing::Scope::Global,
-        &defaults,
-    )
-    .await?;
-    Ok(Json(defaults))
+    Ok(Json(
+        save_ai_settings(
+            &state,
+            &Settings::new(state.store.root()),
+            hotsheet_ticketing::Scope::Global,
+            &defaults,
+        )
+        .await?,
+    ))
 }
 
 async fn create_drive_connection(
@@ -6937,6 +6950,7 @@ async fn create_drive_connection(
                     tool: request.tool.clone(),
                     model: request.model.clone(),
                     effort: request.effort.clone(),
+                    ..Default::default()
                 },
             )
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
@@ -7129,6 +7143,7 @@ async fn send_drive_turn(
                     tool: connection.tool,
                     model: request.model.clone(),
                     effort: request.effort.clone(),
+                    ..Default::default()
                 },
             )
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
@@ -7608,6 +7623,7 @@ fn terminal_launch(
                 tool: tool.to_string(),
                 model: req.model.clone(),
                 effort: req.effort.clone(),
+                ..Default::default()
             },
         )
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;

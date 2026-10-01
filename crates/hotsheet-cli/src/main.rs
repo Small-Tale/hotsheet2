@@ -749,7 +749,8 @@ enum AiSettingsCmd {
         #[arg(long)]
         global: bool,
     },
-    /// Save this project's defaults (machine-local project settings), or the machine-wide fallback.
+    /// Save this project's default provider with its model and effort (machine-local project
+    /// settings), or the machine-wide fallback.
     Set {
         #[arg(long)]
         tool: String,
@@ -758,6 +759,19 @@ enum AiSettingsCmd {
         #[arg(long)]
         effort: Option<String>,
         /// Save the machine-wide fallback used by projects without their own choice.
+        #[arg(long)]
+        global: bool,
+    },
+    /// Save one provider's default model and effort without changing the default provider
+    /// (HS2-EK24KF); used whenever that provider is picked without an explicit model.
+    SetProvider {
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        effort: Option<String>,
+        /// Change the machine-wide fallback instead of this project.
         #[arg(long)]
         global: bool,
     },
@@ -4342,10 +4356,55 @@ fn saved_ai_defaults(
     scope: hotsheet_ticketing::Scope,
     tools: &[hotsheet_plugins::AiToolDescriptor],
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>> {
+    Ok(stored_ai_defaults(settings, scope)?
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok())
+        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults)))
+}
+
+/// The AI defaults stored in one scope, unvalidated.
+fn stored_ai_defaults(
+    settings: &hotsheet_ticketing::Settings,
+    scope: hotsheet_ticketing::Scope,
+) -> Result<Option<hotsheet_plugins::AiToolDefaults>> {
     Ok(settings
         .get("ai.defaults", scope)?
-        .and_then(|value| serde_json::from_value(value).ok())
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
+        .and_then(|value| serde_json::from_value(value).ok()))
+}
+
+/// The settings file and scope an `ai-settings` write targets.
+fn ai_settings_target(
+    store: &Path,
+    cwd: &Path,
+    global: bool,
+) -> (hotsheet_ticketing::Settings, hotsheet_ticketing::Scope) {
+    if global {
+        (
+            hotsheet_ticketing::Settings::new(store),
+            hotsheet_ticketing::Scope::Global,
+        )
+    } else {
+        (
+            settings_for_cli(store, cwd),
+            hotsheet_ticketing::Scope::Local,
+        )
+    }
+}
+
+/// Validate and store AI defaults, keeping choices for providers that are not installed now.
+fn save_ai_defaults(
+    store: &Path,
+    cwd: &Path,
+    global: bool,
+    defaults: &hotsheet_plugins::AiToolDefaults,
+) -> Result<hotsheet_plugins::AiToolDefaults> {
+    let tools = discovered_ai_tools();
+    let (settings, scope) = ai_settings_target(store, cwd, global);
+    let previous = stored_ai_defaults(&settings, scope)?;
+    let prepared =
+        hotsheet_plugins::prepare_ai_defaults_for_save(&tools, defaults, previous.as_ref())
+            .map_err(anyhow::Error::msg)?;
+    settings.set("ai.defaults", serde_json::to_value(&prepared)?, scope)?;
+    Ok(hotsheet_plugins::sanitize_ai_defaults(&tools, prepared))
 }
 
 /// The effective AI defaults: this project's machine-local choice (HS2-SW5S13), else the
@@ -4412,26 +4471,32 @@ fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> Result<()> {
             effort,
             global,
         } => {
+            // Keep every other provider's choices; only the default provider changes.
+            let current = effective_ai_defaults(store, cwd, global).ok();
             let defaults = hotsheet_plugins::AiToolDefaults {
                 tool,
                 model,
                 effort,
+                providers: current.map(|current| current.providers).unwrap_or_default(),
             };
-            hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(), &defaults)
-                .map_err(anyhow::Error::msg)?;
-            let (settings, scope) = if global {
-                (
-                    hotsheet_ticketing::Settings::new(store),
-                    hotsheet_ticketing::Scope::Global,
-                )
-            } else {
-                (
-                    settings_for_cli(store, cwd),
-                    hotsheet_ticketing::Scope::Local,
-                )
-            };
-            settings.set("ai.defaults", serde_json::to_value(&defaults)?, scope)?;
-            println!("{}", serde_json::to_string(&defaults)?);
+            let saved = save_ai_defaults(store, cwd, global, &defaults)?;
+            println!("{}", serde_json::to_string(&saved)?);
+        }
+        AiSettingsCmd::SetProvider {
+            tool,
+            model,
+            effort,
+            global,
+        } => {
+            let mut defaults = effective_ai_defaults(store, cwd, global)?;
+            let entry = hotsheet_plugins::AiProviderDefaults { model, effort };
+            if defaults.tool == tool {
+                defaults.model = entry.model.clone();
+                defaults.effort = entry.effort.clone();
+            }
+            defaults.providers.insert(tool, entry);
+            let saved = save_ai_defaults(store, cwd, global, &defaults)?;
+            println!("{}", serde_json::to_string(&saved)?);
         }
     }
     Ok(())

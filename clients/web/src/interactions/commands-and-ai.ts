@@ -41,7 +41,11 @@ export interface CommandAndAiInteractionsDependencies {
   readonly driveOverridesByProject: Signal<Record<string, Partial<AiToolDefaults>>>;
   readonly normalizedAiSelection: (value?: Partial<AiToolDefaults>) => AiToolDefaults;
   readonly selectDriveModel: (model: string) => void;
-  readonly openManualModel: (target: 'settings' | 'drive' | 'conversation' | 'command', commandId?: string) => void;
+  readonly openManualModel: (
+    target: 'settings' | 'drive' | 'conversation' | 'command',
+    commandId?: string,
+    providerId?: string,
+  ) => void;
   readonly effectiveDriveSelection: (projectId?: string) => AiToolDefaults;
   readonly openSidebarConversation: () => Promise<void>;
   readonly conversationOpen: Signal<boolean>;
@@ -107,7 +111,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
   readonly appleShortcutPlatform: boolean;
   readonly saveAiDefaults: (value: AiToolDefaults) => Promise<void>;
-  readonly selectDefaultModel: (model: string) => void;
+  readonly selectDefaultModel: (model: string, tool?: string) => void;
+  readonly selectDefaultEffort: (effort: string, tool?: string) => void;
+  readonly selectDefaultProvider: (tool: string) => void;
   readonly restoreCommandEditorAfterManualModel: (state: ManualModelDialogState | undefined) => void;
   manualModelDialogShown: boolean;
   readonly aiDefaults: Signal<AiToolDefaults>;
@@ -208,10 +214,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     capturingShortcutId,
     keyboardShortcutOverrides,
     appleShortcutPlatform,
-    saveAiDefaults,
     selectDefaultModel,
+    selectDefaultEffort,
+    selectDefaultProvider,
     restoreCommandEditorAfterManualModel,
-    aiDefaults,
     ticketSourceSetupProject,
     providerSetupKind,
     providerEditingId,
@@ -792,14 +798,22 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     persistShortcutOverrides({ ...keyboardShortcutOverrides.value, [id]: chord });
     setCapturingShortcut(undefined);
   });
+  // Project Settings → AI tools (HS2-EK24KF): the default provider, then each provider's own model
+  // and effort; the provider a field belongs to is its block's `data-ai-provider`.
   delegate(document.body, 'change', 'wa-select[name="ai-default-tool"]', (_event, target) => {
-    void saveAiDefaults(normalizedAiSelection({ tool: (target as Control).value }));
+    selectDefaultProvider((target as Control).value);
   });
-  delegate(document.body, 'change', 'wa-select[name="ai-default-model"]', (_event, target) => {
-    const model = (target as Control).value,
-      manual = target.closest<HTMLElement>('[data-other-model-value]')?.dataset.otherModelValue;
-    if (manual === model) openManualModel('settings');
-    else selectDefaultModel(model);
+  delegate(document.body, 'change', 'wa-select[name^="ai-provider-model-"]', (_event, target) => {
+    const block = target.closest<HTMLElement>('[data-ai-provider]'),
+      tool = block?.dataset.aiProvider,
+      model = (target as Control).value;
+    if (!tool) return;
+    if (block.dataset.otherModelValue === model) openManualModel('settings', undefined, tool);
+    else selectDefaultModel(model, tool);
+  });
+  delegate(document.body, 'change', 'wa-select[name^="ai-provider-effort-"]', (_event, target) => {
+    const tool = target.closest<HTMLElement>('[data-ai-provider]')?.dataset.aiProvider;
+    if (tool) selectDefaultEffort((target as Control).value, tool);
   });
   delegate(document.body, 'click', '[data-action="cancel-manual-model"]', () => {
     const state = manualModelDialog.value;
@@ -825,7 +839,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
           model,
         });
       restoreCommandEditorAfterManualModel(state);
-    } else selectDefaultModel(model);
+    } else selectDefaultModel(model, state.providerId);
   });
   delegateCapture(document.body, 'wa-after-show', '[data-component="manual-model-dialog"]', () => {
     dependencies.manualModelDialogShown = true;
@@ -836,9 +850,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       manualModelDialog.value = undefined;
       restoreCommandEditorAfterManualModel(state);
     }
-  });
-  delegate(document.body, 'change', 'wa-select[name="ai-default-effort"]', (_event, target) => {
-    void saveAiDefaults({ ...aiDefaults.value, effort: (target as Control).value });
   });
   delegate(document.body, 'click', '[data-action="open-provider-dialog"]', () => {
     const current = project();

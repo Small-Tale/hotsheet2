@@ -1049,7 +1049,9 @@ and identity-less legacy entries remain conservatively blocking.
   Drive is a production control, not demo-only state. Its split-button label reflects the
   project's default provider (Project Settings → AI tools, stored per project on this machine,
   HS2-SW5S13; a project without a choice inherits the machine-wide fallback), validated against
-  the drivable plugin manifests. The arrow opens
+  the drivable plugin manifests. That panel lists one Model/Effort pair per installed provider
+  under the default-provider Select, so each provider keeps its own default model and effort
+  (HS2-EK24KF); the pair sits side by side and stacks below a 416px panel width. The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
   Project activation starts catalog discovery without blocking the rest of project startup, and the
   server prewarms the catalog in a background task at start so the first client typically finds it
