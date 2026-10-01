@@ -5641,6 +5641,20 @@ test('edits custom command color and icon in the command settings editor', async
   await expect(editor.locator('.command-settings-editor__row[draggable="true"]')).toHaveCount(3);
   await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality', 'Release']);
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-list.png' });
+  // Add command is the brand-filled primary action; Add group stays a plain secondary button (HS2-JSSMFY).
+  const buttonFill = (name: string) =>
+    editor.getByRole('button', { name, exact: true }).evaluate((node) => {
+      const probe = document.createElement('span');
+      probe.style.background = 'var(--wa-color-brand-fill-loud)';
+      node.append(probe);
+      const brand = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { background: getComputedStyle(node).backgroundColor, brand };
+    });
+  const addCommandFill = await buttonFill('Add command'),
+    addGroupFill = await buttonFill('Add group');
+  expect(addCommandFill.background).toBe(addCommandFill.brand);
+  expect(addGroupFill.background).not.toBe(addGroupFill.brand);
   // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
   await verifyRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
@@ -5650,6 +5664,10 @@ test('edits custom command color and icon in the command settings editor', async
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
+  // The editor styles only its own buttons, so the nested picker keeps its 18px grid icons (HS2-JSSMFY).
+  const pickerIcon = dialog.locator('[data-action="select-command-icon"]').first();
+  await expect(pickerIcon).toHaveCSS('display', 'grid');
+  await expect(pickerIcon.locator('svg')).toHaveCSS('width', '18px');
   await dialog.getByTitle('Blue', { exact: true }).click();
   await dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]').click();
   await expect(dialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#3b82f6');

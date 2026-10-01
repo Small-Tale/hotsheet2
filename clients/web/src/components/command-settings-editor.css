@@ -23,7 +23,10 @@
   flex: 0 0 auto;
   gap: var(--kui-space-2xs);
 }
-.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)) {
+/* The editor's own buttons carry this class rather than every descendant <button> being styled,
+   so nested components (the Lucide icon picker in the edit dialog) keep their own geometry and
+   variants below win by source order at equal specificity (HS2-JSSMFY). */
+.command-settings-editor__button {
   display: inline-flex;
   min-height: remify(36px);
   padding: 0 var(--kui-space-xs);
@@ -37,17 +40,18 @@
   cursor: pointer;
   font: inherit;
 }
-.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)):hover {
+.command-settings-editor__button:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
-.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)):disabled {
+.command-settings-editor__button:disabled {
   opacity: 0.45;
   cursor: default;
 }
-.command-settings-editor button:not(:where(.kui-toolbar-control-group > button)) svg {
+.command-settings-editor__button svg {
   width: remify(16px);
   height: remify(16px);
 }
+/* The primary creation action (HS2-JSSMFY). */
 .command-settings-editor__add-command {
   color: var(--wa-color-brand-on-loud);
   border-color: transparent;
@@ -84,7 +88,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.command-settings-editor button.command-settings-editor__group-delete {
+.command-settings-editor__group-delete {
   width: remify(24px);
   height: remify(24px);
   min-height: remify(24px);
@@ -92,12 +96,12 @@
   border-color: transparent;
   background: transparent;
 }
-.command-settings-editor button.command-settings-editor__group-delete:hover {
+.command-settings-editor__group-delete:hover {
   color: var(--wa-color-danger-on-quiet);
   border-color: var(--wa-color-neutral-border-normal);
   background: var(--wa-color-surface-default);
 }
-.command-settings-editor button.command-settings-editor__group-delete svg {
+.command-settings-editor__group-delete svg {
   width: remify(14px);
   height: remify(14px);
 }

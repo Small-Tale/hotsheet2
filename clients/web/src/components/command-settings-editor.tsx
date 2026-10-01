@@ -328,7 +328,7 @@ function CommandGroup({
           {empty && (
             <button
               type="button"
-              class="command-settings-editor__group-delete"
+              class="command-settings-editor__button command-settings-editor__group-delete"
               data-action="delete-command-group"
               data-group={group}
               aria-label={`Delete empty group ${group}`}
@@ -381,10 +381,14 @@ export function CommandSettingsEditor({
           </p>
         </div>
         <div class="command-settings-editor__heading-actions">
-          <button type="button" data-action="add-command-group">
+          <button type="button" class="command-settings-editor__button" data-action="add-command-group">
             <LucideIcon icon={FolderPlus} name="folder-plus" /> Add group
           </button>
-          <button type="button" class="command-settings-editor__add-command" data-action="add-command-setting">
+          <button
+            type="button"
+            class="command-settings-editor__button command-settings-editor__add-command"
+            data-action="add-command-setting"
+          >
             <LucideIcon icon={Plus} name="plus" /> Add command
           </button>
         </div>

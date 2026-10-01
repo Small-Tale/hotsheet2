@@ -1361,7 +1361,9 @@ capability-aware sections when their underlying features and data contracts land
   dragging any row of the selection moves the whole selection together as one block,
   preserving relative order and adopting the drop target's group (HS2-VJYQHG). Each row
   exposes an overflow "…" menu — also opened by right-click — with Edit and Delete, and
-  double-clicking a row edits it. An "Add group" button appends an empty group (droppable, with a delete button
+  double-clicking a row edits it. The heading pairs a secondary "Add group" with the brand-filled primary
+  "Add command"; the editor styles only its own buttons (`command-settings-editor__button`), so nested
+  components such as the icon picker keep their geometry (HS2-JSSMFY). An "Add group" button appends an empty group (droppable, with a delete button
   while empty). Groups are kept until deleted (HS2-EZ5KMC): an added group, and any group whose last command
   is deleted or dragged elsewhere, stays in the list as an empty, droppable group, saved immediately to the
   project's machine-local `command_groups` setting beside `commands`, so it survives a reload; only its
