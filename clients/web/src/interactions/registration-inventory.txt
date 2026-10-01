@@ -273,7 +273,9 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="select-tic
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'
 notifications-and-links	delegateCapture	document.body	'wa-hide'	'[data-component="ticket-link-choice-dialog"]'
 search-and-composer	wireTicketSearchFields	document.body
+search-and-composer	delegate	document.body	'keydown'	'.ticket-search-field [data-token-search-editor]'
 search-and-composer	wireTokenSearchFields	document.body
+search-and-composer	delegate	document.body	'click'	'.ticket-search-field'
 search-and-composer	delegate	document.body	'click'	'wa-select[name="workspace-sort"] wa-option'
 search-and-composer	delegate	document.body	'wa-select'	'[data-workspace-overflow]'
 search-and-composer	delegate	document.body	'click'	'[data-action="expand-ticket-composer"]'

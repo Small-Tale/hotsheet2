@@ -12,6 +12,7 @@ import {
   parseSearchDate,
   type SearchDateDirection,
   type SearchDateField,
+  searchDateLabel,
   tokenFromRaw,
   toTokenSearchToken,
 } from './inline-search';
@@ -79,7 +80,7 @@ export function ticketSearchRules(tags: () => readonly string[]): TokenSearchRul
       DATE_DIRECTIONS.map((direction): TokenSearchRule => ({
         name: `${field}-${direction}`,
         parse: (input) => parseSearchDate(input),
-        label: (_value, input) => `${field} ${direction} ${input}`,
+        label: (_value, input) => searchDateLabel(field, direction, input),
       })),
     ),
   ];

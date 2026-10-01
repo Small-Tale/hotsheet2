@@ -174,6 +174,35 @@ export function parseSearchDate(value: string, locale?: string, now = new Date()
   return date.toISOString();
 }
 
+/** The local calendar date (and optional minute) the date helper writes: `YYYY-MM-DD[THH:MM]`. */
+const LOCAL_ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/;
+
+/**
+ * The chip label of a lifecycle date filter. A local `YYYY-MM-DD[THH:MM]` value — the editable
+ * syntax the date helper writes — reads in the locale's short date (and time) format; every other
+ * accepted form (relative `4h ago`, zoned ISO, locale-typed dates) keeps the text the person wrote.
+ * Every chip path (date helper, typed filter, restored query, Kerf model rule) labels through this,
+ * so one raw filter always shows one label (HS2-074E0P).
+ */
+export function searchDateLabel(
+  field: SearchDateField,
+  direction: SearchDateDirection,
+  input: string,
+  locale?: string,
+): string {
+  const iso = input.trim().match(LOCAL_ISO_DATE);
+  if (!iso) return `${field} ${direction} ${input}`;
+  // An absent optional time group is undefined at runtime, which `||` reads as midnight.
+  const [hour, minute] = [iso[4] || '0', iso[5] || '0'],
+    date = validLocalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]), Number(hour), Number(minute));
+  if (!date) return `${field} ${direction} ${input}`;
+  const formatter = new Intl.DateTimeFormat(
+    locale,
+    iso[4] ? { dateStyle: 'short', timeStyle: 'short' } : { dateStyle: 'short' },
+  );
+  return `${field} ${direction} ${formatter.format(date)}`;
+}
+
 export function dateTokenFromInput(
   prefix: `${SearchDateField}-${SearchDateDirection}`,
   dateValue: string,
@@ -185,18 +214,14 @@ export function dateTokenFromInput(
     date = validLocalDate(year, month, day, hour, minute);
   if (!date) return undefined;
   const [field, direction] = prefix.split('-') as [SearchDateField, SearchDateDirection],
-    formatter = new Intl.DateTimeFormat(
-      locale,
-      timeValue ? { dateStyle: 'short', timeStyle: 'short' } : { dateStyle: 'short' },
-    ),
-    raw = `${prefix}:${dateValue}${timeValue ? `T${timeValue}` : ''}`;
+    input = `${dateValue}${timeValue ? `T${timeValue}` : ''}`;
   return {
     kind: 'date',
     field,
     direction,
     value: date.toISOString(),
-    raw,
-    label: `${field} ${direction} ${formatter.format(date)}`,
+    raw: `${prefix}:${input}`,
+    label: searchDateLabel(field, direction, input, locale),
   };
 }
 
@@ -240,7 +265,7 @@ export function tokenFromRaw(raw: string): InlineSearchToken | undefined {
       direction,
       value,
       raw: `${field}-${direction}:${date[3].trim()}`,
-      label: `${field} ${direction} ${input}`,
+      label: searchDateLabel(field, direction, input),
     };
   }
   return undefined;

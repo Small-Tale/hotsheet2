@@ -10,6 +10,7 @@ import {
   orderedSearchText,
   parseSearchDate,
   sameInlineSearchState,
+  searchDateLabel,
   tokenFromRaw,
   tokenQuery,
   toTokenSearchToken,
@@ -113,6 +114,21 @@ describe('inline advanced-search tokens', () => {
       raw: 'created-after:2026-09-01',
       label: 'created after 9/1/26',
     });
+  });
+  it('labels every local ISO date filter in the locale format and keeps other date text (HS2-074E0P)', () => {
+    expect(searchDateLabel('created', 'after', '2026-09-01T11:05', 'en-US')).toBe('created after 9/1/26, 11:05 AM');
+    expect(searchDateLabel('updated', 'before', '2026-09-01', 'en-GB')).toBe('updated before 01/09/2026');
+    // Relative, zoned, locale-typed, and impossible dates read as written.
+    expect(searchDateLabel('updated', 'after', '4h ago', 'en-US')).toBe('updated after 4h ago');
+    expect(searchDateLabel('updated', 'after', '2026-09-01T11:05:00Z', 'en-US')).toBe(
+      'updated after 2026-09-01T11:05:00Z',
+    );
+    expect(searchDateLabel('created', 'before', '09/01/2026', 'en-US')).toBe('created before 09/01/2026');
+    expect(searchDateLabel('created', 'before', '2026-02-31', 'en-US')).toBe('created before 2026-02-31');
+    // The typed filter and the date helper produce the same chip label.
+    const helper = dateTokenFromInput('created-after', '2026-09-01', '11:05');
+    expect(tokenFromRaw('created-after:2026-09-01T11:05')?.label).toBe(helper?.label);
+    expect(tokenFromRaw('updated-after:"4h ago"')?.label).toBe('updated after 4h ago');
   });
   it('maps lifecycle and attachment tokens to structured server queries', () => {
     const tokens = [

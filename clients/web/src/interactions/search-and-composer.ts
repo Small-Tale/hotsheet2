@@ -3,6 +3,7 @@ import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type TicketRow as WireTicketRow } from '../api';
+import { TICKET_SEARCH_ACTIONS, ticketSearchFieldId } from '../components/ticket-search-field';
 import {
   nextWorkspaceSort,
   type WorkspaceSort,
@@ -151,6 +152,17 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       });
     },
   });
+  // Backspace/Delete beside a chip removes it through Kerf's model, which re-keys (replaces) the
+  // editor without restoring its focus (KF-Q2G9QS). Snapshot the chips' caret offsets before Kerf's
+  // keydown handler removes one, then put the caret back where the removed chip sat (HS2-074E0P).
+  let keyboardRemovalState: { id: string; tokens: readonly { value: string; offset?: number }[] } | undefined;
+  delegate(document.body, 'keydown', '.ticket-search-field [data-token-search-editor]', (event, target) => {
+    const key = (event as KeyboardEvent).key,
+      id = (target as HTMLElement).dataset.tokenSearchEditor,
+      model = id ? modelFor(id) : undefined;
+    keyboardRemovalState =
+      id && model && (key === 'Backspace' || key === 'Delete') ? { id, tokens: model.state.value.tokens } : undefined;
+  });
   // Kerf owns the token-search editor chrome, collapsible reveal/focus/Escape/empty-blur, Enter
   // submit, and, through the registered models, parsing, chips, suggestions, chip edit/removal,
   // and clear (HS2-5JXBQY). Hot Sheet adopts its persisted workspace signal and retains the
@@ -158,10 +170,26 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   const tokenSearchFields = wireTokenSearchFields(document.body, {
     models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
     collapsible: { signals: { 'workspace-search': searchOpen } },
+    keyboard: {
+      onRemoveToken: ({ id, value }) => {
+        const before = keyboardRemovalState?.id === id ? keyboardRemovalState.tokens : [];
+        keyboardRemovalState = undefined;
+        focusField(id, before.find((token) => token.value === value)?.offset);
+      },
+    },
     // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
     onSubmit: ({ id }) => {
       focusField(id);
     },
+  });
+  // Kerf's managed clear replaces the editor; it restores focus only for a collapsible field
+  // (KF-Q2G9QS). Registered after Kerf's clear so the caret lands in the cleared replacement; it
+  // delegates from the persistent field group because the clear button leaves with the query.
+  delegate(document.body, 'click', '.ticket-search-field', (event, target) => {
+    const clear =
+        event.target instanceof Element && event.target.closest(`[data-action="${TICKET_SEARCH_ACTIONS.clear}"]`),
+      id = clear ? ticketSearchFieldId(target) : undefined;
+    if (id) focusField(id);
   });
   delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
     const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);

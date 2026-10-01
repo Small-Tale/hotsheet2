@@ -931,6 +931,9 @@ and identity-less legacy entries remain conservatively blocking.
   the current render, before the next input task. Restoration coalesces repeated
   requests and respects newer focus handoffs; delayed animation frames must not
   collapse a replacement selection and duplicate surrounding query text (HS2-PR5TNA).
+  Backspace/Delete beside a chip and the clear button keep the editor focused with the
+  caret where the chip sat (or at the start of the emptied field), in the workspace and
+  saved-view fields alike (HS2-074E0P).
 
   Shared Kerf layout primitives own common shell geometry. Project, settings,
   notification, and terminal-operations sidebars use `Pane` for their

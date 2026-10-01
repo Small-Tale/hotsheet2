@@ -13999,6 +13999,8 @@ for (const surface of ['workspace', 'saved-view']) {
         await query.press(key);
         await expect(chip).toHaveCount(0);
         await expect(query).toHaveText('before  after ');
+        // Removing a chip from the keyboard keeps the editor focused (HS2-074E0P).
+        await expect(query).toBeFocused();
         // A busy browser may deliver the old restoration between selecting replacement
         // text and its insertion. Keep this ordering deterministic instead of adding sleep.
         await query.selectText();

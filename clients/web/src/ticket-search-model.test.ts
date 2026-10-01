@@ -61,6 +61,30 @@ describe('ticket search model (HS2-5JXBQY)', () => {
     expect(model.state.value.tokens[0].label).toBe('updated after 4h ago');
   });
 
+  it('labels a date-helper commit in the locale date format, like every other path to that chip (HS2-074E0P)', () => {
+    const model = createTicketSearchModel({ tags: () => tags }),
+      localized = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(
+        new Date(2026, 8, 1, 11, 5),
+      );
+    model.edit({ query: 'parser created-after:', tokens: [] });
+    model.commit('2026-09-01T11:05');
+    const [chip] = model.state.value.tokens;
+    expect(chip.value).toBe('created-after:2026-09-01T11:05');
+    expect(chip.label).toBe(`created after ${localized}`);
+    // A typed filter, a restored query, and the app projection all agree on the label.
+    expect(inlineSearchTokens(model.state.value)[0].label).toBe(chip.label);
+    model.clear();
+    model.edit({ query: 'created-after:2026-09-01T11:05 ', tokens: [] });
+    expect(model.state.value.tokens[0].label).toBe(chip.label);
+    replaceTicketSearch(model, 'created-after:2026-09-01T11:05 parser');
+    expect(model.state.value.tokens[0].label).toBe(chip.label);
+    // A relative value keeps the text the person wrote.
+    model.clear();
+    model.edit({ query: 'created-after:', tokens: [] });
+    model.commit('4h ago');
+    expect(model.state.value.tokens[0].label).toBe('created after 4h ago');
+  });
+
   it('replaces from plain text through the app parser and runs the clear hook', () => {
     let cleared = 0;
     const model = createTicketSearchModel({
