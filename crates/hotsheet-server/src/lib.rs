@@ -1458,6 +1458,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_commands).put(save_checkout_commands),
         )
         .route(
+            "/checkouts/{reference}/command-groups",
+            get(list_checkout_command_groups).put(save_checkout_command_groups),
+        )
+        .route(
             "/checkouts/{reference}/commands/{id}/run",
             post(run_checkout_command),
         )
@@ -1708,6 +1712,10 @@ pub fn app(state: AppState) -> Router {
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/commands", get(list_commands).put(save_commands))
+        .route(
+            "/command-groups",
+            get(list_command_groups).put(save_command_groups),
+        )
         .route("/views", get(list_custom_views).put(save_custom_views))
         .route("/commands/{id}/run", post(run_command))
         .route("/command-runs", get(list_command_runs))
@@ -5625,6 +5633,58 @@ async fn list_checkout_commands(
         .commands
         .replace_project(checkout.id, checkout.root.into(), definitions.clone());
     Ok(Json(definitions))
+}
+
+fn read_command_groups(settings: &Settings) -> Result<Json<Vec<String>>, ApiError> {
+    hotsheet_ticketing::commands::groups_from_settings(settings)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// Persist the kept (possibly empty) command groups beside `commands`, in the same
+/// machine-local scope, so an "Add group" survives a reload (HS2-EZ5KMC).
+fn write_command_groups(
+    settings: &Settings,
+    groups: Vec<String>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let groups = hotsheet_ticketing::commands::normalize_groups(groups);
+    settings
+        .set(
+            hotsheet_ticketing::commands::COMMAND_GROUPS_KEY,
+            serde_json::to_value(&groups)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(groups))
+}
+
+async fn list_command_groups(State(state): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
+    read_command_groups(&Settings::new(state.store.root()))
+}
+
+async fn save_command_groups(
+    State(state): State<AppState>,
+    Json(groups): Json<Vec<String>>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    write_command_groups(&Settings::new(state.store.root()), groups)
+}
+
+async fn list_checkout_command_groups(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let (_checkout, settings) = checkout_settings(&state, &reference)?;
+    read_command_groups(&settings)
+}
+
+async fn save_checkout_command_groups(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(groups): Json<Vec<String>>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let (_checkout, settings) = checkout_settings(&state, &reference)?;
+    write_command_groups(&settings, groups)
 }
 
 async fn save_checkout_commands(

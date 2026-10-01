@@ -938,6 +938,10 @@ export class Api {
   commands = () => this.request<CommandDefinition[]>('/commands');
   saveCommands = (definitions: CommandDefinition[]) =>
     this.request<CommandDefinition[]>('/commands', { method: 'PUT', body: JSON.stringify(definitions) });
+  /** Command groups kept even while empty, stored beside `commands` (HS2-EZ5KMC). */
+  commandGroups = () => this.request<string[]>('/command-groups');
+  saveCommandGroups = (groups: string[]) =>
+    this.request<string[]>('/command-groups', { method: 'PUT', body: JSON.stringify(groups) });
   customViews = () => this.request<CustomView[]>('/views');
   saveCustomViews = (views: CustomView[]) =>
     this.request<CustomView[]>('/views', { method: 'PUT', body: JSON.stringify(views) });

@@ -123,17 +123,33 @@ export function commandGroupSections(
   return sections;
 }
 
-/** The still-empty groups from `extraGroups` (those with no commands), preserving their order. */
-export function emptyExtraGroups(commands: readonly CommandDefinition[], extraGroups: readonly string[]): string[] {
-  const populated = new Set(commands.map(commandGroupKey));
+/** Trim, drop blank names, and de-duplicate group names, keeping the first occurrence's order. */
+export function normalizeCommandGroups(groups: readonly string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const group of extraGroups) {
+  for (const group of groups) {
     const key = group.trim();
-    if (key && !populated.has(key) && !seen.has(key)) {
+    if (key && !seen.has(key)) {
       seen.add(key);
       result.push(key);
     }
   }
   return result;
+}
+
+/**
+ * The project's kept command groups after an edit turns `before` into `after` (HS2-EZ5KMC). A kept
+ * group stays until the user deletes it, whether or not commands currently sit in it, so an "Add
+ * group" group survives gaining and then losing its last command. Any named group that the edit
+ * emptied (its last command deleted or dragged elsewhere) joins the kept list, so emptying a group
+ * behaves the same whether it was added explicitly or only existed through its commands.
+ */
+export function keptCommandGroups(
+  before: readonly CommandDefinition[],
+  after: readonly CommandDefinition[],
+  kept: readonly string[],
+): string[] {
+  const remaining = new Set(after.map(commandGroupKey));
+  const emptied = before.map(commandGroupKey).filter((group) => group && !remaining.has(group));
+  return normalizeCommandGroups([...kept, ...emptied]);
 }

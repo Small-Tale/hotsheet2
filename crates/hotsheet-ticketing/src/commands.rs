@@ -64,9 +64,73 @@ pub fn from_settings(
         })
 }
 
+/// Settings key holding the project's explicitly kept command groups (HS2-EZ5KMC).
+pub const COMMAND_GROUPS_KEY: &str = "command_groups";
+
+/// Normalize kept command-group names: trimmed, blank names dropped, first occurrence wins.
+pub fn normalize_groups(groups: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    groups
+        .into_iter()
+        .map(|group| group.trim().to_owned())
+        .filter(|group| !group.is_empty() && seen.insert(group.clone()))
+        .collect()
+}
+
+/// The command groups the settings editor keeps even while they contain no commands. They
+/// live beside `commands` in the same settings scope, so an empty group survives a reload.
+pub fn groups_from_settings(
+    settings: &crate::Settings,
+) -> Result<Vec<String>, crate::SettingsError> {
+    settings
+        .get_effective(COMMAND_GROUPS_KEY)?
+        .map(serde_json::from_value::<Vec<String>>)
+        .transpose()
+        .map(|v| normalize_groups(v.unwrap_or_default()))
+        .map_err(|source| crate::SettingsError::Invalid {
+            key: COMMAND_GROUPS_KEY.into(),
+            source,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn normalizes_kept_command_groups() {
+        let groups = normalize_groups(
+            [" Ideas ", "", "Later", "Ideas", "  "]
+                .into_iter()
+                .map(String::from),
+        );
+        assert_eq!(groups, ["Ideas", "Later"]);
+    }
+
+    #[test]
+    fn reads_kept_command_groups_from_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        assert!(groups_from_settings(&settings).unwrap().is_empty());
+        settings
+            .set(
+                COMMAND_GROUPS_KEY,
+                serde_json::json!(["Ideas", " Ideas", "Later"]),
+                crate::Scope::Local,
+            )
+            .unwrap();
+        assert_eq!(groups_from_settings(&settings).unwrap(), ["Ideas", "Later"]);
+        // The generic settings writer (and so `hotsheet-cli settings set`) rejects a non-list.
+        assert!(
+            settings
+                .set(
+                    COMMAND_GROUPS_KEY,
+                    serde_json::json!("nope"),
+                    crate::Scope::Local,
+                )
+                .is_err()
+        );
+        assert_eq!(groups_from_settings(&settings).unwrap(), ["Ideas", "Later"]);
+    }
     #[test]
     fn parses_legacy_argv_and_native_ai_command_schemas() {
         let value = serde_json::json!([

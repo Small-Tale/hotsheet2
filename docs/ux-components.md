@@ -1338,7 +1338,10 @@ capability-aware sections when their underlying features and data contracts land
   preserving relative order and adopting the drop target's group (HS2-VJYQHG). Each row
   exposes an overflow "…" menu — also opened by right-click — with Edit and Delete, and
   double-clicking a row edits it. An "Add group" button appends an empty group (droppable, with a delete button
-  while empty). Editing — or adding — a command opens a native "Edit command" popover
+  while empty). Groups are kept until deleted (HS2-EZ5KMC): an added group, and any group whose last command
+  is deleted or dragged elsewhere, stays in the list as an empty, droppable group, saved immediately to the
+  project's machine-local `command_groups` setting beside `commands`, so it survives a reload; only its
+  delete button removes it. Editing — or adding — a command opens a native "Edit command" popover
   dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
   Shell / AI-prompt fields, an optional confirmation message, the color-swatch picker, and
   a searchable Lucide-icon picker — with Done in the dialog toolbar. The identifier (auto-generated),

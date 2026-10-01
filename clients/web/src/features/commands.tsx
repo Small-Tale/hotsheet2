@@ -2,7 +2,12 @@ import type { Signal } from 'kerfjs';
 import { effect, signal } from 'kerfjs';
 
 import { Api, type CommandDefinition, type CommandRun } from '../api';
-import { type CommandDropTarget, emptyExtraGroups, reorderCommandsMultiple } from '../command-order';
+import {
+  type CommandDropTarget,
+  keptCommandGroups,
+  normalizeCommandGroups,
+  reorderCommandsMultiple,
+} from '../command-order';
 import { commandIconNeedsCatalog } from '../components/command-icon';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { CommandDialogSurface } from '../components/reader-overlay-surfaces';
@@ -206,17 +211,56 @@ export function createCommandsController({
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function deleteCommandSetting(projectId:string,id:string){const definitions=commandSettingsDefinitions(projectId),index=definitions.findIndex(command=>command.id===id),next=definitions.filter(command=>command.id!==id);setCommandSettingsDefinitions(projectId,next);selectCommandSetting(projectId,next[Math.min(Math.max(index,0),next.length-1)]?.id);scheduleCommandAutosave(projectId);if(commandSettingsEditingId.value===id){commandSettingsEditingId.value=undefined;(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.()}}
+  function deleteCommandSetting(projectId:string,id:string){const definitions=commandSettingsDefinitions(projectId),index=definitions.findIndex(command=>command.id===id),next=definitions.filter(command=>command.id!==id);setCommandSettingsDefinitions(projectId,next);keepEmptiedCommandGroups(projectId,definitions,next);selectCommandSetting(projectId,next[Math.min(Math.max(index,0),next.length-1)]?.id);scheduleCommandAutosave(projectId);if(commandSettingsEditingId.value===id){commandSettingsEditingId.value=undefined;(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.()}}
   function commandSettingsExtraGroups(projectId = selectedProjectId.value) {
     return commandSettingsExtraGroupsByProject.value[projectId] ?? [];
   }
-  function setCommandSettingsExtraGroups(projectId: string, groups: string[]) {
-    commandSettingsExtraGroupsByProject.value = { ...commandSettingsExtraGroupsByProject.value, [projectId]: groups };
+  function setCommandSettingsExtraGroups(projectId: string, groups: readonly string[]) {
+    commandSettingsExtraGroupsByProject.value = {
+      ...commandSettingsExtraGroupsByProject.value,
+      [projectId]: normalizeCommandGroups(groups),
+    };
+  }
+  const commandGroupSavesPending = new Map<string, number>();
+  /** Persist the kept command groups beside the project's commands so an empty group survives a
+   * reload (HS2-EZ5KMC). A discrete edit, so it saves immediately rather than on the debounce. */
+  async function saveCommandGroups(projectId: string) {
+    const current = projects.value.find((item) => item.id === projectId);
+    if (!current) return;
+    commandGroupSavesPending.set(projectId, (commandGroupSavesPending.get(projectId) ?? 0) + 1);
+    try {
+      await new Api(current.apiPath).saveCommandGroups(commandSettingsExtraGroups(projectId));
+    } catch (reason) {
+      setCommandSettingsMessage(projectId, reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      const remaining = (commandGroupSavesPending.get(projectId) ?? 1) - 1;
+      if (remaining > 0) commandGroupSavesPending.set(projectId, remaining);
+      else commandGroupSavesPending.delete(projectId);
+    }
+  }
+  function changeCommandGroups(projectId: string, groups: readonly string[]) {
+    const before = commandSettingsExtraGroups(projectId);
+    setCommandSettingsExtraGroups(projectId, groups);
+    if (JSON.stringify(before) !== JSON.stringify(commandSettingsExtraGroups(projectId)))
+      void saveCommandGroups(projectId);
+  }
+  /** Keep any group a command edit emptied, so emptying a group never silently deletes it. */
+  function keepEmptiedCommandGroups(
+    projectId: string,
+    before: readonly CommandDefinition[],
+    after: readonly CommandDefinition[],
+  ) {
+    changeCommandGroups(projectId, keptCommandGroups(before, after, commandSettingsExtraGroups(projectId)));
+  }
+  /** Adopt the server's kept command groups unless a local group save is still in flight. */
+  function loadCommandGroups(projectId: string, groups: readonly string[]) {
+    if (!commandGroupSavesPending.has(projectId)) setCommandSettingsExtraGroups(projectId, groups);
   }
   function reorderCommandSettings(projectId: string, sourceIds: readonly string[], target: CommandDropTarget) {
-    const next = reorderCommandsMultiple(commandSettingsDefinitions(projectId), sourceIds, target);
+    const before = commandSettingsDefinitions(projectId),
+      next = reorderCommandsMultiple(before, sourceIds, target);
     setCommandSettingsDefinitions(projectId, next);
-    setCommandSettingsExtraGroups(projectId, emptyExtraGroups(next, commandSettingsExtraGroups(projectId)));
+    keepEmptiedCommandGroups(projectId, before, next);
     scheduleCommandAutosave(projectId);
   }
   function addCommandGroup(projectId: string) {
@@ -232,10 +276,10 @@ export function createCommandsController({
       setCommandSettingsMessage(projectId, `A group named "${name}" already exists.`);
       return;
     }
-    setCommandSettingsExtraGroups(projectId, [...commandSettingsExtraGroups(projectId), name]);
+    changeCommandGroups(projectId, [...commandSettingsExtraGroups(projectId), name]);
   }
   function deleteCommandGroup(projectId: string, group: string) {
-    setCommandSettingsExtraGroups(
+    changeCommandGroups(
       projectId,
       commandSettingsExtraGroups(projectId).filter((item) => item !== group),
     );
@@ -341,6 +385,7 @@ export function createCommandsController({
     addCommandSetting,
     deleteCommandSetting,
     commandSettingsExtraGroups,
+    loadCommandGroups,
     reorderCommandSettings,
     addCommandGroup,
     deleteCommandGroup,

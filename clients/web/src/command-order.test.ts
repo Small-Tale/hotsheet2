@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CommandDefinition } from './api';
-import { commandGroupSections, emptyExtraGroups, reorderCommands, reorderCommandsMultiple } from './command-order';
+import {
+  commandGroupSections,
+  keptCommandGroups,
+  normalizeCommandGroups,
+  reorderCommands,
+  reorderCommandsMultiple,
+} from './command-order';
 
 const cmd = (id: string, group?: string): CommandDefinition => ({
   id,
@@ -98,8 +104,38 @@ describe('commandGroupSections', () => {
   });
 });
 
-describe('emptyExtraGroups', () => {
-  it('returns only extra groups that have no commands, de-duplicated and ordered', () => {
-    expect(emptyExtraGroups([cmd('a', 'Quality')], ['Ideas', 'Quality', 'Ideas', 'Later'])).toEqual(['Ideas', 'Later']);
+describe('normalizeCommandGroups', () => {
+  it('trims, drops blanks, and de-duplicates while keeping first-seen order', () => {
+    expect(normalizeCommandGroups([' Ideas ', '', 'Later', 'Ideas', '  '])).toEqual(['Ideas', 'Later']);
+  });
+});
+
+describe('keptCommandGroups (HS2-EZ5KMC)', () => {
+  it('keeps explicitly added groups whether or not they hold commands', () => {
+    expect(keptCommandGroups([cmd('a', 'Quality')], [cmd('a', 'Quality')], ['Ideas', 'Quality', 'Ideas'])).toEqual([
+      'Ideas',
+      'Quality',
+    ]);
+  });
+
+  it('keeps a group whose last command was deleted or dragged away', () => {
+    expect(keptCommandGroups([cmd('a', 'Quality'), cmd('b')], [cmd('b')], [])).toEqual(['Quality']);
+    expect(keptCommandGroups([cmd('a', 'Quality')], [cmd('a', 'Release')], ['Ideas'])).toEqual(['Ideas', 'Quality']);
+  });
+
+  it('never keeps the ungrouped section and leaves still-populated groups alone', () => {
+    expect(keptCommandGroups([cmd('a'), cmd('b', 'Q'), cmd('c', 'Q')], [cmd('b', 'Q')], [])).toEqual([]);
+  });
+
+  it('walks add group -> populate -> empty -> delete without losing the group early', () => {
+    let kept = keptCommandGroups([], [], ['Ideas']);
+    expect(commandGroupSections([], kept).map((s) => s.group)).toEqual(['Ideas']);
+    const populated = [cmd('a', 'Ideas')];
+    kept = keptCommandGroups([], populated, kept);
+    expect(commandGroupSections(populated, kept)).toEqual([{ group: 'Ideas', commands: populated }]);
+    kept = keptCommandGroups(populated, [], kept);
+    expect(commandGroupSections([], kept)).toEqual([{ group: 'Ideas', commands: [] }]);
+    kept = kept.filter((group) => group !== 'Ideas');
+    expect(commandGroupSections([], kept)).toEqual([]);
   });
 });

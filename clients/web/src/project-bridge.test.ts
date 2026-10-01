@@ -164,6 +164,8 @@ describe('authenticatedServerUrl', () => {
 describe('projectScopedServerPath', () => {
   it('scopes project settings independently of ticket sources and leaves host APIs alone', () => {
     expect(projectScopedServerPath('project one', '/commands')).toBe('/checkouts/project%20one/commands');
+    // Kept (possibly empty) command groups live beside the project's commands (HS2-EZ5KMC).
+    expect(projectScopedServerPath('project one', '/command-groups')).toBe('/checkouts/project%20one/command-groups');
     // AI tool defaults belong to the project (HS2-SW5S13); the tool inventory stays machine-wide.
     expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/checkouts/project%20one/ai-settings');
     expect(projectScopedServerPath('project one', '/ai-tools?refresh=true')).toBe('/ai-tools?refresh=true');

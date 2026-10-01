@@ -314,6 +314,7 @@ async function mockProject(
   const evidenceByTicket = new Map<string, Array<{ id: string; filename: string; created_at: string }>>();
   const patches: Record<string, unknown>[] = [];
   let commandDefinitions = [{ id: 'check', title: 'Run checks', program: '/usr/bin/true', args: [], group: 'Quality' }];
+  let commandGroups: string[] = [];
   let terminalSettings = { inherit_global_shell_history: false };
   let trashSettings = { trash_cleanup_days: 30 };
   let aiSettings = { tool: 'codex', model: 'gpt-6-astra', effort: 'medium' };
@@ -797,6 +798,13 @@ async function mockProject(
     if (path.endsWith('/commands') && request.method() === 'PUT') {
       commandDefinitions = request.postDataJSON();
       return route.fulfill({ json: commandDefinitions });
+    }
+    // Kept (possibly empty) command groups, mirroring the server's normalizing PUT (HS2-EZ5KMC).
+    if (path.endsWith('/command-groups') && request.method() === 'GET') return route.fulfill({ json: commandGroups });
+    if (path.endsWith('/command-groups') && request.method() === 'PUT') {
+      const body: string[] = request.postDataJSON();
+      commandGroups = [...new Set(body.map((group) => group.trim()).filter(Boolean))];
+      return route.fulfill({ json: commandGroups });
     }
     if (path.endsWith('/terminal-settings') && request.method() === 'GET')
       return route.fulfill({ json: terminalSettings });
@@ -8356,6 +8364,155 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   });
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Review changes' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-narrow.png', fullPage: true });
+});
+
+test('keeps an empty command group across reloads, populating, and emptying it (HS2-EZ5KMC)', async ({ page }) => {
+  const groupWrites: string[][] = [];
+  await mockProject(page);
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/command-groups'))
+      groupWrites.push(request.postDataJSON());
+  });
+  page.on('dialog', (dialog) => void dialog.accept('Ideas'));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const editor = page.locator('[data-component="command-settings-editor"]'),
+    ideas = editor.locator('[data-command-group="Ideas"]'),
+    openCommandSettings = async () => {
+      await page.getByLabel('Settings view').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      await expect(editor.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toBeVisible();
+    },
+    reopen = async () => {
+      await page.reload();
+      await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+      await openCommandSettings();
+    };
+  await openCommandSettings();
+  // 1. Add an empty group: it renders with its drop placeholder and delete action, and saves at once.
+  await editor.getByRole('button', { name: 'Add group' }).click();
+  await expect(ideas.locator('.command-settings-editor__group-empty')).toHaveText('Drag commands here');
+  await expect(ideas.getByRole('button', { name: 'Delete empty group Ideas' })).toBeVisible();
+  // The quiet icon-only delete keeps its own 24px geometry instead of the editor's generic button chrome.
+  expect(
+    await ideas.getByRole('button', { name: 'Delete empty group Ideas' }).evaluate((button) => {
+      const box = button.getBoundingClientRect(),
+        icon = button.querySelector('svg')!.getBoundingClientRect();
+      return {
+        button: [box.width, box.height],
+        icon: [icon.width, icon.height],
+        border: getComputedStyle(button).borderTopColor,
+      };
+    }),
+  ).toEqual({ button: [24, 24], icon: [14, 14], border: 'rgba(0, 0, 0, 0)' });
+  await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas']);
+  // 2. Reload: the empty group is still there.
+  await reopen();
+  await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+  await page.locator('.app-shell__workspace').evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await page.screenshot({ path: '/private/tmp/hs2-ez5kmc-empty-group-after-reload-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  // A phone-width load uses the compact shell, whose settings categories sit behind a sidebar toggle.
+  await page.reload();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Show settings sidebar' }).click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  await page.getByRole('button', { name: 'Hide settings sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Show settings sidebar' })).toBeVisible();
+  await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(() => editor.evaluate((node) => Math.round(node.getBoundingClientRect().left))).toBeLessThan(40);
+  await page.screenshot({
+    path: '/private/tmp/hs2-ez5kmc-empty-group-after-reload-narrow.png',
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // 3. Add a command to the group by dragging "Run checks" into its open area.
+  const runChecks = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' }),
+    dropArea = ideas.locator('[data-command-group-drop="Ideas"]'),
+    dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await runChecks.dispatchEvent('dragstart', { dataTransfer });
+  await dropArea.dispatchEvent('dragover', { dataTransfer });
+  await dropArea.dispatchEvent('drop', { dataTransfer });
+  await runChecks.dispatchEvent('dragend', { dataTransfer });
+  await expect(ideas.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toBeVisible();
+  await expect(ideas.getByRole('button', { name: 'Delete empty group Ideas' })).toHaveCount(0);
+  // The group it left ("Quality") was emptied by the drag, so it is kept too.
+  await expect(editor.locator('[data-command-group="Quality"] .command-settings-editor__group-empty')).toBeVisible();
+  await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas', 'Quality']);
+  // 4. Remove the command: the group stays, empty again, and survives another reload.
+  await runChecks.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await runChecks.locator('[data-action="delete-command-setting"]').dispatchEvent('click');
+  await expect(editor.locator('.command-settings-editor__row')).toHaveCount(0);
+  await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+  // The command list itself autosaves on its debounce; let it land before reloading.
+  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+  await expect(editor.locator('[data-command-group]')).toHaveCount(2);
+  // 5. Deleting the empty groups persists their removal across a reload.
+  await ideas.getByRole('button', { name: 'Delete empty group Ideas' }).click();
+  await editor.getByRole('button', { name: 'Delete empty group Quality' }).click();
+  await expect(editor.locator('[data-command-group]')).toHaveCount(0);
+  await expect.poll(() => groupWrites.at(-1)).toEqual([]);
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  await expect(editor.getByText('No custom commands yet.')).toBeVisible();
+});
+
+test('persists an empty command group through the real server (HS2-EZ5KMC)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await mockProject(page);
+    // Only project discovery is a fixture; command and command-group settings are the real server's,
+    // reached through the same checkout-scoped paths the project bridge forwards them to.
+    await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    page.on('dialog', (dialog) => void dialog.accept('Ideas'));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const editor = page.locator('[data-component="command-settings-editor"]'),
+      ideas = editor.locator('[data-command-group="Ideas"]'),
+      openCommandSettings = async () => {
+        await page.getByLabel('Settings view').click();
+        await page.getByRole('button', { name: 'Commands', exact: true }).click();
+        await expect(editor).toBeVisible();
+      },
+      storedGroups = () => server.request<string[]>(`/checkouts/${server.checkoutId}/command-groups`);
+    await openCommandSettings();
+    await expect(editor.getByText('No custom commands yet.')).toBeVisible();
+    await editor.getByRole('button', { name: 'Add group' }).click();
+    await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+    await expect.poll(storedGroups).toEqual(['Ideas']);
+    await page.reload();
+    await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+    await openCommandSettings();
+    await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
+    await ideas.getByRole('button', { name: 'Delete empty group Ideas' }).click();
+    await expect(editor.getByText('No custom commands yet.')).toBeVisible();
+    await expect.poll(storedGroups).toEqual([]);
+  } finally {
+    await server.stop();
+  }
 });
 
 test('multi-selects command rows and drags the whole selection to reorder (HS2-VJYQHG)', async ({ page }) => {

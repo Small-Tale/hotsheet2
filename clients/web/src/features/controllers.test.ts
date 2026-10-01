@@ -103,6 +103,76 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.commandSettingsMessage('b')).toBe('Saved.');
   });
 
+  it('persists kept command groups through add, populate, empty, reload, and delete (HS2-EZ5KMC)', async () => {
+    const projects = signal([project('a')]),
+      selectedProjectId = signal('a');
+    const owner = createCommandsController({
+      projects,
+      selectedProjectId,
+      storedWorkspacePreferences: DEFAULT_WORKSPACE_PREFERENCES,
+    });
+    const groupSaves: unknown[] = [];
+    fetchMock.mockImplementation(async (input, init) => {
+      if (typeof init?.body !== 'string') throw new Error('Expected JSON body');
+      const body: unknown = JSON.parse(init.body);
+      if (input === '/api/a/command-groups') groupSaves.push(body);
+      return json(body);
+    });
+    owner.commandDefinitions.value = [command('one')];
+    owner.setCommandSettingsDraft('a', JSON.stringify([command('one')]));
+    vi.stubGlobal('window', { prompt: () => ' Ideas ' });
+    owner.addCommandGroup('a');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    expect(groupSaves).toEqual([['Ideas']]);
+    // A duplicate name is rejected without another save.
+    owner.addCommandGroup('a');
+    expect(owner.commandSettingsMessage('a')).toBe('A group named "Ideas" already exists.');
+    expect(groupSaves).toHaveLength(1);
+    // Reload: the server's kept groups replace the in-memory list.
+    owner.commandSettingsExtraGroupsByProject.value = {};
+    owner.loadCommandGroups('a', ['Ideas']);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    // Populating the kept group neither drops nor re-saves it.
+    owner.reorderCommandSettings('a', ['one'], { kind: 'group', group: 'Ideas' });
+    expect(owner.commandSettingsDefinitions('a')[0].group).toBe('Ideas');
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    expect(groupSaves).toHaveLength(1);
+    // Removing the group's last command keeps the group.
+    owner.deleteCommandSetting('a', 'one');
+    expect(owner.commandSettingsDefinitions('a')).toEqual([]);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    // An implicitly created group that is emptied is kept and saved too.
+    owner.setCommandSettingsDraft('a', JSON.stringify([{ ...command('two'), group: 'Release' }]));
+    owner.deleteCommandSetting('a', 'two');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas', 'Release']);
+    expect(groupSaves.at(-1)).toEqual(['Ideas', 'Release']);
+    // A refresh racing an in-flight group save does not clobber the local edit.
+    const pending = deferred<Response>();
+    fetchMock.mockReturnValueOnce(pending.promise);
+    owner.deleteCommandGroup('a', 'Release');
+    owner.loadCommandGroups('a', ['Ideas', 'Release']);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    pending.resolve(json(['Ideas']));
+    await vi.advanceTimersByTimeAsync(0);
+    owner.loadCommandGroups('a', ['Ideas']);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
+    // Deleting the last empty group persists an empty list; a failed save reports its error.
+    fetchMock.mockRejectedValueOnce(new Error('offline'));
+    owner.deleteCommandGroup('a', 'Ideas');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsExtraGroups('a')).toEqual([]);
+    expect(owner.commandSettingsMessage('a')).toBe('offline');
+    // A group edit for a project that is no longer open is kept locally without a request.
+    const requests = fetchMock.mock.calls.length;
+    vi.stubGlobal('window', { prompt: () => 'Later' });
+    owner.addCommandGroup('closed');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsExtraGroups('closed')).toEqual(['Later']);
+    expect(fetchMock).toHaveBeenCalledTimes(requests);
+  });
+
   it('rejects stale repository pages after project replacement and permits reset/empty/refill pagination', async () => {
     const active = signal<Project | undefined>(project('a'));
     const owner = createRepositoryController({

@@ -1074,6 +1074,7 @@ export function projectScopedServerPath(projectId: string, path: string): string
     scoped =
       pathname === '/close' ||
       pathname === '/commands' ||
+      pathname === '/command-groups' ||
       pathname === '/command-runs' ||
       pathname === '/views' ||
       pathname === '/terminal-settings' ||

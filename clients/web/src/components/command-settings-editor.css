@@ -84,19 +84,20 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.command-settings-editor__group-delete {
+.command-settings-editor button.command-settings-editor__group-delete {
   width: remify(24px);
+  height: remify(24px);
   min-height: remify(24px);
   padding: 0;
   border-color: transparent;
   background: transparent;
 }
-.command-settings-editor__group-delete:hover {
+.command-settings-editor button.command-settings-editor__group-delete:hover {
   color: var(--wa-color-danger-on-quiet);
   border-color: var(--wa-color-neutral-border-normal);
   background: var(--wa-color-surface-default);
 }
-.command-settings-editor__group-delete svg {
+.command-settings-editor button.command-settings-editor__group-delete svg {
   width: remify(14px);
   height: remify(14px);
 }

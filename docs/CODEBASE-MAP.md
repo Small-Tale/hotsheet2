@@ -41,7 +41,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/app/runtime.tsx      #   Application runtime composition: project/cache/ticket orchestration and feature-controller integration
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
-      commands.tsx            # Project command drafts, selection, autosave, icons, and dialog composition
+      commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
       repository.tsx          # Status/detail paging, stale-response guards, observer, review, and evidence projection
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
       gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces
@@ -187,7 +187,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/checkout_order.rs  #   shared multi-source checkout merge order, ranks, global limit (HS2-M0YTB6), and the value-keyset `MergeKey`/`AfterKey` (HS2-74H84S)
       src/checkout_page.rs   #   shared batched k-way checkout page merge, v2 cursor codec, filter fingerprint, counts envelope (server + serverless MCP, HS2-JVF20F)
       src/corrupt_cache.rs   #   stat-validated per-store memo of corrupt ticket files; re-parses only changed files (checkout corrupt-tickets, HS2-KYSBT2)
-      src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata
+      src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata; `command_groups` kept-group list (HS2-EZ5KMC)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
@@ -206,7 +206,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router + ticket/terminal/permission/activity/client-drive APIs; provider discovery/scoped routes plus idempotent /provider-transfers/copy|move; /stores remains compatible
+      src/lib.rs             #   app() router + ticket/terminal/permission/activity/client-drive APIs; provider discovery/scoped routes plus idempotent /provider-transfers/copy|move; /stores remains compatible; project /commands plus sibling /command-groups (kept empty command groups, HS2-EZ5KMC), each also checkout-scoped
       src/client_drive.rs    #   client-owned prepared AI connections: plugin-neutral checkout/source-bound create/attach, sequential resumable turns, shared-session exclusion, durable project session catalog/home, capability-present interrupt, linked-source metrics/activity projection, and injectable fake/native backends (HS2-5DGFG2/KH8FBA/BXSPMN/AB9RNJ)
       src/main.rs            #   bind + serve (loopback = Tier-0 plaintext; off-loopback = Tier-1 mTLS via tls::build_server_config + serve_tls, HS2-VT3JMF); instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/tls.rs             #   Tier-1 mTLS (HS2-VT3JMF/MPC0QF): required client cert + live revocation verifier; serve_tls_with_acl fingerprints each peer and applies live optional read-only/read-write/deny authorization before routing HTTP

@@ -3289,6 +3289,26 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         .await
         .unwrap();
     assert_eq!(commands.status(), StatusCode::OK);
+    let command_groups = application
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/command-groups"),
+            Some(r#"["Ideas"]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(command_groups.status(), StatusCode::OK);
+    let listed_groups = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/command-groups"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(listed_groups).await, serde_json::json!(["Ideas"]));
 
     let shared: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(checkout.join(".hotsheet2/settings.json")).unwrap(),
@@ -3301,6 +3321,7 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     assert_eq!(shared["views"][0]["id"], "mine");
     assert_eq!(shared["trash_cleanup_days"], 14);
     assert_eq!(local["commands"][0]["id"], "check");
+    assert_eq!(local["command_groups"], serde_json::json!(["Ideas"]));
     assert_eq!(local["terminal.inherit_global_shell_history"], true);
     assert!(
         std::fs::read_to_string(checkout.join(".gitignore"))
@@ -7264,6 +7285,52 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn kept_command_groups_round_trip_beside_local_commands() {
+    // HS2-EZ5KMC: an empty "Add group" group persists in the same local scope as commands.
+    let (dir, st) = state();
+    let app = app(st);
+    let initial = app
+        .clone()
+        .oneshot(authed("GET", "/command-groups", None))
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    assert_eq!(body_json(initial).await, serde_json::json!([]));
+    let saved = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/command-groups",
+            Some(r#"[" Ideas ","","Later","Ideas"]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await,
+        serde_json::json!(["Ideas", "Later"])
+    );
+    let listed = app
+        .clone()
+        .oneshot(authed("GET", "/command-groups", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(listed).await,
+        serde_json::json!(["Ideas", "Later"])
+    );
+    let local = Settings::new(dir.path())
+        .get("command_groups", Scope::Local)
+        .unwrap();
+    assert_eq!(local, Some(serde_json::json!(["Ideas", "Later"])));
+    let invalid = app
+        .oneshot(authed("PUT", "/command-groups", Some(r#"{"group":"x"}"#)))
+        .await
+        .unwrap();
+    assert!(invalid.status().is_client_error());
 }
 
 #[tokio::test]

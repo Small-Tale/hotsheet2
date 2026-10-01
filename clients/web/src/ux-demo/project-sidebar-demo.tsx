@@ -3,7 +3,7 @@ import { signal } from 'kerfjs';
 import { GripHorizontal } from 'lucide';
 
 import type { CommandDefinition } from '../api';
-import { type CommandDropTarget, emptyExtraGroups, reorderCommandsMultiple } from '../command-order';
+import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/command-settings-editor';
@@ -170,9 +170,10 @@ export function reorderCommandEditorSetting(sourceId: string, target: CommandDro
   reorderCommandEditorSettings([sourceId], target);
 }
 export function reorderCommandEditorSettings(sourceIds: readonly string[], target: CommandDropTarget) {
-  const next = reorderCommandsMultiple(commandEditorCommands.value, sourceIds, target);
+  const before = commandEditorCommands.value,
+    next = reorderCommandsMultiple(before, sourceIds, target);
   commandEditorCommands.value = next;
-  commandEditorExtraGroups.value = emptyExtraGroups(next, commandEditorExtraGroups.value);
+  commandEditorExtraGroups.value = keptCommandGroups(before, next, commandEditorExtraGroups.value);
 }
 export function selectCommandEditorRow(id: string, intent: { toggle?: boolean; range?: boolean }) {
   const ordered = commandEditorCommands.value.map((command) => command.id),
@@ -203,7 +204,13 @@ export function deleteCommandEditorGroup(group: string) {
   commandEditorExtraGroups.value = commandEditorExtraGroups.value.filter((item) => item !== group);
 }
 export function deleteCommandEditorSetting(id: string) {
-  commandEditorCommands.value = commandEditorCommands.value.filter((command) => command.id !== id);
+  const before = commandEditorCommands.value;
+  commandEditorCommands.value = before.filter((command) => command.id !== id);
+  commandEditorExtraGroups.value = keptCommandGroups(
+    before,
+    commandEditorCommands.value,
+    commandEditorExtraGroups.value,
+  );
   if (commandEditorEditingId.value === id) closeCommandEditorDemo();
 }
 export function addCommandEditorSetting() {

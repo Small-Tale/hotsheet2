@@ -823,6 +823,15 @@ code-project root so imported shell and AI command buttons retain their working-
 semantics without embedding a shell-formatted `cd` string. Definitions, run history,
 lookup, and cancellation are isolated by checkout on a shared server.
 
+The sibling machine-local `command_groups` key is an ordered list of group names the
+command settings editor keeps even while no command is in them (HS2-EZ5KMC), so an empty
+"Add group" group, or a group emptied by deleting or moving its last command, survives a
+reload until the user deletes it. `GET`/`PUT /command-groups` (and the checkout-scoped
+`/checkouts/{reference}/command-groups` the client uses) read and replace it; writes are
+trimmed, blank names dropped, and duplicates collapsed. The generic settings writer
+rejects anything but a list of strings, so `hotsheet-cli settings set command_groups`
+is the equivalent headless path.
+
 Rich-activity distillation is a stricter case: consent is read from the **local scope
 only**, even though normal effective settings permit shared/global fallback. A committed
 project must not opt another collaborator into summarization. Enable the built-in,
