@@ -826,11 +826,10 @@ date instead of submitting an enclosing form. Every path to a lifecycle date chi
 helper, a typed filter, a restored query, and the model rule — labels it through
 `searchDateLabel`, so a local `YYYY-MM-DD[THH:MM]` value reads in the machine locale's short
 date (and time) format (`created after 9/1/26, 11:05 AM`) while relative, zoned, and
-locale-typed values keep the text as written (HS2-074E0P). Kerf's model-mode Backspace/Delete
-beside a chip and its clear on a non-collapsible field re-key the editor without restoring focus
-(`KF-Q2G9QS`); until that ships, `wireSearchAndComposerInteractions` snapshots chip offsets
-before Kerf's keydown, restores the caret through `keyboard.onRemoveToken`, and refocuses a
-cleared field from a click delegate registered after Kerf's. The surfaces have two placements:
+locale-typed values keep the text as written (HS2-074E0P). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
+restores the caret itself after a model-mode Backspace/Delete beside a chip and after a model
+field's clear, so the app no longer snapshots chip offsets or refocuses a cleared field
+(HS2-45F8WW). The surfaces have two placements:
 `surfaces="floating"` (default) hangs them below the group as popovers, with the component
 overriding Kerf's search-group clipping while expanded; `surfaces="external"` renders none inside
 the group, and the consumer places the exported `TicketSearchSurfaces` for the same `id` in its
