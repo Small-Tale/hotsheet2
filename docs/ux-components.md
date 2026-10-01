@@ -1955,7 +1955,10 @@ component the app needs, the fix belongs in Kerf (a `KF-*` ticket, adopted when 
 not in an override. Application-owned components keep CSS for their own markup, including
 native HTML and raw Web Awesome elements, and surfaces compose Kerf components before
 implementing custom ones. The `KUI-L019` and `KUI-L022` budgets below are the tracked
-residual of that policy and only ever decrease.
+residual of that policy and only ever decrease. A direct maintainer request for a visual
+change does not override the policy (HS2-JS9PSP): when meeting it would restyle a Kerf
+component, the agent asks for feedback or proactively files the `KF-*` request instead of
+writing the override.
 
 The residual is gated on Kerf releases rather than on app work: every Kerf API request
 from HS2-G5K1V0 (`KF-XNRXCK` Toolbar zone layout, `KF-9K8PTV` Select trigger width and

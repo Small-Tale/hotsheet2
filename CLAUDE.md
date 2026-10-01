@@ -126,7 +126,12 @@ never through selectors that target `.kui-*` classes, Kerf-rendered parts, or th
 an app class happens to sit on. When no prop or token expresses what the app needs, add the
 prop, token, or a new component to Kerf (file a `KF-*` ticket in the Kerf store and adopt it
 when it ships) instead of overriding the component; until then the finding stays counted in
-the Kerf UI doctor budgets, which only ever decrease. Application-owned components may carry
+the Kerf UI doctor budgets, which only ever decrease. **This holds even when the
+maintainer directly asks for the visual change** (HS2-JS9PSP): if satisfying a request
+would mean overriding a Kerf component's styling, do not quietly break the rule. Either
+ask the maintainer for feedback (naming the conflict and the Kerf API that is missing) or
+proactively file a `KF-*` ticket in the Kerf store requesting the prop, token, variant, or
+component, and adopt it when it ships. Application-owned components may carry
 CSS for their own markup (native HTML and raw Web Awesome elements), and every surface should
 compose Kerf components before implementing a custom one.
 
