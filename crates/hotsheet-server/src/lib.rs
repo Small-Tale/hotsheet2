@@ -2638,6 +2638,12 @@ async fn update_provider_connection(
         connection.clone(),
         Some(&connection_id),
     )?;
+    // Checkout links copy the locator; an edit made for every project reaches each of them
+    // (HS2-RCBKA3).
+    state
+        .checkout_registry
+        .update_source_locator(&connection_id, &connection.locator)
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(connection))
 }
 

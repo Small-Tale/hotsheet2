@@ -633,6 +633,40 @@ impl CheckoutRegistry {
         Ok(renamed)
     }
 
+    /// Rewrite the copied locator of every checkout link that names the external connection
+    /// `connection_id`, so editing a connection's repository or project for every project
+    /// reaches each linked checkout (HS2-RCBKA3). Git links are path-derived and never change
+    /// here. Returns the ids of the checkouts whose link changed; an unchanged locator is a
+    /// no-op that leaves `checkouts.json` untouched.
+    pub fn update_source_locator(
+        &self,
+        connection_id: &str,
+        locator: &str,
+    ) -> Result<Vec<String>, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let mut updated = Vec::new();
+        for checkout in &mut file.checkouts {
+            let mut changed = false;
+            for source in &mut checkout.sources {
+                if source.connection_id == connection_id
+                    && source.provider != "git"
+                    && source.locator != locator
+                {
+                    source.locator = locator.to_string();
+                    changed = true;
+                }
+            }
+            if changed {
+                updated.push(checkout.id.clone());
+            }
+        }
+        if !updated.is_empty() {
+            self.write_locked(&file)?;
+        }
+        Ok(updated)
+    }
+
     pub fn remove_source(
         &self,
         reference: &str,
@@ -1161,6 +1195,105 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("historical alias")
+        );
+    }
+
+    #[test]
+    fn connection_locator_updates_reach_every_linked_checkout() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = temp.path().join("tickets");
+        std::fs::create_dir(&store).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let github = |locator: &str| TicketSource {
+            connection_id: "github-shared".into(),
+            provider: "github".into(),
+            locator: locator.into(),
+        };
+        let mut ids = Vec::new();
+        for name in ["first", "second", "unlinked"] {
+            let root = temp.path().join(name);
+            std::fs::create_dir(&root).unwrap();
+            let mut sources = vec![TicketSource::git(&store)];
+            if name != "unlinked" {
+                sources.push(github("acme/old"));
+            }
+            ids.push(
+                registry
+                    .register_sources(&root, None, None, sources, None)
+                    .unwrap()
+                    .id,
+            );
+        }
+        let git_id = TicketSource::git(&store).connection_id;
+        let locators = |connection: &str| -> Vec<Option<String>> {
+            ids.iter()
+                .map(|id| {
+                    registry
+                        .resolve(id)
+                        .unwrap()
+                        .source(connection)
+                        .map(|source| source.locator.clone())
+                })
+                .collect()
+        };
+
+        let mut updated = registry
+            .update_source_locator("github-shared", "acme/new")
+            .unwrap();
+        updated.sort();
+        let mut expected = ids[..2].to_vec();
+        expected.sort();
+        assert_eq!(updated, expected);
+        assert_eq!(
+            locators("github-shared"),
+            vec![Some("acme/new".into()), Some("acme/new".into()), None]
+        );
+
+        // Repeating the same locator changes nothing and does not rewrite the file.
+        let before = std::fs::read(temp.path().join("checkouts.json")).unwrap();
+        assert!(
+            registry
+                .update_source_locator("github-shared", "acme/new")
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("checkouts.json")).unwrap(),
+            before
+        );
+
+        // A checkout linked afterwards (with the stale value) is caught by the next edit,
+        // and a rename keeps following the connection under its new id.
+        registry
+            .add_source(&ids[2], github("acme/stale"), false)
+            .unwrap();
+        registry
+            .rename_source(&ids[0], "github-shared", "github-renamed")
+            .unwrap();
+        let updated = registry
+            .update_source_locator("github-shared", "acme/third")
+            .unwrap();
+        assert_eq!(updated.len(), 2);
+        assert_eq!(
+            locators("github-shared"),
+            vec![None, Some("acme/third".into()), Some("acme/third".into())]
+        );
+        assert_eq!(
+            locators("github-renamed"),
+            vec![Some("acme/new".into()), None, None]
+        );
+
+        // Git links are path-derived and never retargeted through a connection edit.
+        assert!(
+            registry
+                .update_source_locator(&git_id, "/elsewhere")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            locators(&git_id)
+                .iter()
+                .all(|locator| locator.as_deref() != Some("/elsewhere"))
         );
     }
 

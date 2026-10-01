@@ -374,6 +374,14 @@ than reporting it inaccessible. Toggle it with `PUT /provider-connections/{id}/d
 dialog's **Disable / Enable** action; the settings list badges it **Disabled**. An ordinary
 connection edit preserves the flag.
 
+A checkout link (`TicketSource` in `checkouts.json`) copies its connection's locator.
+Editing a connection's repository or project with `PATCH /provider-connections/{id}`
+(App Settings → Connections, or a project's Ticket sources edit) rewrites that copy on
+every checkout that links the connection, in one locked registry write, so no linked
+project keeps the old value (HS2-RCBKA3). Git links are path-derived and never change
+through a connection edit. The headless `github-connect` refuses to retarget an existing
+connection to another repository, so the CLI cannot create a stale copy.
+
 Project versus machine scope (HS2-3SCH1K). The connection catalog (`providers.json`) is
 machine-wide, while each checkout links the sources it uses and keeps its own default source
 (`checkouts.json`). `GET /checkouts/{reference}/providers` lists only that checkout's linked

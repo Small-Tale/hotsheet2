@@ -11975,6 +11975,24 @@ async fn provider_connections_crud_keeps_only_references_and_one_default() {
     );
     assert_eq!(listed[1]["id"], "gitlab-team");
 
+    // A checkout linked to github-main copies its locator; editing the connection for
+    // every project must reach that copy (HS2-RCBKA3).
+    let github_checkout = tempfile::tempdir().unwrap();
+    let github_registration = serde_json::json!({
+        "root": github_checkout.path(),
+        "alias": "github-linked",
+        "sources": [{"connection_id":"github-main","provider":"github","locator":"acme/repo"}],
+        "default_source": "github-main"
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&github_registration)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
     let update = serde_json::json!({
         "id":"ignored-by-path","provider":"github","locator":"acme/renamed",
         "name":"Renamed","default":true,
@@ -11993,6 +12011,18 @@ async fn provider_connections_crud_keeps_only_references_and_one_default() {
     .await;
     assert_eq!(updated["id"], "github-main");
     assert_eq!(updated["locator"], "acme/renamed");
+    let github_linked = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/github-linked", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        github_linked["sources"][0]["locator"], "acme/renamed",
+        "{github_linked}"
+    );
+    assert_eq!(github_linked["default_source"], "github-main");
 
     // Link gitlab-team to a checkout as its default, then remove the connection: every
     // local reference goes with it, and a user-managed credential is left alone (HS2-724S9N).
