@@ -618,6 +618,53 @@ mod tests {
         let _ = term.kill();
     }
 
+    /// A takeover held by the focus-hold lands when the hold ends, without any further claim
+    /// (HS2-G4C082). Before, it waited for the next claim — up to a 5 s heartbeat.
+    #[test]
+    fn a_focus_hold_takeover_applies_when_the_hold_ends_without_another_claim() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        let mut sizes = term.subscribe_size();
+        let claim = |viewer: &str, cols, rows, interacting| ViewportClaim {
+            viewer_id: viewer.into(),
+            cols,
+            rows,
+            focus: true,
+            visible: true,
+            interacting,
+            activity_at_ms: wall_ms(),
+        };
+        assert!(
+            term.claim_size(claim("desk", 200, 50, true), wall_ms())
+                .is_some()
+        );
+        let first = sizes.blocking_recv().expect("the desk size");
+        assert_eq!(first.driven_by.as_deref(), Some("desk"));
+        // Past the min-interval, so only the focus-hold defers the phone's takeover.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let tapped = std::time::Instant::now();
+        assert!(
+            term.claim_size(claim("phone", 80, 24, true), wall_ms())
+                .is_none(),
+            "held inside the focus-hold"
+        );
+        let takeover = sizes
+            .blocking_recv()
+            .expect("the held takeover lands on its own");
+        assert_eq!((takeover.cols, takeover.rows), (80, 24));
+        assert_eq!(takeover.driven_by.as_deref(), Some("phone"));
+        let elapsed = tapped.elapsed();
+        assert!(
+            elapsed >= std::time::Duration::from_millis(400)
+                && elapsed < std::time::Duration::from_millis(1500),
+            "lands at the end of the 500 ms hold, got {elapsed:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        assert!(sizes.try_recv().is_err(), "one takeover, no repeats");
+        let _ = term.kill();
+    }
+
     /// An interactive shell's foreground switches to a command while it runs and back to the
     /// shell when it exits (HS2-WQQYT1).
     #[cfg(unix)]

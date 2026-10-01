@@ -2464,7 +2464,9 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
 **Anti-thrash guards** (named so implementation has targets; tune later):
 
 - `SIZE_FOCUS_HOLD_MS` (~500 ms, retaining the protocol's historical name) — a newly
-  eligible viewport must remain eligible this long before its size is applied.
+  eligible viewport must remain eligible this long before its size is applied. The terminal
+  decides again when the hold ends, so the takeover lands without waiting for another claim
+  or heartbeat (HS2-G4C082).
 - `SIZE_MIN_DELTA` (≥2 cols/rows) — ignore sub-threshold differences.
 - `SIZE_RESIZE_MIN_INTERVAL_MS` (~100 ms) — rate-limit actual PTY resizes to ten per
   second. A change inside the window is deferred, not dropped: the terminal decides again

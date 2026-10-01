@@ -83,8 +83,8 @@ pub struct SizeArbiter {
     /// genuine interaction. A different candidate must persist for `SIZE_FOCUS_HOLD_MS` past this
     /// before it takes over, debouncing rapid focus flips and stray double-taps.
     focus_changed_at_ms: u64,
-    /// When a change the min-interval suppressed may be applied (the trailing edge of the rate
-    /// limit), until a later `decide` applies or drops it.
+    /// When the owner should decide again: the trailing edge of the min-interval rate limit or
+    /// the end of a focus-hold takeover, until a later `decide` applies or drops it.
     deferred_until_ms: Option<u64>,
 }
 
@@ -194,7 +194,7 @@ impl SizeArbiter {
         if self.applied.is_some()
             && now_ms.saturating_sub(self.applied_at_ms) < SIZE_RESIZE_MIN_INTERVAL_MS
         {
-            self.deferred_until_ms = Some(self.applied_at_ms + SIZE_RESIZE_MIN_INTERVAL_MS);
+            self.defer_until(self.applied_at_ms + SIZE_RESIZE_MIN_INTERVAL_MS);
             return None;
         }
         self.applied = Some((target.cols, target.rows));
@@ -202,10 +202,18 @@ impl SizeArbiter {
         Some(target)
     }
 
-    /// When the change the last `decide` suppressed for the min-interval may be applied, if it
-    /// suppressed one (HS2-GSRZX6).
+    /// When the owner should call `decide` again because the last one suppressed a change: the
+    /// min-interval rate limit (HS2-GSRZX6) or a focus-hold takeover (HS2-G4C082). The earliest
+    /// pending deadline wins; the next `decide` recomputes any remaining one.
     pub fn deferred_until(&self) -> Option<u64> {
         self.deferred_until_ms
+    }
+
+    fn defer_until(&mut self, at_ms: u64) {
+        self.deferred_until_ms = Some(
+            self.deferred_until_ms
+                .map_or(at_ms, |current| current.min(at_ms)),
+        );
     }
 
     /// The size the policy wants right now (ignoring the resize-rate guards). `None` = no
@@ -272,8 +280,12 @@ impl SizeArbiter {
         } else if now_ms.saturating_sub(self.focus_changed_at_ms) >= SIZE_FOCUS_HOLD_MS {
             // Focus moved to a different live viewport and has been held long enough.
             self.driver = Some(cand.clone());
+        } else {
+            // Within the hold window: keep the current driver (hold its size), and ask the owner to
+            // decide again when the hold ends so the takeover lands without waiting for another
+            // claim — otherwise it could wait for the next 5 s heartbeat (HS2-G4C082).
+            self.defer_until(self.focus_changed_at_ms + SIZE_FOCUS_HOLD_MS);
         }
-        // else: within the hold window — keep the current driver (hold its size).
 
         let d = self.driver.clone().unwrap_or(cand);
         self.claims.get(&d).map(|c| Decision {
@@ -554,5 +566,80 @@ mod tests {
         let d = a.decide(5600).expect("the phone takes over after the hold");
         assert_eq!(d.driven_by.as_deref(), Some("v2"));
         assert_eq!((d.cols, d.rows), (80, 24));
+    }
+
+    /// A held takeover asks for a re-decide at the end of the hold, and that decide switches the
+    /// driver with no further claim (HS2-G4C082).
+    #[test]
+    fn a_held_takeover_defers_a_re_decide_to_the_end_of_the_hold() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 0);
+        assert!(a.decide(0).is_some());
+        assert_eq!(a.deferred_until(), None);
+        a.upsert(interacting_claim("phone", 80, 24, true, 5000), 5000);
+        assert!(a.decide(5000).is_none(), "held");
+        assert_eq!(a.deferred_until(), Some(5000 + SIZE_FOCUS_HOLD_MS));
+        // A heartbeat inside the hold keeps the same deadline (no drift, no earlier switch).
+        a.upsert(claim("desk", 200, 50, true, 5200), 5200);
+        assert!(a.decide(5200).is_none());
+        assert_eq!(a.deferred_until(), Some(5000 + SIZE_FOCUS_HOLD_MS));
+        let d = a
+            .decide(5000 + SIZE_FOCUS_HOLD_MS)
+            .expect("the takeover lands at the deadline");
+        assert_eq!(d.driven_by.as_deref(), Some("phone"));
+        assert_eq!(a.deferred_until(), None, "nothing left pending");
+    }
+
+    /// When the hold and the min-interval both defer, the earliest deadline is reported; a
+    /// re-decide then reports the remaining one.
+    #[test]
+    fn overlapping_hold_and_rate_limit_report_the_earliest_deadline() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 0);
+        assert!(a.decide(0).is_some()); // applied at t=0
+        a.upsert(interacting_claim("phone", 80, 24, true, 50), 50);
+        // Held (until 550); the held desk size equals the applied size, so no rate-limit deferral.
+        assert!(a.decide(50).is_none());
+        assert_eq!(a.deferred_until(), Some(50 + SIZE_FOCUS_HOLD_MS));
+        // The desk resizes inside both windows: rate limit (until 100) and hold (until 550).
+        a.upsert(claim("desk", 180, 48, true, 60), 60);
+        assert!(a.decide(60).is_none());
+        assert_eq!(a.deferred_until(), Some(SIZE_RESIZE_MIN_INTERVAL_MS));
+        let desk = a
+            .decide(SIZE_RESIZE_MIN_INTERVAL_MS)
+            .expect("the desk resize lands first");
+        assert_eq!((desk.cols, desk.rows), (180, 48));
+        assert_eq!(
+            a.deferred_until(),
+            Some(50 + SIZE_FOCUS_HOLD_MS),
+            "the hold is still pending"
+        );
+        let phone = a
+            .decide(50 + SIZE_FOCUS_HOLD_MS)
+            .expect("then the takeover");
+        assert_eq!(phone.driven_by.as_deref(), Some("phone"));
+        assert_eq!(a.deferred_until(), None);
+    }
+
+    /// A rapid flip back to the current driver inside the hold cancels the pending takeover.
+    #[test]
+    fn a_flip_back_inside_the_hold_leaves_nothing_pending() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 0);
+        assert!(a.decide(0).is_some());
+        a.upsert(interacting_claim("phone", 80, 24, true, 1000), 1000);
+        assert!(a.decide(1000).is_none());
+        assert!(a.deferred_until().is_some());
+        a.upsert(interacting_claim("desk", 200, 50, true, 1100), 1100);
+        assert!(a.decide(1100).is_none());
+        assert_eq!(
+            a.deferred_until(),
+            None,
+            "the desk is the focused driver again"
+        );
+        assert!(
+            a.decide(1600).is_none(),
+            "no takeover after the old deadline"
+        );
     }
 }
