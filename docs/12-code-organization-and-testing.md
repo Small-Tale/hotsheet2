@@ -471,6 +471,13 @@ or `HOTSHEET_PLAYWRIGHT_WORKERS` overrides the count. Tests get 60 s and asserti
 busy machine slows a run down instead of failing it. Tests still must wait for events or
 state, never for fixed delays.
 
+When a browser test asserts an intermediate state that only exists while a request is
+outstanding, the route fixture must hold that response behind an explicit gate (a promise the test
+resolves after asserting). Examples are a pending spinner, an optimistic projection, an in-flight
+cancellation, or a restore screen. A fixed `setTimeout` in the route handler is not enough: a busy
+machine can let it expire before the assertion runs. Route delays may remain only to simulate
+latency that no assertion depends on (HS2-ZZX0CV).
+
 HS2-AVXYCB exercises the actual reader's quoted inline answer against that server,
 checks the persisted ordinary note and cleared indexed/full-ticket review state, then
 reloads to confirm persistence. Provider discovery stays deterministic; ticket reads and

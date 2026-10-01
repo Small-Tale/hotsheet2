@@ -10288,9 +10288,15 @@ test('projects Up Next immediately and reconciles without a full project refresh
   page.on('request', (request) => {
     requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
+  // Hold the PATCH until the optimistic state has been asserted, so the assertions cannot be
+  // satisfied by the server response on a slow machine (HS2-ZZX0CV).
+  let releasePatch!: () => void;
+  const patchReleased = new Promise<void>((resolve) => {
+    releasePatch = resolve;
+  });
   await page.route('**/tickets/*05', async (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback();
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await patchReleased;
     const body = route.request().postDataJSON();
     return route.fulfill({
       json: { store: 'git-local', ...notStartedRow, ...body, details: '', notes: [], attachments: [] },
@@ -10317,6 +10323,12 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await expect
     .poll(() => requests.some((value) => value.startsWith('PATCH ') && !value.endsWith('/tickets')))
     .toBe(true);
+  const patched = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && /\/tickets\/[^/]*05$/.test(response.url()),
+  );
+  releasePatch();
+  await patched;
+  await expect(row.getByRole('button', { name: 'Remove from Up Next' })).toBeVisible();
   await page.waitForTimeout(300);
   const afterPatch = requests.slice(requests.findIndex((value) => value.startsWith('PATCH ')) + 1);
   expect(afterPatch.filter((value) => value.includes('/tickets') || value.includes('/repository/status'))).toEqual([]);
@@ -12020,10 +12032,15 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
     baseAttempts += 1;
     return route.fulfill({ status: 503, json: { error: 'discovery temporarily unavailable' } });
   });
-  // Opening Drive options forces a fresh discovery (HS2-10R4VV), which succeeds on retry.
+  // Opening Drive options forces a fresh discovery (HS2-10R4VV), which succeeds on retry. It is held
+  // until the in-progress state has been asserted (HS2-ZZX0CV).
+  let releaseDiscovery!: () => void;
+  const discoveryReleased = new Promise<void>((resolve) => {
+    releaseDiscovery = resolve;
+  });
   await page.route('**/ai-tools?refresh=true', async (route) => {
     refreshAttempts += 1;
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await discoveryReleased;
     return route.fulfill({ json: discovered });
   });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -12040,6 +12057,7 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   await expect(menu).not.toContainText('No AI tools detected');
   await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-discovery-retry-wide.png', fullPage: true });
   await expect.poll(() => refreshAttempts).toBe(1);
+  releaseDiscovery();
   await expect(menu.locator('[data-action="select-drive-tool"][data-value="opencode"]')).toBeAttached();
   await expect(menu).not.toContainText('No AI tools detected');
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -14213,11 +14231,31 @@ test('searches indexed ticket details and notes without discarding the full proj
   await page.getByRole('button', { name: 'Clear search' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-SHG7YS"]')).toBeVisible();
+  // Clear while the search is still in flight: hold its response until after the clear, so the stale
+  // results arriving afterwards must not replace the cleared list (HS2-ZZX0CV).
+  let releaseStaleSearch!: () => void;
+  const staleSearchReleased = new Promise<void>((resolve) => {
+    releaseStaleSearch = resolve;
+  });
+  await page.route(
+    (url) => url.pathname.endsWith('/tickets') && url.searchParams.get('text') === 'QQRY00',
+    async (route) => {
+      await staleSearchReleased;
+      await route.fallback();
+    },
+  );
   const pending = page.waitForRequest((request) => new URL(request.url()).searchParams.get('text') === 'QQRY00');
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('QQRY00');
   await pending;
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await page.waitForTimeout(200);
+  await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  const staleResponse = page.waitForResponse(
+    (response) => new URL(response.url()).searchParams.get('text') === 'QQRY00',
+  );
+  releaseStaleSearch();
+  await staleResponse;
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // The stale QQRY00 results (which exclude HS2-DEMO01) did not replace the cleared list.
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
 });
 
@@ -14889,10 +14927,15 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
 
 test('distinguishes pending and empty ticket search feedback in list and board views', async ({ page }) => {
   await mockProject(page);
+  // Hold searches until the pending feedback has been asserted (HS2-ZZX0CV).
+  let releaseSearch!: () => void;
+  const searchReleased = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
   await page.route('**/checkouts/demo-checkout/tickets*', async (route) => {
     const url = new URL(route.request().url());
     if (route.request().method() === 'GET' && url.searchParams.has('text')) {
-      await new Promise((resolve) => setTimeout(resolve, 220));
+      await searchReleased;
       return route.fulfill({ json: [] });
     }
     return route.fallback();
@@ -14905,6 +14948,7 @@ test('distinguishes pending and empty ticket search feedback in list and board v
   await expect(page.getByRole('status').filter({ hasText: 'Searching tickets' })).toContainText(
     'Looking for “missing parser”…',
   );
+  releaseSearch();
   await expect(page.getByRole('status').filter({ hasText: 'No tickets match' })).toContainText(
     'No tickets match “missing parser”',
   );
