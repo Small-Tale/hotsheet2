@@ -115,6 +115,10 @@ beforeEach(() => {
   throwObservation = false;
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '#000' }));
   vi.clearAllMocks();
+  // clearAllMocks keeps per-test mockImplementation overrides (frame/timer stubs); reset every
+  // window stub to its original implementation so each test starts identically in any order
+  // (HS2-M2KHW1).
+  for (const value of Object.values(windowMock)) if (vi.isMockFunction(value)) value.mockReset();
   vi.stubGlobal('window', windowMock);
   vi.stubGlobal(
     'ResizeObserver',
