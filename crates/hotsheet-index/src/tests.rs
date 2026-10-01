@@ -1567,3 +1567,77 @@ fn index_file_name_is_scoped_by_schema_version_so_builds_never_share_a_file() {
     assert_eq!(reopened.ticket_count().unwrap(), before);
     assert_eq!(ix.ticket_count().unwrap(), before);
 }
+
+#[test]
+fn concurrent_opens_of_a_fresh_index_file_all_succeed_and_keep_one_file() {
+    // HS2-SY8T90: the server and the app's setup refresh opened the same brand-new index
+    // at once. Unserialized schema creation raced (`PRIMARY KEY constraint failed` on
+    // `schema_version`), and the loser then deleted the winner's live file.
+    let (dir, store, _) = seeded();
+    let expected = Index::open_in_memory("x")
+        .unwrap()
+        .rebuild_from_store(&store)
+        .unwrap();
+    for round in 0..8 {
+        let path = dir.path().join(format!("race-{round}.sqlite"));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(6));
+        let handles: Vec<_> = (0..6)
+            .map(|_| {
+                let (path, root, barrier) =
+                    (path.clone(), store.root().to_path_buf(), barrier.clone());
+                std::thread::spawn(move || {
+                    let store = FsStore::open(&root).unwrap();
+                    barrier.wait();
+                    let index = Index::open_reconciled(&path, &store).expect("concurrent open");
+                    index.ticket_count().unwrap()
+                })
+            })
+            .collect();
+        for handle in handles {
+            assert_eq!(handle.join().unwrap(), expected, "round {round}");
+        }
+        // One shared file survives with the full schema and rows.
+        let reopened = Index::open_reconciled(&path, &store).unwrap();
+        assert_eq!(reopened.ticket_count().unwrap(), expected);
+    }
+}
+
+#[test]
+fn an_unreadable_index_file_is_still_rebuilt_but_a_busy_one_is_not_deleted() {
+    let (dir, store, _) = seeded();
+    let expected = Index::open_in_memory("x")
+        .unwrap()
+        .rebuild_from_store(&store)
+        .unwrap();
+
+    // Garbage bytes are genuine corruption: discard and rebuild.
+    let garbage = dir.path().join("garbage.sqlite");
+    std::fs::write(&garbage, vec![0x5a; 8192]).unwrap();
+    assert_eq!(
+        Index::open_reconciled(&garbage, &store)
+            .unwrap()
+            .ticket_count()
+            .unwrap(),
+        expected
+    );
+
+    // A writer holding the lock makes a second opener wait (busy timeout), not delete it.
+    let held = dir.path().join("held.sqlite");
+    let first = Index::open_reconciled(&held, &store).unwrap();
+    first.conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let opener = {
+        let (held, root) = (held.clone(), store.root().to_path_buf());
+        std::thread::spawn(move || {
+            let store = FsStore::open(&root).unwrap();
+            Index::open_reconciled(&held, &store).map(|index| index.ticket_count().unwrap())
+        })
+    };
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    first.conn.execute_batch("COMMIT").unwrap();
+    assert_eq!(opener.join().unwrap().unwrap(), expected);
+    assert_eq!(
+        first.ticket_count().unwrap(),
+        expected,
+        "the first process's file was not deleted"
+    );
+}

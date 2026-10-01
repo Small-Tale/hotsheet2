@@ -90,6 +90,11 @@ the index `SCHEMA_VERSION` (`hotsheet_index::index_file_name`): opening rebuilds
 schema differs, so binaries from different builds (an orphaned older server, a stale installed
 CLI) each keep their own file instead of downgrading the schema under a newer running process
 (`no such column`, HS2-8ZM4PT). Files left behind by older schema generations are inert caches.
+Several processes (the server, the CLI, the app's setup refresh) may open one file at once:
+each connection waits up to 30 s on a busy lock, the schema check and creation run in one
+`BEGIN IMMEDIATE` transaction so a concurrent opener re-reads the version the winner committed,
+and only genuine corruption (`SQLITE_CORRUPT`/`SQLITE_NOTADB`) deletes and rebuilds the file — a
+lock or race error never discards an index another process is using (HS2-SY8T90).
 
 ## 3.3 Index schema (sketch)
 

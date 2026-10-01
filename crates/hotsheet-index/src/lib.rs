@@ -18,6 +18,21 @@ use sha2::{Digest, Sha256};
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
 const SCHEMA_VERSION: i64 = 17;
 
+/// How long an index connection waits for another process's write lock.
+const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Whether an open failure means the file itself is unusable (safe to delete and rebuild).
+fn is_corruption(error: &IndexError) -> bool {
+    matches!(
+        error,
+        IndexError::Sqlite(rusqlite::Error::SqliteFailure(failure, _))
+            if matches!(
+                failure.code,
+                rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase
+            )
+    )
+}
+
 /// The machine-local index file name for one store, scoped by [`SCHEMA_VERSION`].
 ///
 /// `Index::open` rebuilds a file whose schema differs from its own, so binaries built
@@ -220,6 +235,9 @@ impl Index {
     /// Open (or create) a file-backed index. A schema-version mismatch drops + rebuilds.
     pub fn open(db_path: &Path, store_id: impl Into<String>) -> Result<Self, IndexError> {
         let conn = Connection::open(db_path)?;
+        // The server, the CLI, and the app's setup refresh open the same file at once;
+        // wait for a concurrent writer instead of failing with SQLITE_BUSY (HS2-SY8T90).
+        conn.busy_timeout(INDEX_BUSY_TIMEOUT)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::init(conn, store_id.into())
     }
@@ -238,18 +256,26 @@ impl Index {
             .to_string();
         let index = match Self::open(db_path, store_id.clone()) {
             Ok(index) => index,
-            Err(_) => {
+            // Only genuine corruption is disposable. Any other failure (a busy lock, a
+            // concurrent opener) must not delete a file another process is using.
+            Err(error) if is_corruption(&error) => {
                 let _ = std::fs::remove_file(db_path);
                 let _ = std::fs::remove_file(sidecar(db_path, "-wal"));
                 let _ = std::fs::remove_file(sidecar(db_path, "-shm"));
                 Self::open(db_path, store_id)?
             }
+            Err(error) => return Err(error),
         };
         index.reconcile(store)?;
         Ok(index)
     }
 
     fn init(conn: Connection, store_id: String) -> Result<Self, IndexError> {
+        // Check and (re)create the schema in one write transaction: a concurrent opener of
+        // the same fresh file waits here, then re-reads the version the winner committed
+        // instead of dropping its tables or duplicating `schema_version` (HS2-SY8T90).
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
         let has_meta: bool = conn
             .query_row(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='index_meta'",
@@ -282,6 +308,7 @@ impl Index {
                 params![SCHEMA_VERSION.to_string()],
             )?;
         }
+        transaction.commit()?;
         Ok(Self { conn, store_id })
     }
 
