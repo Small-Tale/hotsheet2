@@ -361,6 +361,9 @@ pub struct ProviderPatch {
     pub up_next: Option<bool>,
     pub blocked_by: Option<Vec<String>>,
     pub blocked_reason: Option<Option<String>>,
+    /// Who is making the change (HS2-32QDZ3). The git provider attributes the status
+    /// activity it appends; external trackers attribute changes to their own account.
+    pub actor: Option<hotsheet_model::NoteActor>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1199,6 +1202,7 @@ impl TicketProvider for GitProvider {
             &ticket.id,
             now,
             TicketPatch {
+                actor: patch.actor,
                 title: patch.title,
                 details: patch.details,
                 category: patch.category,
@@ -1258,6 +1262,7 @@ impl TicketProvider for GitProvider {
             NoteMetadataInput {
                 summary,
                 confidence: None,
+                actor: None,
             },
             text,
         )
@@ -1803,6 +1808,7 @@ pub fn copy_between(
                 confidence: note
                     .confidence
                     .and_then(|value| Confidence::new(u64::from(value)).ok()),
+                actor: note.actor.clone(),
             },
             note.text.clone(),
         )?;
@@ -2769,6 +2775,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(Confidence::new(73).unwrap()),
+                    actor: None,
                 },
                 "## Confidence\n73".into(),
             )
@@ -2792,6 +2799,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(Confidence::new(10).unwrap()),
+                    actor: None,
                 },
                 "scored".into(),
             )

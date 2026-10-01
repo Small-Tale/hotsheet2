@@ -29,7 +29,20 @@ pub struct Note {
     /// carried as the `confidence:` note-marker token (HS2-DWTJ43). Optional and
     /// absent on every note written before it existed.
     pub confidence: Option<Confidence>,
+    /// Who wrote the note: the acting role and optional stable id of the mutation that
+    /// created it (HS2-32QDZ3), carried as the `actor:` / `actor_id_hex:` note-marker
+    /// tokens. Absent on notes written before it existed or by an unspecified caller.
+    pub actor: Option<NoteActor>,
     pub text: String,
+}
+
+/// The author of a note (HS2-32QDZ3): the role vocabulary shared with attachment
+/// provenance plus an optional stable identity (worker id, account, or tool name).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoteActor {
+    pub role: AttachmentActorRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 /// A validated AI completion confidence score: an integer percentage from 0 to 100
@@ -407,6 +420,7 @@ mod tests {
             edited_at: Timestamp::new(created_at),
             summary: None,
             confidence: None,
+            actor: None,
             text: String::new(),
         }
     }

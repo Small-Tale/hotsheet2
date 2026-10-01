@@ -243,6 +243,16 @@ Rules are role-specific, and their feedback is written for the reader:
   the `## Confidence` section shape, and the rubric bands, so one retry succeeds.
 - **Humans:** human and `system` actors are never required to score.
 
+The actor is also recorded (HS2-32QDZ3):
+
+- **What is stamped:** the author of every note appended through the git provider, and of
+  the status-transition activity an edit or a completed close produces. It is stored as
+  the `actor:` / `actor_id_hex:` note-marker tokens and exposed as `ApiNote.actor`.
+- **What is not stamped:** claim-driven Started transitions stay unattributed; the claim
+  history already names the worker. Editing a note keeps its original author.
+- **External trackers** attribute comments to their own authenticated account, so Hot
+  Sheet does not write a separate actor trailer there.
+
 The bundled instruction blocks tell an AI to identify itself as the `ai` actor. Further
 role-specific rules and human-tailored feedback are follow-up work.
 

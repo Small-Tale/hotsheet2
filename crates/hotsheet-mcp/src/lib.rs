@@ -1253,8 +1253,9 @@ mod core_backend {
                     let t = self.resolve(close_id(path).unwrap())?;
                     let reason = opt_enum(body, "reason")?
                         .ok_or_else(|| bad_request("reason is required"))?;
+                    let actor = body_actor(body)?;
                     hotsheet_ticketing::actor::check_completion(
-                        body_actor(body)?.as_ref(),
+                        actor.as_ref(),
                         &t.slug,
                         hotsheet_ticketing::actor::close_completes(t.status, reason),
                         hotsheet_ticketing::actor::scored_in_current_cycle(&t),
@@ -1268,8 +1269,15 @@ mod core_backend {
                         Some(d) => Some(self.resolve(d)?.id.to_string()),
                         None => None,
                     };
-                    let closed = ops::close(&self.store, &t.id, (self.now)(), reason, dup)
-                        .map_err(op_err)?;
+                    let closed = ops::close_as(
+                        &self.store,
+                        &t.id,
+                        (self.now)(),
+                        reason,
+                        dup,
+                        hotsheet_ticketing::actor::note_actor(actor.as_ref()).as_ref(),
+                    )
+                    .map_err(op_err)?;
                     self.api(&closed)
                 }
                 "POST" if restore_id(path).is_some() => {
@@ -1353,7 +1361,9 @@ mod core_backend {
                         ),
                         None => None,
                     };
+                    let actor = body_actor(body)?;
                     let patch = TicketPatch {
+                        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         title: str_field(body, "title"),
                         details: str_field(body, "details"),
                         category: str_field(body, "category"),
@@ -1380,7 +1390,7 @@ mod core_backend {
                         None => note_text.is_some() && confidence_change.flatten().is_some(),
                     };
                     hotsheet_ticketing::actor::check_completion(
-                        body_actor(body)?.as_ref(),
+                        actor.as_ref(),
                         &t.slug,
                         hotsheet_ticketing::actor::completes(t.status, patch.status),
                         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&t),
@@ -1417,6 +1427,7 @@ mod core_backend {
                                 ops::NoteMetadataInput {
                                     summary: str_field(body, "note_summary"),
                                     confidence: confidence_change.flatten(),
+                                    actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                                 },
                                 text,
                             )
@@ -3395,6 +3406,15 @@ mod tests {
             json!({ "id": id, "status": "completed", "note": "## Confidence\n70", "note_confidence": 70, "actor_role": "ai" }),
         );
         assert_eq!(completed["latest_confidence"], 70);
+        // HS2-32QDZ3: the scored note records its AI author.
+        let scored = completed["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["confidence"] == 70)
+            .unwrap()
+            .clone();
+        assert_eq!(scored["actor"], json!({ "role": "ai" }));
         for actor in [json!({ "actor_role": "human" }), json!({})] {
             let other = call(&backend, "hotsheet_create", json!({ "title": "Human" }))["id"]
                 .as_str()

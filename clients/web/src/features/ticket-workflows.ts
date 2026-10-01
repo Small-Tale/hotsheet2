@@ -43,6 +43,7 @@ import {
   writableTicketSources,
 } from '../new-ticket-source';
 import { submitNotWorkingReport } from '../not-working-workflow';
+import { noteAuthorship } from '../note-authorship';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import {
   bulkTagChoices,
@@ -1343,15 +1344,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   function notes(ticket: FullTicket) {
     return ticket.notes.map((note) => {
-      const aiAuthored = note.text.includes('hotsheet:activity-distillation:v1:');
+      // Authorship comes from the note's recorded actor (HS2-32QDZ3).
+      const { author, aiAuthored, aiTool } = noteAuthorship(note);
       return {
         id: note.id,
         kind: presentedNoteKind(note, ticket.notes),
-        author: aiAuthored ? 'Hot Sheet AI' : 'Hot Sheet',
+        author,
         time: ago(note.created_at),
         body: note.text,
         aiAuthored,
-        aiTool: aiAuthored ? 'Hot Sheet AI' : undefined,
+        aiTool,
         confidence: note.confidence,
       } as const;
     });

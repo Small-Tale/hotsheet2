@@ -632,6 +632,9 @@ pub struct TicketPatch {
     pub blocked_by: Option<Vec<Ulid>>,
     /// Absent leaves the reason unchanged; present `None` clears it.
     pub blocked_reason: Option<Option<String>>,
+    /// Who is making the change; stamped on the status-transition activity it produces
+    /// (HS2-32QDZ3). Never a field change by itself.
+    pub actor: Option<hotsheet_model::NoteActor>,
 }
 
 /// Apply a patch to an existing ticket and write it. A move to a terminal status
@@ -691,6 +694,7 @@ pub fn update(
         }
         if s != previous_status {
             append_status_transition(&mut t, previous_status, s, &now);
+            stamp_last_note_actor(&mut t, patch.actor.as_ref());
         }
         // Leaving the active set (not_started/started) drops it off Up Next — applied after
         // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
@@ -777,6 +781,13 @@ pub(crate) fn append_claim_event(
     });
 }
 
+/// Attribute the activity note a mutation just appended to its actor (HS2-32QDZ3).
+fn stamp_last_note_actor(ticket: &mut Ticket, actor: Option<&hotsheet_model::NoteActor>) {
+    if let (Some(actor), Some(note)) = (actor, ticket.notes.last_mut()) {
+        note.actor = Some(actor.clone());
+    }
+}
+
 fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: &Timestamp) {
     let mut entropy = DefaultHasher::new();
     ticket.id.hash(&mut entropy);
@@ -795,6 +806,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         edited_at: now.clone(),
         summary: Some(status_label(to).to_string()),
         confidence: None,
+        actor: None,
         text: format!(
             "Status changed from {} to {}",
             status_label(from),
@@ -845,6 +857,7 @@ pub fn prepare_not_working(
         edited_at: now.clone(),
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
+        actor: None,
         text: reporter
             .filter(|value| !value.trim().is_empty())
             .map(|value| format!("{} reported as not working\n{summary}", value.trim()))
@@ -858,6 +871,7 @@ pub fn prepare_not_working(
             edited_at: now.clone(),
             summary: None,
             confidence: None,
+            actor: None,
             text: format!("Not working: {text}"),
         });
     }
@@ -1043,6 +1057,7 @@ pub fn add_note_with_summary(
         NoteMetadataInput {
             summary,
             confidence: None,
+            actor: None,
         },
         text,
     )
@@ -1055,6 +1070,8 @@ pub fn add_note_with_summary(
 pub struct NoteMetadataInput {
     pub summary: Option<String>,
     pub confidence: Option<Confidence>,
+    /// The note's author (HS2-32QDZ3); absent for an unspecified caller.
+    pub actor: Option<hotsheet_model::NoteActor>,
 }
 
 /// Append a note with optional metadata (see [`NoteMetadataInput`]).
@@ -1084,6 +1101,7 @@ pub fn add_note_with_metadata(
             (!value.is_empty()).then_some(value)
         }),
         confidence: metadata.confidence,
+        actor: metadata.actor,
         text,
     });
     t.updated_at = now;
@@ -1533,6 +1551,19 @@ pub fn close(
     reason: CloseReason,
     duplicate_of: Option<String>,
 ) -> Result<Ticket, OpError> {
+    close_as(store, id, now, reason, duplicate_of, None)
+}
+
+/// [`close`], attributing the completion transition it may append to `actor`
+/// (HS2-32QDZ3).
+pub fn close_as(
+    store: &FsStore,
+    id: &Ulid,
+    now: Timestamp,
+    reason: CloseReason,
+    duplicate_of: Option<String>,
+    actor: Option<&hotsheet_model::NoteActor>,
+) -> Result<Ticket, OpError> {
     if reason == CloseReason::Duplicate && duplicate_of.is_none() {
         return Err(OpError::DuplicateNeedsTarget);
     }
@@ -1550,6 +1581,7 @@ pub fn close(
             t.completed_at = Some(now.clone());
         }
         append_status_transition(&mut t, previous_status, Status::Completed, &now);
+        stamp_last_note_actor(&mut t, actor);
     }
     // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
     t.up_next = false;
@@ -2789,6 +2821,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: confidence.map(|value| Confidence::new(value).unwrap()),
+                    actor: None,
                 },
                 "note".into(),
             )
@@ -2866,6 +2899,7 @@ mod tests {
             edited_at: ts(at),
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
+            actor: None,
             text: text.into(),
         };
         let mut ticket = Ticket {

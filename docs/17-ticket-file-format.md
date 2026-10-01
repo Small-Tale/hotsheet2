@@ -131,12 +131,14 @@ than swallowed or discarded; a future schema can define such a section explicitl
 | `edited_at`  | RFC3339                                                      | last text edit; equals `created_at` when never edited                                                                                                        |
 | `summary`    | optional plain text                                          | concise Timeline headline, encoded as UTF-8 hex in the forward-compatible `summary_hex:` note-marker token; primarily supplied for `activity`/`status` notes |
 | `confidence` | optional integer 0-100                                       | AI completion confidence (HS2-DWTJ43) as the plain `confidence: NN` note-marker token after `summary_hex:`; out-of-range or malformed values parse as absent |
+| `actor`      | optional `human\|ai\|system` plus id                         | who wrote the note (HS2-32QDZ3): `actor: ai` plus an optional `actor_id_hex:` (UTF-8 hex id); an unknown role parses as absent                               |
 | text         | Markdown                                                     | rendered; raw HTML escaped                                                                                                                                   |
 
 A scored marker looks like
 `<!-- hotsheet:note:begin <ulid> created_at: … edited_at: … summary_hex: … confidence: 82 -->`.
 Older bounded-note parsers ignore the unknown token, so writing it needs no schema
-guard bump. Writers only emit validated integers; the ticket's current confidence is a
+guard bump. The same holds for the authorship tokens, for example
+`… confidence: 82 actor: ai actor_id_hex: 636c61756465 -->`. Writers only emit validated integers; the ticket's current confidence is a
 read-time derivation (`docs/02` §2.6), never a frontmatter field.
 
 The hex marker encoding keeps summaries single-token and comment-safe while remaining

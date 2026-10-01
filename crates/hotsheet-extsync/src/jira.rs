@@ -294,6 +294,7 @@ impl JiraProvider {
                     edited_at: comment.updated.unwrap_or(comment.created),
                     summary: None,
                     confidence,
+                    actor: None,
                     text,
                 }
             })
@@ -1113,6 +1114,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(score),
+                    actor: None,
                 },
                 "## Result\nShipped.".into(),
             )

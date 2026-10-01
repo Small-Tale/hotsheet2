@@ -8898,7 +8898,18 @@ async fn ai_actor_completion_without_a_score_is_refused_on_every_route() {
     )
     .await;
     assert_eq!(completed.status(), StatusCode::OK);
-    assert_eq!(body_json(completed).await["latest_confidence"], 75);
+    let completed = body_json(completed).await;
+    assert_eq!(completed["latest_confidence"], 75);
+    // HS2-32QDZ3: the note and the status activity it produced record their author.
+    let notes = completed["notes"].as_array().unwrap();
+    let by_ai = serde_json::json!({"role":"ai","id":"codex-1"});
+    let scored = notes.iter().find(|n| n["confidence"] == 75).unwrap();
+    assert_eq!(scored["actor"], by_ai);
+    let transition = notes
+        .iter()
+        .find(|n| n["text"].as_str().unwrap().ends_with("to Completed"))
+        .unwrap();
+    assert_eq!(transition["actor"], by_ai);
 
     // Humans and unspecified callers never need a score; a not-planned close is no completion.
     for actor in [serde_json::json!({"role":"human"}), serde_json::Value::Null] {
@@ -8910,6 +8921,22 @@ async fn ai_actor_completion_without_a_score_is_refused_on_every_route() {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK, "{actor}");
+        let notes = body_json(response).await["notes"].clone();
+        let transition = notes
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["text"].as_str().unwrap().ends_with("to Completed"))
+            .unwrap()
+            .clone();
+        if actor.is_null() {
+            assert!(
+                transition.get("actor").is_none(),
+                "unspecified stays unattributed"
+            );
+        } else {
+            assert_eq!(transition["actor"], serde_json::json!({"role":"human"}));
+        }
     }
     let not_planned = create("Not planned").await;
     let response = send(
@@ -8919,6 +8946,18 @@ async fn ai_actor_completion_without_a_score_is_refused_on_every_route() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
+    let closed = body_json(response).await;
+    let closing = closed["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["text"].as_str().unwrap().ends_with("to Completed"))
+        .unwrap()
+        .clone();
+    assert_eq!(
+        closing["actor"]["role"], "ai",
+        "close attributes its transition"
+    );
 
     // Invalid actor input is a 400, not a silent unspecified actor.
     for actor in [

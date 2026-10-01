@@ -922,6 +922,7 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
         kind: NoteKind::Regular,
         summary: None,
         confidence: None,
+        actor: None,
         text: "Context first. FEEDBACK NEEDED choose one".into(),
     });
     store.write_ticket(&ticket).unwrap();
@@ -1857,6 +1858,7 @@ fn complete_with_score(store: &FsStore, id: &str, now: &str, score: Option<u64>)
         ops::NoteMetadataInput {
             summary: None,
             confidence: score.map(|value| hotsheet_model::Confidence::new(value).unwrap()),
+            actor: None,
         },
         "done".into(),
     )

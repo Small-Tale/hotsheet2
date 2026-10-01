@@ -231,6 +231,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(Confidence::new(value).unwrap()),
+                    actor: None,
                 },
                 "## Confidence".into(),
             )

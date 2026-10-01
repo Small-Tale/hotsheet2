@@ -14,7 +14,7 @@ use serde_yaml::{Mapping, Value};
 
 use crate::enums::NoteKind;
 use crate::ids::Ulid;
-use crate::ticket::{Confidence, Note, Ticket};
+use crate::ticket::{AttachmentActorRole, Confidence, Note, NoteActor, Ticket};
 use crate::timestamp::Timestamp;
 
 const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
@@ -305,6 +305,27 @@ struct NoteMetadata {
     edited_at: Option<Timestamp>,
     summary: Option<String>,
     confidence: Option<Confidence>,
+    actor: Option<NoteActor>,
+}
+
+/// The `actor:` role token (HS2-32QDZ3). An unknown role degrades to "no actor" so a
+/// future vocabulary never fails the file.
+fn parse_actor_role(value: &str) -> Option<AttachmentActorRole> {
+    match value {
+        "human" => Some(AttachmentActorRole::Human),
+        "ai" => Some(AttachmentActorRole::Ai),
+        "system" => Some(AttachmentActorRole::System),
+        _ => None,
+    }
+}
+
+fn actor_role_str(role: AttachmentActorRole) -> &'static str {
+    match role {
+        AttachmentActorRole::Human => "human",
+        AttachmentActorRole::Ai => "ai",
+        AttachmentActorRole::System => "system",
+        AttachmentActorRole::Unknown => "unknown",
+    }
 }
 
 fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
@@ -324,6 +345,12 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         // An out-of-range or malformed score degrades to "no score" rather than failing
         // the whole file (HS2-DWTJ43); writers can only emit validated values.
         confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
+        actor: value_after("actor:")
+            .and_then(parse_actor_role)
+            .map(|role| NoteActor {
+                role,
+                id: value_after("actor_id_hex:").and_then(decode_note_summary),
+            }),
     }
 }
 
@@ -351,6 +378,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         edited_at,
         summary: metadata.summary,
         confidence: metadata.confidence,
+        actor: metadata.actor,
         text,
     })
 }
@@ -383,6 +411,18 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(confidence) = n.confidence {
             out.push_str(" confidence: ");
             out.push_str(&confidence.to_string());
+        }
+        if let Some(actor) = n
+            .actor
+            .as_ref()
+            .filter(|actor| actor.role != AttachmentActorRole::Unknown)
+        {
+            out.push_str(" actor: ");
+            out.push_str(actor_role_str(actor.role));
+            if let Some(id) = actor.id.as_deref().filter(|id| !id.is_empty()) {
+                out.push_str(" actor_id_hex: ");
+                out.push_str(&encode_note_summary(id));
+            }
         }
         out.push_str(" -->\n");
         out.push_str(&escape_content(&n.text));
@@ -591,6 +631,7 @@ mod tests {
                 edited_at: "2026-08-19T15:20:44Z".into(),
                 summary: None,
                 confidence: None,
+                actor: None,
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
             },
             Note {
@@ -600,6 +641,7 @@ mod tests {
                 edited_at: "2026-08-19T15:31:02Z".into(),
                 summary: None,
                 confidence: None,
+                actor: None,
                 text: "should the fix also cover the dashboard dedicated view?".into(),
             },
         ];
@@ -806,6 +848,7 @@ mod tests {
             edited_at: "2026-08-19T16:00:00Z".into(),
             summary: None,
             confidence: None,
+            actor: None,
             text: "half-written reply".into(),
         });
         let text = to_file_string(&t);
@@ -826,6 +869,7 @@ mod tests {
             edited_at: "2026-08-19T15:20:44Z".into(),
             summary: None,
             confidence: None,
+            actor: None,
             text: "   ".into(),
         }];
         let text = to_file_string(&t);
@@ -889,6 +933,66 @@ mod tests {
         assert!(to_file_string(&parsed).contains(NOTES_END));
     }
 
+    /// HS2-32QDZ3: note authorship round-trips as `actor:` / `actor_id_hex:` tokens; an
+    /// unknown role or a malformed id degrades instead of failing the file.
+    #[test]
+    fn note_actor_tokens_round_trip_and_degrade() {
+        let mut ticket = sample_ticket_for_actor();
+        ticket.notes[0].actor = Some(NoteActor {
+            role: AttachmentActorRole::Ai,
+            id: Some("codex-session 7".into()),
+        });
+        ticket.notes[1].actor = Some(NoteActor {
+            role: AttachmentActorRole::Human,
+            id: None,
+        });
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains(" actor: ai actor_id_hex: 636f6465782d73657373696f6e2037 -->"));
+        assert!(encoded.contains(" actor: human -->"));
+        let parsed = parse_file(&encoded).unwrap();
+        assert_eq!(parsed.notes[0].actor, ticket.notes[0].actor);
+        assert_eq!(parsed.notes[1].actor, ticket.notes[1].actor);
+        for (token, expected) in [
+            ("actor: robot", None),
+            (
+                "actor: system actor_id_hex: zz",
+                Some((AttachmentActorRole::System, None)),
+            ),
+            ("actor_id_hex: 6869", None),
+        ] {
+            let text = encoded.replacen(" actor: human -->", &format!(" {token} -->"), 1);
+            let parsed = parse_file(&text).unwrap();
+            assert_eq!(
+                parsed.notes[1]
+                    .actor
+                    .clone()
+                    .map(|actor| (actor.role, actor.id)),
+                expected,
+                "{token}"
+            );
+        }
+    }
+
+    fn sample_ticket_for_actor() -> Ticket {
+        let at = Timestamp::new("2026-08-19T15:21:44Z");
+        let note = |id: &str, text: &str| Note {
+            id: Ulid::from_string(id).unwrap(),
+            kind: NoteKind::Regular,
+            created_at: at.clone(),
+            edited_at: at.clone(),
+            summary: None,
+            confidence: None,
+            actor: None,
+            text: text.into(),
+        };
+        let mut ticket = sample();
+        ticket.notes = vec![
+            note("01ARZ3NDEKTSV4RRFFQ69G5FA0", "by an ai"),
+            note("01ARZ3NDEKTSV4RRFFQ69G5FA1", "by a human"),
+        ];
+        ticket
+    }
+
     #[test]
     fn note_confidence_token_round_trips_beside_the_summary() {
         let mut ticket = sample();
@@ -900,6 +1004,7 @@ mod tests {
                 edited_at: "2026-08-19T15:20:44Z".into(),
                 summary: Some("Shipped".into()),
                 confidence: Some(Confidence::new(82).unwrap()),
+                actor: None,
                 text: "## Result\nDone\n\n## Confidence\n82".into(),
             },
             Note {
@@ -909,6 +1014,7 @@ mod tests {
                 edited_at: "2026-08-19T15:21:44Z".into(),
                 summary: None,
                 confidence: Some(Confidence::new(0).unwrap()),
+                actor: None,
                 text: "zero is a real score".into(),
             },
         ];
@@ -929,6 +1035,7 @@ mod tests {
             edited_at: "2026-08-19T15:20:44Z".into(),
             summary: None,
             confidence: None,
+            actor: None,
             text: "unscored".into(),
         }];
         let unscored = to_file_string(&ticket);
@@ -967,6 +1074,7 @@ mod tests {
             edited_at: "2026-08-19T16:00:00Z".into(),
             summary: Some("Completed café investigation".into()),
             confidence: None,
+            actor: None,
             text: "completed investigation".into(),
         }];
         let encoded = to_file_string(&ticket);
@@ -1018,6 +1126,7 @@ mod tests {
             edited_at: "2026-08-19T00:00:00Z".into(),
             summary: None,
             confidence: None,
+            actor: None,
             text: text.into(),
         };
         // Content that looks exactly like the structural markers, which the writer must
@@ -1080,6 +1189,7 @@ mod tests {
             edited_at: "t0".into(),
             summary: None,
             confidence: None,
+            actor: None,
             text: "half-written".into(),
         }];
         let text = to_file_string(&t);

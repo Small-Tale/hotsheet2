@@ -20,7 +20,7 @@ pub use ids::{Ulid, derive_slug};
 pub use ticket::{
     Attachment, AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,
     ClaimEvent, ClaimEventKind, Confidence, ConfidenceError, ExternalLink, MediaAnnotation, Note,
-    ReviewRequest, Ticket,
+    NoteActor, ReviewRequest, Ticket,
 };
 pub use timestamp::Timestamp;
 

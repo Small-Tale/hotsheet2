@@ -333,6 +333,7 @@ impl GitHubProvider {
                     edited_at: comment.updated_at.unwrap_or(comment.created_at),
                     summary: None,
                     confidence,
+                    actor: None,
                     text,
                 }
             })
@@ -1425,6 +1426,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
+                    actor: None,
                 },
                 "## Result\nDone.".into(),
             )
@@ -2146,6 +2148,7 @@ mod tests {
                 NoteMetadataInput {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
+                    actor: None,
                 },
                 "Hot Sheet live comment validation".into(),
             )

@@ -289,6 +289,7 @@ impl GitLabProvider {
                     edited_at: note.updated_at.unwrap_or(note.created_at),
                     summary: None,
                     confidence,
+                    actor: None,
                     text,
                 }
             })
@@ -1028,6 +1029,7 @@ mod tests {
                     NoteMetadataInput {
                         summary: None,
                         confidence: Some(score),
+                        actor: None,
                     },
                     "Re-verified.".into(),
                 )

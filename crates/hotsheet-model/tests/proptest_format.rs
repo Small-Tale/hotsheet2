@@ -121,18 +121,36 @@ fn arb_note() -> impl Strategy<Value = Note> {
             Just(None),
             (0u64..=100).prop_map(|value| Some(Confidence::new(value).unwrap()))
         ],
+        // HS2-32QDZ3: note authorship, with and without an id (including non-ASCII).
+        prop_oneof![
+            Just(None),
+            (
+                prop_oneof![
+                    Just(hotsheet_model::AttachmentActorRole::Human),
+                    Just(hotsheet_model::AttachmentActorRole::Ai),
+                    Just(hotsheet_model::AttachmentActorRole::System),
+                ],
+                prop_oneof![
+                    Just(None),
+                    "[a-z0-9-]{1,30}".prop_map(Some),
+                    Just(Some("Dana Ö <dana@example.com>".to_string())),
+                ],
+            )
+                .prop_map(|(role, id)| Some(hotsheet_model::NoteActor { role, id })),
+        ],
         prop_oneof![
             "[!-~][ -~\n]{0,80}".prop_map(|s| s.trim().to_string()),
             Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
         ],
     )
-        .prop_map(|(id, kind, at, summary, confidence, text)| Note {
+        .prop_map(|(id, kind, at, summary, confidence, actor, text)| Note {
             id,
             kind,
             created_at: at.clone(),
             edited_at: at,
             summary,
             confidence,
+            actor,
             text: text.trim().to_string(),
         })
 }

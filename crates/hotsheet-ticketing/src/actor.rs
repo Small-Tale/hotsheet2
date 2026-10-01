@@ -53,6 +53,21 @@ impl MutationActor {
     pub fn is_ai(&self) -> bool {
         self.role == ActorRole::Ai
     }
+
+    /// The durable authorship recorded on the notes this actor writes (HS2-32QDZ3).
+    #[must_use]
+    pub fn note_actor(&self) -> hotsheet_model::NoteActor {
+        hotsheet_model::NoteActor {
+            role: self.role,
+            id: self.id.clone(),
+        }
+    }
+}
+
+/// The optional note authorship for an optional actor.
+#[must_use]
+pub fn note_actor(actor: Option<&MutationActor>) -> Option<hotsheet_model::NoteActor> {
+    actor.map(MutationActor::note_actor)
 }
 
 /// A role-specific rule rejected the mutation before anything was written.
@@ -103,6 +118,7 @@ pub fn api_scored_in_current_cycle(ticket: &crate::wire::ApiTicket) -> bool {
             confidence: note
                 .confidence
                 .and_then(|score| hotsheet_model::Confidence::new(u64::from(score)).ok()),
+            actor: None,
             text: note.text.clone(),
         })
         .collect::<Vec<_>>();
@@ -238,6 +254,7 @@ mod tests {
             NoteMetadataInput {
                 summary: None,
                 confidence: Some(Confidence::new(80).unwrap()),
+                actor: None,
             },
             "## Confidence\n80".into(),
         )

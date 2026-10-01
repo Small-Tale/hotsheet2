@@ -3161,6 +3161,7 @@ fn do_provider_update(
             id,
             timestamp.clone(),
             ProviderPatch {
+                actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 expected_token: req.expected_token,
                 title: req.title,
                 details: req.details,
@@ -3201,6 +3202,7 @@ fn do_provider_update(
                     ops::NoteMetadataInput {
                         summary: note_summary,
                         confidence: note_confidence,
+                        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                     },
                     note,
                 )
@@ -6330,7 +6332,9 @@ fn do_update(
         )?),
         None => None,
     };
+    let actor = parse_actor(req.actor.as_ref())?;
     let patch = TicketPatch {
+        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
         title: req.title,
         details: req.details,
         category: req.category,
@@ -6350,7 +6354,7 @@ fn do_update(
         }
     };
     hotsheet_ticketing::actor::check_completion(
-        parse_actor(req.actor.as_ref())?.as_ref(),
+        actor.as_ref(),
         &ticket.slug,
         hotsheet_ticketing::actor::completes(ticket.status, patch.status),
         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
@@ -6381,6 +6385,7 @@ fn do_update(
                 ops::NoteMetadataInput {
                     summary: req.note_summary,
                     confidence: confidence_change.flatten(),
+                    actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 },
                 text,
             )?,
@@ -6492,8 +6497,9 @@ fn do_close(
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
+    let actor = parse_actor(req.actor.as_ref())?;
     hotsheet_ticketing::actor::check_completion(
-        parse_actor(req.actor.as_ref())?.as_ref(),
+        actor.as_ref(),
         &ticket.slug,
         hotsheet_ticketing::actor::close_completes(ticket.status, reason),
         hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
@@ -6528,7 +6534,14 @@ fn do_close(
         }
         None => None,
     };
-    let closed = ops::close(&entry.store, &ticket.id, now(), reason, dup)?;
+    let closed = ops::close_as(
+        &entry.store,
+        &ticket.id,
+        now(),
+        reason,
+        dup,
+        hotsheet_ticketing::actor::note_actor(actor.as_ref()).as_ref(),
+    )?;
     state.changed_in(entry, "closed", &closed);
     api_ticket(entry, &closed)
 }

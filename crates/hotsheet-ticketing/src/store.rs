@@ -1080,6 +1080,7 @@ impl FsStore {
             edited_at: now.clone(),
             summary: Some(summary),
             confidence: None,
+            actor: None,
             text,
         });
         ticket.updated_at = now;

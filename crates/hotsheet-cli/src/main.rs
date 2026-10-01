@@ -2428,6 +2428,7 @@ fn cmd_provider_edit(
             title: input.title,
             details: input.details,
             status,
+            actor: hotsheet_ticketing::actor::note_actor(actor),
             ..Default::default()
         },
     )?;
@@ -2450,6 +2451,7 @@ fn cmd_provider_edit(
             ops::NoteMetadataInput {
                 summary: input.note_summary,
                 confidence: input.note_confidence.flatten(),
+                actor: hotsheet_ticketing::actor::note_actor(actor),
             },
             note,
         )?;
@@ -4108,6 +4110,7 @@ fn cmd_edit(
         )?)
     };
     let patch = TicketPatch {
+        actor: hotsheet_ticketing::actor::note_actor(actor),
         title,
         details,
         category,
@@ -4157,6 +4160,7 @@ fn cmd_edit(
             ops::NoteMetadataInput {
                 summary: note_summary,
                 confidence: note_confidence.flatten(),
+                actor: hotsheet_ticketing::actor::note_actor(actor),
             },
             text,
         )?;
@@ -4398,7 +4402,14 @@ fn cmd_close(
         Some(d) => Some(resolve(&store, &d)?.id.to_string()),
         None => None,
     };
-    let closed = ops::close(&store, &ticket.id, now_ts(), reason_enum, dup)?;
+    let closed = ops::close_as(
+        &store,
+        &ticket.id,
+        now_ts(),
+        reason_enum,
+        dup,
+        hotsheet_ticketing::actor::note_actor(actor).as_ref(),
+    )?;
     println!("Closed {} ({reason})", closed.slug);
     Ok(())
 }

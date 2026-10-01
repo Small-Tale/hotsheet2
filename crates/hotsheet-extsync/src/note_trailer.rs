@@ -211,6 +211,7 @@ mod tests {
             edited_at: created_at.into(),
             summary: None,
             confidence,
+            actor: None,
             text: String::new(),
         };
         let notes = [
@@ -236,6 +237,7 @@ mod tests {
             edited_at: created_at.into(),
             summary: None,
             confidence,
+            actor: None,
             text: String::new(),
         }
     }

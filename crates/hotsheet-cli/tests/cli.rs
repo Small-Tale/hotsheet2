@@ -5141,6 +5141,28 @@ fn ai_actor_completion_requires_a_confidence_score() {
         .assert()
         .success();
     assert_eq!(status(&slug), hotsheet_model::Status::Completed);
+    // HS2-32QDZ3: the note and its status transition record the AI author.
+    let completed = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let ai = Some(hotsheet_model::NoteActor {
+        role: hotsheet_model::AttachmentActorRole::Ai,
+        id: None,
+    });
+    let authored = completed
+        .notes
+        .iter()
+        .filter(|note| note.actor == ai)
+        .map(|note| note.text.lines().next().unwrap_or_default().to_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        authored.contains(&"## Confidence".to_owned()),
+        "{authored:?}"
+    );
+    assert!(
+        authored.iter().any(|line| line.ends_with("to Completed")),
+        "{authored:?}"
+    );
 
     // A score recorded earlier in the same cycle also satisfies it...
     let scored_first = new_ticket(p, "Scored first");
