@@ -16849,13 +16849,18 @@ test('shares the settings category across projects but scopes command drafts to 
     });
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/project-api/*/commands', (route) =>
-    route.request().method() === 'GET'
-      ? route.fulfill({
-          json: new URL(route.request().url()).pathname.includes('/other-checkout/') ? otherCommands : demoCommands,
-        })
-      : route.fallback(),
-  );
+  // Each project's commands are stored like the real server's: a GET returns what the last
+  // autosave PUT wrote, so a save landing before a project switch cannot revert the edit (HS2-W6381S).
+  const storedCommands: Record<string, unknown[]> = { demo: demoCommands, other: otherCommands };
+  await page.route('**/__hotsheet/project-api/*/commands', (route) => {
+    const key = new URL(route.request().url()).pathname.includes('/other-checkout/') ? 'other' : 'demo';
+    if (route.request().method() === 'GET') return route.fulfill({ json: storedCommands[key] });
+    if (route.request().method() === 'PUT') {
+      storedCommands[key] = route.request().postDataJSON() as unknown[];
+      return route.fulfill({ json: storedCommands[key] });
+    }
+    return route.fallback();
+  });
   await page.route('**/__hotsheet/project-api/*/command-runs', (route) =>
     route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
   );
