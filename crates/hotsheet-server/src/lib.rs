@@ -3133,7 +3133,24 @@ fn do_provider_update(
         }
         _ => {}
     }
+    reindex_hosted_provider_write(state, connection_id, id);
     Ok(ticket)
+}
+
+/// A provider-route write to a hosted git store reindexes and broadcasts the ticket at
+/// once, like the legacy route, so an immediate list read sees it (read-your-writes; the
+/// derived `latest_confidence` column depends on it, HS2-RD4M29). External providers are
+/// authoritative remotely and have no local index row.
+fn reindex_hosted_provider_write(state: &AppState, connection_id: &str, native_id: &str) {
+    let Some(entry) = state.host.get(connection_id) else {
+        return;
+    };
+    let Ok(id) = Ulid::from_string(native_id) else {
+        return;
+    };
+    if let Ok(ticket) = entry.store.read_ticket(&id) {
+        state.changed_in(&entry, "updated", &ticket);
+    }
 }
 
 async fn report_provider_ticket_not_working(
@@ -9705,6 +9722,9 @@ struct ListParams {
     completed_before: Option<String>,
     verified_after: Option<String>,
     verified_before: Option<String>,
+    /// Inclusive bounds on the derived `latest_confidence` (0-100, HS2-RD4M29).
+    min_confidence: Option<u8>,
+    max_confidence: Option<u8>,
     has_attachment: Option<bool>,
     has_media_annotation: Option<bool>,
     /// Checkout-only filter: whether repository commits reference the ticket slug.
@@ -9803,6 +9823,17 @@ impl ListParams {
             })?),
             None => None,
         };
+        for (name, bound) in [
+            ("min_confidence", self.min_confidence),
+            ("max_confidence", self.max_confidence),
+        ] {
+            if bound.is_some_and(|value| value > Confidence::MAX) {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("{name} must be an integer from 0 to 100"),
+                ));
+            }
+        }
         Ok(TicketQuery {
             status: opt_parse(self.status.as_deref())?,
             collection: opt_parse(self.collection.as_deref())?,
@@ -9835,6 +9866,8 @@ impl ListParams {
             completed_before: self.completed_before,
             verified_after: self.verified_after,
             verified_before: self.verified_before,
+            min_confidence: self.min_confidence,
+            max_confidence: self.max_confidence,
             has_attachment: self.has_attachment,
             has_media_annotation: self.has_media_annotation,
             attachment_patterns: self

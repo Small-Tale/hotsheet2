@@ -107,7 +107,9 @@ fn tools_list() -> Value {
                 "created_before": str_prop("only tickets created at/before this ISO-8601 time"),
                 "updated_after": str_prop("only tickets updated at/after this ISO-8601 time"),
                 "updated_before": str_prop("only tickets updated at/before this ISO-8601 time"),
-                "sort": str_prop("id|created|updated|priority|status|title"),
+                "min_confidence": { "type": "integer", "minimum": 0, "maximum": 100, "description": "only completed/verified tickets whose derived completion confidence is at least this" },
+                "max_confidence": { "type": "integer", "minimum": 0, "maximum": 100, "description": "only completed/verified tickets whose derived completion confidence is at most this (find low-confidence completions to review)" },
+                "sort": str_prop("id|created|updated|priority|status|title|confidence (confidence: least confident first, unscored last)"),
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort); at most 500" },
                 "page_size": { "type": "integer", "description": "checkout queries only: return a bounded page envelope {items, next_cursor, counts} of 1-500 rows" },
                 "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
@@ -512,6 +514,8 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "created_before",
         "updated_after",
         "updated_before",
+        "min_confidence",
+        "max_confidence",
         "sort",
         "limit",
         "page_size",
@@ -1636,6 +1640,8 @@ mod core_backend {
             review_requested: resolve_person(get("review_requested"))?,
             review_by: resolve_person(get("review_by"))?,
             blocked: get("blocked").map(|v| v == "true"),
+            min_confidence: confidence_bound(get("min_confidence"), "min_confidence")?,
+            max_confidence: confidence_bound(get("max_confidence"), "max_confidence")?,
             sort,
             limit: match get("limit") {
                 Some(s) => Some(
@@ -1647,6 +1653,18 @@ mod core_backend {
             page_after,
             ..Default::default()
         })
+    }
+
+    /// Parse an optional 0-100 confidence bound with the server's contract (HS2-RD4M29).
+    fn confidence_bound(value: Option<&str>, name: &str) -> Result<Option<u8>, BackendError> {
+        value
+            .map(|raw| {
+                raw.parse::<u8>()
+                    .ok()
+                    .filter(|score| *score <= hotsheet_model::Confidence::MAX)
+                    .ok_or_else(|| bad_request(format!("{name} must be an integer from 0 to 100")))
+            })
+            .transpose()
     }
 
     /// The `fields=` allow-list for a leaner list projection (comma-separated; HS2-GY3GWT).
@@ -3150,6 +3168,27 @@ mod tests {
             .clone();
         assert_eq!(newest["text"], "plain");
         assert!(newest.get("confidence").is_none());
+        // HS2-RD4M29: query rows carry the derived score and filter/sort by it.
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note_confidence": 64 }),
+        );
+        call(&backend, "hotsheet_create", json!({ "title": "Unscored" }));
+        let low = call(&backend, "hotsheet_query", json!({ "max_confidence": 70 }));
+        assert_eq!(low.as_array().unwrap().len(), 1);
+        assert_eq!(low[0]["latest_confidence"], 64);
+        let high = call(&backend, "hotsheet_query", json!({ "min_confidence": 65 }));
+        assert!(high.as_array().unwrap().is_empty());
+        let sorted = call(&backend, "hotsheet_query", json!({ "sort": "confidence" }));
+        assert_eq!(sorted[0]["latest_confidence"], 64, "scored first");
+        let invalid = call(&backend, "hotsheet_query", json!({ "min_confidence": 101 }));
+        assert!(
+            invalid["error"]
+                .as_str()
+                .unwrap()
+                .contains("min_confidence must be an integer from 0 to 100")
+        );
         let tools = handle_message(&req("tools/list", json!({})), &backend).unwrap();
         let update = tools["result"]["tools"]
             .as_array()

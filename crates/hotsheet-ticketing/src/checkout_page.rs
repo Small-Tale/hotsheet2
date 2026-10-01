@@ -97,6 +97,7 @@ pub fn sort_name(sort: SortKey) -> &'static str {
         SortKey::Priority => "priority",
         SortKey::Status => "status",
         SortKey::Title => "title",
+        SortKey::Confidence => "confidence",
     }
 }
 

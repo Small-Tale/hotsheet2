@@ -62,6 +62,8 @@ pub enum SortKey {
     Priority,
     Status,
     Title,
+    /// Derived completion confidence, least confident first; unscored last (HS2-RD4M29).
+    Confidence,
 }
 
 impl FromStr for SortKey {
@@ -74,6 +76,7 @@ impl FromStr for SortKey {
             "priority" => SortKey::Priority,
             "status" => SortKey::Status,
             "title" => SortKey::Title,
+            "confidence" => SortKey::Confidence,
             other => return Err(format!("invalid sort '{other}'")),
         })
     }
@@ -154,6 +157,10 @@ pub struct TicketQuery {
     pub has_media_annotation: Option<bool>,
     /// Case-insensitive filename glob patterns. `*` matches any run of characters.
     pub attachment_patterns: Vec<String>,
+    /// Inclusive bounds on the derived `latest_confidence` (HS2-RD4M29). Either bound
+    /// matches only scored tickets, so an unscored completion never passes a range.
+    pub min_confidence: Option<u8>,
+    pub max_confidence: Option<u8>,
     pub sort: SortKey,
     /// Reverse the total `(sort key, id)` order while preserving deterministic pagination.
     pub descending: bool,
@@ -303,6 +310,7 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.verified_before.as_deref().is_none_or(|b| {
                 t.verified_at.as_ref().is_some_and(|value| value.as_str() <= b)
             })
+            && confidence_in_range(latest_confidence(t), q.min_confidence, q.max_confidence)
             && q.has_attachment.is_none_or(|want| t.attachments.is_empty() != want)
             && q.has_media_annotation.is_none_or(|want| {
                 t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) == want
@@ -395,6 +403,16 @@ fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
             .any(|attachment| attachment.filename.to_lowercase().contains(needle_lower))
 }
 
+/// Whether a derived confidence satisfies the optional inclusive bounds (HS2-RD4M29).
+pub fn confidence_in_range(value: Option<Confidence>, min: Option<u8>, max: Option<u8>) -> bool {
+    if min.is_none() && max.is_none() {
+        return true;
+    }
+    value.is_some_and(|score| {
+        min.is_none_or(|min| score.get() >= min) && max.is_none_or(|max| score.get() <= max)
+    })
+}
+
 fn sort_tickets(tickets: &mut [Ticket], key: SortKey, descending: bool) {
     // Every order is total and deterministic, matching the index. Workspace-facing categorical
     // sorts keep recent-first ties regardless of their primary direction.
@@ -440,6 +458,16 @@ fn sort_tickets(tickets: &mut [Ticket], key: SortKey, descending: bool) {
             .then_with(|| b.updated_at.as_str().cmp(a.updated_at.as_str()))
             .then(a.id.cmp(&b.id))
         }),
+        SortKey::Confidence => {
+            let rank = |t: &Ticket| {
+                crate::checkout_order::confidence_rank(latest_confidence(t).map(Confidence::get))
+            };
+            tickets.sort_by(|a, b| {
+                directed_order(rank(a).cmp(&rank(b)), descending)
+                    .then_with(|| b.updated_at.as_str().cmp(a.updated_at.as_str()))
+                    .then(a.id.cmp(&b.id))
+            });
+        }
     }
 }
 

@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_VERSION: i64 = 18;
 
 /// How long an index connection waits for another process's write lock.
 const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -44,6 +44,9 @@ pub fn index_file_name(store_key: &str) -> String {
     format!("{store_key}.v{SCHEMA_VERSION}.sqlite")
 }
 
+/// `checkout_order::confidence_rank` in SQL: scores ascend, unscored (NULL) sorts last.
+const CONFIDENCE_RANK_SQL: &str = "coalesce(t.latest_confidence,255)";
+
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
   rowid           INTEGER PRIMARY KEY,
@@ -70,6 +73,7 @@ CREATE TABLE tickets (
   has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
   claimed_by      TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  latest_confidence INTEGER,
   file_path       TEXT NOT NULL,
   content_hash    TEXT NOT NULL,
   UNIQUE(store_id, id)
@@ -432,8 +436,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -444,7 +448,8 @@ impl Index {
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
-             legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at",
+             legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
+             latest_confidence=excluded.latest_confidence",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -457,6 +462,7 @@ impl Index {
                 t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) as i64,
                 t.legacy_number, ts(&t.claim_eta_at),
                 hotsheet_ticketing::ops::claim_started_at(t).map(|at| at.as_str().to_string()),
+                hotsheet_ticketing::ops::latest_confidence(t).map(|score| i64::from(score.get())),
             ],
         )?;
 
@@ -866,6 +872,13 @@ impl Index {
                 args.push(Box::new(v.clone()));
             }
         }
+        // Derived completion confidence range (HS2-RD4M29): NULL never satisfies a bound.
+        for (val, op) in [(q.min_confidence, ">="), (q.max_confidence, "<=")] {
+            if let Some(v) = val {
+                wheres.push(format!("t.latest_confidence {op} ?"));
+                args.push(Box::new(i64::from(v)));
+            }
+        }
         if let Some(want) = q.has_attachment {
             wheres.push(if want {
                 "t.attachment_names_json <> '[]'".into()
@@ -919,6 +932,7 @@ impl Index {
             SortKey::Priority => "t.priority_rank",
             SortKey::Status => "t.status_rank",
             SortKey::Title => "lower(t.title)",
+            SortKey::Confidence => CONFIDENCE_RANK_SQL,
         };
 
         // Keyset pagination (HS2-TCDTCH): rows strictly after the cursor row in the total
@@ -926,7 +940,10 @@ impl Index {
         // cursor row, so the row-value comparison is type-exact; a missing cursor row makes
         // the subquery NULL → an empty page (matching the ops::query file-scan path).
         if let Some(cursor) = q.page_after {
-            if matches!(q.sort, SortKey::Priority | SortKey::Status | SortKey::Title) {
+            if matches!(
+                q.sort,
+                SortKey::Priority | SortKey::Status | SortKey::Title | SortKey::Confidence
+            ) {
                 let primary_comparison = if q.descending { "<" } else { ">" };
                 let cursor_primary =
                     format!("SELECT {order} FROM tickets t WHERE t.id = ? AND t.store_id = ?");
@@ -991,10 +1008,11 @@ impl Index {
                     args.push(Box::new(prefix));
                     args.push(Box::new(key.qualified_id.clone()));
                 }
-                SortKey::Priority | SortKey::Status | SortKey::Title => {
+                SortKey::Priority | SortKey::Status | SortKey::Title | SortKey::Confidence => {
                     let primary = match q.sort {
                         SortKey::Priority => "t.priority_rank",
                         SortKey::Status => "t.status_rank",
+                        SortKey::Confidence => CONFIDENCE_RANK_SQL,
                         _ => "lower(t.title)",
                     };
                     let bound = if q.sort == SortKey::Title {
@@ -1011,6 +1029,7 @@ impl Index {
                         match q.sort {
                             SortKey::Priority => Box::new(i64::from(key.priority_rank)),
                             SortKey::Status => Box::new(i64::from(key.status_rank)),
+                            SortKey::Confidence => Box::new(i64::from(key.confidence_rank)),
                             _ => Box::new(key.title.clone()),
                         }
                     };
@@ -1030,8 +1049,10 @@ impl Index {
             None => String::new(),
         };
         let direction = if q.descending { " DESC" } else { "" };
-        let order_clause = if matches!(q.sort, SortKey::Priority | SortKey::Status | SortKey::Title)
-        {
+        let order_clause = if matches!(
+            q.sort,
+            SortKey::Priority | SortKey::Status | SortKey::Title | SortKey::Confidence
+        ) {
             format!("{order}{direction}, t.updated_at DESC, t.id")
         } else {
             format!("{order}{direction}, t.id{direction}")
@@ -1040,7 +1061,7 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at \
+             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1079,6 +1100,9 @@ impl Index {
                     worker_label: r.get(20)?,
                     legacy_number: r.get(23)?,
                     claim_count: r.get::<_, i64>(21)? as u32,
+                    latest_confidence: r
+                        .get::<_, Option<i64>>(26)?
+                        .and_then(|score| u8::try_from(score).ok()),
                     auto_context: Vec::new(),
                 })
             })?

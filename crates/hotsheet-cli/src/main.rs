@@ -917,7 +917,14 @@ struct LsFilters {
     /// Only tickets that are unblocked (all blockers done / none).
     #[arg(long)]
     unblocked: bool,
-    /// Sort key: id | created | updated | priority | status | title.
+    /// Only completed/verified tickets whose derived confidence is at least this (0-100).
+    #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
+    min_confidence: Option<u8>,
+    /// Only completed/verified tickets whose derived confidence is at most this (0-100).
+    #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
+    max_confidence: Option<u8>,
+    /// Sort key: id | created | updated | priority | status | title | confidence
+    /// (least confident first, unscored last).
     #[arg(long, default_value = "id")]
     sort: String,
     /// Cap the number of rows shown (after sort).
@@ -1983,6 +1990,8 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         review_by: resolve_person(&f.review_by)?,
         claimed: f.claimed.then_some(true),
         blocked: f.blocked_filter(),
+        min_confidence: f.min_confidence,
+        max_confidence: f.max_confidence,
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
         page_after,
@@ -2010,8 +2019,12 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
                     Err(_) => false,
                 });
         let unread = if is_unread { "●" } else { " " };
+        let confidence = t
+            .latest_confidence
+            .map(|score| format!("  [{score}% confidence]"))
+            .unwrap_or_default();
         println!(
-            "{up}{unread} {:<12} {:<12} {}",
+            "{up}{unread} {:<12} {:<12} {}{confidence}",
             t.slug,
             t.status.as_deref().unwrap_or_default(),
             t.title

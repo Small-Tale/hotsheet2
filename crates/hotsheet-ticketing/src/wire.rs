@@ -284,6 +284,10 @@ pub struct TicketRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_number: Option<String>,
     pub claim_count: u32,
+    /// Derived completion confidence of a completed/verified ticket (HS2-RD4M29), the same
+    /// value as the full ticket's `latest_confidence`. Omitted when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_confidence: Option<u8>,
     /// Computed standing guidance; never persisted in the index or ticket file.
     pub auto_context: Vec<TicketAutoContext>,
 }
@@ -321,6 +325,7 @@ impl From<&Ticket> for TicketRow {
             worker_label: t.worker_label.clone(),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
+            latest_confidence: crate::ops::latest_confidence(t).map(Confidence::get),
             auto_context: Vec::new(),
         }
     }

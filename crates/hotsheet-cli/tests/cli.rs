@@ -3361,6 +3361,35 @@ fn edit_records_note_confidence_on_completion() {
         .success();
     assert_eq!(latest(), Some(82), "a cleared score can be set again");
 
+    // HS2-RD4M29: `ls` shows the derived score and filters/sorts by it.
+    let unscored = new_ticket(p, "Unscored");
+    hs(p)
+        .args(["ls", "--max-confidence", "90"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(&slug))
+        .stdout(predicate::str::contains("[82% confidence]"))
+        .stdout(predicate::str::contains(&unscored).not());
+    hs(p)
+        .args(["ls", "--min-confidence", "83"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(no tickets)"));
+    let sorted = hs(p)
+        .args(["ls", "--sort", "confidence"])
+        .assert()
+        .success();
+    let sorted = String::from_utf8(sorted.get_output().stdout.clone()).unwrap();
+    assert!(
+        sorted.find(&slug).unwrap() < sorted.find(&unscored).unwrap(),
+        "scored before unscored: {sorted}"
+    );
+    hs(p)
+        .args(["ls", "--min-confidence", "101"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("101"));
+
     // Reopen and re-complete without a score: the old score no longer applies.
     hs(p)
         .args(["edit", &slug, "--status", "started"])

@@ -645,6 +645,13 @@ pub fn filter_provider_ticket_page(
                 .updated_before
                 .as_deref()
                 .is_none_or(|value| ticket.updated_at.as_str() <= value)
+            && crate::ops::confidence_in_range(
+                ticket
+                    .latest_confidence
+                    .and_then(|score| Confidence::new(u64::from(score)).ok()),
+                query.min_confidence,
+                query.max_confidence,
+            )
     });
     tickets
         .sort_by(|left, right| compare_provider_tickets(left, right, query.sort, query.descending));
@@ -692,6 +699,13 @@ pub fn compare_provider_tickets(
         crate::SortKey::Title => directed(
             crate::checkout_order::title_fold(&left.title)
                 .cmp(&crate::checkout_order::title_fold(&right.title)),
+        )
+        .then_with(|| right.updated_at.cmp(&left.updated_at))
+        .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        crate::SortKey::Confidence => directed(
+            crate::checkout_order::confidence_rank(left.latest_confidence).cmp(
+                &crate::checkout_order::confidence_rank(right.latest_confidence),
+            ),
         )
         .then_with(|| right.updated_at.cmp(&left.updated_at))
         .then_with(|| left.qualified_id.cmp(&right.qualified_id)),

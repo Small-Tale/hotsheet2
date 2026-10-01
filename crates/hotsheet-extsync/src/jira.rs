@@ -161,6 +161,8 @@ impl JiraProvider {
             || query.up_next_only
             || query.close_reason.is_some()
             || query.completed_after.is_some()
+            || query.min_confidence.is_some()
+            || query.max_confidence.is_some()
             || query.completed_before.is_some()
             || query.verified_after.is_some()
             || query.verified_before.is_some()
@@ -334,6 +336,8 @@ impl TicketProvider for JiraProvider {
             || query.up_next_only
             || query.close_reason.is_some()
             || query.completed_after.is_some()
+            || query.min_confidence.is_some()
+            || query.max_confidence.is_some()
             || query.completed_before.is_some()
             || query.verified_after.is_some()
             || query.verified_before.is_some()

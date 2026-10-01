@@ -1448,6 +1448,27 @@ fn value_keyset_matches_the_checkout_order_for_every_sort_and_arbitrary_keys() {
         )
         .unwrap();
     }
+    // HS2-RD4M29: completed tickets with tied, distinct, and missing confidence scores.
+    for (id, now, score) in [
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+            "2026-08-20T00:00:00Z",
+            Some(40),
+        ),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB4",
+            "2026-08-19T00:00:00Z",
+            Some(40),
+        ),
+        ("01ARZ3NDEKTSV4RRFFQ69G5FB5", "2026-08-18T00:00:00Z", None),
+        (
+            "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+            "2026-08-18T00:00:00Z",
+            Some(95),
+        ),
+    ] {
+        complete_with_score(&store, id, now, score);
+    }
     let index = Index::open_in_memory("s1").unwrap();
     index.rebuild_from_store(&store).unwrap();
 
@@ -1466,6 +1487,7 @@ fn value_keyset_matches_the_checkout_order_for_every_sort_and_arbitrary_keys() {
         SortKey::Priority,
         SortKey::Status,
         SortKey::Title,
+        SortKey::Confidence,
     ] {
         for descending in [false, true] {
             let base = TicketQuery {
@@ -1811,4 +1833,122 @@ fn prune_removes_corrupt_stale_files_and_tolerates_a_missing_dir() {
         prune_stale_index_files(&dir.path().join("missing")).unwrap(),
         PruneReport::default()
     );
+}
+
+/// Complete a ticket at `now` with an optional scored completing note (HS2-RD4M29).
+fn complete_with_score(store: &FsStore, id: &str, now: &str, score: Option<u64>) {
+    let id = ulid(id);
+    ops::update(
+        store,
+        &id,
+        Timestamp::new(now),
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::add_note_with_metadata(
+        store,
+        &id,
+        Ulid::new(),
+        Timestamp::new(now),
+        hotsheet_model::NoteKind::Regular,
+        ops::NoteMetadataInput {
+            summary: None,
+            confidence: score.map(|value| hotsheet_model::Confidence::new(value).unwrap()),
+        },
+        "done".into(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn confidence_column_filters_and_sorts_like_the_file_scan() {
+    let (_d, store, index) = seeded();
+    // FB2 is already completed: give it a score, then complete FB1 with a low one.
+    complete_with_score(
+        &store,
+        "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+        "2026-08-19T00:00:00Z",
+        Some(88),
+    );
+    complete_with_score(
+        &store,
+        "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+        "2026-08-19T00:00:00Z",
+        Some(35),
+    );
+    for id in ["01ARZ3NDEKTSV4RRFFQ69G5FB1", "01ARZ3NDEKTSV4RRFFQ69G5FB2"] {
+        let ticket = store.read_ticket(&ulid(id)).unwrap();
+        index.upsert(&ticket, "x", &format!("hash-{id}")).unwrap();
+    }
+    let rows = index.query(&TicketQuery::default()).unwrap();
+    let score = |id: &str| {
+        rows.iter()
+            .find(|row| row.id == id)
+            .unwrap()
+            .latest_confidence
+    };
+    assert_eq!(score("01ARZ3NDEKTSV4RRFFQ69G5FB2"), Some(88));
+    assert_eq!(score("01ARZ3NDEKTSV4RRFFQ69G5FB1"), Some(35));
+    assert_eq!(score("01ARZ3NDEKTSV4RRFFQ69G5FB0"), None);
+    for (min, max, expected) in [
+        (Some(50), None, vec!["01ARZ3NDEKTSV4RRFFQ69G5FB2"]),
+        (None, Some(50), vec!["01ARZ3NDEKTSV4RRFFQ69G5FB1"]),
+        (
+            Some(35),
+            Some(88),
+            vec!["01ARZ3NDEKTSV4RRFFQ69G5FB1", "01ARZ3NDEKTSV4RRFFQ69G5FB2"],
+        ),
+        (
+            Some(0),
+            Some(100),
+            vec!["01ARZ3NDEKTSV4RRFFQ69G5FB1", "01ARZ3NDEKTSV4RRFFQ69G5FB2"],
+        ),
+        (Some(89), Some(100), vec![]),
+    ] {
+        let q = TicketQuery {
+            min_confidence: min,
+            max_confidence: max,
+            ..Default::default()
+        };
+        let expected = expected
+            .into_iter()
+            .map(String::from)
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            index_ids(&index.query(&q).unwrap()),
+            expected,
+            "{min:?}..{max:?}"
+        );
+        assert_eq!(ops_ids(&store, &q), expected, "file scan {min:?}..{max:?}");
+    }
+    // Least confident first, unscored last; reopening drops the derived score.
+    let sorted = index
+        .query(&TicketQuery {
+            sort: SortKey::Confidence,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(sorted[0].id, "01ARZ3NDEKTSV4RRFFQ69G5FB1");
+    assert_eq!(sorted[1].id, "01ARZ3NDEKTSV4RRFFQ69G5FB2");
+    assert!(sorted[2].latest_confidence.is_none());
+    let reopened = ops::update(
+        &store,
+        &ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
+        Timestamp::new("2026-08-20T00:00:00Z"),
+        TicketPatch {
+            status: Some(Status::Started),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    index.upsert(&reopened, "x", "hash-reopened").unwrap();
+    let low = TicketQuery {
+        max_confidence: Some(50),
+        ..Default::default()
+    };
+    assert!(index.query(&low).unwrap().is_empty());
+    assert!(ops_ids(&store, &low).is_empty());
 }

@@ -28,6 +28,13 @@ pub struct MergeKey {
     pub updated_at: String,
     pub priority_rank: u8,
     pub status_rank: u8,
+    /// [`confidence_rank`] of the derived `latest_confidence` (HS2-RD4M29).
+    #[serde(default = "unscored_rank")]
+    pub confidence_rank: u8,
+}
+
+fn unscored_rank() -> u8 {
+    u8::MAX
 }
 
 impl MergeKey {
@@ -44,6 +51,12 @@ impl MergeKey {
             updated_at: text("updated_at").to_owned(),
             priority_rank: priority_rank(Some(text("priority"))),
             status_rank: status_rank(Some(text("status"))),
+            confidence_rank: confidence_rank(
+                value
+                    .get("latest_confidence")
+                    .and_then(Value::as_u64)
+                    .and_then(|score| u8::try_from(score).ok()),
+            ),
         }
     }
 
@@ -58,6 +71,7 @@ impl MergeKey {
             updated_at: row.updated_at.clone().unwrap_or_default(),
             priority_rank: priority_rank(row.priority.as_deref()),
             status_rank: status_rank(row.status.as_deref()),
+            confidence_rank: confidence_rank(row.latest_confidence),
         }
     }
 
@@ -72,6 +86,7 @@ impl MergeKey {
             updated_at: ticket.updated_at.clone(),
             priority_rank: ticket.priority as u8,
             status_rank: ticket.status as u8,
+            confidence_rank: confidence_rank(ticket.latest_confidence),
         }
     }
 }
@@ -122,6 +137,13 @@ pub fn status_rank(value: Option<&str>) -> u8 {
     }
 }
 
+/// Rank a derived completion confidence (0-100) ascending, so the least confident
+/// completions surface first; an unscored ticket sorts last (HS2-RD4M29).
+#[must_use]
+pub fn confidence_rank(value: Option<u8>) -> u8 {
+    value.unwrap_or(u8::MAX)
+}
+
 /// Compare two rows in the requested checkout order. Chronological and id sorts fall
 /// back to native then qualified identity in the same direction; categorical sorts
 /// break ties recent-first, then by qualified identity, regardless of direction.
@@ -146,6 +168,9 @@ pub fn compare(left: &MergeKey, right: &MergeKey, sort: SortKey, descending: boo
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
         SortKey::Title => directed(title_fold(&left.title).cmp(&title_fold(&right.title)))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
+        SortKey::Confidence => directed(left.confidence_rank.cmp(&right.confidence_rank))
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| left.qualified_id.cmp(&right.qualified_id)),
     }
@@ -188,7 +213,44 @@ mod tests {
             updated_at: updated_at.into(),
             priority_rank,
             status_rank: 0,
+            confidence_rank: u8::MAX,
         }
+    }
+
+    #[test]
+    fn confidence_order_puts_least_confident_first_and_unscored_last() {
+        let scored = |id: &str, value: Option<u64>| {
+            MergeKey::from_json(&json!({
+                "native_id": id, "qualified_id": id, "updated_at": "2026-09-01T00:00:00Z",
+                "latest_confidence": value,
+            }))
+        };
+        let (low, high, unscored) = (
+            scored("a", Some(20)),
+            scored("b", Some(90)),
+            scored("c", None),
+        );
+        assert_eq!(low.confidence_rank, 20);
+        assert_eq!(unscored.confidence_rank, u8::MAX);
+        assert_eq!(
+            compare(&low, &high, SortKey::Confidence, false),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare(&high, &unscored, SortKey::Confidence, false),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare(&low, &high, SortKey::Confidence, true),
+            Ordering::Greater
+        );
+        // Cursors encoded before the field existed still decode (as unscored).
+        let legacy: MergeKey = serde_json::from_value(json!({
+            "native_id": "a", "qualified_id": "a", "title": "", "created_at": "",
+            "updated_at": "", "priority_rank": 2, "status_rank": 0
+        }))
+        .unwrap();
+        assert_eq!(legacy.confidence_rank, u8::MAX);
     }
 
     #[test]

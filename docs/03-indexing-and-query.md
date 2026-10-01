@@ -124,6 +124,7 @@ CREATE TABLE tickets (
   tags_json     TEXT NOT NULL DEFAULT '[]',
   created_at    TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
   claimed_by    TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  latest_confidence INTEGER,          -- derived ops::latest_confidence (0-100) of a completed/verified ticket; NULL otherwise (HS2-RD4M29)
   -- provenance for incremental reindex:
   file_path     TEXT NOT NULL,
   git_blob_oid  TEXT,                 -- content hash for change detection (§3.4)
@@ -217,10 +218,20 @@ query(filter, sort, text?, paging) -> TicketRow[]
   review-requested (by person, incl. "me")** (§10.2), date ranges. These are the
   same dimensions the **custom-view query builder** exposes (HS2-29) — so views can
   filter on the new fields (store / close_reason / assignment).
+  **Completion confidence (HS2-RD4M29):** `min_confidence` / `max_confidence` are
+  inclusive 0-100 bounds on the indexed, derived `latest_confidence`. Either bound
+  matches only scored (completed/verified) tickets, so `max_confidence=69` lists the
+  low-confidence completions to review. CLI `ls --min-confidence/--max-confidence`,
+  server `GET /tickets?min_confidence=&max_confidence=`, and MCP `hotsheet_query` share
+  the contract (a bound outside 0-100 is rejected). GitHub, GitLab, and Jira reject these
+  filters explicitly, because their list reads carry no comment-derived score. Every list
+  row carries `latest_confidence` when present.
   Blocked/unblocked uses the normalized, non-empty `blocked_reason` as its single source
   of truth. `blocked_by` edges remain indexed dependency context, but never create a
   blocked state without visible explanatory text.
-- **sort:** priority-then-recency (the worklist order), created, updated, title;
+- **sort:** priority-then-recency (the worklist order), created, updated, title,
+  confidence (least confident first, unscored last; `checkout_order::confidence_rank`
+  in memory and `coalesce(latest_confidence,255)` in SQL, so keyset pages agree);
   ULID gives a free chronological default. Queries accept ascending or descending order;
   priority/status/title retain recent-first then stable-id tie breakers in either direction.
 - **text:** an FTS5 `MATCH` over slug/title/tags/details/notes, joined with the structured

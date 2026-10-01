@@ -172,6 +172,8 @@ impl GitLabProvider {
             || query.page_after.is_some()
             || query.up_next_only
             || query.completed_after.is_some()
+            || query.min_confidence.is_some()
+            || query.max_confidence.is_some()
             || query.completed_before.is_some()
             || query.verified_after.is_some()
             || query.verified_before.is_some()
@@ -350,6 +352,8 @@ impl TicketProvider for GitLabProvider {
             || query.page_after.is_some()
             || query.up_next_only
             || query.completed_after.is_some()
+            || query.min_confidence.is_some()
+            || query.max_confidence.is_some()
             || query.completed_before.is_some()
             || query.verified_after.is_some()
             || query.verified_before.is_some()

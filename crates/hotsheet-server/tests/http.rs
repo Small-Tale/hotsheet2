@@ -8665,6 +8665,53 @@ async fn update_records_note_confidence_and_derives_latest_confidence() {
     .await;
     assert_eq!(provider_restored["latest_confidence"], 0);
 
+    // HS2-RD4M29: list rows carry the derived score, and the list filters/sorts by it.
+    let other = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Unscored"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let list = |query: &str| {
+        let app = app.clone();
+        let query = query.to_owned();
+        async move {
+            app.oneshot(authed("GET", &format!("/tickets{query}"), None))
+                .await
+                .unwrap()
+        }
+    };
+    let rows = body_json(list("").await).await;
+    let row = |rows: &serde_json::Value, id: &str| {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == id)
+            .cloned()
+    };
+    assert_eq!(row(&rows, &id).unwrap()["latest_confidence"], 0);
+    assert!(
+        row(&rows, other["id"].as_str().unwrap())
+            .unwrap()
+            .get("latest_confidence")
+            .is_none()
+    );
+    let low = body_json(list("?max_confidence=10").await).await;
+    assert_eq!(low.as_array().unwrap().len(), 1);
+    assert_eq!(low[0]["id"], id.as_str());
+    let high = body_json(list("?min_confidence=50").await).await;
+    assert!(high.as_array().unwrap().is_empty());
+    let sorted = body_json(list("?sort=confidence").await).await;
+    assert_eq!(sorted[0]["id"], id.as_str(), "scored before unscored");
+    for bad in [
+        "?min_confidence=101",
+        "?max_confidence=-1",
+        "?sort=confident",
+    ] {
+        assert_eq!(list(bad).await.status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+
     // Reopening clears the derived value; the per-note history stays.
     let reopened = body_json(patch(path, serde_json::json!({"status":"started"})).await).await;
     assert!(reopened.get("latest_confidence").is_none());
