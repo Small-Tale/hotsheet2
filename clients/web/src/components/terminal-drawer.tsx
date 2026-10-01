@@ -2,7 +2,7 @@ import './terminal-drawer.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -39,6 +39,11 @@ export interface TerminalDrawerChatTab {
   busy?: boolean;
   summary?: string;
 }
+/** An AI provider the drawer can open an AI shell with (HS2-3HT4PA). */
+export interface TerminalDrawerAiProvider {
+  id: string;
+  name: string;
+}
 export interface TerminalDrawerProps {
   projectId: string;
   projectName: string;
@@ -61,10 +66,48 @@ export interface TerminalDrawerProps {
   focusTextSize?: MobileMagnifiedTerminal;
   /** The open tile More actions menu, rendered by the drawer grid when it targets one of its tiles (HS2-V2CCN6). */
   contextMenu?: { key: string; x: number; y: number };
+  /** Installed AI providers, in catalog order, for the New drawer item menu's AI shell entry (HS2-3HT4PA). */
+  aiProviders?: readonly TerminalDrawerAiProvider[];
+  /** The provider an AI shell uses when none is picked: the project default or this session's Drive choice. */
+  defaultAiProvider?: string;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
 const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open'];
+
+/**
+ * The New drawer item menu's AI shell entry (HS2-3HT4PA): with one provider it is named for that
+ * provider; with several it opens a submenu of the default, then every provider by name, each using
+ * that provider's own default model and effort.
+ */
+export function aiShellMenuItem(
+  providers: readonly TerminalDrawerAiProvider[],
+  defaultProvider?: string,
+): PopupMenuEntry {
+  const icon = <LucideIcon icon={Bot} name="bot" />,
+    shell = (label: string, provider?: string): PopupMenuEntry => ({
+      label,
+      action: 'create-terminal-drawer-item',
+      icon,
+      attributes: { 'data-item-id': 'ai-shell', ...(provider ? { 'data-provider': provider } : {}) },
+    });
+  if (providers.length < 2) {
+    const only = providers.at(0);
+    // The only provider is normally the default; name it explicitly when a stale default points elsewhere.
+    return only ? shell(`${only.name} shell`, only.id === defaultProvider ? undefined : only.id) : shell('AI shell');
+  }
+  const fallback = providers.find((provider) => provider.id === defaultProvider) ?? providers[0];
+  return {
+    label: 'AI shell',
+    icon,
+    attributes: { 'data-item-id': 'ai-shell-providers' },
+    submenu: [
+      shell(`Default (${fallback.name})`),
+      { kind: 'divider' },
+      ...providers.map((provider) => shell(provider.name, provider.id)),
+    ],
+  };
+}
 
 export function TerminalDrawer({
   projectId,
@@ -86,6 +129,8 @@ export function TerminalDrawer({
   focusViewport,
   focusTextSize,
   contextMenu,
+  aiProviders = [],
+  defaultAiProvider,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -214,12 +259,7 @@ export function TerminalDrawer({
                         icon: <LucideIcon icon={SquareTerminal} name="square-terminal" />,
                         attributes: { 'data-item-id': 'default-shell' },
                       },
-                      {
-                        label: 'AI shell',
-                        action: 'create-terminal-drawer-item',
-                        icon: <LucideIcon icon={Bot} name="bot" />,
-                        attributes: { 'data-item-id': 'ai-shell' },
-                      },
+                      aiShellMenuItem(aiProviders, defaultAiProvider),
                       {
                         label: 'AI chat',
                         action: 'create-terminal-drawer-item',

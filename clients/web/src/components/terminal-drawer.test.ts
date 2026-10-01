@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AIConversation } from './ai-conversation';
-import { TerminalDrawer } from './terminal-drawer';
+import { aiShellMenuItem, TerminalDrawer } from './terminal-drawer';
 
 const sessions = [
   {
@@ -333,5 +333,60 @@ describe('TerminalDrawer', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-dashboard.css'), 'utf8');
     expect(css).toMatchSource(/data-basis="high"\] \{[^}]*grid-template-columns: repeat\(auto-fill/);
     expect(css).toMatchSource(/data-basis="high"\]\[data-fit="1"\] \{[^}]*grid-auto-flow: column/);
+  });
+
+  it('names the AI shell for a single provider and nests several behind a default (HS2-3HT4PA)', () => {
+    const codex = { id: 'codex', name: 'Codex' },
+      claude = { id: 'claude', name: 'Claude' },
+      drawer = (aiProviders: (typeof codex)[], defaultAiProvider?: string) =>
+        String(
+          TerminalDrawer({
+            projectId: 'project',
+            projectName: 'Project',
+            sessions,
+            width: 900,
+            height: 320,
+            fitAcross: 2,
+            fitHigh: 2,
+            selectedId: 'grid',
+            aiProviders,
+            defaultAiProvider,
+          }),
+        );
+    // No provider discovered yet: the generic entry, launching the project default.
+    expect(aiShellMenuItem([])).toMatchObject({ label: 'AI shell', attributes: { 'data-item-id': 'ai-shell' } });
+    const single = drawer([claude], 'claude');
+    expect(single).toContain('Claude shell');
+    expect(single).not.toContain('>AI shell<');
+    expect(single).not.toContain('data-provider=');
+    expect(aiShellMenuItem([claude])).not.toHaveProperty('submenu');
+    // A stale default naming an uninstalled tool still launches the only installed provider.
+    expect(aiShellMenuItem([claude], 'codex')).toMatchObject({
+      label: 'Claude shell',
+      attributes: { 'data-item-id': 'ai-shell', 'data-provider': 'claude' },
+    });
+    // Several providers: a parent item with Default (<effective provider>), a divider, then each provider.
+    const several = aiShellMenuItem([codex, claude], 'claude');
+    expect(several).toMatchObject({ label: 'AI shell', attributes: { 'data-item-id': 'ai-shell-providers' } });
+    expect(several).not.toHaveProperty('action');
+    const submenu = 'submenu' in several ? (several.submenu ?? []) : [];
+    expect(
+      submenu.map((entry) =>
+        entry.kind === 'divider' ? '---' : entry.kind === 'heading' ? entry.label : [entry.label, entry.attributes],
+      ),
+    ).toEqual([
+      ['Default (Claude)', { 'data-item-id': 'ai-shell' }],
+      '---',
+      ['Codex', { 'data-item-id': 'ai-shell', 'data-provider': 'codex' }],
+      ['Claude', { 'data-item-id': 'ai-shell', 'data-provider': 'claude' }],
+    ]);
+    // An unknown default falls back to the first provider's name; every actionable entry carries an icon.
+    const fallback = aiShellMenuItem([codex, claude], 'gone');
+    expect('submenu' in fallback && fallback.submenu?.[0]).toMatchObject({ label: 'Default (Codex)' });
+    for (const entry of submenu)
+      if (entry.kind !== 'divider' && entry.kind !== 'heading') expect(entry.icon).toBeTruthy();
+    const markup = drawer([codex, claude], 'codex');
+    expect(markup).toContain('Default (Codex)');
+    expect(markup).toContain('data-provider="claude"');
   });
 });

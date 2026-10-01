@@ -308,19 +308,24 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function restoreCommandEditorAfterManualModel(state:ManualModelDialogState|undefined){if(state?.target!=='command'||!state.commandId)return;commandSettingsEditingId.value=state.commandId;requestAnimationFrame(()=>requestAnimationFrame(()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control)?.showPopover?.()}))}
 
-  function aiLaunchConfiguration(kind: 'ai-shell' | 'ai-chat', customize: boolean) {
+  /**
+   * The AI selection for a new drawer AI shell or chat: the named provider with its own saved model
+   * and effort (HS2-3HT4PA), else the project default (with this session's Drive choice); Option-click
+   * customizes it.
+   */
+  function aiLaunchConfiguration(kind: 'ai-shell' | 'ai-chat', customize: boolean, provider?: string) {
     const current = project(),
-      base = effectiveDriveSelection(current?.id);
+      base = provider ? normalizedAiSelection({ tool: provider }) : effectiveDriveSelection(current?.id);
     if (!current || !customize) return base;
-    const provider = window.prompt('AI provider', base.tool);
-    if (provider === null) return;
+    const answer = window.prompt('AI provider', base.tool);
+    if (answer === null) return;
     const descriptor = aiTools.value.find(
       (item) =>
-        item.id.toLowerCase() === provider.trim().toLowerCase() ||
-        item.display_name.toLowerCase() === provider.trim().toLowerCase(),
+        item.id.toLowerCase() === answer.trim().toLowerCase() ||
+        item.display_name.toLowerCase() === answer.trim().toLowerCase(),
     );
     if (!descriptor) {
-      error.value = `Unknown AI provider: ${provider}`;
+      error.value = `Unknown AI provider: ${answer}`;
       return;
     }
     const initial = normalizedAiSelection({ tool: descriptor.id }),

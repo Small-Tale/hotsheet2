@@ -559,6 +559,17 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(12.8px);
 }
+.terminal-drawer-provider-demo h2 {
+  margin: 0 0 var(--wa-space-s);
+  font-size: var(--wa-font-size-s);
+}
+.terminal-drawer-provider-demo__stage {
+  width: min(remify(1152px), 100%);
+  height: remify(160px);
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(12.8px);
+}
 .terminal-drawer-demos {
   display: grid;
   width: min(remify(1152px), 100%);

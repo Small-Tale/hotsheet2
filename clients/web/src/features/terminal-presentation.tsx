@@ -60,7 +60,7 @@ export interface TerminalPresentationDependencies {
   };
   ai: Pick<
     ReturnType<typeof createAiConfigurationController>,
-    'aiToolLabel' | 'conversationAiSelection' | 'aiToolOptions' | 'aiTools'
+    'aiToolLabel' | 'conversationAiSelection' | 'aiToolOptions' | 'aiTools' | 'effectiveDriveSelection'
   >;
   permissions: Pick<ReturnType<typeof createPermissionsController>, 'pendingPermissions' | 'permissionPopupSurface'>;
 }
@@ -95,7 +95,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     conversationConnectionId,
     conversationSelectedMessages,
   } = dependencies.conversations;
-  const { aiToolLabel, conversationAiSelection, aiToolOptions, aiTools } = dependencies.ai;
+  const { aiToolLabel, conversationAiSelection, aiToolOptions, aiTools, effectiveDriveSelection } = dependencies.ai;
   const { pendingPermissions, permissionPopupSurface } = dependencies.permissions;
 
   function workspaceTerminalGroups(): TerminalDashboardGroup[] {
@@ -225,6 +225,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       focusTextSize: focusMode ? mobileMagnifiedTerminal() : undefined,
       // The drawer grid's tiles carry the same More actions button as the dashboard (HS2-V2CCN6).
       contextMenu: terminalContextMenu.value,
+      aiProviders: aiToolOptions().map((tool) => ({ id: tool.id, name: tool.label })),
+      defaultAiProvider: effectiveDriveSelection(current.id).tool,
     };
   }
 

@@ -2094,7 +2094,12 @@ the explicit quiet pill-shaped plus action immediately after the last tab and th
 at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
 one-shot input focus; plus
 opens Kerf PopupMenu choices for Terminal (the default shell, renamed by HS2-92C6AR), AI shell, AI chat, and saved conversations.
-The menu has no redundant heading or submenu chevrons. Its popup keeps the commands within the
+The AI shell entry follows the installed providers (HS2-3HT4PA): with one it is named for that
+provider ("Claude shell"); with several it opens a submenu of "Default (<provider>)" (the project
+default, or this session's Drive choice), a divider, and every provider by name, each launching with
+that provider's own default model and effort (HS2-EK24KF). On a phone the submenu flips to the
+left of the menu.
+The menu has no redundant heading, and only the AI shell submenu carries a disclosure chevron. Its popup keeps the commands within the
 viewport as the drawer and window resize, and supplies native menu keyboard navigation
 (HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection
 working even while Web Awesome's previous hide animation is finishing (HS2-1PM38K).

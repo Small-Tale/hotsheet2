@@ -3733,6 +3733,112 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await page.screenshot({ path: '/private/tmp/hs2-prbgrb-provider-reseed.png', fullPage: true });
 });
 
+test("opens an AI shell per provider from the drawer submenu with each provider's own defaults (HS2-3HT4PA)", async ({
+  page,
+}) => {
+  const created: Array<Record<string, unknown>> = [];
+  await mockProject(page);
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/terminals'))
+      created.push(request.postDataJSON());
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  // Claude keeps its own default model, distinct from the project's default provider (HS2-EK24KF).
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  const claudeModel = page.locator('wa-select[name="ai-provider-model-claude"]');
+  await claudeModel.click();
+  await claudeModel.locator('wa-option[value="opus"]').click();
+  await expect(page.locator('[data-component="ai-tool-settings"]')).toContainText('Saved for this project');
+  await page.getByLabel('List view').click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    menu = drawer.locator('[data-terminal-drawer-create]'),
+    parent = menu.locator('[data-item-id="ai-shell-providers"]'),
+    shell = (provider?: string) =>
+      parent.locator(
+        provider
+          ? `[data-action="create-terminal-drawer-item"][data-provider="${provider}"]`
+          : '[data-action="create-terminal-drawer-item"]:not([data-provider])',
+      ),
+    openSubmenu = async () => {
+      await create.click();
+      // Move off first so hovering the parent is a fresh pointer entry that opens its submenu.
+      await page.mouse.move(0, 0);
+      await parent.hover();
+      await expect(shell()).toBeVisible();
+    };
+  await openSubmenu();
+  await expect(parent).not.toHaveAttribute('data-action');
+  await expect(shell()).toHaveText(/Default \(Codex\)/);
+  await expect(shell('codex')).toHaveText(/Codex/);
+  await expect(shell('claude')).toHaveText(/Claude/);
+  await expect(parent.locator('wa-divider')).toHaveCount(1);
+  for (const item of [shell(), shell('codex'), shell('claude')])
+    await expect(item.locator('[data-lucide="bot"]')).toBeAttached();
+  await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-wide.png') });
+  await shell('claude').click();
+  await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'claude', model: 'opus', effort: 'low' });
+  await openSubmenu();
+  await shell().click();
+  await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'codex', model: 'gpt-6-astra', effort: 'medium' });
+  await openSubmenu();
+  await shell('codex').click();
+  await expect.poll(() => created.length).toBe(3);
+  expect(created.at(-1)).toMatchObject({ connect: 'codex', model: 'gpt-6-astra', effort: 'medium' });
+  // On a phone the selected terminal can be in focus mode; leave it to reach the drawer's create menu.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
+  await expect(exitFocus.or(create)).toBeVisible();
+  if (await exitFocus.isVisible()) await exitFocus.click();
+  await expect(create).toBeVisible();
+  await openSubmenu();
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-narrow.png') });
+});
+
+test('names the AI shell after the only installed provider (HS2-3HT4PA)', async ({ page }) => {
+  const created: Array<Record<string, unknown>> = [];
+  await mockProject(page);
+  await page.route('**/ai-tools*', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'claude',
+          display_name: 'Claude',
+          models: [{ id: 'sonnet', label: 'Sonnet', effort_levels: ['low', 'medium'] }],
+          default_model: 'sonnet',
+          default_effort: 'medium',
+          actions: ['change_model', 'change_effort'],
+        },
+      ],
+    }),
+  );
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/terminals'))
+      created.push(request.postDataJSON());
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    menu = drawer.locator('[data-terminal-drawer-create]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  const item = menu.locator('[data-action="create-terminal-drawer-item"][data-item-id="ai-shell"]');
+  await expect(item).toHaveText(/Claude shell/);
+  await expect(menu.getByText('AI shell', { exact: true })).toHaveCount(0);
+  await expect(menu.locator('[data-item-id="ai-shell-providers"]')).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('ai-shell-single-provider-wide.png') });
+  await item.click();
+  await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'claude', model: 'sonnet', effort: 'medium' });
+});
+
 test('creates an embedded AI chat from the polished terminal drawer menu and exposes modifier configuration', async ({
   page,
 }) => {
@@ -3767,7 +3873,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await expect(region).toHaveCSS('overflow', 'visible');
   const menu = drawer.locator('[data-terminal-drawer-create]');
   await expect(menu.getByText('Terminal', { exact: true })).toBeVisible();
-  await expect(menu.getByText('AI shell')).toBeVisible();
+  await expect(menu.locator('[data-item-id="ai-shell-providers"]')).toBeVisible();
   await expect(menu.locator('[data-component="list-header"]')).toHaveCount(0);
   await expect(menu.locator('[data-lucide="chevron-right"]')).toHaveCount(0);
   const popupBounds = () =>

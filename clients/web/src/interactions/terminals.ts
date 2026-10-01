@@ -74,7 +74,11 @@ export interface TerminalInteractionsDependencies {
   readonly terminalFunctionRow: Signal<boolean>;
   readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
-  readonly aiLaunchConfiguration: (kind: 'ai-shell' | 'ai-chat', customize: boolean) => AiToolDefaults | undefined;
+  readonly aiLaunchConfiguration: (
+    kind: 'ai-shell' | 'ai-chat',
+    customize: boolean,
+    provider?: string,
+  ) => AiToolDefaults | undefined;
   readonly createDrawerAIChat: (
     selection: AiToolDefaults,
     options?: { connectionId?: string; drive?: boolean },
@@ -460,7 +464,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       void createProjectTerminal();
       return;
     }
-    const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey);
+    const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey, data(target).provider);
     if (!configuration) return;
     if (kind === 'ai-shell') void createProjectTerminal(configuration);
     else void createDrawerAIChat(configuration);

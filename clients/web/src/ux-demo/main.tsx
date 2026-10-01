@@ -352,6 +352,11 @@ import {
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
+/** The drawer demo's installed AI providers: several open the AI shell submenu (HS2-3HT4PA). */
+const TERMINAL_DRAWER_DEMO_PROVIDERS = [
+  { id: 'codex', name: 'Codex' },
+  { id: 'claude', name: 'Claude' },
+] as const;
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
@@ -854,7 +859,27 @@ function demoContent(item: DemoDefinition) {
             fitHigh={2}
             selectedId="shell"
             contextMenu={terminalDashboardContextMenu.value}
+            aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS}
+            defaultAiProvider="claude"
           />
+        </section>
+        {/* With one installed AI provider the AI shell entry is named for it instead of a submenu (HS2-3HT4PA). */}
+        <section class="terminal-drawer-provider-demo" aria-label="One AI provider">
+          <h2>One AI provider</h2>
+          <div class="terminal-drawer-provider-demo__stage">
+            <TerminalDrawer
+              projectId="demo-single"
+              projectName="Demo project"
+              sessions={[]}
+              width={900}
+              height={96}
+              fitAcross={2}
+              fitHigh={2}
+              selectedId="grid"
+              aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS.slice(1)}
+              defaultAiProvider="claude"
+            />
+          </div>
         </section>
         <section class="terminal-drawer-focus-demo" aria-label="Phone focus mode variants">
           {focusVariant('Phone focus mode', false, 560)}
