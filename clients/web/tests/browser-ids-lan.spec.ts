@@ -36,9 +36,16 @@ for (const width of [390, 1280]) {
       const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
         connections: ToolConnection[] = [],
         uploads: string[] = [],
+        // Uploads the real store has committed. `uploads` counts intercepted requests,
+        // which run ahead of the forwarded write under load (HS2-MCAKGQ).
+        storedUploads: string[] = [],
+        consoleErrors: string[] = [],
         turns: string[] = [],
         errors: string[] = [],
         resizeDeferrals: Array<{ message: string; name: string; stack: string }> = [];
+      page.on('console', (message) => {
+        if (message.type() === 'error') consoleErrors.push(message.text());
+      });
       page.on('pageerror', (error) => {
         // WebKit documents this stackless native event as next-frame deferral:
         // https://webkit.org/blog/9997/resizeobserver-in-webkit/
@@ -141,11 +148,16 @@ for (const width of [390, 1280]) {
           // projects and opens the ticket before its sequential attachment batch settles,
           // so the visible details editor is not the batch-completion boundary.
           if (uploads.length === 3) await thirdUploadGate;
+          // Hold the last forwarded write briefly, as a loaded machine does, so the store
+          // readback below must wait for committed uploads, not intercepted ones (HS2-MCAKGQ).
+          if (uploads.length === 4) await new Promise((resolve) => setTimeout(resolve, 750));
         }
         const response = await route.fetch({
           url: `${server.url}${path}${url.search}`,
           headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
         });
+        if (path.endsWith('/attachments') && request.method() === 'POST' && response.ok())
+          storedUploads.push(decodeURIComponent(request.headers()['x-hotsheet-attachment-batch']));
         return route.fulfill({ response });
       });
       await page.goto(remoteOrigin);
@@ -196,6 +208,9 @@ for (const width of [390, 1280]) {
         }
       }
       await expect.poll(() => uploads.length).toBe(4);
+      // Read the store only after every forwarded upload has been committed: the fourth
+      // request is intercepted before its write lands, so `uploads` alone races the store.
+      await expect.poll(() => storedUploads.length).toBe(4);
       expect(uploads[0]).toBe(uploads[1]);
       expect(uploads[2]).toBe(uploads[3]);
       expect(uploads[0]).not.toBe(uploads[2]);
@@ -275,6 +290,10 @@ for (const width of [390, 1280]) {
       });
       expect(resizeDeferrals).toHaveLength(deferralsBeforePaint);
       expect(errors).toEqual([]);
+      // WebKit reports a failed or aborted same-origin fetch as an access-control error
+      // (HS2-MCAKGQ); none may occur while the page is live and the test still owns it.
+      await testInfo.attach('console-errors', { body: JSON.stringify(consoleErrors), contentType: 'application/json' });
+      expect(consoleErrors.filter((text) => text.includes('access control checks'))).toEqual([]);
     } finally {
       const failures: unknown[] = [];
       for (const close of cleanups.reverse()) {
