@@ -1566,15 +1566,37 @@
       "id": "ticket-sources-settings",
       "name": "TicketSourcesSettings",
       "kind": "component",
-      "purpose": "Connected git and external ticket-source inventory with Kerf List connection rows.",
+      "purpose": "One project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach.",
       "useWhen": [
-        "Hot Sheet needs connected git and external ticket-source inventory with Kerf List connection rows."
+        "Hot Sheet needs one project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."
       ],
       "publicClasses": [
         "ticket-sources-settings"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "connections-settings",
+      "name": "ConnectionsSettings",
+      "kind": "component",
+      "purpose": "The machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections).",
+      "useWhen": [
+        "Hot Sheet needs the machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections)."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConnectionsSettings behavior."
+      ],
+      "publicClasses": [
+        "connections-settings"
       ],
       "publicTokens": [],
       "geometry": {

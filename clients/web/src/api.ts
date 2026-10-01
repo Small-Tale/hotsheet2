@@ -626,6 +626,11 @@ export class Api {
       method: 'PUT',
       body: JSON.stringify({ provider: connection.provider, locator: connection.locator, make_default: makeDefault }),
     });
+  /** Detach a ticket source from one checkout; the machine-wide connection stays (HS2-3SCH1K). */
+  removeCheckoutSource = (checkout: string, connectionId: string) =>
+    this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}`, {
+      method: 'DELETE',
+    });
   setCheckoutDefaultSource = (checkout: string, connectionId: string | null) =>
     this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/default-source`, {
       method: 'PUT',

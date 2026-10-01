@@ -119,6 +119,7 @@ describe('UX demo catalog', () => {
       'ticket-source-setup-dialog',
       'provider-setup-form',
       'ticket-sources-settings',
+      'connections-settings',
       'settings-workspace',
       'keyboard-settings',
       'trash-settings',

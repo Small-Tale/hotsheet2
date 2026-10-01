@@ -546,6 +546,10 @@ and identity-less legacy entries remain conservatively blocking.
   heading and the device-local categories under an **App Settings** heading (HS2-QT6PGR).
   Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page.
+  Ticket sources shows only this checkout's linked sources and its own default; the
+  machine-wide connection catalog (edit for every project, Disable/Enable, Remove) is the
+  **App Settings → Connections** page (HS2-3SCH1K, see
+  [16-external-sync-interface.md](16-external-sync-interface.md)).
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
   `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup and

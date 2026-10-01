@@ -1,6 +1,13 @@
 import { type Signal, signal } from 'kerfjs';
 
-import { Api, type Capabilities, type Checkout, type CustomView, type ProviderConnection } from '../api';
+import {
+  Api,
+  type Capabilities,
+  type Checkout,
+  type CustomView,
+  type ProviderConnection,
+  type ProviderDescriptor,
+} from '../api';
 import { isRemoteClient } from '../client-origin';
 import { copyWhenReady } from '../clipboard-when-ready';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
@@ -85,6 +92,12 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerConnections = signal<ProviderConnection[]>([]),
     providerSetupKind = signal<ExternalProviderKind | undefined>(undefined),
     providerEditingId = signal<string | undefined>(undefined),
+    /**
+     * Where the open connection editor was opened (HS2-3SCH1K): a project's Ticket sources edits the
+     * connection and this project's default choice; App Settings → Connections edits it for every
+     * project and offers Disable and Remove.
+     */
+    providerEditScope = signal<'project' | 'machine'>('project'),
     providerSettingsBusy = signal(false),
     providerSettingsError = signal(''),
     providerRemovingId = signal<string | undefined>(undefined),
@@ -474,9 +487,11 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   async function refreshProviderConnections(current = dependencies.project(), quiet = false) {
     if (!current) return;
     try {
-      const connections = await new Api(current.apiPath, '', { trackBusy: !quiet }).connections();
+      const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
+        [connections, descriptors] = await Promise.all([client.connections(), client.providers()]);
       if (dependencies.project()?.id !== current.id) return;
       providerConnections.value = connections;
+      applyProviderDescriptors(current, descriptors);
       providerSettingsError.value = '';
     } catch (reason) {
       if (dependencies.project()?.id === current.id)
@@ -538,14 +553,20 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       }
       settings.email = email;
     }
-    const connection: ProviderConnection = {
-      id,
-      provider: kind,
-      locator,
-      name,
-      default: makeDefault,
-      settings,
-    };
+    const scope = providerEditScope.value,
+      wasProjectDefault = Boolean(
+        editingId &&
+        defaultProviders.value[current.id]?.sources.some((item) => item.connectionId === editingId && item.default),
+      ),
+      connection: ProviderConnection = {
+        id,
+        provider: kind,
+        locator,
+        name,
+        // The registry flag is machine-wide; an edit keeps it, and a project's default is its checkout's.
+        default: editingId ? (existing?.default ?? false) : makeDefault,
+        settings,
+      };
     providerSettingsBusy.value = true;
     providerSettingsError.value = '';
     try {
@@ -553,8 +574,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         saved = editingId
           ? await client.updateConnection(editingId, connection)
           : await client.createConnection(connection);
-      await client.addCheckoutSource(current.id, saved, makeDefault);
-      if (editingId && !makeDefault && providerConnections.value.find((item) => item.id === editingId)?.default)
+      // An edit from App Settings → Connections leaves every project's links alone.
+      if (!editingId || scope === 'project') await client.addCheckoutSource(current.id, saved, makeDefault);
+      if (editingId && scope === 'project' && !makeDefault && wasProjectDefault)
         await client.setCheckoutDefaultSource(current.id, null);
       await reloadProviderDescriptors(client, current);
       projects.value = projects.value.map((item) =>
@@ -574,7 +596,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
 
   async function reloadProviderDescriptors(client: Api, current: Project) {
     providerConnections.value = await client.connections();
-    const descriptors = await client.providers();
+    applyProviderDescriptors(current, await client.providers());
+  }
+
+  function applyProviderDescriptors(current: Project, descriptors: ProviderDescriptor[]) {
     defaultProviders.value = {
       ...defaultProviders.value,
       [current.id]: projectTicketSources(descriptors),
@@ -583,6 +608,57 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       ...providerCapabilities.value,
       ...Object.fromEntries(descriptors.map((item) => [item.connection_id, item.capabilities])),
     };
+  }
+
+  /** Run one change to this project's checkout sources, then refresh what depends on them (HS2-3SCH1K). */
+  async function changeProjectSources(change: (client: Api, current: Project) => Promise<unknown>, done: string) {
+    const current = dependencies.project();
+    if (!current || providerSettingsBusy.value) return;
+    providerSettingsBusy.value = true;
+    providerSettingsError.value = '';
+    try {
+      const client = new Api(current.apiPath);
+      await change(client, current);
+      await reloadProviderDescriptors(client, current);
+      await dependencies.refreshProject();
+      dependencies.showToast(done);
+    } catch (reason) {
+      providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      providerSettingsBusy.value = false;
+    }
+  }
+
+  /** Use a machine-wide connection in this project too, without signing in again. */
+  function attachProjectSource(id: string) {
+    const connection = providerConnections.value.find((item) => item.id === id);
+    if (!connection) return Promise.resolve();
+    return changeProjectSources(
+      (client, current) => client.addCheckoutSource(current.id, connection, false),
+      `${connection.name ?? id} added to this project.`,
+    );
+  }
+
+  /** Stop using a source in this project; the connection stays for every other project. */
+  function detachProjectSource(id: string) {
+    const name = defaultProviders.value[dependencies.project()?.id ?? '']?.sources.find(
+      (item) => item.connectionId === id,
+    )?.name;
+    return changeProjectSources(
+      (client, current) => client.removeCheckoutSource(current.id, id),
+      `${name ?? id} detached from this project.`,
+    );
+  }
+
+  /** Make one of this project's sources the default for new tickets. */
+  function setProjectDefaultSource(id: string) {
+    const name = defaultProviders.value[dependencies.project()?.id ?? '']?.sources.find(
+      (item) => item.connectionId === id,
+    )?.name;
+    return changeProjectSources(
+      (client, current) => client.setCheckoutDefaultSource(current.id, id),
+      `${name ?? id} is now this project's default source.`,
+    );
   }
 
   /**
@@ -899,8 +975,12 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerConnections,
     providerSetupKind,
     providerEditingId,
+    providerEditScope,
     providerSettingsBusy,
     providerRemovingId,
+    attachProjectSource,
+    detachProjectSource,
+    setProjectDefaultSource,
     requestProviderRemoval,
     cancelProviderRemoval,
     removeExternalProvider,

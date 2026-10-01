@@ -9,6 +9,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   ArchiveRestore,
   Bot,
+  Cable,
   Columns3,
   Database,
   Keyboard,
@@ -20,7 +21,16 @@ import {
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type SettingsCategory =
-  'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns' | 'general' | 'keyboard';
+  | 'sources'
+  | 'ai'
+  | 'commands'
+  | 'lifecycle'
+  | 'terminals'
+  | 'permissions'
+  | 'columns'
+  | 'general'
+  | 'connections'
+  | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
 const projectCategories = [
@@ -35,6 +45,8 @@ const projectCategories = [
 
 const appCategories = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
+  // The machine-wide ticket-provider connection catalog, shared by every project (HS2-3SCH1K).
+  { id: 'connections', label: 'Connections', icon: Cable, iconName: 'cable' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 

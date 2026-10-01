@@ -110,6 +110,12 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
 .ticket-source-setup__error {
   color: var(--wa-color-danger-on-quiet);
 }
+/* Which projects an edit affects (HS2-3SCH1K). */
+.ticket-source-setup__scope-hint {
+  margin: var(--wa-space-s) 0 0;
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-s);
+}
 .ticket-source-setup__remote {
   display: grid;
   padding: var(--wa-space-m);

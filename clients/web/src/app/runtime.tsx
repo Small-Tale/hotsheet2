@@ -937,6 +937,10 @@ export async function startHotSheetWebClient() {
     providerConnections,
     providerSetupKind,
     providerEditingId,
+    providerEditScope,
+    attachProjectSource,
+    detachProjectSource,
+    setProjectDefaultSource,
     providerSettingsBusy,
     providerSettingsError,
     providerRemovingId,
@@ -3906,13 +3910,31 @@ export async function startHotSheetWebClient() {
       }),
     };
   }
+  /** This checkout's own ticket sources, plus the machine's other connections it could use (HS2-3SCH1K). */
+  function projectSourcesSettings(current: Project) {
+    const sources = defaultProviders.value[current.id]?.sources ?? [],
+      linked = new Set(sources.map((source) => source.connectionId));
+    return {
+      sources: sources.map((source) => ({
+        connectionId: source.connectionId,
+        name: source.name,
+        provider: source.provider,
+        locator: source.locator,
+        default: source.default,
+        disabled: providerConnections.value.some((item) => item.id === source.connectionId && item.disabled),
+      })),
+      available: providerConnections.value.filter((item) => !linked.has(item.id)),
+      error: providerSettingsError.value,
+      setupOpen: Boolean(ticketSourceSetupProject.value),
+    };
+  }
   function settingsWorkspace(current: Project) {
     return (
       <SettingsWorkspace
         category={settingsCategory()}
-        sources={{
-          stores: current.stores,
-          providerConnections: providerConnections.value,
+        sources={projectSourcesSettings(current)}
+        connections={{
+          connections: providerConnections.value,
           error: providerSettingsError.value,
           setupOpen: Boolean(ticketSourceSetupProject.value),
         }}
@@ -4716,6 +4738,12 @@ export async function startHotSheetWebClient() {
           providerKind={providerSetupKind.value}
           providerConnections={providerConnections.value}
           editingProviderId={providerEditingId.value}
+          editScope={providerEditScope.value}
+          projectDefault={Boolean(
+            defaultProviders.value[project()?.id ?? '']?.sources.some(
+              (source) => source.connectionId === providerEditingId.value && source.default,
+            ),
+          )}
           githubAuth={githubAuth.value}
           navigation={ticketSourceSetupNavigation.value}
           createdGitTicketStore={createdGitTicketStore.value}
@@ -4933,7 +4961,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, providerEditScope, attachProjectSource, detachProjectSource, setProjectDefaultSource,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

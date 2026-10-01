@@ -52,9 +52,14 @@ export interface ProviderSetupFormProps {
   connection?: ProviderConnection;
   auth?: GithubAuthState;
   error?: string;
+  /**
+   * The "this project's default ticket source" checkbox state, or `undefined` to omit it, as when
+   * editing a connection for every project from App Settings → Connections (HS2-3SCH1K).
+   */
+  defaultChoice?: boolean;
 }
 
-export function ProviderSetupForm({ kind, connection, auth, error = '' }: ProviderSetupFormProps) {
+export function ProviderSetupForm({ kind, connection, auth, error = '', defaultChoice }: ProviderSetupFormProps) {
   const labels = {
       github: ['GitHub Issues', 'owner/repository', 'GitHub credential reference'],
       gitlab: ['GitLab Issues', 'namespace/project', 'GitLab credential reference'],
@@ -330,15 +335,12 @@ export function ProviderSetupForm({ kind, connection, auth, error = '' }: Provid
               value={apiBase}
             ></wa-input>
           )}
-          <wa-checkbox
-            class="provider-setup-form__wide"
-            name="make-default"
-            value="on"
-            checked={connection?.default ?? true}
-          >
-            Use as the default ticket source
-            <span slot="hint">New tickets will be created here.</span>
-          </wa-checkbox>
+          {defaultChoice !== undefined && (
+            <wa-checkbox class="provider-setup-form__wide" name="make-default" value="on" checked={defaultChoice}>
+              Use as this project's default ticket source
+              <span slot="hint">New tickets in this project will be created here.</span>
+            </wa-checkbox>
+          )}
         </Grid>
       )}
       {error && (

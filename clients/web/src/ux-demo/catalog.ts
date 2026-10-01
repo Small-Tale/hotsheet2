@@ -738,7 +738,15 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'ticket-sources-settings',
         'TicketSourcesSettings',
-        'Connected git and external ticket-source inventory with Kerf List connection rows.',
+        "One project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach.",
+        'feature-floor',
+        true,
+        ['list', 'list-item'],
+      ),
+      demo(
+        'connections-settings',
+        'ConnectionsSettings',
+        'The machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections).',
         'feature-floor',
         true,
         ['list', 'list-item'],

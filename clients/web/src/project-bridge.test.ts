@@ -168,6 +168,9 @@ describe('projectScopedServerPath', () => {
     expect(projectScopedServerPath('project one', '/command-groups')).toBe('/checkouts/project%20one/command-groups');
     // AI tool defaults belong to the project (HS2-SW5S13); the tool inventory stays machine-wide.
     expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/checkouts/project%20one/ai-settings');
+    // A project lists only its checkout's linked sources (HS2-3SCH1K); the machine catalog stays host-wide.
+    expect(projectScopedServerPath('project one', '/providers')).toBe('/checkouts/project%20one/providers');
+    expect(projectScopedServerPath('project one', '/provider-connections')).toBe('/provider-connections');
     expect(projectScopedServerPath('project one', '/ai-tools?refresh=true')).toBe('/ai-tools?refresh=true');
     expect(projectScopedServerPath('project one', '/commands/review/run?confirm=true')).toBe(
       '/checkouts/project%20one/commands/review/run?confirm=true',

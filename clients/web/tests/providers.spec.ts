@@ -398,6 +398,29 @@ async function mockProject(
     default: boolean;
     settings: Record<string, unknown>;
   }> = [];
+  // Like the server's checkout registry, the project links connections and keeps its own default
+  // source; `/providers` lists only linked sources (HS2-3SCH1K).
+  let linkedConnectionIds: string[] = [],
+    checkoutDefaultSource: string | undefined;
+  // The first linked store is the one the fixture rows name.
+  const gitSourceId = (index: number) => (index === 0 ? 'git-local' : `git-${index + 1}`);
+  const checkoutRecord = () => ({
+    id: 'demo-checkout',
+    root: '/work/demo',
+    alias: 'demo',
+    stores: gitStores,
+    sources: [
+      ...gitStores.map((locator, index) => ({ connection_id: gitSourceId(index), provider: 'git', locator })),
+      ...providerConnectionRecords
+        .filter((connection) => linkedConnectionIds.includes(connection.id))
+        .map((connection) => ({
+          connection_id: connection.id,
+          provider: connection.provider,
+          locator: connection.locator,
+        })),
+    ],
+    default_source: checkoutDefaultSource,
+  });
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -508,6 +531,8 @@ async function mockProject(
       const id = decodeURIComponent(providerConnection[1]),
         removed = providerConnectionRecords.find((item) => item.id === id);
       providerConnectionRecords = providerConnectionRecords.filter((item) => item.id !== id);
+      linkedConnectionIds = linkedConnectionIds.filter((item) => item !== id);
+      if (checkoutDefaultSource === id) checkoutDefaultSource = undefined;
       const credential = (removed?.settings as { credential?: { secret?: string } } | undefined)?.credential?.secret;
       return route.fulfill({
         json: {
@@ -526,42 +551,25 @@ async function mockProject(
       return route.fulfill({ json: updated });
     }
     if (path.includes('/sources/') && request.method() === 'PUT') {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON(),
+        id = decodeURIComponent(path.split('/').pop()!);
       ticketSourceConfigured = true;
       if (body.provider === 'git' && !gitStores.includes(body.locator)) gitStores = [...gitStores, body.locator];
-      return route.fulfill({
-        json: {
-          id: 'demo-checkout',
-          root: '/work/demo',
-          alias: 'demo',
-          stores: gitStores,
-          sources: [
-            ...gitStores.map((locator, index) => ({ connection_id: `git-${index + 1}`, provider: 'git', locator })),
-            ...providerConnectionRecords.map((connection) => ({
-              connection_id: connection.id,
-              provider: connection.provider,
-              locator: connection.locator,
-            })),
-          ],
-          default_source: body.make_default ? path.split('/').pop() : undefined,
-        },
-      });
+      else if (body.provider !== 'git' && !linkedConnectionIds.includes(id))
+        linkedConnectionIds = [...linkedConnectionIds, id];
+      if (body.make_default) checkoutDefaultSource = id;
+      return route.fulfill({ json: checkoutRecord() });
     }
-    if (path.endsWith('/default-source') && request.method() === 'PUT')
-      return route.fulfill({
-        json: {
-          id: 'demo-checkout',
-          root: '/work/demo',
-          alias: 'demo',
-          stores: [],
-          sources: providerConnectionRecords.map((connection) => ({
-            connection_id: connection.id,
-            provider: connection.provider,
-            locator: connection.locator,
-          })),
-          default_source: request.postDataJSON().connection_id,
-        },
-      });
+    if (path.includes('/sources/') && request.method() === 'DELETE') {
+      const id = decodeURIComponent(path.split('/').pop()!);
+      linkedConnectionIds = linkedConnectionIds.filter((item) => item !== id);
+      if (checkoutDefaultSource === id) checkoutDefaultSource = undefined;
+      return route.fulfill({ json: checkoutRecord() });
+    }
+    if (path.endsWith('/default-source') && request.method() === 'PUT') {
+      checkoutDefaultSource = request.postDataJSON().connection_id ?? undefined;
+      return route.fulfill({ json: checkoutRecord() });
+    }
     if (path.endsWith('/providers')) {
       const capabilities = {
         create: true,
@@ -586,27 +594,27 @@ async function mockProject(
         query_fields: [],
       };
       return route.fulfill({
-        json: providerConnectionRecords.length
-          ? providerConnectionRecords.map((connection) => ({
+        // The checkout's linked git stores, then its linked external connections (HS2-3SCH1K).
+        json: [
+          ...(ticketSourceConfigured ? gitStores : []).map((locator, index) => ({
+            connection_id: gitSourceId(index),
+            provider: 'git',
+            display_name: 'Hot Sheet git',
+            locator,
+            default: checkoutDefaultSource ? checkoutDefaultSource === gitSourceId(index) : index === 0,
+            capabilities,
+          })),
+          ...providerConnectionRecords
+            .filter((connection) => linkedConnectionIds.includes(connection.id))
+            .map((connection) => ({
               connection_id: connection.id,
               provider: connection.provider,
               display_name: connection.name ?? connection.id,
               locator: connection.locator,
-              default: connection.default,
+              default: connection.id === checkoutDefaultSource,
               capabilities,
-            }))
-          : ticketSourceConfigured
-            ? [
-                {
-                  connection_id: 'git-local',
-                  provider: 'git',
-                  display_name: 'Hot Sheet git',
-                  locator: '/tickets',
-                  default: true,
-                  capabilities,
-                },
-              ]
-            : [],
+            })),
+        ],
       });
     }
     if (path.endsWith('/permissions') && request.method() === 'GET') return route.fulfill({ json: drivePermissions });
@@ -1999,12 +2007,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page.getByLabel('Settings view').click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Connected sources' })).toBeVisible();
+  const sourcesPanel = page.locator('[data-component="ticket-sources-settings"]');
+  await expect(sourcesPanel.getByRole('heading', { name: 'Ticket sources' })).toBeVisible();
   await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add data source' })).toBeVisible();
-  const primaryConnection = page.getByRole('button', { name: 'Edit GitHub Issues' });
+  const primaryConnection = sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' });
   await expect(primaryConnection).toContainText('small-tale/hotsheet2');
-  await expect(primaryConnection.locator('[data-lucide="chevron-right"]')).toBeVisible();
+  await expect(primaryConnection).toContainText('Default');
+  await expect(sourcesPanel.getByRole('button', { name: 'Detach GitHub Issues from this project' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-y4zpqq-provider-settings-list-after.png', fullPage: true });
   await page.getByRole('button', { name: 'Add data source' }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -2018,29 +2028,78 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect.poll(() => creates.length).toBe(2);
   expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', default: false });
   await expect(setup).toHaveJSProperty('open', false);
-  await expect(page.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
-  await page.getByRole('button', { name: 'Edit GitHub Issues' }).click();
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
+  // Editing from the project changes this project's use; Disable and Remove live under Connections (HS2-3SCH1K).
+  await sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' }).click();
   await expect(providerForm.locator('wa-input[name="connection-locator"]')).toHaveJSProperty(
     'value',
     'small-tale/hotsheet2',
   );
+  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
+  const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
+  await expect(footer.getByRole('button', { name: 'Remove data source…' })).toHaveCount(0);
+  await expect(footer.getByRole('button', { name: 'Disable' })).toHaveCount(0);
+  await expect(setup.locator('.ticket-source-setup__scope-hint')).toContainText('App Settings → Connections');
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect(setup).toHaveJSProperty('open', false);
-  await expect(page.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
 
-  // Permanent removal lives in the edit dialog behind an inline confirmation (HS2-724S9N).
+  // The project's default source is its own choice.
+  const defaults: unknown[] = [],
+    detaches: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'PUT' && path.endsWith('/default-source')) defaults.push(request.postDataJSON());
+    if (request.method() === 'DELETE' && path.includes('/sources/')) detaches.push(path.split('/').pop()!);
+  });
+  const defaultSelect = sourcesPanel.locator('wa-select[name="project-default-source"]');
+  await expect(defaultSelect).toHaveJSProperty('value', 'github-small-tale-hotsheet2');
+  await defaultSelect.click();
+  await defaultSelect.locator('wa-option[value="github-small-tale-secondary"]').click();
+  await expect.poll(() => defaults).toEqual([{ connection_id: 'github-small-tale-secondary' }]);
+  await expect(page.locator('.app-toast')).toContainText("GitHub Secondary is now this project's default source.");
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toContainText('Default');
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).not.toContainText('Default');
+  await expect(defaultSelect).toHaveJSProperty('value', 'github-small-tale-secondary');
+  await page.screenshot({ path: test.info().outputPath('project-sources-wide.png'), fullPage: true });
+  // Detaching leaves the connection on the machine, ready to attach again without signing in.
+  await sourcesPanel.getByRole('button', { name: 'Detach GitHub Secondary from this project' }).click();
+  await expect.poll(() => detaches).toEqual(['github-small-tale-secondary']);
+  await expect(page.locator('.app-toast')).toContainText('GitHub Secondary detached from this project.');
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
+  const attach = sourcesPanel.getByRole('button', { name: 'Use GitHub Secondary in this project' });
+  await expect(attach).toBeVisible();
+  await expect(defaultSelect).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('project-sources-detached-wide.png'), fullPage: true });
+  await attach.click();
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
+  await expect(attach).toHaveCount(0);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+
+  // App Settings → Connections manages the machine-wide catalog: Remove and Disable affect every project.
+  await sourcesPanel.getByRole('button', { name: 'App Settings → Connections' }).click();
+  const catalog = page.locator('[data-component="connections-settings"]');
+  await expect(catalog).toContainText('shared by every project that uses them');
+  await expect(page.locator('[data-component="settings-workspace"]')).toHaveAttribute(
+    'data-settings-category',
+    'connections',
+  );
+  await page.screenshot({ path: test.info().outputPath('connections-settings-wide.png'), fullPage: true });
   const deletes: string[] = [];
   page.on('request', (request) => {
     if (request.method() === 'DELETE' && request.url().includes('/provider-connections/'))
       deletes.push(new URL(request.url()).pathname.split('/').pop()!);
   });
-  await page.getByRole('button', { name: 'Edit GitHub Secondary' }).click();
+  await catalog.getByRole('button', { name: 'Edit GitHub Secondary for every project' }).click();
   await expect(setup).toHaveJSProperty('open', true);
-  const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
   await expect(footer.getByRole('button', { name: 'Remove data source…' })).toBeVisible();
+  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveCount(0);
+  await expect(setup.locator('.ticket-source-setup__scope-hint')).toContainText(
+    'Changes apply to every project that uses this connection.',
+  );
   await setup.evaluate(async (node) => {
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
     await Promise.all(animations.map((animation) => animation.finished));
@@ -2065,10 +2124,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(setup).toHaveJSProperty('open', false);
   expect(deletes).toEqual(['github-small-tale-secondary']);
   await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed.');
-  await expect(page.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
+  await expect(catalog.getByRole('button', { name: 'Edit GitHub Secondary for every project' })).toHaveCount(0);
+  const primaryRow = catalog.getByRole('button', { name: 'Edit GitHub Primary for every project' });
+  await expect(primaryRow).toBeVisible();
   // Reopening another connection starts without a stale confirmation.
-  await page.getByRole('button', { name: 'Edit GitHub Primary' }).click();
+  await primaryRow.click();
   await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
   await expect(footer.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.app-error')).toHaveCount(0);
@@ -2081,7 +2141,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await footer.getByRole('button', { name: 'Disable' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Primary disabled.');
-  const primaryRow = page.getByRole('button', { name: 'Edit GitHub Primary' });
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveText('Disabled');
   await page.screenshot({ path: '/private/tmp/hs2-sf6w34-disabled-row-wide.png', fullPage: true });
   await primaryRow.click();
@@ -2303,8 +2362,8 @@ test('adds a second git ticket store and connects its remote from one guided for
   await setup.getByRole('button', { name: 'Connect & push' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   expect(remoteAttempts).toBe(2);
-  await expect(page.getByText('This checkout uses 2 git ticket sources')).toBeVisible();
-  await expect(page.getByText('/picked/project', { exact: true })).toBeVisible();
+  await expect(page.getByText('This project uses 2 ticket sources.')).toBeVisible();
+  await expect(page.getByText('Hot Sheet git · /picked/project', { exact: true })).toBeVisible();
 });
 
 test('uses independent width and height terminal dashboard zoom scales', async ({ page }) => {

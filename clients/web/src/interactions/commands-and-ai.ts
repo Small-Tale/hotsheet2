@@ -120,6 +120,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly ticketSourceSetupProject: Signal<Project | undefined>;
   readonly providerSetupKind: Signal<ExternalProviderKind | undefined>;
   readonly providerEditingId: Signal<string | undefined>;
+  readonly providerEditScope: Signal<'project' | 'machine'>;
+  readonly attachProjectSource: (id: string) => Promise<void>;
+  readonly detachProjectSource: (id: string) => Promise<void>;
+  readonly setProjectDefaultSource: (id: string) => Promise<void>;
   readonly providerSettingsError: Signal<string>;
   readonly createdGitTicketStore: Signal<string>;
   readonly ticketSourceSetupNavigation: Signal<'none' | 'push' | 'pop'>;
@@ -221,6 +225,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ticketSourceSetupProject,
     providerSetupKind,
     providerEditingId,
+    providerEditScope,
+    attachProjectSource,
+    detachProjectSource,
+    setProjectDefaultSource,
     providerSettingsError,
     createdGitTicketStore,
     ticketSourceSetupNavigation,
@@ -751,7 +759,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     if (!current) return;
     if (category !== 'keyboard') setCapturingShortcut(undefined);
     setSettingsCategory(current.id, category);
-    if (category === 'sources') void refreshProviderConnections();
+    if (category === 'sources' || category === 'connections') void refreshProviderConnections();
     if (category === 'terminals') void refreshTerminalSettings();
     if (category === 'lifecycle') void refreshTrashSettings();
     if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
@@ -857,6 +865,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ticketSourceSetupProject.value = current;
     providerSetupKind.value = undefined;
     providerEditingId.value = undefined;
+    providerEditScope.value = 'project';
     providerSettingsError.value = '';
     createdGitTicketStore.value = '';
     ticketSourceSetupNavigation.value = 'none';
@@ -870,8 +879,23 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ticketSourceSetupProject.value = current;
     providerSetupKind.value = connection.provider as ExternalProviderKind;
     providerEditingId.value = connection.id;
+    // App Settings → Connections edits for every project; a project's Ticket sources edits its own use.
+    providerEditScope.value =
+      target.closest<HTMLElement>('[data-edit-scope]')?.dataset.editScope === 'machine' ? 'machine' : 'project';
     providerRemovingId.value = undefined;
     providerSettingsError.value = '';
+  });
+  delegate(document.body, 'click', '[data-action="detach-project-source"]', (_event, target) => {
+    const id = data(target).sourceId;
+    if (id) void detachProjectSource(id);
+  });
+  delegate(document.body, 'click', '[data-action="attach-project-source"]', (_event, target) => {
+    const id = data(target).itemId;
+    if (id) void attachProjectSource(id);
+  });
+  delegate(document.body, 'change', 'wa-select[name="project-default-source"]', (_event, target) => {
+    const id = (target as Control).value;
+    if (id) void setProjectDefaultSource(id);
   });
   delegate(document.body, 'click', '[data-action="request-provider-removal"]', () => {
     requestProviderRemoval();

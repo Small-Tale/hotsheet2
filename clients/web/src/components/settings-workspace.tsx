@@ -9,12 +9,18 @@ import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
-import { TicketSourcesSettings, type TicketSourcesSettingsProps } from './ticket-sources-settings';
+import {
+  ConnectionsSettings,
+  type ConnectionsSettingsProps,
+  TicketSourcesSettings,
+  type TicketSourcesSettingsProps,
+} from './ticket-sources-settings';
 import { TrashSettings } from './trash-settings';
 
 export interface SettingsWorkspaceProps {
   category: SettingsCategory;
   sources: TicketSourcesSettingsProps;
+  connections: ConnectionsSettingsProps;
   ai: { tools: readonly AiToolDescriptor[]; selection: AiToolDefaults; loading: boolean; message: string };
   commands: CommandSettingsEditorProps;
   lifecycle: { days: number; message: string };
@@ -28,6 +34,7 @@ export interface SettingsWorkspaceProps {
 export function SettingsWorkspace({
   category,
   sources,
+  connections,
   ai,
   commands,
   lifecycle,
@@ -45,6 +52,7 @@ export function SettingsWorkspace({
       data-settings-category={category}
     >
       {category === 'sources' && <TicketSourcesSettings {...sources} />}
+      {category === 'connections' && <ConnectionsSettings {...connections} />}
       {category === 'ai' && (
         <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
       )}

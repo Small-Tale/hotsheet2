@@ -1502,6 +1502,10 @@ pub fn app(state: AppState) -> Router {
             put(set_checkout_default_source),
         )
         .route(
+            "/checkouts/{reference}/providers",
+            get(list_checkout_providers),
+        )
+        .route(
             "/checkouts/{reference}/repository/status",
             get(checkout_repository_status),
         )
@@ -2494,6 +2498,54 @@ async fn list_providers(
     }
     descriptors.extend(state.injected_providers.descriptors());
     descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+    Ok(Json(descriptors))
+}
+
+/// `GET /checkouts/{reference}/providers` (HS2-3SCH1K): only the ticket sources this checkout
+/// links, in its source order, marked default by the checkout's own default source rather than
+/// the machine-wide registry. A linked connection that no longer exists is omitted.
+async fn list_checkout_providers(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<hotsheet_ticketing::ProviderDescriptor>>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    // Hosting on demand keeps a linked git store listable after a sweep unhosted it.
+    let hosted = checkout_entries(&state, &reference)?
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect::<std::collections::HashSet<_>>();
+    let summaries = state.host.summaries();
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    let injected = state.injected_providers.descriptors();
+    let mut descriptors = Vec::new();
+    for source in &checkout.sources {
+        let is_default = checkout.default_source.as_deref() == Some(source.connection_id.as_str());
+        let descriptor = if source.provider == "git" {
+            summaries
+                .iter()
+                .find(|info| info.id == source.connection_id && hosted.contains(&info.id))
+                .map(|info| info.provider_descriptor(is_default))
+        } else if let Some(connection) = connections
+            .iter()
+            .find(|connection| connection.id == source.connection_id)
+        {
+            Some(hotsheet_extsync::descriptor(connection).map_err(provider_transfer_error)?)
+        } else {
+            injected
+                .iter()
+                .find(|descriptor| descriptor.connection_id == source.connection_id)
+                .cloned()
+        };
+        if let Some(mut descriptor) = descriptor {
+            descriptor.default = is_default;
+            descriptors.push(descriptor);
+        }
+    }
     Ok(Json(descriptors))
 }
 

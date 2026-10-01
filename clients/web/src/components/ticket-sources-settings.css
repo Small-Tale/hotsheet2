@@ -19,19 +19,41 @@
 .ticket-provider-settings__header h2 {
   margin: 0;
 }
-.ticket-provider-settings__source {
-  display: grid;
-  gap: remify(5.6px);
-  margin: remify(16px) 0;
-  padding: remify(16px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12px);
-  background: var(--wa-color-surface-default);
+/* The checkout's default-source choice (HS2-3SCH1K). */
+.ticket-provider-settings__default {
+  width: 100%;
+  max-width: remify(352px);
+  margin-bottom: var(--wa-space-m);
 }
-.ticket-provider-settings__source code {
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* A linked git store: the same row geometry as a connection row, without row actions. */
+.ticket-provider-settings__store {
+  display: flex;
+  min-height: remify(64px);
+  box-sizing: border-box;
+  align-items: center;
+  padding: var(--wa-space-s);
+  gap: var(--wa-space-s);
+}
+.ticket-provider-settings__store + .ticket-provider-settings__store {
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+}
+.ticket-provider-settings__store > svg {
+  width: remify(16px);
+  height: remify(16px);
+  flex: none;
   color: var(--wa-color-neutral-on-quiet);
+}
+.ticket-provider-settings__link {
+  padding: 0;
+  border: 0;
+  color: var(--wa-color-brand-on-quiet);
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ticket-provider-settings__empty {
+  margin: 0;
 }
 .ticket-provider-settings__connections {
   /* Rows fill the bordered card edge to edge; kerf's default inline inset drew the hover

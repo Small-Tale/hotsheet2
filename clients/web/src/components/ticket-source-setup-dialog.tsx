@@ -22,7 +22,8 @@ const previewScenarioChoices: readonly SelectChoice[] = [
   { value: 'signed-out', label: 'GitHub signed out' },
   { value: 'waiting', label: 'Waiting for GitHub' },
   { value: 'authorized', label: 'GitHub authorized' },
-  { value: 'editing', label: 'Editing connection' },
+  { value: 'editing', label: "Editing this project's source" },
+  { value: 'editing-machine', label: 'Editing for every project' },
   { value: 'removing', label: 'Confirm removal' },
   { value: 'busy', label: 'Saving connection' },
   { value: 'remote', label: 'Back up repository' },
@@ -50,6 +51,14 @@ export interface TicketSourceSetupDialogProps {
   providerError?: string;
   /** The edited connection awaiting confirmation of its permanent removal (HS2-724S9N). */
   removingProviderId?: string;
+  /**
+   * Where an edit was opened (HS2-3SCH1K): `project` edits the connection and this project's default
+   * choice; `machine` (App Settings → Connections) edits it for every project and offers Disable and
+   * Remove. Defaults to `project`.
+   */
+  editScope?: 'project' | 'machine';
+  /** Whether the edited connection is this project's default source (project edits only). */
+  projectDefault?: boolean;
   /** Demo-only state picker, rendered within the modal so its controls remain reachable. */
   previewScenario?: string;
 }
@@ -68,9 +77,12 @@ export function TicketSourceSetupDialog({
   providerBusy = false,
   providerError = '',
   removingProviderId,
+  editScope = 'project',
+  projectDefault = false,
   previewScenario,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
+    machineEdit = Boolean(editing) && editScope === 'machine',
     disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" />,
     created = createdGitTicketStore,
     defaultStore = `${target?.root}.hs2`,
@@ -231,7 +243,22 @@ export function TicketSourceSetupDialog({
   const detail = created ? (
     remote
   ) : kind ? (
-    <ProviderSetupForm kind={kind} connection={editing} auth={githubAuth} error={providerError} />
+    <>
+      <ProviderSetupForm
+        kind={kind}
+        connection={editing}
+        auth={githubAuth}
+        error={providerError}
+        defaultChoice={!editing ? true : machineEdit ? undefined : projectDefault}
+      />
+      {editing && (
+        <p class="ticket-source-setup__scope-hint" data-edit-scope={editScope}>
+          {machineEdit
+            ? 'Changes apply to every project that uses this connection.'
+            : 'Connection details are shared by every project that uses them. Disable or remove the connection under App Settings → Connections.'}
+        </p>
+      )}
+    </>
   ) : (
     <></>
   );
@@ -249,7 +276,7 @@ export function TicketSourceSetupDialog({
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
-    ) : editing && removingProviderId === editing.id ? (
+    ) : machineEdit && editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
       // "Remove data source…" button into "Keep" while that same click is still dispatching.
       <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
@@ -272,7 +299,7 @@ export function TicketSourceSetupDialog({
       </div>
     ) : (
       <>
-        {editing && (
+        {machineEdit && editing && (
           <wa-button
             class="ticket-source-setup__remove"
             variant="danger"
@@ -285,7 +312,7 @@ export function TicketSourceSetupDialog({
             Remove data source…
           </wa-button>
         )}
-        {editing && (
+        {machineEdit && editing && (
           <wa-button
             class="ticket-source-setup__toggle"
             appearance="plain"

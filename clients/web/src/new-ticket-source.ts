@@ -4,6 +4,9 @@ import { type Capabilities, type ProviderDescriptor } from './api';
 export interface TicketSourceChoice {
   connectionId: string;
   name: string;
+  /** Provider kind (`git`, `github`, …) and its locator, for the Ticket sources panel (HS2-3SCH1K). */
+  provider: string;
+  locator: string;
   capabilities: Capabilities;
   default: boolean;
 }
@@ -31,6 +34,8 @@ export function projectTicketSources(descriptors: readonly ProviderDescriptor[])
     sources: descriptors.map((item) => ({
       connectionId: item.connection_id,
       name: item.display_name,
+      provider: item.provider,
+      locator: item.locator,
       capabilities: item.capabilities,
       default: item === selected,
     })),

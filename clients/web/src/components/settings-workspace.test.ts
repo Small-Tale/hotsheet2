@@ -7,7 +7,8 @@ import { SettingsWorkspace } from './settings-workspace';
 
 const props: SettingsWorkspaceProps = {
   category: 'general',
-  sources: { stores: [], providerConnections: [] },
+  sources: { sources: [] },
+  connections: { connections: [] },
   ai: { tools: [], selection: { tool: 'codex' }, loading: false, message: '' },
   commands: { commands: [] },
   lifecycle: { days: 30, message: '' },
@@ -50,7 +51,11 @@ describe('SettingsWorkspace', () => {
       SettingsWorkspace({
         ...props,
         category: 'sources',
-        sources: { stores: ['/work/demo.hs2'], providerConnections: [] },
+        sources: {
+          sources: [
+            { connectionId: 'git', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: true },
+          ],
+        },
       }),
     );
     expect(sources).toContain('data-component="ticket-sources-settings"');

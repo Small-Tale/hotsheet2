@@ -374,6 +374,22 @@ than reporting it inaccessible. Toggle it with `PUT /provider-connections/{id}/d
 dialog's **Disable / Enable** action; the settings list badges it **Disabled**. An ordinary
 connection edit preserves the flag.
 
+Project versus machine scope (HS2-3SCH1K). The connection catalog (`providers.json`) is
+machine-wide, while each checkout links the sources it uses and keeps its own default source
+(`checkouts.json`). `GET /checkouts/{reference}/providers` lists only that checkout's linked
+sources, in link order, marked `default` by the checkout's own default source; the web
+client routes a project's `/providers` there, so the composer, capabilities, and the
+**Project Settings → Ticket sources** panel see only the project's sources. That panel
+offers the project's default-source choice, editing a connection's details (with "Use as
+this project's default" in place of the machine-wide flag), **Detach from this project**
+(`DELETE /checkouts/{id}/sources/{cid}`, which never deletes the connection), and attaching
+another connection already on the machine. **App Settings → Connections** manages the
+machine-wide catalog: its edit dialog says changes apply to every project and is the only
+place offering **Disable / Enable** and **Remove data source…**. Headless parity:
+`hotsheet checkout add-source|remove-source|set-default` act on one checkout;
+`providers`, `github-connect`, `provider-disable|provider-enable`, and `provider-remove` act
+on the catalog.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)

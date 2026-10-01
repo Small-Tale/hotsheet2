@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { providerName, ProviderSetupForm } from './provider-setup-form';
 import { TicketSourceSetupDialog } from './ticket-source-setup-dialog';
-import { TicketSourcesSettings } from './ticket-sources-settings';
+import { ConnectionsSettings, TicketSourcesSettings } from './ticket-sources-settings';
 
 describe('ticket source surfaces', () => {
   it('renders the setup root and preserves all five delegated actions', () => {
@@ -129,6 +129,7 @@ describe('ticket source surfaces', () => {
             providerKind: 'github',
             providerConnections: [{ ...connection, disabled }],
             editingProviderId: 'github-main',
+            editScope: 'machine',
             navigation: 'none',
           }),
         );
@@ -146,8 +147,7 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(connecting).not.toContain('toggle-provider-disabled');
-    const settings = (disabled: boolean) =>
-      String(TicketSourcesSettings({ stores: [], providerConnections: [{ ...connection, disabled }] }));
+    const settings = (disabled: boolean) => String(ConnectionsSettings({ connections: [{ ...connection, disabled }] }));
     expect(settings(true)).toContain('<small data-state="disabled">Disabled</small>');
     expect(settings(false)).not.toContain('data-state="disabled"');
   });
@@ -166,6 +166,7 @@ describe('ticket source surfaces', () => {
         providerKind: 'github' as const,
         providerConnections: [connection],
         navigation: 'none' as const,
+        editScope: 'machine' as const,
       };
     const connecting = String(TicketSourceSetupDialog(base));
     expect(connecting).not.toContain('request-provider-removal');
@@ -223,6 +224,7 @@ describe('ticket source surfaces', () => {
       ProviderSetupForm({
         kind: 'github',
         auth: { session: 's', userCode: '', verificationUri: '', state: 'authorized', repositories: ['a/b'] },
+        defaultChoice: true,
       }),
     );
     expect(signedIn).toContain('Signed in to GitHub.');
@@ -253,27 +255,86 @@ describe('ticket source surfaces', () => {
     expect(providerName('jira')).toBe('Jira Cloud');
   });
 
-  it('renders connected git and external sources with default metadata', () => {
-    const markup = String(
-      TicketSourcesSettings({
-        stores: ['/work/demo.hs2'],
-        providerConnections: [
-          {
-            id: 'github-main',
-            provider: 'github',
-            locator: 'small-tale/hotsheet2',
-            name: 'Issues',
-            default: true,
-            settings: {},
-          },
-        ],
-      }),
-    );
+  it("lists only this project's sources with its own default, Detach, and attachable connections (HS2-3SCH1K)", () => {
+    const sources = [
+        { connectionId: 'git-demo', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: false },
+        {
+          connectionId: 'github-main',
+          name: 'Issues',
+          provider: 'github',
+          locator: 'small-tale/hotsheet2',
+          default: true,
+        },
+      ],
+      jira = { id: 'jira-ops', provider: 'jira', locator: 'OPS', name: 'Operations', default: false, settings: {} },
+      markup = String(TicketSourcesSettings({ sources, available: [jira] }));
     expect(markup).toContain('data-component="ticket-sources-settings"');
-    expect(markup).toContain('1 git ticket source and 1 external provider');
+    expect(markup).toContain('This project uses 2 ticket sources.');
+    expect(markup).toMatch(/name="project-default-source"[^>]*value="github-main"/);
+    expect(markup).toContain('data-source-id="git-demo"');
     expect(markup).toContain('/work/demo.hs2');
-    expect(markup).toContain('GitHub Issues');
-    expect(markup).toContain('Default');
+    // The external row edits its connection; its trailing action detaches it from this project only.
+    expect(markup).toContain('data-action="edit-provider-connection"');
+    expect(markup).toContain('data-action="detach-project-source"');
+    expect(markup).toContain('aria-label="Detach Issues from this project"');
+    expect(markup).toContain('data-lucide="unlink"');
+    expect(markup).not.toContain('data-action="detach-project-source" data-source-id="git-demo"');
+    expect(markup.match(/<small>Default<\/small>/g)).toHaveLength(1);
+    // Machine-wide connections the project does not use can be attached without signing in again.
+    expect(markup).toContain('Other connections on this machine');
+    expect(markup).toContain('data-action="attach-project-source"');
+    expect(markup).toContain('Jira Cloud · OPS');
+    expect(markup).toContain('data-item-id="connections"');
+    // One source: no default choice to make, no catalog section without other connections.
+    const single = String(TicketSourcesSettings({ sources: sources.slice(0, 1) }));
+    expect(single).toContain('This project uses 1 ticket source.');
+    expect(single).not.toContain('project-default-source');
+    expect(single).not.toContain('Other connections on this machine');
+    expect(single.match(/<small>Default<\/small>/g)).toHaveLength(1);
+  });
+
+  it('manages the machine-wide connection catalog under App Settings (HS2-3SCH1K)', () => {
+    const connection = {
+        id: 'github-main',
+        provider: 'github',
+        locator: 'acme/repo',
+        name: 'Issues',
+        default: true,
+        settings: {},
+      },
+      markup = String(ConnectionsSettings({ connections: [connection] }));
+    expect(markup).toContain('data-component="connections-settings"');
+    expect(markup).toContain('shared by every project that uses them');
+    expect(markup).toContain('data-edit-scope="machine"');
+    expect(markup).toContain('aria-label="Edit Issues for every project"');
+    expect(markup).toContain('providers.json');
+    expect(String(ConnectionsSettings({ connections: [] }))).toContain('No external connections yet.');
+    // Editing from a project hides Disable/Remove and the machine-wide default; editing from the
+    // catalog offers them and says it affects every project.
+    const dialog = (editScope: 'project' | 'machine', projectDefault = false) =>
+      String(
+        TicketSourceSetupDialog({
+          project: { root: '/work/demo', name: 'Demo', stores: [] },
+          providerKind: 'github',
+          providerConnections: [connection],
+          editingProviderId: 'github-main',
+          editScope,
+          projectDefault,
+          navigation: 'none',
+        }),
+      );
+    const project = dialog('project', true);
+    expect(project).not.toContain('toggle-provider-disabled');
+    expect(project).not.toContain('request-provider-removal');
+    expect(project).toContain("Use as this project's default ticket source");
+    expect(project).toMatch(/name="make-default" value="on" checked/);
+    expect(dialog('project', false)).not.toMatch(/name="make-default" value="on" checked/);
+    expect(project).toContain('data-edit-scope="project"');
+    const machine = dialog('machine');
+    expect(machine).toContain('data-action="toggle-provider-disabled"');
+    expect(machine).toContain('data-action="request-provider-removal"');
+    expect(machine).not.toContain('name="make-default"');
+    expect(machine).toContain('Changes apply to every project that uses this connection.');
   });
 
   it('owns source and provider styles outside the global stylesheet', () => {

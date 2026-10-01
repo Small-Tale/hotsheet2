@@ -5843,13 +5843,35 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await demo.screenshot({ path: test.info().outputPath('hs2-cks78m-demo.png') });
 });
 
+test('renders project ticket sources and the machine connection catalog at wide and phone widths (HS2-3SCH1K)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-sources-settings');
+    const sources = page.locator('[data-component="ticket-sources-settings"]');
+    await expect(sources.locator('wa-select[name="project-default-source"]')).toHaveJSProperty('value', 'github-main');
+    await expect(sources.getByRole('button', { name: 'Detach Product issues from this project' })).toBeVisible();
+    await expect(sources.getByRole('button', { name: 'Use Operations in this project' })).toBeVisible();
+    await expect(sources.locator('[data-state="disabled"]')).toHaveText('Disabled');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`project-sources-${width}.png`), fullPage: true });
+    await page.goto('/ux-demo?component=connections-settings');
+    const catalog = page.locator('[data-component="connections-settings"]');
+    await expect(catalog.getByRole('button', { name: 'Edit Operations for every project' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`connections-${width}.png`), fullPage: true });
+  }
+});
+
 test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 1000 });
-    await page.goto('/ux-demo?component=ticket-sources-settings');
+    // The machine-wide catalog keeps the flush ListItem card (HS2-3SCH1K moved it to App Settings → Connections).
+    await page.goto('/ux-demo?component=connections-settings');
     const card = page.locator('.ticket-provider-settings__connections'),
       rows = card.locator('.kui-list-item');
-    await expect(rows).toHaveCount(2);
+    await expect(rows).toHaveCount(3);
     await rows.first().hover();
     const cardBox = (await card.boundingBox())!,
       rowBox = (await rows.first().boundingBox())!;

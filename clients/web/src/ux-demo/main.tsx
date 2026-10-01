@@ -62,7 +62,7 @@ import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog'
 import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
-import { TicketSourcesSettings } from '../components/ticket-sources-settings';
+import { ConnectionsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
@@ -352,6 +352,45 @@ import {
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
+/** One project's linked ticket sources and the machine's connection catalog (HS2-3SCH1K). */
+const DEMO_PROJECT_SOURCES = [
+  { connectionId: 'git-demo', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: false },
+  {
+    connectionId: 'github-main',
+    name: 'Product issues',
+    provider: 'github',
+    locator: 'small-tale/hotsheet2',
+    default: true,
+  },
+  {
+    connectionId: 'github-docs',
+    name: 'Docs issues',
+    provider: 'github',
+    locator: 'small-tale/hotsheet-docs',
+    default: false,
+    disabled: true,
+  },
+];
+const DEMO_CONNECTIONS = [
+  {
+    id: 'github-main',
+    provider: 'github',
+    locator: 'small-tale/hotsheet2',
+    name: 'Product issues',
+    default: true,
+    settings: {},
+  },
+  {
+    id: 'github-docs',
+    provider: 'github',
+    locator: 'small-tale/hotsheet-docs',
+    name: 'Docs issues',
+    default: false,
+    disabled: true,
+    settings: {},
+  },
+  { id: 'jira-ops', provider: 'jira', locator: 'OPS', name: 'Operations', default: false, settings: {} },
+];
 /** The drawer demo's installed AI providers: several open the AI shell submenu (HS2-3HT4PA). */
 const TERMINAL_DRAWER_DEMO_PROVIDERS = [
   { id: 'codex', name: 'Codex' },
@@ -361,7 +400,7 @@ const fromUrl = () => new URL(location.href).searchParams.get('component') ?? de
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 type TicketSourceScenario =
-  'root' | 'signed-out' | 'waiting' | 'authorized' | 'editing' | 'removing' | 'busy' | 'remote';
+  'root' | 'signed-out' | 'waiting' | 'authorized' | 'editing' | 'editing-machine' | 'removing' | 'busy' | 'remote';
 const ticketSourceScenario = signal<TicketSourceScenario>('root');
 const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-collapsed') === 'true');
 const catalogTheme = signal<'light' | 'dark'>(
@@ -670,7 +709,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'keyboard-settings') return <KeyboardSettings overrides={{}} apple={true} />;
   if (item.id === 'ticket-source-setup-dialog') {
     const scenario = ticketSourceScenario.value,
-      editing = scenario === 'editing' || scenario === 'removing' || scenario === 'busy',
+      editing = ['editing', 'editing-machine', 'removing', 'busy'].includes(scenario),
       connection = {
         id: 'github-main',
         provider: 'github',
@@ -686,6 +725,8 @@ function demoContent(item: DemoDefinition) {
         providerConnections={editing ? [connection] : []}
         editingProviderId={editing ? connection.id : undefined}
         removingProviderId={scenario === 'removing' ? connection.id : undefined}
+        editScope={scenario === 'editing-machine' || scenario === 'removing' ? 'machine' : 'project'}
+        projectDefault
         providerBusy={scenario === 'busy'}
         githubAuth={
           scenario === 'waiting'
@@ -717,6 +758,7 @@ function demoContent(item: DemoDefinition) {
     return (
       <ProviderSetupForm
         kind="github"
+        defaultChoice
         auth={{
           session: 'demo',
           userCode: 'ABCD-EFGH',
@@ -729,32 +771,17 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-sources-settings')
     return (
       <TicketSourcesSettings
-        stores={['/work/demo.hs2']}
-        providerConnections={[
-          {
-            id: 'github-main',
-            provider: 'github',
-            locator: 'small-tale/hotsheet2',
-            name: 'Product issues',
-            default: true,
-            settings: {},
-          },
-          {
-            id: 'github-docs',
-            provider: 'github',
-            locator: 'small-tale/hotsheet-docs',
-            name: 'Docs issues',
-            default: false,
-            settings: {},
-          },
-        ]}
+        sources={DEMO_PROJECT_SOURCES}
+        available={DEMO_CONNECTIONS.filter((item) => item.id === 'jira-ops')}
       />
     );
+  if (item.id === 'connections-settings') return <ConnectionsSettings connections={DEMO_CONNECTIONS} />;
   if (item.id === 'settings-workspace')
     return (
       <SettingsWorkspace
         category="sources"
-        sources={{ stores: ['/work/demo.hs2'], providerConnections: [] }}
+        sources={{ sources: DEMO_PROJECT_SOURCES.slice(0, 1) }}
+        connections={{ connections: DEMO_CONNECTIONS }}
         ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
         commands={{ commands: [] }}
         lifecycle={{ days: 30, message: '' }}

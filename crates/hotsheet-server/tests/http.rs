@@ -13654,3 +13654,149 @@ async fn a_broker_shell_terminal_releases_claims_when_its_foreground_command_exi
     let app = app(st.with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
     a_finished_foreground_command_releases_claims(app, &store, "fg2").await;
 }
+
+/// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by
+/// the checkout's own default source, even though the connection catalog is machine-wide.
+#[tokio::test]
+async fn checkout_providers_list_only_linked_sources_with_the_checkout_default() {
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
+    let (primary, st) = state();
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    for (id, locator) in [("github-a", "acme/a"), ("github-b", "acme/b")] {
+        let connection = serde_json::json!({
+            "id":id,"provider":"github","locator":locator,"name":id,"default":true,
+            "settings":{"credential":{"secret":"github-work"}}
+        });
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/provider-connections",
+                Some(&connection.to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    for (root, alias) in [(first.path(), "first"), (second.path(), "second")] {
+        let registration =
+            serde_json::json!({"root":root,"alias":alias,"stores":[primary.path()]}).to_string();
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap();
+    }
+    let link = |checkout: &'static str, id: &'static str, locator: &'static str, default: bool| {
+        let app = app.clone();
+        async move {
+            let body =
+                serde_json::json!({"provider":"github","locator":locator,"make_default":default});
+            let response = app
+                .oneshot(authed(
+                    "PUT",
+                    &format!("/checkouts/{checkout}/sources/{id}"),
+                    Some(&body.to_string()),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    };
+    link("first", "github-a", "acme/a", true).await;
+    link("second", "github-b", "acme/b", false).await;
+    let providers = |checkout: &'static str| {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/{checkout}/providers"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+            )
+            .await
+        }
+    };
+    let summary = |list: serde_json::Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                (
+                    item["provider"].as_str().unwrap().to_owned(),
+                    item["connection_id"].as_str().unwrap().to_owned(),
+                    item["default"].as_bool().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let git_id = summary(providers("first").await)[0].1.clone();
+    assert_eq!(
+        summary(providers("first").await),
+        vec![
+            ("git".into(), git_id.clone(), false),
+            ("github".into(), "github-a".into(), true)
+        ]
+    );
+    // The other checkout neither sees github-a nor inherits its default: its git store stays default.
+    assert_eq!(
+        summary(providers("second").await),
+        vec![
+            ("git".into(), git_id.clone(), true),
+            ("github".into(), "github-b".into(), false)
+        ]
+    );
+    // Changing one checkout's default and detaching a source leave the other checkout alone.
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/checkouts/second/default-source",
+            Some(&serde_json::json!({"connection_id":"github-b"}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(authed("DELETE", "/checkouts/first/sources/github-a", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    // Detaching the default falls back to the checkout's git store.
+    assert_eq!(
+        summary(providers("first").await),
+        vec![("git".into(), git_id.clone(), true)]
+    );
+    assert_eq!(
+        summary(providers("second").await),
+        vec![
+            ("git".into(), git_id, false),
+            ("github".into(), "github-b".into(), true)
+        ]
+    );
+    // Detaching never deletes the machine-wide connection.
+    let catalog = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/provider-connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(catalog.as_array().unwrap().len(), 2);
+    assert_eq!(
+        app.oneshot(authed("GET", "/checkouts/missing/providers", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+}
