@@ -1,11 +1,12 @@
-import { createTokenSearchModel, type TokenSearchRule } from '@kerfjs/ui/token-search-model';
+import { createTokenSearchModel, type TokenSearchRule, type TokenSearchState } from '@kerfjs/ui/token-search-model';
 import { describe, expect, it } from 'vitest';
 
 import { parseSearchDate, tokenFromRaw } from './inline-search';
 
-// HS2-HHRYP9: does Kerf 5.0.0-beta.59's managed TokenSearchModel express the ticket search
-// grammar that TicketSearchField parses itself today? These tests are the evaluation record:
-// the grammar fits, and the remaining blockers are model API gaps recorded in docs/ux-components.md.
+// HS2-HHRYP9: does Kerf's managed TokenSearchModel express the ticket search grammar that
+// TicketSearchField parses itself today? These tests are the evaluation record: the grammar fits,
+// and the three beta.59 API gaps recorded in docs/ux-components.md are closed in beta.62
+// (HS2-06Q4MG), so the migration (HS2-5JXBQY) has every model action it needs.
 const lifecycle = [
   'up-next',
   'active',
@@ -91,27 +92,55 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
     expect(model.suggestions.value).toEqual([]);
   });
 
-  it('records the API gaps that block adoption today', () => {
-    const model = createTokenSearchModel({ rules });
-    // 1. `suggest` sees only the typed input, not the committed tokens, so it cannot exclude a tag
-    //    that is already a chip (TicketSearchField's suggestions do).
+  it('confirms beta.62 closed the three API gaps recorded against beta.59 (HS2-06Q4MG)', () => {
+    const model = createTokenSearchModel({
+      rules: rules.map((rule) =>
+        rule.name === 'tag'
+          ? {
+              ...rule,
+              // KF-YBJ27D: `suggest` now receives the committed tokens, so a tag that is already a
+              // chip is excluded exactly as `ticketSearchTagSuggestions` excludes it.
+              suggest: (input: string, state: TokenSearchState) =>
+                tags
+                  .filter((tag) => tag.toLowerCase().startsWith(input.toLowerCase()))
+                  .filter((tag) => !state.tokens.some((token) => token.kind === 'tag' && token.parsedValue === tag)),
+            }
+          : rule,
+      ),
+    });
+    // 1. Committed-token-aware suggestions.
     model.edit({ query: 'tag:client ', tokens: [] });
     model.edit({ query: 'tag:cl', tokens: model.state.value.tokens });
-    expect(model.suggestions.value.map((item) => item.value)).toEqual(['tag:client']);
-    // 2. `choose` accepts only a value among the current suggestions, so an external helper (the
-    //    lifecycle date picker) cannot commit a computed token for the active prefix.
-    model.edit({ query: 'created-after:', tokens: [] });
-    model.choose('created-after:2026-09-01');
-    expect(model.state.value.tokens).toEqual([]);
-    // 3. Only `clear()` bumps `editorRevision` through `edit`; Kerf beta.62 closed this gap with a
-    //    `replace` action that rebuilds the DOM-owned editor text (KF-ER975X), so a programmatic
-    //    replacement (applying a saved view, restoring a session) now has a model action. Adoption
-    //    is re-evaluated in HS2-06Q4MG.
+    expect(model.suggestions.value).toEqual([]);
+    model.edit({ query: 'tag:', tokens: model.state.value.tokens });
+    expect(model.suggestions.value.map((item) => item.value)).toEqual(['tag:"needs design"', 'tag:server']);
+    // 2. KF-K3EJM5: `commit` accepts a computed value for the active prefix, so the lifecycle date
+    //    helper can commit its token; an invalid value or a missing prefix leaves the query alone.
+    model.edit({ query: 'parser created-after:', tokens: [] });
+    model.commit('2026-09-01');
+    expect(model.state.value.query).toBe('parser ');
+    expect(model.state.value.tokens.map((token) => [token.kind, token.parsedValue])).toEqual([
+      ['created-after', parseSearchDate('2026-09-01')],
+    ]);
+    model.edit({ query: 'created-before:', tokens: model.state.value.tokens });
+    model.commit('someday');
+    expect(model.state.value.query).toBe('created-before:');
+    expect(model.state.value.tokens).toHaveLength(1);
+    model.edit({ query: 'plain text', tokens: model.state.value.tokens });
+    model.commit('2026-09-01');
+    expect(model.state.value.query).toBe('plain text');
+    // 3. KF-ER975X: `replace` rebuilds the DOM-owned editor text, so applying a saved view or
+    //    restoring a session has a model action; `edit` still leaves the revision alone.
     const revision = model.editorRevision.value;
-    model.edit({ query: 'restored text', tokens: [] }, true);
+    model.edit({ query: 'typed text', tokens: [] }, true);
     expect(model.editorRevision.value).toBe(revision);
-    model.clear();
+    model.replace({ query: 'restored text', tokens: [{ value: 'is:open', label: 'is:open' }] });
     expect(model.editorRevision.value).toBe(revision + 1);
-    expect(typeof (model as { replace?: unknown }).replace).toBe('function');
+    expect(model.state.value).toMatchObject({
+      query: 'restored text',
+      tokens: [{ kind: 'is', parsedValue: 'open', value: 'is:open' }],
+    });
+    model.clear();
+    expect(model.editorRevision.value).toBe(revision + 2);
   });
 });

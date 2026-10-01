@@ -810,17 +810,21 @@ hyphenated rule names (`created-after`, `updated-before`, …) whose `parse` is
 `parseSearchDate`; quoted values, boolean words, and parentheses behave exactly as the
 app's own `consumeSearchTokens` (one separator survives per consumed token), and a `tag`
 rule's `suggest` can serve the tag completion, with `choose` committing the chip. That fit
-is pinned in `clients/web/src/ticket-search-model-evaluation.test.ts`. Adoption is
-deferred because the beta.59 model API has three gaps that a faithful migration needs:
-`suggest(input)` cannot see the committed tokens, so it cannot exclude tags already
-filtering the query (`KF-YBJ27D`); `choose` accepts only a current suggestion, so the
-date helper cannot commit its computed token for the active prefix (`KF-K3EJM5`); and only
-`clear()` bumps `editorRevision`, so applying a saved view or restoring a session has no
+is pinned in `clients/web/src/ticket-search-model-evaluation.test.ts`. Adoption was
+deferred because the beta.59 model API had three gaps that a faithful migration needs:
+`suggest(input)` could not see the committed tokens, so it could not exclude tags already
+filtering the query (`KF-YBJ27D`); `choose` accepted only a current suggestion, so the
+date helper could not commit its computed token for the active prefix (`KF-K3EJM5`); and only
+`clear()` bumped `editorRevision`, so applying a saved view or restoring a session had no
 model action that rebuilds the DOM-owned editor text (`KF-ER975X`). Working around them
-would mean double ownership of the search state (the model's `state` beside the app's
-persisted `searchQuery`/`searchTokens` signals) across three surfaces. `HS2-5JXBQY`
-migrates the tag suggestions (and the date helper's commit) onto the model once those
-APIs ship; the syntax help stays app-owned either way.
+would have meant double ownership of the search state (the model's `state` beside the app's
+persisted `searchQuery`/`searchTokens` signals) across three surfaces. **Beta.62 closed all
+three** (HS2-06Q4MG re-ran the evaluation): a rule's `suggest(input, state)` receives the
+committed tokens, `model.commit(value)` commits a computed value for the active `name:`
+prefix (invalid values and a missing prefix leave the query unchanged), and
+`model.replace(value)` rebuilds the editor text and bumps `editorRevision`. The decision is
+to adopt: `HS2-5JXBQY` (now Up Next) moves the three `TicketSearchField` surfaces onto the
+managed model, with the syntax help staying app-owned.
 
 With the published Kerf dependency, Select All followed by Backspace or
 Delete removes both text and tokens while keeping the empty workspace editor open
@@ -1737,9 +1741,9 @@ their Toolbar parent directly in `clients/web/ai/component-composition-extension
 edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor.mjs` now
 covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
 opt-in managed `TokenSearchModel` (grammar, suggestions, evaluation) for `TokenSearchField`
-and extends `PopupMenu` for nested and context actions; Hot Sheet keeps its app-owned
-`TicketSearchField` suggestions (the `TokenSearchModel` evaluation below, `HS2-HHRYP9`,
-adoption tracked in `HS2-5JXBQY`). HS2-CSRJ9Y moved every button-triggered command menu onto
+and extends `PopupMenu` for nested and context actions; Hot Sheet kept its app-owned
+`TicketSearchField` suggestions until beta.62 closed the model's API gaps (the
+`TokenSearchModel` evaluation below, `HS2-HHRYP9` and `HS2-06Q4MG`; adoption in `HS2-5JXBQY`). HS2-CSRJ9Y moved every button-triggered command menu onto
 `PopupMenu`: the workspace overflow menu (`WorkspaceOverflowControls`, `data-workspace-overflow`
 root, items carrying `data-workspace-overflow-kind`/`-action`/`-state`), the command editor's
 per-row Edit/Delete menu and its AI configuration menu, and the in-conversation model menu
