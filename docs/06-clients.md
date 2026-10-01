@@ -1998,10 +1998,14 @@ magnified tile) renders the same menu with **Open** only, because terminal visib
 the workspace dashboard and the drawer never applies it; only the grid that shows the targeted tile
 renders the menu (HS2-V2CCN6). The dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
-While that magnified viewport is open, its containing workspace is promoted above adjacent
-shell regions, both side-region separators are suppressed, and the workspace suppresses its own
-focus presentation immediately, so neither shell chrome
-nor a transitioning focus outline can paint over the modal. On the first replay payload for a
+While that magnified viewport is open it is always the top-most surface: the overlay is a manual
+popover that the shared top-layer watcher (`clients/web/src/top-layer-overlay.ts`) opens as soon as
+it renders, so the browser lifts it into the top layer above the Workbench's rails, the terminal
+drawer's clip, and every stacking context — a `position: fixed` overlay inside the Workbench shell
+was clipped to the drawer and painted under the side rails (HS2-Z9PQSC). Both side-region
+separators are suppressed and the workspace suppresses its own focus presentation immediately, so
+no transitioning focus outline paints over the modal; the tile's own More actions menu still opens
+above it because its popup enters the top layer later. On the first replay payload for a
 fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
 `%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
 dedicated drawer stream are preserved unchanged.

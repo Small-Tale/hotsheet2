@@ -1114,11 +1114,15 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await expect(magnified).toBeVisible();
   await magnified.getByRole('button', { name: 'More actions for Codex Main' }).tap();
   await expect(menu).toBeVisible();
+  // The magnified terminal is a top-layer popover (HS2-Z9PQSC); the menu's own popup opens in the top
+  // layer after it, so probe the visible menu item rather than the wrapper's positioning anchor.
+  const item = menu.locator('wa-dropdown-item').first();
+  await expect(item).toBeVisible();
   expect(
-    await menu.evaluate((node) => {
+    await item.evaluate((node) => {
       const box = node.getBoundingClientRect(),
         hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-      return Boolean(hit && node.contains(hit));
+      return Boolean(hit && (hit === node || node.contains(hit) || hit.closest('[data-context-menu="terminal"]')));
     }),
   ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('drawer-magnified-tile-menu-phone.png') });

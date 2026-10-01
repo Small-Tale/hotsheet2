@@ -389,6 +389,16 @@
   z-index: 1000;
   inset: 0;
   display: grid;
+  /* A manual popover in the top layer (HS2-Z9PQSC): undo the user-agent popover box (fit-content size,
+     auto margin, border, scrolling, canvas colors) so the overlay still fills the viewport. */
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  color: inherit;
   padding: remify(64px) 10%;
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 55%, transparent);
   backdrop-filter: blur(2px);

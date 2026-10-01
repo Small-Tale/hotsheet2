@@ -32,6 +32,7 @@ import {
   type TerminalVisibilityType,
 } from '../terminal-visibility';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
+import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
 import { type Control, type Project } from './types';
 
@@ -163,6 +164,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     closeDrawerTabIds,
     saveTerminalName,
   } = dependencies;
+  // The magnified terminal is a manual popover; keep it in the top layer as Kerf renders it (HS2-Z9PQSC).
+  wireTopLayerOverlays(document.body);
   delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {
     const viewport = target.closest<HTMLElement>('[data-terminal-id]');
     if (!viewport?.closest('[data-component="terminal-drawer"][data-mode="dedicated"]')) return;

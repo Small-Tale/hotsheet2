@@ -562,8 +562,12 @@ export function TerminalDashboard({
         </FloatingToolbar>
       </div>
       {magnified && (
+        // A manual popover, opened by `wireTopLayerOverlays`, so the magnified terminal sits in the top
+        // layer above the Workbench's rails, drawer clip, and every other surface (HS2-Z9PQSC).
         <div
           class="terminal-dashboard__magnified"
+          popover="manual"
+          data-top-layer-overlay
           role="dialog"
           aria-modal="true"
           aria-label={`Magnified ${magnified.title ?? magnified.id}`}

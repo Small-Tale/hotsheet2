@@ -17746,3 +17746,74 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
   ).toBeGreaterThanOrEqual(47);
   await page.screenshot({ path: testInfo.outputPath('phone-gallery-markup.png'), animations: 'disabled' });
 });
+
+test('paints magnified terminals above every surface from the workspace grid and the drawer grid (HS2-Z9PQSC)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  // Sample the paint at the four corners and the centre: every point must belong to the overlay, so it
+  // is neither clipped to its region nor painted under a rail, the drawer, or the shell toolbar.
+  const coversViewport = (name: string) =>
+    page.getByRole('dialog', { name }).evaluate((overlay) => {
+      const points: Array<[number, number]> = [
+        [4, 4],
+        [innerWidth - 4, 4],
+        [4, innerHeight - 4],
+        [innerWidth - 4, innerHeight - 4],
+        [innerWidth / 2, innerHeight / 2],
+      ];
+      return {
+        topLayer: overlay.matches(':popover-open'),
+        covered: points.map(([x, y]) => {
+          const hit = document.elementFromPoint(x, y);
+          return Boolean(hit && (hit === overlay || overlay.contains(hit)));
+        }),
+      };
+    });
+  // The project drawer's grid, which used to clip the magnified terminal to the drawer region.
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.locator('[data-terminal-key="demo-checkout:codex-main"]').first().click();
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toBeVisible();
+  expect(await coversViewport('Magnified Codex Main')).toEqual({
+    topLayer: true,
+    covered: [true, true, true, true, true],
+  });
+  await page.screenshot({ path: testInfo.outputPath('drawer-grid-magnified.png') });
+  // The focused terminal keeps Escape, so dismiss through the backdrop beside the tile.
+  await page.getByRole('dialog', { name: 'Magnified Codex Main' }).click({ position: { x: 8, y: 8 } });
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
+  // Workspace grid, with the ticket rail open on the right.
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toBeVisible();
+  expect(await coversViewport('Magnified Codex Main')).toEqual({
+    topLayer: true,
+    covered: [true, true, true, true, true],
+  });
+  await page.screenshot({ path: testInfo.outputPath('workspace-grid-magnified.png') });
+  // The tile's own menu still opens above the top-layer overlay and stays operable.
+  const magnified = page.getByRole('dialog', { name: 'Magnified Codex Main' });
+  await magnified.getByRole('button', { name: 'More actions for Codex Main' }).click();
+  const menuItem = page.locator('[data-context-menu="terminal"] wa-dropdown-item').first();
+  await expect(menuItem).toBeVisible();
+  expect(
+    await menuItem.evaluate((item) => {
+      const box = item.getBoundingClientRect(),
+        hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return Boolean(hit && (hit === item || item.contains(hit) || hit.closest('[data-context-menu="terminal"]')));
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('workspace-grid-magnified-menu.png') });
+  // With focus outside the terminal, Escape closes the menu and the magnified overlay together.
+  await page.keyboard.press('Escape');
+  await expect(menuItem).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
+});

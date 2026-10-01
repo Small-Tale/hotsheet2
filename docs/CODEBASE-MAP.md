@@ -104,6 +104,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/focused-draft-sync.ts #  Writes a merged draft into the focused text control without moving the caret (HS2-A4XCXE)
     src/ticket-scroll-state.ts # In-session project/mode/view scroll snapshots, deferred restoration, and content-bound clamping
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
+    src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)
     src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations

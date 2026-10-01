@@ -85,6 +85,7 @@ import {
   toggleTerminalModifier,
 } from '../terminal-keys';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
+import { wireTopLayerOverlays } from '../top-layer-overlay';
 import {
   AIConversationDemo,
   aiConversationDemoOpen,
@@ -1140,6 +1141,8 @@ const openStagedContextMenus = () => {
     if (!menu.open) openContextPopupMenu(menu);
 };
 new MutationObserver(openStagedContextMenus).observe(root, { childList: true, subtree: true });
+// Magnified terminals are manual popovers in the top layer, as in the app (HS2-Z9PQSC).
+wireTopLayerOverlays(root);
 openStagedContextMenus();
 // The app clears its menu signals through capture-phase Escape and outside-press listeners; the
 // demo's bubble-phase handlers run after Web Awesome has consumed the key, so mirror Web Awesome's
