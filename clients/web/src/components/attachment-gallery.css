@@ -6,9 +6,14 @@
   z-index: 1400;
   inset: 0;
   display: grid;
+  /* The dynamic viewport units keep the footer controls on screen when the platform offsets the
+     layout viewport (an opaque PWA status bar on iOS 27) and `100vh` would overshoot the visible
+     area; the static units are the fallback (HS2-5TYNAS). */
   width: 100vw;
+  width: 100dvw;
   max-width: none;
   height: 100vh;
+  height: 100dvh;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -205,7 +210,11 @@
   z-index: 2;
   display: grid;
   min-width: 0;
-  padding: var(--kui-space-xs) var(--kui-space-m) var(--kui-space-m);
+  /* The footer reaches the screen's bottom and inline edges, so its controls clear the home
+     indicator and rounded corners by the device insets (HS2-5TYNAS). */
+  padding: var(--kui-space-xs) calc(var(--kui-space-m) + var(--hotsheet-safe-area-right, 0px))
+    calc(var(--kui-space-m) + var(--hotsheet-safe-area-bottom, 0px))
+    calc(var(--kui-space-m) + var(--hotsheet-safe-area-left, 0px));
   color: var(--wa-color-neutral-on-loud);
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent);
   backdrop-filter: blur(remify(12px));
@@ -360,7 +369,8 @@
     min-width: auto;
   }
   .attachment-gallery__footer {
-    padding-inline: var(--kui-space-xs);
+    padding-inline: calc(var(--kui-space-xs) + var(--hotsheet-safe-area-left, 0px))
+      calc(var(--kui-space-xs) + var(--hotsheet-safe-area-right, 0px));
   }
   .attachment-gallery__timeline {
     grid-template-columns: auto minmax(remify(80px), 1fr) auto auto;

@@ -17687,3 +17687,60 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
 });
+
+test('keeps the gallery zoom and markup toolbars visible on a phone while the inspector overlay is open (HS2-5TYNAS)', async ({
+  page,
+}, testInfo) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  // Tapping the ticket opens the inspector as a Workbench rail overlay, which covers the work area.
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'false');
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
+    zoom = gallery.getByRole('toolbar', { name: 'Media zoom' });
+  await expect(zoom).toBeVisible();
+  await expect(zoom).toHaveCSS('visibility', 'visible');
+  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  const markup = gallery.getByRole('toolbar', { name: 'Media markup' });
+  await expect(markup).toBeVisible();
+  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
+  // The dialog fills exactly the visible viewport, and with device insets its toolbar and footer
+  // controls move into the safe area while the chrome surfaces still reach the screen edges.
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--hotsheet-safe-area-top', '47px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '34px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-left', '7px');
+    document.documentElement.style.setProperty('--hotsheet-safe-area-right', '11px');
+  });
+  expect(
+    await gallery.evaluate((node) => node.getBoundingClientRect().toJSON() as Record<string, number>),
+  ).toMatchObject({
+    x: 0,
+    y: 0,
+    width: 390,
+    height: 844,
+  });
+  const toolbar = gallery.locator('[data-component="toolbar"]').first(),
+    footer = gallery.locator('.attachment-gallery__footer');
+  await expect(toolbar).toHaveCSS('padding-top', '55px');
+  await expect(toolbar).toHaveCSS('padding-left', '15px');
+  await expect(toolbar).toHaveCSS('padding-right', '19px');
+  await expect(footer).toHaveCSS('padding-bottom', '50px');
+  await expect(footer).toHaveCSS('padding-left', '15px');
+  await expect(footer).toHaveCSS('padding-right', '19px');
+  expect(
+    await gallery
+      .getByRole('button', { name: 'Zoom in' })
+      .evaluate((node) => innerHeight - node.getBoundingClientRect().bottom),
+  ).toBeGreaterThanOrEqual(34);
+  expect(
+    await gallery.getByRole('button', { name: /Close/ }).evaluate((node) => node.getBoundingClientRect().top),
+  ).toBeGreaterThanOrEqual(47);
+  await page.screenshot({ path: testInfo.outputPath('phone-gallery-markup.png'), animations: 'disabled' });
+});

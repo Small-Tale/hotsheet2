@@ -50,7 +50,7 @@ describe('AttachmentGallery', () => {
     expect(css).not.toContain('.kui-toolbar__trailing');
     expect(css).toMatch(/__canvas \{[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatchSource(
-      /__footer \{[^}]*padding:var\(--kui-space-xs\) var\(--kui-space-m\) var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/,
+      /__footer \{[^}]*padding:var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-right, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-left, 0px\)\)[^}]*gap:var\(--kui-space-xs\)/,
     );
     expect(css).toMatchSource(/__timeline \{[^}]*gap:var\(--kui-space-xs\)/);
     expect(css).toMatchSource(/__volume-popup \{[^}]*padding:var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);

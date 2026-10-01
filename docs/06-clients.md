@@ -1342,7 +1342,11 @@ and identity-less legacy entries remain conservatively blocking.
   selection: the gallery lists, navigates, and addresses that ticket's media, and because linked
   readers cannot edit attachments its markup is unavailable (HS2-97E0QR). It occupies a
   newer top-layer position when launched from a ticket reader, and Escape consumes only the gallery
-  before returning interaction to the still-open reader. Videos remain paused initially and
+  before returning interaction to the still-open reader. The gallery dialog sizes itself to the
+  dynamic viewport (`100dvh`/`100dvw`, static units as the fallback) so an offset layout viewport
+  such as an opaque iOS status bar cannot push its footer off screen, and its toolbar and footer
+  claim the device safe-area insets so the navigation, close, zoom, and markup controls stay in
+  the safe area while the chrome surfaces still reach the edges (HS2-5TYNAS). Videos remain paused initially and
   use native `preload="auto"` so the browser presents the decoded first frame rather than
   carrying the grid thumbnail poster into the full-screen player. Scrubber input assigns the
   requested precise time directly to `HTMLMediaElement.currentTime`; the browser owns seek
