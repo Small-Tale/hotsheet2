@@ -11,7 +11,8 @@
 //!   to that single server for every project it hosts.
 //! - **Index-writer lock** — a per-store lock so a **second** server on the same store
 //!   refuses instead of double-writing the disposable index (join-don't-collide). A stale
-//!   lock from a dead server is reclaimed.
+//!   lock from a dead server is reclaimed. Acquire / reclaim / release are atomic across
+//!   processes under a `<project-id>.lock.mutex` advisory lock (HS2-585JCP).
 //! - **Stop** — [`stop_instance`] signals a running server to shut down (explicit shutdown
 //!   only, never implicit on a client closing).
 //!
@@ -142,36 +143,113 @@ impl InstanceRegistry {
     /// Take the exclusive index-writer lock for a store. Fails with [`LockError::Held`]
     /// when a **live** server already holds it (the second server should attach, not
     /// duplicate); a stale lock left by a dead server is reclaimed.
+    ///
+    /// Atomic across processes (HS2-585JCP): the whole check-and-take runs under an OS
+    /// advisory lock on a persistent `<project-id>.lock.mutex` file, and the lock contents
+    /// are published with write-temp + rename, so concurrent starters can never both win
+    /// and a lock-free reader never sees a half-written (empty) lock file.
     pub fn acquire_writer_lock(&self, store_path: &Path) -> Result<WriterLock, LockError> {
+        self.acquire_writer_lock_as(store_path, std::process::id())
+    }
+
+    /// [`Self::acquire_writer_lock`] on behalf of `me` (tests race distinct live pids).
+    fn acquire_writer_lock_as(&self, store_path: &Path, me: u32) -> Result<WriterLock, LockError> {
         std::fs::create_dir_all(&self.instances_dir)?;
         let path = self.lock_path(store_path);
-        let me = std::process::id();
+        let _mutex = self.lock_mutex(store_path)?;
+        match read_lock_holder(&path) {
+            LockHolder::Absent | LockHolder::Stale => {}
+            LockHolder::Pid(pid) if pid == me || !pid_alive(pid) => {}
+            LockHolder::Pid(pid) => return Err(LockError::Held(pid)),
+            LockHolder::Unreadable => return Err(LockError::Starting),
+        }
+        publish_lock(&path, me)?;
+        Ok(WriterLock {
+            path,
+            mutex: self.mutex_path(store_path),
+            pid: me,
+        })
+    }
 
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(_) => {
-                std::fs::write(&path, me.to_string())?;
-                Ok(WriterLock { path })
+    fn mutex_path(&self, store_path: &Path) -> PathBuf {
+        self.instances_dir
+            .join(format!("{}.lock.mutex", project_id(store_path)))
+    }
+
+    /// Hold the per-store registry mutex until the returned file is dropped. The file is
+    /// never deleted, so every process locks the same inode; the kernel releases the lock
+    /// if its holder dies.
+    fn lock_mutex(&self, store_path: &Path) -> std::io::Result<std::fs::File> {
+        open_locked_mutex(&self.mutex_path(store_path))
+    }
+}
+
+fn open_locked_mutex(path: &Path) -> std::io::Result<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+        loop {
+            // SAFETY: `file` owns a valid open descriptor for the whole call.
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+                break;
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                let holder = std::fs::read_to_string(&path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u32>().ok());
-                match holder {
-                    Some(pid) if pid != me && pid_alive(pid) => Err(LockError::Held(pid)),
-                    // Stale (dead holder) or our own — reclaim by overwriting.
-                    _ => {
-                        std::fs::write(&path, me.to_string())?;
-                        Ok(WriterLock { path })
-                    }
-                }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::Interrupted {
+                return Err(error);
             }
-            Err(e) => Err(LockError::Io(e)),
         }
     }
+    Ok(file)
+}
+
+/// How long an empty / unparseable lock file is presumed to be another starter mid-write
+/// (an older binary that creates the file before writing its pid) rather than debris.
+const UNREADABLE_LOCK_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// What a lock file currently says.
+#[derive(Debug, PartialEq, Eq)]
+enum LockHolder {
+    Absent,
+    Pid(u32),
+    /// Empty or garbage but recent: possibly a concurrent (older) writer mid-write.
+    Unreadable,
+    /// Empty or garbage and old: leftover debris, safe to reclaim.
+    Stale,
+}
+
+fn read_lock_holder(path: &Path) -> LockHolder {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return LockHolder::Absent,
+        Err(_) => String::new(),
+    };
+    if let Ok(pid) = text.trim().parse::<u32>() {
+        return LockHolder::Pid(pid);
+    }
+    let fresh = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_none_or(|age| age < UNREADABLE_LOCK_GRACE);
+    if fresh {
+        LockHolder::Unreadable
+    } else {
+        LockHolder::Stale
+    }
+}
+
+/// Atomically replace the lock file with `pid` (write a private temp file, then rename).
+fn publish_lock(path: &Path, pid: u32) -> std::io::Result<()> {
+    let tmp = path.with_extension(format!("lock.{pid}.{}.tmp", ulid::Ulid::new()));
+    std::fs::write(&tmp, pid.to_string())?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 // ---- machine-registry convenience wrappers -----------------------------------------
@@ -255,6 +333,9 @@ fn signal(_pid: u32, _sig: &str) -> bool {
 pub enum LockError {
     #[error("another server (pid {0}) is already serving this store")]
     Held(u32),
+    /// Another server is part-way through taking the lock (HS2-585JCP).
+    #[error("another server is starting for this store")]
+    Starting,
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -263,11 +344,18 @@ pub enum LockError {
 #[derive(Debug)]
 pub struct WriterLock {
     path: PathBuf,
+    mutex: PathBuf,
+    pid: u32,
 }
 
 impl Drop for WriterLock {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        // Release only a lock that is still ours (HS2-585JCP): if another process has since
+        // reclaimed it, deleting the file would hand the store to a third server.
+        let _mutex = open_locked_mutex(&self.mutex);
+        if read_lock_holder(&self.path) == LockHolder::Pid(self.pid) {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -431,6 +519,158 @@ mod tests {
         );
         drop(lock);
         assert!(!lock_path.exists(), "lock released on drop");
+    }
+
+    /// Live, distinct, signalable pids for tests that race several "servers".
+    struct LivePids(Vec<std::process::Child>);
+
+    impl LivePids {
+        fn spawn(n: usize) -> Self {
+            Self(
+                (0..n)
+                    .map(|_| {
+                        std::process::Command::new("sleep")
+                            .arg("60")
+                            .spawn()
+                            .unwrap()
+                    })
+                    .collect(),
+            )
+        }
+
+        fn pid(&self, i: usize) -> u32 {
+            self.0[i].id()
+        }
+
+        fn kill(&mut self, i: usize) {
+            self.0[i].kill().ok();
+            self.0[i].wait().ok();
+        }
+    }
+
+    impl Drop for LivePids {
+        fn drop(&mut self) {
+            for child in &mut self.0 {
+                child.kill().ok();
+                child.wait().ok();
+            }
+        }
+    }
+
+    fn age(path: &Path, by: std::time::Duration) {
+        let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_modified(std::time::SystemTime::now() - by)
+            .unwrap();
+    }
+
+    #[test]
+    fn writer_lock_transition_matrix() {
+        // HS2-585JCP: every lock-file state crossed with acquire, then drop.
+        let (_home, registry) = isolated_registry();
+        let store = tempfile::tempdir().unwrap();
+        let path = registry.lock_path(store.path());
+        std::fs::create_dir_all(registry.dir()).unwrap();
+        let mut pids = LivePids::spawn(2);
+        let (a, b) = (pids.pid(0), pids.pid(1));
+
+        // Absent -> acquired, published with the full pid (never an empty file).
+        let lock = registry.acquire_writer_lock_as(store.path(), a).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), a.to_string());
+        // Live other holder -> Held; own pid -> re-acquire succeeds.
+        assert!(matches!(
+            registry.acquire_writer_lock_as(store.path(), b),
+            Err(LockError::Held(p)) if p == a
+        ));
+        let again = registry.acquire_writer_lock_as(store.path(), a).unwrap();
+        drop(again);
+        assert!(!path.exists(), "own drop releases");
+        drop(lock); // already gone: dropping again is harmless
+        assert!(!path.exists());
+
+        // Fresh empty file (an older starter mid-write) -> Starting, file untouched.
+        std::fs::write(&path, "").unwrap();
+        assert!(matches!(
+            registry.acquire_writer_lock_as(store.path(), a),
+            Err(LockError::Starting)
+        ));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
+        // Old empty file -> debris, reclaimed.
+        age(&path, UNREADABLE_LOCK_GRACE * 2);
+        let lock = registry.acquire_writer_lock_as(store.path(), a).unwrap();
+        drop(lock);
+
+        // Fresh garbage -> Starting; old garbage -> reclaimed.
+        std::fs::write(&path, "not-a-pid").unwrap();
+        assert!(matches!(
+            registry.acquire_writer_lock_as(store.path(), b),
+            Err(LockError::Starting)
+        ));
+        age(&path, UNREADABLE_LOCK_GRACE * 2);
+        let lock_b = registry.acquire_writer_lock_as(store.path(), b).unwrap();
+
+        // Dead holder -> reclaimed by another; the dead holder's late drop must not
+        // delete the new owner's lock.
+        pids.kill(1);
+        let lock_a = registry.acquire_writer_lock_as(store.path(), a).unwrap();
+        drop(lock_b);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            a.to_string(),
+            "a replaced holder's drop leaves the new owner's lock"
+        );
+        drop(lock_a);
+        assert!(!path.exists());
+
+        // No stray temp files are left behind.
+        let leftovers: Vec<_> = std::fs::read_dir(registry.dir())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left: {leftovers:?}");
+    }
+
+    #[test]
+    fn concurrent_starters_never_both_take_the_writer_lock() {
+        // HS2-585JCP adversarial: many distinct live "servers" race for one store, over
+        // repeated rounds that cross empty -> held -> released -> refill.
+        let (_home, registry) = isolated_registry();
+        let store = tempfile::tempdir().unwrap();
+        let pids = LivePids::spawn(8);
+        for round in 0..20 {
+            let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+            let results: Vec<_> = (0..8)
+                .map(|i| {
+                    let registry = registry.clone();
+                    let store = store.path().to_path_buf();
+                    let barrier = barrier.clone();
+                    let pid = pids.pid(i);
+                    std::thread::spawn(move || {
+                        barrier.wait();
+                        registry.acquire_writer_lock_as(&store, pid)
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .collect();
+            let winners: Vec<_> = results.iter().filter(|r| r.is_ok()).collect();
+            assert_eq!(winners.len(), 1, "round {round}: {results:?}");
+            assert!(
+                results
+                    .iter()
+                    .filter_map(|r| r.as_ref().err())
+                    .all(|e| matches!(e, LockError::Held(_))),
+                "round {round}: losers must see a live holder, got {results:?}"
+            );
+            assert!(registry.is_writer_locked(store.path()));
+            drop(results);
+            assert!(
+                !registry.lock_path(store.path()).exists(),
+                "round {round}: winner released on drop"
+            );
+        }
     }
 
     #[test]

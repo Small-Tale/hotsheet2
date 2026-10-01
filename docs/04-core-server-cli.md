@@ -350,7 +350,13 @@ machine-local **instance registry** (`${HOTSHEET_HOME:-~/.hotsheet2}/instances/
 <project-id>.json` — not `~/.hotsheet`, which HS1 owns, HS2-104), **discovery**
 (`find_instance`, validating the recorded pid is alive so a crash leaves no false
 positive), the **per-store index-writer lock** (a second server is refused / told to
-attach; a stale lock from a dead server is reclaimed), and **stop** (`hotsheet-server
+attach; a stale lock from a dead server is reclaimed). Taking, reclaiming, and releasing
+that lock is atomic across processes (HS2-585JCP): each step runs under an OS advisory
+lock on a persistent `<project-id>.lock.mutex` file. Lock contents are published by
+temp-file rename, so a reader never sees an empty file. A fresh empty or garbage lock
+file counts as another server starting, and goes stale after 5 s. A server drops only
+a lock that still names its own pid. So simultaneous starts leave exactly one registered
+server, and every loser exits. Then **stop** (`hotsheet-server
 --stop` → SIGTERM). `serve` takes the lock, writes the instance file (removed by a
 guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
