@@ -20,6 +20,7 @@ pub mod live;
 pub mod model_catalog;
 pub mod permission;
 pub mod ports;
+pub mod probe;
 mod procio;
 pub mod registry;
 pub mod safe_trigger;

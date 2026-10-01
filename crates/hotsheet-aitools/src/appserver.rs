@@ -12,7 +12,7 @@
 //! (HS2-115).
 
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Duration;
 
 use crate::codex::{CodexAppServer, CodexDaemonService, StdioTransport};
@@ -131,17 +131,12 @@ impl AppServerModelCatalog {
 impl RuntimeModelCatalogSource for AppServerModelCatalog {
     fn version(&self) -> Result<String, String> {
         let mut command = Command::new(&self.program);
-        command
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        command.arg("--version");
         for (key, value) in &self.env {
             command.env(key, value);
         }
-        let output = command
-            .output()
-            .map_err(|error| format!("starting '{} --version': {error}", self.program))?;
+        // Bounded: a hung tool is killed and the manifest catalog stands in (HS2-BH3M53).
+        let output = crate::probe::run_probe(&mut command)?;
         if !output.status.success() {
             return Err(format!(
                 "'{} --version' exited with {}",

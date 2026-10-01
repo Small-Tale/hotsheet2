@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use hotsheet_plugins::{AiToolDescriptor, ModelSpec, Plugin};
 
@@ -63,17 +63,12 @@ impl CommandModelCatalog {
 
     fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
         let mut command = Command::new(&self.program);
-        command
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        command.args(args);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
-        let output = command
-            .output()
-            .map_err(|error| format!("starting '{}': {error}", self.program))?;
+        // Bounded: a hung tool is killed and the manifest catalog stands in (HS2-BH3M53).
+        let output = crate::probe::run_probe(&mut command)?;
         if !output.status.success() {
             return Err(format!(
                 "'{} {}' exited with {}",

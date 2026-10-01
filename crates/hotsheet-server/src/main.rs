@@ -88,6 +88,11 @@ struct Cli {
     #[arg(long, hide = true, default_value_t = DEFAULT_SHUTDOWN_DRAIN_MS)]
     shutdown_drain_ms: u64,
 
+    /// Deadline for one AI-tool discovery probe (`--version` or a model catalog), in
+    /// milliseconds; a probe that misses it is killed (HS2-BH3M53). Hidden: tests shorten it.
+    #[arg(long, hide = true)]
+    ai_probe_timeout_ms: Option<u64>,
+
     /// Stop gracefully when stdin reaches EOF (HS2-VQ8ZWT). For test harnesses and other
     /// supervisors that own this process: they keep a **pipe** on stdin, so when they die
     /// for any reason (even SIGKILL) the kernel closes it and the server cannot outlive
@@ -330,6 +335,9 @@ async fn main() -> Result<()> {
     // (HS2-87): one server per machine, discoverable per project. Guards live in the state
     // and remove the files on graceful shutdown; a crash leaves stale files `find_instance`
     // ignores. Runtime `POST /stores` additions register themselves the same way.
+    if let Some(ms) = cli.ai_probe_timeout_ms {
+        hotsheet_aitools::probe::set_probe_timeout(std::time::Duration::from_millis(ms));
+    }
     let started_at = Timestamp::from_datetime(OffsetDateTime::now_utc());
     state.publish_instances(url, started_at.as_str().to_string());
     // Warm the AI model catalog now, in the background, so the first client's startup path
@@ -363,6 +371,8 @@ async fn main() -> Result<()> {
         };
     let drain = std::time::Duration::from_millis(cli.shutdown_drain_ms);
     let outcome = drain_on_shutdown(serve, &state, drain, force).await;
+    // A probe started during the drain must not outlive the process either (HS2-BH3M53).
+    hotsheet_aitools::probe::stop_probes();
     state.release_instances();
     drop(writer_lock);
     match outcome {
@@ -407,6 +417,10 @@ async fn drain_on_shutdown(
         result = &mut serve => return DrainOutcome::Drained(result),
         () = state.stopping() => {}
     }
+    // Stop every AI-tool probe at once (HS2-BH3M53): a request waiting on discovery then
+    // answers from the manifest fallback instead of holding the drain open, and no probe
+    // child is orphaned by the exit.
+    hotsheet_aitools::probe::stop_probes();
     tokio::select! {
         result = &mut serve => DrainOutcome::Drained(result),
         () = tokio::time::sleep(deadline) => DrainOutcome::Forced("drain deadline passed"),

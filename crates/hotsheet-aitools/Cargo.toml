@@ -21,6 +21,8 @@ toml.workspace = true
 # The shared-daemon transport (UdsWsTransport): the codex app-server control socket
 # speaks a plain WebSocket carrying text-frame JSON-RPC, so we frame over a Unix socket.
 tokio = { workspace = true }
+# Bounded tool probes kill a hung probe's whole process group (HS2-BH3M53).
+libc.workspace = true
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
 

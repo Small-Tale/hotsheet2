@@ -377,7 +377,13 @@ registered. After a clean drain, a watchdog thread also bounds any leftover bloc
 background work. AI-tool discovery (the startup catalog warmup and `GET /ai-tools`) runs its
 tool probes on a detached thread rather than Tokio's blocking pool, because a dropping runtime
 waits for every blocking task: a stop that lands while an installed tool's `--version` or
-model probe hangs exits promptly instead of waiting out the drain (HS2-NPBZJ9).
+model probe hangs exits promptly instead of waiting out the drain (HS2-NPBZJ9). Each such
+probe is itself bounded (HS2-BH3M53). It runs in its own process group with a 5 s deadline
+(the hidden `--ai-probe-timeout-ms` flag changes it for tests). A probe that misses the
+deadline is killed with everything it spawned, and that tool falls back to its manifest catalog,
+so a hung tool can no longer hold the shared catalog lock that `/ai-tools`, `/ai-settings`,
+and terminal-launch validation wait on. A stop kills every in-flight probe and refuses new
+ones, so no probe child outlives the server.
 
 **Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
 such as a test harness or the scale-stress script, passes the hidden

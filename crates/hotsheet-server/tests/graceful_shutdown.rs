@@ -36,13 +36,14 @@ impl Server {
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
     ) -> Self {
-        Self::start_inner(drain_ms, watch_stdin, stdin, output, false)
+        Self::start_inner(drain_ms, watch_stdin, stdin, output, None)
     }
 
     /// Start with a drivable AI tool on `PATH` whose every invocation hangs, so the
     /// startup AI catalog warmup is still running when the stop arrives (HS2-NPBZJ9).
-    fn start_with_slow_discovery(drain_ms: u64) -> Self {
-        Self::start_inner(drain_ms, true, Stdio::piped(), None, true)
+    /// `probe_timeout_ms` sets the server's per-probe deadline (HS2-BH3M53).
+    fn start_with_slow_discovery(drain_ms: u64, probe_timeout_ms: u64) -> Self {
+        Self::start_inner(drain_ms, true, Stdio::piped(), None, Some(probe_timeout_ms))
     }
 
     fn start_inner(
@@ -50,20 +51,16 @@ impl Server {
         watch_stdin: bool,
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
-        slow_discovery: bool,
+        slow_discovery: Option<u64>,
     ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
         // Keep locally installed AI tools out of startup catalog discovery; a slow-discovery
         // fixture adds only its own hanging `opencode` (a drivable plugin's detection binary).
-        let path = if slow_discovery {
+        let path = if slow_discovery.is_some() {
             let tools = fixture.path().join("tools");
             fs::create_dir(&tools).unwrap();
             let tool = tools.join("opencode");
-            fs::write(
-                &tool,
-                "#!/bin/sh\necho started >> \"$0.calls\"\nexec sleep 30\n",
-            )
-            .unwrap();
+            fs::write(&tool, "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n").unwrap();
             fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
                 .unwrap();
             format!("{}:/usr/bin:/bin", tools.display())
@@ -87,6 +84,7 @@ impl Server {
             .arg(drain_ms.to_string())
             .env("HOTSHEET_HOME", &home)
             .env("PATH", path)
+            .args(slow_discovery.map(|ms| format!("--ai-probe-timeout-ms={ms}")))
             // Piped and held by the fixture: the server stops if this test process dies
             // without running its teardown (HS2-VQ8ZWT).
             .args(watch_stdin.then_some("--exit-on-stdin-eof"))
@@ -109,6 +107,27 @@ impl Server {
     /// The hanging tool's invocation record, written when discovery starts probing it.
     fn slow_tool_calls(&self) -> PathBuf {
         self._fixture.path().join("tools").join("opencode.calls")
+    }
+
+    /// Wait until discovery has probed the hanging tool; return every probe's pid so far.
+    fn slow_tool_pids(&self) -> Vec<i32> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let pids: Vec<i32> = fs::read_to_string(self.slow_tool_calls())
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|line| line.trim().parse().ok())
+                .collect();
+            if !pids.is_empty() {
+                return pids;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "discovery never probed the slow tool: {}",
+                self.log()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     fn log(&self) -> String {
@@ -453,17 +472,10 @@ fn stop_is_prompt_while_startup_ai_catalog_discovery_hangs() {
     // with no deadline of their own. A stop that lands while one hangs must not wait for it:
     // nothing is left to drain, so the process exits promptly and releases its registration
     // instead of sitting out the drain deadline (or, before HS2-W1KJR4, forever).
-    let mut server = Server::start_with_slow_discovery(5_000);
+    // A long probe deadline keeps the probe in flight when the stop arrives.
+    let mut server = Server::start_with_slow_discovery(5_000, 60_000);
     server.ready();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !server.slow_tool_calls().exists() {
-        assert!(
-            Instant::now() < deadline,
-            "discovery never probed the slow tool: {}",
-            server.log()
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    let probes = server.slow_tool_pids();
     let stopped = Instant::now();
     server.sigterm();
     let status = server.exits_within(Duration::from_secs(4));
@@ -479,4 +491,99 @@ fn stop_is_prompt_while_startup_ai_catalog_discovery_hangs() {
         server.log()
     );
     server.assert_registration_released();
+    // HS2-BH3M53: the stop also killed the in-flight probe; nothing it started survives.
+    assert_processes_gone(&probes, &server);
+}
+
+/// Wait (bounded) until every pid is gone; a probe left running is an orphan.
+fn assert_processes_gone(pids: &[i32], server: &Server) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    for pid in pids {
+        // SAFETY: signal 0 only checks whether the pid still exists.
+        while unsafe { libc::kill(*pid, 0) } == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "tool probe {pid} outlived the server: {}",
+                server.log()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+fn timed_request(
+    info: &InstanceInfo,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> (u16, Duration) {
+    let started = Instant::now();
+    let request = ureq::request(method, &format!("{}{path}", info.url))
+        .set("x-hotsheet-secret", &info.secret)
+        .timeout(Duration::from_secs(30));
+    let response = match body {
+        Some(body) => request
+            .set("content-type", "application/json")
+            .send_string(&body.to_string()),
+        None => request.call(),
+    };
+    let status = match response {
+        Ok(response) => response.status(),
+        Err(ureq::Error::Status(status, _)) => status,
+        Err(error) => panic!("{method} {path} failed: {error}"),
+    };
+    (status, started.elapsed())
+}
+
+#[test]
+fn a_hanging_tool_probe_is_killed_at_its_deadline_so_discovery_never_queues_behind_it() {
+    // HS2-BH3M53: a hung `opencode --version` used to hold the shared catalog lock forever,
+    // so every later discovery (`/ai-tools`, `/ai-settings`, terminal-launch validation)
+    // queued behind it. Each probe now has a deadline: the hung child is killed, the tool
+    // falls back to its manifest catalog, and later requests answer within that bound.
+    let mut server = Server::start_with_slow_discovery(5_000, 500);
+    let info = server.ready();
+    let warmup = server.slow_tool_pids();
+    // The startup warmup's probe is killed at its deadline, not left running.
+    assert_processes_gone(&warmup, &server);
+    let bound = Duration::from_secs(4);
+    for path in ["/ai-tools?refresh=true", "/ai-tools", "/ai-settings"] {
+        let (status, elapsed) = timed_request(&info, "GET", path, None);
+        assert_eq!(status, 200, "GET {path}: {}", server.log());
+        assert!(
+            elapsed < bound,
+            "GET {path} queued {elapsed:?} behind the hung probe"
+        );
+    }
+    let tools: serde_json::Value = ureq::get(&format!("{}/ai-tools", info.url))
+        .set("x-hotsheet-secret", &info.secret)
+        .call()
+        .unwrap()
+        .into_string()
+        .map(|text| serde_json::from_str(&text).unwrap())
+        .unwrap();
+    assert!(
+        tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["id"] == "opencode"),
+        "the hung tool lost its manifest fallback: {tools}"
+    );
+    // Terminal-launch validation shares the same discovery; an unsupported effort is
+    // rejected promptly instead of waiting on the hung probe.
+    let (status, elapsed) = timed_request(
+        &info,
+        "POST",
+        "/terminals",
+        Some(
+            json!({ "connect": "opencode", "model": "no-such-model", "effort": "no-such-effort" }),
+        ),
+    );
+    assert_eq!(status, 400, "terminal launch validation: {}", server.log());
+    assert!(elapsed < bound, "terminal launch queued {elapsed:?}");
+    server.sigterm();
+    assert!(server.exits_within(Duration::from_secs(5)).success());
+    server.assert_registration_released();
+    assert_processes_gone(&server.slow_tool_pids(), &server);
 }
